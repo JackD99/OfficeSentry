@@ -1,28 +1,35 @@
 # Get-SharePointTenantPermissions.ps1
-# Description: Get permissions for a given user across all SharePoint Online site collections and export to CSV.
-# Requires: PnP.PowerShell, MSAL.PS
+# Audits a single user's permissions across all SharePoint Online site collections.
+# Exports results to CSV and (optionally) XLSX.
+# Requires: PnP.PowerShell, MSAL.PS, ImportExcel (optional, for XLSX)
 
 #requires -Modules PnP.PowerShell, MSAL.PS
 
 [CmdletBinding()]
 param (
     [Parameter(Mandatory = $true)]
-    [string] $TenantName,  # e.g. contoso  (used as contoso-admin.sharepoint.com and contoso.onmicrosoft.com)
+    [string] $Tenant,           # TenantId (GUID) or domain (e.g. contoso.onmicrosoft.com)
 
     [Parameter(Mandatory = $true)]
-    [string] $UserEmail,
+    [string] $UserEmail,        # UPN of the user to audit
 
     [Parameter(Mandatory = $true)]
-    [string] $CSVPath,
+    [string] $CSVPath,          # Full path for CSV output
+
+    [Parameter(Mandatory = $false)]
+    [string] $XlsxPath,         # Full path for XLSX output (optional)
+
+    [Parameter(Mandatory = $false)]
+    [string] $AdminUrl,         # Override admin URL (default: derived from TenantDomain)
 
     [Parameter(Mandatory = $true)]
     [string] $ClientId,
 
     [Parameter(Mandatory = $true)]
-    [string] $CertificatePath, # PFX path
+    [string] $CertificatePath,  # PFX path
 
     [Parameter(Mandatory = $true)]
-    [securestring] $CertificatePassword, # PFX password
+    [securestring] $CertificatePassword,
 
     [Parameter(Mandatory = $false)]
     [switch] $Append = $false
@@ -31,109 +38,111 @@ param (
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Connect-TenantSite {
-    <#
-    .SYNOPSIS
-    Connects to a SharePoint Online site using certificate-based authentication via PnP PowerShell.
-    #>
-    param (
-        [Parameter(Mandatory = $true)]
-        [string] $SiteUrl
-    )
+# Derive admin URL from Tenant value if not explicitly provided
+function Get-AdminUrl {
+    param([string]$Tenant, [string]$Override)
+    if (-not [string]::IsNullOrWhiteSpace($Override)) { return $Override }
 
-    $connectionAttempts = 3
-    for ($i = 0; $i -lt $connectionAttempts; $i++) {
+    # If it looks like a domain, extract the prefix
+    if ($Tenant -match '^[0-9a-f-]{36}$') {
+        throw "Tenant appears to be a GUID — please provide -AdminUrl explicitly (e.g. https://contoso-admin.sharepoint.com)"
+    }
+
+    $prefix = ($Tenant -split '\.')[0]
+    return "https://$prefix-admin.sharepoint.com"
+}
+
+# Determine if an exception is likely transient (worth retrying)
+function Test-TransientError {
+    param([System.Management.Automation.ErrorRecord]$Err)
+    $msg = $Err.Exception.Message
+    return ($msg -match 'throttl|timeout|429|503|temporarily|network|connect')
+}
+
+function Connect-TenantSite {
+    param ([Parameter(Mandatory = $true)][string] $SiteUrl)
+
+    $attempts = 3
+    for ($i = 0; $i -lt $attempts; $i++) {
         try {
             Connect-PnPOnline `
-                -Url $SiteUrl `
-                -ClientId $ClientId `
-                -Tenant "$TenantName.onmicrosoft.com" `
-                -CertificatePath $CertificatePath `
+                -Url                $SiteUrl `
+                -ClientId           $ClientId `
+                -Tenant             $Tenant `
+                -CertificatePath    $CertificatePath `
                 -CertificatePassword $CertificatePassword
-
             return
         }
         catch {
-            if ($i -eq $connectionAttempts - 1) {
-                throw
-            }
-            Start-Sleep -Seconds 2
+            if ($i -eq $attempts - 1) { throw }
+            if (-not (Test-TransientError -Err $_)) { throw }  # Don't retry auth/config failures
+            Write-Host "$(Get-Date) WARN: Retrying connection to $SiteUrl ($($i+1)/$($attempts-1))..."
+            Start-Sleep -Seconds 3
         }
     }
 }
 
 function Get-GraphToken {
-    <#
-    .SYNOPSIS
-    Gets a bearer token for Microsoft Graph using MSAL.PS + certificate auth.
-    #>
+    $bstr  = $null
+    $plain = $null
     try {
-        # Load PFX into X509Certificate2 (required by MSAL.PS Get-MsalToken -ClientCertificate)
-        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($CertificatePassword)
-        )
+        $bstr  = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($CertificatePassword)
+        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
 
-        $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet `
-               -bor [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable
+        # EphemeralKeySet only — no Exportable flag
+        $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+        $cert  = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($CertificatePath, $plain, $flags)
 
-        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($CertificatePath, $plain, $flags)
-
-        # Use .default so Graph uses the app's *application permissions*
-        return Get-MsalToken -TenantId "$TenantName.onmicrosoft.com" -ClientId $ClientId -ClientCertificate $cert -Scopes "https://graph.microsoft.com/.default"
+        return Get-MsalToken `
+            -TenantId         $Tenant `
+            -ClientId         $ClientId `
+            -ClientCertificate $cert `
+            -Scopes           "https://graph.microsoft.com/.default"
     }
-    catch {
-        throw
+    finally {
+        # Always zero out the BSTR to minimise plaintext exposure in memory
+        if ($null -ne $bstr) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+        $plain = $null
     }
 }
 
 function Get-UserGroupMembership {
-    <#
-    .SYNOPSIS
-    Gets Entra group membership for a given user (memberOf).
-    Returns objects with GroupName and GroupId.
-    #>
-    param (
-        [Parameter(Mandatory = $true)]
-        [string] $UserEmail
-    )
+    param ([Parameter(Mandatory = $true)][string] $UserEmail)
 
-    $accessToken = (Get-GraphToken).AccessToken
-    $encodedUserEmail = [System.Web.HttpUtility]::UrlEncode($UserEmail)
+    $accessToken       = (Get-GraphToken).AccessToken
+    $encodedUserEmail  = [System.Web.HttpUtility]::UrlEncode($UserEmail)
+    $url               = "https://graph.microsoft.com/v1.0/users/$encodedUserEmail/memberOf?`$select=id,displayName"
 
-    $url = "https://graph.microsoft.com/v1.0/users/$encodedUserEmail/memberOf?$select=id,displayName"
-
-    $all = @()
+    $all = [System.Collections.Generic.List[PSCustomObject]]::new()
     while ($url) {
         $resp = Invoke-RestMethod -Uri $url -Method GET -Headers @{ Authorization = "Bearer $accessToken" }
-        $all += @($resp.value | ForEach-Object {
-            [PSCustomObject]@{
-                GroupName = $_.displayName
-                GroupId   = $_.id
-            }
-        })
+        foreach ($item in $resp.value) {
+            $all.Add([PSCustomObject]@{
+                GroupName = $item.displayName
+                GroupId   = $item.id
+            })
+        }
         $url = $resp.'@odata.nextLink'
     }
 
-    return $all
+    return $all.ToArray()
 }
 
 function New-CsvFile {
     param ([Parameter(Mandatory = $true)][string] $Path)
 
+    $dir = Split-Path $Path -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
     if (Test-Path $Path) { Remove-Item $Path -Force }
 
-    # write headers only
     [PSCustomObject]@{
-        UserPrincipalName = $null
-        SiteUrl           = $null
-        SiteAdmin         = $null
-        GroupName         = $null
-        PermissionLevel   = $null
-        ListName          = $null
-        ListPermission    = $null
+        UserPrincipalName = $null; SiteUrl = $null; SiteAdmin = $null
+        GroupName = $null; PermissionLevel = $null; ListName = $null; ListPermission = $null
     } | Export-Csv -Path $Path -NoTypeInformation
 
-    # Remove the empty data row, keep header
+    # Remove empty data row, keep header only
     $lines = Get-Content $Path
     Set-Content -Path $Path -Value @($lines[0])
 }
@@ -146,14 +155,9 @@ function Test-UserIsSiteCollectionAdmin {
 
     $siteAdmins = Get-PnPSiteCollectionAdmin
     foreach ($siteAdmin in $siteAdmins) {
-        $login = $siteAdmin.LoginName
-        $idPart = ($login -split '\|')[-1]
-
+        $idPart = ($siteAdmin.LoginName -split '\|')[-1]
         if ($UserEmail -eq $idPart) { return $true }
-
-        if ($GraphGroups) {
-            if ($GraphGroups.GroupId -contains $idPart) { return $true }
-        }
+        if ($GraphGroups -and $GraphGroups.Count -gt 0 -and ($GraphGroups.GroupId -contains $idPart)) { return $true }
     }
     return $false
 }
@@ -164,33 +168,32 @@ function Get-UserSharePointGroups {
         [Parameter(Mandatory = $false)][array]  $GraphGroups
     )
 
-    $siteGroups = Get-PnPGroup
-    $membership = @()
+    $membership = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-    foreach ($siteGroup in $siteGroups) {
-        $groupMembers = Get-PnPGroupMember -Identity $siteGroup.Title
+    foreach ($siteGroup in (Get-PnPGroup)) {
+        $matched = $false
+        foreach ($member in (Get-PnPGroupMember -Identity $siteGroup.Title)) {
+            $idPart         = ($member.LoginName -split '\|')[-1]
+            $isDirect       = ($UserEmail -eq $idPart)
+            $isViaEntra     = ($GraphGroups -and $GraphGroups.Count -gt 0 -and ($GraphGroups.GroupId -contains $idPart))
 
-        foreach ($groupMember in $groupMembers) {
-            $idPart = (($groupMember.LoginName -split '\|')[-1])
-
-            $isDirect = ($UserEmail -eq $idPart)
-            $isViaEntraGroup = ($GraphGroups -and ($GraphGroups.GroupId -contains $idPart))
-
-            if ($isDirect -or $isViaEntraGroup) {
-                $levels = Get-PnPGroupPermissions -Identity $siteGroup
+            if ($isDirect -or $isViaEntra) {
+                $levels      = Get-PnPGroupPermissions -Identity $siteGroup
                 $levelString = ($levels | ForEach-Object { $_.Name }) -join " | "
                 if ([string]::IsNullOrWhiteSpace($levelString)) { $levelString = "No Permissions" }
 
-                $membership += [PSCustomObject]@{
+                $membership.Add([PSCustomObject]@{
                     GroupName       = $siteGroup.Title
                     PermissionLevel = $levelString
-                }
+                })
+                $matched = $true
                 break
             }
         }
+        if ($matched) { continue }
     }
 
-    return $membership
+    return $membership.ToArray()
 }
 
 function Get-UniqueListPermissions {
@@ -208,7 +211,6 @@ function Get-UniqueListPermissions {
     $ctx.Load($lists)
     $ctx.ExecuteQuery()
 
-    # Exclude built-in lists (fixed syntax)
     $excludedLists = @(
         "App Packages","appdata","appfiles","Apps in Testing","Cache Profiles","Composed Looks",
         "Content and Structure Reports","Content type publishing error log","Converted Forms",
@@ -221,7 +223,7 @@ function Get-UniqueListPermissions {
         "Preservation Hold Library","SharePointHomeCacheList"
     )
 
-    $siteListPermissions = @()
+    $results = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     foreach ($list in $lists) {
         $ctx.Load($list)
@@ -231,7 +233,6 @@ function Get-UniqueListPermissions {
 
         $list.Retrieve("HasUniqueRoleAssignments")
         $ctx.ExecuteQuery()
-
         if (-not $list.HasUniqueRoleAssignments) { continue }
 
         $assignments = $list.RoleAssignments
@@ -243,91 +244,118 @@ function Get-UniqueListPermissions {
             $ctx.Load($ra.RoleDefinitionBindings)
             $ctx.ExecuteQuery()
 
-            $idPart = (($ra.Member.LoginName -split '\|')[-1])
+            $idPart     = ($ra.Member.LoginName -split '\|')[-1]
+            $isDirect   = ($UserEmail -eq $idPart)
+            $isViaEntra = ($GraphGroups -and $GraphGroups.Count -gt 0 -and ($GraphGroups.GroupId -contains $idPart))
 
-            $isDirect = ($UserEmail -eq $idPart)
-            $isViaEntraGroup = ($GraphGroups -and ($GraphGroups.GroupId -contains $idPart))
-
-            if ($isDirect -or $isViaEntraGroup) {
-                $siteListPermissions += [PSCustomObject]@{
+            if ($isDirect -or $isViaEntra) {
+                $results.Add([PSCustomObject]@{
                     Name            = $list.Title
                     PermissionLevel = ($ra.RoleDefinitionBindings | ForEach-Object { $_.Name }) -join "; "
-                }
+                })
             }
         }
     }
 
-    return $siteListPermissions
+    return $results.ToArray()
 }
 
-Set-Location $PSScriptRoot
+# ------------------- Main -------------------
 
-Write-Host "$(Get-Date) INFO: Connecting to tenant admin site..."
-Connect-TenantSite -SiteUrl "https://$TenantName-admin.sharepoint.com"
+$adminUrl = Get-AdminUrl -Tenant $Tenant -Override $AdminUrl
 
-Write-Host "$(Get-Date) INFO: Getting all site collections..."
+Write-Host "$(Get-Date) INFO: Connecting to tenant admin..."
+Connect-TenantSite -SiteUrl $adminUrl
+
+Write-Host "$(Get-Date) INFO: Retrieving site collections..."
 $siteCollections = Get-PnPTenantSite
-Write-Host "$(Get-Date) INFO: `tFound $($siteCollections.Count) site collections."
+Write-Host "$(Get-Date) INFO: Found $($siteCollections.Count) site collections."
 Disconnect-PnPOnline
 
 Write-Host "$(Get-Date) INFO: Getting Entra group membership for $UserEmail..."
 $userGroupMembership = Get-UserGroupMembership -UserEmail $UserEmail
-Write-Host "$(Get-Date) INFO: `tFound $($userGroupMembership.Count) groups."
+Write-Host "$(Get-Date) INFO: Member of $($userGroupMembership.Count) groups."
 
-if (-not $Append) {
-    New-CsvFile -Path $CSVPath
-}
+if (-not $Append) { New-CsvFile -Path $CSVPath }
 
-$siteCounter = 1
-foreach ($siteCollection in $siteCollections) {
-    Write-Host "$(Get-Date) INFO: Connecting to $($siteCollection.Url)`t ($siteCounter of $($siteCollections.Count))..."
-    $siteCounter++
+$allRows   = [System.Collections.Generic.List[PSCustomObject]]::new()
+$total     = $siteCollections.Count
+$counter   = 0
 
-    Connect-TenantSite -SiteUrl $siteCollection.Url
+foreach ($site in $siteCollections) {
+    $counter++
+    Write-Progress -Activity "Auditing user permissions" `
+                   -Status    "Site $counter of $total : $($site.Url)" `
+                   -PercentComplete ([math]::Round(($counter / $total) * 100))
 
-    if (Test-UserIsSiteCollectionAdmin -UserEmail $UserEmail -GraphGroups $userGroupMembership) {
-        Write-Host "$(Get-Date) INFO: `t$UserEmail is a site collection admin for $($siteCollection.Url)."
-        [PSCustomObject]@{
-            UserPrincipalName = $UserEmail
-            SiteUrl           = $siteCollection.Url
-            SiteAdmin         = $true
-            GroupName         = $null
-            PermissionLevel   = $null
-            ListName          = $null
-            ListPermission    = $null
-        } | Export-Csv -Path $CSVPath -Append -NoTypeInformation
+    Write-Host "$(Get-Date) INFO: [$counter/$total] $($site.Url)"
 
-        Disconnect-PnPOnline
+    try {
+        Connect-TenantSite -SiteUrl $site.Url
+    }
+    catch {
+        Write-Host "$(Get-Date) WARN: Could not connect to $($site.Url) — skipping. $_" -ForegroundColor Yellow
         continue
     }
 
-    $spGroups = Get-UserSharePointGroups -UserEmail $UserEmail -GraphGroups $userGroupMembership
-    foreach ($group in $spGroups) {
-        Write-Host "$(Get-Date) INFO: `t$UserEmail is in $($group.GroupName) with $($group.PermissionLevel)."
-        [PSCustomObject]@{
-            UserPrincipalName = $UserEmail
-            SiteUrl           = $siteCollection.Url
-            SiteAdmin         = $false
-            GroupName         = $group.GroupName
-            PermissionLevel   = $group.PermissionLevel
-            ListName          = $null
-            ListPermission    = $null
-        } | Export-Csv -Path $CSVPath -Append -NoTypeInformation
-    }
+    try {
+        if (Test-UserIsSiteCollectionAdmin -UserEmail $UserEmail -GraphGroups $userGroupMembership) {
+            $row = [PSCustomObject]@{
+                UserPrincipalName = $UserEmail; SiteUrl = $site.Url; SiteAdmin = $true
+                GroupName = $null; PermissionLevel = $null; ListName = $null; ListPermission = $null
+            }
+            $row | Export-Csv -Path $CSVPath -Append -NoTypeInformation
+            $allRows.Add($row)
+            Write-Host "$(Get-Date) INFO:   Site Collection Admin"
+        } else {
+            $spGroups = Get-UserSharePointGroups -UserEmail $UserEmail -GraphGroups $userGroupMembership
+            foreach ($g in $spGroups) {
+                $row = [PSCustomObject]@{
+                    UserPrincipalName = $UserEmail; SiteUrl = $site.Url; SiteAdmin = $false
+                    GroupName = $g.GroupName; PermissionLevel = $g.PermissionLevel; ListName = $null; ListPermission = $null
+                }
+                $row | Export-Csv -Path $CSVPath -Append -NoTypeInformation
+                $allRows.Add($row)
+                Write-Host "$(Get-Date) INFO:   Group: $($g.GroupName) [$($g.PermissionLevel)]"
+            }
 
-    $listPermissions = Get-UniqueListPermissions -UserEmail $UserEmail -GraphGroups $userGroupMembership
-    foreach ($lp in $listPermissions) {
-        Write-Host "$(Get-Date) INFO: `t$UserEmail has $($lp.PermissionLevel) on list '$($lp.Name)'."
-        [PSCustomObject]@{
-            UserPrincipalName = $UserEmail
-            SiteUrl           = $siteCollection.Url
-            SiteAdmin         = $false
-            GroupName         = $null
-            PermissionLevel   = $null
-            ListName          = $lp.Name
-            ListPermission    = $lp.PermissionLevel
-        } | Export-Csv -Path $CSVPath -Append -NoTypeInformation
+            $listPerms = Get-UniqueListPermissions -UserEmail $UserEmail -GraphGroups $userGroupMembership
+            foreach ($lp in $listPerms) {
+                $row = [PSCustomObject]@{
+                    UserPrincipalName = $UserEmail; SiteUrl = $site.Url; SiteAdmin = $false
+                    GroupName = $null; PermissionLevel = $null; ListName = $lp.Name; ListPermission = $lp.PermissionLevel
+                }
+                $row | Export-Csv -Path $CSVPath -Append -NoTypeInformation
+                $allRows.Add($row)
+                Write-Host "$(Get-Date) INFO:   List: '$($lp.Name)' [$($lp.PermissionLevel)]"
+            }
+        }
     }
-
-    Disconnect-PnPOnline
+    finally {
+        Disconnect-PnPOnline
+    }
 }
+
+Write-Progress -Activity "Auditing user permissions" -Completed
+
+Write-Host ""
+Write-Host "$(Get-Date) INFO: CSV saved to $CSVPath"
+
+# Export XLSX if requested and ImportExcel is available
+if (-not [string]::IsNullOrWhiteSpace($XlsxPath)) {
+    if (Get-Module -ListAvailable -Name ImportExcel) {
+        Import-Module ImportExcel -ErrorAction Stop
+        $allRows.ToArray() | Export-Excel `
+            -Path          $XlsxPath `
+            -WorksheetName "UserPermissions" `
+            -AutoFilter `
+            -BoldTopRow `
+            -FreezeTopRow `
+            -AutoSize
+        Write-Host "$(Get-Date) INFO: XLSX saved to $XlsxPath"
+    } else {
+        Write-Host "$(Get-Date) WARN: ImportExcel module not found — XLSX not exported." -ForegroundColor Yellow
+    }
+}
+
+Write-Host "$(Get-Date) INFO: Done. $($allRows.Count) permission record(s) found for $UserEmail."
