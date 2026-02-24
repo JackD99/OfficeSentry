@@ -17,7 +17,8 @@ SPO-Audit-Toolkit/
 ├── start.cmd                # Windows launcher for toolkit.ps1 (finds pwsh)
 ├── run.cmd                  # Windows launcher for the Flask web portal
 ├── Build-Toolkit.ps1        # Downloads all required PowerShell modules to ./modules/
-├── requirements.txt         # Python dependencies (Flask, cryptography)
+├── requirements.txt         # Python dependencies (pinned versions)
+├── pyproject.toml           # pytest configuration
 ├── config/
 │   └── settings.json        # CLI toolkit config (tenant, cert paths, defaults)
 ├── scripts/                 # PowerShell audit & setup scripts
@@ -35,8 +36,16 @@ SPO-Audit-Toolkit/
 │   ├── Setup-App.ps1        # Non-interactive Entra app creation (for portal)
 │   └── Setup-RemoveApp.ps1  # Non-interactive Entra app removal (for portal)
 ├── portal/                  # Flask web application
-│   ├── app.py               # Flask app (routes, job runner, PS subprocess management)
+│   ├── app.py               # App factory, config, middleware (CSP, logging)
 │   ├── database.py          # SQLite persistence (tenants, jobs, audit log, users)
+│   ├── helpers.py           # Shared helpers (auth decorator, PS runner, env setup)
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── auth.py          # login, logout, initial_setup, settings
+│   │   ├── tenants.py       # tenant CRUD, setup (cert, app)
+│   │   ├── audits.py        # SPO audit, security scan, breach investigation, batch
+│   │   ├── jobs.py          # job status, polling
+│   │   └── reports.py       # report listing, downloads, audit trail
 │   ├── static/css/portal.css
 │   └── templates/           # Jinja2 templates (Bootstrap 5, dark theme)
 │       ├── base.html         # Layout with sidebar navigation
@@ -54,11 +63,17 @@ SPO-Audit-Toolkit/
 │       └── settings.html
 ├── inspectors/              # 365Inspect security scanner (third-party, adapted)
 │   ├── 365Inspect.ps1       # Main inspector orchestrator
-│   ├── Inspectors/          # Individual security checks (~90 inspector pairs)
+│   ├── Inspectors/          # Individual security checks (108 inspector pairs)
 │   │   ├── Inspect-*.ps1    # PowerShell inspection logic
 │   │   └── Inspect-*.json   # Finding metadata (description, remediation, impact)
 │   └── Utilities/
 │       └── Write-ErrorLog.ps1
+├── tests/                   # Python test suite (pytest)
+│   ├── conftest.py          # Shared fixtures, in-memory SQLite, test client
+│   ├── test_auth.py         # Login, logout, initial setup, session tests
+│   ├── test_database.py     # CRUD operations, encryption, schema integrity
+│   ├── test_routes.py       # Route access control, API response formats
+│   └── test_security.py     # Path traversal, CSRF enforcement, CSP headers
 └── .gitignore
 ```
 
@@ -70,7 +85,7 @@ SPO-Audit-Toolkit/
 - `output/` — audit report output (CLI mode)
 - `tenants/` — per-tenant data, certs, and output (portal mode)
 - `data/` — SQLite database (`portal.db`)
-- `logs/` — application logs (`portal.log`)
+- `logs/` — application logs (`portal.log`, with rotation)
 
 ## Technology Stack
 
@@ -81,9 +96,11 @@ SPO-Audit-Toolkit/
 - **Output**: XLSX (via ImportExcel) with CSV fallback
 
 ### Python (web portal)
-- **Python**: 3.8+
-- **Framework**: Flask 3.0+
-- **Database**: SQLite with WAL mode
+- **Python**: 3.9+
+- **Framework**: Flask 3.1
+- **CSRF Protection**: Flask-WTF (CSRFProtect)
+- **Rate Limiting**: Flask-Limiter (10/min on login)
+- **Database**: SQLite with WAL mode, version-tracked schema migrations
 - **Encryption**: cryptography (Fernet) for PFX passwords at rest
 - **Password hashing**: Werkzeug (bcrypt-based)
 - **Frontend**: Bootstrap 5.3 (dark theme), Bootstrap Icons, Jinja2 templates
@@ -100,11 +117,21 @@ The PFX password is the only secret:
 - **CLI mode**: prompted once per session, cached in `$script:SessionPfxPassword`
 - **Portal mode**: encrypted with Fernet (derived from Flask `secret_key`), stored in SQLite
 
+### Portal Architecture
+The portal uses Flask Blueprints to organize routes by feature:
+- `routes/auth.py` — login, logout, initial setup, password change
+- `routes/tenants.py` — tenant CRUD, cert generation, Entra app management
+- `routes/audits.py` — SPO audit, security scan, breach investigation, batch operations
+- `routes/jobs.py` — job status polling
+- `routes/reports.py` — report listing, file downloads, audit trail
+
+Shared helpers (`helpers.py`) provide auth decorators, PowerShell subprocess management, and tenant filesystem operations.
+
 ### Portal Job Execution
-The portal runs PowerShell scripts as background subprocesses via `threading.Thread`. Output is streamed line-by-line into SQLite (`jobs` table). Job status is polled by the frontend via `/jobs/<id>/status`.
+The portal runs PowerShell scripts as background subprocesses via `threading.Thread`. Output is streamed line-by-line into SQLite (`jobs` table). Job status is polled by the frontend via `/jobs/<id>/status`. Batch operations (`/batch/audit`) allow running security scans or SPO audits across multiple tenants simultaneously.
 
 ### Shared Module Pattern
-All audit scripts import `scripts/Shared.psm1` which provides:
+All audit scripts import `scripts/Shared.psm1` using `Join-Path $PSScriptRoot "Shared.psm1"` which provides:
 - `Connect-AuditSite` — PnP connection with retry logic
 - `Get-AuditGraphToken` — MSAL token acquisition
 - `Invoke-GraphRequest` — paginated Graph API calls
@@ -118,15 +145,19 @@ Each inspector consists of two files:
 - `Inspect-*.ps1` — PowerShell function that returns finding messages
 - `Inspect-*.json` — metadata (FindingName, Description, Remediation, Impact, Service, References)
 
-The `365Inspect.ps1` orchestrator loads all inspectors, runs them, and generates HTML/CSV/JSON/XML reports.
+The `365Inspect.ps1` orchestrator loads all 108 inspectors, runs them, and generates HTML/CSV/JSON/XML reports.
+
+### Database Schema Versioning
+The SQLite database uses a simple `schema_version` table to track schema changes. On startup, `init_db()` checks the current version and applies any incremental migrations defined in the `_MIGRATIONS` dict in `database.py`. This is a lightweight approach — no Alembic dependency.
 
 ## Development Conventions
 
 ### PowerShell Scripts
 - Use `Set-StrictMode -Version Latest` and `$ErrorActionPreference = "Stop"`
-- Use `#requires` directives for module dependencies
+- Use `#requires` directives for module dependencies (e.g., `#requires -Modules ExchangeOnlineManagement`)
 - Use `[CmdletBinding()]` with typed parameters
 - Use `[System.Collections.Generic.List[PSCustomObject]]` instead of `@()` array concatenation
+- Import Shared.psm1 using `Join-Path $PSScriptRoot "Shared.psm1"` (scripts live in `scripts/`)
 - Log with pattern: `Write-Host "$(Get-Date) INFO: message"` (also `WARN:` for warnings)
 - Use `Write-Progress` for long operations with counter/total tracking
 - Always `Disconnect-PnPOnline` or `Disconnect-ExchangeOnline` after use
@@ -135,9 +166,11 @@ The `365Inspect.ps1` orchestrator loads all inspectors, runs them, and generates
 - Setup scripts output JSON on last stdout line for portal parsing
 
 ### Python / Flask
-- Routes grouped by feature with comment dividers
+- App factory pattern in `app.py` (`create_app()`)
+- Routes organized into Blueprints under `portal/routes/`
 - All routes behind `@login_required` decorator (except `/login`, `/initial-setup`)
 - API endpoints return `jsonify({"ok": True/False, ...})`
+- CSRF protection via Flask-WTF on all POST routes; CSRF token exposed as `window.CSRF_TOKEN` in base template for fetch() calls
 - Path traversal protection on file downloads (validates against allowed base directories)
 - Database operations use context manager (`with get_db() as conn:`)
 - Subprocess environment set up via `build_ps_env()` (injects local module path + PFX password)
@@ -147,11 +180,40 @@ The `365Inspect.ps1` orchestrator loads all inspectors, runs them, and generates
 - Bootstrap 5 dark theme (`data-bs-theme="dark"`)
 - Sidebar navigation with Bootstrap Icons
 - Flash messages rendered in base template
+- All forms include CSRF token (hidden field for traditional forms, `window.CSRF_TOKEN` for fetch)
+- url_for uses blueprint-qualified names (e.g., `url_for('tenants.tenant_detail', tenant_id=...)`)
 
 ### Configuration
 - `config/settings.json` — CLI toolkit settings (tenant, app, cert paths)
 - `config/portal.json` — portal config (auto-generated Flask secret key)
 - Portal tenant data stored in SQLite, not JSON files
+
+## Testing
+
+### Python (pytest)
+Run tests from the repository root:
+```bash
+pip install -r requirements.txt pytest
+python -m pytest tests/ -v
+```
+
+Test infrastructure:
+- **conftest.py** — Flask test client fixture, temporary SQLite database (reset per test)
+- **test_auth.py** — Login, logout, initial setup, password change, session protection
+- **test_database.py** — User/tenant/job CRUD, encryption roundtrip, schema versioning
+- **test_routes.py** — Route access control, API response formats, tenant operations
+- **test_security.py** — CSRF enforcement, path traversal protection, CSP/security headers
+
+Patterns:
+- Use `client` fixture for unauthenticated requests, `authed_client` for authenticated
+- Use `app_csrf` / `client_csrf` fixtures to test with CSRF enforcement enabled
+- Database is automatically reset before each test via the `_clean_db` autouse fixture
+
+### PowerShell (Pester)
+No Pester tests currently exist. When adding them:
+- Place test files in `tests/` as `*.Tests.ps1`
+- Mock `Connect-PnPOnline`, `Connect-ExchangeOnline`, and Graph API calls
+- Test parameter validation and output formatting
 
 ## Common Tasks
 
@@ -170,18 +232,22 @@ The `365Inspect.ps1` orchestrator loads all inspectors, runs them, and generates
 # 1. Download PowerShell modules
 powershell -File Build-Toolkit.ps1
 
-# 2. Launch portal
+# 2. Install Python dependencies
+pip install -r requirements.txt
+
+# 3. Launch portal
 run.cmd
 # Visit http://127.0.0.1:5000, create admin account
 ```
 
 ### Adding a new audit script
 1. Create `scripts/New-AuditScript.ps1` following the existing parameter pattern
-2. Import `Shared.psm1` at the top
-3. Use `Get-AuditCertificatePassword` for PFX password resolution
-4. Use `Connect-AuditSite` or `Get-AuditGraphToken` for connections
-5. Use `Export-AuditData` for output
-6. Wire it into `toolkit.ps1` menu (CLI) and/or `portal/app.py` routes (portal)
+2. Add `#requires -Modules <module>` directive at the top
+3. Import Shared.psm1: `$sharedModule = Join-Path $PSScriptRoot "Shared.psm1"`
+4. Use `Get-AuditCertificatePassword` for PFX password resolution
+5. Use `Connect-AuditSite` or `Get-AuditGraphToken` for connections
+6. Use `Export-AuditData` for output
+7. Wire it into `toolkit.ps1` menu (CLI) and/or the appropriate Blueprint in `portal/routes/` (portal)
 
 ### Adding a new inspector
 1. Create `inspectors/Inspectors/Inspect-NewCheck.ps1` with a function returning messages
@@ -193,10 +259,42 @@ run.cmd
 - **Never commit**: certificates (`*.pfx`, `*.cer`, `*.pem`), credentials, audit output (`*.csv`, `*.xlsx`), database (`data/`), tenant data (`tenants/`)
 - PFX passwords are encrypted at rest in the portal database using Fernet
 - The Flask secret key is auto-generated and stored in `config/portal.json`
+- **CSRF protection**: Flask-WTF CSRFProtect applied globally; all forms include CSRF tokens
+- **Session timeout**: Sessions expire after 8 hours (`permanent_session_lifetime`)
+- **Rate limiting**: Login route limited to 10 requests/minute via Flask-Limiter
+- **CSP headers**: Content-Security-Policy set on all responses (allows self + Bootstrap CDN)
+- **Security headers**: X-Content-Type-Options: nosniff, X-Frame-Options: DENY
+- **Log rotation**: RotatingFileHandler (10 MB, 5 backups) for `logs/portal.log`
 - File download routes validate paths against allowed base directories
 - The portal uses session-based auth with werkzeug password hashing
 - All PowerShell scripts use `$ErrorActionPreference = "Stop"` for fail-fast behavior
 - Environment variable `AUDIT_PFX_PASSWORD` is used to pass passwords to subprocesses (avoids command-line exposure)
+
+## Deployment
+
+### Development
+```bash
+python portal/app.py
+# Runs on http://127.0.0.1:5000 with Flask's built-in server
+```
+
+### Production
+For production deployments, use a WSGI server behind a reverse proxy:
+
+```bash
+# Install gunicorn
+pip install gunicorn
+
+# Run with gunicorn (from repository root)
+cd portal && gunicorn -w 4 -b 127.0.0.1:5000 "app:create_app()"
+```
+
+Place behind a reverse proxy (nginx, Caddy) that provides:
+- HTTPS termination with a valid TLS certificate
+- Static file serving for `portal/static/`
+- Proxy headers (X-Forwarded-For, X-Forwarded-Proto)
+
+Set the `FLASK_ENV=production` environment variable. Ensure the Flask secret key in `config/portal.json` is backed up — losing it invalidates all encrypted PFX passwords and active sessions.
 
 ## Dependencies
 
@@ -213,5 +311,15 @@ run.cmd
 - ImportExcel — XLSX export (optional, CSV fallback)
 
 ### Python Packages (`requirements.txt`)
-- Flask >= 3.0.0
-- cryptography >= 42.0.0
+- Flask==3.1.3 — web framework
+- cryptography==44.0.0 — Fernet encryption for PFX passwords
+- Flask-WTF==1.2.2 — CSRF protection
+- Flask-Limiter==3.8.0 — rate limiting
+
+## Known Gaps
+
+- No database migration tool (Alembic) — uses a lightweight version-tracked approach in `database.py`
+- No automated PowerShell tests (Pester) — only Python tests exist
+- SQLite is not suitable for high-concurrency production use (WAL mode helps but has limits)
+- No email/notification system for completed audits
+- Login rate limiting uses in-memory storage (resets on restart); for multi-process deployments, configure a Redis backend for Flask-Limiter

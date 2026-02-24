@@ -31,8 +31,8 @@
         <span class="sidebar-label">MANAGE</span>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint in ('tenants_list', 'tenant_detail', 'tenant_create') %}active{% endif %}"
-           href="{{ url_for('tenants_list') }}">
+        <a class="nav-link {% if request.endpoint in ('tenants.tenants_list', 'tenants.tenant_detail', 'tenants.tenant_create') %}active{% endif %}"
+           href="{{ url_for('tenants.tenants_list') }}">
           <i class="bi bi-building me-2"></i>Tenants
         </a>
       </li>
@@ -41,20 +41,20 @@
         <span class="sidebar-label">RESULTS</span>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'reports' %}active{% endif %}"
-           href="{{ url_for('reports') }}">
+        <a class="nav-link {% if request.endpoint == 'reports.reports' %}active{% endif %}"
+           href="{{ url_for('reports.reports') }}">
           <i class="bi bi-file-earmark-bar-graph me-2"></i>Reports
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'jobs_page' %}active{% endif %}"
-           href="{{ url_for('jobs_page') }}">
+        <a class="nav-link {% if request.endpoint == 'jobs.jobs_page' %}active{% endif %}"
+           href="{{ url_for('jobs.jobs_page') }}">
           <i class="bi bi-activity me-2"></i>Jobs
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'audit_trail' %}active{% endif %}"
-           href="{{ url_for('audit_trail') }}">
+        <a class="nav-link {% if request.endpoint == 'reports.audit_trail' %}active{% endif %}"
+           href="{{ url_for('reports.audit_trail') }}">
           <i class="bi bi-journal-text me-2"></i>Audit Log
         </a>
       </li>
@@ -63,8 +63,8 @@
         <span class="sidebar-label">ACCOUNT</span>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'settings_page' %}active{% endif %}"
-           href="{{ url_for('settings_page') }}">
+        <a class="nav-link {% if request.endpoint == 'auth.settings_page' %}active{% endif %}"
+           href="{{ url_for('auth.settings_page') }}">
           <i class="bi bi-gear me-2"></i>Settings
         </a>
       </li>
@@ -75,7 +75,7 @@
         <small class="text-muted">
           <i class="bi bi-person-circle me-1"></i>{{ session.get('display_name', session.get('username', '')) }}
         </small>
-        <a href="{{ url_for('logout') }}" class="text-muted" title="Sign out">
+        <a href="{{ url_for('auth.logout') }}" class="text-muted" title="Sign out">
           <i class="bi bi-box-arrow-right"></i>
         </a>
       </div>
@@ -104,6 +104,10 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Make CSRF token available for all fetch() calls
+window.CSRF_TOKEN = "{{ csrf_token() }}";
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -14,7 +14,7 @@
 <div class="row g-3">
   {% for t in tenants %}
   <div class="col-md-6 col-xl-4">
-    <a href="{{ url_for('tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
+    <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
       <div class="card h-100" style="cursor:pointer;transition:border-color .15s">
         <div class="card-body">
           <div class="d-flex align-items-start mb-2">
@@ -58,7 +58,8 @@
 <div class="modal fade" id="addTenantModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form method="POST" action="{{ url_for('tenant_create') }}">
+      <form method="POST" action="{{ url_for('tenants.tenant_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h6 class="modal-title fw-semibold">Add Tenant</h6>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

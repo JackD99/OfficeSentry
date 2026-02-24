@@ -6,7 +6,7 @@
 <!-- Tenant filter -->
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
   <span class="text-muted small">Filter:</span>
-  <a href="{{ url_for('jobs_page') }}"
+  <a href="{{ url_for('jobs.jobs_page') }}"
      class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
   {% for tid, tname in tenants.items() %}
   <a href="{{ url_for('jobs_page', tenant_id=tid) }}"

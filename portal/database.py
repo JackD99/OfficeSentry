@@ -111,9 +111,49 @@ CREATE TABLE IF NOT EXISTS audit_log (
 """
 
 
+SCHEMA_VERSION = 1
+
+_MIGRATIONS = {
+    # 1 -> 2: example (uncomment and add when needed)
+    # 2: "ALTER TABLE tenants ADD COLUMN new_column TEXT DEFAULT '';",
+}
+
+
+def _get_schema_version(conn) -> int:
+    try:
+        row = conn.execute(
+            "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
+        ).fetchone()
+        return row["version"] if row else 0
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _run_migrations(conn):
+    current = _get_schema_version(conn)
+    for ver in sorted(_MIGRATIONS):
+        if ver > current:
+            conn.executescript(_MIGRATIONS[ver])
+            conn.execute(
+                "INSERT INTO schema_version (version) VALUES (?)", (ver,)
+            )
+
+
 def init_db():
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schema_version ("
+            "  version INTEGER PRIMARY KEY,"
+            "  applied_at TEXT DEFAULT (datetime('now'))"
+            ")"
+        )
+        if _get_schema_version(conn) == 0:
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
+                (SCHEMA_VERSION,)
+            )
+        _run_migrations(conn)
 
 
 # ---------------------------------------------------------------------------
