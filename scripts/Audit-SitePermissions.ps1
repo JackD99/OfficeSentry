@@ -14,41 +14,22 @@ param (
     [Parameter(Mandatory = $true)][string] $ClientId,
     [Parameter(Mandatory = $true)][string] $Tenant,
     [Parameter(Mandatory = $true)][string] $CertificatePath,
-    [Parameter(Mandatory = $true)][securestring] $CertificatePassword
+    [Parameter(Mandatory = $false)][securestring] $CertificatePassword
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$excludedLists = @(
-    "App Packages","appdata","appfiles","Apps in Testing","Cache Profiles","Composed Looks",
-    "Content and Structure Reports","Content type publishing error log","Converted Forms",
-    "Device Channels","Form Templates","fpdatasources","Get started with Apps for Office and SharePoint",
-    "List Template Gallery","Long Running Operation Status","Maintenance Log Library","Style Library",
-    "Master Docs","Master Page Gallery","MicroFeed","NintexFormXml","Quick Deploy Items",
-    "Relationships List","Reusable Content","Search Config List","Solution Gallery",
-    "Site Collection Images","Suggested Content Browser Locations","TaxonomyHiddenList",
-    "User Information List","Web Part Gallery","wfpub","wfsvc","Workflow History","Workflow Tasks",
-    "Preservation Hold Library","SharePointHomeCacheList"
-)
+# Import shared module
+Import-Module (Join-Path $PSScriptRoot "Shared.psm1") -Force
 
-function Get-PrincipalType {
-    param([string]$LoginName)
-    if ($LoginName -match '^c:0t\.c\|tenant\|' -or $LoginName -match 'spo-grid-all-users') { return "Everyone" }
-    if ($LoginName -match '#ext#|urn:spo:guest') { return "External" }
-    if ($LoginName -match '^i:0#\.f\|membership\|') { return "User" }
-    if ($LoginName -match '^c:0o\.c\|federateddirectoryclaimprovider\|') { return "M365 Group" }
-    if ($LoginName -match 'sharepoint\|') { return "SP Group" }
-    return "Other"
-}
+# Resolve PFX password
+$CertificatePassword = Get-AuditCertificatePassword -CertificatePassword $CertificatePassword
+$excludedLists = Get-ExcludedSystemLists
 
 Write-Host "$(Get-Date) INFO: Connecting to $SiteUrl ..."
-Connect-PnPOnline `
-    -Url                 $SiteUrl `
-    -ClientId            $ClientId `
-    -Tenant              $Tenant `
-    -CertificatePath     $CertificatePath `
-    -CertificatePassword $CertificatePassword
+Connect-AuditSite -SiteUrl $SiteUrl -ClientId $ClientId -Tenant $Tenant `
+    -CertificatePath $CertificatePath -CertificatePassword $CertificatePassword
 
 # ---- Site-level permissions ----
 Write-Host "$(Get-Date) INFO: Reading site-level role assignments..."
@@ -136,43 +117,10 @@ Write-Host "$(Get-Date) INFO: $listCount lists with unique permissions, $($listR
 
 # ---- Export ----
 $siteName = ($SiteUrl -replace 'https?://', '' -replace '[/\\:*?"<>|]', '_')
-$stamp    = Get-Date -Format "yyyyMMdd-HHmm"
-$xlsx     = Join-Path $OutputFolder "SitePermissions_${siteName}_${stamp}.xlsx"
 
-if (-not (Test-Path $OutputFolder)) { New-Item -ItemType Directory -Path $OutputFolder | Out-Null }
-
-if (Get-Module -ListAvailable -Name ImportExcel) {
-    Import-Module ImportExcel -ErrorAction Stop
-
-    $siteRows.ToArray() | Export-Excel `
-        -Path          $xlsx `
-        -WorksheetName "SitePermissions" `
-        -AutoFilter `
-        -BoldTopRow `
-        -FreezeTopRow `
-        -AutoSize `
-        -ClearSheet
-
-    if ($listRows.Count -gt 0) {
-        $listRows.ToArray() | Export-Excel `
-            -Path          $xlsx `
-            -WorksheetName "ListPermissions" `
-            -AutoFilter `
-            -BoldTopRow `
-            -FreezeTopRow `
-            -AutoSize
-    }
-
-    Write-Host "$(Get-Date) INFO: Report saved to $xlsx" -ForegroundColor Green
-} else {
-    $csv1 = Join-Path $OutputFolder "SitePermissions_${siteName}_${stamp}.csv"
-    $siteRows.ToArray() | Export-Csv -Path $csv1 -NoTypeInformation
-    Write-Host "$(Get-Date) WARN: ImportExcel not found — exported CSV to $csv1" -ForegroundColor Yellow
-    if ($listRows.Count -gt 0) {
-        $csv2 = Join-Path $OutputFolder "ListPermissions_${siteName}_${stamp}.csv"
-        $listRows.ToArray() | Export-Csv -Path $csv2 -NoTypeInformation
-        Write-Host "  $csv2"
-    }
-}
+Export-AuditData -OutputFolder $OutputFolder -FilePrefix "SitePermissions_${siteName}" -Sheets @(
+    @{ Name = "SitePermissions"; Data = $siteRows.ToArray() },
+    @{ Name = "ListPermissions"; Data = $listRows.ToArray() }
+)
 
 Write-Host "$(Get-Date) INFO: Done. $($siteRows.Count) site-level, $($listRows.Count) list-level records."

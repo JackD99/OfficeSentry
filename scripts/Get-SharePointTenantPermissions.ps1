@@ -28,7 +28,7 @@ param (
     [Parameter(Mandatory = $true)]
     [string] $CertificatePath,  # PFX path
 
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [securestring] $CertificatePassword,
 
     [Parameter(Mandatory = $false)]
@@ -38,12 +38,18 @@ param (
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Import shared module
+Import-Module (Join-Path $PSScriptRoot "Shared.psm1") -Force
+
+# Resolve PFX password
+$CertificatePassword = Get-AuditCertificatePassword -CertificatePassword $CertificatePassword
+$excludedLists = Get-ExcludedSystemLists
+
 # Derive admin URL from Tenant value if not explicitly provided
 function Get-AdminUrl {
     param([string]$Tenant, [string]$Override)
     if (-not [string]::IsNullOrWhiteSpace($Override)) { return $Override }
 
-    # If it looks like a domain, extract the prefix
     if ($Tenant -match '^[0-9a-f-]{36}$') {
         throw "Tenant appears to be a GUID — please provide -AdminUrl explicitly (e.g. https://contoso-admin.sharepoint.com)"
     }
@@ -52,82 +58,23 @@ function Get-AdminUrl {
     return "https://$prefix-admin.sharepoint.com"
 }
 
-# Determine if an exception is likely transient (worth retrying)
-function Test-TransientError {
-    param([System.Management.Automation.ErrorRecord]$Err)
-    $msg = $Err.Exception.Message
-    return ($msg -match 'throttl|timeout|429|503|temporarily|network|connect')
-}
-
-function Connect-TenantSite {
-    param ([Parameter(Mandatory = $true)][string] $SiteUrl)
-
-    $attempts = 3
-    for ($i = 0; $i -lt $attempts; $i++) {
-        try {
-            Connect-PnPOnline `
-                -Url                $SiteUrl `
-                -ClientId           $ClientId `
-                -Tenant             $Tenant `
-                -CertificatePath    $CertificatePath `
-                -CertificatePassword $CertificatePassword
-            return
-        }
-        catch {
-            if ($i -eq $attempts - 1) { throw }
-            if (-not (Test-TransientError -Err $_)) { throw }  # Don't retry auth/config failures
-            Write-Host "$(Get-Date) WARN: Retrying connection to $SiteUrl ($($i+1)/$($attempts-1))..."
-            Start-Sleep -Seconds 3
-        }
-    }
-}
-
-function Get-GraphToken {
-    $bstr  = $null
-    $plain = $null
-    try {
-        $bstr  = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($CertificatePassword)
-        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-
-        # EphemeralKeySet only — no Exportable flag
-        $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
-        $cert  = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($CertificatePath, $plain, $flags)
-
-        return Get-MsalToken `
-            -TenantId         $Tenant `
-            -ClientId         $ClientId `
-            -ClientCertificate $cert `
-            -Scopes           "https://graph.microsoft.com/.default"
-    }
-    finally {
-        # Always zero out the BSTR to minimise plaintext exposure in memory
-        if ($null -ne $bstr) {
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        }
-        $plain = $null
-    }
-}
-
 function Get-UserGroupMembership {
     param ([Parameter(Mandatory = $true)][string] $UserEmail)
 
-    $accessToken       = (Get-GraphToken).AccessToken
-    $encodedUserEmail  = [System.Web.HttpUtility]::UrlEncode($UserEmail)
-    $url               = "https://graph.microsoft.com/v1.0/users/$encodedUserEmail/memberOf?`$select=id,displayName"
+    $token = Get-AuditGraphToken -Tenant $Tenant -ClientId $ClientId `
+        -CertificatePath $CertificatePath -CertificatePassword $CertificatePassword
+    $encodedUserEmail = [System.Web.HttpUtility]::UrlEncode($UserEmail)
+    $uri = "https://graph.microsoft.com/v1.0/users/$encodedUserEmail/memberOf?`$select=id,displayName"
 
-    $all = [System.Collections.Generic.List[PSCustomObject]]::new()
-    while ($url) {
-        $resp = Invoke-RestMethod -Uri $url -Method GET -Headers @{ Authorization = "Bearer $accessToken" }
-        foreach ($item in $resp.value) {
-            $all.Add([PSCustomObject]@{
-                GroupName = $item.displayName
-                GroupId   = $item.id
-            })
-        }
-        $url = $resp.'@odata.nextLink'
+    $results = Invoke-GraphRequest -Uri $uri -AccessToken $token.AccessToken
+    $groups = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($item in $results) {
+        $groups.Add([PSCustomObject]@{
+            GroupName = $item.displayName
+            GroupId   = $item.id
+        })
     }
-
-    return $all.ToArray()
+    return $groups.ToArray()
 }
 
 function New-CsvFile {
@@ -211,18 +158,6 @@ function Get-UniqueListPermissions {
     $ctx.Load($lists)
     $ctx.ExecuteQuery()
 
-    $excludedLists = @(
-        "App Packages","appdata","appfiles","Apps in Testing","Cache Profiles","Composed Looks",
-        "Content and Structure Reports","Content type publishing error log","Converted Forms",
-        "Device Channels","Form Templates","fpdatasources","Get started with Apps for Office and SharePoint",
-        "List Template Gallery","Long Running Operation Status","Maintenance Log Library","Style Library",
-        "Master Docs","Master Page Gallery","MicroFeed","NintexFormXml","Quick Deploy Items",
-        "Relationships List","Reusable Content","Search Config List","Solution Gallery",
-        "Site Collection Images","Suggested Content Browser Locations","TaxonomyHiddenList",
-        "User Information List","Web Part Gallery","wfpub","wfsvc","Workflow History","Workflow Tasks",
-        "Preservation Hold Library","SharePointHomeCacheList"
-    )
-
     $results = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     foreach ($list in $lists) {
@@ -265,7 +200,8 @@ function Get-UniqueListPermissions {
 $adminUrl = Get-AdminUrl -Tenant $Tenant -Override $AdminUrl
 
 Write-Host "$(Get-Date) INFO: Connecting to tenant admin..."
-Connect-TenantSite -SiteUrl $adminUrl
+Connect-AuditSite -SiteUrl $adminUrl -ClientId $ClientId -Tenant $Tenant `
+    -CertificatePath $CertificatePath -CertificatePassword $CertificatePassword
 
 Write-Host "$(Get-Date) INFO: Retrieving site collections..."
 $siteCollections = Get-PnPTenantSite
@@ -291,7 +227,8 @@ foreach ($site in $siteCollections) {
     Write-Host "$(Get-Date) INFO: [$counter/$total] $($site.Url)"
 
     try {
-        Connect-TenantSite -SiteUrl $site.Url
+        Connect-AuditSite -SiteUrl $site.Url -ClientId $ClientId -Tenant $Tenant `
+            -CertificatePath $CertificatePath -CertificatePassword $CertificatePassword
     }
     catch {
         Write-Host "$(Get-Date) WARN: Could not connect to $($site.Url) — skipping. $_" -ForegroundColor Yellow

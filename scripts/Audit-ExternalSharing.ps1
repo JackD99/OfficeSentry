@@ -14,11 +14,17 @@ param (
     [Parameter(Mandatory = $true)][string] $ClientId,
     [Parameter(Mandatory = $true)][string] $Tenant,
     [Parameter(Mandatory = $true)][string] $CertificatePath,
-    [Parameter(Mandatory = $true)][securestring] $CertificatePassword
+    [Parameter(Mandatory = $false)][securestring] $CertificatePassword
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Import shared module
+Import-Module (Join-Path $PSScriptRoot "Shared.psm1") -Force
+
+# Resolve PFX password
+$CertificatePassword = Get-AuditCertificatePassword -CertificatePassword $CertificatePassword
 
 function Test-IsExternal {
     param([string]$LoginName)
@@ -28,12 +34,8 @@ function Test-IsExternal {
 }
 
 Write-Host "$(Get-Date) INFO: Connecting to $SiteUrl ..."
-Connect-PnPOnline `
-    -Url                 $SiteUrl `
-    -ClientId            $ClientId `
-    -Tenant              $Tenant `
-    -CertificatePath     $CertificatePath `
-    -CertificatePassword $CertificatePassword
+Connect-AuditSite -SiteUrl $SiteUrl -ClientId $ClientId -Tenant $Tenant `
+    -CertificatePath $CertificatePath -CertificatePassword $CertificatePassword
 
 # ---- External users ----
 Write-Host "$(Get-Date) INFO: Retrieving site users..."
@@ -46,7 +48,6 @@ foreach ($user in $allUsers) {
 
     $email = if ($user.Email) { $user.Email } else {
         if ($user.LoginName -match '#ext#') {
-            # Extract email from UPN-style guest login
             ($user.LoginName -split '\|')[-1] -replace '#ext#.*', ''
         } else { "" }
     }
@@ -85,7 +86,6 @@ foreach ($lib in $docLibraries) {
     Write-Host "$(Get-Date) INFO:   Library: $($lib.Title)"
 
     try {
-        # Get-PnPFileSharingLink works per file; iterate items in the library
         $query = [Microsoft.SharePoint.Client.CamlQuery]::CreateAllItemsQuery(500)
         $items = $lib.GetItems($query)
         $ctx.Load($items)
@@ -124,7 +124,7 @@ foreach ($lib in $docLibraries) {
                 }
             }
             catch {
-                # Some items may not support sharing link retrieval — skip silently
+                # Some items may not support sharing link retrieval
             }
         }
     }
@@ -140,49 +140,16 @@ Write-Host "$(Get-Date) INFO: Found $($linkRows.Count) sharing link records."
 
 # ---- Export ----
 $siteName = ($SiteUrl -replace 'https?://', '' -replace '[/\\:*?"<>|]', '_')
-$stamp    = Get-Date -Format "yyyyMMdd-HHmm"
-$xlsx     = Join-Path $OutputFolder "ExternalSharing_${siteName}_${stamp}.xlsx"
 
-if (-not (Test-Path $OutputFolder)) { New-Item -ItemType Directory -Path $OutputFolder | Out-Null }
-
-if (Get-Module -ListAvailable -Name ImportExcel) {
-    Import-Module ImportExcel -ErrorAction Stop
-
-    $externalRows.ToArray() | Export-Excel `
-        -Path          $xlsx `
-        -WorksheetName "ExternalUsers" `
-        -AutoFilter `
-        -BoldTopRow `
-        -FreezeTopRow `
-        -AutoSize `
-        -ClearSheet
-
-    if ($linkRows.Count -gt 0) {
-        $linkRows.ToArray() | Export-Excel `
-            -Path          $xlsx `
-            -WorksheetName "SharingLinks" `
-            -AutoFilter `
-            -BoldTopRow `
-            -FreezeTopRow `
-            -AutoSize
-    } else {
-        # Write an empty sheet with a note so the workbook isn't misleading
-        [PSCustomObject]@{ Note = "No sharing links found" } | Export-Excel `
-            -Path          $xlsx `
-            -WorksheetName "SharingLinks" `
-            -ClearSheet
-    }
-
-    Write-Host "$(Get-Date) INFO: Report saved to $xlsx" -ForegroundColor Green
+$sheets = @(
+    @{ Name = "ExternalUsers"; Data = $externalRows.ToArray() }
+)
+if ($linkRows.Count -gt 0) {
+    $sheets += @{ Name = "SharingLinks"; Data = $linkRows.ToArray() }
 } else {
-    $csv1 = Join-Path $OutputFolder "ExternalUsers_${siteName}_${stamp}.csv"
-    $externalRows.ToArray() | Export-Csv -Path $csv1 -NoTypeInformation
-    Write-Host "$(Get-Date) WARN: ImportExcel not found — exported CSV to $csv1" -ForegroundColor Yellow
-    if ($linkRows.Count -gt 0) {
-        $csv2 = Join-Path $OutputFolder "SharingLinks_${siteName}_${stamp}.csv"
-        $linkRows.ToArray() | Export-Csv -Path $csv2 -NoTypeInformation
-        Write-Host "  $csv2"
-    }
+    $sheets += @{ Name = "SharingLinks"; Data = @([PSCustomObject]@{ Note = "No sharing links found" }) }
 }
+
+Export-AuditData -OutputFolder $OutputFolder -FilePrefix "ExternalSharing_${siteName}" -Sheets $sheets
 
 Write-Host "$(Get-Date) INFO: Done. $($externalRows.Count) external user(s), $($linkRows.Count) sharing link(s)."

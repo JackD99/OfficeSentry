@@ -3,15 +3,31 @@
 {% block page_title %}Reports{% endblock %}
 
 {% block content %}
+<!-- Tenant filter -->
+<div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
+  <span class="text-muted small">Tenant:</span>
+  <a href="{{ url_for('reports') }}"
+     class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
+  {% for t in tenants %}
+  <a href="{{ url_for('reports', tenant_id=t.id) }}"
+     class="btn btn-sm {{ 'btn-secondary' if filter_tenant == t.id else 'btn-outline-secondary' }}">{{ t.name }}</a>
+  {% endfor %}
+</div>
+
 {% if files %}
+<!-- Type filter -->
 <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
-  <span class="text-muted small">Filter:</span>
+  <span class="text-muted small">Type:</span>
   <button class="btn btn-sm btn-outline-secondary active" onclick="filterType('', this)">All</button>
   <button class="btn btn-sm btn-outline-primary"   onclick="filterType('Groups', this)">Groups</button>
   <button class="btn btn-sm btn-outline-info"      onclick="filterType('Site Permissions', this)">Site Permissions</button>
   <button class="btn btn-sm btn-outline-warning"   onclick="filterType('External Sharing', this)">External Sharing</button>
   <button class="btn btn-sm btn-outline-success"   onclick="filterType('User Permissions', this)">User Permissions</button>
   <button class="btn btn-sm btn-outline-danger"    onclick="filterType('Security Scan', this)">Security Scan</button>
+  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('Audit Log', this)">Audit Log</button>
+  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('Inbox Rules', this)">Inbox Rules</button>
+  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('Sign-In Logs', this)">Sign-In</button>
+  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('OAuth Consent', this)">OAuth</button>
 </div>
 
 <div class="card">
@@ -21,6 +37,7 @@
         <tr>
           <th>File</th>
           <th>Type</th>
+          <th>Tenant</th>
           <th>Date</th>
           <th>Size</th>
           <th class="text-end">Actions</th>
@@ -44,16 +61,17 @@
             <span class="font-monospace small">{{ f.name }}</span>
           </td>
           <td><span class="badge bg-secondary">{{ f.type }}</span></td>
+          <td class="small text-muted">{{ f.tenant_name }}</td>
           <td class="text-muted small">{{ f.mtime }}</td>
           <td class="text-muted small">{{ f.size }}</td>
           <td class="text-end">
             {% if f.ext == '.html' %}
-            <a href="{{ url_for('report_view', filename=f.name) }}" target="_blank"
+            <a href="{{ url_for('report_download', path=f.full_path) }}" target="_blank"
                class="btn btn-sm btn-outline-primary me-1">
               <i class="bi bi-eye me-1"></i>View
             </a>
             {% endif %}
-            <a href="{{ url_for('report_view', filename=f.name) }}" download
+            <a href="{{ url_for('report_download', path=f.full_path) }}"
                class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-download me-1"></i>Download
             </a>
@@ -68,8 +86,7 @@
 <div class="text-center py-5 text-muted">
   <i class="bi bi-file-earmark-bar-graph fs-1 mb-3 d-block"></i>
   <p>No reports yet.</p>
-  <a href="{{ url_for('audit_spo') }}" class="btn btn-outline-primary me-2">SPO Audit</a>
-  <a href="{{ url_for('audit_security') }}" class="btn btn-outline-warning">Security Scan</a>
+  <a href="{{ url_for('tenants_list') }}" class="btn btn-outline-primary">Go to Tenants</a>
 </div>
 {% endif %}
 {% endblock %}
@@ -77,7 +94,7 @@
 {% block scripts %}
 <script>
 function filterType(type, btn) {
-  document.querySelectorAll('.d-flex .btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[onclick^="filterType"]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.querySelectorAll('#report-table tr').forEach(row => {
     row.style.display = (!type || row.dataset.type === type) ? '' : 'none';

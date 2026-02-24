@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+{% block title %}{{ tenant.name }} — M365 Audit Portal{% endblock %}
+{% block page_title %}{{ tenant.name }}{% endblock %}
+
+{% block content %}
+<!-- Status row -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card h-100 {{ 'border-success' if tenant.domain else 'border-warning' }}">
+      <div class="card-body py-2">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-building me-2 {{ 'text-success' if tenant.domain else 'text-warning' }}"></i>
+          <div>
+            <div class="small text-muted">Domain</div>
+            <div class="small fw-semibold text-truncate">{{ tenant.domain or 'Not set' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card h-100 {{ 'border-success' if tenant.client_id else 'border-warning' }}">
+      <div class="card-body py-2">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-app-indicator me-2 {{ 'text-success' if tenant.client_id else 'text-warning' }}"></i>
+          <div>
+            <div class="small text-muted">Entra App</div>
+            <div class="small fw-semibold text-truncate font-monospace">{{ tenant.client_id[:12] + '...' if tenant.client_id else 'Not created' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card h-100 {{ 'border-success' if cert_exists else 'border-danger' }}">
+      <div class="card-body py-2">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-patch-check me-2 {{ 'text-success' if cert_exists else 'text-danger' }}"></i>
+          <div>
+            <div class="small text-muted">Certificate</div>
+            <div class="small fw-semibold">{{ 'PFX found' if cert_exists else 'Missing' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    {% set ready = cert_exists and tenant.client_id %}
+    <div class="card h-100 {{ 'border-success' if ready else 'border-secondary' }}">
+      <div class="card-body py-2">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-check-circle me-2 {{ 'text-success' if ready else 'text-secondary' }}"></i>
+          <div>
+            <div class="small text-muted">Ready</div>
+            <div class="small fw-semibold">{{ 'Ready to audit' if ready else 'Setup incomplete' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Left: Setup & Actions -->
+  <div class="col-lg-7">
+    <!-- Quick actions -->
+    {% if cert_exists and tenant.client_id %}
+    <div class="card mb-4">
+      <div class="card-header fw-semibold"><i class="bi bi-lightning me-2 text-warning"></i>Audit Actions</div>
+      <div class="card-body">
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="{{ url_for('audit_spo', tenant_id=tenant.id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-diagram-3 me-1"></i>SPO Audit
+          </a>
+          <a href="{{ url_for('audit_security', tenant_id=tenant.id) }}" class="btn btn-outline-warning btn-sm">
+            <i class="bi bi-shield-exclamation me-1"></i>Security Scan
+          </a>
+          <a href="{{ url_for('audit_breach', tenant_id=tenant.id) }}" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-search me-1"></i>Breach Investigation
+          </a>
+          <a href="{{ url_for('reports', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-file-earmark-bar-graph me-1"></i>Reports
+          </a>
+          <a href="{{ url_for('jobs_page', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-activity me-1"></i>Jobs
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Setup accordion -->
+    <div class="accordion" id="setupAccordion">
+      <!-- Step 1: Certificate -->
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button {{ '' if not cert_exists else 'collapsed' }}" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#step1">
+            <span class="badge bg-primary me-3">1</span>
+            Generate Certificate
+            {% if cert_exists %}
+              <span class="badge bg-success ms-3"><i class="bi bi-check"></i> Found</span>
+            {% else %}
+              <span class="badge bg-danger ms-3">Missing</span>
+            {% endif %}
+          </button>
+        </h2>
+        <div id="step1" class="accordion-collapse collapse {{ 'show' if not cert_exists }}" data-bs-parent="#setupAccordion">
+          <div class="accordion-body">
+            <p class="text-muted small">Creates a self-signed certificate used to authenticate the Entra app.</p>
+            <form id="cert-form">
+              <div class="mb-3">
+                <label class="form-label">PFX Password <span class="text-danger">*</span></label>
+                <input type="password" class="form-control" name="pfx_password" required
+                       placeholder="Set a strong password">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm" id="cert-btn">
+                <span class="spinner-border spinner-border-sm d-none me-1" id="cert-spinner"></span>
+                Generate Certificate
+              </button>
+            </form>
+            <div class="mt-3 d-none" id="cert-result"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Entra App -->
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#step2">
+            <span class="badge bg-primary me-3">2</span>
+            Create Entra App
+            {% if tenant.client_id %}
+              <span class="badge bg-success ms-3"><i class="bi bi-check"></i> {{ tenant.client_id[:8] }}...</span>
+            {% else %}
+              <span class="badge bg-warning text-dark ms-3">Not created</span>
+            {% endif %}
+          </button>
+        </h2>
+        <div id="step2" class="accordion-collapse collapse {{ 'show' if cert_exists and not tenant.client_id }}" data-bs-parent="#setupAccordion">
+          <div class="accordion-body">
+            <p class="text-muted small">Creates an app registration in Entra ID with required API permissions.
+              You'll be prompted to sign in with a Global Admin account.</p>
+            <button class="btn btn-primary btn-sm" id="app-btn" onclick="createApp()">
+              <span class="spinner-border spinner-border-sm d-none me-1" id="app-spinner"></span>
+              Create Entra App
+            </button>
+            <div class="mt-3 d-none" id="app-result"></div>
+            <div class="mt-3 d-none" id="app-log-wrap">
+              <pre class="bg-dark text-light p-2 rounded small" id="app-log" style="max-height:200px;overflow-y:auto"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Remove App -->
+      <div class="accordion-item border-danger">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed text-danger" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#stepRemove">
+            <span class="badge bg-danger me-3">!</span>
+            Remove App &amp; Clean Up
+          </button>
+        </h2>
+        <div id="stepRemove" class="accordion-collapse collapse" data-bs-parent="#setupAccordion">
+          <div class="accordion-body">
+            <p class="text-muted small">Deletes the Entra app and clears credentials. Use after finishing an engagement.</p>
+            <button class="btn btn-danger btn-sm" id="remove-btn"
+                    onclick="if(confirm('Delete the Entra app and certificates for this tenant?')) removeApp()">
+              <span class="spinner-border spinner-border-sm d-none me-1" id="remove-spinner"></span>
+              Remove Entra App
+            </button>
+            <div class="mt-3 d-none" id="remove-result"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Settings + Recent Jobs -->
+  <div class="col-lg-5">
+    <!-- Tenant settings -->
+    <div class="card mb-4">
+      <div class="card-header fw-semibold"><i class="bi bi-gear me-2 text-secondary"></i>Settings</div>
+      <div class="card-body">
+        <form id="settings-form">
+          <div class="mb-2">
+            <label class="form-label small">Display Name</label>
+            <input type="text" class="form-control form-control-sm" name="name" value="{{ tenant.name }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Domain</label>
+            <input type="text" class="form-control form-control-sm" name="domain" value="{{ tenant.domain }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Tenant ID</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="tenant_id"
+                   value="{{ tenant.tenant_id or '' }}" placeholder="GUID (optional if domain is set)">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Client ID</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="client_id"
+                   value="{{ tenant.client_id or '' }}" placeholder="Set automatically after app creation">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">App Display Name</label>
+            <input type="text" class="form-control form-control-sm" name="app_display_name"
+                   value="{{ tenant.app_display_name or 'M365-Audit-App' }}">
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-8">
+              <label class="form-label small">Cert Subject</label>
+              <input type="text" class="form-control form-control-sm" name="cert_subject"
+                     value="{{ tenant.cert_subject or 'CN=M365 Audit' }}">
+            </div>
+            <div class="col-4">
+              <label class="form-label small">Cert Years</label>
+              <input type="number" class="form-control form-control-sm" name="cert_years_valid"
+                     value="{{ tenant.cert_years_valid or 2 }}" min="1" max="10">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">PFX Password</label>
+            <input type="password" class="form-control form-control-sm" name="pfx_password"
+                   placeholder="Leave blank to keep current">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Notes</label>
+            <textarea class="form-control form-control-sm" name="notes" rows="2">{{ tenant.notes or '' }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100" id="save-btn">Save Settings</button>
+        </form>
+        <div class="mt-2 d-none" id="settings-result"></div>
+      </div>
+    </div>
+
+    <!-- Recent jobs -->
+    <div class="card mb-4">
+      <div class="card-header fw-semibold d-flex align-items-center">
+        <i class="bi bi-activity me-2 text-primary"></i>Recent Jobs
+        <a href="{{ url_for('jobs_page', tenant_id=tenant.id) }}" class="ms-auto btn btn-sm btn-outline-secondary">All</a>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_jobs %}
+        <ul class="list-group list-group-flush">
+          {% for job in recent_jobs[:5] %}
+          <li class="list-group-item d-flex align-items-center gap-2 py-2">
+            {% if job.status == 'running' %}
+              <div class="spinner-border spinner-border-sm text-primary"></div>
+            {% elif job.status == 'done' %}
+              <i class="bi bi-check-circle-fill text-success"></i>
+            {% else %}
+              <i class="bi bi-x-circle-fill text-danger"></i>
+            {% endif %}
+            <div class="flex-grow-1 small">
+              <div class="fw-semibold">{{ job.label }}</div>
+              <div class="text-muted" style="font-size:.7rem">{{ job.started_at[:16] if job.started_at else '' }}</div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="p-3 text-muted small">No jobs yet for this tenant.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Delete tenant -->
+    <div class="card border-danger">
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('tenant_delete', tenant_id=tenant.id) }}"
+              onsubmit="return confirm('Delete tenant {{ tenant.name }}? This removes all local data.')">
+          <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+            <i class="bi bi-trash me-1"></i>Delete Tenant
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TENANT_ID = "{{ tenant.id }}";
+
+function showResult(el, data, successMsg) {
+  el.classList.remove('d-none');
+  if (data.ok) {
+    el.innerHTML = `<div class="alert alert-success small mb-0 py-1"><i class="bi bi-check-circle me-1"></i>${successMsg || data.message || 'Done.'}</div>`;
+  } else {
+    el.innerHTML = `<div class="alert alert-danger small mb-0 py-1"><i class="bi bi-x-circle me-1"></i>${data.error || 'An error occurred.'}</div>`;
+  }
+}
+
+// Cert generation
+document.getElementById('cert-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('cert-btn');
+  const spinner = document.getElementById('cert-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  const fd = new FormData(e.target);
+  const res = await fetch(`/tenants/${TENANT_ID}/cert`, { method: 'POST', body: fd });
+  const data = await res.json();
+  spinner.classList.add('d-none'); btn.disabled = false;
+  showResult(document.getElementById('cert-result'), data,
+    `Certificate created. Thumbprint: ${data.thumbprint || ''}`);
+  if (data.ok) setTimeout(() => location.reload(), 2000);
+});
+
+// App creation
+async function createApp() {
+  const btn = document.getElementById('app-btn');
+  const spinner = document.getElementById('app-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  const res = await fetch(`/tenants/${TENANT_ID}/app`, { method: 'POST' });
+  const data = await res.json();
+  if (!data.ok) {
+    spinner.classList.add('d-none'); btn.disabled = false;
+    showResult(document.getElementById('app-result'), data);
+    return;
+  }
+  document.getElementById('app-log-wrap').classList.remove('d-none');
+  pollJob(data.job_id, 'app-log', () => {
+    spinner.classList.add('d-none'); btn.disabled = false;
+    showResult(document.getElementById('app-result'),
+      { ok: true }, 'App creation complete. Check log for ClientId and grant admin consent.');
+    setTimeout(() => location.reload(), 3000);
+  });
+}
+
+// App removal
+async function removeApp() {
+  const btn = document.getElementById('remove-btn');
+  const spinner = document.getElementById('remove-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  const res = await fetch(`/tenants/${TENANT_ID}/remove-app`, { method: 'POST' });
+  const data = await res.json();
+  spinner.classList.add('d-none'); btn.disabled = false;
+  showResult(document.getElementById('remove-result'), data, 'App removed.');
+  if (data.ok) setTimeout(() => location.reload(), 2000);
+}
+
+// Settings save
+document.getElementById('settings-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  const fd = new FormData(e.target);
+  const res = await fetch(`/tenants/${TENANT_ID}/settings`, { method: 'POST', body: fd });
+  const data = await res.json();
+  btn.disabled = false;
+  showResult(document.getElementById('settings-result'), data, 'Settings saved.');
+});
+
+// Job poller
+function pollJob(jobId, logElId, onDone) {
+  const logEl = document.getElementById(logElId);
+  const interval = setInterval(async () => {
+    const r = await fetch(`/jobs/${jobId}/status`);
+    const d = await r.json();
+    if (logEl) {
+      logEl.textContent = d.output.join('\n');
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    if (d.status !== 'running') {
+      clearInterval(interval);
+      if (onDone) onDone(d);
+    }
+  }, 2000);
+}
+</script>
+{% endblock %}
