@@ -3,7 +3,7 @@ portal/app.py — M365 Audit Portal
 Multi-tenant Flask web app for M365 auditing, security scanning, and breach
 investigation.  Designed for MSPs managing hundreds of client tenants.
 
-Run via start.cmd or: python portal/app.py
+Launch: start.cmd (Windows), ./setup.sh --run (Linux/macOS), or: python portal/app.py
 """
 
 import json
