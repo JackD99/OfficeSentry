@@ -12,19 +12,21 @@ param (
     [Parameter(Mandatory = $true)][string] $ClientId,
     [Parameter(Mandatory = $true)][string] $Tenant,
     [Parameter(Mandatory = $true)][string] $CertificatePath,
-    [Parameter(Mandatory = $true)][securestring] $CertificatePassword
+    [Parameter(Mandatory = $false)][securestring] $CertificatePassword
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Import shared module
+Import-Module (Join-Path $PSScriptRoot "Shared.psm1") -Force
+
+# Resolve PFX password (explicit param -> env var -> interactive prompt)
+$CertificatePassword = Get-AuditCertificatePassword -CertificatePassword $CertificatePassword
+
 Write-Host "$(Get-Date) INFO: Connecting to $SiteUrl ..."
-Connect-PnPOnline `
-    -Url                 $SiteUrl `
-    -ClientId            $ClientId `
-    -Tenant              $Tenant `
-    -CertificatePath     $CertificatePath `
-    -CertificatePassword $CertificatePassword
+Connect-AuditSite -SiteUrl $SiteUrl -ClientId $ClientId -Tenant $Tenant `
+    -CertificatePath $CertificatePath -CertificatePassword $CertificatePassword
 
 Write-Host "$(Get-Date) INFO: Retrieving SharePoint groups..."
 $groups = Get-PnPGroup
@@ -53,7 +55,7 @@ foreach ($group in $groups) {
     foreach ($m in $members) {
         $loginName = $m.LoginName
         $email     = if ($m.Email) { $m.Email } else { ($loginName -split '\|')[-1] }
-        $type      = if ($m.PrincipalType -eq 'SecurityGroup' -or $m.PrincipalType -eq 'SharePointGroup') { "Group" } else { "User" }
+        $type      = Get-PrincipalType -LoginName $loginName
 
         $memberRow = [PSCustomObject]@{
             GroupName  = $group.Title
@@ -78,43 +80,12 @@ foreach ($group in $groups) {
 Write-Progress -Activity "Auditing groups" -Completed
 Disconnect-PnPOnline
 
-# Build output paths
+# Build output filename
 $siteName = ($SiteUrl -replace 'https?://', '' -replace '[/\\:*?"<>|]', '_')
-$stamp    = Get-Date -Format "yyyyMMdd-HHmm"
-$xlsx     = Join-Path $OutputFolder "Groups_${siteName}_${stamp}.xlsx"
 
-if (-not (Test-Path $OutputFolder)) { New-Item -ItemType Directory -Path $OutputFolder | Out-Null }
-
-if (Get-Module -ListAvailable -Name ImportExcel) {
-    Import-Module ImportExcel -ErrorAction Stop
-
-    $groupSummary.ToArray() | Export-Excel `
-        -Path          $xlsx `
-        -WorksheetName "Groups" `
-        -AutoFilter `
-        -BoldTopRow `
-        -FreezeTopRow `
-        -AutoSize `
-        -ClearSheet
-
-    $groupMembers.ToArray() | Export-Excel `
-        -Path          $xlsx `
-        -WorksheetName "Members" `
-        -AutoFilter `
-        -BoldTopRow `
-        -FreezeTopRow `
-        -AutoSize
-
-    Write-Host "$(Get-Date) INFO: Report saved to $xlsx" -ForegroundColor Green
-} else {
-    # Fallback to CSV
-    $csv1 = Join-Path $OutputFolder "Groups_${siteName}_${stamp}.csv"
-    $csv2 = Join-Path $OutputFolder "GroupMembers_${siteName}_${stamp}.csv"
-    $groupSummary.ToArray() | Export-Csv -Path $csv1 -NoTypeInformation
-    $groupMembers.ToArray() | Export-Csv -Path $csv2 -NoTypeInformation
-    Write-Host "$(Get-Date) WARN: ImportExcel not found. Exported CSV instead:" -ForegroundColor Yellow
-    Write-Host "  $csv1"
-    Write-Host "  $csv2"
-}
+Export-AuditData -OutputFolder $OutputFolder -FilePrefix "Groups_${siteName}" -Sheets @(
+    @{ Name = "Groups";  Data = $groupSummary.ToArray() },
+    @{ Name = "Members"; Data = $groupMembers.ToArray() }
+)
 
 Write-Host "$(Get-Date) INFO: Done. $($groupSummary.Count) groups, $($groupMembers.Count) member records."

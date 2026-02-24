@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Tenants — M365 Audit Portal{% endblock %}
+{% block page_title %}Tenants{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <h6 class="mb-0 text-muted">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }} configured</h6>
+  <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#addTenantModal">
+    <i class="bi bi-plus-lg me-1"></i>Add Tenant
+  </button>
+</div>
+
+{% if tenants %}
+<div class="row g-3">
+  {% for t in tenants %}
+  <div class="col-md-6 col-xl-4">
+    <a href="{{ url_for('tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
+      <div class="card h-100" style="cursor:pointer;transition:border-color .15s">
+        <div class="card-body">
+          <div class="d-flex align-items-start mb-2">
+            <div>
+              <h6 class="fw-semibold mb-0">{{ t.name }}</h6>
+              <small class="text-muted">{{ t.domain }}</small>
+            </div>
+            <div class="ms-auto">
+              {% if t.client_id %}
+                <span class="badge bg-success">Ready</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Setup needed</span>
+              {% endif %}
+            </div>
+          </div>
+          {% if t.client_id %}
+          <div class="small font-monospace text-muted text-truncate">{{ t.client_id }}</div>
+          {% endif %}
+          {% if t.last_audit_at %}
+          <div class="small text-muted mt-2">
+            <i class="bi bi-clock me-1"></i>Last audit: {{ t.last_audit_at[:16] }}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-building fs-1 mb-3 d-block"></i>
+  <p>No tenants configured yet.</p>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTenantModal">
+    <i class="bi bi-plus-lg me-1"></i>Add Your First Tenant
+  </button>
+</div>
+{% endif %}
+
+<!-- Add Tenant Modal -->
+<div class="modal fade" id="addTenantModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('tenant_create') }}">
+        <div class="modal-header">
+          <h6 class="modal-title fw-semibold">Add Tenant</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Display Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="name" placeholder="Contoso Ltd" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Domain <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="domain" placeholder="contoso.onmicrosoft.com" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Tenant ID (GUID)</label>
+            <input type="text" class="form-control font-monospace" name="tenant_id"
+                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+            <div class="form-text">Optional — the domain can be used instead.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="notes" rows="2" placeholder="Optional notes"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i>Create Tenant
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

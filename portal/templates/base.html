@@ -28,28 +28,12 @@
       </li>
 
       <li class="nav-item mt-2">
-        <span class="sidebar-label">SETUP</span>
+        <span class="sidebar-label">MANAGE</span>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'setup' %}active{% endif %}"
-           href="{{ url_for('setup') }}">
-          <i class="bi bi-gear me-2"></i>Configuration
-        </a>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">AUDITS</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'audit_spo' %}active{% endif %}"
-           href="{{ url_for('audit_spo') }}">
-          <i class="bi bi-diagram-3 me-2"></i>SPO Permissions
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'audit_security' %}active{% endif %}"
-           href="{{ url_for('audit_security') }}">
-          <i class="bi bi-shield-exclamation me-2"></i>Security Scan
+        <a class="nav-link {% if request.endpoint in ('tenants_list', 'tenant_detail', 'tenant_create') %}active{% endif %}"
+           href="{{ url_for('tenants_list') }}">
+          <i class="bi bi-building me-2"></i>Tenants
         </a>
       </li>
 
@@ -63,15 +47,38 @@
         </a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'jobs_list' %}active{% endif %}"
-           href="{{ url_for('jobs_list') }}">
+        <a class="nav-link {% if request.endpoint == 'jobs_page' %}active{% endif %}"
+           href="{{ url_for('jobs_page') }}">
           <i class="bi bi-activity me-2"></i>Jobs
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'audit_trail' %}active{% endif %}"
+           href="{{ url_for('audit_trail') }}">
+          <i class="bi bi-journal-text me-2"></i>Audit Log
+        </a>
+      </li>
+
+      <li class="nav-item mt-2">
+        <span class="sidebar-label">ACCOUNT</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'settings_page' %}active{% endif %}"
+           href="{{ url_for('settings_page') }}">
+          <i class="bi bi-gear me-2"></i>Settings
         </a>
       </li>
     </ul>
 
     <div class="sidebar-footer mt-auto pt-3 border-top border-secondary">
-      <small class="text-muted">v1.0 · Local install</small>
+      <div class="d-flex align-items-center justify-content-between">
+        <small class="text-muted">
+          <i class="bi bi-person-circle me-1"></i>{{ session.get('display_name', session.get('username', '')) }}
+        </small>
+        <a href="{{ url_for('logout') }}" class="text-muted" title="Sign out">
+          <i class="bi bi-box-arrow-right"></i>
+        </a>
+      </div>
     </div>
   </nav>
 
@@ -79,13 +86,6 @@
   <div class="flex-grow-1 d-flex flex-column">
     <header class="portal-header d-flex align-items-center px-4 py-2 border-bottom border-secondary">
       <h6 class="mb-0 fw-semibold">{% block page_title %}{% endblock %}</h6>
-      <div class="ms-auto">
-        {% if session.get('pfx_password') %}
-          <span class="badge bg-success"><i class="bi bi-key me-1"></i>PFX cached</span>
-        {% else %}
-          <span class="badge bg-secondary"><i class="bi bi-key me-1"></i>No PFX cached</span>
-        {% endif %}
-      </div>
     </header>
 
     <main class="flex-grow-1 p-4">
