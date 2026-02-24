@@ -1,8 +1,43 @@
 {% extends "base.html" %}
 {% block title %}{{ tenant.name }} — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('tenants.tenants_list') }}">Tenants</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">{{ tenant.name }}</span></li>
+</ul>
+{% endblock %}
 {% block page_title %}{{ tenant.name }}{% endblock %}
 
 {% block content %}
+{% set ready = cert_exists and tenant.client_id %}
+
+<!-- Setup stepper -->
+<div class="setup-stepper mb-4">
+  <div class="setup-step">
+    <div class="step-circle {{ 'done' if cert_exists else ('active' if not cert_exists else '') }}">
+      {% if cert_exists %}<i class="bi bi-check"></i>{% else %}1{% endif %}
+    </div>
+    <span class="step-label {{ 'done' if cert_exists else 'active' }}">Certificate</span>
+  </div>
+  <div class="step-connector {{ 'done' if cert_exists }}"></div>
+  <div class="setup-step">
+    <div class="step-circle {{ 'done' if tenant.client_id else ('active' if cert_exists and not tenant.client_id else '') }}">
+      {% if tenant.client_id %}<i class="bi bi-check"></i>{% else %}2{% endif %}
+    </div>
+    <span class="step-label {{ 'done' if tenant.client_id else ('active' if cert_exists else '') }}">Entra App</span>
+  </div>
+  <div class="step-connector {{ 'done' if ready }}"></div>
+  <div class="setup-step">
+    <div class="step-circle {{ 'done' if ready else '' }}">
+      {% if ready %}<i class="bi bi-check"></i>{% else %}3{% endif %}
+    </div>
+    <span class="step-label {{ 'done' if ready }}">Ready to Audit</span>
+  </div>
+</div>
+
 <!-- Status row -->
 <div class="row g-3 mb-4">
   <div class="col-md-3">
@@ -111,8 +146,11 @@
             <form id="cert-form">
               <div class="mb-3">
                 <label class="form-label">PFX Password <span class="text-danger">*</span></label>
-                <input type="password" class="form-control" name="pfx_password" required
-                       placeholder="Set a strong password">
+                <div class="input-password-wrap">
+                  <input type="password" class="form-control" name="pfx_password" required
+                         placeholder="Set a strong password">
+                  <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
+                </div>
               </div>
               <button type="submit" class="btn btn-primary btn-sm" id="cert-btn">
                 <span class="spinner-border spinner-border-sm d-none me-1" id="cert-spinner"></span>
@@ -290,8 +328,10 @@ function showResult(el, data, successMsg) {
   el.classList.remove('d-none');
   if (data.ok) {
     el.innerHTML = `<div class="alert alert-success small mb-0 py-1"><i class="bi bi-check-circle me-1"></i>${successMsg || data.message || 'Done.'}</div>`;
+    showToast(successMsg || data.message || 'Done.', 'success');
   } else {
     el.innerHTML = `<div class="alert alert-danger small mb-0 py-1"><i class="bi bi-x-circle me-1"></i>${data.error || 'An error occurred.'}</div>`;
+    showToast(data.error || 'An error occurred.', 'danger');
   }
 }
 

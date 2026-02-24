@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Reports — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Reports</span></li>
+</ul>
+{% endblock %}
 {% block page_title %}Reports{% endblock %}
 
 {% block content %}
@@ -9,25 +16,27 @@
   <a href="{{ url_for('reports.reports') }}"
      class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
   {% for t in tenants %}
-  <a href="{{ url_for('reports', tenant_id=t.id) }}"
+  <a href="{{ url_for('reports.reports', tenant_id=t.id) }}"
      class="btn btn-sm {{ 'btn-secondary' if filter_tenant == t.id else 'btn-outline-secondary' }}">{{ t.name }}</a>
   {% endfor %}
 </div>
 
 {% if files %}
-<!-- Type filter -->
-<div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
-  <span class="text-muted small">Type:</span>
-  <button class="btn btn-sm btn-outline-secondary active" onclick="filterType('', this)">All</button>
-  <button class="btn btn-sm btn-outline-primary"   onclick="filterType('Groups', this)">Groups</button>
-  <button class="btn btn-sm btn-outline-info"      onclick="filterType('Site Permissions', this)">Site Permissions</button>
-  <button class="btn btn-sm btn-outline-warning"   onclick="filterType('External Sharing', this)">External Sharing</button>
-  <button class="btn btn-sm btn-outline-success"   onclick="filterType('User Permissions', this)">User Permissions</button>
-  <button class="btn btn-sm btn-outline-danger"    onclick="filterType('Security Scan', this)">Security Scan</button>
-  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('Audit Log', this)">Audit Log</button>
-  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('Inbox Rules', this)">Inbox Rules</button>
-  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('Sign-In Logs', this)">Sign-In</button>
-  <button class="btn btn-sm btn-outline-secondary" onclick="filterType('OAuth Consent', this)">OAuth</button>
+<!-- Search + type filter -->
+<div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
+  <input type="text" class="form-control form-control-sm search-input" style="max-width:240px"
+         id="report-search" placeholder="Search filenames..." oninput="filterReports()">
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-sm btn-outline-secondary active type-filter-btn" onclick="filterType('', this)">All</button>
+    <button class="btn btn-sm btn-outline-primary type-filter-btn"   onclick="filterType('Groups', this)">Groups</button>
+    <button class="btn btn-sm btn-outline-info type-filter-btn"      onclick="filterType('Site Permissions', this)">Site Perms</button>
+    <button class="btn btn-sm btn-outline-warning type-filter-btn"   onclick="filterType('External Sharing', this)">External</button>
+    <button class="btn btn-sm btn-outline-success type-filter-btn"   onclick="filterType('User Permissions', this)">User Perms</button>
+    <button class="btn btn-sm btn-outline-danger type-filter-btn"    onclick="filterType('Security Scan', this)">Security</button>
+    <button class="btn btn-sm btn-outline-secondary type-filter-btn" onclick="filterType('Inbox Rules', this)">Inbox</button>
+    <button class="btn btn-sm btn-outline-secondary type-filter-btn" onclick="filterType('Sign-In Logs', this)">Sign-In</button>
+    <button class="btn btn-sm btn-outline-secondary type-filter-btn" onclick="filterType('OAuth Consent', this)">OAuth</button>
+  </div>
 </div>
 
 <div class="card">
@@ -45,7 +54,7 @@
       </thead>
       <tbody id="report-table">
         {% for f in files %}
-        <tr data-type="{{ f.type }}">
+        <tr data-type="{{ f.type }}" data-name="{{ f.name|lower }}">
           <td>
             {% if f.ext == '.html' %}
               <i class="bi bi-filetype-html me-2 text-warning"></i>
@@ -83,21 +92,31 @@
   </div>
 </div>
 {% else %}
-<div class="text-center py-5 text-muted">
-  <i class="bi bi-file-earmark-bar-graph fs-1 mb-3 d-block"></i>
-  <p>No reports yet.</p>
-  <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary">Go to Tenants</a>
+<div class="empty-state">
+  <i class="bi bi-file-earmark-bar-graph"></i>
+  <p>No reports yet. Run an audit to generate reports.</p>
+  <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary btn-sm">Go to Tenants</a>
 </div>
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
+let activeType = '';
+
 function filterType(type, btn) {
-  document.querySelectorAll('[onclick^="filterType"]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.type-filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  activeType = type;
+  filterReports();
+}
+
+function filterReports() {
+  const q = (document.getElementById('report-search').value || '').toLowerCase().trim();
   document.querySelectorAll('#report-table tr').forEach(row => {
-    row.style.display = (!type || row.dataset.type === type) ? '' : 'none';
+    const matchType = !activeType || row.dataset.type === activeType;
+    const matchSearch = !q || row.dataset.name.includes(q);
+    row.style.display = (matchType && matchSearch) ? '' : 'none';
   });
 }
 </script>

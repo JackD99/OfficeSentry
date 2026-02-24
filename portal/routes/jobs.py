@@ -4,7 +4,7 @@ portal/routes/jobs.py — Job status and polling routes.
 
 from flask import Blueprint, render_template, request, jsonify
 
-from database import get_job, list_jobs, list_tenants
+from database import get_job, list_jobs, list_tenants, list_running_jobs
 from helpers import login_required
 
 bp = Blueprint("jobs", __name__)
@@ -18,6 +18,13 @@ def jobs_page():
     tenants = {t["id"]: t["name"] for t in list_tenants()}
     return render_template("jobs.html", jobs=all_jobs, tenants=tenants,
                            filter_tenant=tenant_id)
+
+
+@bp.route("/jobs/running-count")
+@login_required
+def running_count():
+    """Lightweight endpoint for dashboard polling — avoids full page reload."""
+    return jsonify({"count": len(list_running_jobs())})
 
 
 @bp.route("/jobs/<job_id>/status")

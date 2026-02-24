@@ -287,6 +287,14 @@ def audit_breach_run(tenant_id):
 # Batch Operations
 # ---------------------------------------------------------------------------
 
+@bp.route("/batch")
+@login_required
+def batch_page():
+    tenants = list_tenants()
+    ready_tenants = [t for t in tenants if t["client_id"]]
+    return render_template("batch.html", tenants=ready_tenants)
+
+
 @bp.route("/batch/audit", methods=["POST"])
 @login_required
 def batch_audit():

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Batch Operations — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Batch Operations</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Batch Operations{% endblock %}
+
+{% block content %}
+{% if not tenants %}
+<div class="empty-state">
+  <i class="bi bi-collection"></i>
+  <p>No tenants are ready for batch operations. Set up at least one tenant with a certificate and Entra app first.</p>
+  <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary btn-sm">Go to Tenants</a>
+</div>
+{% else %}
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-collection me-2 text-primary"></i>Run Batch Audit
+      </div>
+      <div class="card-body">
+        <form id="batch-form">
+          <div class="mb-3">
+            <label class="form-label">Audit Type</label>
+            <select class="form-select" name="audit_type" id="batch-type">
+              <option value="security">Security Scan (365Inspect)</option>
+              <option value="spo">SPO Groups Audit</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Report Format</label>
+            <div class="d-flex gap-2">
+              {% for fmt in ['HTML','CSV','JSON','All'] %}
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="report_format"
+                       id="batch-fmt-{{ fmt }}" value="{{ fmt }}" {% if fmt == 'HTML' %}checked{% endif %}>
+                <label class="form-check-label" for="batch-fmt-{{ fmt }}">{{ fmt }}</label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0">Select Tenants</label>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+                Select All
+              </button>
+            </div>
+            <div style="max-height:240px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem;padding:.5rem">
+              {% for t in tenants %}
+              <div class="form-check py-1">
+                <input class="form-check-input tenant-check" type="checkbox" name="tenant_ids"
+                       id="t-{{ t.id }}" value="{{ t.id }}">
+                <label class="form-check-label small" for="t-{{ t.id }}">
+                  {{ t.name }} <span class="text-muted">({{ t.domain }})</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="form-text"><span id="selected-count">0</span> of {{ tenants|length }} tenants selected</div>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100" id="batch-btn">
+            <span class="spinner-border spinner-border-sm d-none me-2" id="batch-spinner"></span>
+            <i class="bi bi-play-fill me-1"></i>Start Batch
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-activity me-2 text-secondary"></i>Batch Progress
+      </div>
+      <div class="card-body" id="batch-progress">
+        <div class="text-muted small">Select tenants and start a batch operation to see progress here.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Update selected count
+document.querySelectorAll('.tenant-check').forEach(cb => {
+  cb.addEventListener('change', updateCount);
+});
+
+function updateCount() {
+  const count = document.querySelectorAll('.tenant-check:checked').length;
+  document.getElementById('selected-count').textContent = count;
+}
+
+function toggleAllTenants() {
+  const checks = document.querySelectorAll('.tenant-check');
+  const allChecked = [...checks].every(c => c.checked);
+  checks.forEach(c => c.checked = !allChecked);
+  updateCount();
+}
+
+document.getElementById('batch-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('batch-btn');
+  const spinner = document.getElementById('batch-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+
+  const res = await fetch('{{ url_for("audits.batch_audit") }}', { method: 'POST', body: fd });
+  const data = await res.json();
+  spinner.classList.add('d-none');
+  btn.disabled = false;
+
+  const progress = document.getElementById('batch-progress');
+  if (!data.ok) {
+    progress.innerHTML = `<div class="alert alert-danger small">${data.error}</div>`;
+    showToast(data.error, 'danger');
+    return;
+  }
+
+  showToast(data.message, 'success');
+  progress.innerHTML = `
+    <div class="alert alert-success small mb-3">
+      <i class="bi bi-check-circle me-1"></i>${data.message}
+    </div>
+    <a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-activity me-1"></i>View Jobs
+    </a>
+  `;
+});
+</script>
+{% endblock %}

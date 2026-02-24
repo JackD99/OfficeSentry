@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% block title %}SPO Audit — {{ tenant.name }}{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('tenants.tenant_detail', tenant_id=tenant.id) }}">{{ tenant.name }}</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">SPO Audit</span></li>
+</ul>
+{% endblock %}
 {% block page_title %}SharePoint Permissions Audit — {{ tenant.name }}{% endblock %}
 
 {% block content %}

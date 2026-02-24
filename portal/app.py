@@ -18,7 +18,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from database import init_db, list_tenants, list_running_jobs
+from database import init_db, list_tenants, list_running_jobs, get_audit_log
 from helpers import login_required, TENANTS_DIR
 
 # ---------------------------------------------------------------------------
@@ -123,12 +123,14 @@ def create_app() -> Flask:
         total_tenants = len(tenants)
         configured = sum(1 for t in tenants if t["client_id"])
         recent_audits = sum(1 for t in tenants if t.get("last_audit_at"))
+        recent_activity = get_audit_log(limit=10)
         return render_template("dashboard.html",
                                tenants=tenants,
                                running_jobs=running,
                                total_tenants=total_tenants,
                                configured_count=configured,
-                               audited_count=recent_audits)
+                               audited_count=recent_audits,
+                               recent_activity=recent_activity)
 
     # ------------------------------------------------------------------
     # CSP headers
