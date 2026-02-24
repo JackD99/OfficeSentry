@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}SPO Audits — M365 Audit Portal{% endblock %}
+{% block page_title %}SharePoint Permissions Audit{% endblock %}
+
+{% block content %}
+{% if not status.ready %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  Setup is incomplete. <a href="{{ url_for('setup') }}">Complete configuration</a> before running audits.
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-diagram-3 me-2 text-primary"></i>Run Audit</div>
+      <div class="card-body">
+        <form id="spo-form">
+
+          <div class="mb-3">
+            <label class="form-label">Audit Type</label>
+            <select class="form-select" name="audit_type" id="audit-type" onchange="toggleUserField()">
+              <option value="groups">Groups Audit — SP groups, members &amp; permission levels</option>
+              <option value="permissions">Site Permissions — full snapshot of who has access</option>
+              <option value="external">External Sharing — external users &amp; sharing links</option>
+              <option value="user">User Permissions — one user across all sites</option>
+            </select>
+          </div>
+
+          <div class="mb-3" id="site-url-wrap">
+            <label class="form-label">Site URL</label>
+            <input type="url" class="form-control" name="site_url"
+                   value="{{ cfg.get('Defaults',{}).get('SiteUrl','') }}"
+                   placeholder="https://contoso.sharepoint.com/sites/Finance">
+          </div>
+
+          <div class="mb-3 d-none" id="user-email-wrap">
+            <label class="form-label">User Email (UPN)</label>
+            <input type="email" class="form-control" name="user_email"
+                   placeholder="user@contoso.onmicrosoft.com">
+            <div class="form-text">Audits this user's permissions across <strong>all site collections</strong>.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">
+              PFX Password
+              {% if session.get('pfx_password') %}
+                <span class="badge bg-success ms-2">Cached — leave blank to reuse</span>
+              {% endif %}
+            </label>
+            <input type="password" class="form-control" name="pfx_password"
+                   placeholder="{% if session.get('pfx_password') %}Using cached password{% else %}Enter PFX password{% endif %}">
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100" id="run-btn" {% if not status.ready %}disabled{% endif %}>
+            <span class="spinner-border spinner-border-sm d-none me-2" id="run-spinner"></span>
+            <i class="bi bi-play-fill me-2"></i>Run Audit
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Output</div>
+      <div class="card-body p-0 d-flex flex-column" style="min-height:300px">
+        <div class="p-3 text-muted small d-none" id="job-waiting">
+          <div class="spinner-border spinner-border-sm me-2"></div>Job running…
+        </div>
+        <pre class="flex-grow-1 m-0 p-3 small bg-dark text-light rounded-bottom d-none"
+             id="job-output" style="overflow-y:auto;max-height:400px"></pre>
+        <div class="p-3 d-none" id="job-done"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleUserField() {
+  const t = document.getElementById('audit-type').value;
+  const userWrap = document.getElementById('user-email-wrap');
+  const siteWrap = document.getElementById('site-url-wrap');
+  if (t === 'user') {
+    userWrap.classList.remove('d-none');
+    siteWrap.classList.add('d-none');
+  } else {
+    userWrap.classList.add('d-none');
+    siteWrap.classList.remove('d-none');
+  }
+}
+
+document.getElementById('spo-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('run-btn');
+  const spinner = document.getElementById('run-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+
+  const fd = new FormData(e.target);
+  const res = await fetch('/audit/spo/run', { method: 'POST', body: fd });
+  const data = await res.json();
+
+  spinner.classList.add('d-none');
+
+  if (!data.ok) {
+    btn.disabled = false;
+    document.getElementById('job-done').classList.remove('d-none');
+    document.getElementById('job-done').innerHTML =
+      `<div class="alert alert-danger small mb-0">${data.error}</div>`;
+    return;
+  }
+
+  document.getElementById('job-waiting').classList.remove('d-none');
+  document.getElementById('job-output').classList.remove('d-none');
+
+  pollJob(data.job_id);
+});
+
+function pollJob(jobId) {
+  const outputEl = document.getElementById('job-output');
+  const waitEl   = document.getElementById('job-waiting');
+  const doneEl   = document.getElementById('job-done');
+  const btn      = document.getElementById('run-btn');
+
+  const interval = setInterval(async () => {
+    const r = await fetch(`/jobs/${jobId}/status`);
+    const d = await r.json();
+    outputEl.textContent = d.output.join('\n');
+    outputEl.scrollTop   = outputEl.scrollHeight;
+
+    if (d.status !== 'running') {
+      clearInterval(interval);
+      waitEl.classList.add('d-none');
+      btn.disabled = false;
+      doneEl.classList.remove('d-none');
+      if (d.status === 'done') {
+        doneEl.innerHTML = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-2"></i>Audit complete. <a href="/reports">View reports</a></div>';
+      } else {
+        doneEl.innerHTML = '<div class="alert alert-danger small mb-0"><i class="bi bi-x-circle me-2"></i>Audit failed. Check output above.</div>';
+      }
+    }
+  }, 2000);
+}
+</script>
+{% endblock %}

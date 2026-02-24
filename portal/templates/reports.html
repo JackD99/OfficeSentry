@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Reports — M365 Audit Portal{% endblock %}
+{% block page_title %}Reports{% endblock %}
+
+{% block content %}
+{% if files %}
+<div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
+  <span class="text-muted small">Filter:</span>
+  <button class="btn btn-sm btn-outline-secondary active" onclick="filterType('', this)">All</button>
+  <button class="btn btn-sm btn-outline-primary"   onclick="filterType('Groups', this)">Groups</button>
+  <button class="btn btn-sm btn-outline-info"      onclick="filterType('Site Permissions', this)">Site Permissions</button>
+  <button class="btn btn-sm btn-outline-warning"   onclick="filterType('External Sharing', this)">External Sharing</button>
+  <button class="btn btn-sm btn-outline-success"   onclick="filterType('User Permissions', this)">User Permissions</button>
+  <button class="btn btn-sm btn-outline-danger"    onclick="filterType('Security Scan', this)">Security Scan</button>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th>File</th>
+          <th>Type</th>
+          <th>Date</th>
+          <th>Size</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="report-table">
+        {% for f in files %}
+        <tr data-type="{{ f.type }}">
+          <td>
+            {% if f.ext == '.html' %}
+              <i class="bi bi-filetype-html me-2 text-warning"></i>
+            {% elif f.ext in ['.xlsx', '.xls'] %}
+              <i class="bi bi-filetype-xlsx me-2 text-success"></i>
+            {% elif f.ext == '.csv' %}
+              <i class="bi bi-filetype-csv me-2 text-info"></i>
+            {% elif f.ext == '.json' %}
+              <i class="bi bi-filetype-json me-2 text-secondary"></i>
+            {% else %}
+              <i class="bi bi-file-earmark me-2 text-muted"></i>
+            {% endif %}
+            <span class="font-monospace small">{{ f.name }}</span>
+          </td>
+          <td><span class="badge bg-secondary">{{ f.type }}</span></td>
+          <td class="text-muted small">{{ f.mtime }}</td>
+          <td class="text-muted small">{{ f.size }}</td>
+          <td class="text-end">
+            {% if f.ext == '.html' %}
+            <a href="{{ url_for('report_view', filename=f.name) }}" target="_blank"
+               class="btn btn-sm btn-outline-primary me-1">
+              <i class="bi bi-eye me-1"></i>View
+            </a>
+            {% endif %}
+            <a href="{{ url_for('report_view', filename=f.name) }}" download
+               class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-download me-1"></i>Download
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-file-earmark-bar-graph fs-1 mb-3 d-block"></i>
+  <p>No reports yet.</p>
+  <a href="{{ url_for('audit_spo') }}" class="btn btn-outline-primary me-2">SPO Audit</a>
+  <a href="{{ url_for('audit_security') }}" class="btn btn-outline-warning">Security Scan</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterType(type, btn) {
+  document.querySelectorAll('.d-flex .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#report-table tr').forEach(row => {
+    row.style.display = (!type || row.dataset.type === type) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

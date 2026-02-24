@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — M365 Audit Portal{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Status cards -->
+<div class="row g-3 mb-4">
+
+  <div class="col-md-3">
+    <div class="card h-100 {% if status.tenant %}border-success{% else %}border-warning{% endif %}">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-2">
+          <i class="bi bi-building fs-4 me-2 {% if status.tenant %}text-success{% else %}text-warning{% endif %}"></i>
+          <span class="fw-semibold">Tenant</span>
+        </div>
+        {% if status.tenant %}
+          <div class="text-truncate small">{{ status.tenant }}</div>
+        {% else %}
+          <div class="text-warning small">Not configured — <a href="{{ url_for('setup') }}">Setup</a></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card h-100 {% if status.client_id %}border-success{% else %}border-warning{% endif %}">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-2">
+          <i class="bi bi-app-indicator fs-4 me-2 {% if status.client_id %}text-success{% else %}text-warning{% endif %}"></i>
+          <span class="fw-semibold">Entra App</span>
+        </div>
+        {% if status.client_id %}
+          <div class="text-truncate small font-monospace">{{ status.client_id }}</div>
+        {% else %}
+          <div class="text-warning small">Not created — <a href="{{ url_for('setup') }}">Setup</a></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card h-100 {% if status.cert.exists %}border-success{% else %}border-danger{% endif %}">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-2">
+          <i class="bi bi-patch-check fs-4 me-2 {% if status.cert.exists %}text-success{% else %}text-danger{% endif %}"></i>
+          <span class="fw-semibold">Certificate</span>
+        </div>
+        {% if status.cert.exists %}
+          <div class="small text-success">PFX found</div>
+        {% else %}
+          <div class="small text-danger">Not generated — <a href="{{ url_for('setup') }}">Setup</a></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card h-100 {% if status.ready %}border-success{% else %}border-secondary{% endif %}">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-2">
+          <i class="bi bi-check-circle fs-4 me-2 {% if status.ready %}text-success{% else %}text-secondary{% endif %}"></i>
+          <span class="fw-semibold">Ready to Audit</span>
+        </div>
+        {% if status.ready %}
+          <div class="small text-success">All setup steps complete</div>
+        {% else %}
+          <div class="small text-secondary">Complete setup first</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <h6 class="text-muted text-uppercase fw-semibold mb-3" style="font-size:.75rem;letter-spacing:.08em">Quick Actions</h6>
+  </div>
+  <div class="col-auto">
+    <a href="{{ url_for('audit_spo') }}" class="btn btn-outline-primary">
+      <i class="bi bi-diagram-3 me-2"></i>SPO Permissions Audit
+    </a>
+  </div>
+  <div class="col-auto">
+    <a href="{{ url_for('audit_security') }}" class="btn btn-outline-warning">
+      <i class="bi bi-shield-exclamation me-2"></i>Security Scan
+    </a>
+  </div>
+  <div class="col-auto">
+    <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-file-earmark-bar-graph me-2"></i>View Reports
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Active jobs -->
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-activity me-2 text-primary"></i>
+        <span class="fw-semibold">Running Jobs</span>
+        <span class="badge bg-primary ms-auto" id="job-count">{{ active_jobs|length }}</span>
+      </div>
+      <div class="card-body p-0" id="active-jobs-body">
+        {% if active_jobs %}
+          <ul class="list-group list-group-flush" id="active-jobs-list">
+            {% for job in active_jobs %}
+            <li class="list-group-item d-flex align-items-center gap-2" id="job-{{ job.id }}">
+              <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+              <div>
+                <div class="fw-semibold small">{{ job.label }}</div>
+                <div class="text-muted" style="font-size:.75rem">Started {{ job.started[:16] }}</div>
+              </div>
+              <a href="{{ url_for('jobs_list') }}" class="btn btn-sm btn-outline-secondary ms-auto">View</a>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="p-3 text-muted small" id="no-jobs-msg">No jobs running.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent reports -->
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-clock-history me-2 text-secondary"></i>
+        <span class="fw-semibold">Recent Reports</span>
+        <a href="{{ url_for('reports') }}" class="ms-auto btn btn-sm btn-outline-secondary">All reports</a>
+      </div>
+      <div class="card-body p-0">
+        {% if recent %}
+          <table class="table table-sm table-hover mb-0">
+            <tbody>
+              {% for f in recent %}
+              <tr>
+                <td class="ps-3"><i class="bi bi-file-earmark me-1 text-muted"></i>{{ f.name }}</td>
+                <td class="text-muted small">{{ f.mtime }}</td>
+                <td class="text-muted small">{{ f.size }}</td>
+                <td class="pe-3">
+                  <a href="{{ url_for('report_view', filename=f.name) }}" class="btn btn-sm btn-outline-primary">Open</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div class="p-3 text-muted small">No reports yet. Run an audit to generate one.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-refresh if jobs are running
+{% if active_jobs %}
+setTimeout(() => location.reload(), 5000);
+{% endif %}
+</script>
+{% endblock %}

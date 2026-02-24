@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Jobs — M365 Audit Portal{% endblock %}
+{% block page_title %}Jobs{% endblock %}
+
+{% block content %}
+{% if jobs %}
+<div class="row g-3">
+  {% for jid, job in jobs.items()|sort(attribute='1.started', reverse=true) %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        {% if job.status == 'running' %}
+          <div class="spinner-border spinner-border-sm text-primary"></div>
+        {% elif job.status == 'done' %}
+          <i class="bi bi-check-circle-fill text-success"></i>
+        {% else %}
+          <i class="bi bi-x-circle-fill text-danger"></i>
+        {% endif %}
+        <span class="fw-semibold">{{ job.label }}</span>
+        <span class="badge bg-secondary ms-1">{{ job.type }}</span>
+        <span class="text-muted small ms-auto">{{ job.started[:16] if job.started else '' }}</span>
+      </div>
+      <div class="card-body p-0">
+        <pre class="m-0 p-3 small bg-dark text-light"
+             style="max-height:200px;overflow-y:auto;border-radius:0 0 .375rem .375rem">{{ job.output|join('\n') }}</pre>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-activity fs-1 mb-3 d-block"></i>
+  <p>No jobs have run this session.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% set has_running = jobs.values()|selectattr('status','eq','running')|list %}
+{% if has_running %}
+<script>setTimeout(() => location.reload(), 4000);</script>
+{% endif %}
+{% endblock %}
