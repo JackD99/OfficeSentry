@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Audit Log — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Audit Log</span></li>
+</ul>
+{% endblock %}
 {% block page_title %}Operator Audit Log{% endblock %}
 
 {% block content %}
@@ -8,7 +15,7 @@
   <a href="{{ url_for('reports.audit_trail') }}"
      class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
   {% for t in tenants %}
-  <a href="{{ url_for('audit_trail', tenant_id=t.id) }}"
+  <a href="{{ url_for('reports.audit_trail', tenant_id=t.id) }}"
      class="btn btn-sm {{ 'btn-secondary' if filter_tenant == t.id else 'btn-outline-secondary' }}">{{ t.name }}</a>
   {% endfor %}
 </div>

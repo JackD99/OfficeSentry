@@ -36,13 +36,23 @@
       </div>
       <div class="mb-3">
         <label class="form-label small" for="password">Password</label>
-        <input type="password" class="form-control" id="password" name="password"
-               placeholder="At least 8 characters" required minlength="8">
+        <div class="input-password-wrap">
+          <input type="password" class="form-control" id="password" name="password"
+                 placeholder="At least 8 characters" required minlength="8">
+          <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
+        </div>
+        <div class="password-strength mt-1">
+          <div class="password-strength-fill" id="pw-strength-fill"></div>
+        </div>
+        <small class="text-muted" id="pw-strength-text" style="font-size:.7rem"></small>
       </div>
       <div class="mb-3">
         <label class="form-label small" for="confirm">Confirm Password</label>
-        <input type="password" class="form-control" id="confirm" name="confirm"
-               placeholder="Re-enter password" required minlength="8">
+        <div class="input-password-wrap">
+          <input type="password" class="form-control" id="confirm" name="confirm"
+                 placeholder="Re-enter password" required minlength="8">
+          <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
+        </div>
       </div>
       <button type="submit" class="btn btn-primary w-100">
         <i class="bi bi-person-plus me-2"></i>Create Admin Account
@@ -52,5 +62,43 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Password toggle
+document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = btn.parentElement.querySelector('input');
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    btn.querySelector('i').className = isPass ? 'bi bi-eye-slash' : 'bi bi-eye';
+  });
+});
+
+// Password strength indicator
+document.getElementById('password').addEventListener('input', function() {
+  const pw = this.value;
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+  if (/\d/.test(pw))   score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+  const fill = document.getElementById('pw-strength-fill');
+  const text = document.getElementById('pw-strength-text');
+  const levels = [
+    { w: '0%',   c: '#30363d', t: '' },
+    { w: '20%',  c: '#f85149', t: 'Weak' },
+    { w: '40%',  c: '#d29922', t: 'Fair' },
+    { w: '60%',  c: '#d29922', t: 'Good' },
+    { w: '80%',  c: '#3fb950', t: 'Strong' },
+    { w: '100%', c: '#3fb950', t: 'Very strong' },
+  ];
+  const l = levels[score] || levels[0];
+  fill.style.width = l.w;
+  fill.style.background = l.c;
+  text.textContent = l.t;
+  text.style.color = l.c;
+});
+</script>
 </body>
 </html>

@@ -10,10 +10,16 @@
 </head>
 <body>
 
+<!-- Toast notification container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Sidebar overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
 <div class="d-flex" style="min-height:100vh">
 
   <!-- Sidebar -->
-  <nav class="sidebar d-flex flex-column p-3" style="width:240px;min-width:240px">
+  <nav class="sidebar d-flex flex-column p-3" id="sidebar">
     <a class="sidebar-brand mb-4" href="{{ url_for('dashboard') }}">
       <i class="bi bi-shield-lock-fill me-2 text-primary"></i>
       <span>M365 Audit Portal</span>
@@ -34,6 +40,16 @@
         <a class="nav-link {% if request.endpoint in ('tenants.tenants_list', 'tenants.tenant_detail', 'tenants.tenant_create') %}active{% endif %}"
            href="{{ url_for('tenants.tenants_list') }}">
           <i class="bi bi-building me-2"></i>Tenants
+        </a>
+      </li>
+
+      <li class="nav-item mt-2">
+        <span class="sidebar-label">AUDIT</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'audits.batch_page' %}active{% endif %}"
+           href="{{ url_for('audits.batch_page') }}">
+          <i class="bi bi-collection me-2"></i>Batch Operations
         </a>
       </li>
 
@@ -85,7 +101,13 @@
   <!-- Main content -->
   <div class="flex-grow-1 d-flex flex-column">
     <header class="portal-header d-flex align-items-center px-4 py-2 border-bottom border-secondary">
-      <h6 class="mb-0 fw-semibold">{% block page_title %}{% endblock %}</h6>
+      <button class="sidebar-toggle me-2" onclick="toggleSidebar()" aria-label="Toggle navigation">
+        <i class="bi bi-list"></i>
+      </button>
+      <div>
+        {% block breadcrumb %}{% endblock %}
+        <h6 class="mb-0 fw-semibold">{% block page_title %}{% endblock %}</h6>
+      </div>
     </header>
 
     <main class="flex-grow-1 p-4">
@@ -107,6 +129,45 @@
 <script>
 // Make CSRF token available for all fetch() calls
 window.CSRF_TOKEN = "{{ csrf_token() }}";
+
+// --- Mobile sidebar toggle ---
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('show');
+  document.getElementById('sidebar-overlay').classList.toggle('show');
+}
+
+// Close sidebar on nav click (mobile)
+document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+  link.addEventListener('click', () => {
+    if (window.innerWidth < 992) toggleSidebar();
+  });
+});
+
+// --- Toast notification system ---
+window.showToast = function(message, type = 'info', duration = 5000) {
+  const container = document.getElementById('toast-container');
+  const icons = {success:'bi-check-circle-fill', danger:'bi-x-circle-fill', info:'bi-info-circle-fill', warning:'bi-exclamation-triangle-fill'};
+  const toast = document.createElement('div');
+  toast.className = `portal-toast toast-${type}`;
+  toast.innerHTML = `<i class="bi ${icons[type] || icons.info}"></i><span>${message}</span><button class="toast-close" onclick="this.parentElement.remove()">&times;</button>`;
+  container.appendChild(toast);
+  if (duration > 0) {
+    setTimeout(() => {
+      toast.classList.add('removing');
+      setTimeout(() => toast.remove(), 250);
+    }, duration);
+  }
+};
+
+// --- Password toggle helper ---
+document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = btn.parentElement.querySelector('input');
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    btn.querySelector('i').className = isPass ? 'bi bi-eye-slash' : 'bi bi-eye';
+  });
+});
 </script>
 {% block scripts %}{% endblock %}
 </body>

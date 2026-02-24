@@ -3,13 +3,68 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+{% set needs_setup = total_tenants == 0 %}
+{% set needs_config = total_tenants > 0 and configured_count == 0 %}
+
+<!-- Onboarding checklist (shown until first audit is complete) -->
+{% if needs_setup or needs_config or audited_count == 0 %}
+<div class="onboarding-card p-4 mb-4">
+  <div class="d-flex align-items-center mb-3">
+    <i class="bi bi-rocket-takeoff fs-4 me-2 text-accent-blue"></i>
+    <div>
+      <h6 class="mb-0 fw-semibold">Getting Started</h6>
+      <small class="text-muted">Complete these steps to run your first audit</small>
+    </div>
+    {% if audited_count > 0 %}
+    <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="this.closest('.onboarding-card').remove()">Dismiss</button>
+    {% endif %}
+  </div>
+  <div class="onboarding-step">
+    <div class="onboarding-check {{ 'done' if total_tenants > 0 }}">
+      {% if total_tenants > 0 %}<i class="bi bi-check"></i>{% else %}1{% endif %}
+    </div>
+    <div class="onboarding-text">
+      {% if total_tenants > 0 %}
+        <span class="done">Add a tenant</span>
+      {% else %}
+        <strong>Add your first tenant</strong> — <a href="{{ url_for('tenants.tenants_list') }}">Go to Tenants</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="onboarding-step">
+    <div class="onboarding-check {{ 'done' if configured_count > 0 }}">
+      {% if configured_count > 0 %}<i class="bi bi-check"></i>{% else %}2{% endif %}
+    </div>
+    <div class="onboarding-text">
+      {% if configured_count > 0 %}
+        <span class="done">Generate certificate &amp; create Entra app</span>
+      {% else %}
+        <strong>Set up certificate &amp; Entra app</strong> — Open a tenant and follow the setup steps
+      {% endif %}
+    </div>
+  </div>
+  <div class="onboarding-step">
+    <div class="onboarding-check {{ 'done' if audited_count > 0 }}">
+      {% if audited_count > 0 %}<i class="bi bi-check"></i>{% else %}3{% endif %}
+    </div>
+    <div class="onboarding-text">
+      {% if audited_count > 0 %}
+        <span class="done">Run your first audit</span>
+      {% else %}
+        <strong>Run your first audit</strong> — SPO audit, security scan, or breach investigation
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Status cards -->
 <div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card h-100">
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 stat-card stat-blue">
       <div class="card-body">
         <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-building fs-4 me-2 text-primary"></i>
+          <i class="bi bi-building fs-4 me-2 text-accent-blue"></i>
           <span class="fw-semibold">Tenants</span>
         </div>
         <div class="fs-3 fw-bold">{{ total_tenants }}</div>
@@ -18,11 +73,11 @@
     </div>
   </div>
 
-  <div class="col-md-3">
-    <div class="card h-100">
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 stat-card stat-green">
       <div class="card-body">
         <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-check-circle fs-4 me-2 text-success"></i>
+          <i class="bi bi-check-circle fs-4 me-2 text-accent-green"></i>
           <span class="fw-semibold">Ready</span>
         </div>
         <div class="fs-3 fw-bold">{{ configured_count }}</div>
@@ -31,11 +86,11 @@
     </div>
   </div>
 
-  <div class="col-md-3">
-    <div class="card h-100">
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 stat-card stat-amber">
       <div class="card-body">
         <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-graph-up fs-4 me-2 text-info"></i>
+          <i class="bi bi-graph-up fs-4 me-2 text-accent-amber"></i>
           <span class="fw-semibold">Audited</span>
         </div>
         <div class="fs-3 fw-bold">{{ audited_count }}</div>
@@ -44,52 +99,64 @@
     </div>
   </div>
 
-  <div class="col-md-3">
-    <div class="card h-100">
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 stat-card {{ 'stat-red' if running_jobs else 'stat-blue' }}">
       <div class="card-body">
         <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-activity fs-4 me-2 {{ 'text-warning' if running_jobs else 'text-secondary' }}"></i>
+          <i class="bi bi-activity fs-4 me-2 {{ 'text-accent-red' if running_jobs else 'text-muted' }}"></i>
           <span class="fw-semibold">Running</span>
         </div>
-        <div class="fs-3 fw-bold">{{ running_jobs|length }}</div>
+        <div class="fs-3 fw-bold" id="running-count">{{ running_jobs|length }}</div>
         <div class="small text-muted">active job{{ 's' if running_jobs|length != 1 else '' }}</div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Quick actions -->
-<div class="row g-3 mb-4">
-  <div class="col-12">
-    <h6 class="text-muted text-uppercase fw-semibold mb-3" style="font-size:.75rem;letter-spacing:.08em">Quick Actions</h6>
-  </div>
-  <div class="col-auto">
-    <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary">
-      <i class="bi bi-building me-2"></i>Manage Tenants
-    </a>
-  </div>
-  <div class="col-auto">
-    <a href="{{ url_for('reports.reports') }}" class="btn btn-outline-secondary">
-      <i class="bi bi-file-earmark-bar-graph me-2"></i>View Reports
-    </a>
-  </div>
-  <div class="col-auto">
-    <a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-outline-secondary">
-      <i class="bi bi-activity me-2"></i>View Jobs
-    </a>
+<!-- Quick launch -->
+{% if configured_count > 0 %}
+<div class="card mb-4">
+  <div class="card-header fw-semibold"><i class="bi bi-lightning me-2 text-warning"></i>Quick Launch</div>
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label small">Tenant</label>
+        <select class="form-select form-select-sm" id="ql-tenant">
+          {% for t in tenants %}
+          {% if t.client_id %}
+          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small">Audit Type</label>
+        <select class="form-select form-select-sm" id="ql-type">
+          <option value="spo">SPO Permissions Audit</option>
+          <option value="security">Security Scan (365Inspect)</option>
+          <option value="breach">Breach Investigation</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <button class="btn btn-primary btn-sm w-100" onclick="quickLaunch()">
+          <i class="bi bi-play-fill me-1"></i>Go
+        </button>
+      </div>
+    </div>
   </div>
 </div>
+{% endif %}
 
 <div class="row g-4">
   <!-- Active jobs -->
-  <div class="col-md-5">
+  <div class="col-lg-5">
     <div class="card">
       <div class="card-header d-flex align-items-center">
         <i class="bi bi-activity me-2 text-primary"></i>
         <span class="fw-semibold">Running Jobs</span>
-        <span class="badge bg-primary ms-auto">{{ running_jobs|length }}</span>
+        <span class="badge bg-primary ms-auto" id="running-badge">{{ running_jobs|length }}</span>
       </div>
-      <div class="card-body p-0">
+      <div class="card-body p-0" id="running-jobs-list">
         {% if running_jobs %}
           <ul class="list-group list-group-flush">
             {% for job in running_jobs %}
@@ -108,10 +175,34 @@
         {% endif %}
       </div>
     </div>
+
+    <!-- Recent activity -->
+    {% if recent_activity %}
+    <div class="card mt-4">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-clock-history me-2 text-secondary"></i>
+        <span class="fw-semibold">Recent Activity</span>
+        <a href="{{ url_for('reports.audit_trail') }}" class="ms-auto btn btn-sm btn-outline-secondary">All</a>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for e in recent_activity[:8] %}
+          <li class="list-group-item py-2">
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-secondary" style="font-size:.65rem">{{ e.action }}</span>
+              <span class="small text-truncate">{{ e.tenant_name or '' }}{{ ' — ' + e.details if e.details else '' }}</span>
+              <span class="text-muted small ms-auto text-nowrap" style="font-size:.7rem">{{ e.timestamp[:16] }}</span>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Tenants overview -->
-  <div class="col-md-7">
+  <div class="col-lg-7">
     <div class="card">
       <div class="card-header d-flex align-items-center">
         <i class="bi bi-building me-2 text-secondary"></i>
@@ -122,10 +213,10 @@
         {% if tenants %}
           <table class="table table-sm table-hover mb-0">
             <tbody>
-              {% for t in tenants[:8] %}
+              {% for t in tenants[:10] %}
               <tr>
                 <td class="ps-3">
-                  <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
+                  <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="row-link">
                     {{ t.name }}
                   </a>
                 </td>
@@ -137,14 +228,18 @@
                     <span class="badge bg-warning text-dark">Setup</span>
                   {% endif %}
                 </td>
-                <td class="pe-3 text-muted small">{{ t.last_audit_at[:10] if t.last_audit_at else 'Never' }}</td>
+                <td class="pe-3 text-muted small text-nowrap">{{ t.last_audit_at[:10] if t.last_audit_at else 'Never' }}</td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
         {% else %}
-          <div class="p-3 text-muted small">
-            No tenants configured. <a href="{{ url_for('tenants.tenants_list') }}">Add your first tenant</a>.
+          <div class="empty-state">
+            <i class="bi bi-building"></i>
+            <p>No tenants configured yet.</p>
+            <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-primary btn-sm">
+              <i class="bi bi-plus-lg me-1"></i>Add Your First Tenant
+            </a>
           </div>
         {% endif %}
       </div>
@@ -154,7 +249,38 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+// Quick launch navigation
+function quickLaunch() {
+  const tid = document.getElementById('ql-tenant').value;
+  const type = document.getElementById('ql-type').value;
+  const urls = {
+    spo:      `/tenants/${tid}/audit/spo`,
+    security: `/tenants/${tid}/audit/security`,
+    breach:   `/tenants/${tid}/audit/breach`,
+  };
+  window.location.href = urls[type] || urls.spo;
+}
+
+// Poll running jobs via fetch (no full-page reload)
 {% if running_jobs %}
-<script>setTimeout(() => location.reload(), 5000);</script>
+(function pollRunning() {
+  setTimeout(async () => {
+    try {
+      const r = await fetch('{{ url_for("jobs.running_count") }}');
+      const d = await r.json();
+      document.getElementById('running-count').textContent = d.count;
+      document.getElementById('running-badge').textContent = d.count;
+      if (d.count === 0) {
+        document.getElementById('running-jobs-list').innerHTML =
+          '<div class="p-3 text-muted small">No jobs running.</div>';
+        showToast('All jobs completed', 'success');
+      } else {
+        pollRunning();
+      }
+    } catch { pollRunning(); }
+  }, 5000);
+})();
 {% endif %}
+</script>
 {% endblock %}

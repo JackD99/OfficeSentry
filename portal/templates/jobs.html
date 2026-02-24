@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Jobs — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Jobs</span></li>
+</ul>
+{% endblock %}
 {% block page_title %}Jobs{% endblock %}
 
 {% block content %}
@@ -9,17 +16,18 @@
   <a href="{{ url_for('jobs.jobs_page') }}"
      class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
   {% for tid, tname in tenants.items() %}
-  <a href="{{ url_for('jobs_page', tenant_id=tid) }}"
+  <a href="{{ url_for('jobs.jobs_page', tenant_id=tid) }}"
      class="btn btn-sm {{ 'btn-secondary' if filter_tenant == tid else 'btn-outline-secondary' }}">{{ tname }}</a>
   {% endfor %}
 </div>
 
 {% if jobs %}
-<div class="row g-3">
+<div class="row g-3" id="jobs-list">
   {% for job in jobs %}
-  <div class="col-12">
+  <div class="col-12" data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
     <div class="card">
       <div class="card-header d-flex align-items-center gap-2">
+        <span class="job-status-icon">
         {% if job.status == 'running' %}
           <div class="spinner-border spinner-border-sm text-primary"></div>
         {% elif job.status == 'done' %}
@@ -27,18 +35,19 @@
         {% else %}
           <i class="bi bi-x-circle-fill text-danger"></i>
         {% endif %}
+        </span>
         <span class="fw-semibold">{{ job.label }}</span>
         <span class="badge bg-secondary ms-1">{{ job.type }}</span>
         {% if job.tenant_id and tenants.get(job.tenant_id) %}
           <span class="badge bg-info ms-1">{{ tenants[job.tenant_id] }}</span>
         {% endif %}
-        <span class="text-muted small ms-auto">
+        <span class="text-muted small ms-auto text-nowrap">
           {{ job.started_at[:16] if job.started_at else '' }}
           {% if job.operator %} · {{ job.operator }}{% endif %}
         </span>
       </div>
       <div class="card-body p-0">
-        <pre class="m-0 p-3 small bg-dark text-light"
+        <pre class="m-0 p-3 small bg-dark text-light job-output"
              style="max-height:200px;overflow-y:auto;border-radius:0 0 .375rem .375rem">{{ job.output|join('\n') if job.output is iterable and job.output is not string else job.output }}</pre>
       </div>
     </div>
@@ -46,8 +55,8 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="text-center py-5 text-muted">
-  <i class="bi bi-activity fs-1 mb-3 d-block"></i>
+<div class="empty-state">
+  <i class="bi bi-activity"></i>
   <p>No jobs found.</p>
 </div>
 {% endif %}
@@ -56,6 +65,42 @@
 {% block scripts %}
 {% set has_running = jobs|selectattr('status','eq','running')|list %}
 {% if has_running %}
-<script>setTimeout(() => location.reload(), 4000);</script>
+<script>
+// Fetch-based polling — updates running jobs in-place without full page reload
+(function pollRunningJobs() {
+  const runningCards = document.querySelectorAll('[data-job-status="running"]');
+  if (runningCards.length === 0) return;
+
+  setTimeout(async () => {
+    let stillRunning = false;
+    for (const card of runningCards) {
+      if (card.dataset.jobStatus !== 'running') continue;
+      try {
+        const r = await fetch(`/jobs/${card.dataset.jobId}/status`);
+        const d = await r.json();
+        const pre = card.querySelector('.job-output');
+        if (pre) {
+          pre.textContent = d.output.join('\n');
+          pre.scrollTop = pre.scrollHeight;
+        }
+        if (d.status !== 'running') {
+          card.dataset.jobStatus = d.status;
+          const icon = card.querySelector('.job-status-icon');
+          if (d.status === 'done') {
+            icon.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+            showToast(`Job completed: ${d.label}`, 'success');
+          } else {
+            icon.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+            showToast(`Job failed: ${d.label}`, 'danger');
+          }
+        } else {
+          stillRunning = true;
+        }
+      } catch { stillRunning = true; }
+    }
+    if (stillRunning) pollRunningJobs();
+  }, 3000);
+})();
+</script>
 {% endif %}
 {% endblock %}
