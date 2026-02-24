@@ -5,6 +5,8 @@
 # for older data, use Start-HistoricalSearch (up to 90 days).
 # Requires: ExchangeOnlineManagement, ImportExcel (optional)
 
+#requires -Modules ExchangeOnlineManagement
+
 [CmdletBinding()]
 param (
     [Parameter(Mandatory)][string] $Tenant,
@@ -19,7 +21,7 @@ param (
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$sharedModule = Join-Path (Split-Path $PSScriptRoot) "scripts\Shared.psm1"
+$sharedModule = Join-Path $PSScriptRoot "Shared.psm1"
 if (Test-Path $sharedModule) { Import-Module $sharedModule -Force }
 
 $CertificatePassword = Get-AuditCertificatePassword

@@ -7,7 +7,7 @@
 <div class="alert alert-warning">
   <i class="bi bi-exclamation-triangle me-2"></i>
   Setup is incomplete for this tenant.
-  <a href="{{ url_for('tenant_detail', tenant_id=tenant.id) }}">Complete configuration</a> first.
+  <a href="{{ url_for('tenants.tenant_detail', tenant_id=tenant.id) }}">Complete configuration</a> first.
 </div>
 {% endif %}
 
@@ -81,7 +81,8 @@ document.getElementById('spo-form').addEventListener('submit', async (e) => {
   btn.disabled = true; spinner.classList.remove('d-none');
 
   const fd = new FormData(e.target);
-  const res = await fetch('{{ url_for("audit_spo_run", tenant_id=tenant.id) }}', {
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const res = await fetch('{{ url_for("audits.audit_spo_run", tenant_id=tenant.id) }}', {
     method: 'POST', body: fd
   });
   const data = await res.json();
@@ -118,7 +119,7 @@ function pollJob(jobId) {
       btn.disabled = false;
       doneEl.classList.remove('d-none');
       if (d.status === 'done') {
-        doneEl.innerHTML = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-2"></i>Audit complete. <a href="{{ url_for("reports", tenant_id=tenant.id) }}">View reports</a></div>';
+        doneEl.innerHTML = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-2"></i>Audit complete. <a href="{{ url_for("reports.reports", tenant_id=tenant.id) }}">View reports</a></div>';
       } else {
         doneEl.innerHTML = '<div class="alert alert-danger small mb-0"><i class="bi bi-x-circle me-2"></i>Audit failed. Check output above.</div>';
       }

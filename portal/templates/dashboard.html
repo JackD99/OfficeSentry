@@ -64,17 +64,17 @@
     <h6 class="text-muted text-uppercase fw-semibold mb-3" style="font-size:.75rem;letter-spacing:.08em">Quick Actions</h6>
   </div>
   <div class="col-auto">
-    <a href="{{ url_for('tenants_list') }}" class="btn btn-outline-primary">
+    <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary">
       <i class="bi bi-building me-2"></i>Manage Tenants
     </a>
   </div>
   <div class="col-auto">
-    <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary">
+    <a href="{{ url_for('reports.reports') }}" class="btn btn-outline-secondary">
       <i class="bi bi-file-earmark-bar-graph me-2"></i>View Reports
     </a>
   </div>
   <div class="col-auto">
-    <a href="{{ url_for('jobs_page') }}" class="btn btn-outline-secondary">
+    <a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-outline-secondary">
       <i class="bi bi-activity me-2"></i>View Jobs
     </a>
   </div>
@@ -99,7 +99,7 @@
                 <div class="fw-semibold small">{{ job.label }}</div>
                 <div class="text-muted" style="font-size:.75rem">{{ job.started_at[:16] if job.started_at else '' }}</div>
               </div>
-              <a href="{{ url_for('jobs_page') }}" class="btn btn-sm btn-outline-secondary ms-auto">View</a>
+              <a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-sm btn-outline-secondary ms-auto">View</a>
             </li>
             {% endfor %}
           </ul>
@@ -116,7 +116,7 @@
       <div class="card-header d-flex align-items-center">
         <i class="bi bi-building me-2 text-secondary"></i>
         <span class="fw-semibold">Tenants</span>
-        <a href="{{ url_for('tenants_list') }}" class="ms-auto btn btn-sm btn-outline-secondary">All tenants</a>
+        <a href="{{ url_for('tenants.tenants_list') }}" class="ms-auto btn btn-sm btn-outline-secondary">All tenants</a>
       </div>
       <div class="card-body p-0">
         {% if tenants %}
@@ -125,7 +125,7 @@
               {% for t in tenants[:8] %}
               <tr>
                 <td class="ps-3">
-                  <a href="{{ url_for('tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
+                  <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
                     {{ t.name }}
                   </a>
                 </td>
@@ -144,7 +144,7 @@
           </table>
         {% else %}
           <div class="p-3 text-muted small">
-            No tenants configured. <a href="{{ url_for('tenants_list') }}">Add your first tenant</a>.
+            No tenants configured. <a href="{{ url_for('tenants.tenants_list') }}">Add your first tenant</a>.
           </div>
         {% endif %}
       </div>

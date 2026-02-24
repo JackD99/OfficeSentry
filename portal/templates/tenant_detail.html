@@ -69,19 +69,19 @@
       <div class="card-header fw-semibold"><i class="bi bi-lightning me-2 text-warning"></i>Audit Actions</div>
       <div class="card-body">
         <div class="d-flex gap-2 flex-wrap">
-          <a href="{{ url_for('audit_spo', tenant_id=tenant.id) }}" class="btn btn-outline-primary btn-sm">
+          <a href="{{ url_for('audits.audit_spo', tenant_id=tenant.id) }}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-diagram-3 me-1"></i>SPO Audit
           </a>
-          <a href="{{ url_for('audit_security', tenant_id=tenant.id) }}" class="btn btn-outline-warning btn-sm">
+          <a href="{{ url_for('audits.audit_security', tenant_id=tenant.id) }}" class="btn btn-outline-warning btn-sm">
             <i class="bi bi-shield-exclamation me-1"></i>Security Scan
           </a>
-          <a href="{{ url_for('audit_breach', tenant_id=tenant.id) }}" class="btn btn-outline-danger btn-sm">
+          <a href="{{ url_for('audits.audit_breach', tenant_id=tenant.id) }}" class="btn btn-outline-danger btn-sm">
             <i class="bi bi-search me-1"></i>Breach Investigation
           </a>
-          <a href="{{ url_for('reports', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
+          <a href="{{ url_for('reports.reports', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-file-earmark-bar-graph me-1"></i>Reports
           </a>
-          <a href="{{ url_for('jobs_page', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
+          <a href="{{ url_for('jobs.jobs_page', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-activity me-1"></i>Jobs
           </a>
         </div>
@@ -239,7 +239,7 @@
     <div class="card mb-4">
       <div class="card-header fw-semibold d-flex align-items-center">
         <i class="bi bi-activity me-2 text-primary"></i>Recent Jobs
-        <a href="{{ url_for('jobs_page', tenant_id=tenant.id) }}" class="ms-auto btn btn-sm btn-outline-secondary">All</a>
+        <a href="{{ url_for('jobs.jobs_page', tenant_id=tenant.id) }}" class="ms-auto btn btn-sm btn-outline-secondary">All</a>
       </div>
       <div class="card-body p-0">
         {% if recent_jobs %}
@@ -269,8 +269,9 @@
     <!-- Delete tenant -->
     <div class="card border-danger">
       <div class="card-body">
-        <form method="POST" action="{{ url_for('tenant_delete', tenant_id=tenant.id) }}"
+        <form method="POST" action="{{ url_for('tenants.tenant_delete', tenant_id=tenant.id) }}"
               onsubmit="return confirm('Delete tenant {{ tenant.name }}? This removes all local data.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-outline-danger btn-sm w-100">
             <i class="bi bi-trash me-1"></i>Delete Tenant
           </button>
@@ -294,13 +295,20 @@ function showResult(el, data, successMsg) {
   }
 }
 
+// Helper to append CSRF token to FormData
+function csrfFormData(form) {
+  const fd = form ? new FormData(form) : new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  return fd;
+}
+
 // Cert generation
 document.getElementById('cert-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('cert-btn');
   const spinner = document.getElementById('cert-spinner');
   btn.disabled = true; spinner.classList.remove('d-none');
-  const fd = new FormData(e.target);
+  const fd = csrfFormData(e.target);
   const res = await fetch(`/tenants/${TENANT_ID}/cert`, { method: 'POST', body: fd });
   const data = await res.json();
   spinner.classList.add('d-none'); btn.disabled = false;
@@ -314,7 +322,8 @@ async function createApp() {
   const btn = document.getElementById('app-btn');
   const spinner = document.getElementById('app-spinner');
   btn.disabled = true; spinner.classList.remove('d-none');
-  const res = await fetch(`/tenants/${TENANT_ID}/app`, { method: 'POST' });
+  const fd = csrfFormData();
+  const res = await fetch(`/tenants/${TENANT_ID}/app`, { method: 'POST', body: fd });
   const data = await res.json();
   if (!data.ok) {
     spinner.classList.add('d-none'); btn.disabled = false;
@@ -335,7 +344,8 @@ async function removeApp() {
   const btn = document.getElementById('remove-btn');
   const spinner = document.getElementById('remove-spinner');
   btn.disabled = true; spinner.classList.remove('d-none');
-  const res = await fetch(`/tenants/${TENANT_ID}/remove-app`, { method: 'POST' });
+  const fd = csrfFormData();
+  const res = await fetch(`/tenants/${TENANT_ID}/remove-app`, { method: 'POST', body: fd });
   const data = await res.json();
   spinner.classList.add('d-none'); btn.disabled = false;
   showResult(document.getElementById('remove-result'), data, 'App removed.');
@@ -347,7 +357,7 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
   e.preventDefault();
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
-  const fd = new FormData(e.target);
+  const fd = csrfFormData(e.target);
   const res = await fetch(`/tenants/${TENANT_ID}/settings`, { method: 'POST', body: fd });
   const data = await res.json();
   btn.disabled = false;

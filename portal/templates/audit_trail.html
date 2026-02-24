@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
   <span class="text-muted small">Filter by tenant:</span>
-  <a href="{{ url_for('audit_trail') }}"
+  <a href="{{ url_for('reports.audit_trail') }}"
      class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
   {% for t in tenants %}
   <a href="{{ url_for('audit_trail', tenant_id=t.id) }}"

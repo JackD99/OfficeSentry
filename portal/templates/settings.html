@@ -54,7 +54,8 @@ document.getElementById('password-form').addEventListener('submit', async (e) =>
   const btn = document.getElementById('pw-btn');
   btn.disabled = true;
   const fd = new FormData(e.target);
-  const res = await fetch('{{ url_for("change_password") }}', { method: 'POST', body: fd });
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const res = await fetch('{{ url_for("auth.change_password") }}', { method: 'POST', body: fd });
   const data = await res.json();
   btn.disabled = false;
 
