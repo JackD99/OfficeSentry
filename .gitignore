@@ -8,7 +8,6 @@ modules/
 # -------------------------------------------------------
 # Certificates & credentials  (NEVER commit these)
 # -------------------------------------------------------
-certs/
 *.pfx
 *.cer
 *.key
@@ -18,7 +17,6 @@ certs/
 # -------------------------------------------------------
 # Audit output  (may contain sensitive tenant data)
 # -------------------------------------------------------
-output/
 *.csv
 *.xlsx
 

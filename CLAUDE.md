@@ -2,25 +2,21 @@
 
 ## Project Overview
 
-SPO-Audit-Toolkit is a **Microsoft 365 security audit and breach investigation toolkit** designed for MSPs and IT administrators. It provides two interfaces:
+SPO-Audit-Toolkit is a **Microsoft 365 security audit and breach investigation toolkit** designed for MSPs and IT administrators. It provides a **web portal** (`portal/app.py`) — a multi-tenant Flask web app for managing hundreds of client tenants.
 
-1. **CLI toolkit** (`toolkit.ps1`) — interactive PowerShell menu for single-tenant auditing
-2. **Web portal** (`portal/app.py`) — multi-tenant Flask web app for managing hundreds of client tenants
-
-Both interfaces use **certificate-based app-only authentication** (Entra ID / Azure AD) to connect to SharePoint Online, Exchange Online, and Microsoft Graph without storing user credentials.
+The portal uses **certificate-based app-only authentication** (Entra ID / Azure AD) to connect to SharePoint Online, Exchange Online, and Microsoft Graph without storing user credentials.
 
 ## Repository Structure
 
 ```
 SPO-Audit-Toolkit/
-├── toolkit.ps1              # Main CLI entry point (PowerShell menu)
-├── start.cmd                # Windows launcher for toolkit.ps1 (finds pwsh)
-├── run.cmd                  # Windows launcher for the Flask web portal
+├── setup.sh                 # Cross-platform launcher (Linux/macOS)
+├── start.cmd                # Windows launcher for the Flask web portal
 ├── Build-Toolkit.ps1        # Downloads all required PowerShell modules to ./modules/
 ├── requirements.txt         # Python dependencies (pinned versions)
 ├── pyproject.toml           # pytest configuration
 ├── config/
-│   └── settings.json        # CLI toolkit config (tenant, cert paths, defaults)
+│   └── portal.json          # Portal config (auto-generated Flask secret key, gitignored)
 ├── scripts/                 # PowerShell audit & setup scripts
 │   ├── Shared.psm1          # Shared module (connection helpers, export, password handling)
 │   ├── Audit-Groups.ps1     # Site groups + members audit
@@ -55,6 +51,7 @@ SPO-Audit-Toolkit/
 │       ├── audit_spo.html    # SPO audit launch page
 │       ├── audit_security.html  # Security scan (365Inspect) page
 │       ├── audit_breach.html    # Breach investigation page
+│       ├── batch.html        # Batch operations page
 │       ├── jobs.html
 │       ├── reports.html
 │       ├── audit_trail.html
@@ -81,9 +78,7 @@ SPO-Audit-Toolkit/
 
 - `bin/` — optional bundled PowerShell 7 runtime
 - `modules/` — PowerShell modules downloaded by `Build-Toolkit.ps1`
-- `certs/` — generated certificates (CLI mode)
-- `output/` — audit report output (CLI mode)
-- `tenants/` — per-tenant data, certs, and output (portal mode)
+- `tenants/` — per-tenant data, certs, and output
 - `data/` — SQLite database (`portal.db`)
 - `logs/` — application logs (`portal.log`, with rotation)
 
@@ -109,13 +104,11 @@ SPO-Audit-Toolkit/
 
 ### Authentication Model
 All connections to M365 services use **certificate-based app-only auth**. No user passwords are stored. The flow is:
-1. Generate self-signed cert (CER + PFX)
+1. Generate self-signed cert (CER + PFX) via the portal's tenant setup
 2. Register Entra app, upload CER, assign API permissions
 3. Connect using ClientId + PFX + PFX password
 
-The PFX password is the only secret:
-- **CLI mode**: prompted once per session, cached in `$script:SessionPfxPassword`
-- **Portal mode**: encrypted with Fernet (derived from Flask `secret_key`), stored in SQLite
+The PFX password is encrypted with Fernet (derived from Flask `secret_key`) and stored in SQLite.
 
 ### Portal Architecture
 The portal uses Flask Blueprints to organize routes by feature:
@@ -127,7 +120,7 @@ The portal uses Flask Blueprints to organize routes by feature:
 
 Shared helpers (`helpers.py`) provide auth decorators, PowerShell subprocess management, and tenant filesystem operations.
 
-### Portal Job Execution
+### Job Execution
 The portal runs PowerShell scripts as background subprocesses via `threading.Thread`. Output is streamed line-by-line into SQLite (`jobs` table). Job status is polled by the frontend via `/jobs/<id>/status`. Batch operations (`/batch/audit`) allow running security scans or SPO audits across multiple tenants simultaneously.
 
 ### Shared Module Pattern
@@ -184,9 +177,8 @@ The SQLite database uses a simple `schema_version` table to track schema changes
 - url_for uses blueprint-qualified names (e.g., `url_for('tenants.tenant_detail', tenant_id=...)`)
 
 ### Configuration
-- `config/settings.json` — CLI toolkit settings (tenant, app, cert paths)
 - `config/portal.json` — portal config (auto-generated Flask secret key)
-- Portal tenant data stored in SQLite, not JSON files
+- Tenant data stored in SQLite, not JSON files
 
 ## Testing
 
@@ -217,26 +209,20 @@ No Pester tests currently exist. When adding them:
 
 ## Common Tasks
 
-### First-time setup (CLI)
-```powershell
+### First-time setup
+```bash
 # 1. Download PowerShell modules
-.\Build-Toolkit.ps1
-
-# 2. Launch toolkit
-.\start.cmd
-# Then use menu options 1 (cert), 2 (Entra app), 3 (configure tenant)
-```
-
-### First-time setup (Portal)
-```cmd
-# 1. Download PowerShell modules
-powershell -File Build-Toolkit.ps1
+pwsh -File Build-Toolkit.ps1
 
 # 2. Install Python dependencies
 pip install -r requirements.txt
 
 # 3. Launch portal
-run.cmd
+# Windows:
+start.cmd
+# Linux/macOS:
+./setup.sh --run
+
 # Visit http://127.0.0.1:5000, create admin account
 ```
 
@@ -247,7 +233,7 @@ run.cmd
 4. Use `Get-AuditCertificatePassword` for PFX password resolution
 5. Use `Connect-AuditSite` or `Get-AuditGraphToken` for connections
 6. Use `Export-AuditData` for output
-7. Wire it into `toolkit.ps1` menu (CLI) and/or the appropriate Blueprint in `portal/routes/` (portal)
+7. Wire it into the appropriate Blueprint in `portal/routes/` and add a template
 
 ### Adding a new inspector
 1. Create `inspectors/Inspectors/Inspect-NewCheck.ps1` with a function returning messages
