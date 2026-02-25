@@ -9,7 +9,8 @@ param(
     [Parameter(Mandatory)][string] $AppDisplayName,
     [Parameter(Mandatory)][string] $CerPath,
     [Parameter(Mandatory)][int]    $CertYearsValid,
-    [Parameter(Mandatory)][string] $ModulesPath    # Path to local modules folder
+    [Parameter(Mandatory)][string] $ModulesPath,   # Path to local modules folder
+    [string] $TenantId = ""                        # Azure tenant GUID or domain (e.g. contoso.onmicrosoft.com)
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,8 +28,16 @@ try {
         "RoleManagement.ReadWrite.Directory"
     )
 
+    # WAM (Web Account Manager) overrides -UseDeviceCode on Windows and causes
+    # DeviceCodeCredential NullReferenceExceptions in subsequent Graph calls.
+    # Disable it for this session before connecting.
+    try { Set-MgGraphOption -DisableLoginByWAM $true } catch {}
+
+    $connectParams = @{ Scopes = $scopes; UseDeviceCode = $true; NoWelcome = $true }
+    if ($TenantId) { $connectParams["TenantId"] = $TenantId }
+
     Write-Output "ACTION REQUIRED: open https://microsoft.com/devicelogin in any browser and enter the code below."
-    Connect-MgGraph -Scopes $scopes -UseDeviceCode
+    Connect-MgGraph @connectParams
 
     # Create app + service principal
     $app = New-MgApplication -DisplayName $AppDisplayName

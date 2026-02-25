@@ -292,18 +292,24 @@ def tenant_app(tenant_id):
     if not Path(cer).exists():
         return jsonify({"ok": False, "error": "Certificate not found. Generate it first."})
 
-    years    = int(t.get("cert_years_valid") or 2)
-    app_name = t.get("app_display_name") or "M365-Audit-App"
+    years      = int(t.get("cert_years_valid") or 2)
+    app_name   = t.get("app_display_name") or "M365-Audit-App"
+    tenant_val = t.get("tenant_id") or t.get("domain", "")
 
-    env = build_ps_env()
-    job_id = start_job(f"Create Entra App — {t['name']}", "setup", [
+    cmd = [
         PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
         str(SCRIPTS_DIR / "Setup-App.ps1"),
         "-AppDisplayName", app_name,
         "-CerPath",        cer,
         "-CertYearsValid", str(years),
         "-ModulesPath",    str(MODULES_DIR),
-    ], tenant_id=tenant_id, env=env)
+    ]
+    if tenant_val:
+        cmd += ["-TenantId", tenant_val]
+
+    env = build_ps_env()
+    job_id = start_job(f"Create Entra App — {t['name']}", "setup",
+                       cmd, tenant_id=tenant_id, env=env)
 
     log_action(current_user(), "app_creation_started",
                tenant_id=tenant_id, tenant_name=t["name"])
