@@ -6,11 +6,13 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+import shutil
+
 from flask import (
-    Blueprint, render_template, request, abort, send_file,
+    Blueprint, render_template, request, abort, send_file, jsonify,
 )
 
-from database import get_tenant, list_tenants, get_audit_log
+from database import get_tenant, list_tenants, get_audit_log, log_action
 from helpers import (
     login_required, current_user,
     tenant_output_dir, TENANTS_DIR, LEGACY_OUTPUT,
@@ -89,13 +91,8 @@ def reports():
 def report_download():
     """Safe file download — validates path is within an allowed directory."""
     file_path = request.args.get("path", "")
-    if not file_path:
-        abort(404)
-
-    resolved = Path(file_path).resolve()
-
-    allowed_bases = [TENANTS_DIR.resolve(), LEGACY_OUTPUT.resolve()]
-    if not any(str(resolved).startswith(str(base)) for base in allowed_bases):
+    resolved = _validate_report_path(file_path)
+    if not resolved:
         log.warning("Path traversal attempt blocked: %s (user=%s)",
                     file_path, current_user())
         abort(403)
@@ -106,6 +103,44 @@ def report_download():
     if resolved.suffix.lower() == ".html":
         return send_file(str(resolved), mimetype="text/html")
     return send_file(str(resolved), as_attachment=True)
+
+
+def _validate_report_path(file_path: str) -> Path | None:
+    """Validate that a file path is within allowed directories. Returns resolved Path or None."""
+    if not file_path:
+        return None
+    resolved = Path(file_path).resolve()
+    allowed_bases = [TENANTS_DIR.resolve(), LEGACY_OUTPUT.resolve()]
+    if not any(str(resolved).startswith(str(base)) for base in allowed_bases):
+        return None
+    return resolved
+
+
+@bp.route("/reports/delete", methods=["POST"])
+@login_required
+def report_delete():
+    """Delete a report file or directory."""
+    file_path = request.form.get("path", "")
+    resolved = _validate_report_path(file_path)
+    if not resolved:
+        log.warning("Report delete path validation failed: %s (user=%s)",
+                    file_path, current_user())
+        return jsonify({"ok": False, "error": "Invalid path."}), 403
+
+    if not resolved.exists():
+        return jsonify({"ok": False, "error": "File not found."}), 404
+
+    name = resolved.name
+    try:
+        if resolved.is_dir():
+            shutil.rmtree(resolved)
+        else:
+            resolved.unlink()
+    except OSError as exc:
+        return jsonify({"ok": False, "error": f"Delete failed: {exc}"})
+
+    log_action(current_user(), "report_deleted", details=f"File: {name}")
+    return jsonify({"ok": True, "message": f"Deleted '{name}'."})
 
 
 @bp.route("/audit-log")

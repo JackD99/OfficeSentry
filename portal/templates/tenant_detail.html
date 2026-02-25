@@ -119,7 +119,12 @@
           <a href="{{ url_for('jobs.jobs_page', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-activity me-1"></i>Jobs
           </a>
+          <button class="btn btn-outline-info btn-sm" onclick="runHealthCheck()" id="health-btn">
+            <span class="spinner-border spinner-border-sm d-none me-1" id="health-spinner"></span>
+            <i class="bi bi-heart-pulse me-1"></i>Health Check
+          </button>
         </div>
+        <div class="mt-2 d-none" id="health-result"></div>
       </div>
     </div>
     {% endif %}
@@ -419,6 +424,40 @@ function pollJob(jobId, logElId, onDone) {
       if (onDone) onDone(d);
     }
   }, 2000);
+}
+
+// Health check
+async function runHealthCheck() {
+  const btn = document.getElementById('health-btn');
+  const spinner = document.getElementById('health-spinner');
+  const result = document.getElementById('health-result');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+
+  const fd = csrfFormData();
+  const res = await fetch(`/tenants/${TENANT_ID}/health`, { method: 'POST', body: fd });
+  const data = await res.json();
+  spinner.classList.add('d-none');
+  btn.disabled = false;
+
+  result.classList.remove('d-none');
+  if (data.ok) {
+    let html = '<div class="alert alert-success small mb-0 py-2"><i class="bi bi-check-circle me-1"></i>All checks passed</div>';
+    result.innerHTML = html;
+    showToast('Health check passed', 'success');
+  } else {
+    let rows = '';
+    for (const [name, check] of Object.entries(data.checks || {})) {
+      const icon = check.status === 'ok'
+        ? '<i class="bi bi-check-circle-fill text-success"></i>'
+        : '<i class="bi bi-x-circle-fill text-danger"></i>';
+      rows += `<tr><td>${icon}</td><td class="small">${name}</td><td class="small text-muted">${check.detail}</td></tr>`;
+    }
+    result.innerHTML = `<div class="alert alert-warning small mb-0 py-2">
+      <table class="table table-sm table-borderless mb-0">${rows}</table>
+    </div>`;
+    showToast('Some health checks failed', 'warning');
+  }
 }
 </script>
 {% endblock %}

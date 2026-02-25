@@ -16,9 +16,22 @@
   <input type="text" class="form-control form-control-sm search-input ms-2" style="max-width:260px"
          id="tenant-search" placeholder="Search tenants..." oninput="filterTenants(this.value)">
   {% endif %}
-  <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#addTenantModal">
-    <i class="bi bi-plus-lg me-1"></i>Add Tenant
-  </button>
+  <div class="ms-auto d-flex gap-2">
+    <div class="btn-group btn-group-sm">
+      <a href="{{ url_for('tenants.tenants_export') }}" class="btn btn-outline-secondary" title="Export tenants">
+        <i class="bi bi-download me-1"></i>Export
+      </a>
+      <button class="btn btn-outline-secondary" onclick="document.getElementById('import-file').click()" title="Import tenants">
+        <i class="bi bi-upload me-1"></i>Import
+      </button>
+    </div>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addTenantModal">
+      <i class="bi bi-plus-lg me-1"></i>Add Tenant
+    </button>
+  </div>
+  <form id="import-form" class="d-none">
+    <input type="file" id="import-file" accept=".json" onchange="importTenants(this)">
+  </form>
 </div>
 
 {% if tenants %}
@@ -121,6 +134,27 @@ function filterTenants(query) {
   });
   const noResults = document.getElementById('no-search-results');
   if (noResults) noResults.classList.toggle('d-none', visible > 0);
+}
+
+async function importTenants(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  try {
+    const r = await fetch('{{ url_for("tenants.tenants_import") }}', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message, 'success');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(d.error, 'danger');
+    }
+  } catch {
+    showToast('Import failed', 'danger');
+  }
+  input.value = '';
 }
 </script>
 {% endblock %}

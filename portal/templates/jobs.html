@@ -32,6 +32,8 @@
           <div class="spinner-border spinner-border-sm text-primary"></div>
         {% elif job.status == 'done' %}
           <i class="bi bi-check-circle-fill text-success"></i>
+        {% elif job.status == 'cancelled' %}
+          <i class="bi bi-dash-circle-fill text-warning"></i>
         {% else %}
           <i class="bi bi-x-circle-fill text-danger"></i>
         {% endif %}
@@ -45,6 +47,14 @@
           {{ job.started_at[:16] if job.started_at else '' }}
           {% if job.operator %} · {{ job.operator }}{% endif %}
         </span>
+        {% if job.status == 'running' %}
+        <button class="btn btn-sm btn-outline-danger ms-2 cancel-btn" data-job-id="{{ job.id }}"
+                onclick="cancelJob('{{ job.id }}', this)" title="Cancel job">
+          <i class="bi bi-stop-circle me-1"></i>Cancel
+        </button>
+        {% elif job.status == 'cancelled' %}
+        <span class="badge bg-warning text-dark ms-2">Cancelled</span>
+        {% endif %}
       </div>
       <div class="card-body p-0">
         <pre class="m-0 p-3 small bg-dark text-light job-output"
@@ -63,6 +73,28 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+async function cancelJob(jobId, btn) {
+  if (!confirm('Cancel this job?')) return;
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  try {
+    const r = await fetch(`/jobs/${jobId}/cancel`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message, 'success');
+      btn.outerHTML = '<span class="badge bg-warning text-dark ms-2">Cancelled</span>';
+    } else {
+      showToast(d.error, 'danger');
+      btn.disabled = false;
+    }
+  } catch {
+    showToast('Failed to cancel job', 'danger');
+    btn.disabled = false;
+  }
+}
+</script>
 {% set has_running = jobs|selectattr('status','eq','running')|list %}
 {% if has_running %}
 <script>
