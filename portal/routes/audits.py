@@ -3,6 +3,7 @@ portal/routes/audits.py — SPO audit, security scan, breach investigation, and 
 """
 
 import logging
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -151,7 +152,13 @@ def audit_security_run(tenant_id):
         return jsonify({"ok": False, "error": "Tenant not found."}), 404
 
     report_format = request.form.get("report_format", "HTML")
-    selected      = request.form.getlist("inspectors")
+    if report_format not in ("HTML", "CSV", "JSON"):
+        return jsonify({"ok": False, "error": "Invalid report format."})
+
+    selected = [
+        s for s in request.form.getlist("inspectors")
+        if re.match(r'^[\w\-]+$', s)
+    ]
 
     pfx_pass = get_tenant_pfx_password(t)
     if not pfx_pass:
@@ -177,6 +184,9 @@ def audit_security_run(tenant_id):
         thumbprint = thumb_result.stdout.strip()
     except Exception:
         thumbprint = ""
+
+    if not thumbprint:
+        return jsonify({"ok": False, "error": "Failed to extract certificate thumbprint. Verify the PFX password and certificate."})
 
     stamp   = datetime.now().strftime("%Y%m%d-%H%M")
     out_dir = str(tenant_output_dir(tenant_id) / f"SecurityScan_{stamp}")
@@ -320,6 +330,13 @@ def batch_audit():
     if not tenant_ids:
         return jsonify({"ok": False, "error": "No tenants selected."})
 
+    if report_fmt not in ("HTML", "CSV", "JSON"):
+        return jsonify({"ok": False, "error": "Invalid report format."})
+
+    batch_site_url = request.form.get("site_url", "").strip()
+    if audit_type != "security" and batch_site_url and not validate_site_url(batch_site_url):
+        return jsonify({"ok": False, "error": "Invalid SharePoint site URL format."})
+
     job_ids = []
     for tid in tenant_ids:
         t = get_tenant(tid)
@@ -356,7 +373,7 @@ def batch_audit():
             cmd = [
                 PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
                 str(SCRIPTS_DIR / "Audit-Groups.ps1"),
-                "-SiteUrl",         request.form.get("site_url", ""),
+                "-SiteUrl",         batch_site_url,
                 "-OutputFolder",    out_dir,
                 "-ClientId",        t["client_id"],
                 "-Tenant",          tenant_val,

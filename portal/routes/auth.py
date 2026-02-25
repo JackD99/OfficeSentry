@@ -35,7 +35,9 @@ def login():
             session["display_name"] = user["display_name"]
             log.info("Login: %s", username)
             log_action(username, "login")
-            next_url = request.args.get("next", url_for("dashboard"))
+            next_url = request.args.get("next", "")
+            if not next_url or not next_url.startswith("/"):
+                next_url = url_for("dashboard")
             return redirect(next_url)
         flash("Invalid username or password.", "danger")
     return render_template("login.html")

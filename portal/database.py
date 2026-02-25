@@ -268,12 +268,12 @@ def list_tenants() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def update_tenant(tenant_id: str, **fields):
+def update_tenant(row_id: str, **fields):
     if not fields:
         return
     fields["updated_at"] = datetime.now().isoformat()
     set_clause = ", ".join(f"{k} = ?" for k in fields)
-    values = list(fields.values()) + [tenant_id]
+    values = list(fields.values()) + [row_id]
     with get_db() as conn:
         conn.execute(
             f"UPDATE tenants SET {set_clause} WHERE id = ?", values

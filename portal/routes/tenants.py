@@ -98,6 +98,11 @@ def tenant_settings(tenant_id):
     if pfx_pass:
         fields["pfx_password_enc"] = encrypt_value(pfx_pass, current_app.secret_key)
 
+    if "domain" in fields and not validate_domain(fields["domain"]):
+        return jsonify({"ok": False, "error": "Invalid domain format. Example: contoso.onmicrosoft.com"})
+    if "tenant_id" in fields and not validate_tenant_guid(fields["tenant_id"]):
+        return jsonify({"ok": False, "error": "Tenant ID must be a valid GUID."})
+
     if fields:
         update_tenant(tenant_id, **fields)
         log_action(current_user(), "tenant_settings_updated",
@@ -266,7 +271,7 @@ def tenant_cert(tenant_id):
         "-PfxPath",     pfx,
         "-YearsValid",  str(years),
         "-PfxPassword", password,
-    ], env=env, timeout=60)
+    ], env=env, timeout=120)
 
     if result.get("ok"):
         log_action(current_user(), "cert_generated",
