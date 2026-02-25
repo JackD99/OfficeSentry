@@ -60,11 +60,58 @@
       </div>
     </div>
   </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-plug me-2 text-success"></i>Admin Connector App</div>
+      <div class="card-body">
+        <p class="small text-muted mb-3">
+          Microsoft Graph PowerShell requires a custom Entra app to use device-code flow across client tenants.
+          The default Microsoft ClientId forces WAM on Windows and reuses your cached session instead of prompting.
+          Register a <strong>public-client multi-tenant</strong> app in your management tenant,
+          enable <em>Allow public client flows</em>, then paste its Client ID here.
+          The app needs no pre-assigned API permissions — scopes are requested at runtime when the client admin authenticates.
+        </p>
+        <form id="admin-app-form">
+          <div class="mb-3" style="max-width:420px">
+            <label class="form-label small">Admin Connector Client ID</label>
+            <input type="text" class="form-control font-monospace"
+                   name="admin_client_id"
+                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                   value="{{ admin_client_id or '' }}"
+                   pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" id="admin-app-btn">Save</button>
+        </form>
+        <div class="mt-3 d-none" id="admin-app-result"></div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+document.getElementById('admin-app-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('admin-app-btn');
+  btn.disabled = true;
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const res = await fetch('{{ url_for("auth.settings_admin_app") }}', { method: 'POST', body: fd });
+  const data = await res.json();
+  btn.disabled = false;
+  const el = document.getElementById('admin-app-result');
+  el.classList.remove('d-none');
+  if (data.ok) {
+    el.innerHTML = '<div class="alert alert-success small mb-0 py-1"><i class="bi bi-check-circle me-1"></i>' + (data.message || 'Saved.') + '</div>';
+    showToast(data.message || 'Saved.', 'success');
+  } else {
+    el.innerHTML = '<div class="alert alert-danger small mb-0 py-1"><i class="bi bi-x-circle me-1"></i>' + (data.error || 'Error.') + '</div>';
+    showToast(data.error || 'Error saving.', 'danger');
+  }
+});
+
 document.getElementById('password-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('pw-btn');

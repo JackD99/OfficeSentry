@@ -35,6 +35,24 @@ LEGACY_OUTPUT  = ROOT / "output"
 _bundled = ROOT / "bin" / "pwsh" / "pwsh.exe"
 PWSH = str(_bundled) if _bundled.exists() else "pwsh"
 
+_CONFIG_PATH = ROOT / "config" / "portal.json"
+
+
+def read_portal_config() -> dict:
+    try:
+        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def write_portal_config(cfg: dict):
+    _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+
+def get_admin_client_id() -> str:
+    return read_portal_config().get("admin_client_id", "")
+
 
 # ---------------------------------------------------------------------------
 # Tenant filesystem helpers

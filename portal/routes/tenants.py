@@ -21,6 +21,7 @@ from helpers import (
     tenant_output_dir,
     build_ps_env, run_ps_sync, start_job, get_tenant_pfx_password,
     validate_domain, validate_tenant_guid, sanitize_text,
+    get_admin_client_id,
     SCRIPTS_DIR, MODULES_DIR, PWSH,
 )
 
@@ -292,6 +293,14 @@ def tenant_app(tenant_id):
     if not Path(cer).exists():
         return jsonify({"ok": False, "error": "Certificate not found. Generate it first."})
 
+    admin_client_id = get_admin_client_id()
+    if not admin_client_id:
+        return jsonify({"ok": False, "error": (
+            "Admin Connector App not configured. "
+            "Go to Settings, register a public-client Entra app in your management tenant, "
+            "and enter its Client ID."
+        )})
+
     years      = int(t.get("cert_years_valid") or 2)
     app_name   = t.get("app_display_name") or "OfficeSentry"
     tenant_val = t.get("tenant_id") or t.get("domain", "")
@@ -299,10 +308,11 @@ def tenant_app(tenant_id):
     cmd = [
         PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
         str(SCRIPTS_DIR / "Setup-App.ps1"),
-        "-AppDisplayName", app_name,
-        "-CerPath",        cer,
-        "-CertYearsValid", str(years),
-        "-ModulesPath",    str(MODULES_DIR),
+        "-AppDisplayName",  app_name,
+        "-CerPath",         cer,
+        "-CertYearsValid",  str(years),
+        "-ModulesPath",     str(MODULES_DIR),
+        "-AdminClientId",   admin_client_id,
     ]
     if tenant_val:
         cmd += ["-TenantId", tenant_val]

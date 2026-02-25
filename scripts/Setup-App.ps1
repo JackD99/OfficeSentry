@@ -9,8 +9,9 @@ param(
     [Parameter(Mandatory)][string] $AppDisplayName,
     [Parameter(Mandatory)][string] $CerPath,
     [Parameter(Mandatory)][int]    $CertYearsValid,
-    [Parameter(Mandatory)][string] $ModulesPath,   # Path to local modules folder
-    [string] $TenantId = ""                        # Azure tenant GUID or domain (e.g. contoso.onmicrosoft.com)
+    [Parameter(Mandatory)][string] $ModulesPath,      # Path to local modules folder
+    [Parameter(Mandatory)][string] $AdminClientId,    # ClientId of public-client app in your management tenant
+    [string] $TenantId = ""                           # Azure tenant GUID or domain (e.g. contoso.onmicrosoft.com)
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,12 +29,19 @@ try {
         "RoleManagement.ReadWrite.Directory"
     )
 
-    # WAM (Web Account Manager) overrides -UseDeviceCode on Windows and causes
-    # DeviceCodeCredential NullReferenceExceptions in subsequent Graph calls.
-    # Disable it for this session before connecting.
-    try { Set-MgGraphOption -DisableLoginByWAM $true } catch {}
+    # Clear any cached Graph session so WAM cannot reuse a previous token.
+    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
 
-    $connectParams = @{ Scopes = $scopes; UseDeviceCode = $true; NoWelcome = $true }
+    # DisableLoginByWAM only takes effect when a custom ClientId is supplied —
+    # the default Microsoft Graph PowerShell ClientId forces WAM regardless.
+    Set-MgGraphOption -DisableLoginByWAM $true
+
+    $connectParams = @{
+        ClientId      = $AdminClientId
+        Scopes        = $scopes
+        UseDeviceCode = $true
+        NoWelcome     = $true
+    }
     if ($TenantId) { $connectParams["TenantId"] = $TenantId }
 
     Write-Output "ACTION REQUIRED: open https://microsoft.com/devicelogin in any browser and enter the code below."
@@ -68,9 +76,10 @@ try {
     # Helper to assign an app role
     function Grant-Role {
         param([string]$ResourceAppId, [string]$RoleValue)
-        $countVar = 0
+        $spCount = 0
         $resourceSp = Get-MgServicePrincipal -Filter "appId eq '$ResourceAppId'" `
-            -ConsistencyLevel eventual -CountVariable countVar | Select-Object -First 1
+            -ConsistencyLevel eventual -CountVariable spCount | Select-Object -First 1
+        Write-Debug "Service principal query returned $spCount result(s) for $ResourceAppId"
         if (-not $resourceSp) {
             Write-Output "WARNING: service principal not found for $ResourceAppId — skipping $RoleValue"
             return

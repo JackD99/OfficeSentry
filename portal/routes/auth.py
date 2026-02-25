@@ -13,7 +13,11 @@ from database import (
     list_users, delete_user, update_user,
     log_action,
 )
-from helpers import login_required, admin_required, current_user
+from helpers import (
+    login_required, admin_required, current_user,
+    read_portal_config, write_portal_config, get_admin_client_id,
+    validate_tenant_guid,
+)
 
 log = logging.getLogger("portal")
 
@@ -81,7 +85,22 @@ def initial_setup():
 @bp.route("/settings")
 @login_required
 def settings_page():
-    return render_template("settings.html")
+    return render_template("settings.html",
+                           admin_client_id=get_admin_client_id())
+
+
+@bp.route("/settings/admin-app", methods=["POST"])
+@admin_required
+def settings_admin_app():
+    client_id = request.form.get("admin_client_id", "").strip()
+    if client_id and not validate_tenant_guid(client_id):
+        return jsonify({"ok": False, "error": "Admin Client ID must be a valid GUID."})
+    cfg = read_portal_config()
+    cfg["admin_client_id"] = client_id
+    write_portal_config(cfg)
+    log_action(current_user(), "admin_app_configured",
+               details=f"Admin Client ID: {'set' if client_id else 'cleared'}")
+    return jsonify({"ok": True, "message": "Admin app settings saved."})
 
 
 @bp.route("/settings/password", methods=["POST"])
