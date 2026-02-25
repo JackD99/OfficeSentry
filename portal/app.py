@@ -19,8 +19,12 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from database import init_db, list_tenants, list_running_jobs, get_audit_log, get_dashboard_stats
-from helpers import login_required, TENANTS_DIR
+from database import (
+    init_db, list_tenants, list_running_jobs, get_audit_log, get_dashboard_stats,
+    get_job_trends, get_job_type_distribution, get_report_type_counts,
+    list_saved_views, list_schedules,
+)
+from helpers import login_required, current_user, TENANTS_DIR, tenant_output_dir
 
 # ---------------------------------------------------------------------------
 # Paths & config
@@ -128,13 +132,32 @@ def create_app() -> Flask:
         configured = sum(1 for t in tenants if t["client_id"])
         recent_audits = sum(1 for t in tenants if t.get("last_audit_at"))
         recent_activity = get_audit_log(limit=10)
+
+        # Chart data
+        stats = get_dashboard_stats()
+        job_trends = get_job_trends(30)
+        job_types = get_job_type_distribution()
+        schedules = list_schedules()
+        saved_views = list_saved_views()
+
+        # Report type distribution from filesystem
+        out_dirs = [tenant_output_dir(t["id"]) for t in tenants
+                    if tenant_output_dir(t["id"]).exists()]
+        report_counts = get_report_type_counts(out_dirs)
+
         return render_template("dashboard.html",
                                tenants=tenants,
                                running_jobs=running,
                                total_tenants=total_tenants,
                                configured_count=configured,
                                audited_count=recent_audits,
-                               recent_activity=recent_activity)
+                               recent_activity=recent_activity,
+                               stats=stats,
+                               job_trends=job_trends,
+                               job_types=job_types,
+                               report_counts=report_counts,
+                               schedules=schedules,
+                               saved_views=saved_views)
 
     # ------------------------------------------------------------------
     # Dashboard stats API
@@ -143,6 +166,20 @@ def create_app() -> Flask:
     @login_required
     def api_stats():
         return jsonify(get_dashboard_stats())
+
+    @app.route("/api/chart-data")
+    @login_required
+    def api_chart_data():
+        """Return chart data for dashboard AJAX updates."""
+        tenants = list_tenants()
+        out_dirs = [tenant_output_dir(t["id"]) for t in tenants
+                    if tenant_output_dir(t["id"]).exists()]
+        return jsonify({
+            "job_trends": get_job_trends(30),
+            "job_types": get_job_type_distribution(),
+            "report_counts": get_report_type_counts(out_dirs),
+            "stats": get_dashboard_stats(),
+        })
 
     # ------------------------------------------------------------------
     # Health check endpoint (unauthenticated, for monitoring)
@@ -211,7 +248,7 @@ def create_app() -> Flask:
             "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
             "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
             "font-src 'self' https://cdn.jsdelivr.net; "
-            "img-src 'self' data:; "
+            "img-src 'self' data: blob:; "
             "connect-src 'self'"
         )
         response.headers["X-Content-Type-Options"] = "nosniff"

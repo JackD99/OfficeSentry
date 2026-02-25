@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+{% block title %}{{ file_name }} — Report Viewer{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('reports.reports') }}">Reports</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Viewer</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Report Viewer{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- Report header -->
+<div class="card mb-4">
+  <div class="card-body d-flex align-items-center flex-wrap gap-3">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-{% if ext == '.csv' %}filetype-csv text-info{% elif ext == '.json' %}filetype-json text-secondary{% else %}file-earmark text-muted{% endif %} fs-4"></i>
+      <div>
+        <h6 class="mb-0 fw-semibold">{{ file_name }}</h6>
+        <span class="badge bg-{{ type_color }}">{{ report_type }}</span>
+        <span class="text-muted small ms-1">{{ data.total }} rows · {{ data.headers|length }} columns</span>
+        {% if data.truncated %}<span class="badge bg-warning text-dark ms-1">Truncated</span>{% endif %}
+      </div>
+    </div>
+    <div class="ms-auto d-flex gap-2 flex-wrap">
+      <!-- Column selector toggle -->
+      <button class="btn btn-sm btn-outline-secondary" onclick="togglePanel('columns-panel')">
+        <i class="bi bi-layout-three-columns me-1"></i>Columns
+      </button>
+      <!-- Chart toggle -->
+      <button class="btn btn-sm btn-outline-secondary" onclick="togglePanel('chart-panel')">
+        <i class="bi bi-bar-chart me-1"></i>Chart
+      </button>
+      <!-- Export dropdown -->
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+          <i class="bi bi-download me-1"></i>Export
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="#" onclick="exportData('csv')"><i class="bi bi-filetype-csv me-2"></i>CSV</a></li>
+          <li><a class="dropdown-item" href="#" onclick="exportData('json')"><i class="bi bi-filetype-json me-2"></i>JSON</a></li>
+          <li><a class="dropdown-item" href="#" onclick="exportData('html')"><i class="bi bi-filetype-html me-2"></i>HTML Report</a></li>
+        </ul>
+      </div>
+      <!-- Save view -->
+      <button class="btn btn-sm btn-outline-success" onclick="showSaveModal()">
+        <i class="bi bi-bookmark-plus me-1"></i>Save View
+      </button>
+      <!-- Download original -->
+      <a href="{{ url_for('reports.report_download', path=file_path) }}"
+         class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-file-earmark-arrow-down me-1"></i>Original
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Column selector panel (hidden by default) -->
+<div class="card mb-3" id="columns-panel" style="display:none">
+  <div class="card-header d-flex align-items-center">
+    <i class="bi bi-layout-three-columns me-2"></i>
+    <span class="fw-semibold">Column Visibility</span>
+    <div class="ms-auto d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" onclick="selectAllCols(true)">All</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="selectAllCols(false)">None</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2" id="col-checkboxes">
+      {% for h in data.headers %}
+      <label class="form-check-inline">
+        <input type="checkbox" class="form-check-input col-toggle" value="{{ loop.index0 }}" checked
+               onchange="toggleColumn(this)">
+        <span class="small">{{ h }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Chart panel (hidden by default) -->
+<div class="card mb-3" id="chart-panel" style="display:none">
+  <div class="card-header d-flex align-items-center">
+    <i class="bi bi-bar-chart me-2"></i>
+    <span class="fw-semibold">Chart Builder</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <label class="form-label small">Chart Type</label>
+        <select class="form-select form-select-sm" id="chart-type" onchange="updateChart()">
+          <option value="bar">Bar Chart</option>
+          <option value="doughnut">Donut Chart</option>
+          <option value="pie">Pie Chart</option>
+          <option value="line">Line Chart</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small">Group By Column</label>
+        <select class="form-select form-select-sm" id="chart-group-col" onchange="updateChart()">
+          {% for h in data.headers %}
+          <option value="{{ loop.index0 }}">{{ h }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small">Value Column</label>
+        <select class="form-select form-select-sm" id="chart-value-col" onchange="updateChart()">
+          <option value="_count">Count</option>
+          {% for h in data.headers %}
+          <option value="{{ loop.index0 }}">{{ h }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small">Max Items</label>
+        <select class="form-select form-select-sm" id="chart-limit" onchange="updateChart()">
+          <option value="10">Top 10</option>
+          <option value="20" selected>Top 20</option>
+          <option value="50">Top 50</option>
+          <option value="0">All</option>
+        </select>
+      </div>
+    </div>
+    <div style="position:relative;height:300px"><canvas id="dataChart"></canvas></div>
+  </div>
+</div>
+
+{% if data.error %}
+<div class="alert alert-danger">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  Error reading file: {{ data.error }}
+</div>
+{% endif %}
+
+{% if data.headers %}
+<!-- Filter row -->
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-funnel text-muted"></i>
+        <input type="text" class="form-control form-control-sm search-input" style="max-width:220px"
+               id="global-search" placeholder="Search all columns..." oninput="applyFilters()">
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="text-muted small">Showing:</span>
+        <span class="badge bg-primary" id="visible-count">{{ data.total }}</span>
+        <span class="text-muted small">of {{ data.total }} rows</span>
+      </div>
+      <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+          <i class="bi bi-x-circle me-1"></i>Clear Filters
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Data table -->
+<div class="card">
+  <div class="table-responsive" style="max-height:600px;overflow-y:auto">
+    <table class="table table-hover table-sm align-middle mb-0" id="data-table">
+      <thead class="table-dark" style="position:sticky;top:0;z-index:1">
+        <tr id="header-row">
+          <th class="text-muted" style="width:50px">#</th>
+          {% for h in data.headers %}
+          <th class="sortable-header" data-col="{{ loop.index0 }}" onclick="sortByColumn({{ loop.index0 }})">
+            {{ h }}
+            <i class="bi bi-chevron-expand ms-1 sort-icon" style="font-size:.65rem;opacity:.4"></i>
+          </th>
+          {% endfor %}
+        </tr>
+        <!-- Per-column filter row -->
+        <tr id="filter-row" class="bg-dark">
+          <td></td>
+          {% for h in data.headers %}
+          <td>
+            <input type="text" class="form-control form-control-sm col-filter" style="font-size:.75rem"
+                   data-col="{{ loop.index0 }}" placeholder="Filter..." oninput="applyFilters()">
+          </td>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody id="data-body">
+        {% for row in data.rows %}
+        <tr>
+          <td class="text-muted small">{{ loop.index }}</td>
+          {% for cell in row %}
+          <td class="small">{{ cell }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Pagination -->
+{% if data.total > 100 %}
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <span class="text-muted small" id="page-info">Page 1 of {{ ((data.total - 1) // 100) + 1 }}</span>
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-outline-secondary" id="prev-page" onclick="changePage(-1)" disabled>
+      <i class="bi bi-chevron-left"></i> Previous
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" id="next-page" onclick="changePage(1)">
+      Next <i class="bi bi-chevron-right"></i>
+    </button>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- Save View Modal -->
+<div class="modal fade" id="saveViewModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--card-bg);border-color:var(--border-color)">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title">Save Report View</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small">View Name</label>
+          <input type="text" class="form-control form-control-sm" id="view-name" placeholder="e.g. External Users Only">
+        </div>
+        <p class="text-muted small">This saves your current column selection, filters, sorting, and chart configuration.</p>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="saveView()">
+          <i class="bi bi-bookmark-check me-1"></i>Save View
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const HEADERS = {{ data.headers|tojson }};
+const ALL_ROWS = {{ data.rows|tojson }};
+const FILE_PATH = {{ file_path|tojson }};
+let filteredRows = [...ALL_ROWS];
+let currentPage = 0;
+const PAGE_SIZE = 100;
+let sortCol = -1;
+let sortDir = 'asc';
+let hiddenCols = new Set();
+let dataChart = null;
+
+// --- Panels ---
+function togglePanel(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+  if (id === 'chart-panel' && el.style.display !== 'none' && !dataChart) {
+    updateChart();
+  }
+}
+
+// --- Column visibility ---
+function selectAllCols(show) {
+  document.querySelectorAll('.col-toggle').forEach(cb => {
+    cb.checked = show;
+    toggleColumn(cb, true);
+  });
+  renderPage();
+}
+
+function toggleColumn(cb, batch) {
+  const idx = parseInt(cb.value);
+  if (cb.checked) {
+    hiddenCols.delete(idx);
+  } else {
+    hiddenCols.add(idx);
+  }
+  // Toggle header and filter visibility
+  const headerCells = document.querySelectorAll('#header-row th');
+  const filterCells = document.querySelectorAll('#filter-row td');
+  if (headerCells[idx + 1]) headerCells[idx + 1].style.display = cb.checked ? '' : 'none';
+  if (filterCells[idx + 1]) filterCells[idx + 1].style.display = cb.checked ? '' : 'none';
+  if (!batch) renderPage();
+}
+
+// --- Sorting ---
+function sortByColumn(colIdx) {
+  if (sortCol === colIdx) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortCol = colIdx;
+    sortDir = 'asc';
+  }
+  // Update sort icons
+  document.querySelectorAll('.sort-icon').forEach(icon => {
+    icon.className = 'bi bi-chevron-expand ms-1 sort-icon';
+    icon.style.opacity = '.4';
+  });
+  const activeHeader = document.querySelector(`th[data-col="${colIdx}"] .sort-icon`);
+  if (activeHeader) {
+    activeHeader.className = `bi bi-chevron-${sortDir === 'asc' ? 'up' : 'down'} ms-1 sort-icon`;
+    activeHeader.style.opacity = '1';
+  }
+  filteredRows.sort((a, b) => {
+    let va = a[colIdx] || '', vb = b[colIdx] || '';
+    // Try numeric sort
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) {
+      return sortDir === 'asc' ? na - nb : nb - na;
+    }
+    va = va.toLowerCase();
+    vb = vb.toLowerCase();
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  currentPage = 0;
+  renderPage();
+}
+
+// --- Filtering ---
+function applyFilters() {
+  const globalQ = (document.getElementById('global-search').value || '').toLowerCase().trim();
+  const colFilters = {};
+  document.querySelectorAll('.col-filter').forEach(input => {
+    const val = input.value.toLowerCase().trim();
+    if (val) colFilters[parseInt(input.dataset.col)] = val;
+  });
+
+  filteredRows = ALL_ROWS.filter(row => {
+    // Global search
+    if (globalQ) {
+      const match = row.some(cell => (cell || '').toLowerCase().includes(globalQ));
+      if (!match) return false;
+    }
+    // Per-column filters
+    for (const [col, q] of Object.entries(colFilters)) {
+      if (!(row[col] || '').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (sortCol >= 0) {
+    filteredRows.sort((a, b) => {
+      let va = a[sortCol] || '', vb = b[sortCol] || '';
+      const na = parseFloat(va), nb = parseFloat(vb);
+      if (!isNaN(na) && !isNaN(nb)) return sortDir === 'asc' ? na - nb : nb - na;
+      va = va.toLowerCase(); vb = vb.toLowerCase();
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+  currentPage = 0;
+  renderPage();
+  document.getElementById('visible-count').textContent = filteredRows.length;
+}
+
+function clearFilters() {
+  document.getElementById('global-search').value = '';
+  document.querySelectorAll('.col-filter').forEach(input => input.value = '');
+  filteredRows = [...ALL_ROWS];
+  currentPage = 0;
+  renderPage();
+  document.getElementById('visible-count').textContent = ALL_ROWS.length;
+}
+
+// --- Pagination & Rendering ---
+function renderPage() {
+  const tbody = document.getElementById('data-body');
+  const start = currentPage * PAGE_SIZE;
+  const pageRows = filteredRows.slice(start, start + PAGE_SIZE);
+
+  tbody.innerHTML = pageRows.map((row, i) => {
+    const cells = row.map((cell, ci) => {
+      const display = hiddenCols.has(ci) ? 'style="display:none"' : '';
+      return `<td class="small" ${display}>${escapeHtml(cell || '')}</td>`;
+    }).join('');
+    return `<tr><td class="text-muted small">${start + i + 1}</td>${cells}</tr>`;
+  }).join('');
+
+  // Update pagination controls
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const pageInfo = document.getElementById('page-info');
+  if (pageInfo) pageInfo.textContent = `Page ${currentPage + 1} of ${totalPages}`;
+  const prevBtn = document.getElementById('prev-page');
+  const nextBtn = document.getElementById('next-page');
+  if (prevBtn) prevBtn.disabled = currentPage === 0;
+  if (nextBtn) nextBtn.disabled = currentPage >= totalPages - 1;
+}
+
+function changePage(delta) {
+  const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
+  currentPage = Math.max(0, Math.min(totalPages - 1, currentPage + delta));
+  renderPage();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// --- Chart Builder ---
+function updateChart() {
+  const chartType = document.getElementById('chart-type').value;
+  const groupColIdx = parseInt(document.getElementById('chart-group-col').value);
+  const valueColSel = document.getElementById('chart-value-col').value;
+  const limit = parseInt(document.getElementById('chart-limit').value);
+
+  // Aggregate data
+  const groups = {};
+  for (const row of filteredRows) {
+    const key = row[groupColIdx] || '(empty)';
+    if (valueColSel === '_count') {
+      groups[key] = (groups[key] || 0) + 1;
+    } else {
+      const val = parseFloat(row[parseInt(valueColSel)]) || 0;
+      groups[key] = (groups[key] || 0) + val;
+    }
+  }
+
+  // Sort by value descending and limit
+  let entries = Object.entries(groups).sort((a, b) => b[1] - a[1]);
+  if (limit > 0) entries = entries.slice(0, limit);
+
+  const labels = entries.map(e => e[0]);
+  const values = entries.map(e => e[1]);
+  const palette = ['#388bfd','#3fb950','#d29922','#f85149','#a371f7','#39d2c0','#f778ba','#8b949e','#58a6ff','#79c0ff'];
+  const colors = labels.map((_, i) => palette[i % palette.length]);
+
+  if (dataChart) dataChart.destroy();
+
+  const canvas = document.getElementById('dataChart');
+  dataChart = new Chart(canvas, {
+    type: chartType,
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: chartType === 'line' ? colors[0] : undefined,
+        borderWidth: chartType === 'line' ? 2 : 0,
+        borderRadius: chartType === 'bar' ? 4 : undefined,
+        barThickness: chartType === 'bar' ? 24 : undefined,
+        tension: 0.3,
+        fill: chartType === 'line',
+        pointRadius: chartType === 'line' ? 3 : undefined,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: chartType === 'bar' && labels.length > 8 ? 'y' : 'x',
+      cutout: chartType === 'doughnut' ? '55%' : undefined,
+      scales: (chartType === 'bar' || chartType === 'line') ? {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 10 }, maxTicksLimit: 15 } },
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 10 } } },
+      } : undefined,
+      plugins: {
+        legend: { display: chartType === 'doughnut' || chartType === 'pie', position: 'right',
+                  labels: { font: { size: 10 }, boxWidth: 10, padding: 6 } },
+      },
+    }
+  });
+}
+
+// --- Export ---
+function exportData(format) {
+  const visibleCols = HEADERS.filter((_, i) => !hiddenCols.has(i));
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{{ url_for("reports.report_export") }}';
+
+  const addField = (name, value) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  };
+
+  addField('csrf_token', window.CSRF_TOKEN);
+  addField('path', FILE_PATH);
+  addField('format', format);
+  visibleCols.forEach(col => addField('columns', col));
+
+  document.body.appendChild(form);
+  form.submit();
+  form.remove();
+}
+
+// --- Save View ---
+function showSaveModal() {
+  new bootstrap.Modal(document.getElementById('saveViewModal')).show();
+}
+
+async function saveView() {
+  const name = document.getElementById('view-name').value.trim();
+  if (!name) { showToast('Please enter a view name', 'warning'); return; }
+
+  const visibleCols = HEADERS.filter((_, i) => !hiddenCols.has(i));
+  const filters = {};
+  document.querySelectorAll('.col-filter').forEach(input => {
+    if (input.value.trim()) filters[HEADERS[parseInt(input.dataset.col)]] = input.value.trim();
+  });
+
+  const fd = new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  fd.append('name', name);
+  fd.append('report_type', {{ report_type|tojson }});
+  visibleCols.forEach(col => fd.append('columns', col));
+  fd.append('filters', JSON.stringify(filters));
+  fd.append('sort_col', sortCol >= 0 ? HEADERS[sortCol] : '');
+  fd.append('sort_dir', sortDir);
+  fd.append('chart_type', document.getElementById('chart-type')?.value || '');
+  fd.append('chart_col', document.getElementById('chart-group-col')?.value || '');
+
+  try {
+    const r = await fetch('{{ url_for("reports.save_view") }}', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message, 'success');
+      bootstrap.Modal.getInstance(document.getElementById('saveViewModal')).hide();
+    } else {
+      showToast(d.error, 'danger');
+    }
+  } catch {
+    showToast('Failed to save view', 'danger');
+  }
+}
+
+// --- Apply saved view if present ---
+{% if saved_view %}
+(function applySavedView() {
+  const sv = {{ saved_view|tojson }};
+  // Apply column visibility
+  if (sv.columns && sv.columns.length) {
+    const svColSet = new Set(sv.columns);
+    document.querySelectorAll('.col-toggle').forEach(cb => {
+      const colName = HEADERS[parseInt(cb.value)];
+      cb.checked = svColSet.has(colName);
+      toggleColumn(cb, true);
+    });
+  }
+  // Apply sort
+  if (sv.sort_col) {
+    const idx = HEADERS.indexOf(sv.sort_col);
+    if (idx >= 0) {
+      sortDir = sv.sort_dir === 'desc' ? 'asc' : 'desc'; // toggle will flip
+      sortByColumn(idx);
+    }
+  }
+  // Apply filters
+  if (sv.filters) {
+    for (const [colName, val] of Object.entries(sv.filters)) {
+      const idx = HEADERS.indexOf(colName);
+      if (idx >= 0) {
+        const input = document.querySelector(`.col-filter[data-col="${idx}"]`);
+        if (input) input.value = val;
+      }
+    }
+    applyFilters();
+  }
+  renderPage();
+})();
+{% endif %}
+</script>
+{% endblock %}

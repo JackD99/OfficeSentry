@@ -9,7 +9,89 @@
 {% endblock %}
 {% block page_title %}Reports{% endblock %}
 
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
+<!-- Summary Cards -->
+{% if files %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 stat-card stat-blue">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <i class="bi bi-files fs-5 text-accent-blue"></i>
+          <span class="fw-semibold small">Total Reports</span>
+        </div>
+        <div class="fs-4 fw-bold">{{ files|length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 stat-card stat-green">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <i class="bi bi-hdd fs-5 text-accent-green"></i>
+          <span class="fw-semibold small">Total Size</span>
+        </div>
+        <div class="fs-4 fw-bold">
+          {% if total_size > 1048576 %}{{ (total_size / 1048576)|round(1) }} MB{% else %}{{ (total_size / 1024)|round(0)|int }} KB{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 stat-card stat-amber">
+      <div class="card-body py-3">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <i class="bi bi-grid fs-5 text-accent-amber"></i>
+          <span class="fw-semibold small">Report Types</span>
+        </div>
+        <div class="fs-4 fw-bold">{{ type_counts|length }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card h-100">
+      <div class="card-body py-3 d-flex align-items-center justify-content-center">
+        <a href="{{ url_for('reports.schedules_page') }}" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-calendar-plus me-1"></i>Schedule Reports
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Report Type Distribution Chart -->
+{% if type_counts|length > 1 %}
+<div class="row g-4 mb-4">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-bar-chart me-2 text-accent-blue"></i>
+        <span class="fw-semibold">Report Distribution</span>
+      </div>
+      <div class="card-body">
+        <div style="position:relative;height:180px"><canvas id="reportDistChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-pie-chart me-2 text-accent-green"></i>
+        <span class="fw-semibold">By Type</span>
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center">
+        <div style="position:relative;height:170px;width:170px"><canvas id="reportPieChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
 <!-- Tenant filter -->
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
   <span class="text-muted small">Tenant:</span>
@@ -26,30 +108,42 @@
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
   <input type="text" class="form-control form-control-sm search-input" style="max-width:240px"
          id="report-search" placeholder="Search filenames..." oninput="filterReports()">
-  <div class="d-flex gap-2 flex-wrap">
-    <button class="btn btn-sm btn-outline-secondary active type-filter-btn" onclick="filterType('', this)">All</button>
-    <button class="btn btn-sm btn-outline-primary type-filter-btn"   onclick="filterType('Groups', this)">Groups</button>
-    <button class="btn btn-sm btn-outline-info type-filter-btn"      onclick="filterType('Site Permissions', this)">Site Perms</button>
-    <button class="btn btn-sm btn-outline-warning type-filter-btn"   onclick="filterType('External Sharing', this)">External</button>
-    <button class="btn btn-sm btn-outline-success type-filter-btn"   onclick="filterType('User Permissions', this)">User Perms</button>
-    <button class="btn btn-sm btn-outline-danger type-filter-btn"    onclick="filterType('Security Scan', this)">Security</button>
-    <button class="btn btn-sm btn-outline-secondary type-filter-btn" onclick="filterType('Inbox Rules', this)">Inbox</button>
-    <button class="btn btn-sm btn-outline-secondary type-filter-btn" onclick="filterType('Sign-In Logs', this)">Sign-In</button>
-    <button class="btn btn-sm btn-outline-secondary type-filter-btn" onclick="filterType('OAuth Consent', this)">OAuth</button>
+  <div class="d-flex gap-1 flex-wrap">
+    <button class="btn btn-sm btn-outline-secondary active type-filter-btn" onclick="filterType('', this)">
+      All <span class="badge bg-dark ms-1">{{ files|length }}</span>
+    </button>
+    {% for tname, tcount in type_counts.items()|sort(attribute='1', reverse=true) %}
+    <button class="btn btn-sm btn-outline-{{ type_badge_colors.get(tname, 'secondary') }} type-filter-btn"
+            onclick="filterType('{{ tname }}', this)">
+      {{ tname }} <span class="badge bg-dark ms-1">{{ tcount }}</span>
+    </button>
+    {% endfor %}
   </div>
 </div>
+
+<!-- Saved views dropdown -->
+{% if saved_views %}
+<div class="d-flex align-items-center mb-3 gap-2">
+  <i class="bi bi-bookmark text-muted"></i>
+  <span class="text-muted small">Saved Views:</span>
+  {% for v in saved_views %}
+  <span class="badge bg-secondary" style="cursor:pointer"
+        title="{{ v.report_type }}">{{ v.name }}</span>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead class="table-dark">
         <tr>
-          <th>File</th>
+          <th style="width:35%">File</th>
           <th>Type</th>
           <th>Tenant</th>
           <th>Date</th>
           <th>Size</th>
-          <th class="text-end">Actions</th>
+          <th class="text-end" style="width:220px">Actions</th>
         </tr>
       </thead>
       <tbody id="report-table">
@@ -69,20 +163,25 @@
             {% endif %}
             <span class="font-monospace small">{{ f.name }}</span>
           </td>
-          <td><span class="badge bg-secondary">{{ f.type }}</span></td>
+          <td><span class="badge bg-{{ type_badge_colors.get(f.type, 'secondary') }}">{{ f.type }}</span></td>
           <td class="small text-muted">{{ f.tenant_name }}</td>
           <td class="text-muted small">{{ f.mtime }}</td>
           <td class="text-muted small">{{ f.size }}</td>
           <td class="text-end">
-            {% if f.ext == '.html' %}
+            {% if f.ext in ['.csv', '.json'] %}
+            <a href="{{ url_for('reports.report_viewer', path=f.full_path) }}"
+               class="btn btn-sm btn-outline-primary me-1" title="Open in interactive viewer">
+              <i class="bi bi-table me-1"></i>View
+            </a>
+            {% elif f.ext == '.html' %}
             <a href="{{ url_for('reports.report_download', path=f.full_path) }}" target="_blank"
-               class="btn btn-sm btn-outline-primary me-1">
+               class="btn btn-sm btn-outline-primary me-1" title="View HTML report">
               <i class="bi bi-eye me-1"></i>View
             </a>
             {% endif %}
             <a href="{{ url_for('reports.report_download', path=f.full_path) }}"
-               class="btn btn-sm btn-outline-secondary me-1">
-              <i class="bi bi-download me-1"></i>Download
+               class="btn btn-sm btn-outline-secondary me-1" title="Download file">
+              <i class="bi bi-download"></i>
             </a>
             <button class="btn btn-sm btn-outline-danger"
                     onclick="deleteReport('{{ f.full_path|e }}', this)" title="Delete">
@@ -117,10 +216,13 @@ function filterType(type, btn) {
 
 function filterReports() {
   const q = (document.getElementById('report-search').value || '').toLowerCase().trim();
+  let visible = 0;
   document.querySelectorAll('#report-table tr').forEach(row => {
     const matchType = !activeType || row.dataset.type === activeType;
     const matchSearch = !q || row.dataset.name.includes(q);
-    row.style.display = (matchType && matchSearch) ? '' : 'none';
+    const show = matchType && matchSearch;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
   });
 }
 
@@ -145,5 +247,45 @@ async function deleteReport(path, btn) {
     btn.disabled = false;
   }
 }
+
+// Charts
+{% if files and type_counts|length > 1 %}
+const typeData = {{ type_counts|tojson }};
+const chartPalette = ['#388bfd','#3fb950','#d29922','#f85149','#a371f7','#39d2c0','#f778ba','#8b949e','#58a6ff','#79c0ff'];
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#21262d';
+
+new Chart(document.getElementById('reportDistChart'), {
+  type: 'bar',
+  data: {
+    labels: Object.keys(typeData),
+    datasets: [{
+      data: Object.values(typeData),
+      backgroundColor: Object.keys(typeData).map((_, i) => chartPalette[i % chartPalette.length]),
+      borderWidth: 0, borderRadius: 4, barThickness: 24,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+    scales: {
+      x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      y: { grid: { display: false }, ticks: { font: { size: 11 } } },
+    },
+    plugins: { legend: { display: false } },
+  }
+});
+
+new Chart(document.getElementById('reportPieChart'), {
+  type: 'doughnut',
+  data: {
+    labels: Object.keys(typeData),
+    datasets: [{ data: Object.values(typeData), backgroundColor: chartPalette.slice(0, Object.keys(typeData).length), borderWidth: 0 }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, cutout: '55%',
+    plugins: { legend: { display: false } },
+  }
+});
+{% endif %}
 </script>
 {% endblock %}
