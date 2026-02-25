@@ -111,10 +111,21 @@
         <span class="sidebar-label">OPERATIONS</span>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}active{% endif %}"
-           href="{{ url_for('operations.operations_page') }}">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-ops" role="button"
+           aria-expanded="{% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}true{% else %}false{% endif %}">
           <i class="bi bi-tools me-2"></i>MSP Operations
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
         </a>
+        <div class="collapse {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}show{% endif %}" id="sidebar-ops">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}"><i class="bi bi-grid-3x3-gap me-2"></i>All Operations</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#user"><i class="bi bi-person-badge me-2"></i>User Management</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#exchange"><i class="bi bi-envelope me-2"></i>Exchange Online</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#teams"><i class="bi bi-chat-dots me-2"></i>Microsoft Teams</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#sharepoint"><i class="bi bi-folder2-open me-2"></i>SharePoint</a></li>
+          </ul>
+        </div>
       </li>
 
       <li class="nav-item mt-2">
