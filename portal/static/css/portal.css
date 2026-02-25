@@ -563,3 +563,269 @@ a.row-link {
   transition: color var(--transition-fast);
 }
 a.row-link:hover { color: var(--accent-blue); }
+
+/* ================================================================
+   AUDIT TYPE CARD SELECTOR
+   ================================================================ */
+.audit-card {
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  border-radius: .375rem;
+  padding: .75rem;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  background: var(--card-bg);
+}
+.audit-card:hover {
+  border-color: var(--accent-blue);
+  background: var(--hover-bg);
+}
+.audit-card.active {
+  border-color: var(--accent-blue);
+  background: rgba(56, 139, 253, 0.08);
+  box-shadow: 0 0 0 1px var(--accent-blue);
+}
+.audit-card .card-icon {
+  font-size: 1.25rem;
+  width: 2rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.audit-card .card-title {
+  font-weight: 600;
+  font-size: .85rem;
+}
+.audit-card .card-desc {
+  font-size: .75rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin-top: .25rem;
+}
+
+/* ================================================================
+   BATCH TENANT PROGRESS
+   ================================================================ */
+.batch-tenant-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem .5rem;
+  border-bottom: 1px solid var(--border-color);
+  font-size: .8rem;
+}
+.batch-tenant-row:last-child { border-bottom: none; }
+.batch-tenant-row .tenant-name { flex: 1; font-weight: 500; }
+.batch-tenant-row .tenant-status {
+  font-size: .75rem;
+  color: var(--text-muted);
+}
+
+.batch-summary {
+  display: flex;
+  gap: 1rem;
+  padding: .5rem .75rem;
+  border-radius: .375rem;
+  background: var(--card-header-bg);
+  font-size: .8rem;
+  margin-bottom: .75rem;
+}
+
+/* ================================================================
+   JOB OUTPUT COLLAPSIBLE
+   ================================================================ */
+.job-card .card-header {
+  cursor: pointer;
+  user-select: none;
+}
+.job-card .card-header .collapse-icon {
+  transition: transform var(--transition-fast);
+}
+.job-card .card-header.collapsed .collapse-icon {
+  transform: rotate(-90deg);
+}
+.job-card .job-output-wrap {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.job-card .job-output-wrap.show {
+  max-height: 350px;
+}
+.job-card .job-output-wrap pre {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+/* Job status tabs */
+.job-tabs .btn {
+  font-size: .8rem;
+  padding: .25rem .75rem;
+}
+.job-tabs .btn .badge {
+  font-size: .65rem;
+  margin-left: .25rem;
+}
+
+/* ================================================================
+   SIDEBAR SUB-MENUS (collapsible audit categories)
+   ================================================================ */
+.sidebar-submenu-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-chevron {
+  transition: transform var(--transition-fast);
+  font-size: 0.6rem;
+}
+
+.sidebar-submenu-toggle[aria-expanded="true"] .sidebar-chevron {
+  transform: rotate(180deg);
+}
+
+.sidebar-subnav {
+  padding: 0.15rem 0 0.15rem 1.5rem;
+}
+
+.nav-link-sub {
+  color: var(--text-muted) !important;
+  font-size: 0.78rem !important;
+  padding: 0.2rem 0.6rem !important;
+  border-radius: 4px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-link-sub:hover {
+  color: var(--text-primary) !important;
+  background-color: var(--hover-bg) !important;
+}
+
+.nav-link-sub.active {
+  color: #fff !important;
+  background-color: var(--border-color) !important;
+}
+
+/* ================================================================
+   AUDIT CATALOGUE PAGE
+   ================================================================ */
+.catalogue-section {
+  margin-bottom: 2rem;
+}
+
+.catalogue-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.catalogue-section-header .section-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.tenant-selector-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--body-bg);
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.catalogue-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--card-bg);
+  transition: border-color var(--transition-fast),
+              box-shadow var(--transition-normal),
+              transform var(--transition-normal);
+  height: 100%;
+}
+
+.catalogue-card:hover {
+  border-color: var(--accent-blue);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  transform: translateY(-2px);
+}
+
+.catalogue-card.highlight {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px var(--accent-blue);
+  animation: cataloguePulse 1.5s ease-out;
+}
+
+@keyframes cataloguePulse {
+  0%   { box-shadow: 0 0 0 4px rgba(56,139,253,0.4); }
+  100% { box-shadow: 0 0 0 2px var(--accent-blue); }
+}
+
+/* ================================================================
+   INSPECTOR BROWSER PAGE
+   ================================================================ */
+.inspector-detail {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--card-bg);
+  margin-bottom: 0.35rem;
+  overflow: hidden;
+}
+
+.inspector-detail-header {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inspector-detail-header:hover {
+  background: var(--hover-bg);
+}
+
+.inspector-chevron {
+  transition: transform var(--transition-fast);
+  font-size: 0.6rem;
+}
+
+.inspector-detail.open .inspector-chevron {
+  transform: rotate(180deg);
+}
+
+.inspector-detail-body {
+  display: none;
+  padding: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.inspector-detail.open .inspector-detail-body {
+  display: block;
+}
+
+.inspector-detail-body .remediation {
+  background: rgba(56, 139, 253, 0.04);
+  border-left: 3px solid var(--accent-blue);
+  padding: 0.6rem 0.75rem;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.8rem;
+  overflow-x: auto;
+}
+
+.inspector-detail-body .references a {
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.inspector-detail-body .references a:hover {
+  text-decoration: underline;
+}
+
+.inspector-service-group h6 {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.35rem;
+}

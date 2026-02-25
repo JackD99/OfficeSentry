@@ -4,6 +4,8 @@
 <ul class="portal-breadcrumb">
   <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
   <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('audits.catalogue') }}">Audits</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
   <li><a href="{{ url_for('tenants.tenant_detail', tenant_id=tenant.id) }}">{{ tenant.name }}</a></li>
   <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
   <li><span class="current">Breach Investigation</span></li>
@@ -33,33 +35,68 @@
       <div class="card-header fw-semibold"><i class="bi bi-search me-2 text-danger"></i>Investigation</div>
       <div class="card-body">
         <form id="breach-form">
+          <input type="hidden" name="investigation" id="inv-type" value="ual">
 
-          <div class="mb-3">
-            <label class="form-label">Investigation Type</label>
-            <select class="form-select" name="investigation" id="inv-type">
-              <option value="ual">Unified Audit Log — all tenant activity</option>
-              <option value="inbox">Inbox Rules — suspicious forwarding &amp; deletion rules</option>
-              <option value="signin">Sign-In Logs — login history &amp; anomalies</option>
-              <option value="oauth">OAuth Consent — third-party app permissions</option>
-              <option value="msgtrace">Message Trace — mail flow analysis</option>
-            </select>
+          <label class="form-label">Investigation Type</label>
+          <div class="d-flex flex-column gap-2 mb-3" id="inv-cards">
+            <div class="audit-card active d-flex align-items-start gap-2" data-type="ual" onclick="selectInv(this)">
+              <span class="card-icon text-primary"><i class="bi bi-journal-text"></i></span>
+              <div>
+                <div class="card-title">Unified Audit Log</div>
+                <div class="card-desc">Searches M365 unified audit log — file access, admin actions, mailbox changes, login events.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="inbox" onclick="selectInv(this)">
+              <span class="card-icon text-danger"><i class="bi bi-inbox"></i></span>
+              <div>
+                <div class="card-title">Inbox Rules</div>
+                <div class="card-desc">Checks mailboxes for suspicious forwarding, deletion, and redirect rules (key BEC indicator).</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="signin" onclick="selectInv(this)">
+              <span class="card-icon text-warning"><i class="bi bi-box-arrow-in-right"></i></span>
+              <div>
+                <div class="card-title">Sign-In Logs</div>
+                <div class="card-desc">Pulls Azure AD sign-in history — failed attempts, unusual locations, risky sign-ins.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="oauth" onclick="selectInv(this)">
+              <span class="card-icon text-info"><i class="bi bi-key"></i></span>
+              <div>
+                <div class="card-title">OAuth Consent</div>
+                <div class="card-desc">Reviews third-party apps with delegated or application permissions — detects consent phishing.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="msgtrace" onclick="selectInv(this)">
+              <span class="card-icon text-secondary"><i class="bi bi-envelope-arrow-up"></i></span>
+              <div>
+                <div class="card-title">Message Trace</div>
+                <div class="card-desc">Traces email delivery — who sent what to whom, external recipients, delivery status.</div>
+              </div>
+            </div>
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Target User (optional)</label>
+            <label class="form-label">Target User <span class="text-muted fw-normal">(optional)</span></label>
             <input type="email" class="form-control" name="target_user"
                    placeholder="user@{{ tenant.domain }}">
-            <div class="form-text">Leave blank to audit all users.</div>
+            <div class="form-text">Leave blank to audit all users in the tenant.</div>
           </div>
 
-          <div class="row g-2 mb-3">
-            <div class="col-6">
-              <label class="form-label">Start Date</label>
-              <input type="date" class="form-control" name="date_start" id="date-start">
+          <div class="mb-3">
+            <label class="form-label">Date Range</label>
+            <div class="d-flex gap-1 flex-wrap mb-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setRange(7)">Last 7 days</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="setRange(30)">Last 30 days</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setRange(90)">Last 90 days</button>
             </div>
-            <div class="col-6">
-              <label class="form-label">End Date</label>
-              <input type="date" class="form-control" name="date_end" id="date-end">
+            <div class="row g-2">
+              <div class="col-6">
+                <input type="date" class="form-control form-control-sm" name="date_start" id="date-start">
+              </div>
+              <div class="col-6">
+                <input type="date" class="form-control form-control-sm" name="date_end" id="date-end">
+              </div>
             </div>
           </div>
 
@@ -74,10 +111,10 @@
 
   <div class="col-lg-7">
     <div class="card h-100">
-      <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Output</div>
+      <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Live Output</div>
       <div class="card-body p-0 d-flex flex-column" style="min-height:300px">
         <div class="p-3 text-muted small" id="job-idle">
-          Select an investigation type and click Run to begin.
+          Select an investigation type and click <strong>Run Investigation</strong> to begin.
         </div>
         <div class="p-3 text-muted small d-none" id="job-waiting">
           <div class="spinner-border spinner-border-sm me-2"></div>Investigation running...
@@ -93,14 +130,35 @@
 
 {% block scripts %}
 <script>
-// Set default date range (last 30 days)
+function selectInv(card) {
+  document.querySelectorAll('#inv-cards .audit-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+  document.getElementById('inv-type').value = card.dataset.type;
+}
+
+// Pre-select investigation type from query param (e.g. ?type=inbox from catalogue)
 (function() {
+  const params = new URLSearchParams(window.location.search);
+  const preType = params.get('type');
+  if (preType) {
+    const card = document.querySelector(`#inv-cards [data-type="${preType}"]`);
+    if (card) selectInv(card);
+  }
+})();
+
+function setRange(days) {
   const end = new Date();
   const start = new Date();
-  start.setDate(start.getDate() - 30);
+  start.setDate(start.getDate() - days);
   document.getElementById('date-start').value = start.toISOString().slice(0, 10);
   document.getElementById('date-end').value = end.toISOString().slice(0, 10);
-})();
+  // Toggle active button
+  document.querySelectorAll('[onclick^="setRange"]').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// Set default date range (last 30 days)
+setRange(30);
 
 document.getElementById('breach-form').addEventListener('submit', async (e) => {
   e.preventDefault();

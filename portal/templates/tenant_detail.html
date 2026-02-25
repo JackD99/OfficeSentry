@@ -228,6 +228,42 @@
             {% endif %}
 
             <div class="mt-3 d-none" id="app-result"></div>
+
+            <!-- Device code callout — shown when detected in job output -->
+            <div class="mt-3 d-none" id="device-code-banner">
+              <div class="alert alert-warning py-3 mb-0">
+                <div class="d-flex align-items-start gap-3">
+                  <i class="bi bi-shield-lock fs-3 text-warning flex-shrink-0"></i>
+                  <div class="flex-grow-1">
+                    <div class="fw-semibold mb-1">Action Required: Sign in as the client's Global Admin</div>
+                    <ol class="mb-2 ps-3 small">
+                      <li>Open
+                        <a href="https://microsoft.com/devicelogin" target="_blank" rel="noopener"
+                           class="fw-semibold">microsoft.com/devicelogin</a>
+                        <i class="bi bi-box-arrow-up-right small"></i>
+                      </li>
+                      <li>Enter this code:</li>
+                    </ol>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                      <code class="fs-4 fw-bold px-3 py-1 bg-dark rounded user-select-all" id="device-code-value"
+                            style="letter-spacing:0.15em;cursor:pointer;border:2px dashed var(--bs-warning)"
+                            title="Click to copy"
+                            onclick="navigator.clipboard.writeText(this.textContent.trim());showToast('Code copied!','success')">
+                      </code>
+                      <button type="button" class="btn btn-outline-light btn-sm"
+                              onclick="navigator.clipboard.writeText(document.getElementById('device-code-value').textContent.trim());showToast('Code copied!','success')">
+                        <i class="bi bi-clipboard me-1"></i>Copy
+                      </button>
+                    </div>
+                    <div class="small text-muted" id="device-code-status">
+                      Waiting for authentication...
+                      <span class="spinner-border spinner-border-sm ms-1"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="mt-3 d-none" id="app-log-wrap">
               <pre class="bg-dark text-light p-2 rounded small" id="app-log" style="max-height:200px;overflow-y:auto"></pre>
             </div>
@@ -235,24 +271,41 @@
         </div>
       </div>
 
-      <!-- Step 3: Remove App -->
-      <div class="accordion-item border-danger">
+      <!-- Reset / Remove -->
+      <div class="accordion-item border-warning">
         <h2 class="accordion-header">
-          <button class="accordion-button collapsed text-danger" type="button"
-                  data-bs-toggle="collapse" data-bs-target="#stepRemove">
-            <span class="badge bg-danger me-3">!</span>
-            Remove App &amp; Clean Up
+          <button class="accordion-button collapsed text-warning" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#stepReset">
+            <span class="badge bg-warning text-dark me-3"><i class="bi bi-arrow-counterclockwise"></i></span>
+            Reset &amp; Clean Up
           </button>
         </h2>
-        <div id="stepRemove" class="accordion-collapse collapse" data-bs-parent="#setupAccordion">
+        <div id="stepReset" class="accordion-collapse collapse" data-bs-parent="#setupAccordion">
           <div class="accordion-body">
-            <p class="text-muted small">Deletes the Entra app and clears credentials. Use after finishing an engagement.</p>
-            <button class="btn btn-danger btn-sm" id="remove-btn"
-                    onclick="if(confirm('Delete the Entra app and certificates for this tenant?')) removeApp()">
-              <span class="spinner-border spinner-border-sm d-none me-1" id="remove-spinner"></span>
-              Remove Entra App
-            </button>
-            <div class="mt-3 d-none" id="remove-result"></div>
+            <div class="mb-3 pb-3 border-bottom">
+              <p class="text-muted small mb-2">
+                <strong>Reset Setup</strong> — clears local certificates and credentials so you can restart from Step 1.
+                Does <em>not</em> remove the Entra app from the client's tenant.
+              </p>
+              <button class="btn btn-warning btn-sm" id="reset-btn"
+                      onclick="if(confirm('Reset setup? This deletes local certs and clears the Client ID. The Entra app (if any) will remain in the client tenant.')) resetSetup()">
+                <span class="spinner-border spinner-border-sm d-none me-1" id="reset-spinner"></span>
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Setup
+              </button>
+              <div class="mt-2 d-none" id="reset-result"></div>
+            </div>
+            <div>
+              <p class="text-muted small mb-2">
+                <strong>Remove Entra App</strong> — deletes the app registration from the client's Entra tenant and removes local certs.
+                Requires Graph authentication.
+              </p>
+              <button class="btn btn-danger btn-sm" id="remove-btn"
+                      onclick="if(confirm('Delete the Entra app and certificates for this tenant?')) removeApp()">
+                <span class="spinner-border spinner-border-sm d-none me-1" id="remove-spinner"></span>
+                <i class="bi bi-trash me-1"></i>Remove Entra App
+              </button>
+              <div class="mt-2 d-none" id="remove-result"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -413,13 +466,91 @@ async function createApp() {
     showResult(document.getElementById('app-result'), data);
     return;
   }
+
   document.getElementById('app-log-wrap').classList.remove('d-none');
-  pollJob(data.job_id, 'app-log', () => {
-    spinner.classList.add('d-none'); btn.disabled = false;
-    showResult(document.getElementById('app-result'),
-      { ok: true }, 'App creation complete. Check log for ClientId and grant admin consent.');
-    setTimeout(() => location.reload(), 3000);
-  });
+  const logEl = document.getElementById('app-log');
+  const banner = document.getElementById('device-code-banner');
+  const codeEl = document.getElementById('device-code-value');
+  const codeStatus = document.getElementById('device-code-status');
+  let codeFound = false;
+
+  const interval = setInterval(async () => {
+    const r = await fetch(`/jobs/${data.job_id}/status`);
+    const d = await r.json();
+
+    // Update log
+    if (logEl) {
+      logEl.textContent = d.output.join('\n');
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // Detect device code from MSAL.PS output
+    if (!codeFound) {
+      const fullOutput = d.output.join('\n');
+      const codeMatch = fullOutput.match(/enter the code\s+([A-Z0-9]{6,12})\s/i);
+      if (codeMatch) {
+        codeFound = true;
+        codeEl.textContent = codeMatch[1];
+        banner.classList.remove('d-none');
+        showToast('Device code ready — sign in as the client admin', 'warning');
+      }
+    }
+
+    // Update banner status when authentication completes (but job still running)
+    if (codeFound && d.output.some(l => l.includes('Authenticated as'))) {
+      codeStatus.innerHTML = '<i class="bi bi-check-circle text-success me-1"></i>Authenticated — creating app...';
+    }
+
+    if (d.status !== 'running') {
+      clearInterval(interval);
+      spinner.classList.add('d-none'); btn.disabled = false;
+      banner.classList.add('d-none');
+
+      // Parse last JSON line from job output to extract result
+      const output = d.output || [];
+      let result = null;
+      for (let i = output.length - 1; i >= 0; i--) {
+        const line = output[i].trim();
+        if (line.startsWith('{')) {
+          try { result = JSON.parse(line); break; } catch(e) {}
+        }
+      }
+
+      const el = document.getElementById('app-result');
+      if (result && result.ok && result.clientId) {
+        // Auto-save the Client ID to tenant settings
+        const saveFd = csrfFormData();
+        saveFd.append('client_id', result.clientId);
+        await fetch(`/tenants/${TENANT_ID}/settings`, { method: 'POST', body: saveFd });
+        el.classList.remove('d-none');
+        el.innerHTML = `<div class="alert alert-success small mb-0 py-2">
+          <i class="bi bi-check-circle me-1"></i>
+          App created! Client ID <code>${result.clientId}</code> saved automatically.
+          ${result.consentUrl ? `<br><a href="${result.consentUrl}" target="_blank" class="mt-1">Open in Entra to grant admin consent <i class="bi bi-box-arrow-up-right"></i></a>` : ''}
+        </div>`;
+        showToast('Entra app created and Client ID saved.', 'success');
+      } else if (result && !result.ok) {
+        showResult(el, result);
+      } else {
+        showResult(el, { ok: d.status === 'done', error: 'Job finished but no result was returned. Check the log above.' },
+          'App creation complete. Check log for details.');
+      }
+      setTimeout(() => location.reload(), 4000);
+    }
+  }, 2000);
+}
+
+// Reset setup (local only)
+async function resetSetup() {
+  const btn = document.getElementById('reset-btn');
+  const spinner = document.getElementById('reset-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  const fd = csrfFormData();
+  const res = await fetch(`/tenants/${TENANT_ID}/reset-setup`, { method: 'POST', body: fd });
+  const data = await res.json();
+  spinner.classList.add('d-none'); btn.disabled = false;
+  showResult(document.getElementById('reset-result'), data, 'Setup reset. Reloading...');
+  if (data.ok) setTimeout(() => location.reload(), 1500);
 }
 
 // App removal

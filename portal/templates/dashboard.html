@@ -132,9 +132,22 @@
       <div class="col-md-4">
         <label class="form-label small">Audit Type</label>
         <select class="form-select form-select-sm" id="ql-type">
-          <option value="spo">SPO Permissions Audit</option>
-          <option value="security">Security Scan (365Inspect)</option>
-          <option value="breach">Breach Investigation</option>
+          <optgroup label="SharePoint">
+            <option value="spo" data-subtype="groups">Groups Audit</option>
+            <option value="spo" data-subtype="permissions">Site Permissions</option>
+            <option value="spo" data-subtype="external">External Sharing</option>
+            <option value="spo" data-subtype="user">User Permissions</option>
+          </optgroup>
+          <optgroup label="Security">
+            <option value="security">Security Scan ({{ configured_count * 108 }}+ checks)</option>
+          </optgroup>
+          <optgroup label="Breach Investigation">
+            <option value="breach" data-subtype="ual">Unified Audit Log</option>
+            <option value="breach" data-subtype="inbox">Inbox Rules</option>
+            <option value="breach" data-subtype="signin">Sign-In Logs</option>
+            <option value="breach" data-subtype="oauth">OAuth Consent</option>
+            <option value="breach" data-subtype="msgtrace">Message Trace</option>
+          </optgroup>
         </select>
       </div>
       <div class="col-md-4">
@@ -142,6 +155,11 @@
           <i class="bi bi-play-fill me-1"></i>Go
         </button>
       </div>
+    </div>
+    <div class="text-end mt-2">
+      <a href="{{ url_for('audits.catalogue') }}" class="small text-muted text-decoration-none">
+        <i class="bi bi-grid-3x3-gap me-1"></i>Browse all audit types
+      </a>
     </div>
   </div>
 </div>
@@ -253,11 +271,14 @@
 // Quick launch navigation
 function quickLaunch() {
   const tid = document.getElementById('ql-tenant').value;
-  const type = document.getElementById('ql-type').value;
+  const sel = document.getElementById('ql-type');
+  const type = sel.value;
+  const subtype = sel.selectedOptions[0]?.dataset.subtype || '';
+  const qs = subtype ? `?type=${subtype}` : '';
   const urls = {
-    spo:      `/tenants/${tid}/audit/spo`,
+    spo:      `/tenants/${tid}/audit/spo${qs}`,
     security: `/tenants/${tid}/audit/security`,
-    breach:   `/tenants/${tid}/audit/breach`,
+    breach:   `/tenants/${tid}/audit/breach${qs}`,
   };
   window.location.href = urls[type] || urls.spo;
 }

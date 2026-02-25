@@ -19,57 +19,70 @@ $ErrorActionPreference = "Stop"
 try {
     $env:PSModulePath = "$ModulesPath;$($env:PSModulePath)"
 
+    Import-Module MSAL.PS                       -ErrorAction Stop
     Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-    Import-Module Microsoft.Graph.Applications    -ErrorAction Stop
+    Import-Module Microsoft.Graph.Applications   -ErrorAction Stop
 
+    # Fully-qualified scopes required by MSAL.PS
     $scopes = @(
-        "Application.ReadWrite.All",
-        "Directory.Read.All",
-        "AppRoleAssignment.ReadWrite.All",
-        "RoleManagement.ReadWrite.Directory"
+        "https://graph.microsoft.com/Application.ReadWrite.All",
+        "https://graph.microsoft.com/Directory.Read.All",
+        "https://graph.microsoft.com/AppRoleAssignment.ReadWrite.All",
+        "https://graph.microsoft.com/RoleManagement.ReadWrite.Directory"
     )
 
-    # Clear any cached Graph session so WAM cannot reuse a previous token.
+    # Clear any cached Graph session.
     Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
 
-    # DisableLoginByWAM only takes effect when a custom ClientId is supplied —
-    # the default Microsoft Graph PowerShell ClientId forces WAM regardless.
-    Set-MgGraphOption -DisableLoginByWAM $true
-
-    $connectParams = @{
-        ClientId      = $AdminClientId
-        Scopes        = $scopes
-        UseDeviceCode = $true
-        NoWelcome     = $true
+    # Acquire token via MSAL.PS device code flow.
+    # This bypasses the MS Graph SDK's DeviceCodeCredential which has a known
+    # null-reference bug when used with a custom ClientId.
+    $msalParams = @{
+        ClientId   = $AdminClientId
+        Scopes     = $scopes
+        DeviceCode = $true
     }
-    if ($TenantId) { $connectParams["TenantId"] = $TenantId }
+    if ($TenantId) { $msalParams["TenantId"] = $TenantId }
 
     Write-Output "ACTION REQUIRED: open https://microsoft.com/devicelogin in any browser and enter the code below."
-    Connect-MgGraph @connectParams
+    $tokenResult = Get-MsalToken @msalParams
 
-    $ctx = Get-MgContext
-    Write-Output "Authenticated as $($ctx.Account) in tenant $($ctx.TenantId)"
+    Write-Output "Authenticated as $($tokenResult.Account.Username) in tenant $($tokenResult.TenantId)"
+
+    # Connect to Microsoft Graph using the access token (avoids DeviceCodeCredential issues)
+    $secureToken = ConvertTo-SecureString $tokenResult.AccessToken -AsPlainText -Force
+    Connect-MgGraph -AccessToken $secureToken -NoWelcome
 
     # Create app registration
     $app = New-MgApplication -DisplayName $AppDisplayName
     Write-Output "App registration created: $($app.AppId)"
 
-    # Allow replication before creating service principal
-    Start-Sleep -Seconds 5
-
-    $sp = New-MgServicePrincipal -AppId $app.AppId
+    # Create service principal with retry (Entra ID replication delay)
+    $sp = $null
+    $maxAttempts = 6
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            $sp = New-MgServicePrincipal -AppId $app.AppId
+            break
+        } catch {
+            if ($attempt -eq $maxAttempts) { throw }
+            $wait = $attempt * 5
+            Write-Output "Waiting for app to replicate... (attempt $attempt/$maxAttempts, retrying in ${wait}s)"
+            Start-Sleep -Seconds $wait
+        }
+    }
     Write-Output "Service principal created: $($sp.Id)"
 
-    # Upload certificate
-    $now      = Get-Date
+    # Upload certificate — read actual validity dates from the cert so they match exactly
     $cerBytes = [IO.File]::ReadAllBytes($CerPath)
+    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CerPath)
     $keyCredential = @{
         Type          = "AsymmetricX509Cert"
         Usage         = "Verify"
         Key           = $cerBytes
         DisplayName   = "M365 Audit Portal Cert"
-        StartDateTime = $now
-        EndDateTime   = $now.AddYears($CertYearsValid)
+        StartDateTime = $cert.NotBefore.ToUniversalTime()
+        EndDateTime   = $cert.NotAfter.ToUniversalTime()
     }
     Update-MgApplication -ApplicationId $app.Id -KeyCredentials @($keyCredential)
 

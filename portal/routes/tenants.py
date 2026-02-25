@@ -329,6 +329,34 @@ def tenant_app(tenant_id):
                     "message": "App creation started. Check job output for ClientId."})
 
 
+@bp.route("/tenants/<tenant_id>/reset-setup", methods=["POST"])
+@login_required
+def tenant_reset_setup(tenant_id):
+    """Reset tenant setup: delete local cert files and clear app/cert DB fields.
+
+    This does NOT contact Entra — it only clears local state so the user can
+    restart the setup wizard from scratch.  If the Entra app still exists in
+    the client's tenant, the user should remove it manually or use Remove App.
+    """
+    t = get_tenant(tenant_id)
+    if not t:
+        return jsonify({"ok": False, "error": "Tenant not found."}), 404
+
+    # Delete local cert files
+    for p in (tenant_pfx_path(tenant_id), tenant_cer_path(tenant_id)):
+        if p.exists():
+            p.unlink()
+
+    # Clear app/cert fields in the database
+    update_tenant(tenant_id, client_id="", pfx_password_enc="")
+
+    log_action(current_user(), "setup_reset",
+               tenant_id=tenant_id, tenant_name=t["name"],
+               details="Local certs deleted, client_id and pfx_password cleared")
+
+    return jsonify({"ok": True, "message": "Setup reset. You can now start fresh from Step 1."})
+
+
 @bp.route("/tenants/<tenant_id>/remove-app", methods=["POST"])
 @login_required
 def tenant_remove_app(tenant_id):

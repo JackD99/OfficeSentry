@@ -4,6 +4,8 @@
 <ul class="portal-breadcrumb">
   <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
   <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('audits.catalogue') }}">Audits</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
   <li><a href="{{ url_for('tenants.tenant_detail', tenant_id=tenant.id) }}">{{ tenant.name }}</a></li>
   <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
   <li><span class="current">Security Scan</span></li>
@@ -26,58 +28,129 @@
   Conditional Access, DLP, and more. A full scan can take <strong>10-30 minutes</strong> depending on tenant size.
 </div>
 
+<form id="security-form">
 <div class="row g-4">
-  <div class="col-lg-5">
-    <div class="card">
+  <!-- Left: Settings & Inspector Selection -->
+  <div class="col-lg-6">
+    <div class="card mb-4">
       <div class="card-header fw-semibold"><i class="bi bi-shield-exclamation me-2 text-warning"></i>Scan Settings</div>
       <div class="card-body">
-        <form id="security-form">
 
-          <div class="mb-3">
-            <label class="form-label">Report Format</label>
-            <div class="d-flex gap-2 flex-wrap">
-              {% for fmt in ['HTML','CSV','JSON','All'] %}
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="report_format"
-                       id="fmt-{{ fmt }}" value="{{ fmt }}" {% if fmt == 'HTML' %}checked{% endif %}>
-                <label class="form-check-label" for="fmt-{{ fmt }}">{{ fmt }}</label>
+        <div class="mb-3">
+          <label class="form-label">Report Format</label>
+          <div class="d-flex gap-2 flex-wrap">
+            {% for fmt in ['HTML','CSV','JSON','All'] %}
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="report_format"
+                     id="fmt-{{ fmt }}" value="{{ fmt }}" {% if fmt == 'HTML' %}checked{% endif %}>
+              <label class="form-check-label" for="fmt-{{ fmt }}">{{ fmt }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <label class="form-label mb-0">Inspector Selection</label>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="filter-toggle"
+                     onchange="toggleFilters()">
+              <label class="form-check-label small" for="filter-toggle">Select specific</label>
+            </div>
+          </div>
+
+          <div class="d-none" id="inspector-panel">
+            <!-- Search -->
+            <div class="mb-2">
+              <input type="text" class="form-control form-control-sm" id="inspector-search"
+                     placeholder="Search inspectors..." oninput="filterInspectors()">
+            </div>
+
+            <!-- Impact filters -->
+            <div class="d-flex gap-1 flex-wrap mb-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary active"
+                      data-impact="all" onclick="toggleImpactFilter(this)">
+                All <span class="badge bg-secondary ms-1">{{ inspectors|length }}</span>
+              </button>
+              {% set impact_order = ['Critical', 'High', 'Medium', 'Low', 'Informational', 'Review Required'] %}
+              {% for impact in impact_order %}
+              {% if impact in impact_counts %}
+              <button type="button" class="btn btn-sm btn-outline-{{ impact_colors.get(impact, 'secondary') }}"
+                      data-impact="{{ impact }}" onclick="toggleImpactFilter(this)">
+                {{ impact }} <span class="badge bg-{{ impact_colors.get(impact, 'secondary') }} ms-1">{{ impact_counts[impact] }}</span>
+              </button>
+              {% endif %}
+              {% endfor %}
+            </div>
+
+            <!-- Select all / none + count -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" onclick="selectAllVisible()">Select Visible</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="selectNone()">Clear</button>
+              </div>
+              <span class="small text-muted">
+                <span id="selected-count">0</span> / <span id="visible-count">{{ inspectors|length }}</span> selected
+              </span>
+            </div>
+
+            <!-- Grouped inspector list -->
+            <div style="max-height:450px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem">
+              {% for svc in service_order %}
+              <div class="inspector-group" data-service="{{ svc }}">
+                <div class="px-3 py-2 sticky-top"
+                     style="background:var(--bs-body-bg);border-bottom:1px solid var(--bs-border-color);z-index:1">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <span class="fw-semibold small">
+                      <i class="bi bi-{{ get_service_icon(svc) }} me-1"></i>
+                      {{ service_display.get(svc, svc) }}
+                    </span>
+                    <span class="badge bg-secondary">{{ service_groups[svc]|length }}</span>
+                  </div>
+                </div>
+                {% for insp in service_groups[svc] %}
+                <div class="inspector-item px-3 py-2 border-bottom"
+                     data-name="{{ insp.name }}"
+                     data-impact="{{ insp.impact }}"
+                     data-service="{{ insp.service }}"
+                     data-search="{{ insp.finding_name|lower }} {{ insp.description|lower }} {{ insp.name|lower }}">
+                  <div class="form-check">
+                    <input class="form-check-input inspector-cb" type="checkbox"
+                           name="inspectors" id="insp-{{ insp.name }}"
+                           value="{{ insp.name }}" onchange="updateCount()">
+                    <label class="form-check-label w-100" for="insp-{{ insp.name }}">
+                      <div class="d-flex align-items-center gap-2">
+                        <span class="small fw-semibold">{{ insp.finding_name }}</span>
+                        <span class="badge bg-{{ impact_colors.get(insp.impact, 'secondary') }}"
+                              style="font-size:.6rem">{{ insp.impact }}</span>
+                      </div>
+                      {% if insp.description %}
+                      <div class="text-muted mt-1" style="font-size:.72rem;line-height:1.35">
+                        {{ insp.description[:160] }}{% if insp.description|length > 160 %}...{% endif %}
+                      </div>
+                      {% endif %}
+                    </label>
+                  </div>
+                </div>
+                {% endfor %}
               </div>
               {% endfor %}
             </div>
           </div>
 
-          <div class="mb-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <label class="form-label mb-0">Inspector Filter</label>
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" id="filter-toggle"
-                       onchange="toggleFilters()">
-                <label class="form-check-label small" for="filter-toggle">Select specific</label>
-              </div>
-            </div>
-            <div class="d-none" id="inspector-list"
-                 style="max-height:280px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem;padding:.5rem">
-              {% for name in inspectors %}
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="inspectors"
-                       id="insp-{{ loop.index }}" value="{{ name }}">
-                <label class="form-check-label small font-monospace" for="insp-{{ loop.index }}">{{ name }}</label>
-              </div>
-              {% endfor %}
-            </div>
-            <div class="text-muted small mt-1" id="filter-hint">All {{ inspectors|length }} inspectors will run.</div>
-          </div>
+          <div class="text-muted small mt-1" id="filter-hint">All {{ inspectors|length }} inspectors will run.</div>
+        </div>
 
-          <button type="submit" class="btn btn-warning w-100 text-dark" id="scan-btn" {% if not ready %}disabled{% endif %}>
-            <span class="spinner-border spinner-border-sm d-none me-2" id="scan-spinner"></span>
-            <i class="bi bi-play-fill me-2"></i>Start Security Scan
-          </button>
-        </form>
+        <button type="submit" class="btn btn-warning w-100 text-dark" id="scan-btn" {% if not ready %}disabled{% endif %}>
+          <span class="spinner-border spinner-border-sm d-none me-2" id="scan-spinner"></span>
+          <i class="bi bi-play-fill me-2"></i>Start Security Scan
+        </button>
       </div>
     </div>
   </div>
 
-  <div class="col-lg-7">
+  <!-- Right: Live Output -->
+  <div class="col-lg-6">
     <div class="card h-100">
       <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Live Output</div>
       <div class="card-body p-0 d-flex flex-column">
@@ -95,18 +168,90 @@
     </div>
   </div>
 </div>
+</form>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// --- Inspector filtering state ---
+let activeImpacts = new Set(['all']);
+
 function toggleFilters() {
   const on = document.getElementById('filter-toggle').checked;
-  document.getElementById('inspector-list').classList.toggle('d-none', !on);
+  document.getElementById('inspector-panel').classList.toggle('d-none', !on);
   document.getElementById('filter-hint').textContent = on
     ? 'Only selected inspectors will run.'
     : 'All {{ inspectors|length }} inspectors will run.';
+  if (on) updateCount();
 }
 
+function filterInspectors() {
+  const query = document.getElementById('inspector-search').value.toLowerCase().trim();
+  let visible = 0;
+
+  document.querySelectorAll('.inspector-item').forEach(item => {
+    const matchSearch = !query || item.dataset.search.includes(query);
+    const matchImpact = activeImpacts.has('all') || activeImpacts.has(item.dataset.impact);
+    const show = matchSearch && matchImpact;
+    item.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  // Hide empty group headers
+  document.querySelectorAll('.inspector-group').forEach(g => {
+    const has = g.querySelectorAll('.inspector-item:not([style*="display: none"])').length > 0;
+    g.style.display = has ? '' : 'none';
+  });
+
+  document.getElementById('visible-count').textContent = visible;
+}
+
+function toggleImpactFilter(btn) {
+  const impact = btn.dataset.impact;
+  if (impact === 'all') {
+    activeImpacts = new Set(['all']);
+    document.querySelectorAll('[data-impact]').forEach(b => {
+      if (b.closest('#impact-filters') || b.dataset.impact) b.classList.remove('active');
+    });
+    // Only toggle filter buttons, not inspector items
+    btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  } else {
+    activeImpacts.delete('all');
+    const allBtn = btn.parentElement.querySelector('[data-impact="all"]');
+    if (allBtn) allBtn.classList.remove('active');
+    btn.classList.toggle('active');
+    if (btn.classList.contains('active')) {
+      activeImpacts.add(impact);
+    } else {
+      activeImpacts.delete(impact);
+    }
+    if (activeImpacts.size === 0) {
+      activeImpacts.add('all');
+      if (allBtn) allBtn.classList.add('active');
+    }
+  }
+  filterInspectors();
+}
+
+function selectAllVisible() {
+  document.querySelectorAll('.inspector-item:not([style*="display: none"]) .inspector-cb').forEach(cb => {
+    cb.checked = true;
+  });
+  updateCount();
+}
+
+function selectNone() {
+  document.querySelectorAll('.inspector-cb').forEach(cb => cb.checked = false);
+  updateCount();
+}
+
+function updateCount() {
+  document.getElementById('selected-count').textContent =
+    document.querySelectorAll('.inspector-cb:checked').length;
+}
+
+// --- Scan submission & job polling ---
 document.getElementById('security-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('scan-btn');

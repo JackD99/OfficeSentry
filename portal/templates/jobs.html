@@ -12,7 +12,7 @@
 {% block content %}
 <!-- Tenant filter -->
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-  <span class="text-muted small">Filter:</span>
+  <span class="text-muted small">Tenant:</span>
   <a href="{{ url_for('jobs.jobs_page') }}"
      class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
   {% for tid, tname in tenants.items() %}
@@ -22,11 +22,38 @@
 </div>
 
 {% if jobs %}
+{# Compute counts for tabs #}
+{% set running_jobs = jobs|selectattr('status','eq','running')|list %}
+{% set done_jobs = jobs|selectattr('status','eq','done')|list %}
+{% set failed_jobs = jobs|rejectattr('status','eq','running')|rejectattr('status','eq','done')|list %}
+
+<!-- Status tabs -->
+<div class="d-flex align-items-center gap-2 mb-3 job-tabs">
+  <button class="btn btn-sm btn-secondary active" data-filter="all" onclick="filterJobs(this)">
+    All <span class="badge bg-dark ms-1">{{ jobs|length }}</span>
+  </button>
+  {% if running_jobs %}
+  <button class="btn btn-sm btn-outline-primary" data-filter="running" onclick="filterJobs(this)">
+    Running <span class="badge bg-primary ms-1">{{ running_jobs|length }}</span>
+  </button>
+  {% endif %}
+  <button class="btn btn-sm btn-outline-success" data-filter="done" onclick="filterJobs(this)">
+    Completed <span class="badge bg-success ms-1">{{ done_jobs|length }}</span>
+  </button>
+  {% if failed_jobs %}
+  <button class="btn btn-sm btn-outline-danger" data-filter="failed" onclick="filterJobs(this)">
+    Failed <span class="badge bg-danger ms-1">{{ failed_jobs|length }}</span>
+  </button>
+  {% endif %}
+</div>
+
 <div class="row g-3" id="jobs-list">
   {% for job in jobs %}
-  <div class="col-12" data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
+  <div class="col-12 job-card" data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
     <div class="card">
-      <div class="card-header d-flex align-items-center gap-2">
+      <div class="card-header d-flex align-items-center gap-2 {{ '' if job.status == 'running' else 'collapsed' }}"
+           onclick="toggleOutput(this)" role="button">
+        <i class="bi bi-chevron-down collapse-icon small"></i>
         <span class="job-status-icon">
         {% if job.status == 'running' %}
           <div class="spinner-border spinner-border-sm text-primary"></div>
@@ -43,22 +70,25 @@
         {% if job.tenant_id and tenants.get(job.tenant_id) %}
           <span class="badge bg-info ms-1">{{ tenants[job.tenant_id] }}</span>
         {% endif %}
-        <span class="text-muted small ms-auto text-nowrap">
+        <span class="text-muted small ms-auto text-nowrap d-flex align-items-center gap-2">
+          {% if job.duration %}
+            <span class="badge bg-dark fw-normal"><i class="bi bi-clock me-1"></i>{{ job.duration }}</span>
+          {% endif %}
           {{ job.started_at[:16] if job.started_at else '' }}
           {% if job.operator %} · {{ job.operator }}{% endif %}
         </span>
         {% if job.status == 'running' %}
         <button class="btn btn-sm btn-outline-danger ms-2 cancel-btn" data-job-id="{{ job.id }}"
-                onclick="cancelJob('{{ job.id }}', this)" title="Cancel job">
+                onclick="event.stopPropagation(); cancelJob('{{ job.id }}', this)" title="Cancel job">
           <i class="bi bi-stop-circle me-1"></i>Cancel
         </button>
         {% elif job.status == 'cancelled' %}
         <span class="badge bg-warning text-dark ms-2">Cancelled</span>
         {% endif %}
       </div>
-      <div class="card-body p-0">
+      <div class="job-output-wrap {{ 'show' if job.status == 'running' else '' }}">
         <pre class="m-0 p-3 small bg-dark text-light job-output"
-             style="max-height:200px;overflow-y:auto;border-radius:0 0 .375rem .375rem">{{ job.output|join('\n') if job.output is iterable and job.output is not string else job.output }}</pre>
+             style="border-radius:0 0 .375rem .375rem">{{ job.output|join('\n') if job.output is iterable and job.output is not string else job.output }}</pre>
       </div>
     </div>
   </div>
@@ -74,6 +104,43 @@
 
 {% block scripts %}
 <script>
+// --- Status tab filtering ---
+function filterJobs(btn) {
+  document.querySelectorAll('.job-tabs button').forEach(b => {
+    b.classList.remove('active', 'btn-secondary', 'btn-primary', 'btn-success', 'btn-danger');
+    b.classList.add(b === btn ? 'btn-secondary' : `btn-outline-${b.dataset.filter === 'running' ? 'primary' : btn.dataset.filter === 'done' ? 'success' : 'secondary'}`);
+  });
+  // Simpler: just toggle active class and reset outline variants
+  document.querySelectorAll('.job-tabs button').forEach(b => {
+    b.className = b.className.replace(/btn-(secondary|outline-\w+)/g, '');
+    b.classList.add(b === btn ? 'btn-secondary' : 'btn-outline-secondary');
+    b.classList.toggle('active', b === btn);
+  });
+
+  const filter = btn.dataset.filter;
+  document.querySelectorAll('.job-card').forEach(card => {
+    if (filter === 'all') {
+      card.style.display = '';
+    } else if (filter === 'failed') {
+      // "failed" tab shows both failed and cancelled
+      const s = card.dataset.jobStatus;
+      card.style.display = (s === 'failed' || s === 'cancelled') ? '' : 'none';
+    } else {
+      card.style.display = card.dataset.jobStatus === filter ? '' : 'none';
+    }
+  });
+}
+
+// --- Collapsible output ---
+function toggleOutput(header) {
+  const wrap = header.nextElementSibling;
+  if (wrap && wrap.classList.contains('job-output-wrap')) {
+    wrap.classList.toggle('show');
+    header.classList.toggle('collapsed');
+  }
+}
+
+// --- Job cancellation ---
 async function cancelJob(jobId, btn) {
   if (!confirm('Cancel this job?')) return;
   btn.disabled = true;
@@ -115,6 +182,22 @@ async function cancelJob(jobId, btn) {
           pre.textContent = d.output.join('\n');
           pre.scrollTop = pre.scrollHeight;
         }
+        // Update duration badge
+        if (d.duration) {
+          const header = card.querySelector('.card-header');
+          let badge = header.querySelector('.duration-badge');
+          if (!badge) {
+            const timeSpan = header.querySelector('.text-muted.ms-auto');
+            if (timeSpan) {
+              const b = document.createElement('span');
+              b.className = 'badge bg-dark fw-normal duration-badge';
+              b.innerHTML = `<i class="bi bi-clock me-1"></i>${d.duration}`;
+              timeSpan.prepend(b);
+            }
+          } else {
+            badge.innerHTML = `<i class="bi bi-clock me-1"></i>${d.duration}`;
+          }
+        }
         if (d.status !== 'running') {
           card.dataset.jobStatus = d.status;
           const icon = card.querySelector('.job-status-icon');
@@ -125,6 +208,9 @@ async function cancelJob(jobId, btn) {
             icon.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
             showToast(`Job failed: ${d.label}`, 'danger');
           }
+          // Remove cancel button
+          const cancelBtn = card.querySelector('.cancel-btn');
+          if (cancelBtn) cancelBtn.remove();
         } else {
           stillRunning = true;
         }

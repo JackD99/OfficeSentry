@@ -47,6 +47,59 @@
         <span class="sidebar-label">AUDIT</span>
       </li>
       <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'audits.catalogue' %}active{% endif %}"
+           href="{{ url_for('audits.catalogue') }}">
+          <i class="bi bi-grid-3x3-gap me-2"></i>Audit Catalogue
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-spo" role="button"
+           aria-expanded="{% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}true{% else %}false{% endif %}">
+          <i class="bi bi-diagram-3 me-2"></i>SPO Audits
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}show{% endif %}" id="sidebar-spo">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='groups') }}"><i class="bi bi-people me-2"></i>Groups</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='permissions') }}"><i class="bi bi-shield-lock me-2"></i>Site Permissions</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='external') }}"><i class="bi bi-globe me-2"></i>External Sharing</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='user') }}"><i class="bi bi-person-lines-fill me-2"></i>User Permissions</a></li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-security" role="button"
+           aria-expanded="{% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}true{% else %}false{% endif %}">
+          <i class="bi bi-shield-exclamation me-2"></i>Security Scan
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}show{% endif %}" id="sidebar-security">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='security') }}"><i class="bi bi-play me-2"></i>Run Scan</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'audits.inspectors_page' %}active{% endif %}" href="{{ url_for('audits.inspectors_page') }}"><i class="bi bi-card-checklist me-2"></i>Browse Inspectors</a></li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-breach" role="button"
+           aria-expanded="{% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}true{% else %}false{% endif %}">
+          <i class="bi bi-search me-2"></i>Breach Investigation
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}show{% endif %}" id="sidebar-breach">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='ual') }}"><i class="bi bi-journal-text me-2"></i>Unified Audit Log</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='inbox') }}"><i class="bi bi-inbox me-2"></i>Inbox Rules</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='signin') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Sign-In Logs</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='oauth') }}"><i class="bi bi-key me-2"></i>OAuth Consent</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='msgtrace') }}"><i class="bi bi-envelope-arrow-up me-2"></i>Message Trace</a></li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
         <a class="nav-link {% if request.endpoint == 'audits.batch_page' %}active{% endif %}"
            href="{{ url_for('audits.batch_page') }}">
           <i class="bi bi-collection me-2"></i>Batch Operations

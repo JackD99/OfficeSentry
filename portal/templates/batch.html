@@ -18,22 +18,94 @@
 </div>
 {% else %}
 <div class="row g-4">
-  <div class="col-lg-5">
+  <div class="col-lg-6">
     <div class="card">
       <div class="card-header fw-semibold">
         <i class="bi bi-collection me-2 text-primary"></i>Run Batch Audit
       </div>
       <div class="card-body">
         <form id="batch-form">
-          <div class="mb-3">
-            <label class="form-label">Audit Type</label>
-            <select class="form-select" name="audit_type" id="batch-type">
-              <option value="security">Security Scan (365Inspect)</option>
-              <option value="spo">SPO Groups Audit</option>
-            </select>
+          <input type="hidden" name="audit_type" id="batch-type" value="security">
+
+          <!-- Audit type selection -->
+          <label class="form-label">Audit Type</label>
+          <div class="d-flex flex-column gap-2 mb-3" id="batch-cards">
+
+            <!-- Security -->
+            <div class="small fw-semibold text-muted mb-0"><i class="bi bi-shield-exclamation me-1"></i>Security</div>
+            <div class="audit-card active d-flex align-items-start gap-2" data-type="security" onclick="selectBatchType(this)">
+              <span class="card-icon text-warning"><i class="bi bi-shield-exclamation"></i></span>
+              <div>
+                <div class="card-title">Security Scan</div>
+                <div class="card-desc">Runs 108 security inspectors across Exchange, Azure AD, SharePoint, Teams, and more.</div>
+              </div>
+            </div>
+
+            <!-- SharePoint -->
+            <div class="small fw-semibold text-muted mb-0 mt-2"><i class="bi bi-diagram-3 me-1"></i>SharePoint</div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_groups" onclick="selectBatchType(this)">
+              <span class="card-icon text-primary"><i class="bi bi-people"></i></span>
+              <div>
+                <div class="card-title">Groups Audit</div>
+                <div class="card-desc">Lists all SP groups, members, and permission levels for a specific site.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_permissions" onclick="selectBatchType(this)">
+              <span class="card-icon text-warning"><i class="bi bi-shield-lock"></i></span>
+              <div>
+                <div class="card-title">Site Permissions</div>
+                <div class="card-desc">Full snapshot of who has access — includes unique permissions at list and item level.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_external" onclick="selectBatchType(this)">
+              <span class="card-icon text-info"><i class="bi bi-globe"></i></span>
+              <div>
+                <div class="card-title">External Sharing</div>
+                <div class="card-desc">Identifies external users and anonymous sharing links on a site.</div>
+              </div>
+            </div>
+
+            <!-- Breach Investigation -->
+            <div class="small fw-semibold text-muted mb-0 mt-2"><i class="bi bi-search me-1"></i>Breach Investigation</div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_ual" onclick="selectBatchType(this)">
+              <span class="card-icon text-primary"><i class="bi bi-journal-text"></i></span>
+              <div>
+                <div class="card-title">Unified Audit Log</div>
+                <div class="card-desc">File access, admin actions, mailbox changes, login events.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_inbox" onclick="selectBatchType(this)">
+              <span class="card-icon text-danger"><i class="bi bi-inbox"></i></span>
+              <div>
+                <div class="card-title">Inbox Rules</div>
+                <div class="card-desc">Checks for suspicious forwarding, deletion, and redirect rules (BEC indicator).</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_signin" onclick="selectBatchType(this)">
+              <span class="card-icon text-warning"><i class="bi bi-box-arrow-in-right"></i></span>
+              <div>
+                <div class="card-title">Sign-In Logs</div>
+                <div class="card-desc">Azure AD sign-in history — failed attempts, unusual locations, risky sign-ins.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_oauth" onclick="selectBatchType(this)">
+              <span class="card-icon text-info"><i class="bi bi-key"></i></span>
+              <div>
+                <div class="card-title">OAuth Consent</div>
+                <div class="card-desc">Reviews third-party app permissions — detects consent phishing.</div>
+              </div>
+            </div>
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_msgtrace" onclick="selectBatchType(this)">
+              <span class="card-icon text-secondary"><i class="bi bi-envelope-arrow-up"></i></span>
+              <div>
+                <div class="card-title">Message Trace</div>
+                <div class="card-desc">Traces email delivery — external recipients, delivery status.</div>
+              </div>
+            </div>
           </div>
 
-          <div class="mb-3">
+          <!-- Conditional: Report format (security only) -->
+          <div class="mb-3" id="format-wrap">
             <label class="form-label">Report Format</label>
             <div class="d-flex gap-2">
               {% for fmt in ['HTML','CSV','JSON','All'] %}
@@ -46,6 +118,41 @@
             </div>
           </div>
 
+          <!-- Conditional: Site URL (SPO types) -->
+          <div class="mb-3 d-none" id="batch-site-wrap">
+            <label class="form-label">SharePoint Site URL</label>
+            <input type="url" class="form-control" name="site_url"
+                   placeholder="https://contoso.sharepoint.com/sites/...">
+            <div class="form-text">Applied to all selected tenants.</div>
+          </div>
+
+          <!-- Conditional: Breach options -->
+          <div class="d-none" id="batch-breach-wrap">
+            <div class="mb-3">
+              <label class="form-label">Target User <span class="text-muted fw-normal">(optional)</span></label>
+              <input type="email" class="form-control" name="target_user"
+                     placeholder="user@domain.com">
+              <div class="form-text">Leave blank to audit all users per tenant.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Date Range</label>
+              <div class="d-flex gap-1 flex-wrap mb-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setBatchRange(7)">7 days</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="setBatchRange(30)">30 days</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setBatchRange(90)">90 days</button>
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <input type="date" class="form-control form-control-sm" name="date_start" id="batch-date-start">
+                </div>
+                <div class="col-6">
+                  <input type="date" class="form-control form-control-sm" name="date_end" id="batch-date-end">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tenant selection -->
           <div class="mb-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0">Select Tenants</label>
@@ -53,7 +160,7 @@
                 Select All
               </button>
             </div>
-            <div style="max-height:240px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem;padding:.5rem">
+            <div style="max-height:200px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem;padding:.5rem">
               {% for t in tenants %}
               <div class="form-check py-1">
                 <input class="form-check-input tenant-check" type="checkbox" name="tenant_ids"
@@ -76,13 +183,13 @@
     </div>
   </div>
 
-  <div class="col-lg-7">
+  <div class="col-lg-6">
     <div class="card h-100">
       <div class="card-header fw-semibold">
         <i class="bi bi-activity me-2 text-secondary"></i>Batch Progress
       </div>
       <div class="card-body" id="batch-progress">
-        <div class="text-muted small">Select tenants and start a batch operation to see progress here.</div>
+        <div class="text-muted small">Select tenants and start a batch operation to see per-tenant progress here.</div>
       </div>
     </div>
   </div>
@@ -92,14 +199,36 @@
 
 {% block scripts %}
 <script>
-// Update selected count
+// --- Type selection ---
+function selectBatchType(card) {
+  document.querySelectorAll('#batch-cards .audit-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+  const type = card.dataset.type;
+  document.getElementById('batch-type').value = type;
+
+  // Toggle conditional fields
+  const isSpo = type.startsWith('spo_');
+  const isBreach = type.startsWith('breach_');
+  const isSecurity = type === 'security';
+
+  document.getElementById('batch-site-wrap').classList.toggle('d-none', !isSpo);
+  document.getElementById('batch-breach-wrap').classList.toggle('d-none', !isBreach);
+  document.getElementById('format-wrap').classList.toggle('d-none', !isSecurity);
+
+  // Set default breach dates if switching to breach
+  if (isBreach && !document.getElementById('batch-date-start').value) {
+    setBatchRange(30);
+  }
+}
+
+// --- Tenant selection ---
 document.querySelectorAll('.tenant-check').forEach(cb => {
   cb.addEventListener('change', updateCount);
 });
 
 function updateCount() {
-  const count = document.querySelectorAll('.tenant-check:checked').length;
-  document.getElementById('selected-count').textContent = count;
+  document.getElementById('selected-count').textContent =
+    document.querySelectorAll('.tenant-check:checked').length;
 }
 
 function toggleAllTenants() {
@@ -109,6 +238,18 @@ function toggleAllTenants() {
   updateCount();
 }
 
+// --- Breach date presets ---
+function setBatchRange(days) {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  document.getElementById('batch-date-start').value = start.toISOString().slice(0, 10);
+  document.getElementById('batch-date-end').value = end.toISOString().slice(0, 10);
+  document.querySelectorAll('[onclick^="setBatchRange"]').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// --- Batch submission + per-tenant progress ---
 document.getElementById('batch-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('batch-btn');
@@ -132,14 +273,96 @@ document.getElementById('batch-form')?.addEventListener('submit', async (e) => {
   }
 
   showToast(data.message, 'success');
-  progress.innerHTML = `
-    <div class="alert alert-success small mb-3">
-      <i class="bi bi-check-circle me-1"></i>${data.message}
+
+  // Build per-tenant progress UI
+  const jobs = data.tenant_jobs || [];
+  if (jobs.length === 0) {
+    progress.innerHTML = '<div class="alert alert-warning small">No jobs were started. Check tenant configurations.</div>';
+    return;
+  }
+
+  let html = `
+    <div class="batch-summary" id="batch-summary">
+      <span><i class="bi bi-check-circle text-success me-1"></i><span id="bs-done">0</span> complete</span>
+      <span><i class="bi bi-arrow-repeat text-primary me-1"></i><span id="bs-running">${jobs.length}</span> running</span>
+      <span><i class="bi bi-x-circle text-danger me-1"></i><span id="bs-failed">0</span> failed</span>
     </div>
-    <a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-activity me-1"></i>View Jobs
-    </a>
-  `;
+    <div id="batch-rows">`;
+  for (const j of jobs) {
+    html += `
+      <div class="batch-tenant-row" data-job-id="${j.job_id}" data-status="running">
+        <div class="spinner-border spinner-border-sm text-primary job-icon"></div>
+        <span class="tenant-name">${j.tenant_name}</span>
+        <span class="tenant-status">Running...</span>
+      </div>`;
+  }
+  html += '</div>';
+  html += `<div class="mt-3"><a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-activity me-1"></i>View All Jobs</a></div>`;
+  progress.innerHTML = html;
+
+  // Poll each job
+  pollBatchJobs(jobs.map(j => j.job_id));
 });
+
+function pollBatchJobs(jobIds) {
+  const interval = setInterval(async () => {
+    let allDone = true;
+    let doneCount = 0, failedCount = 0, runningCount = 0;
+
+    for (const jid of jobIds) {
+      const row = document.querySelector(`[data-job-id="${jid}"]`);
+      if (!row || row.dataset.status !== 'running') {
+        if (row && row.dataset.status === 'done') doneCount++;
+        if (row && (row.dataset.status === 'failed' || row.dataset.status === 'cancelled')) failedCount++;
+        continue;
+      }
+
+      try {
+        const r = await fetch(`/jobs/${jid}/status`);
+        const d = await r.json();
+
+        if (d.status !== 'running') {
+          row.dataset.status = d.status;
+          const icon = row.querySelector('.job-icon');
+          const status = row.querySelector('.tenant-status');
+          if (d.status === 'done') {
+            icon.outerHTML = '<i class="bi bi-check-circle-fill text-success job-icon"></i>';
+            status.textContent = 'Complete';
+            status.classList.add('text-success');
+            doneCount++;
+          } else {
+            icon.outerHTML = '<i class="bi bi-x-circle-fill text-danger job-icon"></i>';
+            status.textContent = d.status === 'cancelled' ? 'Cancelled' : 'Failed';
+            status.classList.add('text-danger');
+            failedCount++;
+          }
+        } else {
+          allDone = false;
+          runningCount++;
+        }
+      } catch {
+        allDone = false;
+        runningCount++;
+      }
+    }
+
+    // Update summary
+    const sDone = document.getElementById('bs-done');
+    const sRunning = document.getElementById('bs-running');
+    const sFailed = document.getElementById('bs-failed');
+    if (sDone) sDone.textContent = doneCount;
+    if (sRunning) sRunning.textContent = runningCount;
+    if (sFailed) sFailed.textContent = failedCount;
+
+    if (allDone) {
+      clearInterval(interval);
+      if (failedCount === 0) {
+        showToast('All batch jobs completed successfully!', 'success');
+      } else {
+        showToast(`Batch complete: ${doneCount} succeeded, ${failedCount} failed`, 'warning');
+      }
+    }
+  }, 3000);
+}
 </script>
 {% endblock %}

@@ -2,10 +2,34 @@
 portal/routes/jobs.py — Job status, polling, and cancellation routes.
 """
 
+from datetime import datetime
+
 from flask import Blueprint, render_template, request, jsonify
 
 from database import get_job, list_jobs, list_tenants, list_running_jobs, log_action
 from helpers import login_required, current_user, cancel_job
+
+
+def _format_duration(started_at, ended_at=None):
+    """Return human-readable duration string from ISO timestamps."""
+    if not started_at:
+        return ""
+    try:
+        start = datetime.fromisoformat(started_at)
+        end = datetime.fromisoformat(ended_at) if ended_at else datetime.now()
+        delta = end - start
+        total_secs = int(delta.total_seconds())
+        if total_secs < 0:
+            return ""
+        if total_secs < 60:
+            return f"{total_secs}s"
+        mins, secs = divmod(total_secs, 60)
+        if mins < 60:
+            return f"{mins}m {secs}s"
+        hours, mins = divmod(mins, 60)
+        return f"{hours}h {mins}m"
+    except (ValueError, TypeError):
+        return ""
 
 bp = Blueprint("jobs", __name__)
 
@@ -15,6 +39,9 @@ bp = Blueprint("jobs", __name__)
 def jobs_page():
     tenant_id = request.args.get("tenant_id")
     all_jobs = list_jobs(tenant_id=tenant_id, limit=100)
+    # Add duration to each job for template rendering
+    for job in all_jobs:
+        job["duration"] = _format_duration(job.get("started_at"), job.get("ended_at"))
     tenants = {t["id"]: t["name"] for t in list_tenants()}
     return render_template("jobs.html", jobs=all_jobs, tenants=tenants,
                            filter_tenant=tenant_id)
@@ -35,12 +62,13 @@ def job_status(job_id):
         return jsonify({"error": "Job not found"}), 404
     tail = job["output"][-80:]
     return jsonify({
-        "status":  job["status"],
-        "label":   job["label"],
-        "type":    job["type"],
-        "started": job["started_at"],
-        "ended":   job["ended_at"],
-        "output":  tail,
+        "status":   job["status"],
+        "label":    job["label"],
+        "type":     job["type"],
+        "started":  job["started_at"],
+        "ended":    job["ended_at"],
+        "duration": _format_duration(job["started_at"], job["ended_at"]),
+        "output":   tail,
     })
 
 
