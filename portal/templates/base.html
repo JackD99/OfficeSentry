@@ -108,6 +108,16 @@
       </li>
 
       <li class="nav-item mt-2">
+        <span class="sidebar-label">OPERATIONS</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}active{% endif %}"
+           href="{{ url_for('operations.operations_page') }}">
+          <i class="bi bi-tools me-2"></i>MSP Operations
+        </a>
+      </li>
+
+      <li class="nav-item mt-2">
         <span class="sidebar-label">RESULTS</span>
       </li>
       <li class="nav-item">
