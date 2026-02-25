@@ -1,6 +1,7 @@
 # Get-UserReport.ps1
 # Generates user reports via Microsoft Graph API.
-# Supports: license assignments, MFA status, user info, group membership.
+# Supports: license assignments, MFA status, user info, group membership,
+#           full user list, and stale/inactive account detection.
 # Designed for MSP helpdesk staff needing quick visibility across tenants.
 #
 # Required API Permissions (Application):
@@ -8,23 +9,25 @@
 #   - Directory.Read.All (group membership)
 #   - UserAuthenticationMethod.Read.All (MFA status)
 #   - Reports.Read.All (authentication methods report)
+#   - AuditLog.Read.All (sign-in activity for stale accounts)
 #
 # Usage:
 #   .\Get-UserReport.ps1 -ReportType licenses -Tenant contoso.onmicrosoft.com ...
-#   .\Get-UserReport.ps1 -ReportType mfa_status -Tenant contoso.onmicrosoft.com ...
-#   .\Get-UserReport.ps1 -ReportType user_info -TargetUser user@contoso.com ...
+#   .\Get-UserReport.ps1 -ReportType list_users -Tenant contoso.onmicrosoft.com ...
+#   .\Get-UserReport.ps1 -ReportType stale_accounts -DaysInactive 90 ...
 
 #requires -Modules MSAL.PS
 
 [CmdletBinding()]
 param (
-    [Parameter(Mandatory)][ValidateSet("licenses","mfa_status","user_info","group_membership")]
+    [Parameter(Mandatory)][ValidateSet("licenses","mfa_status","user_info","group_membership","list_users","stale_accounts")]
     [string] $ReportType,
     [Parameter(Mandatory)][string] $Tenant,
     [Parameter(Mandatory)][string] $ClientId,
     [Parameter(Mandatory)][string] $CertificatePath,
     [Parameter(Mandatory)][string] $OutputFolder,
-    [string] $TargetUser = ""
+    [string] $TargetUser    = "",
+    [int]    $DaysInactive  = 90
 )
 
 Set-StrictMode -Version Latest
@@ -220,6 +223,105 @@ switch ($ReportType) {
         $sheets = @(@{ Name = "GroupMembership"; Data = $rows.ToArray() })
         $target = $TargetUser -replace '@','_'
         Export-AuditData -OutputFolder $OutputFolder -FilePrefix "Groups_${target}" -Sheets $sheets
+    }
+
+    "list_users" {
+        Write-Host "$(Get-Date) INFO: Retrieving all users..."
+        $select = "displayName,userPrincipalName,mail,accountEnabled,userType,jobTitle,department,companyName,createdDateTime,signInActivity"
+        $uri = "https://graph.microsoft.com/v1.0/users?`$select=$select&`$top=999"
+        $users = Invoke-GraphRequest -Uri $uri -AccessToken $accessToken
+
+        $rows = [System.Collections.Generic.List[PSCustomObject]]::new()
+        $counter = 0
+        foreach ($user in $users) {
+            $counter++
+            if ($counter % 100 -eq 0) {
+                Write-Progress -Activity "Processing users" -Status "$counter of $($users.Count)" `
+                    -PercentComplete (($counter / [math]::Max($users.Count, 1)) * 100)
+            }
+
+            $lastSignIn = ""
+            if ($user.signInActivity -and $user.signInActivity.lastSignInDateTime) {
+                $lastSignIn = $user.signInActivity.lastSignInDateTime
+            }
+
+            $rows.Add([PSCustomObject]@{
+                DisplayName       = $user.displayName
+                UserPrincipalName = $user.userPrincipalName
+                Email             = $user.mail
+                AccountEnabled    = $user.accountEnabled
+                UserType          = $user.userType
+                JobTitle          = $user.jobTitle
+                Department        = $user.department
+                Company           = $user.companyName
+                Created           = $user.createdDateTime
+                LastSignIn        = $lastSignIn
+            })
+        }
+        Write-Progress -Activity "Processing users" -Completed
+
+        Write-Host "$(Get-Date) INFO: Found $($rows.Count) users."
+        $sheets = @(@{ Name = "AllUsers"; Data = $rows.ToArray() })
+        Export-AuditData -OutputFolder $OutputFolder -FilePrefix "UserList" -Sheets $sheets
+    }
+
+    "stale_accounts" {
+        Write-Host "$(Get-Date) INFO: Finding accounts inactive for $DaysInactive+ days..."
+        $select = "displayName,userPrincipalName,mail,accountEnabled,userType,signInActivity,assignedLicenses,createdDateTime"
+        $uri = "https://graph.microsoft.com/v1.0/users?`$select=$select&`$top=999"
+        $users = Invoke-GraphRequest -Uri $uri -AccessToken $accessToken
+
+        $cutoffDate = (Get-Date).AddDays(-$DaysInactive)
+        $stale = [System.Collections.Generic.List[PSCustomObject]]::new()
+        $counter = 0
+
+        foreach ($user in $users) {
+            $counter++
+            if ($counter % 100 -eq 0) {
+                Write-Progress -Activity "Analyzing sign-in activity" -Status "$counter of $($users.Count)" `
+                    -PercentComplete (($counter / [math]::Max($users.Count, 1)) * 100)
+            }
+
+            $lastSignIn = $null
+            if ($user.signInActivity -and $user.signInActivity.lastSignInDateTime) {
+                $lastSignIn = [datetime]$user.signInActivity.lastSignInDateTime
+            }
+
+            $isStale = $false
+            $daysSinceSignIn = "Never"
+            if ($null -eq $lastSignIn) {
+                $isStale = $true
+            }
+            elseif ($lastSignIn -lt $cutoffDate) {
+                $isStale = $true
+                $daysSinceSignIn = [math]::Round(((Get-Date) - $lastSignIn).TotalDays)
+            }
+
+            if ($isStale) {
+                $hasLicense = ($user.assignedLicenses -and $user.assignedLicenses.Count -gt 0)
+                $stale.Add([PSCustomObject]@{
+                    DisplayName       = $user.displayName
+                    UserPrincipalName = $user.userPrincipalName
+                    AccountEnabled    = $user.accountEnabled
+                    UserType          = $user.userType
+                    HasLicense        = $hasLicense
+                    LastSignIn        = if ($lastSignIn) { $lastSignIn.ToString("yyyy-MM-dd") } else { "Never" }
+                    DaysSinceSignIn   = $daysSinceSignIn
+                    Created           = $user.createdDateTime
+                })
+            }
+        }
+        Write-Progress -Activity "Analyzing sign-in activity" -Completed
+
+        # Sort by days since sign-in descending
+        $sorted = $stale | Sort-Object -Property DaysSinceSignIn -Descending
+
+        $licensedStale = ($stale | Where-Object { $_.HasLicense }).Count
+        Write-Host "$(Get-Date) INFO: Found $($stale.Count) stale accounts ($licensedStale with active licenses)."
+        Write-Host "$(Get-Date) INFO: Threshold: $DaysInactive days of inactivity."
+
+        $sheets = @(@{ Name = "StaleAccounts"; Data = @($sorted) })
+        Export-AuditData -OutputFolder $OutputFolder -FilePrefix "StaleAccounts_${DaysInactive}d" -Sheets $sheets
     }
 }
 

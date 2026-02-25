@@ -33,16 +33,28 @@
         <form id="ops-form">
           <input type="hidden" name="action" id="ops-action" value="">
 
+          <!-- Category filter tabs -->
+          <div class="mb-3">
+            <div class="btn-group btn-group-sm flex-wrap" id="category-filter">
+              {% for cat_key, cat in categories.items() %}
+              <button type="button" class="btn btn-outline-secondary{% if cat_key == 'all' %} active{% endif %}"
+                      data-category="{{ cat_key }}" onclick="filterCategory(this)">
+                <i class="bi bi-{{ cat.icon }} me-1"></i>{{ cat.name }}
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+
           <!-- Operation selection grouped by tier -->
           <label class="form-label">Select Operation</label>
-          <div class="d-flex flex-column gap-2 mb-3" id="ops-cards">
+          <div class="d-flex flex-column gap-2 mb-3" id="ops-cards" style="max-height:420px;overflow-y:auto">
 
             <!-- Tier 1: 1st Line -->
-            <div class="small fw-semibold text-muted mb-0">
+            <div class="small fw-semibold text-muted mb-0 tier-label" data-tier="1">
               <span class="badge bg-primary me-1">T1</span>1st Line — Service Desk
             </div>
             {% for key, op in tier1.items() %}
-            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" onclick="selectOp(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" onclick="selectOp(this)">
               <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
               <div>
                 <div class="card-title">{{ op.name }}</div>
@@ -52,11 +64,11 @@
             {% endfor %}
 
             <!-- Tier 2: 2nd Line -->
-            <div class="small fw-semibold text-muted mb-0 mt-2">
+            <div class="small fw-semibold text-muted mb-0 mt-2 tier-label" data-tier="2">
               <span class="badge bg-warning text-dark me-1">T2</span>2nd Line — Technical Support
             </div>
             {% for key, op in tier2.items() %}
-            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" onclick="selectOp(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" onclick="selectOp(this)">
               <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
               <div>
                 <div class="card-title">{{ op.name }}</div>
@@ -66,11 +78,11 @@
             {% endfor %}
 
             <!-- Tier 3: 3rd Line -->
-            <div class="small fw-semibold text-muted mb-0 mt-2">
+            <div class="small fw-semibold text-muted mb-0 mt-2 tier-label" data-tier="3">
               <span class="badge bg-danger me-1">T3</span>3rd Line — Engineering
             </div>
             {% for key, op in tier3.items() %}
-            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" onclick="selectOp(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" onclick="selectOp(this)">
               <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
               <div>
                 <div class="card-title">{{ op.name }}</div>
@@ -89,6 +101,120 @@
               <input type="email" class="form-control" name="target_user" id="input-target-user"
                      placeholder="user@domain.com">
               <div class="form-text">The user to perform this operation on.</div>
+            </div>
+
+            <!-- Display name -->
+            <div class="mb-3 d-none" id="field-display-name">
+              <label class="form-label">Display Name</label>
+              <input type="text" class="form-control" name="display_name"
+                     placeholder="John Smith" maxlength="200">
+              <div class="form-text">The user's display name.</div>
+            </div>
+
+            <!-- User details (job title, department) -->
+            <div class="d-none" id="field-user-details">
+              <div class="mb-3">
+                <label class="form-label">Job Title <span class="text-muted fw-normal">(optional)</span></label>
+                <input type="text" class="form-control" name="job_title"
+                       placeholder="IT Manager" maxlength="200">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Department <span class="text-muted fw-normal">(optional)</span></label>
+                <input type="text" class="form-control" name="department"
+                       placeholder="IT" maxlength="200">
+              </div>
+            </div>
+
+            <!-- License SKU -->
+            <div class="mb-3 d-none" id="field-license-sku">
+              <label class="form-label">License SKU</label>
+              <input type="text" class="form-control" name="license_sku"
+                     placeholder="ENTERPRISEPACK, SPE_E5, EXCHANGESTANDARD, etc." maxlength="100">
+              <div class="form-text">The license SkuPartNumber to assign or remove.</div>
+            </div>
+
+            <!-- Days inactive -->
+            <div class="mb-3 d-none" id="field-days-inactive">
+              <label class="form-label">Days Inactive</label>
+              <select class="form-select" name="days_inactive">
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90" selected>90 days</option>
+                <option value="180">180 days</option>
+                <option value="365">365 days</option>
+              </select>
+              <div class="form-text">Flag accounts with no sign-in for this many days.</div>
+            </div>
+
+            <!-- Team name -->
+            <div class="mb-3 d-none" id="field-team-name">
+              <label class="form-label">Team Name</label>
+              <input type="text" class="form-control" name="team_name"
+                     placeholder="IT Support Team" maxlength="300">
+              <div class="form-text">The display name of the Microsoft Team.</div>
+            </div>
+
+            <!-- Group name (distribution group) -->
+            <div class="mb-3 d-none" id="field-group-name">
+              <label class="form-label">Distribution Group</label>
+              <input type="text" class="form-control" name="group_name"
+                     placeholder="all-staff@domain.com or group display name" maxlength="300">
+              <div class="form-text">The group name, alias, or email address.</div>
+            </div>
+
+            <!-- Delegate user (mailbox perms) -->
+            <div class="mb-3 d-none" id="field-delegate-user">
+              <label class="form-label">Delegate User</label>
+              <input type="email" class="form-control" name="delegate_user"
+                     placeholder="delegate@domain.com">
+              <div class="form-text">The user to grant or remove permissions for.</div>
+            </div>
+
+            <!-- Permission type -->
+            <div class="mb-3 d-none" id="field-permission-type">
+              <label class="form-label">Permission Type</label>
+              <select class="form-select" name="permission_type">
+                <option value="FullAccess">Full Access</option>
+                <option value="SendAs">Send As</option>
+                <option value="SendOnBehalf">Send on Behalf</option>
+              </select>
+              <div class="form-text">The type of mailbox permission to grant or remove.</div>
+            </div>
+
+            <!-- Quota settings -->
+            <div class="d-none" id="field-quota-settings">
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label">Warning Quota (GB)</label>
+                  <input type="number" class="form-control" name="quota_warning_gb"
+                         placeholder="45" min="1" max="100" step="1">
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Send Limit (GB)</label>
+                  <input type="number" class="form-control" name="quota_limit_gb"
+                         placeholder="50" min="1" max="100" step="1">
+                </div>
+              </div>
+            </div>
+
+            <!-- Site URL -->
+            <div class="mb-3 d-none" id="field-site-url">
+              <label class="form-label">Site URL</label>
+              <input type="url" class="form-control" name="site_url"
+                     placeholder="https://contoso.sharepoint.com/sites/teamsite">
+              <div class="form-text">The full URL of the SharePoint site collection.</div>
+            </div>
+
+            <!-- Sharing level -->
+            <div class="mb-3 d-none" id="field-sharing-level">
+              <label class="form-label">Sharing Level</label>
+              <select class="form-select" name="sharing_level">
+                <option value="Disabled">Disabled (no external sharing)</option>
+                <option value="ExistingExternalUserSharingOnly">Existing external users only</option>
+                <option value="ExternalUserSharingOnly">New and existing external users</option>
+                <option value="ExternalUserAndGuestSharing">Anyone (including anonymous links)</option>
+              </select>
+              <div class="form-text">External sharing setting for this site.</div>
             </div>
 
             <!-- OOO message -->
@@ -242,29 +368,45 @@
       <div class="card-body small">
         <table class="table table-sm table-borderless mb-0">
           <tbody>
+            <tr><td colspan="2" class="fw-semibold text-muted pt-0">User Management</td></tr>
             <tr>
               <td class="text-nowrap"><span class="badge bg-primary">T1</span> Password / User Info</td>
               <td class="text-muted">User.ReadWrite.All</td>
             </tr>
             <tr>
-              <td class="text-nowrap"><span class="badge bg-primary">T1</span> License Report</td>
+              <td class="text-nowrap"><span class="badge bg-primary">T1</span> License / User Reports</td>
               <td class="text-muted">User.Read.All, Directory.Read.All</td>
             </tr>
             <tr>
-              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> Block / Revoke</td>
-              <td class="text-muted">User.ReadWrite.All</td>
+              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> Block / Revoke / MFA</td>
+              <td class="text-muted">User.ReadWrite.All, UserAuthenticationMethod.Read.All</td>
             </tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-danger">T3</span> Create / Delete / Offboard</td>
+              <td class="text-muted">User.ReadWrite.All, Directory.ReadWrite.All</td>
+            </tr>
+            <tr><td colspan="2" class="fw-semibold text-muted pt-2">Exchange Online</td></tr>
             <tr>
               <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> Mailbox Ops</td>
               <td class="text-muted">Exchange.ManageAsApp</td>
             </tr>
+            <tr><td colspan="2" class="fw-semibold text-muted pt-2">Microsoft Teams</td></tr>
             <tr>
-              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> MFA Report</td>
-              <td class="text-muted">UserAuthenticationMethod.Read.All</td>
+              <td class="text-nowrap"><span class="badge bg-primary">T1</span> Teams Reports</td>
+              <td class="text-muted">Group.Read.All, TeamMember.Read.All</td>
             </tr>
             <tr>
-              <td class="text-nowrap"><span class="badge bg-danger">T3</span> Offboarding</td>
-              <td class="text-muted">All of the above + Directory.ReadWrite.All</td>
+              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> Team Member Mgmt</td>
+              <td class="text-muted">TeamMember.ReadWrite.All</td>
+            </tr>
+            <tr><td colspan="2" class="fw-semibold text-muted pt-2">SharePoint Online</td></tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-primary">T1</span> Site Reports</td>
+              <td class="text-muted">Sites.FullControl.All (PnP)</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> Site Admin / Sharing</td>
+              <td class="text-muted">SharePoint Administrator role</td>
             </tr>
           </tbody>
         </table>
@@ -281,29 +423,82 @@
 const OPS_META = {{ operations | tojson }};
 let currentMode = 'single';
 let currentAction = '';
+let currentCategory = 'all';
 
 // Field mapping: which fields each operation needs
 const FIELD_MAP = {
-  target_user:   'field-target-user',
-  ooo_message:   'field-ooo-message',
-  ooo_dates:     'field-ooo-dates',
-  forward_to:    'field-forward-to',
-  keep_copy:     'field-keep-copy',
-  skip_convert:  'field-offboard-opts',
-  skip_licenses: 'field-offboard-opts',
-  skip_gal:      'field-offboard-opts',
+  target_user:      'field-target-user',
+  ooo_message:      'field-ooo-message',
+  ooo_dates:        'field-ooo-dates',
+  forward_to:       'field-forward-to',
+  keep_copy:        'field-keep-copy',
+  skip_convert:     'field-offboard-opts',
+  skip_licenses:    'field-offboard-opts',
+  skip_gal:         'field-offboard-opts',
+  team_name:        'field-team-name',
+  group_name:       'field-group-name',
+  site_url:         'field-site-url',
+  license_sku:      'field-license-sku',
+  delegate_user:    'field-delegate-user',
+  permission_type:  'field-permission-type',
+  quota_settings:   'field-quota-settings',
+  sharing_level:    'field-sharing-level',
+  days_inactive:    'field-days-inactive',
+  display_name:     'field-display-name',
+  user_details:     'field-user-details',
 };
 
 // Destructive actions that need confirmation
 const CONFIRM_ACTIONS = {
-  block:            'This will immediately prevent the user from signing in.',
-  revoke_sessions:  'All active sessions will be invalidated immediately.',
-  reset_password:   'The current password will be replaced. User must change on next sign-in.',
-  convert_shared:   'The mailbox will be converted to shared. Ensure the license can be freed.',
-  offboard:         'This will block sign-in, revoke sessions, remove licenses, convert to shared mailbox, and hide from GAL.',
-  remove_forwarding:'All forwarding rules on this mailbox will be removed.',
-  hide_from_gal:    'The user will no longer appear in the Global Address List.',
+  block:              'This will immediately prevent the user from signing in.',
+  revoke_sessions:    'All active sessions will be invalidated immediately.',
+  reset_password:     'The current password will be replaced. User must change on next sign-in.',
+  convert_shared:     'The mailbox will be converted to shared. Ensure the license can be freed.',
+  offboard:           'This will block sign-in, revoke sessions, remove licenses, convert to shared mailbox, and hide from GAL.',
+  remove_forwarding:  'All forwarding rules on this mailbox will be removed.',
+  hide_from_gal:      'The user will no longer appear in the Global Address List.',
+  delete_user:        'The user account will be soft-deleted. Recoverable from recycle bin for 30 days.',
+  remove_guest:       'The guest user will be permanently removed from the directory.',
+  remove_license:     'This license will be removed from the user. They will lose access to associated services.',
+  archive_team:       'This team will be archived and made read-only for all members.',
+  lock_site:          'This site collection will be locked to read-only mode.',
+  remove_site_admin:  'This user will be removed as a site collection administrator.',
+  remove_team_member: 'This user will be removed from the team.',
+  remove_distro_member: 'This user will be removed from the distribution group.',
+  remove_mailbox_perms: 'The selected mailbox permissions will be removed.',
 };
+
+// --- Category filter ---
+function filterCategory(btn) {
+  document.querySelectorAll('#category-filter .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentCategory = btn.dataset.category;
+
+  const cards = document.querySelectorAll('#ops-cards .audit-card');
+  const tierLabels = document.querySelectorAll('#ops-cards .tier-label');
+
+  if (currentCategory === 'all') {
+    cards.forEach(c => c.style.display = '');
+    tierLabels.forEach(l => l.style.display = '');
+  } else {
+    cards.forEach(c => {
+      c.style.display = c.dataset.category === currentCategory ? '' : 'none';
+    });
+    // Show tier labels only if they have visible cards after them
+    tierLabels.forEach(label => {
+      let next = label.nextElementSibling;
+      let hasVisible = false;
+      while (next && !next.classList.contains('tier-label')) {
+        if (next.classList.contains('audit-card') && next.style.display !== 'none') {
+          hasVisible = true;
+          break;
+        }
+        next = next.nextElementSibling;
+      }
+      label.style.display = hasVisible ? '' : 'none';
+    });
+  }
+}
 
 // --- Select operation ---
 function selectOp(card) {
@@ -319,8 +514,10 @@ function selectOp(card) {
   document.getElementById('ops-fields').classList.remove('d-none');
 
   // Hide all optional fields first
-  Object.values(FIELD_MAP).forEach(id => {
-    document.getElementById(id)?.classList.add('d-none');
+  const allFieldIds = new Set(Object.values(FIELD_MAP));
+  allFieldIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('d-none');
   });
   document.getElementById('field-confirm').classList.add('d-none');
 
@@ -329,7 +526,8 @@ function selectOp(card) {
   for (const field of op.fields) {
     const domId = FIELD_MAP[field];
     if (domId && !shownIds.has(domId)) {
-      document.getElementById(domId)?.classList.remove('d-none');
+      const el = document.getElementById(domId);
+      if (el) el.classList.remove('d-none');
       shownIds.add(domId);
     }
   }
@@ -404,7 +602,7 @@ document.getElementById('ops-form')?.addEventListener('submit', async (e) => {
     const progress = document.getElementById('ops-progress');
 
     if (!data.ok) {
-      progress.innerHTML = `<div class="alert alert-danger small">${data.error}</div>`;
+      progress.innerHTML = `<div class="alert alert-danger small">${escapeHtml(data.error)}</div>`;
       showToast(data.error, 'danger');
       return;
     }
