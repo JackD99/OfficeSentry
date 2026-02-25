@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}CA Templates — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('conditional.ca_policies_page') }}">Conditional Access</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Policy Templates</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}CA Policy Templates{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#addTemplateModal">
+    <i class="bi bi-plus-lg me-1"></i>New Template
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>Name</th><th>Category</th><th>Description</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for t in templates %}
+          <tr>
+            <td class="fw-semibold">{{ t.name }}</td>
+            <td><span class="badge bg-primary">{{ t.category }}</span></td>
+            <td class="small">{{ t.description[:80] }}{{ '...' if t.description|length > 80 else '' }}</td>
+            <td class="small">{{ t.created_at[:10] }}</td>
+            <td>
+              <button class="btn btn-outline-danger btn-sm py-0 px-1"
+                      onclick="deleteTemplate('{{ t.id }}', '{{ t.name }}')" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted text-center py-3">No CA templates yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Template Modal -->
+<div class="modal fade" id="addTemplateModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="add-template-form">
+        <div class="modal-header"><h6 class="modal-title fw-semibold">New CA Policy Template</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="name" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <select class="form-select" name="category">
+              <option value="general">General</option>
+              <option value="security">Security</option>
+              <option value="compliance">Compliance</option>
+              <option value="identity">Identity</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" name="description" rows="2"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Policy JSON</label>
+            <textarea class="form-control font-monospace" name="policy_json" rows="8" placeholder='{"conditions": {}, "grantControls": {}}'>{}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('add-template-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);
+  const r = await fetch('{{ url_for("conditional.ca_template_create") }}', { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.ok) { showToast(d.message, 'success'); setTimeout(() => location.reload(), 1000); }
+  else { showToast(d.error, 'danger'); }
+});
+
+async function deleteTemplate(id, name) {
+  if (!confirm(`Delete template "${name}"?`)) return;
+  const fd = new FormData(); fd.append('csrf_token', window.CSRF_TOKEN);
+  const r = await fetch(`/ca-templates/${id}/delete`, { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.ok) { showToast(d.message, 'success'); setTimeout(() => location.reload(), 500); }
+  else { showToast(d.error, 'danger'); }
+}
+</script>
+{% endblock %}

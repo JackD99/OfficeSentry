@@ -109,6 +109,10 @@ def create_app() -> Flask:
     from routes.reports import bp as reports_bp
     from routes.operations import bp as operations_bp
     from routes.standards import bp as standards_bp
+    from routes.tenant_admin import bp as tenant_admin_bp
+    from routes.conditional import bp as conditional_bp
+    from routes.gdap import bp as gdap_bp
+    from routes.tools import bp as tools_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tenants_bp)
@@ -117,6 +121,10 @@ def create_app() -> Flask:
     app.register_blueprint(reports_bp)
     app.register_blueprint(operations_bp)
     app.register_blueprint(standards_bp)
+    app.register_blueprint(tenant_admin_bp)
+    app.register_blueprint(conditional_bp)
+    app.register_blueprint(gdap_bp)
+    app.register_blueprint(tools_bp)
 
     # Apply rate limit to login and initial setup
     limiter.limit("10/minute")(
@@ -265,7 +273,7 @@ def create_app() -> Flask:
             "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data: blob:; "
-            "connect-src 'self'"
+            "connect-src 'self' http://ip-api.com"
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"

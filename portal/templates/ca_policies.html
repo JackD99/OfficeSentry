@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Conditional Access — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Conditional Access</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Conditional Access{% endblock %}
+
+{% block content %}
+<p class="text-muted small mb-4">View and manage Conditional Access policies across your tenants. Select a tenant to view its policies, named locations, and deploy templates.</p>
+
+<div class="row g-3">
+  {% for t in tenants %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card card-hover h-100">
+      <div class="card-body">
+        <h6 class="fw-semibold mb-1">{{ t.name }}</h6>
+        <div class="small text-muted mb-3">{{ t.domain }}</div>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="{{ url_for('conditional.tenant_ca_policies', tenant_id=t.id) }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-shield-lock me-1"></i>CA Policies
+          </a>
+          <a href="{{ url_for('conditional.tenant_named_locations', tenant_id=t.id) }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-geo-alt me-1"></i>Named Locations
+          </a>
+          <a href="{{ url_for('conditional.tenant_vacation_mode', tenant_id=t.id) }}" class="btn btn-outline-warning btn-sm">
+            <i class="bi bi-airplane me-1"></i>Vacation Mode
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if not tenants %}
+<div class="empty-state">
+  <i class="bi bi-shield-lock"></i>
+  <p>No configured tenants. Add a tenant and complete setup first.</p>
+</div>
+{% endif %}
+
+<div class="card mt-4">
+  <div class="card-header fw-semibold"><i class="bi bi-file-earmark-code me-2"></i>CA Policy Templates</div>
+  <div class="card-body">
+    <a href="{{ url_for('conditional.ca_templates_page') }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-collection me-1"></i>Manage Templates
+    </a>
+  </div>
+</div>
+{% endblock %}

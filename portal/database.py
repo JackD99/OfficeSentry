@@ -236,10 +236,65 @@ CREATE TABLE IF NOT EXISTS secure_scores (
     details     TEXT DEFAULT '{}',
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS tenant_custom_variables (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    var_key     TEXT NOT NULL,
+    var_value   TEXT DEFAULT '',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    UNIQUE (tenant_id, var_key)
+);
+
+CREATE TABLE IF NOT EXISTS cached_tenant_data (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    data_type   TEXT NOT NULL,
+    data        TEXT DEFAULT '{}',
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS gdap_role_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    roles       TEXT DEFAULT '[]',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tenant_backups (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    backup_type TEXT NOT NULL DEFAULT 'full',
+    components  TEXT DEFAULT '[]',
+    status      TEXT NOT NULL DEFAULT 'pending',
+    data        TEXT DEFAULT '{}',
+    created_by  TEXT NOT NULL,
+    started_at  TEXT DEFAULT (datetime('now')),
+    completed_at TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ca_policy_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    policy_json TEXT DEFAULT '{}',
+    category    TEXT DEFAULT 'general',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
 """
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _MIGRATIONS = {
     2: """
@@ -368,6 +423,62 @@ CREATE TABLE IF NOT EXISTS secure_scores (
     fetched_at  TEXT DEFAULT (datetime('now')),
     details     TEXT DEFAULT '{}',
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+""",
+    4: """
+CREATE TABLE IF NOT EXISTS tenant_custom_variables (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    var_key     TEXT NOT NULL,
+    var_value   TEXT DEFAULT '',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    UNIQUE (tenant_id, var_key)
+);
+
+CREATE TABLE IF NOT EXISTS cached_tenant_data (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    data_type   TEXT NOT NULL,
+    data        TEXT DEFAULT '{}',
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS gdap_role_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    roles       TEXT DEFAULT '[]',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tenant_backups (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    backup_type TEXT NOT NULL DEFAULT 'full',
+    components  TEXT DEFAULT '[]',
+    status      TEXT NOT NULL DEFAULT 'pending',
+    data        TEXT DEFAULT '{}',
+    created_by  TEXT NOT NULL,
+    started_at  TEXT DEFAULT (datetime('now')),
+    completed_at TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ca_policy_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    policy_json TEXT DEFAULT '{}',
+    category    TEXT DEFAULT 'general',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
 );
 """,
 }
@@ -1423,3 +1534,298 @@ def get_all_latest_secure_scores() -> list[dict]:
             d["details"] = json.loads(d["details"]) if d["details"] else {}
             result.append(d)
         return result
+
+
+# ---------------------------------------------------------------------------
+# Tenant Custom Variables
+# ---------------------------------------------------------------------------
+
+def set_tenant_variable(tenant_id: str, var_key: str, var_value: str,
+                        created_by: str = "") -> str:
+    vid = str(uuid.uuid4())[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO tenant_custom_variables (id, tenant_id, var_key, var_value, created_by) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(tenant_id, var_key) DO UPDATE SET "
+            "var_value = excluded.var_value, updated_at = datetime('now')",
+            (vid, tenant_id, var_key, var_value, created_by)
+        )
+    return vid
+
+
+def get_tenant_variables(tenant_id: str) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM tenant_custom_variables WHERE tenant_id = ? ORDER BY var_key",
+            (tenant_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_tenant_variable(tenant_id: str, var_key: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM tenant_custom_variables WHERE tenant_id = ? AND var_key = ?",
+            (tenant_id, var_key)
+        )
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Cached Tenant Data (domains, auth methods, CA policies, etc.)
+# ---------------------------------------------------------------------------
+
+def save_cached_data(tenant_id: str, data_type: str, data: dict) -> str:
+    cid = str(uuid.uuid4())[:12]
+    with get_db() as conn:
+        # Remove old cache for this type
+        conn.execute(
+            "DELETE FROM cached_tenant_data WHERE tenant_id = ? AND data_type = ?",
+            (tenant_id, data_type)
+        )
+        conn.execute(
+            "INSERT INTO cached_tenant_data (id, tenant_id, data_type, data) "
+            "VALUES (?, ?, ?, ?)",
+            (cid, tenant_id, data_type, json.dumps(data))
+        )
+    return cid
+
+
+def get_cached_data(tenant_id: str, data_type: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM cached_tenant_data WHERE tenant_id = ? AND data_type = ? "
+            "ORDER BY fetched_at DESC LIMIT 1",
+            (tenant_id, data_type)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["data"] = json.loads(d["data"]) if d["data"] else {}
+        return d
+
+
+def list_cached_data(tenant_id: str) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM cached_tenant_data WHERE tenant_id = ? ORDER BY data_type",
+            (tenant_id,)
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["data"] = json.loads(d["data"]) if d["data"] else {}
+            result.append(d)
+        return result
+
+
+# ---------------------------------------------------------------------------
+# GDAP Role Templates
+# ---------------------------------------------------------------------------
+
+def create_gdap_role_template(name: str, description: str = "",
+                               roles: list = None,
+                               created_by: str = "") -> str:
+    rid = str(uuid.uuid4())[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO gdap_role_templates (id, name, description, roles, created_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (rid, name, description, json.dumps(roles or []), created_by)
+        )
+    return rid
+
+
+def get_gdap_role_template(template_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM gdap_role_templates WHERE id = ?", (template_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["roles"] = json.loads(d["roles"]) if d["roles"] else []
+        return d
+
+
+def list_gdap_role_templates() -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM gdap_role_templates ORDER BY name"
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["roles"] = json.loads(d["roles"]) if d["roles"] else []
+            result.append(d)
+        return result
+
+
+def update_gdap_role_template(template_id: str, **fields):
+    if not fields:
+        return
+    allowed = {"name", "description", "roles"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if "roles" in fields and isinstance(fields["roles"], list):
+        fields["roles"] = json.dumps(fields["roles"])
+    fields["updated_at"] = datetime.now().isoformat()
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [template_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE gdap_role_templates SET {set_clause} WHERE id = ?", values
+        )
+
+
+def delete_gdap_role_template(template_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM gdap_role_templates WHERE id = ?", (template_id,)
+        )
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Tenant Backups
+# ---------------------------------------------------------------------------
+
+def create_tenant_backup(tenant_id: str, backup_type: str = "full",
+                          components: list = None,
+                          created_by: str = "") -> str:
+    bid = str(uuid.uuid4())[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO tenant_backups (id, tenant_id, backup_type, components, "
+            "status, created_by) VALUES (?, ?, ?, ?, 'pending', ?)",
+            (bid, tenant_id, backup_type, json.dumps(components or []), created_by)
+        )
+    return bid
+
+
+def get_tenant_backup(backup_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM tenant_backups WHERE id = ?", (backup_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["components"] = json.loads(d["components"]) if d["components"] else []
+        d["data"] = json.loads(d["data"]) if d["data"] else {}
+        return d
+
+
+def list_tenant_backups(tenant_id: str = None) -> list[dict]:
+    with get_db() as conn:
+        if tenant_id:
+            rows = conn.execute(
+                "SELECT b.*, t.name as tenant_name FROM tenant_backups b "
+                "JOIN tenants t ON b.tenant_id = t.id "
+                "WHERE b.tenant_id = ? ORDER BY b.started_at DESC",
+                (tenant_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT b.*, t.name as tenant_name FROM tenant_backups b "
+                "JOIN tenants t ON b.tenant_id = t.id "
+                "ORDER BY b.started_at DESC"
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["components"] = json.loads(d["components"]) if d["components"] else []
+            d["data"] = json.loads(d["data"]) if d["data"] else {}
+            result.append(d)
+        return result
+
+
+def update_tenant_backup(backup_id: str, **fields):
+    if not fields:
+        return
+    allowed = {"status", "data", "completed_at"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if "data" in fields and isinstance(fields["data"], dict):
+        fields["data"] = json.dumps(fields["data"])
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [backup_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE tenant_backups SET {set_clause} WHERE id = ?", values
+        )
+
+
+def delete_tenant_backup(backup_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM tenant_backups WHERE id = ?", (backup_id,)
+        )
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Conditional Access Policy Templates
+# ---------------------------------------------------------------------------
+
+def create_ca_template(name: str, description: str = "",
+                        policy_json: dict = None, category: str = "general",
+                        created_by: str = "") -> str:
+    tid = str(uuid.uuid4())[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO ca_policy_templates (id, name, description, policy_json, "
+            "category, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+            (tid, name, description, json.dumps(policy_json or {}), category, created_by)
+        )
+    return tid
+
+
+def get_ca_template(template_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM ca_policy_templates WHERE id = ?", (template_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["policy_json"] = json.loads(d["policy_json"]) if d["policy_json"] else {}
+        return d
+
+
+def list_ca_templates() -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM ca_policy_templates ORDER BY category, name"
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["policy_json"] = json.loads(d["policy_json"]) if d["policy_json"] else {}
+            result.append(d)
+        return result
+
+
+def update_ca_template(template_id: str, **fields):
+    if not fields:
+        return
+    allowed = {"name", "description", "policy_json", "category"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if "policy_json" in fields and isinstance(fields["policy_json"], dict):
+        fields["policy_json"] = json.dumps(fields["policy_json"])
+    fields["updated_at"] = datetime.now().isoformat()
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [template_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE ca_policy_templates SET {set_clause} WHERE id = ?", values
+        )
+
+
+def delete_ca_template(template_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM ca_policy_templates WHERE id = ?", (template_id,)
+        )
+        return cur.rowcount > 0

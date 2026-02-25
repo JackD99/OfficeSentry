@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Domain Health — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Domain Health</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Domain Health Check{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header fw-semibold"><i class="bi bi-globe me-2"></i>DNS Health Analysis</div>
+      <div class="card-body">
+        <p class="text-muted small">Check SPF, DKIM, DMARC, and MX records for any domain. Identifies common email security misconfigurations.</p>
+        <form id="check-form" class="d-flex gap-2">
+          <input type="text" class="form-control" name="domain" placeholder="e.g. contoso.com" required>
+          <button type="submit" class="btn btn-primary" id="check-btn">
+            <span class="spinner-border spinner-border-sm d-none me-1" id="check-spinner"></span>
+            Check
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="d-none" id="result-area">
+      <div class="card">
+        <div class="card-header fw-semibold d-flex align-items-center">
+          <i class="bi bi-clipboard-check me-2"></i>
+          <span id="result-domain"></span>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead><tr><th style="width:100px">Check</th><th style="width:80px">Status</th><th>Detail</th></tr></thead>
+            <tbody id="checks-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-none" id="error-area">
+      <div class="alert alert-danger small"><i class="bi bi-x-circle me-1"></i><span id="error-msg"></span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('check-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('check-btn'); const spinner = document.getElementById('check-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  document.getElementById('result-area').classList.add('d-none');
+  document.getElementById('error-area').classList.add('d-none');
+
+  const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);
+  try {
+    const r = await fetch('{{ url_for("tools.domain_health_check") }}', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('result-domain').textContent = d.domain;
+      const tbody = document.getElementById('checks-body');
+      tbody.innerHTML = '';
+      for (const [name, check] of Object.entries(d.checks)) {
+        const icon = check.status === 'pass'
+          ? '<i class="bi bi-check-circle-fill text-success"></i>'
+          : check.status === 'warn'
+            ? '<i class="bi bi-exclamation-triangle-fill text-warning"></i>'
+            : '<i class="bi bi-x-circle-fill text-danger"></i>';
+        tbody.innerHTML += `<tr><td class="fw-semibold text-uppercase">${name}</td><td>${icon}</td><td class="small">${check.detail}</td></tr>`;
+      }
+      document.getElementById('result-area').classList.remove('d-none');
+    } else {
+      document.getElementById('error-msg').textContent = d.error;
+      document.getElementById('error-area').classList.remove('d-none');
+    }
+  } catch (ex) {
+    document.getElementById('error-msg').textContent = 'Check failed: ' + ex.message;
+    document.getElementById('error-area').classList.remove('d-none');
+  }
+  spinner.classList.add('d-none'); btn.disabled = false;
+});
+</script>
+{% endblock %}
