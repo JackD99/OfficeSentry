@@ -2,7 +2,8 @@
 # Creates an Entra app registration with cert auth and all permissions needed
 # by both SPO-Audit-Toolkit and OfficeSentry inspectors.
 # Outputs a JSON result line that portal/app.py can parse.
-# Called non-interactively by the Flask portal (Graph login is interactive via browser popup).
+# Called by the Flask portal as a background job. Uses device code flow so any tenant admin
+# can authenticate from any browser without adding their account to this device.
 
 param(
     [Parameter(Mandatory)][string] $AppDisplayName,
@@ -26,7 +27,8 @@ try {
         "RoleManagement.ReadWrite.Directory"
     )
 
-    Connect-MgGraph -Scopes $scopes | Out-Null
+    Write-Output "ACTION REQUIRED: open https://microsoft.com/devicelogin in any browser and enter the code below."
+    Connect-MgGraph -Scopes $scopes -UseDeviceCode
 
     # Create app + service principal
     $app = New-MgApplication -DisplayName $AppDisplayName
