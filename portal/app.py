@@ -13,12 +13,12 @@ import secrets
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from database import init_db, list_tenants, list_running_jobs, get_audit_log
+from database import init_db, list_tenants, list_running_jobs, get_audit_log, get_dashboard_stats
 from helpers import login_required, TENANTS_DIR
 
 # ---------------------------------------------------------------------------
@@ -131,6 +131,14 @@ def create_app() -> Flask:
                                configured_count=configured,
                                audited_count=recent_audits,
                                recent_activity=recent_activity)
+
+    # ------------------------------------------------------------------
+    # Dashboard stats API
+    # ------------------------------------------------------------------
+    @app.route("/api/stats")
+    @login_required
+    def api_stats():
+        return jsonify(get_dashboard_stats())
 
     # ------------------------------------------------------------------
     # CSP headers

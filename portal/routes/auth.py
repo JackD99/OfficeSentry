@@ -10,9 +10,10 @@ from flask import (
 
 from database import (
     user_count, create_user, get_user, check_password, update_password,
+    list_users, delete_user, update_user,
     log_action,
 )
-from helpers import login_required, current_user
+from helpers import login_required, admin_required, current_user
 
 log = logging.getLogger("portal")
 
@@ -99,3 +100,76 @@ def change_password():
     update_password(current_user(), new_pass)
     log_action(current_user(), "password_changed")
     return jsonify({"ok": True, "message": "Password updated."})
+
+
+# ---------------------------------------------------------------------------
+# User management (admin only)
+# ---------------------------------------------------------------------------
+
+@bp.route("/users")
+@admin_required
+def users_page():
+    users = list_users()
+    return render_template("users.html", users=users)
+
+
+@bp.route("/users/new", methods=["POST"])
+@admin_required
+def user_create():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    display  = request.form.get("display_name", "").strip()
+    is_admin = 1 if request.form.get("is_admin") else 0
+
+    if not username or not password:
+        return jsonify({"ok": False, "error": "Username and password are required."})
+    if len(password) < 8:
+        return jsonify({"ok": False, "error": "Password must be at least 8 characters."})
+    if get_user(username):
+        return jsonify({"ok": False, "error": f"User '{username}' already exists."})
+
+    create_user(username, password, display_name=display or username, is_admin=is_admin)
+    log_action(current_user(), "user_created", details=f"User: {username}")
+    return jsonify({"ok": True, "message": f"User '{username}' created."})
+
+
+@bp.route("/users/<username>/toggle-admin", methods=["POST"])
+@admin_required
+def user_toggle_admin(username):
+    user = get_user(username)
+    if not user:
+        return jsonify({"ok": False, "error": "User not found."}), 404
+    if username == current_user():
+        return jsonify({"ok": False, "error": "Cannot change your own admin status."})
+    new_val = 0 if user["is_admin"] else 1
+    update_user(username, is_admin=new_val)
+    role = "admin" if new_val else "operator"
+    log_action(current_user(), "user_role_changed",
+               details=f"User: {username}, Role: {role}")
+    return jsonify({"ok": True, "message": f"'{username}' is now {role}."})
+
+
+@bp.route("/users/<username>/reset-password", methods=["POST"])
+@admin_required
+def user_reset_password(username):
+    user = get_user(username)
+    if not user:
+        return jsonify({"ok": False, "error": "User not found."}), 404
+    new_pass = request.form.get("new_password", "")
+    if len(new_pass) < 8:
+        return jsonify({"ok": False, "error": "Password must be at least 8 characters."})
+    update_password(username, new_pass)
+    log_action(current_user(), "user_password_reset",
+               details=f"User: {username}")
+    return jsonify({"ok": True, "message": f"Password reset for '{username}'."})
+
+
+@bp.route("/users/<username>/delete", methods=["POST"])
+@admin_required
+def user_delete(username):
+    if username == current_user():
+        return jsonify({"ok": False, "error": "Cannot delete your own account."})
+    if not delete_user(username):
+        return jsonify({"ok": False, "error": "User not found."}), 404
+    log_action(current_user(), "user_deleted", details=f"User: {username}")
+    return jsonify({"ok": True, "message": f"User '{username}' deleted."})

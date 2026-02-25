@@ -79,6 +79,12 @@
         <span class="sidebar-label">ACCOUNT</span>
       </li>
       <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'auth.users_page' %}active{% endif %}"
+           href="{{ url_for('auth.users_page') }}">
+          <i class="bi bi-people me-2"></i>Users
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link {% if request.endpoint == 'auth.settings_page' %}active{% endif %}"
            href="{{ url_for('auth.settings_page') }}">
           <i class="bi bi-gear me-2"></i>Settings

@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}User Management — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Users</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}User Management{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-people me-2 text-primary"></i>
+        <span class="fw-semibold">Operator Accounts</span>
+        <span class="badge bg-secondary ms-2">{{ users|length }}</span>
+        <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#addUserModal">
+          <i class="bi bi-person-plus me-1"></i>Add User
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Username</th>
+              <th>Display Name</th>
+              <th>Role</th>
+              <th>Created</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+            <tr id="user-row-{{ u.username }}">
+              <td class="fw-semibold">
+                <i class="bi bi-person-circle me-1 text-muted"></i>{{ u.username }}
+                {% if u.username == session.get('username') %}
+                  <span class="badge bg-info ms-1">You</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ u.display_name }}</td>
+              <td>
+                {% if u.is_admin %}
+                  <span class="badge bg-warning text-dark">Admin</span>
+                {% else %}
+                  <span class="badge bg-secondary">Operator</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ u.created_at[:10] if u.created_at else '' }}</td>
+              <td class="text-end">
+                {% if u.username != session.get('username') %}
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-secondary" title="Toggle admin"
+                          onclick="toggleAdmin('{{ u.username }}')">
+                    <i class="bi bi-shield-{{ 'minus' if u.is_admin else 'plus' }}"></i>
+                  </button>
+                  <button class="btn btn-outline-secondary" title="Reset password"
+                          data-bs-toggle="modal" data-bs-target="#resetPwModal"
+                          onclick="document.getElementById('reset-pw-user').value='{{ u.username }}';document.getElementById('reset-pw-title').textContent='{{ u.username }}'">
+                    <i class="bi bi-key"></i>
+                  </button>
+                  <button class="btn btn-outline-danger" title="Delete user"
+                          onclick="if(confirm('Delete user {{ u.username }}?')) deleteUser('{{ u.username }}')">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+                {% else %}
+                <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-info-circle me-2 text-info"></i>About Roles</div>
+      <div class="card-body small">
+        <p class="mb-2"><strong>Admin</strong> — Full access including user management, tenant setup, and all audit operations.</p>
+        <p class="mb-0"><strong>Operator</strong> — Can run audits, view reports, and manage tenants, but cannot manage user accounts.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="add-user-form">
+        <div class="modal-header">
+          <h6 class="modal-title fw-semibold">Add User</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Username <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="username" required placeholder="e.g. john.doe">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Display Name</label>
+            <input type="text" class="form-control" name="display_name" placeholder="John Doe">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password <span class="text-danger">*</span></label>
+            <div class="input-password-wrap">
+              <input type="password" class="form-control" name="password" required
+                     placeholder="At least 8 characters" minlength="8">
+              <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
+            </div>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="is_admin" id="new-user-admin">
+            <label class="form-check-label" for="new-user-admin">Grant admin privileges</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-person-plus me-1"></i>Create User
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPwModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form id="reset-pw-form">
+        <input type="hidden" name="username" id="reset-pw-user">
+        <div class="modal-header">
+          <h6 class="modal-title fw-semibold">Reset Password — <span id="reset-pw-title"></span></h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-0">
+            <label class="form-label">New Password</label>
+            <div class="input-password-wrap">
+              <input type="password" class="form-control" name="new_password" required
+                     placeholder="At least 8 characters" minlength="8">
+              <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm text-dark">Reset Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Re-bind password toggles for modals
+document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = btn.parentElement.querySelector('input');
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    btn.querySelector('i').className = isPass ? 'bi bi-eye-slash' : 'bi bi-eye';
+  });
+});
+
+async function apiPost(url, fd) {
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const res = await fetch(url, { method: 'POST', body: fd });
+  return res.json();
+}
+
+// Add user
+document.getElementById('add-user-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const data = await apiPost('{{ url_for("auth.user_create") }}', new FormData(e.target));
+  if (data.ok) {
+    showToast(data.message, 'success');
+    setTimeout(() => location.reload(), 500);
+  } else {
+    showToast(data.error, 'danger');
+  }
+});
+
+// Toggle admin
+async function toggleAdmin(username) {
+  const fd = new FormData();
+  const data = await apiPost(`/users/${username}/toggle-admin`, fd);
+  if (data.ok) {
+    showToast(data.message, 'success');
+    setTimeout(() => location.reload(), 500);
+  } else {
+    showToast(data.error, 'danger');
+  }
+}
+
+// Delete user
+async function deleteUser(username) {
+  const fd = new FormData();
+  const data = await apiPost(`/users/${username}/delete`, fd);
+  if (data.ok) {
+    showToast(data.message, 'success');
+    document.getElementById(`user-row-${username}`)?.remove();
+  } else {
+    showToast(data.error, 'danger');
+  }
+}
+
+// Reset password
+document.getElementById('reset-pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('reset-pw-user').value;
+  const data = await apiPost(`/users/${username}/reset-password`, new FormData(e.target));
+  if (data.ok) {
+    showToast(data.message, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('resetPwModal'))?.hide();
+  } else {
+    showToast(data.error, 'danger');
+  }
+});
+</script>
+{% endblock %}

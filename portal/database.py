@@ -202,6 +202,38 @@ def update_password(username: str, new_password: str):
         )
 
 
+def list_users() -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, username, display_name, is_admin, created_at "
+            "FROM users ORDER BY username"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_user(username: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM users WHERE username = ?", (username,)
+        )
+        return cur.rowcount > 0
+
+
+def update_user(username: str, **fields):
+    if not fields:
+        return
+    allowed = {"display_name", "is_admin"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [username]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE users SET {set_clause} WHERE username = ?", values
+        )
+
+
 # ---------------------------------------------------------------------------
 # Tenants
 # ---------------------------------------------------------------------------
@@ -367,3 +399,39 @@ def get_audit_log(limit: int = 200, tenant_id: str = None) -> list[dict]:
                 (limit,)
             ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Dashboard statistics
+# ---------------------------------------------------------------------------
+
+def get_dashboard_stats() -> dict:
+    with get_db() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+        configured = conn.execute(
+            "SELECT COUNT(*) FROM tenants WHERE client_id != ''"
+        ).fetchone()[0]
+        audited = conn.execute(
+            "SELECT COUNT(*) FROM tenants WHERE last_audit_at IS NOT NULL"
+        ).fetchone()[0]
+        running = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status = 'running'"
+        ).fetchone()[0]
+        total_jobs = conn.execute(
+            "SELECT COUNT(*) FROM jobs"
+        ).fetchone()[0]
+        completed_jobs = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status = 'done'"
+        ).fetchone()[0]
+        failed_jobs = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status = 'failed'"
+        ).fetchone()[0]
+        return {
+            "total_tenants": total,
+            "configured_tenants": configured,
+            "audited_tenants": audited,
+            "running_jobs": running,
+            "total_jobs": total_jobs,
+            "completed_jobs": completed_jobs,
+            "failed_jobs": failed_jobs,
+        }

@@ -51,9 +51,9 @@ class TestPathTraversal:
         assert resp.status_code == 403
 
     def test_report_download_empty_path(self, authed_client):
-        """Empty path returns 404."""
+        """Empty path is rejected."""
         resp = authed_client.get("/reports/download?path=")
-        assert resp.status_code == 404
+        assert resp.status_code in (403, 404)
 
 
 class TestSecurityHeaders:

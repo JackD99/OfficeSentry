@@ -117,6 +117,117 @@ def tenant_delete(tenant_id):
 
 
 # ---------------------------------------------------------------------------
+# Tenant Health Check
+# ---------------------------------------------------------------------------
+
+@bp.route("/tenants/<tenant_id>/health", methods=["POST"])
+@login_required
+def tenant_health(tenant_id):
+    """Check tenant connectivity by verifying cert + app config and testing PnP connection."""
+    t = get_tenant(tenant_id)
+    if not t:
+        return jsonify({"ok": False, "error": "Tenant not found."}), 404
+
+    checks = {}
+
+    # Check 1: Certificate file exists
+    pfx_exists = tenant_pfx_path(tenant_id).exists()
+    cer_exists = tenant_cer_path(tenant_id).exists()
+    checks["certificate"] = {
+        "status": "ok" if pfx_exists else "fail",
+        "detail": "PFX and CER present" if (pfx_exists and cer_exists) else
+                  "PFX present" if pfx_exists else "Certificate files missing",
+    }
+
+    # Check 2: Client ID configured
+    checks["entra_app"] = {
+        "status": "ok" if t["client_id"] else "fail",
+        "detail": f"Client ID: {t['client_id'][:12]}..." if t["client_id"] else "Not configured",
+    }
+
+    # Check 3: PFX password decryptable
+    from helpers import get_tenant_pfx_password
+    pfx_pass = get_tenant_pfx_password(t)
+    checks["pfx_password"] = {
+        "status": "ok" if pfx_pass else "fail",
+        "detail": "Decryptable" if pfx_pass else "Missing or decrypt failed",
+    }
+
+    # Check 4: Tenant identifier set
+    tenant_val = t.get("tenant_id") or t.get("domain")
+    checks["tenant_identity"] = {
+        "status": "ok" if tenant_val else "fail",
+        "detail": tenant_val or "No tenant ID or domain set",
+    }
+
+    all_ok = all(c["status"] == "ok" for c in checks.values())
+    return jsonify({
+        "ok": all_ok,
+        "checks": checks,
+        "ready": all_ok,
+        "message": "All checks passed" if all_ok else "Some checks failed",
+    })
+
+
+# ---------------------------------------------------------------------------
+# Tenant Export/Import
+# ---------------------------------------------------------------------------
+
+@bp.route("/tenants/export")
+@login_required
+def tenants_export():
+    """Export all tenants as JSON for backup/migration."""
+    import json
+    tenants = list_tenants()
+    # Strip encrypted passwords for safety
+    for t in tenants:
+        t.pop("pfx_password_enc", None)
+    return current_app.response_class(
+        json.dumps(tenants, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=tenants_export.json"},
+    )
+
+
+@bp.route("/tenants/import", methods=["POST"])
+@login_required
+def tenants_import():
+    """Import tenants from a JSON file."""
+    import json
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "No file provided."})
+
+    try:
+        data = json.loads(f.read().decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return jsonify({"ok": False, "error": "Invalid JSON file."})
+
+    if not isinstance(data, list):
+        return jsonify({"ok": False, "error": "Expected a JSON array of tenants."})
+
+    imported = 0
+    skipped = 0
+    for entry in data:
+        name = entry.get("name", "").strip()
+        domain = entry.get("domain", "").strip()
+        if not name or not domain:
+            skipped += 1
+            continue
+        tid = entry.get("tenant_id", "")
+        notes = entry.get("notes", "")
+        create_tenant(name, domain, tenant_id=tid, notes=notes)
+        imported += 1
+
+    log_action(current_user(), "tenants_imported",
+               details=f"Imported: {imported}, Skipped: {skipped}")
+    return jsonify({
+        "ok": True,
+        "message": f"Imported {imported} tenant(s), skipped {skipped}.",
+    })
+
+
+# ---------------------------------------------------------------------------
 # Tenant Setup (cert, app)
 # ---------------------------------------------------------------------------
 

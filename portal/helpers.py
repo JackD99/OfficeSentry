@@ -77,6 +77,21 @@ def login_required(f):
     return decorated
 
 
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "username" not in session:
+            return redirect(url_for("auth.login", next=request.url))
+        g.username = session["username"]
+        from database import get_user
+        user = get_user(session["username"])
+        if not user or not user.get("is_admin"):
+            from flask import abort
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
+
+
 def current_user() -> str:
     return session.get("username", "anonymous")
 
@@ -85,6 +100,10 @@ def current_user() -> str:
 # PowerShell runner (background thread -> SQLite)
 # ---------------------------------------------------------------------------
 
+# Track running processes for cancellation support
+_running_processes: dict[str, subprocess.Popen] = {}
+
+
 def _ps_worker(job_id: str, cmd: list, env: dict = None):
     try:
         proc = subprocess.Popen(
@@ -92,6 +111,7 @@ def _ps_worker(job_id: str, cmd: list, env: dict = None):
             text=True, encoding="utf-8", errors="replace",
             env=env,
         )
+        _running_processes[job_id] = proc
         for line in proc.stdout:
             append_job_output(job_id, line.rstrip())
         rc = proc.wait()
@@ -102,6 +122,29 @@ def _ps_worker(job_id: str, cmd: list, env: dict = None):
         append_job_output(job_id, f"ERROR: {exc}")
         finish_job(job_id, "failed")
         log.error("Job %s error: %s", job_id, exc)
+    finally:
+        _running_processes.pop(job_id, None)
+
+
+def cancel_job(job_id: str) -> bool:
+    """Cancel a running job by terminating its subprocess."""
+    proc = _running_processes.get(job_id)
+    if proc is None:
+        return False
+    try:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        append_job_output(job_id, "--- Job cancelled by operator ---")
+        finish_job(job_id, "cancelled")
+        _running_processes.pop(job_id, None)
+        log.info("Job %s cancelled by %s", job_id, current_user())
+        return True
+    except Exception as exc:
+        log.error("Failed to cancel job %s: %s", job_id, exc)
+        return False
 
 
 def start_job(label: str, job_type: str, cmd: list,

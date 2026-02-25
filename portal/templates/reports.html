@@ -81,9 +81,13 @@
             </a>
             {% endif %}
             <a href="{{ url_for('reports.report_download', path=f.full_path) }}"
-               class="btn btn-sm btn-outline-secondary">
+               class="btn btn-sm btn-outline-secondary me-1">
               <i class="bi bi-download me-1"></i>Download
             </a>
+            <button class="btn btn-sm btn-outline-danger"
+                    onclick="deleteReport('{{ f.full_path|e }}', this)" title="Delete">
+              <i class="bi bi-trash"></i>
+            </button>
           </td>
         </tr>
         {% endfor %}
@@ -118,6 +122,28 @@ function filterReports() {
     const matchSearch = !q || row.dataset.name.includes(q);
     row.style.display = (matchType && matchSearch) ? '' : 'none';
   });
+}
+
+async function deleteReport(path, btn) {
+  if (!confirm('Delete this report file?')) return;
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  fd.append('path', path);
+  try {
+    const r = await fetch('{{ url_for("reports.report_delete") }}', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message, 'success');
+      btn.closest('tr').remove();
+    } else {
+      showToast(d.error, 'danger');
+      btn.disabled = false;
+    }
+  } catch {
+    showToast('Delete failed', 'danger');
+    btn.disabled = false;
+  }
 }
 </script>
 {% endblock %}

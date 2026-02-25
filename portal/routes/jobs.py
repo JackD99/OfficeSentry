@@ -1,11 +1,11 @@
 """
-portal/routes/jobs.py — Job status and polling routes.
+portal/routes/jobs.py — Job status, polling, and cancellation routes.
 """
 
 from flask import Blueprint, render_template, request, jsonify
 
-from database import get_job, list_jobs, list_tenants, list_running_jobs
-from helpers import login_required
+from database import get_job, list_jobs, list_tenants, list_running_jobs, log_action
+from helpers import login_required, current_user, cancel_job
 
 bp = Blueprint("jobs", __name__)
 
@@ -42,3 +42,19 @@ def job_status(job_id):
         "ended":   job["ended_at"],
         "output":  tail,
     })
+
+
+@bp.route("/jobs/<job_id>/cancel", methods=["POST"])
+@login_required
+def job_cancel(job_id):
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "Job not found."}), 404
+    if job["status"] != "running":
+        return jsonify({"ok": False, "error": "Job is not running."})
+    if cancel_job(job_id):
+        log_action(current_user(), "job_cancelled",
+                   tenant_id=job.get("tenant_id"),
+                   details=f"Job: {job['label']}")
+        return jsonify({"ok": True, "message": "Job cancelled."})
+    return jsonify({"ok": False, "error": "Could not cancel job (process not found)."})
