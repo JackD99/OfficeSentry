@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Best Practice Analyzer — M365 Audit Portal{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+  <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li class="breadcrumb-item active">Best Practice Analyzer</li>
+</ol></nav>
+{% endblock %}
+
+{% block page_title %}Best Practice Analyzer{% endblock %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-primary">{{ tenants|length }}</div>
+        <small class="text-muted">Total Tenants</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-success">{{ summary|selectattr('fail_count', 'equalto', 0)|list|length }}</div>
+        <small class="text-muted">Fully Compliant</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-warning">{{ summary|selectattr('warn_count', 'greaterthan', 0)|list|length }}</div>
+        <small class="text-muted">Warnings</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-danger">{{ summary|selectattr('fail_count', 'greaterthan', 0)|list|length }}</div>
+        <small class="text-muted">Failures Found</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Action Bar -->
+<div class="card bg-dark border-secondary mb-4">
+  <div class="card-body">
+    <div class="row align-items-end g-3">
+      <div class="col-md-6">
+        <h6 class="mb-2"><i class="bi bi-play-circle me-1"></i> Run BPA Scan</h6>
+        <form id="bpa-scan-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-2">
+            <select class="form-select form-select-sm" id="bpa-group-filter">
+              <option value="">All Tenants</option>
+              {% for g in groups %}
+              <option value="{{ g.id }}">{{ g.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="d-flex gap-2 flex-wrap" id="bpa-tenant-checkboxes">
+            {% for t in tenants if t.client_id %}
+            <div class="form-check form-check-inline">
+              <input class="form-check-input tenant-cb" type="checkbox" name="tenant_ids" value="{{ t.id }}" id="bpa-t-{{ t.id }}">
+              <label class="form-check-label small" for="bpa-t-{{ t.id }}">{{ t.name }}</label>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-light me-1" onclick="document.querySelectorAll('.tenant-cb').forEach(c=>c.checked=true)">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-light me-1" onclick="document.querySelectorAll('.tenant-cb').forEach(c=>c.checked=false)">Clear All</button>
+            <button type="submit" class="btn btn-sm btn-primary">
+              <i class="bi bi-play-fill me-1"></i>Run BPA Scan
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="col-md-6 text-end">
+        <p class="text-muted small mb-1">{{ bpa_checks|length }} checks available across {{ bpa_checks|map(attribute='category')|unique|list|length }} categories</p>
+        <p class="text-muted small mb-0">Last scan data available for {{ summary|length }} tenant(s)</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BPA Results Matrix -->
+{% if summary %}
+<div class="card bg-dark border-secondary mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h6 class="mb-0"><i class="bi bi-table me-1"></i> Tenant Compliance Matrix</h6>
+    <div>
+      <span class="badge bg-success me-1"><i class="bi bi-check-circle"></i> Pass</span>
+      <span class="badge bg-warning text-dark me-1"><i class="bi bi-exclamation-triangle"></i> Warning</span>
+      <span class="badge bg-danger me-1"><i class="bi bi-x-circle"></i> Fail</span>
+      <span class="badge bg-secondary"><i class="bi bi-question-circle"></i> Unknown</span>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-dark table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th class="sticky-col">Tenant</th>
+            {% for check in bpa_checks %}
+            <th class="text-center small" style="min-width:80px; writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; height:120px;" title="{{ check.description }}">
+              {{ check.name }}
+            </th>
+            {% endfor %}
+            <th class="text-center">Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tenants if t.id in tenant_results %}
+          {% set results = tenant_results[t.id] %}
+          <tr>
+            <td class="sticky-col">
+              <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
+                {{ t.name }}
+              </a>
+              <br><small class="text-muted">{{ t.domain }}</small>
+            </td>
+            {% for check in bpa_checks %}
+            {% set r = results.get(check.key) %}
+            <td class="text-center">
+              {% if r %}
+                {% if r.status == 'pass' %}
+                  <span class="text-success" title="{{ r.detail }}"><i class="bi bi-check-circle-fill"></i></span>
+                {% elif r.status == 'warn' %}
+                  <span class="text-warning" title="{{ r.detail }}"><i class="bi bi-exclamation-triangle-fill"></i></span>
+                {% elif r.status == 'fail' %}
+                  <span class="text-danger" title="{{ r.detail }}"><i class="bi bi-x-circle-fill"></i></span>
+                {% else %}
+                  <span class="text-secondary" title="Not checked"><i class="bi bi-dash-circle"></i></span>
+                {% endif %}
+              {% else %}
+                <span class="text-secondary"><i class="bi bi-dash"></i></span>
+              {% endif %}
+            </td>
+            {% endfor %}
+            <td class="text-center">
+              {% set s = score_map.get(t.id) %}
+              {% if s %}
+                {% set pct = ((s.current_score / s.max_score * 100) if s.max_score > 0 else 0)|round(0)|int %}
+                <span class="badge {% if pct >= 70 %}bg-success{% elif pct >= 40 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                  {{ pct }}%
+                </span>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- BPA Checks Reference -->
+<div class="card bg-dark border-secondary">
+  <div class="card-header">
+    <h6 class="mb-0"><i class="bi bi-card-checklist me-1"></i> Available Checks ({{ bpa_checks|length }})</h6>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-dark table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Check</th>
+            <th>Category</th>
+            <th>Impact</th>
+            <th>Expected Setting</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for check in bpa_checks %}
+          <tr>
+            <td class="fw-semibold">{{ check.name }}</td>
+            <td><span class="badge bg-secondary">{{ check.category }}</span></td>
+            <td><span class="badge bg-{{ impact_colors.get(check.impact, 'secondary') }}">{{ check.impact }}</span></td>
+            <td class="small">{{ check.expected }}</td>
+            <td class="small text-muted">{{ check.description }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('bpa-scan-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const checked = document.querySelectorAll('.tenant-cb:checked');
+  if (checked.length === 0) {
+    showToast('Select at least one tenant.', 'warning');
+    return;
+  }
+  const fd = new FormData(this);
+  fetch('{{ url_for("standards.bpa_scan") }}', {
+    method: 'POST', body: fd,
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      showToast(data.message, 'success');
+      if (data.job_ids && data.job_ids.length > 0) {
+        setTimeout(() => window.location.href = '{{ url_for("jobs.jobs_page") }}', 1500);
+      }
+    } else {
+      showToast(data.error || 'Scan failed.', 'danger');
+    }
+  })
+  .catch(() => showToast('Request failed.', 'danger'));
+});
+</script>
+{% endblock %}
