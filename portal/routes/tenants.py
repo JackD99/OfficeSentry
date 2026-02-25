@@ -74,7 +74,8 @@ def tenant_detail(tenant_id):
     cert_exists = tenant_pfx_path(tenant_id).exists()
     recent_jobs = list_jobs(tenant_id=tenant_id, limit=10)
     return render_template("tenant_detail.html", tenant=t,
-                           cert_exists=cert_exists, recent_jobs=recent_jobs)
+                           cert_exists=cert_exists, recent_jobs=recent_jobs,
+                           admin_connector_configured=bool(get_admin_client_id()))
 
 
 @bp.route("/tenants/<tenant_id>/settings", methods=["POST"])
