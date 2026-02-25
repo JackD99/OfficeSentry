@@ -18,6 +18,7 @@ from helpers import (
     login_required, current_user,
     tenant_pfx_path, tenant_output_dir,
     build_ps_env, start_job, get_tenant_pfx_password,
+    validate_site_url, validate_email, sanitize_text,
     SCRIPTS_DIR, INSPECTORS_DIR, PWSH,
 )
 
@@ -50,6 +51,17 @@ def audit_spo_run(tenant_id):
     audit_type = request.form.get("audit_type", "groups")
     site_url   = request.form.get("site_url", "").strip()
     user_email = request.form.get("user_email", "").strip()
+
+    if audit_type not in ("groups", "permissions", "external", "user"):
+        return jsonify({"ok": False, "error": "Invalid audit type."})
+
+    if audit_type in ("groups", "permissions", "external") and site_url:
+        if not validate_site_url(site_url):
+            return jsonify({"ok": False, "error": "Invalid SharePoint site URL format."})
+
+    if audit_type == "user" and user_email:
+        if not validate_email(user_email):
+            return jsonify({"ok": False, "error": "Invalid email address format."})
 
     pfx_pass = get_tenant_pfx_password(t)
     if not pfx_pass:
@@ -223,6 +235,9 @@ def audit_breach_run(tenant_id):
     date_start    = request.form.get("date_start", "").strip()
     date_end      = request.form.get("date_end", "").strip()
     target_user   = request.form.get("target_user", "").strip()
+
+    if target_user and not validate_email(target_user):
+        return jsonify({"ok": False, "error": "Invalid target user email format."})
 
     pfx_pass = get_tenant_pfx_password(t)
     if not pfx_pass:

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} — M365 Audit Portal{% endblock %}
+{% block page_title %}Error {{ code }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-center" style="min-height: 50vh">
+  <div class="text-center">
+    <div class="mb-3" style="font-size: 4rem; opacity: 0.3;">
+      {% if code == 404 %}
+      <i class="bi bi-question-circle"></i>
+      {% elif code == 403 %}
+      <i class="bi bi-shield-x"></i>
+      {% else %}
+      <i class="bi bi-exclamation-triangle"></i>
+      {% endif %}
+    </div>
+    <h2 class="fw-bold mb-2">{{ message }}</h2>
+    <p class="text-muted mb-4">{{ detail }}</p>
+    <div class="d-flex gap-2 justify-content-center">
+      <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-house me-1"></i>Dashboard
+      </a>
+      <button onclick="history.back()" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Go Back
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}

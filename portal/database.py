@@ -4,6 +4,7 @@ Manages tenants, jobs, audit trail, and operator accounts.
 """
 
 import json
+import shutil
 import sqlite3
 import uuid
 import hashlib
@@ -13,6 +14,7 @@ from pathlib import Path
 from contextlib import contextmanager
 
 DB_PATH = Path(__file__).parent.parent / "data" / "portal.db"
+BACKUP_DIR = Path(__file__).parent.parent / "data" / "backups"
 
 
 # ---------------------------------------------------------------------------
@@ -435,3 +437,54 @@ def get_dashboard_stats() -> dict:
             "completed_jobs": completed_jobs,
             "failed_jobs": failed_jobs,
         }
+
+
+# ---------------------------------------------------------------------------
+# Database maintenance
+# ---------------------------------------------------------------------------
+
+def backup_db(max_backups: int = 5) -> str | None:
+    """Create a timestamped backup of the database. Returns backup path or None on failure."""
+    if not DB_PATH.exists():
+        return None
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = BACKUP_DIR / f"portal_{stamp}.db"
+    try:
+        shutil.copy2(str(DB_PATH), str(backup_path))
+    except OSError:
+        return None
+    # Prune old backups
+    backups = sorted(BACKUP_DIR.glob("portal_*.db"), key=lambda p: p.stat().st_mtime)
+    while len(backups) > max_backups:
+        backups.pop(0).unlink(missing_ok=True)
+    return str(backup_path)
+
+
+def check_integrity() -> dict:
+    """Run SQLite integrity check and return results."""
+    with get_db() as conn:
+        result = conn.execute("PRAGMA integrity_check").fetchone()
+        ok = result[0] == "ok" if result else False
+        version = _get_schema_version(conn)
+        user_ct = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        tenant_ct = conn.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+        job_ct = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+        return {
+            "integrity": "ok" if ok else result[0],
+            "schema_version": version,
+            "users": user_ct,
+            "tenants": tenant_ct,
+            "jobs": job_ct,
+        }
+
+
+def purge_old_jobs(days: int = 90) -> int:
+    """Delete completed/failed jobs older than the specified number of days. Returns count deleted."""
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM jobs WHERE status IN ('done', 'failed', 'cancelled') "
+            "AND started_at < datetime('now', ?)",
+            (f"-{days} days",)
+        )
+        return cur.rowcount

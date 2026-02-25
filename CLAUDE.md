@@ -10,6 +10,10 @@ The portal uses **certificate-based app-only authentication** (Entra ID / Azure 
 
 ```
 SPO-Audit-Toolkit/
+├── README.md                # Project documentation and setup guide
+├── CONTRIBUTING.md          # Development guidelines and conventions
+├── SECURITY.md              # Security policy and vulnerability reporting
+├── .env.example             # Environment variable documentation
 ├── setup.sh                 # Cross-platform launcher (Linux/macOS)
 ├── start.cmd                # Windows launcher for the Flask web portal
 ├── Build-Toolkit.ps1        # Downloads all required PowerShell modules to ./modules/
@@ -249,7 +253,12 @@ start.cmd
 - **Session timeout**: Sessions expire after 8 hours (`permanent_session_lifetime`)
 - **Rate limiting**: Login route limited to 10 requests/minute via Flask-Limiter
 - **CSP headers**: Content-Security-Policy set on all responses (allows self + Bootstrap CDN)
-- **Security headers**: X-Content-Type-Options: nosniff, X-Frame-Options: DENY
+- **Security headers**: X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Referrer-Policy, Permissions-Policy
+- **Request tracking**: X-Request-ID header on all responses for request correlation
+- **Input validation**: Domain, GUID, email, and URL validation on tenant and audit forms
+- **Custom error pages**: Styled 404/403/500 error pages with JSON responses for API endpoints
+- **Health endpoint**: `/health` endpoint for load balancer and monitoring integration
+- **Database maintenance**: Backup utility, integrity checks, and old job purging
 - **Log rotation**: RotatingFileHandler (10 MB, 5 backups) for `logs/portal.log`
 - File download routes validate paths against allowed base directories
 - The portal uses session-based auth with werkzeug password hashing

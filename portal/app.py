@@ -10,10 +10,11 @@ import json
 import logging
 import logging.handlers
 import secrets
+import uuid
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, g
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -107,9 +108,12 @@ def create_app() -> Flask:
     app.register_blueprint(jobs_bp)
     app.register_blueprint(reports_bp)
 
-    # Apply rate limit to login
+    # Apply rate limit to login and initial setup
     limiter.limit("10/minute")(
         app.view_functions["auth.login"]
+    )
+    limiter.limit("5/minute")(
+        app.view_functions["auth.initial_setup"]
     )
 
     # ------------------------------------------------------------------
@@ -141,7 +145,64 @@ def create_app() -> Flask:
         return jsonify(get_dashboard_stats())
 
     # ------------------------------------------------------------------
-    # CSP headers
+    # Health check endpoint (unauthenticated, for monitoring)
+    # ------------------------------------------------------------------
+    @app.route("/health")
+    def health_check():
+        """Lightweight health check for load balancers and monitoring."""
+        from database import get_db
+        try:
+            with get_db() as conn:
+                conn.execute("SELECT 1").fetchone()
+            db_ok = True
+        except Exception:
+            db_ok = False
+
+        status = "healthy" if db_ok else "degraded"
+        code = 200 if db_ok else 503
+        return jsonify({
+            "status": status,
+            "database": "ok" if db_ok else "error",
+        }), code
+
+    # ------------------------------------------------------------------
+    # Request ID tracking
+    # ------------------------------------------------------------------
+    @app.before_request
+    def assign_request_id():
+        g.request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
+
+    # ------------------------------------------------------------------
+    # Error handlers
+    # ------------------------------------------------------------------
+    @app.errorhandler(404)
+    def not_found(e):
+        if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+            return jsonify({"ok": False, "error": "Not found"}), 404
+        return render_template("error.html", code=404,
+                               message="Page not found",
+                               detail="The page you're looking for doesn't exist or has been moved."), 404
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        log.error("Internal server error: %s (request_id=%s)",
+                  e, getattr(g, "request_id", "unknown"))
+        if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+            return jsonify({"ok": False, "error": "Internal server error"}), 500
+        return render_template("error.html", code=500,
+                               message="Something went wrong",
+                               detail="An unexpected error occurred. Check the logs for details."), 500
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+            return jsonify({"ok": False, "error": "Forbidden"}), 403
+        return render_template("error.html", code=403,
+                               message="Access denied",
+                               detail="You don't have permission to access this resource."), 403
+
+    # ------------------------------------------------------------------
+    # Security headers
     # ------------------------------------------------------------------
     @app.after_request
     def set_security_headers(response):
@@ -155,6 +216,12 @@ def create_app() -> Flask:
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=()"
+        )
+        if hasattr(g, "request_id"):
+            response.headers["X-Request-ID"] = g.request_id
         return response
 
     return app

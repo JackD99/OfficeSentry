@@ -7,6 +7,7 @@ and environment setup.
 import os
 import json
 import logging
+import re
 import subprocess
 import threading
 from functools import wraps
@@ -197,3 +198,48 @@ def get_tenant_pfx_password(t: dict) -> str:
         return decrypt_value(enc, current_app.secret_key)
     except Exception:
         return ""
+
+
+# ---------------------------------------------------------------------------
+# Input validation helpers
+# ---------------------------------------------------------------------------
+
+# Pattern for valid M365 domain names (e.g., contoso.onmicrosoft.com)
+_DOMAIN_PATTERN = re.compile(
+    r"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)+$"
+)
+
+# Pattern for valid Azure AD / Entra tenant IDs (GUID format)
+_GUID_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+# Pattern for valid SharePoint site URLs
+_SITE_URL_PATTERN = re.compile(
+    r"^https://[a-zA-Z0-9\-]+\.sharepoint\.com(/.*)?$"
+)
+
+
+def validate_domain(domain: str) -> bool:
+    """Check if a string looks like a valid domain name."""
+    return bool(_DOMAIN_PATTERN.match(domain)) and len(domain) <= 253
+
+
+def validate_tenant_guid(tenant_id: str) -> bool:
+    """Check if a string is a valid GUID format (for Entra tenant IDs)."""
+    return bool(_GUID_PATTERN.match(tenant_id))
+
+
+def validate_site_url(url: str) -> bool:
+    """Check if a string looks like a valid SharePoint site URL."""
+    return bool(_SITE_URL_PATTERN.match(url)) and len(url) <= 2048
+
+
+def validate_email(email: str) -> bool:
+    """Basic email format validation."""
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email)) and len(email) <= 320
+
+
+def sanitize_text(text: str, max_length: int = 500) -> str:
+    """Strip and truncate user-provided text input."""
+    return text.strip()[:max_length]
