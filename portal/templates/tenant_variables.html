@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Tenant Variables — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Tenant Variables</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Tenant Variables{% endblock %}
+
+{% block content %}
+<p class="text-muted small">Custom key-value variables scoped to each tenant. Use these for storing tenant-specific configuration, reference IDs, or notes used across operations.</p>
+
+<div class="card mb-4">
+  <div class="card-header fw-semibold d-flex align-items-center">
+    <i class="bi bi-braces me-2"></i>Add Variable
+  </div>
+  <div class="card-body">
+    <form id="add-var-form" class="d-flex gap-2 align-items-end flex-wrap">
+      <div>
+        <label class="form-label small mb-0">Tenant</label>
+        <select class="form-select form-select-sm" name="tenant_id" required style="min-width:200px">
+          {% for t in tenants %}
+          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label small mb-0">Key</label>
+        <input type="text" class="form-control form-control-sm" name="var_key" required placeholder="e.g. psa_ticket_id">
+      </div>
+      <div>
+        <label class="form-label small mb-0">Value</label>
+        <input type="text" class="form-control form-control-sm" name="var_value" placeholder="e.g. 12345" style="min-width:200px">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Add</button>
+    </form>
+    <div class="mt-2 d-none" id="add-result"></div>
+  </div>
+</div>
+
+{% for t in tenants %}
+  {% if all_vars.get(t.id) %}
+  <div class="card mb-3">
+    <div class="card-header fw-semibold d-flex align-items-center">
+      <i class="bi bi-building me-2"></i>{{ t.name }}
+      <span class="badge bg-primary ms-2">{{ all_vars[t.id]|length }}</span>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>Key</th><th>Value</th><th style="width:80px">Actions</th></tr></thead>
+        <tbody>
+          {% for v in all_vars[t.id] %}
+          <tr>
+            <td class="font-monospace small">{{ v.var_key }}</td>
+            <td class="small">{{ v.var_value }}</td>
+            <td>
+              <button class="btn btn-outline-danger btn-sm py-0 px-1"
+                      onclick="deleteVar('{{ t.id }}', '{{ v.var_key }}')" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+
+{% if not all_vars or all_vars|length == 0 %}
+<div class="empty-state">
+  <i class="bi bi-braces"></i>
+  <p>No tenant variables configured yet. Use the form above to add your first variable.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('add-var-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);
+  const tid = fd.get('tenant_id');
+  const r = await fetch(`/tenants/${tid}/variables/set`, { method: 'POST', body: fd });
+  const d = await r.json();
+  const el = document.getElementById('add-result');
+  el.classList.remove('d-none');
+  el.innerHTML = d.ok
+    ? `<div class="alert alert-success small py-1 mb-0">${d.message}</div>`
+    : `<div class="alert alert-danger small py-1 mb-0">${d.error}</div>`;
+  if (d.ok) setTimeout(() => location.reload(), 1000);
+});
+
+async function deleteVar(tid, key) {
+  if (!confirm(`Delete variable "${key}"?`)) return;
+  const fd = new FormData(); fd.append('csrf_token', window.CSRF_TOKEN); fd.append('var_key', key);
+  const r = await fetch(`/tenants/${tid}/variables/delete`, { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.ok) { showToast(d.message, 'success'); setTimeout(() => location.reload(), 500); }
+  else { showToast(d.error, 'danger'); }
+}
+</script>
+{% endblock %}

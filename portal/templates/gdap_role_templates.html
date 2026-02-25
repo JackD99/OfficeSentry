@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}GDAP Role Templates — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('gdap.gdap_relationships_page') }}">GDAP Management</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Role Templates</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}GDAP Role Templates{% endblock %}
+
+{% block content %}
+<div class="d-flex mb-3">
+  <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#addTemplateModal">
+    <i class="bi bi-plus-lg me-1"></i>New Template
+  </button>
+</div>
+
+{% for t in templates %}
+<div class="card mb-3">
+  <div class="card-header fw-semibold d-flex align-items-center">
+    <i class="bi bi-collection me-2"></i>{{ t.name }}
+    <span class="badge bg-primary ms-2">{{ t.roles|length }} role(s)</span>
+    <button class="btn btn-outline-danger btn-sm ms-auto py-0 px-1"
+            onclick="deleteTemplate('{{ t.id }}', '{{ t.name }}')" title="Delete"><i class="bi bi-trash"></i></button>
+  </div>
+  <div class="card-body">
+    {% if t.description %}<p class="small text-muted mb-2">{{ t.description }}</p>{% endif %}
+    <div class="d-flex flex-wrap gap-1">
+      {% for role in t.roles %}
+      <span class="badge bg-secondary">{{ role.roleName }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="empty-state"><i class="bi bi-collection"></i><p>No GDAP role templates yet.</p></div>
+{% endfor %}
+
+<!-- Add Template Modal -->
+<div class="modal fade" id="addTemplateModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="add-form">
+        <div class="modal-header"><h6 class="modal-title fw-semibold">New GDAP Role Template</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Template Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="name" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" name="description" rows="2"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Select Roles <span class="text-danger">*</span></label>
+            <div class="row g-2" style="max-height:300px;overflow-y:auto">
+              {% for role in directory_roles %}
+              <div class="col-md-6">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="role_ids" value="{{ role.id }}" id="role-{{ role.id[:8] }}">
+                  <label class="form-check-label small" for="role-{{ role.id[:8] }}">{{ role.name }}</label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('add-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);
+  const r = await fetch('{{ url_for("gdap.gdap_role_template_create") }}', { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.ok) { showToast(d.message, 'success'); setTimeout(() => location.reload(), 1000); }
+  else { showToast(d.error, 'danger'); }
+});
+
+async function deleteTemplate(id, name) {
+  if (!confirm(`Delete template "${name}"?`)) return;
+  const fd = new FormData(); fd.append('csrf_token', window.CSRF_TOKEN);
+  const r = await fetch(`/gdap/role-templates/${id}/delete`, { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.ok) { showToast(d.message, 'success'); setTimeout(() => location.reload(), 500); }
+  else { showToast(d.error, 'danger'); }
+}
+</script>
+{% endblock %}

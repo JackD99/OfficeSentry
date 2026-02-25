@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Directory Audit Logs — {{ tenant.name }} — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('tenants.tenants_list') }}">Tenants</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('tenants.tenant_detail', tenant_id=tenant.id) }}">{{ tenant.name }}</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Directory Audit Logs</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Directory Audit Logs — {{ tenant.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
+  <form id="fetch-form" class="d-flex gap-2 align-items-end flex-wrap">
+    <div>
+      <label class="form-label small mb-0">Start Date</label>
+      <input type="datetime-local" class="form-control form-control-sm" name="start_date">
+    </div>
+    <div>
+      <label class="form-label small mb-0">End Date</label>
+      <input type="datetime-local" class="form-control form-control-sm" name="end_date">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm" id="fetch-btn">
+      <span class="spinner-border spinner-border-sm d-none me-1" id="fetch-spinner"></span>
+      <i class="bi bi-arrow-clockwise me-1"></i>Fetch Audit Logs
+    </button>
+  </form>
+  {% if cached %}<span class="text-muted small ms-2">Last fetched: {{ cached.fetched_at[:16] }}</span>{% endif %}
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>Date/Time</th><th>Activity</th><th>Category</th><th>Result</th><th>Actor</th><th>Target</th></tr></thead>
+        <tbody>
+          {% if cached and cached.data and cached.data.logs %}
+            {% for l in cached.data.logs %}
+            <tr>
+              <td class="small text-nowrap">{{ l.dateTime[:19] if l.dateTime else '' }}</td>
+              <td class="fw-semibold small">{{ l.activity }}</td>
+              <td class="small">{{ l.category }}</td>
+              <td>
+                {% if l.result == 'success' %}<span class="badge bg-success">{{ l.result }}</span>
+                {% elif l.result == 'failure' %}<span class="badge bg-danger">{{ l.result }}</span>
+                {% else %}<span class="badge bg-secondary">{{ l.result }}</span>{% endif %}
+              </td>
+              <td class="small">{{ l.actorUPN or l.actorApp or '' }}</td>
+              <td class="small">{{ l.targetName }}</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+          <tr><td colspan="6" class="text-muted text-center py-3">No audit log data yet. Click "Fetch Audit Logs" to load.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="mt-3 d-none" id="fetch-log-wrap">
+  <pre class="bg-dark text-light p-2 rounded small" id="fetch-log" style="max-height:200px;overflow-y:auto"></pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TENANT_ID = "{{ tenant.id }}";
+document.getElementById('fetch-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('fetch-btn'); const spinner = document.getElementById('fetch-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);
+  const r = await fetch(`/tenants/${TENANT_ID}/directory-audits/fetch`, { method: 'POST', body: fd });
+  const d = await r.json();
+  if (!d.ok) { showToast(d.error, 'danger'); spinner.classList.add('d-none'); btn.disabled = false; return; }
+  document.getElementById('fetch-log-wrap').classList.remove('d-none');
+  const logEl = document.getElementById('fetch-log');
+  const interval = setInterval(async () => {
+    const jr = await fetch(`/jobs/${d.job_id}/status`); const jd = await jr.json();
+    logEl.textContent = jd.output.join('\n'); logEl.scrollTop = logEl.scrollHeight;
+    if (jd.status !== 'running') {
+      clearInterval(interval); spinner.classList.add('d-none'); btn.disabled = false;
+      if (jd.status === 'done') {
+        for (let i = (jd.output||[]).length - 1; i >= 0; i--) {
+          if (jd.output[i].trim().startsWith('{')) {
+            try { const res = JSON.parse(jd.output[i].trim()); if (res.ok) { const cfd = new FormData(); cfd.append('csrf_token', window.CSRF_TOKEN); cfd.append('data_type', 'directory_audits'); cfd.append('data', JSON.stringify(res)); await fetch(`/tenants/${TENANT_ID}/cache-import`, { method: 'POST', body: cfd }); } } catch(e) {} break;
+          }
+        }
+        showToast('Audit logs fetched. Reloading...', 'success'); setTimeout(() => location.reload(), 1500);
+      } else { showToast('Fetch failed.', 'danger'); }
+    }
+  }, 2000);
+});
+</script>
+{% endblock %}

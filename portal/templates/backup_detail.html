@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Backup Detail — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('tools.backup_page') }}">Configuration Backup</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Backup {{ backup.id }}</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Backup Detail{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-info-circle me-2"></i>Metadata</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tr><td class="text-muted">Backup ID</td><td class="font-monospace small">{{ backup.id }}</td></tr>
+          <tr><td class="text-muted">Tenant</td><td>{{ tenant.name if tenant else 'Unknown' }}</td></tr>
+          <tr><td class="text-muted">Type</td><td>{{ backup.backup_type }}</td></tr>
+          <tr><td class="text-muted">Status</td><td>
+            {% if backup.status == 'done' %}<span class="badge bg-success">Done</span>
+            {% elif backup.status == 'running' %}<span class="badge bg-primary">Running</span>
+            {% elif backup.status == 'failed' %}<span class="badge bg-danger">Failed</span>
+            {% else %}<span class="badge bg-secondary">{{ backup.status }}</span>{% endif %}
+          </td></tr>
+          <tr><td class="text-muted">Started</td><td class="small">{{ backup.started_at }}</td></tr>
+          <tr><td class="text-muted">Completed</td><td class="small">{{ backup.completed_at or 'N/A' }}</td></tr>
+          <tr><td class="text-muted">Created By</td><td>{{ backup.created_by }}</td></tr>
+          <tr><td class="text-muted">Components</td><td>
+            {% for c in backup.components %}<span class="badge bg-secondary me-1">{{ c }}</span>{% endfor %}
+          </td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header fw-semibold d-flex align-items-center">
+        <i class="bi bi-code-square me-2"></i>Backup Data
+        <button class="btn btn-outline-secondary btn-sm ms-auto py-0 px-2"
+                onclick="navigator.clipboard.writeText(document.getElementById('backup-data').textContent);showToast('Copied!','success')">
+          <i class="bi bi-clipboard me-1"></i>Copy
+        </button>
+      </div>
+      <div class="card-body p-0">
+        <pre class="p-3 mb-0 small" id="backup-data" style="max-height:600px;overflow-y:auto;white-space:pre-wrap">{{ backup.data | tojson(indent=2) }}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Domains — {{ tenant.name }} — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('tenants.tenants_list') }}">Tenants</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('tenants.tenant_detail', tenant_id=tenant.id) }}">{{ tenant.name }}</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Domains</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Domains — {{ tenant.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3 gap-2">
+  <button class="btn btn-primary btn-sm" onclick="fetchDomains()" id="fetch-btn">
+    <span class="spinner-border spinner-border-sm d-none me-1" id="fetch-spinner"></span>
+    <i class="bi bi-arrow-clockwise me-1"></i>Fetch Domains
+  </button>
+  {% if cached %}
+  <span class="text-muted small">Last fetched: {{ cached.fetched_at[:16] }}</span>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0" id="domains-table">
+        <thead>
+          <tr>
+            <th>Domain</th>
+            <th>Auth Type</th>
+            <th>Verified</th>
+            <th>Default</th>
+            <th>Initial</th>
+            <th>Capabilities</th>
+          </tr>
+        </thead>
+        <tbody id="domains-body">
+          {% if cached and cached.data and cached.data.domains %}
+            {% for d in cached.data.domains %}
+            <tr>
+              <td class="fw-semibold">{{ d.name }}</td>
+              <td>{{ d.authenticationType }}</td>
+              <td>{% if d.isVerified %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+              <td>{% if d.isDefault %}<i class="bi bi-star-fill text-warning"></i>{% endif %}</td>
+              <td>{% if d.isInitial %}<i class="bi bi-flag-fill text-info"></i>{% endif %}</td>
+              <td class="small">{{ d.capabilities }}</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+          <tr><td colspan="6" class="text-muted text-center py-3">No domain data yet. Click "Fetch Domains" to load.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="mt-3 d-none" id="fetch-log-wrap">
+  <pre class="bg-dark text-light p-2 rounded small" id="fetch-log" style="max-height:200px;overflow-y:auto"></pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TENANT_ID = "{{ tenant.id }}";
+
+async function fetchDomains() {
+  const btn = document.getElementById('fetch-btn');
+  const spinner = document.getElementById('fetch-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+
+  const fd = new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+
+  const r = await fetch(`/tenants/${TENANT_ID}/domains/fetch`, { method: 'POST', body: fd });
+  const d = await r.json();
+
+  if (!d.ok) {
+    showToast(d.error, 'danger');
+    spinner.classList.add('d-none'); btn.disabled = false;
+    return;
+  }
+
+  document.getElementById('fetch-log-wrap').classList.remove('d-none');
+  const logEl = document.getElementById('fetch-log');
+
+  const interval = setInterval(async () => {
+    const jr = await fetch(`/jobs/${d.job_id}/status`);
+    const jd = await jr.json();
+    logEl.textContent = jd.output.join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+    if (jd.status !== 'running') {
+      clearInterval(interval);
+      spinner.classList.add('d-none'); btn.disabled = false;
+      if (jd.status === 'done') {
+        showToast('Domains fetched. Reloading...', 'success');
+        // Parse job output for JSON result and cache it
+        const output = jd.output || [];
+        for (let i = output.length - 1; i >= 0; i--) {
+          const line = output[i].trim();
+          if (line.startsWith('{')) {
+            try {
+              const result = JSON.parse(line);
+              if (result.ok) {
+                const cfd = new FormData();
+                cfd.append('csrf_token', window.CSRF_TOKEN);
+                cfd.append('data_type', 'domains');
+                cfd.append('data', JSON.stringify(result));
+                await fetch(`/tenants/${TENANT_ID}/cache-import`, { method: 'POST', body: cfd });
+              }
+            } catch(e) {}
+            break;
+          }
+        }
+        setTimeout(() => location.reload(), 1500);
+      } else {
+        showToast('Domain fetch failed. Check the log.', 'danger');
+      }
+    }
+  }, 2000);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}GeoIP Lookup — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">GeoIP Lookup</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}GeoIP Lookup{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card mb-4">
+      <div class="card-header fw-semibold"><i class="bi bi-geo-alt me-2"></i>IP Address Geolocation</div>
+      <div class="card-body">
+        <p class="text-muted small">Look up the geographic location, ISP, and organization for any IP address. Useful during breach investigations to identify suspicious sign-in locations.</p>
+        <form id="lookup-form" class="d-flex gap-2">
+          <input type="text" class="form-control" name="ip_address" placeholder="e.g. 8.8.8.8" required>
+          <button type="submit" class="btn btn-primary" id="lookup-btn">
+            <span class="spinner-border spinner-border-sm d-none me-1" id="lookup-spinner"></span>
+            Lookup
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="d-none" id="result-area">
+      <div class="card">
+        <div class="card-header fw-semibold"><i class="bi bi-geo me-2"></i>Result</div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr><td class="text-muted" style="width:180px">IP Address</td><td class="fw-semibold" id="res-ip"></td></tr>
+              <tr><td class="text-muted">Country</td><td id="res-country"></td></tr>
+              <tr><td class="text-muted">Region</td><td id="res-region"></td></tr>
+              <tr><td class="text-muted">City</td><td id="res-city"></td></tr>
+              <tr><td class="text-muted">ZIP Code</td><td id="res-zip"></td></tr>
+              <tr><td class="text-muted">Coordinates</td><td id="res-coords"></td></tr>
+              <tr><td class="text-muted">Timezone</td><td id="res-tz"></td></tr>
+              <tr><td class="text-muted">ISP</td><td id="res-isp"></td></tr>
+              <tr><td class="text-muted">Organization</td><td id="res-org"></td></tr>
+              <tr><td class="text-muted">AS Number</td><td id="res-as"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-none" id="error-area">
+      <div class="alert alert-danger small"><i class="bi bi-x-circle me-1"></i><span id="error-msg"></span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('lookup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('lookup-btn'); const spinner = document.getElementById('lookup-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  document.getElementById('result-area').classList.add('d-none');
+  document.getElementById('error-area').classList.add('d-none');
+
+  const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);
+  try {
+    const r = await fetch('{{ url_for("tools.geoip_lookup_query") }}', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      const res = d.result;
+      document.getElementById('res-ip').textContent = res.query;
+      document.getElementById('res-country').textContent = `${res.country} (${res.countryCode})`;
+      document.getElementById('res-region').textContent = res.regionName;
+      document.getElementById('res-city').textContent = res.city;
+      document.getElementById('res-zip').textContent = res.zip;
+      document.getElementById('res-coords').textContent = `${res.lat}, ${res.lon}`;
+      document.getElementById('res-tz').textContent = res.timezone;
+      document.getElementById('res-isp').textContent = res.isp;
+      document.getElementById('res-org').textContent = res.org;
+      document.getElementById('res-as').textContent = res.as;
+      document.getElementById('result-area').classList.remove('d-none');
+    } else {
+      document.getElementById('error-msg').textContent = d.error;
+      document.getElementById('error-area').classList.remove('d-none');
+    }
+  } catch (ex) {
+    document.getElementById('error-msg').textContent = 'Lookup failed: ' + ex.message;
+    document.getElementById('error-area').classList.remove('d-none');
+  }
+  spinner.classList.add('d-none'); btn.disabled = false;
+});
+</script>
+{% endblock %}

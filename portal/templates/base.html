@@ -143,6 +143,52 @@
       </li>
 
       <li class="nav-item mt-2">
+        <span class="sidebar-label">TENANT ADMIN</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'tenant_admin.tenant_lookup_page' %}active{% endif %}"
+           href="{{ url_for('tenant_admin.tenant_lookup_page') }}">
+          <i class="bi bi-search me-2"></i>Tenant Lookup
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'tenant_admin.tenant_variables_page' %}active{% endif %}"
+           href="{{ url_for('tenant_admin.tenant_variables_page') }}">
+          <i class="bi bi-sliders me-2"></i>Tenant Variables
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('conditional.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-ca" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('conditional.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-shield-lock me-2"></i>Conditional Access
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('conditional.') %}show{% endif %}" id="sidebar-ca">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('conditional.ca_policies_page') }}"><i class="bi bi-list-check me-2"></i>Policies</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('conditional.ca_templates_page') }}"><i class="bi bi-file-earmark-code me-2"></i>Templates</a></li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('gdap.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-gdap" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('gdap.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-people-fill me-2"></i>GDAP Management
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('gdap.') %}show{% endif %}" id="sidebar-gdap">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_relationships_page') }}"><i class="bi bi-diagram-2 me-2"></i>Relationships</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_role_templates_page') }}"><i class="bi bi-card-checklist me-2"></i>Role Templates</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_onboarding_page') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Onboarding</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_offboarding_page') }}"><i class="bi bi-box-arrow-left me-2"></i>Offboarding</a></li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="nav-item mt-2">
         <span class="sidebar-label">OPERATIONS</span>
       </li>
       <li class="nav-item">
@@ -161,6 +207,34 @@
             <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#sharepoint"><i class="bi bi-folder2-open me-2"></i>SharePoint</a></li>
           </ul>
         </div>
+      </li>
+
+      <li class="nav-item mt-2">
+        <span class="sidebar-label">TOOLS</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'tools.graph_explorer_page' %}active{% endif %}"
+           href="{{ url_for('tools.graph_explorer_page') }}">
+          <i class="bi bi-terminal me-2"></i>Graph Explorer
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'tools.domain_health_page' %}active{% endif %}"
+           href="{{ url_for('tools.domain_health_page') }}">
+          <i class="bi bi-globe me-2"></i>Domain Health
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'tools.geoip_lookup_page' %}active{% endif %}"
+           href="{{ url_for('tools.geoip_lookup_page') }}">
+          <i class="bi bi-geo-alt me-2"></i>GeoIP Lookup
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint in ('tools.backup_page', 'tools.backup_detail') %}active{% endif %}"
+           href="{{ url_for('tools.backup_page') }}">
+          <i class="bi bi-cloud-download me-2"></i>Config Backup
+        </a>
       </li>
 
       <li class="nav-item mt-2">
