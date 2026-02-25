@@ -427,3 +427,205 @@ class TestReportDeletion:
             if test_dir.exists():
                 import shutil
                 shutil.rmtree(test_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Health check endpoint
+# ---------------------------------------------------------------------------
+
+class TestHealthCheck:
+    """Tests for the /health endpoint."""
+
+    def test_health_check_returns_200(self, client):
+        """Health check should return 200 when DB is accessible."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "healthy"
+        assert data["database"] == "ok"
+
+    def test_health_check_no_auth_required(self, client):
+        """Health check should not require authentication."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Error handlers
+# ---------------------------------------------------------------------------
+
+class TestErrorHandlers:
+    """Tests for custom error handlers."""
+
+    def test_404_returns_html(self, authed_client):
+        """Non-existent page returns styled 404 page."""
+        resp = authed_client.get("/nonexistent-page")
+        assert resp.status_code == 404
+        assert b"Page not found" in resp.data
+
+    def test_404_api_returns_json(self, authed_client):
+        """API 404 returns JSON."""
+        resp = authed_client.get("/api/nonexistent",
+                                 headers={"Accept": "application/json"})
+        assert resp.status_code == 404
+
+    def test_403_on_non_admin(self, client, admin_user):
+        """Non-admin accessing admin route gets 403."""
+        db.create_user("operator", "password123", display_name="Op", is_admin=0)
+        client.post("/login", data={
+            "username": "operator",
+            "password": "password123",
+        })
+        resp = client.get("/users")
+        assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Security headers
+# ---------------------------------------------------------------------------
+
+class TestNewSecurityHeaders:
+    """Tests for additional security headers."""
+
+    def test_referrer_policy_header(self, authed_client):
+        """Referrer-Policy header should be present."""
+        resp = authed_client.get("/")
+        assert resp.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+    def test_permissions_policy_header(self, authed_client):
+        """Permissions-Policy header should be present."""
+        resp = authed_client.get("/")
+        assert "camera=()" in resp.headers.get("Permissions-Policy", "")
+
+    def test_request_id_header(self, authed_client):
+        """X-Request-ID header should be present."""
+        resp = authed_client.get("/")
+        assert resp.headers.get("X-Request-ID") is not None
+
+
+# ---------------------------------------------------------------------------
+# Input validation helpers
+# ---------------------------------------------------------------------------
+
+class TestInputValidation:
+    """Tests for input validation helper functions."""
+
+    def test_validate_domain_valid(self):
+        from helpers import validate_domain
+        assert validate_domain("contoso.onmicrosoft.com") is True
+        assert validate_domain("example.com") is True
+        assert validate_domain("sub.domain.co.uk") is True
+
+    def test_validate_domain_invalid(self):
+        from helpers import validate_domain
+        assert validate_domain("") is False
+        assert validate_domain("not a domain") is False
+        assert validate_domain("-invalid.com") is False
+        assert validate_domain("a" * 254) is False
+
+    def test_validate_tenant_guid_valid(self):
+        from helpers import validate_tenant_guid
+        assert validate_tenant_guid("12345678-1234-1234-1234-123456789abc") is True
+
+    def test_validate_tenant_guid_invalid(self):
+        from helpers import validate_tenant_guid
+        assert validate_tenant_guid("not-a-guid") is False
+        assert validate_tenant_guid("") is False
+
+    def test_validate_site_url_valid(self):
+        from helpers import validate_site_url
+        assert validate_site_url("https://contoso.sharepoint.com/sites/test") is True
+        assert validate_site_url("https://contoso.sharepoint.com") is True
+
+    def test_validate_site_url_invalid(self):
+        from helpers import validate_site_url
+        assert validate_site_url("http://contoso.sharepoint.com") is False
+        assert validate_site_url("https://evil.com") is False
+        assert validate_site_url("") is False
+
+    def test_validate_email_valid(self):
+        from helpers import validate_email
+        assert validate_email("user@example.com") is True
+        assert validate_email("admin@contoso.onmicrosoft.com") is True
+
+    def test_validate_email_invalid(self):
+        from helpers import validate_email
+        assert validate_email("notanemail") is False
+        assert validate_email("") is False
+
+    def test_sanitize_text(self):
+        from helpers import sanitize_text
+        assert sanitize_text("  hello  ") == "hello"
+        assert sanitize_text("a" * 600, max_length=500) == "a" * 500
+
+
+# ---------------------------------------------------------------------------
+# Database maintenance
+# ---------------------------------------------------------------------------
+
+class TestDatabaseMaintenance:
+    """Tests for database backup and integrity check functions."""
+
+    def test_check_integrity(self):
+        """Integrity check should return OK for a valid database."""
+        result = db.check_integrity()
+        assert result["integrity"] == "ok"
+        assert result["schema_version"] >= 1
+
+    def test_purge_old_jobs(self):
+        """purge_old_jobs should delete old completed jobs."""
+        # Create a job and manually backdate it
+        jid = db.create_job("test", "test", operator="admin")
+        db.finish_job(jid, "done")
+        # Backdate the job to 100 days ago
+        with db.get_db() as conn:
+            conn.execute(
+                "UPDATE jobs SET started_at = datetime('now', '-100 days') WHERE id = ?",
+                (jid,)
+            )
+        # Purge jobs older than 90 days
+        deleted = db.purge_old_jobs(days=90)
+        assert deleted >= 1
+
+    def test_backup_db(self):
+        """backup_db should create a backup file."""
+        result = db.backup_db()
+        assert result is not None
+        assert Path(result).exists()
+        # Clean up
+        Path(result).unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Tenant creation validation
+# ---------------------------------------------------------------------------
+
+class TestTenantValidation:
+    """Tests for tenant creation input validation."""
+
+    def test_create_tenant_invalid_domain(self, authed_client):
+        """Creating a tenant with invalid domain should fail."""
+        resp = authed_client.post("/tenants/new", data={
+            "name": "Test Tenant",
+            "domain": "not a valid domain!!",
+        }, follow_redirects=True)
+        assert b"Invalid domain format" in resp.data
+
+    def test_create_tenant_invalid_guid(self, authed_client):
+        """Creating a tenant with invalid tenant ID should fail."""
+        resp = authed_client.post("/tenants/new", data={
+            "name": "Test Tenant",
+            "domain": "contoso.onmicrosoft.com",
+            "tenant_id": "not-a-guid",
+        }, follow_redirects=True)
+        assert b"Tenant ID must be a valid GUID" in resp.data
+
+    def test_create_tenant_valid(self, authed_client):
+        """Creating a tenant with valid inputs should succeed."""
+        resp = authed_client.post("/tenants/new", data={
+            "name": "Test Tenant",
+            "domain": "contoso.onmicrosoft.com",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        # Should redirect to tenant detail
+        assert b"Test Tenant" in resp.data

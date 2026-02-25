@@ -41,8 +41,16 @@ config/portal.json
 *.tmp
 
 # -------------------------------------------------------
+# Environment files (may contain secrets)
+# -------------------------------------------------------
+.env
+.env.local
+.env.production
+
+# -------------------------------------------------------
 # Windows / editor noise
 # -------------------------------------------------------
 Thumbs.db
 desktop.ini
 .vscode/
+.idea/

@@ -20,6 +20,7 @@ from helpers import (
     tenant_dir, tenant_pfx_path, tenant_cer_path, tenant_certs_dir,
     tenant_output_dir,
     build_ps_env, run_ps_sync, start_job, get_tenant_pfx_password,
+    validate_domain, validate_tenant_guid, sanitize_text,
     SCRIPTS_DIR, MODULES_DIR, PWSH,
 )
 
@@ -38,13 +39,21 @@ def tenants_list():
 @bp.route("/tenants/new", methods=["POST"])
 @login_required
 def tenant_create():
-    name   = request.form.get("name", "").strip()
-    domain = request.form.get("domain", "").strip()
+    name   = sanitize_text(request.form.get("name", ""), max_length=200)
+    domain = request.form.get("domain", "").strip().lower()
     tid    = request.form.get("tenant_id", "").strip()
-    notes  = request.form.get("notes", "").strip()
+    notes  = sanitize_text(request.form.get("notes", ""), max_length=1000)
 
     if not name or not domain:
         flash("Name and domain are required.", "danger")
+        return redirect(url_for("tenants.tenants_list"))
+
+    if not validate_domain(domain):
+        flash("Invalid domain format. Example: contoso.onmicrosoft.com", "danger")
+        return redirect(url_for("tenants.tenants_list"))
+
+    if tid and not validate_tenant_guid(tid):
+        flash("Tenant ID must be a valid GUID (e.g., xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).", "danger")
         return redirect(url_for("tenants.tenants_list"))
 
     new_id = create_tenant(name, domain, tenant_id=tid, notes=notes)
