@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}Report Schedules — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('reports.reports') }}">Reports</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Schedules</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Report Schedules{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4 gap-3">
+  <div>
+    <p class="text-muted small mb-0">Automate recurring audits. Schedules run at the configured time and generate reports automatically.</p>
+  </div>
+  <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#createScheduleModal">
+    <i class="bi bi-plus-lg me-1"></i>New Schedule
+  </button>
+</div>
+
+{% if schedules %}
+<div class="row g-3">
+  {% for s in schedules %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100 card-hover">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-{% if s.enabled %}clock-fill text-accent-green{% else %}pause-circle text-muted{% endif %}"></i>
+        <span class="fw-semibold">{{ s.name }}</span>
+        <span class="badge bg-{% if s.enabled %}success{% else %}secondary{% endif %} ms-auto">
+          {{ 'Active' if s.enabled else 'Paused' }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="d-flex flex-column gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-building text-muted"></i>
+            <span class="small">{{ tenants_map.get(s.tenant_id, 'Unknown') }}</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-shield-check text-muted"></i>
+            <span class="small">{{ s.audit_type }}</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-calendar-event text-muted"></i>
+            <span class="small">{{ s.frequency|capitalize }}
+              {% if s.frequency == 'weekly' %} · {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][s.day_of_week] }}{% endif %}
+              at {{ '%02d:00'|format(s.hour) }}
+            </span>
+          </div>
+          {% if s.last_run %}
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-clock-history text-muted"></i>
+            <span class="small text-muted">Last: {{ s.last_run[:16] }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2 border-secondary" style="background:var(--card-header-bg)">
+        <button class="btn btn-sm btn-outline-{{ 'warning' if s.enabled else 'success' }} flex-fill"
+                onclick="toggleSchedule('{{ s.id }}', this)">
+          <i class="bi bi-{% if s.enabled %}pause{% else %}play{% endif %}-circle me-1"></i>
+          {{ 'Pause' if s.enabled else 'Enable' }}
+        </button>
+        <button class="btn btn-sm btn-outline-danger"
+                onclick="deleteSchedule('{{ s.id }}', '{{ s.name|e }}', this)">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="bi bi-calendar-check"></i>
+  <p>No schedules configured yet.</p>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createScheduleModal">
+    <i class="bi bi-plus-lg me-1"></i>Create Your First Schedule
+  </button>
+</div>
+{% endif %}
+
+<!-- Create Schedule Modal -->
+<div class="modal fade" id="createScheduleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" style="background:var(--card-bg);border-color:var(--border-color)">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title"><i class="bi bi-calendar-plus me-2"></i>New Report Schedule</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small">Schedule Name</label>
+            <input type="text" class="form-control form-control-sm" id="sched-name"
+                   placeholder="e.g. Weekly Security Scan">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Tenant</label>
+            <select class="form-select form-select-sm" id="sched-tenant">
+              {% for t in tenants %}
+              {% if t.client_id %}
+              <option value="{{ t.id }}">{{ t.name }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Audit Type</label>
+            <select class="form-select form-select-sm" id="sched-audit-type" onchange="updateSchedParams()">
+              <optgroup label="Security">
+                <option value="security">Security Scan</option>
+              </optgroup>
+              <optgroup label="SharePoint">
+                <option value="spo_groups">Groups Audit</option>
+                <option value="spo_permissions">Site Permissions</option>
+                <option value="spo_external">External Sharing</option>
+              </optgroup>
+              <optgroup label="Breach Investigation">
+                <option value="breach_ual">Unified Audit Log</option>
+                <option value="breach_inbox">Inbox Rules</option>
+                <option value="breach_signin">Sign-In Logs</option>
+                <option value="breach_oauth">OAuth Consent</option>
+                <option value="breach_msgtrace">Message Trace</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Frequency</label>
+            <select class="form-select form-select-sm" id="sched-frequency" onchange="updateFreqFields()">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="biweekly">Bi-weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="col-md-6" id="sched-day-wrap">
+            <label class="form-label small">Day of Week</label>
+            <select class="form-select form-select-sm" id="sched-day">
+              <option value="0">Monday</option>
+              <option value="1" selected>Tuesday</option>
+              <option value="2">Wednesday</option>
+              <option value="3">Thursday</option>
+              <option value="4">Friday</option>
+              <option value="5">Saturday</option>
+              <option value="6">Sunday</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Time (Hour, UTC)</label>
+            <select class="form-select form-select-sm" id="sched-hour">
+              {% for h in range(24) %}
+              <option value="{{ h }}" {{ 'selected' if h == 9 }}>{{ '%02d:00'|format(h) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <!-- Audit-specific params -->
+          <div class="col-12" id="sched-params" style="display:none">
+            <div class="card bg-dark border-secondary">
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-6" id="sched-site-url-wrap" style="display:none">
+                    <label class="form-label small">Site URL</label>
+                    <input type="url" class="form-control form-control-sm" id="sched-site-url"
+                           placeholder="https://contoso.sharepoint.com/sites/...">
+                  </div>
+                  <div class="col-md-6" id="sched-report-format-wrap" style="display:none">
+                    <label class="form-label small">Report Format</label>
+                    <select class="form-select form-select-sm" id="sched-report-format">
+                      <option value="HTML">HTML</option>
+                      <option value="CSV">CSV</option>
+                      <option value="JSON">JSON</option>
+                      <option value="All">All Formats</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6" id="sched-date-range-wrap" style="display:none">
+                    <label class="form-label small">Lookback Days</label>
+                    <input type="number" class="form-control form-control-sm" id="sched-date-range"
+                           value="30" min="1" max="365">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="createSchedule()">
+          <i class="bi bi-calendar-check me-1"></i>Create Schedule
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateFreqFields() {
+  const freq = document.getElementById('sched-frequency').value;
+  document.getElementById('sched-day-wrap').style.display = (freq === 'daily') ? 'none' : '';
+}
+
+function updateSchedParams() {
+  const type = document.getElementById('sched-audit-type').value;
+  const params = document.getElementById('sched-params');
+  const siteUrl = document.getElementById('sched-site-url-wrap');
+  const reportFmt = document.getElementById('sched-report-format-wrap');
+  const dateRange = document.getElementById('sched-date-range-wrap');
+
+  const isSpo = type.startsWith('spo_');
+  const isBreach = type.startsWith('breach_');
+  const isSecurity = type === 'security';
+
+  siteUrl.style.display = isSpo ? '' : 'none';
+  reportFmt.style.display = isSecurity ? '' : 'none';
+  dateRange.style.display = isBreach ? '' : 'none';
+  params.style.display = (isSpo || isSecurity || isBreach) ? '' : 'none';
+}
+
+async function createSchedule() {
+  const fd = new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  fd.append('name', document.getElementById('sched-name').value);
+  fd.append('tenant_id', document.getElementById('sched-tenant').value);
+  fd.append('audit_type', document.getElementById('sched-audit-type').value);
+  fd.append('frequency', document.getElementById('sched-frequency').value);
+  fd.append('day_of_week', document.getElementById('sched-day').value);
+  fd.append('hour', document.getElementById('sched-hour').value);
+
+  const type = document.getElementById('sched-audit-type').value;
+  if (type.startsWith('spo_')) {
+    fd.append('site_url', document.getElementById('sched-site-url').value);
+  }
+  if (type === 'security') {
+    fd.append('report_format', document.getElementById('sched-report-format').value);
+  }
+  if (type.startsWith('breach_')) {
+    fd.append('date_range_days', document.getElementById('sched-date-range').value);
+  }
+
+  try {
+    const r = await fetch('{{ url_for("reports.schedule_create") }}', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message, 'success');
+      setTimeout(() => location.reload(), 500);
+    } else {
+      showToast(d.error, 'danger');
+    }
+  } catch {
+    showToast('Failed to create schedule', 'danger');
+  }
+}
+
+async function toggleSchedule(id, btn) {
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  try {
+    const r = await fetch(`/reports/schedules/${id}/toggle`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message, 'success');
+      setTimeout(() => location.reload(), 500);
+    } else {
+      showToast(d.error, 'danger');
+      btn.disabled = false;
+    }
+  } catch {
+    showToast('Action failed', 'danger');
+    btn.disabled = false;
+  }
+}
+
+async function deleteSchedule(id, name, btn) {
+  if (!confirm(`Delete schedule "${name}"?`)) return;
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  try {
+    const r = await fetch(`/reports/schedules/${id}/delete`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(d.message, 'success');
+      btn.closest('.col-md-6').remove();
+    } else {
+      showToast(d.error, 'danger');
+      btn.disabled = false;
+    }
+  } catch {
+    showToast('Delete failed', 'danger');
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

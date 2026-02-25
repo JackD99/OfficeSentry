@@ -110,14 +110,77 @@ CREATE TABLE IF NOT EXISTS audit_log (
     action      TEXT NOT NULL,
     details     TEXT DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS saved_views (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    report_type TEXT NOT NULL DEFAULT '',
+    columns     TEXT DEFAULT '[]',
+    filters     TEXT DEFAULT '{}',
+    sort_col    TEXT DEFAULT '',
+    sort_dir    TEXT DEFAULT 'asc',
+    chart_type  TEXT DEFAULT '',
+    chart_col   TEXT DEFAULT '',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS report_schedules (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    tenant_id   TEXT,
+    audit_type  TEXT NOT NULL,
+    audit_params TEXT DEFAULT '{}',
+    frequency   TEXT NOT NULL DEFAULT 'weekly',
+    day_of_week INTEGER DEFAULT 1,
+    hour        INTEGER DEFAULT 9,
+    enabled     INTEGER DEFAULT 1,
+    last_run    TEXT,
+    next_run    TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
 """
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATIONS = {
-    # 1 -> 2: example (uncomment and add when needed)
-    # 2: "ALTER TABLE tenants ADD COLUMN new_column TEXT DEFAULT '';",
+    2: """
+CREATE TABLE IF NOT EXISTS saved_views (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    report_type TEXT NOT NULL DEFAULT '',
+    columns     TEXT DEFAULT '[]',
+    filters     TEXT DEFAULT '{}',
+    sort_col    TEXT DEFAULT '',
+    sort_dir    TEXT DEFAULT 'asc',
+    chart_type  TEXT DEFAULT '',
+    chart_col   TEXT DEFAULT '',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS report_schedules (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    tenant_id   TEXT,
+    audit_type  TEXT NOT NULL,
+    audit_params TEXT DEFAULT '{}',
+    frequency   TEXT NOT NULL DEFAULT 'weekly',
+    day_of_week INTEGER DEFAULT 1,
+    hour        INTEGER DEFAULT 9,
+    enabled     INTEGER DEFAULT 1,
+    last_run    TEXT,
+    next_run    TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+""",
 }
 
 
@@ -477,6 +540,202 @@ def check_integrity() -> dict:
             "tenants": tenant_ct,
             "jobs": job_ct,
         }
+
+
+# ---------------------------------------------------------------------------
+# Saved Views
+# ---------------------------------------------------------------------------
+
+def create_saved_view(name: str, report_type: str, columns: list, filters: dict,
+                      sort_col: str = "", sort_dir: str = "asc",
+                      chart_type: str = "", chart_col: str = "",
+                      created_by: str = "") -> str:
+    vid = str(uuid.uuid4())[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO saved_views (id, name, report_type, columns, filters, "
+            "sort_col, sort_dir, chart_type, chart_col, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (vid, name, report_type, json.dumps(columns), json.dumps(filters),
+             sort_col, sort_dir, chart_type, chart_col, created_by)
+        )
+    return vid
+
+
+def get_saved_view(view_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM saved_views WHERE id = ?", (view_id,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["columns"] = json.loads(d["columns"]) if d["columns"] else []
+        d["filters"] = json.loads(d["filters"]) if d["filters"] else {}
+        return d
+
+
+def list_saved_views(created_by: str = None) -> list[dict]:
+    with get_db() as conn:
+        if created_by:
+            rows = conn.execute(
+                "SELECT * FROM saved_views WHERE created_by = ? ORDER BY name",
+                (created_by,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM saved_views ORDER BY name").fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["columns"] = json.loads(d["columns"]) if d["columns"] else []
+            d["filters"] = json.loads(d["filters"]) if d["filters"] else {}
+            result.append(d)
+        return result
+
+
+def delete_saved_view(view_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM saved_views WHERE id = ?", (view_id,))
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Report Schedules
+# ---------------------------------------------------------------------------
+
+def create_schedule(name: str, tenant_id: str, audit_type: str,
+                    audit_params: dict, frequency: str = "weekly",
+                    day_of_week: int = 1, hour: int = 9,
+                    created_by: str = "") -> str:
+    sid = str(uuid.uuid4())[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO report_schedules (id, name, tenant_id, audit_type, "
+            "audit_params, frequency, day_of_week, hour, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (sid, name, tenant_id, audit_type, json.dumps(audit_params),
+             frequency, day_of_week, hour, created_by)
+        )
+    return sid
+
+
+def list_schedules(tenant_id: str = None) -> list[dict]:
+    with get_db() as conn:
+        if tenant_id:
+            rows = conn.execute(
+                "SELECT * FROM report_schedules WHERE tenant_id = ? ORDER BY name",
+                (tenant_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM report_schedules ORDER BY name"
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["audit_params"] = json.loads(d["audit_params"]) if d["audit_params"] else {}
+            result.append(d)
+        return result
+
+
+def get_schedule(schedule_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM report_schedules WHERE id = ?", (schedule_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["audit_params"] = json.loads(d["audit_params"]) if d["audit_params"] else {}
+        return d
+
+
+def update_schedule(schedule_id: str, **fields):
+    if not fields:
+        return
+    allowed = {"name", "audit_type", "audit_params", "frequency",
+               "day_of_week", "hour", "enabled", "last_run", "next_run"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if "audit_params" in fields and isinstance(fields["audit_params"], dict):
+        fields["audit_params"] = json.dumps(fields["audit_params"])
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [schedule_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE report_schedules SET {set_clause} WHERE id = ?", values
+        )
+
+
+def delete_schedule(schedule_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM report_schedules WHERE id = ?", (schedule_id,)
+        )
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Enhanced Dashboard Statistics
+# ---------------------------------------------------------------------------
+
+def get_job_trends(days: int = 30) -> list[dict]:
+    """Get daily job counts for the last N days."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT date(started_at) as day, "
+            "COUNT(*) as total, "
+            "SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as completed, "
+            "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed "
+            "FROM jobs WHERE started_at >= date('now', ?) "
+            "GROUP BY date(started_at) ORDER BY day",
+            (f"-{days} days",)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_job_type_distribution() -> list[dict]:
+    """Get job counts grouped by type."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT type, COUNT(*) as count FROM jobs GROUP BY type ORDER BY count DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_report_type_counts(tenant_dirs: list) -> dict:
+    """Count report files by type from filesystem paths (called from route)."""
+    counts = {}
+    for out_dir in tenant_dirs:
+        if not out_dir.exists():
+            continue
+        for f in out_dir.rglob("*"):
+            if not f.is_file():
+                continue
+            n = f.name.lower()
+            if "securityscan" in n or "365inspect" in n:
+                rt = "Security Scan"
+            elif "userperms" in n:
+                rt = "User Permissions"
+            elif "groups" in n:
+                rt = "Groups"
+            elif "siteperm" in n:
+                rt = "Site Permissions"
+            elif "external" in n:
+                rt = "External Sharing"
+            elif "ual" in n or "auditlog" in n:
+                rt = "Audit Log"
+            elif "inboxrule" in n:
+                rt = "Inbox Rules"
+            elif "signin" in n:
+                rt = "Sign-In Logs"
+            elif "oauth" in n:
+                rt = "OAuth Consent"
+            elif "msgtrace" in n or "messagetrace" in n:
+                rt = "Message Trace"
+            else:
+                rt = "Other"
+            counts[rt] = counts.get(rt, 0) + 1
+    return counts
 
 
 def purge_old_jobs(days: int = 90) -> int:

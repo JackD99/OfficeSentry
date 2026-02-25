@@ -829,3 +829,86 @@ a.row-link:hover { color: var(--accent-blue); }
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 0.35rem;
 }
+
+/* ================================================================
+   CHART CONTAINERS
+   ================================================================ */
+.chart-container {
+  width: 100%;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+}
+
+/* ================================================================
+   REPORT VIEWER
+   ================================================================ */
+#data-table thead th.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+#data-table thead th.sortable-header:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.col-filter {
+  background: var(--body-bg) !important;
+  border-color: #30363d !important;
+  color: var(--text-primary) !important;
+}
+
+.col-filter::placeholder {
+  color: var(--text-faint) !important;
+}
+
+#data-table td {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#data-table td:hover {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* ================================================================
+   SCHEDULE CARDS
+   ================================================================ */
+.card-footer {
+  padding: 0.5rem 0.75rem;
+}
+
+/* ================================================================
+   DROPDOWN MENUS (dark theme)
+   ================================================================ */
+.dropdown-menu {
+  background: var(--card-bg);
+  border-color: var(--border-color);
+}
+
+.dropdown-item {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.dropdown-item:hover {
+  background: var(--hover-bg);
+  color: #fff;
+}
+
+/* ================================================================
+   MODAL OVERRIDES (dark theme)
+   ================================================================ */
+.modal-content {
+  background: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
+}
+
+.modal-header, .modal-footer {
+  border-color: var(--border-color) !important;
+}
