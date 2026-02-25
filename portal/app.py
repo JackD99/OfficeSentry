@@ -105,12 +105,14 @@ def create_app() -> Flask:
     from routes.audits import bp as audits_bp
     from routes.jobs import bp as jobs_bp
     from routes.reports import bp as reports_bp
+    from routes.operations import bp as operations_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tenants_bp)
     app.register_blueprint(audits_bp)
     app.register_blueprint(jobs_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(operations_bp)
 
     # Apply rate limit to login and initial setup
     limiter.limit("10/minute")(

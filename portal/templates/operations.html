@@ -1,0 +1,571 @@
+{% extends "base.html" %}
+{% block title %}MSP Operations — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">MSP Operations</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}MSP Operations{% endblock %}
+
+{% block content %}
+{% if not tenants %}
+<div class="empty-state">
+  <i class="bi bi-tools"></i>
+  <p>No tenants are ready for operations. Set up at least one tenant with a certificate and Entra app first.</p>
+  <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary btn-sm">Go to Tenants</a>
+</div>
+{% else %}
+<div class="row g-4">
+  <!-- Left column: Operation form -->
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header fw-semibold d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-tools me-2 text-primary"></i>Run Operation</span>
+        <div class="d-flex gap-1">
+          <span class="badge bg-primary" title="1st Line — Service Desk">Tier 1</span>
+          <span class="badge bg-warning text-dark" title="2nd Line — Technical Support">Tier 2</span>
+          <span class="badge bg-danger" title="3rd Line — Engineering">Tier 3</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <form id="ops-form">
+          <input type="hidden" name="action" id="ops-action" value="">
+
+          <!-- Operation selection grouped by tier -->
+          <label class="form-label">Select Operation</label>
+          <div class="d-flex flex-column gap-2 mb-3" id="ops-cards">
+
+            <!-- Tier 1: 1st Line -->
+            <div class="small fw-semibold text-muted mb-0">
+              <span class="badge bg-primary me-1">T1</span>1st Line — Service Desk
+            </div>
+            {% for key, op in tier1.items() %}
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" onclick="selectOp(this)">
+              <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
+              <div>
+                <div class="card-title">{{ op.name }}</div>
+                <div class="card-desc">{{ op.desc }}</div>
+              </div>
+            </div>
+            {% endfor %}
+
+            <!-- Tier 2: 2nd Line -->
+            <div class="small fw-semibold text-muted mb-0 mt-2">
+              <span class="badge bg-warning text-dark me-1">T2</span>2nd Line — Technical Support
+            </div>
+            {% for key, op in tier2.items() %}
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" onclick="selectOp(this)">
+              <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
+              <div>
+                <div class="card-title">{{ op.name }}</div>
+                <div class="card-desc">{{ op.desc }}</div>
+              </div>
+            </div>
+            {% endfor %}
+
+            <!-- Tier 3: 3rd Line -->
+            <div class="small fw-semibold text-muted mb-0 mt-2">
+              <span class="badge bg-danger me-1">T3</span>3rd Line — Engineering
+            </div>
+            {% for key, op in tier3.items() %}
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" onclick="selectOp(this)">
+              <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
+              <div>
+                <div class="card-title">{{ op.name }}</div>
+                <div class="card-desc">{{ op.desc }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- Dynamic fields (shown/hidden based on selected operation) -->
+          <div id="ops-fields" class="d-none">
+
+            <!-- Target user -->
+            <div class="mb-3 d-none" id="field-target-user">
+              <label class="form-label">Target User</label>
+              <input type="email" class="form-control" name="target_user" id="input-target-user"
+                     placeholder="user@domain.com">
+              <div class="form-text">The user to perform this operation on.</div>
+            </div>
+
+            <!-- OOO message -->
+            <div class="mb-3 d-none" id="field-ooo-message">
+              <label class="form-label">Out-of-Office Message</label>
+              <textarea class="form-control" name="ooo_message" rows="3"
+                        placeholder="I am currently out of the office..."></textarea>
+              <div class="form-text">This message will be sent as both internal and external auto-reply.</div>
+            </div>
+
+            <!-- OOO dates -->
+            <div class="d-none" id="field-ooo-dates">
+              <div class="mb-3">
+                <label class="form-label">Schedule <span class="text-muted fw-normal">(optional)</span></label>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <input type="date" class="form-control form-control-sm" name="ooo_start_date"
+                           id="input-ooo-start">
+                    <div class="form-text">Start date</div>
+                  </div>
+                  <div class="col-6">
+                    <input type="date" class="form-control form-control-sm" name="ooo_end_date"
+                           id="input-ooo-end">
+                    <div class="form-text">End date</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Forward to -->
+            <div class="mb-3 d-none" id="field-forward-to">
+              <label class="form-label">Forward To</label>
+              <input type="email" class="form-control" name="forward_to"
+                     placeholder="recipient@domain.com">
+              <div class="form-text">Email address to forward mail to.</div>
+            </div>
+
+            <!-- Keep copy checkbox -->
+            <div class="mb-3 d-none" id="field-keep-copy">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="keep_copy" id="chk-keep-copy">
+                <label class="form-check-label" for="chk-keep-copy">
+                  Keep a copy in the original mailbox
+                </label>
+              </div>
+            </div>
+
+            <!-- Offboard options -->
+            <div class="d-none" id="field-offboard-opts">
+              <label class="form-label">Offboarding Options</label>
+              <div class="mb-3 p-2 border rounded">
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox" name="skip_convert" id="chk-skip-convert">
+                  <label class="form-check-label small" for="chk-skip-convert">
+                    Skip mailbox conversion to shared
+                  </label>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox" name="skip_licenses" id="chk-skip-licenses">
+                  <label class="form-check-label small" for="chk-skip-licenses">
+                    Skip license removal
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="skip_gal" id="chk-skip-gal">
+                  <label class="form-check-label small" for="chk-skip-gal">
+                    Skip hiding from Global Address List
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Confirmation for destructive actions -->
+            <div class="d-none mb-3" id="field-confirm">
+              <div class="alert alert-warning small py-2 mb-2">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                <strong>Confirm:</strong> <span id="confirm-text"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tenant / Bulk toggle -->
+          <div class="mb-3">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <label class="form-label mb-0">Mode</label>
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary active" id="mode-single" onclick="setMode('single')">Single Tenant</button>
+                <button type="button" class="btn btn-outline-secondary" id="mode-bulk" onclick="setMode('bulk')">Bulk (Multi-Tenant)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Single tenant selector -->
+          <div class="mb-3" id="single-tenant-wrap">
+            <label class="form-label">Tenant</label>
+            <select class="form-select" name="tenant_id" id="select-tenant">
+              <option value="">Select a tenant...</option>
+              {% for t in tenants %}
+              <option value="{{ t.id }}">{{ t.name }} ({{ t.domain }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Bulk tenant selector -->
+          <div class="mb-3 d-none" id="bulk-tenant-wrap">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0">Select Tenants</label>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+                Select All
+              </button>
+            </div>
+            <div style="max-height:180px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem;padding:.5rem">
+              {% for t in tenants %}
+              <div class="form-check py-1">
+                <input class="form-check-input tenant-check" type="checkbox" name="tenant_ids"
+                       id="bt-{{ t.id }}" value="{{ t.id }}">
+                <label class="form-check-label small" for="bt-{{ t.id }}">
+                  {{ t.name }} <span class="text-muted">({{ t.domain }})</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="form-text"><span id="selected-count">0</span> of {{ tenants|length }} tenants selected</div>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100" id="ops-btn" disabled>
+            <span class="spinner-border spinner-border-sm d-none me-2" id="ops-spinner"></span>
+            <i class="bi bi-play-fill me-1"></i>Run Operation
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: Progress -->
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-activity me-2 text-secondary"></i>Operation Progress
+      </div>
+      <div class="card-body" id="ops-progress">
+        <div class="text-muted small">Select an operation and tenant to see progress here.</div>
+      </div>
+    </div>
+
+    <!-- Quick reference card -->
+    <div class="card mt-3">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-info-circle me-2 text-info"></i>Required API Permissions
+      </div>
+      <div class="card-body small">
+        <table class="table table-sm table-borderless mb-0">
+          <tbody>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-primary">T1</span> Password / User Info</td>
+              <td class="text-muted">User.ReadWrite.All</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-primary">T1</span> License Report</td>
+              <td class="text-muted">User.Read.All, Directory.Read.All</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> Block / Revoke</td>
+              <td class="text-muted">User.ReadWrite.All</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> Mailbox Ops</td>
+              <td class="text-muted">Exchange.ManageAsApp</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-warning text-dark">T2</span> MFA Report</td>
+              <td class="text-muted">UserAuthenticationMethod.Read.All</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><span class="badge bg-danger">T3</span> Offboarding</td>
+              <td class="text-muted">All of the above + Directory.ReadWrite.All</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --- Operation metadata (from server) ---
+const OPS_META = {{ operations | tojson }};
+let currentMode = 'single';
+let currentAction = '';
+
+// Field mapping: which fields each operation needs
+const FIELD_MAP = {
+  target_user:   'field-target-user',
+  ooo_message:   'field-ooo-message',
+  ooo_dates:     'field-ooo-dates',
+  forward_to:    'field-forward-to',
+  keep_copy:     'field-keep-copy',
+  skip_convert:  'field-offboard-opts',
+  skip_licenses: 'field-offboard-opts',
+  skip_gal:      'field-offboard-opts',
+};
+
+// Destructive actions that need confirmation
+const CONFIRM_ACTIONS = {
+  block:            'This will immediately prevent the user from signing in.',
+  revoke_sessions:  'All active sessions will be invalidated immediately.',
+  reset_password:   'The current password will be replaced. User must change on next sign-in.',
+  convert_shared:   'The mailbox will be converted to shared. Ensure the license can be freed.',
+  offboard:         'This will block sign-in, revoke sessions, remove licenses, convert to shared mailbox, and hide from GAL.',
+  remove_forwarding:'All forwarding rules on this mailbox will be removed.',
+  hide_from_gal:    'The user will no longer appear in the Global Address List.',
+};
+
+// --- Select operation ---
+function selectOp(card) {
+  document.querySelectorAll('#ops-cards .audit-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+  currentAction = card.dataset.action;
+  document.getElementById('ops-action').value = currentAction;
+
+  const op = OPS_META[currentAction];
+  if (!op) return;
+
+  // Show the fields container
+  document.getElementById('ops-fields').classList.remove('d-none');
+
+  // Hide all optional fields first
+  Object.values(FIELD_MAP).forEach(id => {
+    document.getElementById(id)?.classList.add('d-none');
+  });
+  document.getElementById('field-confirm').classList.add('d-none');
+
+  // Show relevant fields
+  const shownIds = new Set();
+  for (const field of op.fields) {
+    const domId = FIELD_MAP[field];
+    if (domId && !shownIds.has(domId)) {
+      document.getElementById(domId)?.classList.remove('d-none');
+      shownIds.add(domId);
+    }
+  }
+
+  // Show confirmation for destructive actions
+  if (CONFIRM_ACTIONS[currentAction]) {
+    document.getElementById('field-confirm').classList.remove('d-none');
+    document.getElementById('confirm-text').textContent = CONFIRM_ACTIONS[currentAction];
+  }
+
+  // Enable submit button
+  document.getElementById('ops-btn').disabled = false;
+  document.getElementById('ops-btn').innerHTML =
+    '<span class="spinner-border spinner-border-sm d-none me-2" id="ops-spinner"></span>' +
+    '<i class="bi bi-play-fill me-1"></i>' + op.name;
+}
+
+// --- Mode toggle ---
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-single').classList.toggle('active', mode === 'single');
+  document.getElementById('mode-bulk').classList.toggle('active', mode === 'bulk');
+  document.getElementById('single-tenant-wrap').classList.toggle('d-none', mode === 'bulk');
+  document.getElementById('bulk-tenant-wrap').classList.toggle('d-none', mode === 'single');
+}
+
+// --- Tenant selection (bulk mode) ---
+document.querySelectorAll('.tenant-check').forEach(cb => {
+  cb.addEventListener('change', updateCount);
+});
+
+function updateCount() {
+  document.getElementById('selected-count').textContent =
+    document.querySelectorAll('.tenant-check:checked').length;
+}
+
+function toggleAllTenants() {
+  const checks = document.querySelectorAll('.tenant-check');
+  const allChecked = [...checks].every(c => c.checked);
+  checks.forEach(c => c.checked = !allChecked);
+  updateCount();
+}
+
+// --- Form submission ---
+document.getElementById('ops-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  if (!currentAction) {
+    showToast('Please select an operation first.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('ops-btn');
+  const spinner = document.getElementById('ops-spinner');
+  btn.disabled = true;
+  spinner?.classList.remove('d-none');
+
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+
+  const endpoint = currentMode === 'bulk'
+    ? '{{ url_for("operations.operations_bulk") }}'
+    : '{{ url_for("operations.operations_run") }}';
+
+  try {
+    const res = await fetch(endpoint, { method: 'POST', body: fd });
+    const data = await res.json();
+
+    spinner?.classList.add('d-none');
+    btn.disabled = false;
+
+    const progress = document.getElementById('ops-progress');
+
+    if (!data.ok) {
+      progress.innerHTML = `<div class="alert alert-danger small">${data.error}</div>`;
+      showToast(data.error, 'danger');
+      return;
+    }
+
+    showToast(data.message || 'Operation started.', 'success');
+
+    if (currentMode === 'bulk') {
+      renderBulkProgress(data.tenant_jobs || []);
+    } else {
+      renderSingleProgress(data.job_id);
+    }
+  } catch (err) {
+    spinner?.classList.add('d-none');
+    btn.disabled = false;
+    showToast('Network error: ' + err.message, 'danger');
+  }
+});
+
+// --- Single-tenant progress rendering ---
+function renderSingleProgress(jobId) {
+  const progress = document.getElementById('ops-progress');
+  progress.innerHTML = `
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <div class="spinner-border spinner-border-sm text-primary" id="single-spinner"></div>
+      <span class="fw-semibold">Running...</span>
+    </div>
+    <div class="border rounded p-2" style="max-height:300px;overflow-y:auto;font-family:monospace;font-size:.8rem" id="single-output">
+    </div>
+    <div class="mt-2">
+      <a href="/jobs/${jobId}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-activity me-1"></i>View Job</a>
+    </div>
+  `;
+  pollSingleJob(jobId);
+}
+
+function pollSingleJob(jobId) {
+  const interval = setInterval(async () => {
+    try {
+      const r = await fetch(`/jobs/${jobId}/status`);
+      const d = await r.json();
+      const out = document.getElementById('single-output');
+      if (out && d.output) {
+        out.innerHTML = d.output.map(l => {
+          if (l.includes('ERROR') || l.includes('[FAIL]')) return `<div class="text-danger">${escapeHtml(l)}</div>`;
+          if (l.includes('SUCCESS') || l.includes('[OK]')) return `<div class="text-success">${escapeHtml(l)}</div>`;
+          if (l.includes('WARN')) return `<div class="text-warning">${escapeHtml(l)}</div>`;
+          return `<div>${escapeHtml(l)}</div>`;
+        }).join('');
+        out.scrollTop = out.scrollHeight;
+      }
+      if (d.status !== 'running') {
+        clearInterval(interval);
+        const sp = document.getElementById('single-spinner');
+        if (sp) {
+          sp.outerHTML = d.status === 'done'
+            ? '<i class="bi bi-check-circle-fill text-success"></i>'
+            : '<i class="bi bi-x-circle-fill text-danger"></i>';
+        }
+        const label = d.status === 'done' ? 'Complete' : 'Failed';
+        const cls = d.status === 'done' ? 'text-success' : 'text-danger';
+        document.querySelector('#ops-progress .fw-semibold').className = `fw-semibold ${cls}`;
+        document.querySelector('#ops-progress .fw-semibold').textContent = label;
+        showToast(`Operation ${label.toLowerCase()}.`, d.status === 'done' ? 'success' : 'danger');
+      }
+    } catch { /* retry on next tick */ }
+  }, 2000);
+}
+
+// --- Bulk progress rendering (same pattern as batch.html) ---
+function renderBulkProgress(jobs) {
+  const progress = document.getElementById('ops-progress');
+  if (jobs.length === 0) {
+    progress.innerHTML = '<div class="alert alert-warning small">No jobs started. Check tenant configurations.</div>';
+    return;
+  }
+
+  let html = `
+    <div class="batch-summary" id="ops-summary">
+      <span><i class="bi bi-check-circle text-success me-1"></i><span id="os-done">0</span> complete</span>
+      <span><i class="bi bi-arrow-repeat text-primary me-1"></i><span id="os-running">${jobs.length}</span> running</span>
+      <span><i class="bi bi-x-circle text-danger me-1"></i><span id="os-failed">0</span> failed</span>
+    </div>
+    <div id="ops-rows">`;
+  for (const j of jobs) {
+    html += `
+      <div class="batch-tenant-row" data-job-id="${j.job_id}" data-status="running">
+        <div class="spinner-border spinner-border-sm text-primary job-icon"></div>
+        <span class="tenant-name">${escapeHtml(j.tenant_name)}</span>
+        <span class="tenant-status">Running...</span>
+      </div>`;
+  }
+  html += '</div>';
+  html += `<div class="mt-3"><a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-activity me-1"></i>View All Jobs</a></div>`;
+  progress.innerHTML = html;
+
+  pollBulkJobs(jobs.map(j => j.job_id));
+}
+
+function pollBulkJobs(jobIds) {
+  const interval = setInterval(async () => {
+    let allDone = true;
+    let doneCount = 0, failedCount = 0, runningCount = 0;
+
+    for (const jid of jobIds) {
+      const row = document.querySelector(`[data-job-id="${jid}"]`);
+      if (!row || row.dataset.status !== 'running') {
+        if (row && row.dataset.status === 'done') doneCount++;
+        if (row && (row.dataset.status === 'failed' || row.dataset.status === 'cancelled')) failedCount++;
+        continue;
+      }
+      try {
+        const r = await fetch(`/jobs/${jid}/status`);
+        const d = await r.json();
+        if (d.status !== 'running') {
+          row.dataset.status = d.status;
+          const icon = row.querySelector('.job-icon');
+          const status = row.querySelector('.tenant-status');
+          if (d.status === 'done') {
+            icon.outerHTML = '<i class="bi bi-check-circle-fill text-success job-icon"></i>';
+            status.textContent = 'Complete';
+            status.classList.add('text-success');
+            doneCount++;
+          } else {
+            icon.outerHTML = '<i class="bi bi-x-circle-fill text-danger job-icon"></i>';
+            status.textContent = d.status === 'cancelled' ? 'Cancelled' : 'Failed';
+            status.classList.add('text-danger');
+            failedCount++;
+          }
+        } else {
+          allDone = false;
+          runningCount++;
+        }
+      } catch {
+        allDone = false;
+        runningCount++;
+      }
+    }
+
+    const sDone = document.getElementById('os-done');
+    const sRunning = document.getElementById('os-running');
+    const sFailed = document.getElementById('os-failed');
+    if (sDone) sDone.textContent = doneCount;
+    if (sRunning) sRunning.textContent = runningCount;
+    if (sFailed) sFailed.textContent = failedCount;
+
+    if (allDone) {
+      clearInterval(interval);
+      if (failedCount === 0) {
+        showToast('All operations completed successfully!', 'success');
+      } else {
+        showToast(`Operations complete: ${doneCount} succeeded, ${failedCount} failed`, 'warning');
+      }
+    }
+  }, 3000);
+}
+
+// --- Utility ---
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+</script>
+{% endblock %}
