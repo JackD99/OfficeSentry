@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block title %}Alert Configuration — M365 Audit Portal{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+  <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li class="breadcrumb-item active">Alerts</li>
+</ol></nav>
+{% endblock %}
+
+{% block page_title %}Alert Configuration{% endblock %}
+
+{% block content %}
+<!-- Alert Summary -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-primary">{{ rules|length }}</div>
+        <small class="text-muted">Alert Rules</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-danger">{{ counts.by_severity.get('critical', 0) + counts.by_severity.get('high', 0) }}</div>
+        <small class="text-muted">Critical/High Alerts</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-warning">{{ counts.total_active }}</div>
+        <small class="text-muted">Active Alerts</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body text-center">
+        <div class="fs-2 fw-bold text-success">{{ counts.by_status.get('resolved', 0) }}</div>
+        <small class="text-muted">Resolved</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Alert Rules & History -->
+  <div class="col-lg-8">
+    <!-- Rules -->
+    <div class="card bg-dark border-secondary mb-4">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-bell me-1"></i> Alert Rules ({{ rules|length }})</h6>
+      </div>
+      {% if rules %}
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Scope</th>
+                <th>Delivery</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rule in rules %}
+              <tr class="{% if not rule.enabled %}opacity-50{% endif %}">
+                <td>
+                  <strong>{{ rule.name }}</strong>
+                  {% if rule.description %}<br><small class="text-muted">{{ rule.description[:60] }}</small>{% endif %}
+                </td>
+                <td>
+                  <span class="badge bg-secondary">{{ rule.alert_type|replace('_', ' ')|title }}</span>
+                </td>
+                <td class="small">
+                  {% if rule.tenant_id %}
+                    Specific tenant
+                  {% else %}
+                    All tenants
+                  {% endif %}
+                </td>
+                <td class="small">
+                  {% for act in rule.actions %}
+                    <span class="badge bg-info text-dark">{{ act.type }}</span>
+                  {% endfor %}
+                </td>
+                <td>
+                  {% if rule.enabled %}
+                    <span class="badge bg-success">Active</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Disabled</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-warning" onclick="toggleRule('{{ rule.id }}')" title="{{ 'Disable' if rule.enabled else 'Enable' }}">
+                      <i class="bi bi-{{ 'pause' if rule.enabled else 'play' }}"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="deleteRule('{{ rule.id }}', '{{ rule.name }}')" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="card-body text-center py-4">
+        <i class="bi bi-bell-slash display-4 text-muted"></i>
+        <p class="mt-3 text-muted mb-0">No alert rules configured. Create one to start monitoring.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Recent Alerts -->
+    <div class="card bg-dark border-secondary">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i> Recent Alerts</h6>
+      </div>
+      {% if recent_alerts %}
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Severity</th>
+                <th>Alert</th>
+                <th>Tenant</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for alert in recent_alerts %}
+              <tr>
+                <td class="small text-muted text-nowrap">{{ alert.created_at }}</td>
+                <td>
+                  {% set sev_colors = {'critical':'danger', 'high':'warning', 'medium':'info', 'low':'primary', 'info':'secondary'} %}
+                  <span class="badge bg-{{ sev_colors.get(alert.severity, 'secondary') }}">{{ alert.severity }}</span>
+                </td>
+                <td>
+                  <strong>{{ alert.title }}</strong>
+                  {% if alert.detail %}<br><small class="text-muted">{{ alert.detail[:80] }}</small>{% endif %}
+                </td>
+                <td class="small">{{ alert.tenant_name or '-' }}</td>
+                <td>
+                  {% if alert.status == 'new' %}
+                    <span class="badge bg-danger">New</span>
+                  {% elif alert.status == 'acknowledged' %}
+                    <span class="badge bg-warning text-dark">Ack</span>
+                  {% elif alert.status == 'delivered' %}
+                    <span class="badge bg-info text-dark">Sent</span>
+                  {% elif alert.status == 'resolved' %}
+                    <span class="badge bg-success">Resolved</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if alert.status != 'resolved' %}
+                  <div class="btn-group btn-group-sm">
+                    {% if alert.status == 'new' %}
+                    <button class="btn btn-outline-warning" onclick="ackAlert('{{ alert.id }}')" title="Acknowledge">
+                      <i class="bi bi-check"></i>
+                    </button>
+                    {% endif %}
+                    <button class="btn btn-outline-success" onclick="resolveAlert('{{ alert.id }}')" title="Resolve">
+                      <i class="bi bi-check2-all"></i>
+                    </button>
+                  </div>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="card-body text-center py-4">
+        <p class="text-muted mb-0">No alerts yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Create Alert Rule -->
+  <div class="col-lg-4">
+    <div class="card bg-dark border-secondary">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-plus-circle me-1"></i> Create Alert Rule</h6>
+      </div>
+      <div class="card-body">
+        <form id="create-rule-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label small">Alert Name</label>
+            <input type="text" name="name" class="form-control form-control-sm" required
+                   placeholder="e.g., Failed login detection">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Description</label>
+            <textarea name="description" class="form-control form-control-sm" rows="2"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Alert Type</label>
+            <select name="alert_type" class="form-select form-select-sm" id="alert-type-select">
+              <option value="audit_log">Audit Log Event</option>
+              <option value="bpa_fail">BPA Check Failure</option>
+              <option value="secure_score_drop">Secure Score Drop</option>
+              <option value="job_failure">Job Failure</option>
+            </select>
+          </div>
+          <div class="mb-3" id="action-pattern-group">
+            <label class="form-label small">Action Pattern (contains)</label>
+            <input type="text" name="action_pattern" class="form-control form-control-sm"
+                   placeholder="e.g., breach_, login_failed">
+          </div>
+          <div class="mb-3" id="threshold-group" style="display:none">
+            <label class="form-label small">Score Drop Threshold (%)</label>
+            <input type="number" name="threshold" class="form-control form-control-sm" value="5" min="1" max="100">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Severity</label>
+            <select name="severity" class="form-select form-select-sm">
+              <option value="info">Info</option>
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Scope</label>
+            <select name="tenant_id" class="form-select form-select-sm">
+              <option value="">All Tenants</option>
+              {% for t in tenants %}
+              <option value="{{ t.id }}">{{ t.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <hr>
+          <h6 class="small fw-semibold">Delivery</h6>
+          <div class="mb-3">
+            <label class="form-label small">Webhook URL</label>
+            <input type="url" name="webhook_url" class="form-control form-control-sm"
+                   placeholder="https://hooks.slack.com/...">
+            <div class="form-text">Slack, Teams, or any webhook endpoint</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Email (SMTP must be configured)</label>
+            <input type="email" name="email_to" class="form-control form-control-sm"
+                   placeholder="alerts@company.com">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-bell-fill me-1"></i>Create Alert Rule
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Toggle form fields based on alert type
+document.getElementById('alert-type-select').addEventListener('change', function() {
+  document.getElementById('action-pattern-group').style.display = this.value === 'audit_log' ? '' : 'none';
+  document.getElementById('threshold-group').style.display = this.value === 'secure_score_drop' ? '' : 'none';
+});
+
+document.getElementById('create-rule-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const fd = new FormData(this);
+  fetch('{{ url_for("standards.alert_rule_create") }}', {
+    method: 'POST', body: fd,
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 1000); }
+    else showToast(data.error, 'danger');
+  })
+  .catch(() => showToast('Request failed.', 'danger'));
+});
+
+function toggleRule(id) {
+  fetch(`/alerts/rules/${id}/toggle`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 500); }
+    else showToast(data.error, 'danger');
+  });
+}
+
+function deleteRule(id, name) {
+  if (!confirm(`Delete alert rule "${name}"?`)) return;
+  fetch(`/alerts/rules/${id}/delete`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 500); }
+    else showToast(data.error, 'danger');
+  });
+}
+
+function ackAlert(id) {
+  fetch(`/alerts/${id}/acknowledge`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { showToast('Alert acknowledged.', 'info'); setTimeout(() => location.reload(), 500); }
+  });
+}
+
+function resolveAlert(id) {
+  fetch(`/alerts/${id}/resolve`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { showToast('Alert resolved.', 'success'); setTimeout(() => location.reload(), 500); }
+  });
+}
+</script>
+{% endblock %}

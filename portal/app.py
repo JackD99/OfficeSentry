@@ -23,6 +23,8 @@ from database import (
     init_db, list_tenants, list_running_jobs, get_audit_log, get_dashboard_stats,
     get_job_trends, get_job_type_distribution, get_report_type_counts,
     list_saved_views, list_schedules,
+    get_bpa_summary, get_all_latest_secure_scores, get_alert_counts,
+    list_tenant_groups,
 )
 from helpers import login_required, current_user, TENANTS_DIR, tenant_output_dir
 
@@ -106,6 +108,7 @@ def create_app() -> Flask:
     from routes.jobs import bp as jobs_bp
     from routes.reports import bp as reports_bp
     from routes.operations import bp as operations_bp
+    from routes.standards import bp as standards_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tenants_bp)
@@ -113,6 +116,7 @@ def create_app() -> Flask:
     app.register_blueprint(jobs_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(operations_bp)
+    app.register_blueprint(standards_bp)
 
     # Apply rate limit to login and initial setup
     limiter.limit("10/minute")(
@@ -147,6 +151,12 @@ def create_app() -> Flask:
                     if tenant_output_dir(t["id"]).exists()]
         report_counts = get_report_type_counts(out_dirs)
 
+        # Compliance data
+        bpa_summary = get_bpa_summary()
+        secure_scores = get_all_latest_secure_scores()
+        alert_counts = get_alert_counts()
+        tenant_groups = list_tenant_groups()
+
         return render_template("dashboard.html",
                                tenants=tenants,
                                running_jobs=running,
@@ -159,7 +169,11 @@ def create_app() -> Flask:
                                job_types=job_types,
                                report_counts=report_counts,
                                schedules=schedules,
-                               saved_views=saved_views)
+                               saved_views=saved_views,
+                               bpa_summary=bpa_summary,
+                               secure_scores=secure_scores,
+                               alert_counts=alert_counts,
+                               tenant_groups=tenant_groups)
 
     # ------------------------------------------------------------------
     # Dashboard stats API

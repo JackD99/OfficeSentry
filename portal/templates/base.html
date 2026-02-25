@@ -108,6 +108,41 @@
       </li>
 
       <li class="nav-item mt-2">
+        <span class="sidebar-label">COMPLIANCE</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'standards.bpa_page' %}active{% endif %}"
+           href="{{ url_for('standards.bpa_page') }}">
+          <i class="bi bi-clipboard2-check me-2"></i>Best Practice Analyzer
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint in ('standards.standards_page', 'standards.template_detail') %}active{% endif %}"
+           href="{{ url_for('standards.standards_page') }}">
+          <i class="bi bi-shield-check me-2"></i>Standards & Baselines
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'standards.secure_scores_page' %}active{% endif %}"
+           href="{{ url_for('standards.secure_scores_page') }}">
+          <i class="bi bi-speedometer me-2"></i>Secure Scores
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'standards.alerts_page' %}active{% endif %}"
+           href="{{ url_for('standards.alerts_page') }}">
+          <i class="bi bi-bell me-2"></i>Alerts
+          <span class="badge bg-danger ms-auto alert-count-badge" style="display:none"></span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint in ('standards.groups_page', 'standards.group_detail') %}active{% endif %}"
+           href="{{ url_for('standards.groups_page') }}">
+          <i class="bi bi-collection me-2"></i>Tenant Groups
+        </a>
+      </li>
+
+      <li class="nav-item mt-2">
         <span class="sidebar-label">OPERATIONS</span>
       </li>
       <li class="nav-item">
@@ -257,6 +292,25 @@ document.querySelectorAll('.btn-toggle-password').forEach(btn => {
     btn.querySelector('i').className = isPass ? 'bi bi-eye-slash' : 'bi bi-eye';
   });
 });
+
+// --- Alert count badge (poll every 60s) ---
+function updateAlertBadge() {
+  fetch('/api/alerts/counts')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data) return;
+      const badge = document.querySelector('.alert-count-badge');
+      if (badge && data.total_active > 0) {
+        badge.textContent = data.total_active;
+        badge.style.display = '';
+      } else if (badge) {
+        badge.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
+updateAlertBadge();
+setInterval(updateAlertBadge, 60000);
 </script>
 {% block scripts %}{% endblock %}
 </body>

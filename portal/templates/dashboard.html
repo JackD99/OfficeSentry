@@ -283,6 +283,105 @@
 </div>
 {% endif %}
 
+<!-- Compliance Overview (BPA, Secure Scores, Alerts) -->
+{% if bpa_summary or secure_scores or alert_counts.total_active > 0 %}
+<div class="row g-4 mb-4">
+  {% if bpa_summary %}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-clipboard2-check me-2 text-accent-green"></i>
+        <span class="fw-semibold">BPA Compliance</span>
+        <a href="{{ url_for('standards.bpa_page') }}" class="ms-auto btn btn-sm btn-outline-secondary">View</a>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for s in bpa_summary[:5] %}
+          <li class="list-group-item d-flex align-items-center gap-2 py-2">
+            <div class="flex-grow-1">
+              <div class="small fw-semibold">{{ s.tenant_name }}</div>
+              <div class="d-flex gap-1 mt-1">
+                {% if s.pass_count > 0 %}<span class="badge bg-success" style="font-size:.65rem">{{ s.pass_count }} pass</span>{% endif %}
+                {% if s.warn_count > 0 %}<span class="badge bg-warning text-dark" style="font-size:.65rem">{{ s.warn_count }} warn</span>{% endif %}
+                {% if s.fail_count > 0 %}<span class="badge bg-danger" style="font-size:.65rem">{{ s.fail_count }} fail</span>{% endif %}
+              </div>
+            </div>
+            {% set total = s.pass_count + s.warn_count + s.fail_count %}
+            {% set score = ((s.pass_count / total * 100) if total > 0 else 0)|round(0)|int %}
+            <span class="badge {% if score >= 80 %}bg-success{% elif score >= 50 %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-6">
+              {{ score }}%
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if secure_scores %}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-speedometer me-2 text-accent-blue"></i>
+        <span class="fw-semibold">Secure Scores</span>
+        <a href="{{ url_for('standards.secure_scores_page') }}" class="ms-auto btn btn-sm btn-outline-secondary">View</a>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for s in secure_scores[:5] %}
+          {% set pct = ((s.current_score / s.max_score * 100) if s.max_score > 0 else 0)|round(0)|int %}
+          <li class="list-group-item d-flex align-items-center gap-2 py-2">
+            <div class="flex-grow-1">
+              <div class="small fw-semibold">{{ s.tenant_name }}</div>
+              <div class="progress mt-1" style="height:4px">
+                <div class="progress-bar {% if pct >= 70 %}bg-success{% elif pct >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                     style="width:{{ pct }}%"></div>
+              </div>
+            </div>
+            <span class="badge {% if pct >= 70 %}bg-success{% elif pct >= 40 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+              {{ pct }}%
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-bell me-2 {% if alert_counts.total_active > 0 %}text-accent-red{% else %}text-muted{% endif %}"></i>
+        <span class="fw-semibold">Active Alerts</span>
+        <a href="{{ url_for('standards.alerts_page') }}" class="ms-auto btn btn-sm btn-outline-secondary">View</a>
+      </div>
+      <div class="card-body text-center py-4">
+        {% if alert_counts.total_active > 0 %}
+        <div class="fs-2 fw-bold text-accent-red">{{ alert_counts.total_active }}</div>
+        <div class="small text-muted mb-3">active alert{{ 's' if alert_counts.total_active != 1 }}</div>
+        <div class="d-flex justify-content-center gap-3">
+          {% for sev, count in alert_counts.by_severity.items() %}
+          {% set sev_colors = {'critical':'danger', 'high':'warning', 'medium':'info', 'low':'primary', 'info':'secondary'} %}
+          <div>
+            <span class="badge bg-{{ sev_colors.get(sev, 'secondary') }} fs-6">{{ count }}</span>
+            <div class="small text-muted mt-1">{{ sev|title }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted">
+          <i class="bi bi-check-circle display-5"></i>
+          <p class="mt-2 mb-0 small">No active alerts</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="row g-4">
   <!-- Active jobs + Scheduled Reports -->
   <div class="col-lg-5">

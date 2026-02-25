@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} — Tenant Group{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+  <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li class="breadcrumb-item"><a href="{{ url_for('standards.groups_page') }}">Tenant Groups</a></li>
+  <li class="breadcrumb-item active">{{ group.name }}</li>
+</ol></nav>
+{% endblock %}
+
+{% block page_title %}
+<span class="badge bg-{{ group.color }} me-2">&nbsp;</span>{{ group.name }}
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card bg-dark border-secondary">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-building me-1"></i> Group Members ({{ members|length }})</h6>
+      </div>
+      <div class="card-body p-0">
+        {% if members %}
+        <div class="table-responsive">
+          <table class="table table-dark table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Domain</th>
+                <th>Status</th>
+                <th>Last Audit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in members %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
+                    {{ t.name }}
+                  </a>
+                </td>
+                <td class="text-muted">{{ t.domain }}</td>
+                <td>
+                  {% if t.client_id %}
+                    <span class="badge bg-success">Ready</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">Setup needed</span>
+                  {% endif %}
+                </td>
+                <td class="small text-muted">{{ t.last_audit_at or 'Never' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+          <p class="text-muted mb-0">No members yet. Add tenants using the form.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card bg-dark border-secondary">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-pencil me-1"></i> Edit Group</h6>
+      </div>
+      <div class="card-body">
+        <form id="update-group-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label small">Name</label>
+            <input type="text" name="name" class="form-control form-control-sm" value="{{ group.name }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Description</label>
+            <textarea name="description" class="form-control form-control-sm" rows="2">{{ group.description }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Color</label>
+            <div class="d-flex gap-2 flex-wrap">
+              {% for c in group_colors %}
+              <label>
+                <input type="radio" name="color" value="{{ c }}" {% if c == group.color %}checked{% endif %} class="d-none">
+                <span class="badge bg-{{ c }} px-3 py-2 border border-2 {% if c == group.color %}border-white{% else %}border-transparent{% endif %}"
+                      style="cursor:pointer" onclick="this.closest('.d-flex').querySelectorAll('.badge').forEach(b=>b.classList.replace('border-white','border-transparent'));this.classList.replace('border-transparent','border-white')">
+                  {{ c }}
+                </span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Members</label>
+            <div style="max-height:300px; overflow-y:auto" class="border border-secondary rounded p-2">
+              {% set member_ids = members|map(attribute='id')|list %}
+              {% for t in all_tenants %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="tenant_ids" value="{{ t.id }}"
+                       id="edit-t-{{ t.id }}" {% if t.id in member_ids %}checked{% endif %}>
+                <label class="form-check-label small" for="edit-t-{{ t.id }}">{{ t.name }}</label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-check-lg me-1"></i>Save Changes
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('update-group-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const fd = new FormData(this);
+  fetch('{{ url_for("standards.group_update", group_id=group.id) }}', {
+    method: 'POST', body: fd,
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      showToast(data.message, 'success');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.error || 'Update failed.', 'danger');
+    }
+  })
+  .catch(() => showToast('Request failed.', 'danger'));
+});
+</script>
+{% endblock %}

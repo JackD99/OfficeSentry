@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Standards & Baselines — M365 Audit Portal{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb mb-0 small">
+  <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li class="breadcrumb-item active">Standards & Baselines</li>
+</ol></nav>
+{% endblock %}
+
+{% block page_title %}Standards & Baselines{% endblock %}
+
+{% block content %}
+<p class="text-muted mb-4">
+  Define security baselines and apply them across your tenants. Standards can be set to <strong>Report</strong>
+  (record current state) or <strong>Alert</strong> (notify on non-compliance). Inspired by CIPP's Standards & Drift system.
+</p>
+
+<div class="row g-4">
+  <!-- Templates List -->
+  <div class="col-lg-8">
+    <div class="card bg-dark border-secondary mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bi bi-file-earmark-ruled me-1"></i> Standards Templates ({{ templates|length }})</h6>
+      </div>
+      {% if templates %}
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Template</th>
+                <th>Description</th>
+                <th>Checks</th>
+                <th>Created By</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tmpl in templates %}
+              <tr>
+                <td class="fw-semibold">{{ tmpl.name }}</td>
+                <td class="small text-muted">{{ tmpl.description[:80] }}{% if tmpl.description|length > 80 %}...{% endif %}</td>
+                <td><span class="badge bg-primary">{{ tmpl.checks|length }}</span></td>
+                <td class="small text-muted">{{ tmpl.created_by }}</td>
+                <td>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="viewTemplate('{{ tmpl.id }}')" title="View">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="deleteTemplate('{{ tmpl.id }}', '{{ tmpl.name }}')" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="card-body text-center py-4">
+        <i class="bi bi-file-earmark-ruled display-4 text-muted"></i>
+        <p class="mt-3 text-muted">No standards templates yet. Create one to define your security baseline.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Apply Standards -->
+    <div class="card bg-dark border-secondary">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-arrow-right-circle me-1"></i> Apply Standards to Tenants</h6>
+      </div>
+      <div class="card-body">
+        <form id="apply-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label small">Template</label>
+              <select name="template_id" class="form-select form-select-sm" required>
+                <option value="">Select template...</option>
+                {% for tmpl in templates %}
+                <option value="{{ tmpl.id }}">{{ tmpl.name }} ({{ tmpl.checks|length }} checks)</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Action</label>
+              <select name="action" class="form-select form-select-sm">
+                <option value="report">Report (record state)</option>
+                <option value="alert">Alert (notify on drift)</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Tenants</label>
+              <div style="max-height:150px; overflow-y:auto" class="border border-secondary rounded p-2">
+                {% for t in tenants if t.client_id %}
+                <div class="form-check form-check-sm">
+                  <input class="form-check-input" type="checkbox" name="tenant_ids" value="{{ t.id }}" id="apply-t-{{ t.id }}">
+                  <label class="form-check-label small" for="apply-t-{{ t.id }}">{{ t.name }}</label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="bi bi-check2-all me-1"></i>Apply to Selected Tenants
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Template -->
+  <div class="col-lg-4">
+    <div class="card bg-dark border-secondary">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="bi bi-plus-circle me-1"></i> Create Template</h6>
+      </div>
+      <div class="card-body">
+        <form id="create-template-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label small">Template Name</label>
+            <input type="text" name="name" class="form-control form-control-sm" required
+                   placeholder="e.g., MSP Security Baseline">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Description</label>
+            <textarea name="description" class="form-control form-control-sm" rows="2"
+                      placeholder="What this standard covers..."></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Select Checks</label>
+            <div class="d-flex gap-1 mb-2">
+              <button type="button" class="btn btn-sm btn-outline-light" onclick="document.querySelectorAll('.check-cb').forEach(c=>c.checked=true)">All</button>
+              <button type="button" class="btn btn-sm btn-outline-light" onclick="document.querySelectorAll('.check-cb').forEach(c=>c.checked=false)">None</button>
+              {% for cat in bpa_checks|map(attribute='category')|unique %}
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleCategory('{{ cat }}')">{{ cat }}</button>
+              {% endfor %}
+            </div>
+            <div style="max-height:350px; overflow-y:auto" class="border border-secondary rounded p-2">
+              {% for check in bpa_checks %}
+              <div class="form-check mb-1">
+                <input class="form-check-input check-cb" type="checkbox" name="checks" value="{{ check.key }}"
+                       id="chk-{{ check.key }}" data-category="{{ check.category }}" checked>
+                <label class="form-check-label small" for="chk-{{ check.key }}">
+                  <span class="badge bg-{{ impact_colors.get(check.impact, 'secondary') }} me-1" style="font-size:0.65rem">{{ check.impact }}</span>
+                  {{ check.name }}
+                  <br><span class="text-muted" style="font-size:0.7rem">{{ check.category }}</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-plus-circle me-1"></i>Create Template
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Template Detail Modal -->
+<div class="modal fade" id="templateModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark border-secondary">
+      <div class="modal-header">
+        <h5 class="modal-title" id="templateModalTitle">Template Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="templateModalBody">
+        <div class="text-center py-3"><div class="spinner-border text-primary"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleCategory(cat) {
+  document.querySelectorAll('.check-cb').forEach(cb => {
+    if (cb.dataset.category === cat) cb.checked = !cb.checked;
+  });
+}
+
+function viewTemplate(id) {
+  const modal = new bootstrap.Modal(document.getElementById('templateModal'));
+  document.getElementById('templateModalBody').innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary"></div></div>';
+  modal.show();
+  fetch(`/standards/templates/${id}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { document.getElementById('templateModalBody').innerHTML = '<p class="text-danger">Error loading template.</p>'; return; }
+      const t = data.template;
+      let html = `<h6>${t.name}</h6><p class="text-muted">${t.description || 'No description'}</p>`;
+      html += '<table class="table table-dark table-sm"><thead><tr><th>Check</th><th>Category</th><th>Impact</th><th>Expected</th></tr></thead><tbody>';
+      const impactMap = {'Critical':'danger','High':'warning','Medium':'info','Low':'primary'};
+      for (const c of data.check_details) {
+        const cls = impactMap[c.impact] || 'secondary';
+        html += `<tr><td>${c.name}</td><td>${c.category}</td><td><span class="badge bg-${cls}">${c.impact}</span></td><td class="small">${c.expected}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      document.getElementById('templateModalTitle').textContent = t.name;
+      document.getElementById('templateModalBody').innerHTML = html;
+    });
+}
+
+function deleteTemplate(id, name) {
+  if (!confirm(`Delete template "${name}"?`)) return;
+  fetch(`/standards/templates/${id}/delete`, {
+    method: 'POST',
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 800); }
+    else showToast(data.error, 'danger');
+  });
+}
+
+document.getElementById('create-template-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const fd = new FormData(this);
+  fetch('{{ url_for("standards.template_create") }}', {
+    method: 'POST', body: fd,
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { showToast(data.message, 'success'); setTimeout(() => location.reload(), 1000); }
+    else showToast(data.error, 'danger');
+  })
+  .catch(() => showToast('Request failed.', 'danger'));
+});
+
+document.getElementById('apply-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const fd = new FormData(this);
+  fetch('{{ url_for("standards.standards_apply") }}', {
+    method: 'POST', body: fd,
+    headers: {'X-CSRFToken': window.CSRF_TOKEN}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) showToast(data.message, 'success');
+    else showToast(data.error, 'danger');
+  })
+  .catch(() => showToast('Request failed.', 'danger'));
+});
+</script>
+{% endblock %}
