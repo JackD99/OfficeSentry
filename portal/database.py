@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     domain           TEXT NOT NULL,
     tenant_id        TEXT DEFAULT '',
     client_id        TEXT DEFAULT '',
-    app_display_name TEXT DEFAULT 'M365-Audit-App',
+    app_display_name TEXT DEFAULT 'OfficeSentry',
     cert_subject     TEXT DEFAULT 'CN=M365 Audit',
     cert_years_valid INTEGER DEFAULT 2,
     pfx_password_enc TEXT DEFAULT '',

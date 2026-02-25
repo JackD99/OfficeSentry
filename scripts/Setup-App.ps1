@@ -39,9 +39,18 @@ try {
     Write-Output "ACTION REQUIRED: open https://microsoft.com/devicelogin in any browser and enter the code below."
     Connect-MgGraph @connectParams
 
-    # Create app + service principal
+    $ctx = Get-MgContext
+    Write-Output "Authenticated as $($ctx.Account) in tenant $($ctx.TenantId)"
+
+    # Create app registration
     $app = New-MgApplication -DisplayName $AppDisplayName
-    $sp  = New-MgServicePrincipal -AppId $app.AppId
+    Write-Output "App registration created: $($app.AppId)"
+
+    # Allow replication before creating service principal
+    Start-Sleep -Seconds 5
+
+    $sp = New-MgServicePrincipal -AppId $app.AppId
+    Write-Output "Service principal created: $($sp.Id)"
 
     # Upload certificate
     $now      = Get-Date
@@ -59,17 +68,30 @@ try {
     # Helper to assign an app role
     function Grant-Role {
         param([string]$ResourceAppId, [string]$RoleValue)
-        $resourceSp = Get-MgServicePrincipal -Filter "appId eq '$ResourceAppId'" -ConsistencyLevel eventual
-        if (-not $resourceSp) { return }
+        $countVar = 0
+        $resourceSp = Get-MgServicePrincipal -Filter "appId eq '$ResourceAppId'" `
+            -ConsistencyLevel eventual -CountVariable countVar | Select-Object -First 1
+        if (-not $resourceSp) {
+            Write-Output "WARNING: service principal not found for $ResourceAppId — skipping $RoleValue"
+            return
+        }
         $role = $resourceSp.AppRoles |
             Where-Object { $_.Value -eq $RoleValue -and $_.AllowedMemberTypes -contains "Application" } |
             Select-Object -First 1
-        if (-not $role) { return }
-        New-MgServicePrincipalAppRoleAssignment `
-            -ServicePrincipalId $sp.Id `
-            -PrincipalId        $sp.Id `
-            -ResourceId         $resourceSp.Id `
-            -AppRoleId          $role.Id | Out-Null
+        if (-not $role) {
+            Write-Output "WARNING: role '$RoleValue' not found on $ResourceAppId — skipping"
+            return
+        }
+        try {
+            New-MgServicePrincipalAppRoleAssignment `
+                -ServicePrincipalId $sp.Id `
+                -PrincipalId        $sp.Id `
+                -ResourceId         $resourceSp.Id `
+                -AppRoleId          $role.Id | Out-Null
+            Write-Output "Granted: $RoleValue"
+        } catch {
+            Write-Output "WARNING: could not assign $RoleValue — $($_.Exception.Message)"
+        }
     }
 
     $spo   = "00000003-0000-0ff1-ce00-000000000000"  # SharePoint Online

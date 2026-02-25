@@ -293,7 +293,7 @@ def tenant_app(tenant_id):
         return jsonify({"ok": False, "error": "Certificate not found. Generate it first."})
 
     years      = int(t.get("cert_years_valid") or 2)
-    app_name   = t.get("app_display_name") or "M365-Audit-App"
+    app_name   = t.get("app_display_name") or "OfficeSentry"
     tenant_val = t.get("tenant_id") or t.get("domain", "")
 
     cmd = [
