@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Incident Response — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Incident Response</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Incident Response{% endblock %}
+
+{% block content %}
+<div class="alert alert-info small">
+  <i class="bi bi-info-circle me-2"></i>
+  Automated incident response playbooks for common M365 security scenarios. Each playbook collects
+  relevant evidence, analyzes indicators of compromise, and generates a structured investigation report.
+</div>
+
+<!-- Playbook Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <i class="bi bi-envelope-slash fs-3 me-2 text-danger"></i>
+          <h6 class="mb-0 fw-semibold">BEC Response</h6>
+        </div>
+        <p class="small text-muted mb-3">
+          Business Email Compromise investigation. Checks inbox rules, mail forwarding, sign-in anomalies,
+          OAuth consents, and recent mailbox activity for a targeted user.
+        </p>
+        <a href="{{ url_for('incidents.bec_response_page') }}" class="btn btn-outline-danger btn-sm w-100">
+          <i class="bi bi-play-fill me-1"></i>Launch Playbook
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <i class="bi bi-person-x fs-3 me-2 text-warning"></i>
+          <h6 class="mb-0 fw-semibold">Account Compromise</h6>
+        </div>
+        <p class="small text-muted mb-3">
+          Investigate a potentially compromised account. Reviews sign-ins, inbox rules, OAuth consents,
+          MFA status, and password changes with configurable investigation steps.
+        </p>
+        <a href="{{ url_for('incidents.account_compromise_page') }}" class="btn btn-outline-warning btn-sm w-100">
+          <i class="bi bi-play-fill me-1"></i>Launch Playbook
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <i class="bi bi-cloud-arrow-up fs-3 me-2 text-info"></i>
+          <h6 class="mb-0 fw-semibold">Data Exfiltration</h6>
+        </div>
+        <p class="small text-muted mb-3">
+          Detect potential data exfiltration. Analyzes file downloads, sharing activity, external sharing
+          links, and large data transfers at user, site, or tenant scope.
+        </p>
+        <a href="{{ url_for('incidents.data_exfiltration_page') }}" class="btn btn-outline-info btn-sm w-100">
+          <i class="bi bi-play-fill me-1"></i>Launch Playbook
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <i class="bi bi-bug fs-3 me-2 text-danger"></i>
+          <h6 class="mb-0 fw-semibold">Malware Outbreak</h6>
+        </div>
+        <p class="small text-muted mb-3">
+          Investigate malware detections across the tenant. Checks Defender alerts, quarantined items,
+          file activity, and email-borne threats within a specified timeframe.
+        </p>
+        <a href="{{ url_for('incidents.malware_outbreak_page') }}" class="btn btn-outline-danger btn-sm w-100">
+          <i class="bi bi-play-fill me-1"></i>Launch Playbook
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <i class="bi bi-arrow-up-circle fs-3 me-2 text-primary"></i>
+          <h6 class="mb-0 fw-semibold">Privilege Escalation</h6>
+        </div>
+        <p class="small text-muted mb-3">
+          Detect unauthorized privilege escalation. Reviews role assignments, admin actions, consent grants,
+          and directory changes to identify suspicious elevation of permissions.
+        </p>
+        <a href="{{ url_for('incidents.privilege_escalation_page') }}" class="btn btn-outline-primary btn-sm w-100">
+          <i class="bi bi-play-fill me-1"></i>Launch Playbook
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100 border-secondary">
+      <div class="card-body d-flex flex-column align-items-center justify-content-center text-center">
+        <i class="bi bi-plus-circle fs-3 text-muted mb-2"></i>
+        <p class="small text-muted mb-0">Additional playbooks coming soon. Use the individual investigation tools under <strong>Breach Investigation</strong> for custom workflows.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Incidents -->
+{% if recent_incidents %}
+<div class="card">
+  <div class="card-header fw-semibold d-flex align-items-center">
+    <i class="bi bi-clock-history me-2 text-secondary"></i>Recent Investigations
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th class="ps-3">Playbook</th>
+            <th>Tenant</th>
+            <th>Target</th>
+            <th>Status</th>
+            <th>Started</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inc in recent_incidents %}
+          <tr>
+            <td class="ps-3 small fw-semibold">{{ inc.playbook or inc.label or '-' }}</td>
+            <td class="small text-muted">{{ inc.tenant_name or '-' }}</td>
+            <td class="small">{{ inc.target or '-' }}</td>
+            <td>
+              {% if inc.status == 'done' %}
+              <span class="badge bg-success">Complete</span>
+              {% elif inc.status == 'running' %}
+              <span class="badge bg-primary">Running</span>
+              {% else %}
+              <span class="badge bg-danger">Failed</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ inc.started_at[:16] if inc.started_at else '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-fire display-4 text-muted"></i>
+    <p class="mt-3 text-muted mb-0">No recent investigations. Select a playbook above to begin an incident response.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Service Health — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('service_health.service_health_page') }}">Service Health</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Status</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Service Health Status{% endblock %}
+
+{% block content %}
+{% if not tenants %}
+<div class="empty-state">
+  <i class="bi bi-heart-pulse"></i>
+  <p>No tenants are configured. Set up at least one tenant with a certificate and Entra app first.</p>
+  <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary btn-sm">Go to Tenants</a>
+</div>
+{% else %}
+<div class="row g-4">
+  <!-- Left: Controls -->
+  <div class="col-lg-5">
+    <!-- Single tenant fetch -->
+    <div class="card mb-4">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-check-circle me-2 text-success"></i>Fetch Service Status
+      </div>
+      <div class="card-body">
+        <form id="health-form">
+          <div class="mb-3">
+            <label class="form-label" for="tenant-select">Select Tenant</label>
+            <select class="form-select" id="tenant-select" name="tenant_id" required>
+              <option value="" disabled selected>Choose a tenant...</option>
+              {% for t in tenants %}
+              <option value="{{ t.id }}">{{ t.name }} ({{ t.domain }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100" id="run-btn">
+            <span class="spinner-border spinner-border-sm d-none me-2" id="run-spinner"></span>
+            <i class="bi bi-arrow-clockwise me-2"></i>Fetch Status
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Multi-tenant scan -->
+    <div class="card">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-collection me-2 text-primary"></i>Multi-Tenant Scan
+      </div>
+      <div class="card-body">
+        <form id="scan-form">
+          <div class="mb-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0">Select Tenants</label>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+                Select All
+              </button>
+            </div>
+            <div style="max-height:200px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem;padding:.5rem">
+              {% for t in tenants %}
+              <div class="form-check py-1">
+                <input class="form-check-input tenant-check" type="checkbox" name="tenant_ids"
+                       id="scan-t-{{ t.id }}" value="{{ t.id }}">
+                <label class="form-check-label small" for="scan-t-{{ t.id }}">
+                  {{ t.name }} <span class="text-muted">({{ t.domain }})</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="form-text"><span id="selected-count">0</span> of {{ tenants|length }} tenants selected</div>
+          </div>
+
+          <button type="submit" class="btn btn-outline-primary w-100" id="scan-btn">
+            <span class="spinner-border spinner-border-sm d-none me-2" id="scan-spinner"></span>
+            <i class="bi bi-play-fill me-1"></i>Scan All Selected
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Live Output -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Live Output</div>
+      <div class="card-body p-0 d-flex flex-column" style="min-height:300px">
+        <div class="p-3 text-muted small" id="job-idle">
+          Select a tenant and click <strong>Fetch Status</strong> to check service health.
+        </div>
+        <div class="p-3 text-muted small d-none" id="job-waiting">
+          <div class="spinner-border spinner-border-sm me-2"></div>Fetching service health...
+        </div>
+        <pre class="flex-grow-1 m-0 p-3 small bg-dark text-light d-none"
+             id="job-output" style="overflow-y:auto;max-height:500px;border-radius:0 0 .375rem .375rem"></pre>
+        <div class="p-3 d-none" id="job-done"></div>
+      </div>
+    </div>
+
+    <!-- Batch progress (for multi-tenant scan) -->
+    <div class="card mt-4 d-none" id="batch-card">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-activity me-2 text-secondary"></i>Batch Progress
+      </div>
+      <div class="card-body" id="batch-progress">
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --- Tenant selection for multi-tenant scan ---
+document.querySelectorAll('.tenant-check').forEach(cb => {
+  cb.addEventListener('change', updateCount);
+});
+
+function updateCount() {
+  document.getElementById('selected-count').textContent =
+    document.querySelectorAll('.tenant-check:checked').length;
+}
+
+function toggleAllTenants() {
+  const checks = document.querySelectorAll('.tenant-check');
+  const allChecked = [...checks].every(c => c.checked);
+  checks.forEach(c => c.checked = !allChecked);
+  updateCount();
+}
+
+// --- Single-tenant fetch ---
+document.getElementById('health-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('run-btn');
+  const spinner = document.getElementById('run-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+  document.getElementById('job-idle').classList.add('d-none');
+  document.getElementById('job-done').classList.add('d-none');
+
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const tenantId = document.getElementById('tenant-select').value;
+  const res = await fetch(`/tenants/${tenantId}/service-health/fetch`, {
+    method: 'POST', body: fd
+  });
+  const data = await res.json();
+  spinner.classList.add('d-none');
+
+  if (!data.ok) {
+    btn.disabled = false;
+    window.showToast(data.error, 'danger');
+    return;
+  }
+
+  window.showToast('Job started', 'success');
+  document.getElementById('job-waiting').classList.remove('d-none');
+  document.getElementById('job-output').classList.remove('d-none');
+  pollJob(data.job_id);
+});
+
+function pollJob(jobId) {
+  const outputEl = document.getElementById('job-output');
+  const waitEl   = document.getElementById('job-waiting');
+  const doneEl   = document.getElementById('job-done');
+  const btn      = document.getElementById('run-btn');
+
+  const interval = setInterval(async () => {
+    const r = await fetch(`/jobs/${jobId}/status`);
+    const d = await r.json();
+    outputEl.textContent = d.output.join('\n');
+    outputEl.scrollTop = outputEl.scrollHeight;
+
+    if (d.status !== 'running') {
+      clearInterval(interval);
+      waitEl.classList.add('d-none');
+      btn.disabled = false;
+      doneEl.classList.remove('d-none');
+      if (d.status === 'done') {
+        doneEl.innerHTML = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-2"></i>Service health fetch complete.</div>';
+        window.showToast('Complete!', 'success');
+      } else {
+        doneEl.innerHTML = '<div class="alert alert-danger small mb-0"><i class="bi bi-x-circle me-2"></i>Failed. Check output above.</div>';
+        window.showToast('Failed. Check output.', 'danger');
+      }
+    }
+  }, 2000);
+}
+
+// --- Multi-tenant scan ---
+document.getElementById('scan-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('scan-btn');
+  const spinner = document.getElementById('scan-spinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const res = await fetch('/service-health/scan', { method: 'POST', body: fd });
+  const data = await res.json();
+  spinner.classList.add('d-none');
+  btn.disabled = false;
+
+  if (!data.ok) {
+    window.showToast(data.error, 'danger');
+    return;
+  }
+
+  window.showToast(data.message, 'success');
+  const batchCard = document.getElementById('batch-card');
+  batchCard.classList.remove('d-none');
+  const progress = document.getElementById('batch-progress');
+
+  const jobIds = data.job_ids || [];
+  if (jobIds.length === 0) {
+    progress.innerHTML = '<div class="alert alert-warning small">No jobs were started. Check tenant configurations.</div>';
+    return;
+  }
+
+  let html = `
+    <div class="batch-summary" id="batch-summary">
+      <span><i class="bi bi-check-circle text-success me-1"></i><span id="bs-done">0</span> complete</span>
+      <span><i class="bi bi-arrow-repeat text-primary me-1"></i><span id="bs-running">${jobIds.length}</span> running</span>
+      <span><i class="bi bi-x-circle text-danger me-1"></i><span id="bs-failed">0</span> failed</span>
+    </div>`;
+  progress.innerHTML = html;
+
+  pollBatchJobs(jobIds);
+});
+
+function pollBatchJobs(jobIds) {
+  const interval = setInterval(async () => {
+    let allDone = true;
+    let doneCount = 0, failedCount = 0, runningCount = 0;
+
+    for (const jid of jobIds) {
+      try {
+        const r = await fetch(`/jobs/${jid}/status`);
+        const d = await r.json();
+        if (d.status === 'done') { doneCount++; }
+        else if (d.status === 'failed' || d.status === 'cancelled') { failedCount++; }
+        else { runningCount++; allDone = false; }
+      } catch {
+        runningCount++;
+        allDone = false;
+      }
+    }
+
+    const sDone = document.getElementById('bs-done');
+    const sRunning = document.getElementById('bs-running');
+    const sFailed = document.getElementById('bs-failed');
+    if (sDone) sDone.textContent = doneCount;
+    if (sRunning) sRunning.textContent = runningCount;
+    if (sFailed) sFailed.textContent = failedCount;
+
+    if (allDone) {
+      clearInterval(interval);
+      if (failedCount === 0) {
+        window.showToast('All health checks completed successfully!', 'success');
+      } else {
+        window.showToast(`Batch complete: ${doneCount} succeeded, ${failedCount} failed`, 'warning');
+      }
+    }
+  }, 3000);
+}
+</script>
+{% endblock %}

@@ -113,6 +113,12 @@ def create_app() -> Flask:
     from routes.conditional import bp as conditional_bp
     from routes.gdap import bp as gdap_bp
     from routes.tools import bp as tools_bp
+    from routes.email_security import bp as email_security_bp
+    from routes.identity import bp as identity_bp
+    from routes.devices import bp as devices_bp
+    from routes.service_health import bp as service_health_bp
+    from routes.licenses import bp as licenses_bp
+    from routes.incidents import bp as incidents_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tenants_bp)
@@ -125,6 +131,12 @@ def create_app() -> Flask:
     app.register_blueprint(conditional_bp)
     app.register_blueprint(gdap_bp)
     app.register_blueprint(tools_bp)
+    app.register_blueprint(email_security_bp)
+    app.register_blueprint(identity_bp)
+    app.register_blueprint(devices_bp)
+    app.register_blueprint(service_health_bp)
+    app.register_blueprint(licenses_bp)
+    app.register_blueprint(incidents_bp)
 
     # Apply rate limit to login and initial setup
     limiter.limit("10/minute")(

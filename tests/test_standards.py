@@ -389,10 +389,10 @@ class TestStandardsRoutes:
 
 
 class TestSchemaVersion:
-    def test_schema_version_is_4(self):
+    def test_schema_version_is_5(self):
         with db.get_db() as conn:
             row = conn.execute(
                 "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
             ).fetchone()
             assert row is not None
-            assert row["version"] == 4
+            assert row["version"] == 5
