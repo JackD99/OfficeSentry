@@ -10,10 +10,12 @@
 {% block page_title %}Tenants{% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center mb-4 gap-2 flex-wrap">
-  <h6 class="mb-0 text-muted">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }}</h6>
+<div class="d-flex align-items-center mb-4 gap-3 flex-wrap">
+  <div>
+    <span style="font-size:var(--text-sm);color:var(--color-text-tertiary)">{{ tenants|length }} tenant{{ 's' if tenants|length != 1 else '' }}</span>
+  </div>
   {% if tenants %}
-  <input type="text" class="form-control form-control-sm search-input ms-2" style="max-width:260px"
+  <input type="text" class="form-control form-control-sm search-input" style="max-width:280px"
          id="tenant-search" placeholder="Search tenants..." oninput="filterTenants(this.value)">
   {% endif %}
   <div class="ms-auto d-flex gap-2">
@@ -35,31 +37,33 @@
 </div>
 
 {% if tenants %}
-<div class="row g-3" id="tenant-grid">
+<div class="row g-3 stagger-animate" id="tenant-grid">
   {% for t in tenants %}
   <div class="col-md-6 col-xl-4 tenant-card" data-name="{{ t.name|lower }}" data-domain="{{ t.domain|lower }}">
     <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="text-decoration-none">
-      <div class="card card-hover h-100" style="cursor:pointer">
-        <div class="card-body">
-          <div class="d-flex align-items-start mb-2">
-            <div>
-              <h6 class="fw-semibold mb-0">{{ t.name }}</h6>
-              <small class="text-muted">{{ t.domain }}</small>
-            </div>
-            <div class="ms-auto">
-              {% if t.client_id %}
-                <span class="badge bg-success">Ready</span>
-              {% else %}
-                <span class="badge bg-warning text-dark">Setup needed</span>
-              {% endif %}
-            </div>
+      <div class="tenant-grid-card {{ 'status-ready' if t.client_id else '' }}">
+        <div class="d-flex align-items-start gap-3 mb-3">
+          <div class="tenant-icon">
+            <i class="bi bi-building"></i>
           </div>
-          {% if t.client_id %}
-          <div class="small font-monospace text-muted text-truncate">{{ t.client_id }}</div>
-          {% endif %}
-          <div class="small text-muted mt-2">
-            <i class="bi bi-clock me-1"></i>{{ 'Last audit: ' + t.last_audit_at[:16] if t.last_audit_at else 'No audits yet' }}
+          <div class="flex-grow-1 min-width-0">
+            <h6 class="fw-semibold mb-0" style="font-size:var(--text-sm);letter-spacing:-0.01em;color:var(--color-text-primary)">{{ t.name }}</h6>
+            <small style="color:var(--color-text-tertiary)">{{ t.domain }}</small>
           </div>
+          <div>
+            {% if t.client_id %}
+              <span class="badge bg-success">Ready</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">Setup needed</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if t.client_id %}
+        <div class="font-monospace" style="font-size:var(--text-xs);color:var(--color-text-quaternary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.client_id }}</div>
+        {% endif %}
+        <div class="d-flex align-items-center gap-2 mt-3" style="font-size:var(--text-xs);color:var(--color-text-tertiary)">
+          <i class="bi bi-clock"></i>
+          <span>{{ 'Last audit: ' + t.last_audit_at[:16] if t.last_audit_at else 'No audits yet' }}</span>
         </div>
       </div>
     </a>
@@ -87,7 +91,7 @@
       <form method="POST" action="{{ url_for('tenants.tenant_create') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
-          <h6 class="modal-title fw-semibold">Add Tenant</h6>
+          <h6 class="modal-title">Add Tenant</h6>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">

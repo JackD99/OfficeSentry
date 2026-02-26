@@ -17,416 +17,393 @@
 <!-- Sidebar overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
-<div class="d-flex" style="min-height:100vh">
+<div class="app-shell">
 
   <!-- Sidebar -->
-  <nav class="sidebar d-flex flex-column p-3" id="sidebar">
-    <a class="sidebar-brand mb-4" href="{{ url_for('dashboard') }}">
-      <i class="bi bi-shield-lock-fill me-2 text-primary"></i>
-      <span>M365 Audit Portal</span>
-    </a>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-inner">
+      <a class="sidebar-brand" href="{{ url_for('dashboard') }}">
+        <span class="brand-icon"><i class="bi bi-shield-lock-fill"></i></span>
+        <span>M365 Audit</span>
+      </a>
 
-    <ul class="nav nav-pills flex-column gap-1 flex-grow-1">
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
-           href="{{ url_for('dashboard') }}">
-          <i class="bi bi-speedometer2 me-2"></i>Dashboard
-        </a>
-      </li>
+      <ul class="nav nav-pills flex-column flex-grow-1">
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
+             href="{{ url_for('dashboard') }}">
+            <i class="bi bi-grid-1x2-fill me-2"></i>Dashboard
+          </a>
+        </li>
 
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">MANAGE</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint in ('tenants.tenants_list', 'tenants.tenant_detail', 'tenants.tenant_create') %}active{% endif %}"
-           href="{{ url_for('tenants.tenants_list') }}">
-          <i class="bi bi-building me-2"></i>Tenants
-        </a>
-      </li>
+        <li><span class="sidebar-label">Manage</span></li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint in ('tenants.tenants_list', 'tenants.tenant_detail', 'tenants.tenant_create') %}active{% endif %}"
+             href="{{ url_for('tenants.tenants_list') }}">
+            <i class="bi bi-building me-2"></i>Tenants
+          </a>
+        </li>
 
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">AUDIT</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'audits.catalogue' %}active{% endif %}"
-           href="{{ url_for('audits.catalogue') }}">
-          <i class="bi bi-grid-3x3-gap me-2"></i>Audit Catalogue
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-spo" role="button"
-           aria-expanded="{% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}true{% else %}false{% endif %}">
-          <i class="bi bi-diagram-3 me-2"></i>SPO Audits
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}show{% endif %}" id="sidebar-spo">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='groups') }}"><i class="bi bi-people me-2"></i>Groups</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='permissions') }}"><i class="bi bi-shield-lock me-2"></i>Site Permissions</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='external') }}"><i class="bi bi-globe me-2"></i>External Sharing</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='user') }}"><i class="bi bi-person-lines-fill me-2"></i>User Permissions</a></li>
-          </ul>
+        <li><span class="sidebar-label">Audit</span></li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'audits.catalogue' %}active{% endif %}"
+             href="{{ url_for('audits.catalogue') }}">
+            <i class="bi bi-grid-3x3-gap me-2"></i>Audit Catalogue
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-spo" role="button"
+             aria-expanded="{% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}true{% else %}false{% endif %}">
+            <i class="bi bi-diagram-3 me-2"></i>SPO Audits
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint in ('audits.audit_spo', 'audits.audit_spo_run') %}show{% endif %}" id="sidebar-spo">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='groups') }}"><i class="bi bi-people me-2"></i>Groups</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='permissions') }}"><i class="bi bi-shield-lock me-2"></i>Site Permissions</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='external') }}"><i class="bi bi-globe me-2"></i>External Sharing</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='spo', type='user') }}"><i class="bi bi-person-lines-fill me-2"></i>User Permissions</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-security" role="button"
+             aria-expanded="{% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}true{% else %}false{% endif %}">
+            <i class="bi bi-shield-exclamation me-2"></i>Security Scan
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}show{% endif %}" id="sidebar-security">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='security') }}"><i class="bi bi-play me-2"></i>Run Scan</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'audits.inspectors_page' %}active{% endif %}" href="{{ url_for('audits.inspectors_page') }}"><i class="bi bi-card-checklist me-2"></i>Browse Inspectors</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-breach" role="button"
+             aria-expanded="{% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}true{% else %}false{% endif %}">
+            <i class="bi bi-search me-2"></i>Breach Investigation
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}show{% endif %}" id="sidebar-breach">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='ual') }}"><i class="bi bi-journal-text me-2"></i>Unified Audit Log</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='inbox') }}"><i class="bi bi-inbox me-2"></i>Inbox Rules</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='signin') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Sign-In Logs</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='oauth') }}"><i class="bi bi-key me-2"></i>OAuth Consent</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='msgtrace') }}"><i class="bi bi-envelope-arrow-up me-2"></i>Message Trace</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'audits.batch_page' %}active{% endif %}"
+             href="{{ url_for('audits.batch_page') }}">
+            <i class="bi bi-collection me-2"></i>Batch Operations
+          </a>
+        </li>
+
+        <li><span class="sidebar-label">Compliance</span></li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'standards.bpa_page' %}active{% endif %}"
+             href="{{ url_for('standards.bpa_page') }}">
+            <i class="bi bi-clipboard2-check me-2"></i>Best Practices
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint in ('standards.standards_page', 'standards.template_detail') %}active{% endif %}"
+             href="{{ url_for('standards.standards_page') }}">
+            <i class="bi bi-shield-check me-2"></i>Standards
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'standards.secure_scores_page' %}active{% endif %}"
+             href="{{ url_for('standards.secure_scores_page') }}">
+            <i class="bi bi-speedometer me-2"></i>Secure Scores
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'standards.alerts_page' %}active{% endif %}"
+             href="{{ url_for('standards.alerts_page') }}">
+            <i class="bi bi-bell me-2"></i>Alerts
+            <span class="badge bg-danger ms-auto alert-count-badge" style="display:none;font-size:.6rem"></span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint in ('standards.groups_page', 'standards.group_detail') %}active{% endif %}"
+             href="{{ url_for('standards.groups_page') }}">
+            <i class="bi bi-collection me-2"></i>Tenant Groups
+          </a>
+        </li>
+
+        <li><span class="sidebar-label">Tenant Admin</span></li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'tenant_admin.tenant_lookup_page' %}active{% endif %}"
+             href="{{ url_for('tenant_admin.tenant_lookup_page') }}">
+            <i class="bi bi-search me-2"></i>Tenant Lookup
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'tenant_admin.tenant_variables_page' %}active{% endif %}"
+             href="{{ url_for('tenant_admin.tenant_variables_page') }}">
+            <i class="bi bi-sliders me-2"></i>Tenant Variables
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('conditional.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-ca" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('conditional.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-shield-lock me-2"></i>Conditional Access
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('conditional.') %}show{% endif %}" id="sidebar-ca">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('conditional.ca_policies_page') }}"><i class="bi bi-list-check me-2"></i>Policies</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('conditional.ca_templates_page') }}"><i class="bi bi-file-earmark-code me-2"></i>Templates</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('gdap.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-gdap" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('gdap.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-people-fill me-2"></i>GDAP Management
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('gdap.') %}show{% endif %}" id="sidebar-gdap">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_relationships_page') }}"><i class="bi bi-diagram-2 me-2"></i>Relationships</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_role_templates_page') }}"><i class="bi bi-card-checklist me-2"></i>Role Templates</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_onboarding_page') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Onboarding</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_offboarding_page') }}"><i class="bi bi-box-arrow-left me-2"></i>Offboarding</a></li>
+            </ul>
+          </div>
+        </li>
+
+        <li><span class="sidebar-label">Operations</span></li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-ops" role="button"
+             aria-expanded="{% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}true{% else %}false{% endif %}">
+            <i class="bi bi-tools me-2"></i>MSP Operations
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}show{% endif %}" id="sidebar-ops">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}"><i class="bi bi-grid-3x3-gap me-2"></i>All Operations</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#user"><i class="bi bi-person-badge me-2"></i>User Management</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#exchange"><i class="bi bi-envelope me-2"></i>Exchange Online</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#teams"><i class="bi bi-chat-dots me-2"></i>Microsoft Teams</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#sharepoint"><i class="bi bi-folder2-open me-2"></i>SharePoint</a></li>
+            </ul>
+          </div>
+        </li>
+
+        <li><span class="sidebar-label">Security</span></li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('email_security.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-email" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('email_security.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-envelope-exclamation me-2"></i>Email Protection
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('email_security.') %}show{% endif %}" id="sidebar-email">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.quarantine_page') }}"><i class="bi bi-shield-x me-2"></i>Quarantine</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.transport_rules_page') }}"><i class="bi bi-signpost-split me-2"></i>Transport Rules</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.anti_phishing_page') }}"><i class="bi bi-fish me-2"></i>Anti-Phishing</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.defender_policies_page') }}"><i class="bi bi-shield-check me-2"></i>Defender Policies</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.threat_report_page') }}"><i class="bi bi-graph-up-arrow me-2"></i>Threat Report</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('identity.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-identity" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('identity.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-person-lock me-2"></i>Identity Protection
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('identity.') %}show{% endif %}" id="sidebar-identity">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risky_users_page') }}"><i class="bi bi-person-exclamation me-2"></i>Risky Users</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risky_signins_page') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Risky Sign-Ins</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.mfa_report_page') }}"><i class="bi bi-phone me-2"></i>MFA Gap Analysis</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risk_overview_page') }}"><i class="bi bi-graph-down-arrow me-2"></i>Risk Overview</a></li>
+            </ul>
+          </div>
+        </li>
+
+        <li><span class="sidebar-label">Devices</span></li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('devices.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-devices" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('devices.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-laptop me-2"></i>Device Management
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('devices.') %}show{% endif %}" id="sidebar-devices">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.device_inventory_page') }}"><i class="bi bi-list-ul me-2"></i>Inventory</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.device_compliance_page') }}"><i class="bi bi-clipboard2-check me-2"></i>Compliance</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.autopilot_page') }}"><i class="bi bi-rocket-takeoff me-2"></i>Autopilot</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.devices_overview_page') }}"><i class="bi bi-pie-chart me-2"></i>Overview</a></li>
+            </ul>
+          </div>
+        </li>
+
+        <li><span class="sidebar-label">Monitoring</span></li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('service_health.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-health" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('service_health.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-heart-pulse me-2"></i>Service Health
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('service_health.') %}show{% endif %}" id="sidebar-health">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.service_health_page') }}"><i class="bi bi-check-circle me-2"></i>Status</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.incidents_list_page') }}"><i class="bi bi-exclamation-triangle me-2"></i>Incidents</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.message_center_page') }}"><i class="bi bi-megaphone me-2"></i>Message Center</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.maintenance_page') }}"><i class="bi bi-wrench me-2"></i>Maintenance</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('licenses.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-licenses" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('licenses.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-credit-card me-2"></i>Licenses
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('licenses.') %}show{% endif %}" id="sidebar-licenses">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_inventory_page') }}"><i class="bi bi-card-list me-2"></i>Inventory</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_usage_page') }}"><i class="bi bi-bar-chart me-2"></i>Usage Analysis</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_optimization_page') }}"><i class="bi bi-lightning me-2"></i>Optimization</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_overview_page') }}"><i class="bi bi-pie-chart me-2"></i>Overview</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('incidents.') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-incidents" role="button"
+             aria-expanded="{% if request.endpoint and request.endpoint.startswith('incidents.') %}true{% else %}false{% endif %}">
+            <i class="bi bi-fire me-2"></i>Incident Response
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint and request.endpoint.startswith('incidents.') %}show{% endif %}" id="sidebar-incidents">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.incidents_dashboard') }}"><i class="bi bi-kanban me-2"></i>Dashboard</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.bec_response_page') }}"><i class="bi bi-envelope-slash me-2"></i>BEC Response</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.account_compromise_page') }}"><i class="bi bi-person-x me-2"></i>Account Compromise</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.data_exfiltration_page') }}"><i class="bi bi-cloud-arrow-up me-2"></i>Data Exfiltration</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.malware_outbreak_page') }}"><i class="bi bi-bug me-2"></i>Malware Outbreak</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.privilege_escalation_page') }}"><i class="bi bi-arrow-up-circle me-2"></i>Privilege Escalation</a></li>
+            </ul>
+          </div>
+        </li>
+
+        <li><span class="sidebar-label">Tools</span></li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'tools.graph_explorer_page' %}active{% endif %}"
+             href="{{ url_for('tools.graph_explorer_page') }}">
+            <i class="bi bi-terminal me-2"></i>Graph Explorer
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'tools.domain_health_page' %}active{% endif %}"
+             href="{{ url_for('tools.domain_health_page') }}">
+            <i class="bi bi-globe me-2"></i>Domain Health
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'tools.geoip_lookup_page' %}active{% endif %}"
+             href="{{ url_for('tools.geoip_lookup_page') }}">
+            <i class="bi bi-geo-alt me-2"></i>GeoIP Lookup
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint in ('tools.backup_page', 'tools.backup_detail') %}active{% endif %}"
+             href="{{ url_for('tools.backup_page') }}">
+            <i class="bi bi-cloud-download me-2"></i>Config Backup
+          </a>
+        </li>
+
+        <li><span class="sidebar-label">Results</span></li>
+        <li class="nav-item">
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}active{% endif %}"
+             data-bs-toggle="collapse" href="#sidebar-reports" role="button"
+             aria-expanded="{% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}true{% else %}false{% endif %}">
+            <i class="bi bi-file-earmark-bar-graph me-2"></i>Reports
+            <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+          </a>
+          <div class="collapse {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}show{% endif %}" id="sidebar-reports">
+            <ul class="nav flex-column sidebar-subnav">
+              <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}"><i class="bi bi-files me-2"></i>All Reports</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'reports.schedules_page' %}active{% endif %}" href="{{ url_for('reports.schedules_page') }}"><i class="bi bi-calendar-check me-2"></i>Schedules</a></li>
+            </ul>
+          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'jobs.jobs_page' %}active{% endif %}"
+             href="{{ url_for('jobs.jobs_page') }}">
+            <i class="bi bi-activity me-2"></i>Jobs
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'reports.audit_trail' %}active{% endif %}"
+             href="{{ url_for('reports.audit_trail') }}">
+            <i class="bi bi-journal-text me-2"></i>Audit Log
+          </a>
+        </li>
+
+        <li><span class="sidebar-label">Account</span></li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'auth.users_page' %}active{% endif %}"
+             href="{{ url_for('auth.users_page') }}">
+            <i class="bi bi-people me-2"></i>Users
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'auth.settings_page' %}active{% endif %}"
+             href="{{ url_for('auth.settings_page') }}">
+            <i class="bi bi-gear me-2"></i>Settings
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <span class="user-avatar">
+            <i class="bi bi-person-fill"></i>
+          </span>
+          <span class="user-name">{{ session.get('display_name', session.get('username', '')) }}</span>
+          <a href="{{ url_for('auth.logout') }}" class="logout-btn" title="Sign out">
+            <i class="bi bi-box-arrow-right"></i>
+          </a>
         </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-security" role="button"
-           aria-expanded="{% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}true{% else %}false{% endif %}">
-          <i class="bi bi-shield-exclamation me-2"></i>Security Scan
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint in ('audits.audit_security', 'audits.audit_security_run', 'audits.inspectors_page') %}show{% endif %}" id="sidebar-security">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='security') }}"><i class="bi bi-play me-2"></i>Run Scan</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'audits.inspectors_page' %}active{% endif %}" href="{{ url_for('audits.inspectors_page') }}"><i class="bi bi-card-checklist me-2"></i>Browse Inspectors</a></li>
-          </ul>
-        </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-breach" role="button"
-           aria-expanded="{% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}true{% else %}false{% endif %}">
-          <i class="bi bi-search me-2"></i>Breach Investigation
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint in ('audits.audit_breach', 'audits.audit_breach_run') %}show{% endif %}" id="sidebar-breach">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='ual') }}"><i class="bi bi-journal-text me-2"></i>Unified Audit Log</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='inbox') }}"><i class="bi bi-inbox me-2"></i>Inbox Rules</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='signin') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Sign-In Logs</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='oauth') }}"><i class="bi bi-key me-2"></i>OAuth Consent</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('audits.catalogue', category='breach', type='msgtrace') }}"><i class="bi bi-envelope-arrow-up me-2"></i>Message Trace</a></li>
-          </ul>
-        </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'audits.batch_page' %}active{% endif %}"
-           href="{{ url_for('audits.batch_page') }}">
-          <i class="bi bi-collection me-2"></i>Batch Operations
-        </a>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">COMPLIANCE</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'standards.bpa_page' %}active{% endif %}"
-           href="{{ url_for('standards.bpa_page') }}">
-          <i class="bi bi-clipboard2-check me-2"></i>Best Practice Analyzer
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint in ('standards.standards_page', 'standards.template_detail') %}active{% endif %}"
-           href="{{ url_for('standards.standards_page') }}">
-          <i class="bi bi-shield-check me-2"></i>Standards & Baselines
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'standards.secure_scores_page' %}active{% endif %}"
-           href="{{ url_for('standards.secure_scores_page') }}">
-          <i class="bi bi-speedometer me-2"></i>Secure Scores
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'standards.alerts_page' %}active{% endif %}"
-           href="{{ url_for('standards.alerts_page') }}">
-          <i class="bi bi-bell me-2"></i>Alerts
-          <span class="badge bg-danger ms-auto alert-count-badge" style="display:none"></span>
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint in ('standards.groups_page', 'standards.group_detail') %}active{% endif %}"
-           href="{{ url_for('standards.groups_page') }}">
-          <i class="bi bi-collection me-2"></i>Tenant Groups
-        </a>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">TENANT ADMIN</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'tenant_admin.tenant_lookup_page' %}active{% endif %}"
-           href="{{ url_for('tenant_admin.tenant_lookup_page') }}">
-          <i class="bi bi-search me-2"></i>Tenant Lookup
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'tenant_admin.tenant_variables_page' %}active{% endif %}"
-           href="{{ url_for('tenant_admin.tenant_variables_page') }}">
-          <i class="bi bi-sliders me-2"></i>Tenant Variables
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('conditional.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-ca" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('conditional.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-shield-lock me-2"></i>Conditional Access
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('conditional.') %}show{% endif %}" id="sidebar-ca">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('conditional.ca_policies_page') }}"><i class="bi bi-list-check me-2"></i>Policies</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('conditional.ca_templates_page') }}"><i class="bi bi-file-earmark-code me-2"></i>Templates</a></li>
-          </ul>
-        </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('gdap.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-gdap" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('gdap.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-people-fill me-2"></i>GDAP Management
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('gdap.') %}show{% endif %}" id="sidebar-gdap">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_relationships_page') }}"><i class="bi bi-diagram-2 me-2"></i>Relationships</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_role_templates_page') }}"><i class="bi bi-card-checklist me-2"></i>Role Templates</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_onboarding_page') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Onboarding</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('gdap.gdap_offboarding_page') }}"><i class="bi bi-box-arrow-left me-2"></i>Offboarding</a></li>
-          </ul>
-        </div>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">OPERATIONS</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-ops" role="button"
-           aria-expanded="{% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}true{% else %}false{% endif %}">
-          <i class="bi bi-tools me-2"></i>MSP Operations
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint in ('operations.operations_page', 'operations.operations_run', 'operations.operations_bulk') %}show{% endif %}" id="sidebar-ops">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}"><i class="bi bi-grid-3x3-gap me-2"></i>All Operations</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#user"><i class="bi bi-person-badge me-2"></i>User Management</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#exchange"><i class="bi bi-envelope me-2"></i>Exchange Online</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#teams"><i class="bi bi-chat-dots me-2"></i>Microsoft Teams</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('operations.operations_page') }}#sharepoint"><i class="bi bi-folder2-open me-2"></i>SharePoint</a></li>
-          </ul>
-        </div>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">EMAIL SECURITY</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('email_security.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-email" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('email_security.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-envelope-exclamation me-2"></i>Email Protection
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('email_security.') %}show{% endif %}" id="sidebar-email">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.quarantine_page') }}"><i class="bi bi-shield-x me-2"></i>Quarantine</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.transport_rules_page') }}"><i class="bi bi-signpost-split me-2"></i>Transport Rules</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.anti_phishing_page') }}"><i class="bi bi-fish me-2"></i>Anti-Phishing</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.defender_policies_page') }}"><i class="bi bi-shield-check me-2"></i>Defender Policies</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.threat_report_page') }}"><i class="bi bi-graph-up-arrow me-2"></i>Threat Report</a></li>
-          </ul>
-        </div>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">IDENTITY</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('identity.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-identity" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('identity.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-person-lock me-2"></i>Identity Protection
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('identity.') %}show{% endif %}" id="sidebar-identity">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risky_users_page') }}"><i class="bi bi-person-exclamation me-2"></i>Risky Users</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risky_signins_page') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Risky Sign-Ins</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.mfa_report_page') }}"><i class="bi bi-phone me-2"></i>MFA Gap Analysis</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risk_overview_page') }}"><i class="bi bi-graph-down-arrow me-2"></i>Risk Overview</a></li>
-          </ul>
-        </div>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">DEVICES</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('devices.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-devices" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('devices.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-laptop me-2"></i>Device Management
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('devices.') %}show{% endif %}" id="sidebar-devices">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.device_inventory_page') }}"><i class="bi bi-list-ul me-2"></i>Inventory</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.device_compliance_page') }}"><i class="bi bi-clipboard2-check me-2"></i>Compliance</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.autopilot_page') }}"><i class="bi bi-rocket-takeoff me-2"></i>Autopilot</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.devices_overview_page') }}"><i class="bi bi-pie-chart me-2"></i>Overview</a></li>
-          </ul>
-        </div>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">MONITORING</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('service_health.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-health" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('service_health.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-heart-pulse me-2"></i>Service Health
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('service_health.') %}show{% endif %}" id="sidebar-health">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.service_health_page') }}"><i class="bi bi-check-circle me-2"></i>Status</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.incidents_list_page') }}"><i class="bi bi-exclamation-triangle me-2"></i>Incidents</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.message_center_page') }}"><i class="bi bi-megaphone me-2"></i>Message Center</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.maintenance_page') }}"><i class="bi bi-wrench me-2"></i>Maintenance</a></li>
-          </ul>
-        </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('licenses.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-licenses" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('licenses.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-credit-card me-2"></i>Licenses
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('licenses.') %}show{% endif %}" id="sidebar-licenses">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_inventory_page') }}"><i class="bi bi-card-list me-2"></i>Inventory</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_usage_page') }}"><i class="bi bi-bar-chart me-2"></i>Usage Analysis</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_optimization_page') }}"><i class="bi bi-lightning me-2"></i>Optimization</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_overview_page') }}"><i class="bi bi-pie-chart me-2"></i>Overview</a></li>
-          </ul>
-        </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('incidents.') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-incidents" role="button"
-           aria-expanded="{% if request.endpoint and request.endpoint.startswith('incidents.') %}true{% else %}false{% endif %}">
-          <i class="bi bi-fire me-2"></i>Incident Response
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint and request.endpoint.startswith('incidents.') %}show{% endif %}" id="sidebar-incidents">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.incidents_dashboard') }}"><i class="bi bi-kanban me-2"></i>Dashboard</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.bec_response_page') }}"><i class="bi bi-envelope-slash me-2"></i>BEC Response</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.account_compromise_page') }}"><i class="bi bi-person-x me-2"></i>Account Compromise</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.data_exfiltration_page') }}"><i class="bi bi-cloud-arrow-up me-2"></i>Data Exfiltration</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.malware_outbreak_page') }}"><i class="bi bi-bug me-2"></i>Malware Outbreak</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.privilege_escalation_page') }}"><i class="bi bi-arrow-up-circle me-2"></i>Privilege Escalation</a></li>
-          </ul>
-        </div>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">TOOLS</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'tools.graph_explorer_page' %}active{% endif %}"
-           href="{{ url_for('tools.graph_explorer_page') }}">
-          <i class="bi bi-terminal me-2"></i>Graph Explorer
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'tools.domain_health_page' %}active{% endif %}"
-           href="{{ url_for('tools.domain_health_page') }}">
-          <i class="bi bi-globe me-2"></i>Domain Health
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'tools.geoip_lookup_page' %}active{% endif %}"
-           href="{{ url_for('tools.geoip_lookup_page') }}">
-          <i class="bi bi-geo-alt me-2"></i>GeoIP Lookup
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint in ('tools.backup_page', 'tools.backup_detail') %}active{% endif %}"
-           href="{{ url_for('tools.backup_page') }}">
-          <i class="bi bi-cloud-download me-2"></i>Config Backup
-        </a>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">RESULTS</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}active{% endif %}"
-           data-bs-toggle="collapse" href="#sidebar-reports" role="button"
-           aria-expanded="{% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}true{% else %}false{% endif %}">
-          <i class="bi bi-file-earmark-bar-graph me-2"></i>Reports
-          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
-        </a>
-        <div class="collapse {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}show{% endif %}" id="sidebar-reports">
-          <ul class="nav flex-column sidebar-subnav">
-            <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}"><i class="bi bi-files me-2"></i>All Reports</a></li>
-            <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'reports.schedules_page' %}active{% endif %}" href="{{ url_for('reports.schedules_page') }}"><i class="bi bi-calendar-check me-2"></i>Schedules</a></li>
-          </ul>
-        </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'jobs.jobs_page' %}active{% endif %}"
-           href="{{ url_for('jobs.jobs_page') }}">
-          <i class="bi bi-activity me-2"></i>Jobs
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'reports.audit_trail' %}active{% endif %}"
-           href="{{ url_for('reports.audit_trail') }}">
-          <i class="bi bi-journal-text me-2"></i>Audit Log
-        </a>
-      </li>
-
-      <li class="nav-item mt-2">
-        <span class="sidebar-label">ACCOUNT</span>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'auth.users_page' %}active{% endif %}"
-           href="{{ url_for('auth.users_page') }}">
-          <i class="bi bi-people me-2"></i>Users
-        </a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint == 'auth.settings_page' %}active{% endif %}"
-           href="{{ url_for('auth.settings_page') }}">
-          <i class="bi bi-gear me-2"></i>Settings
-        </a>
-      </li>
-    </ul>
-
-    <div class="sidebar-footer mt-auto pt-3 border-top border-secondary">
-      <div class="d-flex align-items-center justify-content-between">
-        <small class="text-muted">
-          <i class="bi bi-person-circle me-1"></i>{{ session.get('display_name', session.get('username', '')) }}
-        </small>
-        <a href="{{ url_for('auth.logout') }}" class="text-muted" title="Sign out">
-          <i class="bi bi-box-arrow-right"></i>
-        </a>
       </div>
     </div>
   </nav>
 
   <!-- Main content -->
-  <div class="flex-grow-1 d-flex flex-column">
-    <header class="portal-header d-flex align-items-center px-4 py-2 border-bottom border-secondary">
+  <div class="main-wrapper">
+    <header class="portal-header">
       <button class="sidebar-toggle me-2" onclick="toggleSidebar()" aria-label="Toggle navigation">
         <i class="bi bi-list"></i>
       </button>
       <div>
         {% block breadcrumb %}{% endblock %}
-        <h6 class="mb-0 fw-semibold">{% block page_title %}{% endblock %}</h6>
+        <h6 class="page-title mb-0">{% block page_title %}{% endblock %}</h6>
       </div>
     </header>
 
-    <main class="flex-grow-1 p-4">
+    <main class="main-content">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
-          <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">
+          <div class="alert alert-{{ cat }} alert-dismissible fade show animate-fade-in" role="alert">
             {{ msg }}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
           </div>

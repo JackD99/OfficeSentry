@@ -12,12 +12,14 @@
 
 <!-- Onboarding checklist (shown until first audit is complete) -->
 {% if needs_setup or needs_config or audited_count == 0 %}
-<div class="onboarding-card p-4 mb-4">
+<div class="onboarding-card p-4 mb-4 animate-fade-in">
   <div class="d-flex align-items-center mb-3">
-    <i class="bi bi-rocket-takeoff fs-4 me-2 text-accent-blue"></i>
+    <div style="width:36px;height:36px;border-radius:var(--radius-md);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-3">
+      <i class="bi bi-rocket-takeoff text-accent-blue"></i>
+    </div>
     <div>
-      <h6 class="mb-0 fw-semibold">Getting Started</h6>
-      <small class="text-muted">Complete these steps to run your first audit</small>
+      <h6 class="mb-0 fw-bold" style="letter-spacing:-0.01em">Getting Started</h6>
+      <small style="color:var(--color-text-tertiary)">Complete these steps to run your first audit</small>
     </div>
     {% if audited_count > 0 %}
     <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="this.closest('.onboarding-card').remove()">Dismiss</button>
@@ -63,55 +65,63 @@
 {% endif %}
 
 <!-- Status cards -->
-<div class="row g-3 mb-4">
+<div class="row g-3 mb-4 stagger-animate">
   <div class="col-6 col-lg-3">
     <div class="card h-100 stat-card stat-blue">
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-building fs-4 me-2 text-accent-blue"></i>
-          <span class="fw-semibold">Tenants</span>
+      <div class="card-body py-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div style="width:32px;height:32px;border-radius:var(--radius-md);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-building text-accent-blue"></i>
+          </div>
+          <span class="stat-label">Tenants</span>
         </div>
-        <div class="fs-3 fw-bold">{{ total_tenants }}</div>
-        <div class="small text-muted">{{ configured_count }} configured</div>
+        <div class="stat-value">{{ total_tenants }}</div>
+        <div class="small mt-1" style="color:var(--color-text-tertiary)">{{ configured_count }} configured</div>
       </div>
     </div>
   </div>
 
   <div class="col-6 col-lg-3">
     <div class="card h-100 stat-card stat-green">
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-check-circle fs-4 me-2 text-accent-green"></i>
-          <span class="fw-semibold">Ready</span>
+      <div class="card-body py-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div style="width:32px;height:32px;border-radius:var(--radius-md);background:var(--color-accent-green-soft);display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-check-circle text-accent-green"></i>
+          </div>
+          <span class="stat-label">Ready</span>
         </div>
-        <div class="fs-3 fw-bold">{{ configured_count }}</div>
-        <div class="small text-muted">with app &amp; cert</div>
+        <div class="stat-value">{{ configured_count }}</div>
+        <div class="small mt-1" style="color:var(--color-text-tertiary)">with app &amp; cert</div>
       </div>
     </div>
   </div>
 
   <div class="col-6 col-lg-3">
     <div class="card h-100 stat-card stat-amber">
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-graph-up fs-4 me-2 text-accent-amber"></i>
-          <span class="fw-semibold">Audited</span>
+      <div class="card-body py-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div style="width:32px;height:32px;border-radius:var(--radius-md);background:var(--color-accent-amber-soft);display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-graph-up text-accent-amber"></i>
+          </div>
+          <span class="stat-label">Audited</span>
         </div>
-        <div class="fs-3 fw-bold">{{ audited_count }}</div>
-        <div class="small text-muted">tenants audited</div>
+        <div class="stat-value">{{ audited_count }}</div>
+        <div class="small mt-1" style="color:var(--color-text-tertiary)">tenants audited</div>
       </div>
     </div>
   </div>
 
   <div class="col-6 col-lg-3">
     <div class="card h-100 stat-card {{ 'stat-red' if running_jobs else 'stat-blue' }}">
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-2">
-          <i class="bi bi-activity fs-4 me-2 {{ 'text-accent-red' if running_jobs else 'text-muted' }}"></i>
-          <span class="fw-semibold">Running</span>
+      <div class="card-body py-4">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div style="width:32px;height:32px;border-radius:var(--radius-md);background:{% if running_jobs %}var(--color-accent-red-soft){% else %}var(--color-accent-blue-soft){% endif %};display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-activity {% if running_jobs %}text-accent-red{% else %}text-accent-blue{% endif %}"></i>
+          </div>
+          <span class="stat-label">Running</span>
         </div>
-        <div class="fs-3 fw-bold" id="running-count">{{ running_jobs|length }}</div>
-        <div class="small text-muted">active job{{ 's' if running_jobs|length != 1 else '' }}</div>
+        <div class="stat-value" id="running-count">{{ running_jobs|length }}</div>
+        <div class="small mt-1" style="color:var(--color-text-tertiary)">active job{{ 's' if running_jobs|length != 1 else '' }}</div>
       </div>
     </div>
   </div>
@@ -123,24 +133,24 @@
   <div class="col-md-3 col-6">
     <div class="card h-100">
       <div class="card-body text-center py-3">
-        <div class="fs-4 fw-bold text-accent-blue">{{ stats.total_jobs }}</div>
-        <div class="small text-muted">Total Jobs</div>
+        <div class="stat-value text-accent-blue" style="font-size:var(--text-2xl)">{{ stats.total_jobs }}</div>
+        <div class="stat-label">Total Jobs</div>
       </div>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="card h-100">
       <div class="card-body text-center py-3">
-        <div class="fs-4 fw-bold text-accent-green">{{ stats.completed_jobs }}</div>
-        <div class="small text-muted">Completed</div>
+        <div class="stat-value text-accent-green" style="font-size:var(--text-2xl)">{{ stats.completed_jobs }}</div>
+        <div class="stat-label">Completed</div>
       </div>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="card h-100">
       <div class="card-body text-center py-3">
-        <div class="fs-4 fw-bold text-accent-red">{{ stats.failed_jobs }}</div>
-        <div class="small text-muted">Failed</div>
+        <div class="stat-value text-accent-red" style="font-size:var(--text-2xl)">{{ stats.failed_jobs }}</div>
+        <div class="stat-label">Failed</div>
       </div>
     </div>
   </div>
@@ -148,8 +158,8 @@
     <div class="card h-100">
       <div class="card-body text-center py-3">
         {% set rate = ((stats.completed_jobs / stats.total_jobs) * 100)|round(0)|int if stats.total_jobs > 0 else 0 %}
-        <div class="fs-4 fw-bold {% if rate >= 80 %}text-accent-green{% elif rate >= 50 %}text-accent-amber{% else %}text-accent-red{% endif %}">{{ rate }}%</div>
-        <div class="small text-muted">Success Rate</div>
+        <div class="stat-value {% if rate >= 80 %}text-accent-green{% elif rate >= 50 %}text-accent-amber{% else %}text-accent-red{% endif %}" style="font-size:var(--text-2xl)">{{ rate }}%</div>
+        <div class="stat-label">Success Rate</div>
       </div>
     </div>
   </div>
@@ -158,12 +168,17 @@
 
 <!-- Quick launch -->
 {% if configured_count > 0 %}
-<div class="card mb-4">
-  <div class="card-header fw-semibold"><i class="bi bi-lightning me-2 text-warning"></i>Quick Launch</div>
+<div class="card mb-4 animate-fade-in">
+  <div class="card-header d-flex align-items-center">
+    <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-amber-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+      <i class="bi bi-lightning-fill text-accent-amber" style="font-size:0.75rem"></i>
+    </div>
+    <span class="fw-semibold">Quick Launch</span>
+  </div>
   <div class="card-body">
-    <div class="row g-2 align-items-end">
+    <div class="row g-3 align-items-end">
       <div class="col-md-4">
-        <label class="form-label small">Tenant</label>
+        <label class="form-label">Tenant</label>
         <select class="form-select form-select-sm" id="ql-tenant">
           {% for t in tenants %}
           {% if t.client_id %}
@@ -173,7 +188,7 @@
         </select>
       </div>
       <div class="col-md-4">
-        <label class="form-label small">Audit Type</label>
+        <label class="form-label">Audit Type</label>
         <select class="form-select form-select-sm" id="ql-type">
           <optgroup label="SharePoint">
             <option value="spo" data-subtype="groups">Groups Audit</option>
@@ -195,12 +210,12 @@
       </div>
       <div class="col-md-4">
         <button class="btn btn-primary btn-sm w-100" onclick="quickLaunch()">
-          <i class="bi bi-play-fill me-1"></i>Go
+          <i class="bi bi-play-fill me-1"></i>Launch Audit
         </button>
       </div>
     </div>
     <div class="text-end mt-2">
-      <a href="{{ url_for('audits.catalogue') }}" class="small text-muted text-decoration-none">
+      <a href="{{ url_for('audits.catalogue') }}" class="small" style="color:var(--color-text-tertiary);text-decoration:none">
         <i class="bi bi-grid-3x3-gap me-1"></i>Browse all audit types
       </a>
     </div>
@@ -215,11 +230,14 @@
   <div class="col-lg-8">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-graph-up me-2 text-accent-blue"></i>
-        <span class="fw-semibold">Audit Activity (Last 30 Days)</span>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-graph-up text-accent-blue" style="font-size:0.75rem"></i>
+        </div>
+        <span class="fw-semibold">Audit Activity</span>
+        <span class="ms-auto" style="font-size:var(--text-xs);color:var(--color-text-quaternary)">Last 30 days</span>
       </div>
       <div class="card-body">
-        <div class="chart-container" style="position:relative;height:240px">
+        <div class="chart-container" style="position:relative;height:260px">
           <canvas id="trendChart"></canvas>
         </div>
       </div>
@@ -230,7 +248,9 @@
   <div class="col-lg-4">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-pie-chart me-2 text-accent-green"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-green-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-pie-chart text-accent-green" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Job Results</span>
       </div>
       <div class="card-body d-flex align-items-center justify-content-center">
@@ -247,7 +267,9 @@
   <div class="col-lg-6">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-bar-chart me-2 text-accent-amber"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-amber-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-bar-chart text-accent-amber" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Reports by Type</span>
       </div>
       <div class="card-body">
@@ -256,7 +278,7 @@
           <canvas id="reportTypeChart"></canvas>
         </div>
         {% else %}
-        <div class="text-center py-4 text-muted small">No reports generated yet.</div>
+        <div class="text-center py-4" style="color:var(--color-text-quaternary);font-size:var(--text-sm)">No reports generated yet.</div>
         {% endif %}
       </div>
     </div>
@@ -266,7 +288,9 @@
   <div class="col-lg-6">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-diagram-3 me-2 text-primary"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-purple-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-diagram-3 text-accent-purple" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Audits by Type</span>
       </div>
       <div class="card-body">
@@ -275,7 +299,7 @@
           <canvas id="jobTypeChart"></canvas>
         </div>
         {% else %}
-        <div class="text-center py-4 text-muted small">No audits run yet.</div>
+        <div class="text-center py-4" style="color:var(--color-text-quaternary);font-size:var(--text-sm)">No audits run yet.</div>
         {% endif %}
       </div>
     </div>
@@ -290,25 +314,27 @@
   <div class="col-lg-4">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-clipboard2-check me-2 text-accent-green"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-green-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-clipboard2-check text-accent-green" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">BPA Compliance</span>
         <a href="{{ url_for('standards.bpa_page') }}" class="ms-auto btn btn-sm btn-outline-secondary">View</a>
       </div>
       <div class="card-body p-0">
         <ul class="list-group list-group-flush">
           {% for s in bpa_summary[:5] %}
-          <li class="list-group-item d-flex align-items-center gap-2 py-2">
+          <li class="list-group-item d-flex align-items-center gap-2 py-2 px-4">
             <div class="flex-grow-1">
               <div class="small fw-semibold">{{ s.tenant_name }}</div>
               <div class="d-flex gap-1 mt-1">
-                {% if s.pass_count > 0 %}<span class="badge bg-success" style="font-size:.65rem">{{ s.pass_count }} pass</span>{% endif %}
-                {% if s.warn_count > 0 %}<span class="badge bg-warning text-dark" style="font-size:.65rem">{{ s.warn_count }} warn</span>{% endif %}
-                {% if s.fail_count > 0 %}<span class="badge bg-danger" style="font-size:.65rem">{{ s.fail_count }} fail</span>{% endif %}
+                {% if s.pass_count > 0 %}<span class="badge bg-success" style="font-size:.6rem">{{ s.pass_count }} pass</span>{% endif %}
+                {% if s.warn_count > 0 %}<span class="badge bg-warning text-dark" style="font-size:.6rem">{{ s.warn_count }} warn</span>{% endif %}
+                {% if s.fail_count > 0 %}<span class="badge bg-danger" style="font-size:.6rem">{{ s.fail_count }} fail</span>{% endif %}
               </div>
             </div>
             {% set total = s.pass_count + s.warn_count + s.fail_count %}
             {% set score = ((s.pass_count / total * 100) if total > 0 else 0)|round(0)|int %}
-            <span class="badge {% if score >= 80 %}bg-success{% elif score >= 50 %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-6">
+            <span class="badge {% if score >= 80 %}bg-success{% elif score >= 50 %}bg-warning text-dark{% else %}bg-danger{% endif %}" style="font-size:var(--text-sm)">
               {{ score }}%
             </span>
           </li>
@@ -323,7 +349,9 @@
   <div class="col-lg-4">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-speedometer me-2 text-accent-blue"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-speedometer text-accent-blue" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Secure Scores</span>
         <a href="{{ url_for('standards.secure_scores_page') }}" class="ms-auto btn btn-sm btn-outline-secondary">View</a>
       </div>
@@ -331,7 +359,7 @@
         <ul class="list-group list-group-flush">
           {% for s in secure_scores[:5] %}
           {% set pct = ((s.current_score / s.max_score * 100) if s.max_score > 0 else 0)|round(0)|int %}
-          <li class="list-group-item d-flex align-items-center gap-2 py-2">
+          <li class="list-group-item d-flex align-items-center gap-2 py-2 px-4">
             <div class="flex-grow-1">
               <div class="small fw-semibold">{{ s.tenant_name }}</div>
               <div class="progress mt-1" style="height:4px">
@@ -353,25 +381,27 @@
   <div class="col-lg-4">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-bell me-2 {% if alert_counts.total_active > 0 %}text-accent-red{% else %}text-muted{% endif %}"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:{% if alert_counts.total_active > 0 %}var(--color-accent-red-soft){% else %}var(--color-bg-overlay){% endif %};display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-bell {% if alert_counts.total_active > 0 %}text-accent-red{% else %}text-muted{% endif %}" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Active Alerts</span>
         <a href="{{ url_for('standards.alerts_page') }}" class="ms-auto btn btn-sm btn-outline-secondary">View</a>
       </div>
       <div class="card-body text-center py-4">
         {% if alert_counts.total_active > 0 %}
-        <div class="fs-2 fw-bold text-accent-red">{{ alert_counts.total_active }}</div>
-        <div class="small text-muted mb-3">active alert{{ 's' if alert_counts.total_active != 1 }}</div>
+        <div class="stat-value text-accent-red">{{ alert_counts.total_active }}</div>
+        <div class="small mb-3" style="color:var(--color-text-tertiary)">active alert{{ 's' if alert_counts.total_active != 1 }}</div>
         <div class="d-flex justify-content-center gap-3">
           {% for sev, count in alert_counts.by_severity.items() %}
           {% set sev_colors = {'critical':'danger', 'high':'warning', 'medium':'info', 'low':'primary', 'info':'secondary'} %}
           <div>
-            <span class="badge bg-{{ sev_colors.get(sev, 'secondary') }} fs-6">{{ count }}</span>
-            <div class="small text-muted mt-1">{{ sev|title }}</div>
+            <span class="badge bg-{{ sev_colors.get(sev, 'secondary') }}" style="font-size:var(--text-sm)">{{ count }}</span>
+            <div class="small mt-1" style="color:var(--color-text-tertiary)">{{ sev|title }}</div>
           </div>
           {% endfor %}
         </div>
         {% else %}
-        <div class="text-muted">
+        <div style="color:var(--color-text-quaternary)">
           <i class="bi bi-check-circle display-5"></i>
           <p class="mt-2 mb-0 small">No active alerts</p>
         </div>
@@ -383,11 +413,13 @@
 {% endif %}
 
 <div class="row g-4">
-  <!-- Active jobs + Scheduled Reports -->
+  <!-- Active jobs + Scheduled Reports + Recent activity -->
   <div class="col-lg-5">
     <div class="card">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-activity me-2 text-primary"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-activity text-accent-blue" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Running Jobs</span>
         <span class="badge bg-primary ms-auto" id="running-badge">{{ running_jobs|length }}</span>
       </div>
@@ -395,18 +427,18 @@
         {% if running_jobs %}
           <ul class="list-group list-group-flush">
             {% for job in running_jobs %}
-            <li class="list-group-item d-flex align-items-center gap-2">
+            <li class="list-group-item d-flex align-items-center gap-2 px-4">
               <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
               <div>
                 <div class="fw-semibold small">{{ job.label }}</div>
-                <div class="text-muted" style="font-size:.75rem">{{ job.started_at[:16] if job.started_at else '' }}</div>
+                <div style="font-size:var(--text-xs);color:var(--color-text-tertiary)">{{ job.started_at[:16] if job.started_at else '' }}</div>
               </div>
               <a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-sm btn-outline-secondary ms-auto">View</a>
             </li>
             {% endfor %}
           </ul>
         {% else %}
-          <div class="p-3 text-muted small">No jobs running.</div>
+          <div class="p-4 small" style="color:var(--color-text-tertiary)">No jobs running.</div>
         {% endif %}
       </div>
     </div>
@@ -415,18 +447,20 @@
     {% if schedules %}
     <div class="card mt-4">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-calendar-check me-2 text-accent-amber"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-amber-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-calendar-check text-accent-amber" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Scheduled Reports</span>
         <a href="{{ url_for('reports.schedules_page') }}" class="ms-auto btn btn-sm btn-outline-secondary">Manage</a>
       </div>
       <div class="card-body p-0">
         <ul class="list-group list-group-flush">
           {% for s in schedules[:5] %}
-          <li class="list-group-item d-flex align-items-center gap-2 py-2">
-            <i class="bi bi-{% if s.enabled %}clock-fill text-accent-green{% else %}pause-circle text-muted{% endif %}"></i>
+          <li class="list-group-item d-flex align-items-center gap-2 py-2 px-4">
+            <i class="bi bi-{% if s.enabled %}clock-fill text-accent-green{% else %}pause-circle{% endif %}" style="{% if not s.enabled %}color:var(--color-text-quaternary){% endif %}"></i>
             <div>
               <div class="small fw-semibold">{{ s.name }}</div>
-              <div class="text-muted" style="font-size:.7rem">{{ s.frequency|capitalize }} · {{ s.audit_type }}</div>
+              <div style="font-size:var(--text-xs);color:var(--color-text-tertiary)">{{ s.frequency|capitalize }} · {{ s.audit_type }}</div>
             </div>
             <span class="badge bg-{% if s.enabled %}success{% else %}secondary{% endif %} ms-auto">{{ 'Active' if s.enabled else 'Paused' }}</span>
           </li>
@@ -440,18 +474,20 @@
     {% if recent_activity %}
     <div class="card mt-4">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-clock-history me-2 text-secondary"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-bg-overlay);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-clock-history" style="font-size:0.75rem;color:var(--color-text-tertiary)"></i>
+        </div>
         <span class="fw-semibold">Recent Activity</span>
         <a href="{{ url_for('reports.audit_trail') }}" class="ms-auto btn btn-sm btn-outline-secondary">All</a>
       </div>
       <div class="card-body p-0">
         <ul class="list-group list-group-flush">
           {% for e in recent_activity[:8] %}
-          <li class="list-group-item py-2">
+          <li class="list-group-item py-2 px-4">
             <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-secondary" style="font-size:.65rem">{{ e.action }}</span>
+              <span class="badge bg-secondary" style="font-size:.6rem">{{ e.action }}</span>
               <span class="small text-truncate">{{ e.tenant_name or '' }}{{ ' — ' + e.details if e.details else '' }}</span>
-              <span class="text-muted small ms-auto text-nowrap" style="font-size:.7rem">{{ e.timestamp[:16] }}</span>
+              <span class="ms-auto text-nowrap" style="font-size:var(--text-xs);color:var(--color-text-quaternary)">{{ e.timestamp[:16] }}</span>
             </div>
           </li>
           {% endfor %}
@@ -467,7 +503,9 @@
     {% if total_tenants > 0 %}
     <div class="card mb-4">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-pie-chart-fill me-2 text-accent-blue"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-pie-chart-fill text-accent-blue" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Tenant Status</span>
       </div>
       <div class="card-body">
@@ -478,17 +516,17 @@
             </div>
           </div>
           <div class="col-7">
-            <div class="d-flex flex-column gap-2">
+            <div class="d-flex flex-column gap-3">
               <div class="d-flex align-items-center gap-2">
-                <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:var(--accent-green)"></span>
+                <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:var(--color-accent-green)"></span>
                 <span class="small">Ready ({{ configured_count }})</span>
               </div>
               <div class="d-flex align-items-center gap-2">
-                <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:var(--accent-amber)"></span>
+                <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:var(--color-accent-amber)"></span>
                 <span class="small">Setup needed ({{ total_tenants - configured_count }})</span>
               </div>
               <div class="d-flex align-items-center gap-2">
-                <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:var(--accent-blue)"></span>
+                <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:var(--color-accent-blue)"></span>
                 <span class="small">Audited ({{ audited_count }})</span>
               </div>
             </div>
@@ -502,20 +540,22 @@
     {% if saved_views %}
     <div class="card mb-4">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-bookmark me-2 text-accent-blue"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-bookmark text-accent-blue" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Saved Report Views</span>
         <a href="{{ url_for('reports.reports') }}" class="ms-auto btn btn-sm btn-outline-secondary">All Reports</a>
       </div>
       <div class="card-body p-0">
         <ul class="list-group list-group-flush">
           {% for v in saved_views[:5] %}
-          <li class="list-group-item d-flex align-items-center gap-2 py-2">
-            <i class="bi bi-layout-text-sidebar-reverse text-muted"></i>
+          <li class="list-group-item d-flex align-items-center gap-2 py-2 px-4">
+            <i class="bi bi-layout-text-sidebar-reverse" style="color:var(--color-text-tertiary)"></i>
             <div>
               <span class="small fw-semibold">{{ v.name }}</span>
-              {% if v.report_type %}<span class="badge bg-secondary ms-1" style="font-size:.6rem">{{ v.report_type }}</span>{% endif %}
+              {% if v.report_type %}<span class="badge bg-secondary ms-1" style="font-size:.55rem">{{ v.report_type }}</span>{% endif %}
             </div>
-            <span class="text-muted small ms-auto">{{ v.created_at[:10] }}</span>
+            <span class="ms-auto" style="font-size:var(--text-xs);color:var(--color-text-quaternary)">{{ v.created_at[:10] }}</span>
           </li>
           {% endfor %}
         </ul>
@@ -525,7 +565,9 @@
 
     <div class="card">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-building me-2 text-secondary"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-bg-overlay);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-building" style="font-size:0.75rem;color:var(--color-text-tertiary)"></i>
+        </div>
         <span class="fw-semibold">Tenants</span>
         <a href="{{ url_for('tenants.tenants_list') }}" class="ms-auto btn btn-sm btn-outline-secondary">All tenants</a>
       </div>
@@ -535,12 +577,12 @@
             <tbody>
               {% for t in tenants[:10] %}
               <tr>
-                <td class="ps-3">
+                <td class="ps-4">
                   <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}" class="row-link">
                     {{ t.name }}
                   </a>
                 </td>
-                <td class="text-muted small">{{ t.domain }}</td>
+                <td class="small" style="color:var(--color-text-tertiary)">{{ t.domain }}</td>
                 <td>
                   {% if t.client_id %}
                     <span class="badge bg-success">Ready</span>
@@ -548,7 +590,7 @@
                     <span class="badge bg-warning text-dark">Setup</span>
                   {% endif %}
                 </td>
-                <td class="pe-3 text-muted small text-nowrap">{{ t.last_audit_at[:10] if t.last_audit_at else 'Never' }}</td>
+                <td class="pe-4 small text-nowrap" style="color:var(--color-text-tertiary)">{{ t.last_audit_at[:10] if t.last_audit_at else 'Never' }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -587,22 +629,23 @@ function quickLaunch() {
 
 // --- Chart.js Configuration ---
 const chartColors = {
-  blue: '#388bfd',
-  green: '#3fb950',
-  amber: '#d29922',
-  red: '#f85149',
-  purple: '#a371f7',
-  cyan: '#39d2c0',
-  pink: '#f778ba',
-  gray: '#8b949e',
+  blue: '#3b82f6',
+  green: '#22c55e',
+  amber: '#f59e0b',
+  red: '#ef4444',
+  purple: '#a855f7',
+  cyan: '#06b6d4',
+  pink: '#ec4899',
+  gray: '#71717a',
 };
 const chartDefaults = {
-  color: '#8b949e',
-  borderColor: '#21262d',
-  font: { family: 'system-ui, -apple-system, sans-serif' },
+  color: '#71717a',
+  borderColor: '#27272a',
+  font: { family: 'Inter, system-ui, -apple-system, sans-serif' },
 };
 Chart.defaults.color = chartDefaults.color;
 Chart.defaults.borderColor = chartDefaults.borderColor;
+Chart.defaults.font.family = chartDefaults.font.family;
 
 // Tenant Status Donut
 {% if total_tenants > 0 %}
@@ -619,7 +662,7 @@ new Chart(document.getElementById('tenantStatusChart'), {
   options: {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: '65%',
+    cutout: '68%',
     plugins: {
       legend: { display: false },
     },
@@ -639,21 +682,23 @@ new Chart(document.getElementById('trendChart'), {
         label: 'Completed',
         data: trendData.map(d => d.completed),
         borderColor: chartColors.green,
-        backgroundColor: 'rgba(63,185,80,0.1)',
+        backgroundColor: 'rgba(34, 197, 94, 0.08)',
         fill: true,
-        tension: 0.3,
-        pointRadius: 3,
+        tension: 0.4,
+        pointRadius: 2,
         pointHoverRadius: 5,
+        borderWidth: 2,
       },
       {
         label: 'Failed',
         data: trendData.map(d => d.failed),
         borderColor: chartColors.red,
-        backgroundColor: 'rgba(248,81,73,0.1)',
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
         fill: true,
-        tension: 0.3,
-        pointRadius: 3,
+        tension: 0.4,
+        pointRadius: 2,
         pointHoverRadius: 5,
+        borderWidth: 2,
       },
     ]
   },
@@ -669,18 +714,19 @@ new Chart(document.getElementById('trendChart'), {
       y: {
         beginAtZero: true,
         ticks: { stepSize: 1, font: { size: 11 } },
-        grid: { color: 'rgba(255,255,255,0.04)' },
+        grid: { color: 'rgba(255,255,255,0.03)' },
       },
     },
     plugins: {
-      legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 6, padding: 12, font: { size: 11 } } },
+      legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 6, padding: 16, font: { size: 11, family: chartDefaults.font.family } } },
       tooltip: {
-        backgroundColor: '#161b22',
-        borderColor: '#30363d',
+        backgroundColor: '#18181b',
+        borderColor: '#3f3f46',
         borderWidth: 1,
-        titleFont: { size: 12 },
-        bodyFont: { size: 11 },
-        padding: 8,
+        titleFont: { size: 12, family: chartDefaults.font.family },
+        bodyFont: { size: 11, family: chartDefaults.font.family },
+        padding: 10,
+        cornerRadius: 8,
       },
     },
   }
@@ -700,9 +746,9 @@ new Chart(document.getElementById('successChart'), {
   options: {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: '60%',
+    cutout: '65%',
     plugins: {
-      legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 6, padding: 10, font: { size: 11 } } },
+      legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 6, padding: 12, font: { size: 11, family: chartDefaults.font.family } } },
     },
   }
 });
@@ -726,7 +772,7 @@ new Chart(document.getElementById('reportTypeChart'), {
       data: reportValues,
       backgroundColor: reportColors,
       borderWidth: 0,
-      borderRadius: 4,
+      borderRadius: 6,
       barThickness: 22,
     }]
   },
@@ -735,7 +781,7 @@ new Chart(document.getElementById('reportTypeChart'), {
     maintainAspectRatio: false,
     indexAxis: 'y',
     scales: {
-      x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      x: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
       y: { grid: { display: false }, ticks: { font: { size: 11 } } },
     },
     plugins: { legend: { display: false } },
@@ -755,7 +801,7 @@ new Chart(document.getElementById('jobTypeChart'), {
       data: jobTypeData.map(d => d.count),
       backgroundColor: [chartColors.blue, chartColors.green, chartColors.red, chartColors.amber, chartColors.gray],
       borderWidth: 0,
-      borderRadius: 4,
+      borderRadius: 6,
       barThickness: 32,
     }]
   },
@@ -764,7 +810,7 @@ new Chart(document.getElementById('jobTypeChart'), {
     maintainAspectRatio: false,
     scales: {
       x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-      y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
     },
     plugins: { legend: { display: false } },
   }
@@ -783,7 +829,7 @@ new Chart(document.getElementById('jobTypeChart'), {
       document.getElementById('running-badge').textContent = d.count;
       if (d.count === 0) {
         document.getElementById('running-jobs-list').innerHTML =
-          '<div class="p-3 text-muted small">No jobs running.</div>';
+          '<div class="p-4 small" style="color:var(--color-text-tertiary)">No jobs running.</div>';
         showToast('All jobs completed', 'success');
       } else {
         pollRunning();

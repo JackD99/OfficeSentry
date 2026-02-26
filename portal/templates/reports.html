@@ -16,26 +16,30 @@
 {% block content %}
 <!-- Summary Cards -->
 {% if files %}
-<div class="row g-3 mb-4">
+<div class="row g-3 mb-4 stagger-animate">
   <div class="col-6 col-lg-3">
     <div class="card h-100 stat-card stat-blue">
       <div class="card-body py-3">
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <i class="bi bi-files fs-5 text-accent-blue"></i>
-          <span class="fw-semibold small">Total Reports</span>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div style="width:28px;height:28px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-files text-accent-blue" style="font-size:0.8rem"></i>
+          </div>
+          <span class="stat-label">Total Reports</span>
         </div>
-        <div class="fs-4 fw-bold">{{ files|length }}</div>
+        <div class="stat-value" style="font-size:var(--text-2xl)">{{ files|length }}</div>
       </div>
     </div>
   </div>
   <div class="col-6 col-lg-3">
     <div class="card h-100 stat-card stat-green">
       <div class="card-body py-3">
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <i class="bi bi-hdd fs-5 text-accent-green"></i>
-          <span class="fw-semibold small">Total Size</span>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div style="width:28px;height:28px;border-radius:var(--radius-sm);background:var(--color-accent-green-soft);display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-hdd text-accent-green" style="font-size:0.8rem"></i>
+          </div>
+          <span class="stat-label">Total Size</span>
         </div>
-        <div class="fs-4 fw-bold">
+        <div class="stat-value" style="font-size:var(--text-2xl)">
           {% if total_size > 1048576 %}{{ (total_size / 1048576)|round(1) }} MB{% else %}{{ (total_size / 1024)|round(0)|int }} KB{% endif %}
         </div>
       </div>
@@ -44,11 +48,13 @@
   <div class="col-6 col-lg-3">
     <div class="card h-100 stat-card stat-amber">
       <div class="card-body py-3">
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <i class="bi bi-grid fs-5 text-accent-amber"></i>
-          <span class="fw-semibold small">Report Types</span>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div style="width:28px;height:28px;border-radius:var(--radius-sm);background:var(--color-accent-amber-soft);display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-grid text-accent-amber" style="font-size:0.8rem"></i>
+          </div>
+          <span class="stat-label">Report Types</span>
         </div>
-        <div class="fs-4 fw-bold">{{ type_counts|length }}</div>
+        <div class="stat-value" style="font-size:var(--text-2xl)">{{ type_counts|length }}</div>
       </div>
     </div>
   </div>
@@ -69,7 +75,9 @@
   <div class="col-lg-7">
     <div class="card">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-bar-chart me-2 text-accent-blue"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-bar-chart text-accent-blue" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">Report Distribution</span>
       </div>
       <div class="card-body">
@@ -80,7 +88,9 @@
   <div class="col-lg-5">
     <div class="card h-100">
       <div class="card-header d-flex align-items-center">
-        <i class="bi bi-pie-chart me-2 text-accent-green"></i>
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-green-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-pie-chart text-accent-green" style="font-size:0.75rem"></i>
+        </div>
         <span class="fw-semibold">By Type</span>
       </div>
       <div class="card-body d-flex align-items-center justify-content-center">
@@ -94,27 +104,27 @@
 
 <!-- Tenant filter -->
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-  <span class="text-muted small">Tenant:</span>
+  <span style="font-size:var(--text-xs);color:var(--color-text-tertiary)">Tenant:</span>
   <a href="{{ url_for('reports.reports') }}"
-     class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}">All</a>
+     class="btn btn-sm {{ 'btn-secondary' if not filter_tenant else 'btn-outline-secondary' }}" style="border-radius:var(--radius-full)">All</a>
   {% for t in tenants %}
   <a href="{{ url_for('reports.reports', tenant_id=t.id) }}"
-     class="btn btn-sm {{ 'btn-secondary' if filter_tenant == t.id else 'btn-outline-secondary' }}">{{ t.name }}</a>
+     class="btn btn-sm {{ 'btn-secondary' if filter_tenant == t.id else 'btn-outline-secondary' }}" style="border-radius:var(--radius-full)">{{ t.name }}</a>
   {% endfor %}
 </div>
 
 {% if files %}
 <!-- Search + type filter -->
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-  <input type="text" class="form-control form-control-sm search-input" style="max-width:240px"
+  <input type="text" class="form-control form-control-sm search-input" style="max-width:260px"
          id="report-search" placeholder="Search filenames..." oninput="filterReports()">
   <div class="d-flex gap-1 flex-wrap">
-    <button class="btn btn-sm btn-outline-secondary active type-filter-btn" onclick="filterType('', this)">
+    <button class="btn btn-sm btn-outline-secondary active type-filter-btn" onclick="filterType('', this)" style="border-radius:var(--radius-full)">
       All <span class="badge bg-dark ms-1">{{ files|length }}</span>
     </button>
     {% for tname, tcount in type_counts.items()|sort(attribute='1', reverse=true) %}
     <button class="btn btn-sm btn-outline-{{ type_badge_colors.get(tname, 'secondary') }} type-filter-btn"
-            onclick="filterType('{{ tname }}', this)">
+            onclick="filterType('{{ tname }}', this)" style="border-radius:var(--radius-full)">
       {{ tname }} <span class="badge bg-dark ms-1">{{ tcount }}</span>
     </button>
     {% endfor %}
@@ -124,8 +134,8 @@
 <!-- Saved views dropdown -->
 {% if saved_views %}
 <div class="d-flex align-items-center mb-3 gap-2">
-  <i class="bi bi-bookmark text-muted"></i>
-  <span class="text-muted small">Saved Views:</span>
+  <i class="bi bi-bookmark" style="color:var(--color-text-quaternary)"></i>
+  <span style="font-size:var(--text-xs);color:var(--color-text-tertiary)">Saved Views:</span>
   {% for v in saved_views %}
   <span class="badge bg-secondary" style="cursor:pointer"
         title="{{ v.report_type }}">{{ v.name }}</span>
@@ -136,7 +146,7 @@
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
-      <thead class="table-dark">
+      <thead>
         <tr>
           <th style="width:35%">File</th>
           <th>Type</th>
@@ -157,16 +167,16 @@
             {% elif f.ext == '.csv' %}
               <i class="bi bi-filetype-csv me-2 text-info"></i>
             {% elif f.ext == '.json' %}
-              <i class="bi bi-filetype-json me-2 text-secondary"></i>
+              <i class="bi bi-filetype-json me-2" style="color:var(--color-text-tertiary)"></i>
             {% else %}
-              <i class="bi bi-file-earmark me-2 text-muted"></i>
+              <i class="bi bi-file-earmark me-2" style="color:var(--color-text-quaternary)"></i>
             {% endif %}
-            <span class="font-monospace small">{{ f.name }}</span>
+            <span class="font-monospace" style="font-size:var(--text-xs)">{{ f.name }}</span>
           </td>
           <td><span class="badge bg-{{ type_badge_colors.get(f.type, 'secondary') }}">{{ f.type }}</span></td>
-          <td class="small text-muted">{{ f.tenant_name }}</td>
-          <td class="text-muted small">{{ f.mtime }}</td>
-          <td class="text-muted small">{{ f.size }}</td>
+          <td style="font-size:var(--text-xs);color:var(--color-text-tertiary)">{{ f.tenant_name }}</td>
+          <td style="font-size:var(--text-xs);color:var(--color-text-tertiary)">{{ f.mtime }}</td>
+          <td style="font-size:var(--text-xs);color:var(--color-text-tertiary)">{{ f.size }}</td>
           <td class="text-end">
             {% if f.ext in ['.csv', '.json'] %}
             <a href="{{ url_for('reports.report_viewer', path=f.full_path) }}"
@@ -251,9 +261,10 @@ async function deleteReport(path, btn) {
 // Charts
 {% if files and type_counts|length > 1 %}
 const typeData = {{ type_counts|tojson }};
-const chartPalette = ['#388bfd','#3fb950','#d29922','#f85149','#a371f7','#39d2c0','#f778ba','#8b949e','#58a6ff','#79c0ff'];
-Chart.defaults.color = '#8b949e';
-Chart.defaults.borderColor = '#21262d';
+const chartPalette = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#a855f7','#06b6d4','#ec4899','#71717a','#60a5fa','#4ade80'];
+Chart.defaults.color = '#71717a';
+Chart.defaults.borderColor = '#27272a';
+Chart.defaults.font.family = 'Inter, system-ui, -apple-system, sans-serif';
 
 new Chart(document.getElementById('reportDistChart'), {
   type: 'bar',
@@ -262,13 +273,13 @@ new Chart(document.getElementById('reportDistChart'), {
     datasets: [{
       data: Object.values(typeData),
       backgroundColor: Object.keys(typeData).map((_, i) => chartPalette[i % chartPalette.length]),
-      borderWidth: 0, borderRadius: 4, barThickness: 24,
+      borderWidth: 0, borderRadius: 6, barThickness: 24,
     }]
   },
   options: {
     responsive: true, maintainAspectRatio: false, indexAxis: 'y',
     scales: {
-      x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      x: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.03)' } },
       y: { grid: { display: false }, ticks: { font: { size: 11 } } },
     },
     plugins: { legend: { display: false } },
@@ -282,7 +293,7 @@ new Chart(document.getElementById('reportPieChart'), {
     datasets: [{ data: Object.values(typeData), backgroundColor: chartPalette.slice(0, Object.keys(typeData).length), borderWidth: 0 }]
   },
   options: {
-    responsive: true, maintainAspectRatio: false, cutout: '55%',
+    responsive: true, maintainAspectRatio: false, cutout: '60%',
     plugins: { legend: { display: false } },
   }
 });

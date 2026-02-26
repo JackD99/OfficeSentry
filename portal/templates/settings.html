@@ -11,20 +11,26 @@
 
 {% block content %}
 <div class="row g-4">
+  <!-- Password Change -->
   <div class="col-lg-5">
     <div class="card">
-      <div class="card-header fw-semibold"><i class="bi bi-key me-2 text-warning"></i>Change Password</div>
+      <div class="card-header d-flex align-items-center">
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-amber-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-key-fill text-accent-amber" style="font-size:0.75rem"></i>
+        </div>
+        <span class="fw-semibold">Change Password</span>
+      </div>
       <div class="card-body">
         <form id="password-form">
           <div class="mb-3">
-            <label class="form-label small">Current Password</label>
+            <label class="form-label">Current Password</label>
             <div class="input-password-wrap">
               <input type="password" class="form-control" name="current_password" required>
               <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
             </div>
           </div>
           <div class="mb-3">
-            <label class="form-label small">New Password</label>
+            <label class="form-label">New Password</label>
             <div class="input-password-wrap">
               <input type="password" class="form-control" name="new_password" required minlength="8"
                      placeholder="At least 8 characters">
@@ -32,7 +38,7 @@
             </div>
           </div>
           <div class="mb-3">
-            <label class="form-label small">Confirm New Password</label>
+            <label class="form-label">Confirm New Password</label>
             <div class="input-password-wrap">
               <input type="password" class="form-control" name="confirm_password" required minlength="8">
               <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
@@ -45,36 +51,57 @@
     </div>
   </div>
 
+  <!-- Account Info -->
   <div class="col-lg-5">
     <div class="card">
-      <div class="card-header fw-semibold"><i class="bi bi-person me-2 text-info"></i>Account</div>
-      <div class="card-body">
-        <div class="mb-2">
-          <span class="small text-muted">Username:</span>
-          <span class="small fw-semibold ms-2">{{ session.get('username', '') }}</span>
+      <div class="card-header d-flex align-items-center">
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-person-fill text-accent-blue" style="font-size:0.75rem"></i>
         </div>
-        <div class="mb-0">
-          <span class="small text-muted">Display name:</span>
-          <span class="small fw-semibold ms-2">{{ session.get('display_name', '') }}</span>
+        <span class="fw-semibold">Account</span>
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <div style="width:48px;height:48px;border-radius:var(--radius-full);background:var(--color-bg-subtle);display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-person-fill" style="font-size:1.25rem;color:var(--color-text-tertiary)"></i>
+          </div>
+          <div>
+            <div class="fw-semibold">{{ session.get('display_name', session.get('username', '')) }}</div>
+            <div style="font-size:var(--text-xs);color:var(--color-text-tertiary)">Administrator</div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <div class="form-control" style="background:var(--color-bg-overlay);cursor:default;color:var(--color-text-secondary)">{{ session.get('username', '') }}</div>
+        </div>
+        <div>
+          <label class="form-label">Display Name</label>
+          <div class="form-control" style="background:var(--color-bg-overlay);cursor:default;color:var(--color-text-secondary)">{{ session.get('display_name', '') }}</div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Admin Connector App -->
   <div class="col-12">
     <div class="card">
-      <div class="card-header fw-semibold"><i class="bi bi-plug me-2 text-success"></i>Admin Connector App</div>
+      <div class="card-header d-flex align-items-center">
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-green-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-plug-fill text-accent-green" style="font-size:0.75rem"></i>
+        </div>
+        <span class="fw-semibold">Admin Connector App</span>
+      </div>
       <div class="card-body">
-        <p class="small text-muted mb-3">
+        <p class="small mb-3" style="color:var(--color-text-tertiary);max-width:640px">
           Microsoft Graph PowerShell requires a custom Entra app to use device-code flow across client tenants.
           The default Microsoft ClientId forces WAM on Windows and reuses your cached session instead of prompting.
-          Register a <strong>public-client multi-tenant</strong> app in your management tenant,
+          Register a <strong style="color:var(--color-text-secondary)">public-client multi-tenant</strong> app in your management tenant,
           enable <em>Allow public client flows</em>, then paste its Client ID here.
           The app needs no pre-assigned API permissions — scopes are requested at runtime when the client admin authenticates.
         </p>
         <form id="admin-app-form">
           <div class="mb-3" style="max-width:420px">
-            <label class="form-label small">Admin Connector Client ID</label>
+            <label class="form-label">Admin Connector Client ID</label>
             <input type="text" class="form-control font-monospace"
                    name="admin_client_id"
                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
