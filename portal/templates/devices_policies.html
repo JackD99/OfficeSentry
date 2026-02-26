@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Device Policies — {{ tenant.name }}{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('devices.device_inventory_page') }}">Devices</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Policies</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Device Policies — {{ tenant.name }}{% endblock %}
+
+{% block content %}
+{% if not tenant.client_id %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  Setup is incomplete for this tenant.
+  <a href="{{ url_for('tenants.tenant_detail', tenant_id=tenant.id) }}">Complete configuration</a> first.
+</div>
+{% endif %}
+
+<div class="alert alert-info small">
+  <i class="bi bi-info-circle me-2"></i>
+  Fetches Intune configuration and compliance policies for <strong>{{ tenant.name }}</strong>.
+  Select a policy type to narrow down the results, or fetch all policy types at once.
+</div>
+
+<div class="row g-4">
+  <!-- Left: Settings -->
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-sliders me-2 text-primary"></i>Fetch Policies</div>
+      <div class="card-body">
+        <form id="policies-form">
+          <div class="mb-3">
+            <label class="form-label">Tenant</label>
+            <input type="text" class="form-control" value="{{ tenant.name }} ({{ tenant.domain }})" disabled>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Policy Type</label>
+            <select class="form-select" id="policy-type" name="policy_type">
+              <option value="all" selected>All Policy Types</option>
+              <option value="configuration">Configuration Profiles</option>
+              <option value="compliance">Compliance Policies</option>
+              <option value="windowsUpdate">Windows Update Rings</option>
+              <option value="endpoint">Endpoint Security</option>
+              <option value="appProtection">App Protection Policies</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100" id="run-btn" {% if not tenant.client_id %}disabled{% endif %}>
+            <span class="spinner-border spinner-border-sm d-none me-2" id="run-spinner"></span>
+            <i class="bi bi-download me-2"></i>Fetch Policies
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {% if cached %}
+    <div class="card mt-4">
+      <div class="card-header fw-semibold"><i class="bi bi-clock-history me-2 text-secondary"></i>Cached Data</div>
+      <div class="card-body">
+        <div class="small text-muted mb-2">
+          Last fetched: <strong>{{ cached.fetched_at[:16] if cached.fetched_at else 'Unknown' }}</strong>
+        </div>
+        {% if cached.data %}
+        {% set policy_data = cached.data if cached.data is mapping else {} %}
+        <div class="d-flex flex-wrap gap-2">
+          {% for ptype, count in policy_data.items() %}
+          <span class="badge bg-secondary">{{ ptype }}: {{ count }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="mt-2">
+          <small class="text-muted">Click <strong>Fetch Policies</strong> to refresh.</small>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Right: Live Output -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Live Output</div>
+      <div class="card-body p-0 d-flex flex-column" style="min-height:300px">
+        <div class="p-3 text-muted small" id="job-idle">
+          Select a policy type and click <strong>Fetch Policies</strong> to begin.
+        </div>
+        <div class="p-3 text-muted small d-none" id="job-waiting">
+          <div class="spinner-border spinner-border-sm me-2"></div>Fetching device policies...
+        </div>
+        <pre class="flex-grow-1 m-0 p-3 small bg-dark text-light d-none"
+             id="job-output" style="overflow-y:auto;max-height:500px;border-radius:0 0 .375rem .375rem"></pre>
+        <div class="p-3 d-none" id="job-done"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('policies-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('run-btn');
+  const spinner = document.getElementById('run-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+  document.getElementById('job-idle').classList.add('d-none');
+  document.getElementById('job-done').classList.add('d-none');
+
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+
+  const res = await fetch('{{ url_for("devices.device_policies_fetch", tenant_id=tenant.id) }}', {
+    method: 'POST', body: fd
+  });
+  const data = await res.json();
+  spinner.classList.add('d-none');
+
+  if (!data.ok) {
+    btn.disabled = false;
+    window.showToast(data.error, 'danger');
+    return;
+  }
+
+  window.showToast('Job started', 'success');
+  document.getElementById('job-waiting').classList.remove('d-none');
+  document.getElementById('job-output').classList.remove('d-none');
+  pollJob(data.job_id);
+});
+
+function pollJob(jobId) {
+  const outputEl = document.getElementById('job-output');
+  const waitEl   = document.getElementById('job-waiting');
+  const doneEl   = document.getElementById('job-done');
+  const btn      = document.getElementById('run-btn');
+
+  const interval = setInterval(async () => {
+    const r = await fetch(`/jobs/${jobId}/status`);
+    const d = await r.json();
+    outputEl.textContent = d.output.join('\n');
+    outputEl.scrollTop = outputEl.scrollHeight;
+
+    if (d.status !== 'running') {
+      clearInterval(interval);
+      waitEl.classList.add('d-none');
+      btn.disabled = false;
+      doneEl.classList.remove('d-none');
+      if (d.status === 'done') {
+        doneEl.innerHTML = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-2"></i>Policy fetch complete. <a href="{{ url_for("reports.reports", tenant_id=tenant.id) }}">View reports</a></div>';
+        window.showToast('Complete!', 'success');
+      } else {
+        doneEl.innerHTML = '<div class="alert alert-danger small mb-0"><i class="bi bi-x-circle me-2"></i>Failed. Check output above.</div>';
+        window.showToast('Failed. Check output.', 'danger');
+      }
+    }
+  }, 2000);
+}
+</script>
+{% endblock %}

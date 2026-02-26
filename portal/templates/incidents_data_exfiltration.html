@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Data Exfiltration — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('incidents.incidents_dashboard') }}">Incident Response</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Data Exfiltration</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Data Exfiltration Investigation{% endblock %}
+
+{% block content %}
+{% if not tenants %}
+<div class="empty-state">
+  <i class="bi bi-cloud-arrow-up"></i>
+  <p>No tenants available. Set up at least one tenant with a certificate and Entra app first.</p>
+  <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary btn-sm">Go to Tenants</a>
+</div>
+{% else %}
+<div class="alert alert-info small">
+  <i class="bi bi-info-circle me-2"></i>
+  <strong>Data Exfiltration Detection</strong> — Analyze file downloads, sharing activity, external sharing links,
+  and large data transfers. Investigate at user, site, or tenant scope to identify potential data theft.
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-cloud-arrow-up me-2 text-info"></i>Investigation Settings</div>
+      <div class="card-body">
+        <form id="exfil-form">
+          <div class="mb-3">
+            <label class="form-label" for="tenant-select">Tenant</label>
+            <select class="form-select" id="tenant-select" name="tenant_id" required>
+              <option value="" disabled selected>Select a tenant...</option>
+              {% for t in tenants %}
+              <option value="{{ t.id }}">{{ t.name }} ({{ t.domain }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Investigation Scope</label>
+            <div class="d-flex gap-2 flex-wrap">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="scope" id="scope-user" value="user" checked
+                       onchange="toggleScope()">
+                <label class="form-check-label" for="scope-user">User</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="scope" id="scope-site" value="site"
+                       onchange="toggleScope()">
+                <label class="form-check-label" for="scope-site">Site</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="scope" id="scope-tenant" value="tenant"
+                       onchange="toggleScope()">
+                <label class="form-check-label" for="scope-tenant">Tenant-wide</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3" id="target-user-wrap">
+            <label class="form-label" for="target-user">Target User Email</label>
+            <input type="email" class="form-control" id="target-user" name="target_user"
+                   placeholder="user@domain.com">
+            <div class="form-text">The email address of the user to investigate. Leave blank for tenant-wide scope.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="days-back">Days Back</label>
+            <input type="number" class="form-control" id="days-back" name="days_back"
+                   value="30" min="1" max="365">
+            <div class="form-text">Number of days to look back for exfiltration indicators.</div>
+          </div>
+
+          <button type="submit" class="btn btn-info w-100 text-dark" id="run-btn">
+            <span class="spinner-border spinner-border-sm d-none me-2" id="run-spinner"></span>
+            <i class="bi bi-play-fill me-2"></i>Run Investigation
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-terminal me-2 text-secondary"></i>Live Output</div>
+      <div class="card-body p-0 d-flex flex-column" style="min-height:300px">
+        <div class="p-3 text-muted small" id="job-idle">
+          Configure the investigation scope and click <strong>Run Investigation</strong> to begin.
+        </div>
+        <div class="p-3 text-muted small d-none" id="job-waiting">
+          <div class="spinner-border spinner-border-sm me-2"></div>Data exfiltration investigation running...
+        </div>
+        <pre class="flex-grow-1 m-0 p-3 small bg-dark text-light d-none"
+             id="job-output" style="overflow-y:auto;max-height:500px;border-radius:0 0 .375rem .375rem"></pre>
+        <div class="p-3 d-none" id="job-done"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleScope() {
+  const scope = document.querySelector('input[name="scope"]:checked').value;
+  const userWrap = document.getElementById('target-user-wrap');
+  if (scope === 'tenant') {
+    userWrap.classList.add('d-none');
+  } else {
+    userWrap.classList.remove('d-none');
+  }
+  const userInput = document.getElementById('target-user');
+  userInput.placeholder = scope === 'site' ? 'https://contoso.sharepoint.com/sites/...' : 'user@domain.com';
+  userInput.type = scope === 'site' ? 'url' : 'email';
+}
+
+document.getElementById('exfil-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('run-btn');
+  const spinner = document.getElementById('run-spinner');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+  document.getElementById('job-idle').classList.add('d-none');
+  document.getElementById('job-done').classList.add('d-none');
+
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const tenantId = document.getElementById('tenant-select').value;
+  const res = await fetch(`/tenants/${tenantId}/incidents/data-exfil/run`, { method: 'POST', body: fd });
+  const data = await res.json();
+  spinner.classList.add('d-none');
+
+  if (!data.ok) {
+    btn.disabled = false;
+    window.showToast(data.error, 'danger');
+    return;
+  }
+
+  window.showToast('Job started', 'success');
+  document.getElementById('job-waiting').classList.remove('d-none');
+  document.getElementById('job-output').classList.remove('d-none');
+  pollJob(data.job_id);
+});
+
+function pollJob(jobId) {
+  const outputEl = document.getElementById('job-output');
+  const waitEl   = document.getElementById('job-waiting');
+  const doneEl   = document.getElementById('job-done');
+  const btn      = document.getElementById('run-btn');
+
+  const interval = setInterval(async () => {
+    const r = await fetch(`/jobs/${jobId}/status`);
+    const d = await r.json();
+    outputEl.textContent = d.output.join('\n');
+    outputEl.scrollTop = outputEl.scrollHeight;
+
+    if (d.status !== 'running') {
+      clearInterval(interval);
+      waitEl.classList.add('d-none');
+      btn.disabled = false;
+      doneEl.classList.remove('d-none');
+      if (d.status === 'done') {
+        doneEl.innerHTML = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-2"></i>Data exfiltration investigation complete. Review findings above.</div>';
+        window.showToast('Complete!', 'success');
+      } else {
+        doneEl.innerHTML = '<div class="alert alert-danger small mb-0"><i class="bi bi-x-circle me-2"></i>Investigation failed. Check output above.</div>';
+        window.showToast('Failed. Check output.', 'danger');
+      }
+    }
+  }, 2000);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Threat Report — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><a href="{{ url_for('email_security.quarantine_page') }}">Email Security</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Threat Report</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Cross-Tenant Threat Report{% endblock %}
+
+{% block content %}
+{% if not tenants %}
+<div class="empty-state">
+  <i class="bi bi-graph-up-arrow"></i>
+  <p>No tenants available. Set up at least one tenant with a certificate and Entra app first.</p>
+  <a href="{{ url_for('tenants.tenants_list') }}" class="btn btn-outline-primary btn-sm">Go to Tenants</a>
+</div>
+{% else %}
+<div class="alert alert-info small">
+  <i class="bi bi-info-circle me-2"></i>
+  Generate a cross-tenant threat report aggregating email threat data across multiple tenants.
+  This report summarizes phishing, malware, spam detections, and quarantine activity over the specified time range.
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-graph-up-arrow me-2 text-danger"></i>Threat Report Settings</div>
+      <div class="card-body">
+        <form id="threat-form">
+          <div class="mb-3">
+            <label class="form-label">Days Range</label>
+            <input type="number" class="form-control" name="days" id="days-input"
+                   value="30" min="1" max="365">
+            <div class="form-text">Number of days to include in the threat report (default: 30).</div>
+          </div>
+
+          <div class="mb-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label mb-0">Select Tenants</label>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+                Select All
+              </button>
+            </div>
+            <div style="max-height:250px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:.375rem;padding:.5rem">
+              {% for t in tenants %}
+              <div class="form-check py-1">
+                <input class="form-check-input tenant-check" type="checkbox" name="tenant_ids"
+                       id="t-{{ t.id }}" value="{{ t.id }}">
+                <label class="form-check-label small" for="t-{{ t.id }}">
+                  {{ t.name }} <span class="text-muted">({{ t.domain }})</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="form-text"><span id="selected-count">0</span> of {{ tenants|length }} tenants selected</div>
+          </div>
+
+          <button type="submit" class="btn btn-danger w-100" id="run-btn">
+            <span class="spinner-border spinner-border-sm d-none me-2" id="run-spinner"></span>
+            <i class="bi bi-play-fill me-2"></i>Run Threat Report
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold"><i class="bi bi-activity me-2 text-secondary"></i>Report Progress</div>
+      <div class="card-body" id="report-progress">
+        <div class="text-muted small">Select tenants and click <strong>Run Threat Report</strong> to generate a cross-tenant threat summary.</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// --- Tenant selection ---
+document.querySelectorAll('.tenant-check').forEach(cb => {
+  cb.addEventListener('change', updateCount);
+});
+
+function updateCount() {
+  document.getElementById('selected-count').textContent =
+    document.querySelectorAll('.tenant-check:checked').length;
+}
+
+function toggleAllTenants() {
+  const checks = document.querySelectorAll('.tenant-check');
+  const allChecked = [...checks].every(c => c.checked);
+  checks.forEach(c => c.checked = !allChecked);
+  updateCount();
+}
+
+// --- Form submission ---
+document.getElementById('threat-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('run-btn');
+  const spinner = document.getElementById('run-spinner');
+
+  const selected = document.querySelectorAll('.tenant-check:checked');
+  if (selected.length === 0) {
+    window.showToast('Select at least one tenant.', 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+
+  const fd = new FormData(e.target);
+  fd.append('csrf_token', window.CSRF_TOKEN);
+
+  const res = await fetch('/email-security/threat-report/run', { method: 'POST', body: fd });
+  const data = await res.json();
+  spinner.classList.add('d-none');
+  btn.disabled = false;
+
+  const progress = document.getElementById('report-progress');
+
+  if (!data.ok) {
+    progress.innerHTML = `<div class="alert alert-danger small">${data.error}</div>`;
+    window.showToast(data.error, 'danger');
+    return;
+  }
+
+  window.showToast(data.message || 'Threat report started', 'success');
+
+  // Build per-tenant job progress UI
+  const jobs = data.tenant_jobs || [];
+  if (jobs.length === 0) {
+    progress.innerHTML = '<div class="alert alert-warning small">No jobs were started. Check tenant configurations.</div>';
+    return;
+  }
+
+  let html = `
+    <div class="alert alert-success small">
+      <i class="bi bi-check-circle me-2"></i>Started ${jobs.length} job(s) across selected tenants.
+    </div>
+    <div class="batch-summary" id="batch-summary">
+      <span><i class="bi bi-check-circle text-success me-1"></i><span id="bs-done">0</span> complete</span>
+      <span><i class="bi bi-arrow-repeat text-primary me-1"></i><span id="bs-running">${jobs.length}</span> running</span>
+      <span><i class="bi bi-x-circle text-danger me-1"></i><span id="bs-failed">0</span> failed</span>
+    </div>
+    <div id="batch-rows">`;
+  for (const j of jobs) {
+    html += `
+      <div class="batch-tenant-row" data-job-id="${j.job_id}" data-status="running">
+        <div class="spinner-border spinner-border-sm text-primary job-icon"></div>
+        <span class="tenant-name">${j.tenant_name}</span>
+        <span class="tenant-status">Running...</span>
+      </div>`;
+  }
+  html += '</div>';
+  html += `<div class="mt-3"><a href="{{ url_for('jobs.jobs_page') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-activity me-1"></i>View All Jobs</a></div>`;
+  progress.innerHTML = html;
+
+  // Poll each job
+  pollBatchJobs(jobs.map(j => j.job_id));
+});
+
+function pollBatchJobs(jobIds) {
+  const interval = setInterval(async () => {
+    let allDone = true;
+    let doneCount = 0, failedCount = 0, runningCount = 0;
+
+    for (const jid of jobIds) {
+      const row = document.querySelector(`[data-job-id="${jid}"]`);
+      if (!row || row.dataset.status !== 'running') {
+        if (row && row.dataset.status === 'done') doneCount++;
+        if (row && (row.dataset.status === 'failed' || row.dataset.status === 'cancelled')) failedCount++;
+        continue;
+      }
+
+      try {
+        const r = await fetch(`/jobs/${jid}/status`);
+        const d = await r.json();
+
+        if (d.status !== 'running') {
+          row.dataset.status = d.status;
+          const icon = row.querySelector('.job-icon');
+          const status = row.querySelector('.tenant-status');
+          if (d.status === 'done') {
+            icon.outerHTML = '<i class="bi bi-check-circle-fill text-success job-icon"></i>';
+            status.textContent = 'Complete';
+            status.classList.add('text-success');
+            doneCount++;
+          } else {
+            icon.outerHTML = '<i class="bi bi-x-circle-fill text-danger job-icon"></i>';
+            status.textContent = d.status === 'cancelled' ? 'Cancelled' : 'Failed';
+            status.classList.add('text-danger');
+            failedCount++;
+          }
+        } else {
+          allDone = false;
+          runningCount++;
+        }
+      } catch {
+        allDone = false;
+        runningCount++;
+      }
+    }
+
+    // Update summary
+    const sDone = document.getElementById('bs-done');
+    const sRunning = document.getElementById('bs-running');
+    const sFailed = document.getElementById('bs-failed');
+    if (sDone) sDone.textContent = doneCount;
+    if (sRunning) sRunning.textContent = runningCount;
+    if (sFailed) sFailed.textContent = failedCount;
+
+    if (allDone) {
+      clearInterval(interval);
+      if (failedCount === 0) {
+        window.showToast('Threat report complete across all tenants!', 'success');
+      } else {
+        window.showToast(`Threat report complete: ${doneCount} succeeded, ${failedCount} failed`, 'warning');
+      }
+    }
+  }, 2000);
+}
+</script>
+{% endblock %}

@@ -210,6 +210,121 @@
       </li>
 
       <li class="nav-item mt-2">
+        <span class="sidebar-label">EMAIL SECURITY</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('email_security.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-email" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('email_security.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-envelope-exclamation me-2"></i>Email Protection
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('email_security.') %}show{% endif %}" id="sidebar-email">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.quarantine_page') }}"><i class="bi bi-shield-x me-2"></i>Quarantine</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.transport_rules_page') }}"><i class="bi bi-signpost-split me-2"></i>Transport Rules</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.anti_phishing_page') }}"><i class="bi bi-fish me-2"></i>Anti-Phishing</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.defender_policies_page') }}"><i class="bi bi-shield-check me-2"></i>Defender Policies</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('email_security.threat_report_page') }}"><i class="bi bi-graph-up-arrow me-2"></i>Threat Report</a></li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="nav-item mt-2">
+        <span class="sidebar-label">IDENTITY</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('identity.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-identity" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('identity.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-person-lock me-2"></i>Identity Protection
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('identity.') %}show{% endif %}" id="sidebar-identity">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risky_users_page') }}"><i class="bi bi-person-exclamation me-2"></i>Risky Users</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risky_signins_page') }}"><i class="bi bi-box-arrow-in-right me-2"></i>Risky Sign-Ins</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.mfa_report_page') }}"><i class="bi bi-phone me-2"></i>MFA Gap Analysis</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('identity.risk_overview_page') }}"><i class="bi bi-graph-down-arrow me-2"></i>Risk Overview</a></li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="nav-item mt-2">
+        <span class="sidebar-label">DEVICES</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('devices.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-devices" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('devices.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-laptop me-2"></i>Device Management
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('devices.') %}show{% endif %}" id="sidebar-devices">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.device_inventory_page') }}"><i class="bi bi-list-ul me-2"></i>Inventory</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.device_compliance_page') }}"><i class="bi bi-clipboard2-check me-2"></i>Compliance</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.autopilot_page') }}"><i class="bi bi-rocket-takeoff me-2"></i>Autopilot</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('devices.devices_overview_page') }}"><i class="bi bi-pie-chart me-2"></i>Overview</a></li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="nav-item mt-2">
+        <span class="sidebar-label">MONITORING</span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('service_health.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-health" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('service_health.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-heart-pulse me-2"></i>Service Health
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('service_health.') %}show{% endif %}" id="sidebar-health">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.service_health_page') }}"><i class="bi bi-check-circle me-2"></i>Status</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.incidents_list_page') }}"><i class="bi bi-exclamation-triangle me-2"></i>Incidents</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.message_center_page') }}"><i class="bi bi-megaphone me-2"></i>Message Center</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('service_health.maintenance_page') }}"><i class="bi bi-wrench me-2"></i>Maintenance</a></li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('licenses.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-licenses" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('licenses.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-credit-card me-2"></i>Licenses
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('licenses.') %}show{% endif %}" id="sidebar-licenses">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_inventory_page') }}"><i class="bi bi-card-list me-2"></i>Inventory</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_usage_page') }}"><i class="bi bi-bar-chart me-2"></i>Usage Analysis</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_optimization_page') }}"><i class="bi bi-lightning me-2"></i>Optimization</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('licenses.license_overview_page') }}"><i class="bi bi-pie-chart me-2"></i>Overview</a></li>
+          </ul>
+        </div>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('incidents.') %}active{% endif %}"
+           data-bs-toggle="collapse" href="#sidebar-incidents" role="button"
+           aria-expanded="{% if request.endpoint and request.endpoint.startswith('incidents.') %}true{% else %}false{% endif %}">
+          <i class="bi bi-fire me-2"></i>Incident Response
+          <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
+        </a>
+        <div class="collapse {% if request.endpoint and request.endpoint.startswith('incidents.') %}show{% endif %}" id="sidebar-incidents">
+          <ul class="nav flex-column sidebar-subnav">
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.incidents_dashboard') }}"><i class="bi bi-kanban me-2"></i>Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.bec_response_page') }}"><i class="bi bi-envelope-slash me-2"></i>BEC Response</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.account_compromise_page') }}"><i class="bi bi-person-x me-2"></i>Account Compromise</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.data_exfiltration_page') }}"><i class="bi bi-cloud-arrow-up me-2"></i>Data Exfiltration</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.malware_outbreak_page') }}"><i class="bi bi-bug me-2"></i>Malware Outbreak</a></li>
+            <li class="nav-item"><a class="nav-link nav-link-sub" href="{{ url_for('incidents.privilege_escalation_page') }}"><i class="bi bi-arrow-up-circle me-2"></i>Privilege Escalation</a></li>
+          </ul>
+        </div>
+      </li>
+
+      <li class="nav-item mt-2">
         <span class="sidebar-label">TOOLS</span>
       </li>
       <li class="nav-item">

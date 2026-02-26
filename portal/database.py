@@ -291,10 +291,67 @@ CREATE TABLE IF NOT EXISTS ca_policy_templates (
     created_at  TEXT DEFAULT (datetime('now')),
     updated_at  TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS incident_cases (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    playbook    TEXT NOT NULL DEFAULT 'general',
+    status      TEXT NOT NULL DEFAULT 'open',
+    severity    TEXT NOT NULL DEFAULT 'medium',
+    target_user TEXT DEFAULT '',
+    summary     TEXT DEFAULT '',
+    findings    TEXT DEFAULT '[]',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now')),
+    closed_at   TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS incident_notes (
+    id          TEXT PRIMARY KEY,
+    case_id     TEXT NOT NULL,
+    author      TEXT NOT NULL,
+    content     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (case_id) REFERENCES incident_cases(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS service_health_cache (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    service     TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'unknown',
+    details     TEXT DEFAULT '{}',
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS license_snapshots (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    sku_data    TEXT DEFAULT '[]',
+    total_licenses  INTEGER DEFAULT 0,
+    assigned_licenses INTEGER DEFAULT 0,
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS device_inventory_cache (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    device_count INTEGER DEFAULT 0,
+    compliant_count INTEGER DEFAULT 0,
+    noncompliant_count INTEGER DEFAULT 0,
+    summary     TEXT DEFAULT '{}',
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
 """
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _MIGRATIONS = {
     2: """
@@ -479,6 +536,64 @@ CREATE TABLE IF NOT EXISTS ca_policy_templates (
     created_by  TEXT NOT NULL,
     created_at  TEXT DEFAULT (datetime('now')),
     updated_at  TEXT DEFAULT (datetime('now'))
+);
+""",
+    5: """
+CREATE TABLE IF NOT EXISTS incident_cases (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    playbook    TEXT NOT NULL DEFAULT 'general',
+    status      TEXT NOT NULL DEFAULT 'open',
+    severity    TEXT NOT NULL DEFAULT 'medium',
+    target_user TEXT DEFAULT '',
+    summary     TEXT DEFAULT '',
+    findings    TEXT DEFAULT '[]',
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now')),
+    closed_at   TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS incident_notes (
+    id          TEXT PRIMARY KEY,
+    case_id     TEXT NOT NULL,
+    author      TEXT NOT NULL,
+    content     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (case_id) REFERENCES incident_cases(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS service_health_cache (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    service     TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'unknown',
+    details     TEXT DEFAULT '{}',
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS license_snapshots (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    sku_data    TEXT DEFAULT '[]',
+    total_licenses  INTEGER DEFAULT 0,
+    assigned_licenses INTEGER DEFAULT 0,
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS device_inventory_cache (
+    id          TEXT PRIMARY KEY,
+    tenant_id   TEXT NOT NULL,
+    device_count INTEGER DEFAULT 0,
+    compliant_count INTEGER DEFAULT 0,
+    noncompliant_count INTEGER DEFAULT 0,
+    summary     TEXT DEFAULT '{}',
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 """,
 }
@@ -1829,3 +1944,186 @@ def delete_ca_template(template_id: str) -> bool:
             "DELETE FROM ca_policy_templates WHERE id = ?", (template_id,)
         )
         return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Incident Cases
+# ---------------------------------------------------------------------------
+
+def create_incident_case(tenant_id: str, title: str, playbook: str,
+                         severity: str, created_by: str,
+                         target_user: str = "", summary: str = "") -> str:
+    case_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO incident_cases "
+            "(id, tenant_id, title, playbook, severity, target_user, summary, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (case_id, tenant_id, title, playbook, severity,
+             target_user, summary, created_by),
+        )
+    return case_id
+
+
+def get_incident_case(case_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM incident_cases WHERE id = ?", (case_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["findings"] = json.loads(d["findings"]) if d["findings"] else []
+        return d
+
+
+def list_incident_cases(tenant_id: str = None, status: str = None) -> list:
+    with get_db() as conn:
+        sql = "SELECT * FROM incident_cases WHERE 1=1"
+        params = []
+        if tenant_id:
+            sql += " AND tenant_id = ?"
+            params.append(tenant_id)
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        sql += " ORDER BY created_at DESC"
+        rows = conn.execute(sql, params).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["findings"] = json.loads(d["findings"]) if d["findings"] else []
+            result.append(d)
+        return result
+
+
+def update_incident_case(case_id: str, **fields):
+    if not fields:
+        return
+    allowed = {"title", "status", "severity", "summary", "findings", "closed_at"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if "findings" in fields and isinstance(fields["findings"], list):
+        fields["findings"] = json.dumps(fields["findings"])
+    fields["updated_at"] = datetime.now().isoformat()
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [case_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE incident_cases SET {set_clause} WHERE id = ?", values
+        )
+
+
+def add_incident_note(case_id: str, author: str, content: str) -> str:
+    note_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO incident_notes (id, case_id, author, content) "
+            "VALUES (?, ?, ?, ?)",
+            (note_id, case_id, author, content),
+        )
+    return note_id
+
+
+def list_incident_notes(case_id: str) -> list:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM incident_notes WHERE case_id = ? ORDER BY created_at ASC",
+            (case_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Service Health Cache
+# ---------------------------------------------------------------------------
+
+def save_service_health(tenant_id: str, service: str, status: str,
+                        details: dict = None) -> str:
+    entry_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO service_health_cache "
+            "(id, tenant_id, service, status, details) VALUES (?, ?, ?, ?, ?)",
+            (entry_id, tenant_id, service, status,
+             json.dumps(details or {})),
+        )
+    return entry_id
+
+
+def get_service_health(tenant_id: str) -> list:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM service_health_cache WHERE tenant_id = ? "
+            "ORDER BY fetched_at DESC",
+            (tenant_id,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["details"] = json.loads(d["details"]) if d["details"] else {}
+            result.append(d)
+        return result
+
+
+# ---------------------------------------------------------------------------
+# License Snapshots
+# ---------------------------------------------------------------------------
+
+def save_license_snapshot(tenant_id: str, sku_data: list,
+                          total: int, assigned: int) -> str:
+    snap_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO license_snapshots "
+            "(id, tenant_id, sku_data, total_licenses, assigned_licenses) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (snap_id, tenant_id, json.dumps(sku_data), total, assigned),
+        )
+    return snap_id
+
+
+def get_latest_license_snapshot(tenant_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM license_snapshots WHERE tenant_id = ? "
+            "ORDER BY fetched_at DESC LIMIT 1",
+            (tenant_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["sku_data"] = json.loads(d["sku_data"]) if d["sku_data"] else []
+        return d
+
+
+# ---------------------------------------------------------------------------
+# Device Inventory Cache
+# ---------------------------------------------------------------------------
+
+def save_device_inventory(tenant_id: str, device_count: int,
+                          compliant: int, noncompliant: int,
+                          summary: dict = None) -> str:
+    inv_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO device_inventory_cache "
+            "(id, tenant_id, device_count, compliant_count, "
+            "noncompliant_count, summary) VALUES (?, ?, ?, ?, ?, ?)",
+            (inv_id, tenant_id, device_count, compliant, noncompliant,
+             json.dumps(summary or {})),
+        )
+    return inv_id
+
+
+def get_latest_device_inventory(tenant_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM device_inventory_cache WHERE tenant_id = ? "
+            "ORDER BY fetched_at DESC LIMIT 1",
+            (tenant_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["summary"] = json.loads(d["summary"]) if d["summary"] else {}
+        return d
