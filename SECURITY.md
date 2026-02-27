@@ -2,9 +2,9 @@
 
 ## Reporting Vulnerabilities
 
-If you discover a security vulnerability in SPO-Audit-Toolkit, please report it responsibly. **Do not open a public issue.**
+If you discover a security vulnerability in Office Sentry, please report it responsibly. **Do not open a public issue.**
 
-Instead, please contact the maintainers privately through GitHub's [security advisory feature](https://github.com/JackD99/SPO-Audit-Toolkit/security/advisories/new). Include:
+Instead, please contact the maintainers privately through GitHub's [security advisory feature](https://github.com/JackD99/Office Sentry/security/advisories/new). Include:
 
 1. A description of the vulnerability
 2. Steps to reproduce
@@ -17,7 +17,7 @@ We aim to acknowledge reports within 48 hours and provide an initial assessment 
 
 ### Authentication
 
-SPO-Audit-Toolkit uses **certificate-based app-only authentication** to connect to Microsoft 365 services. This means:
+Office Sentry uses **certificate-based app-only authentication** to connect to Microsoft 365 services. This means:
 
 - No user passwords for M365 tenants are ever stored
 - Authentication uses X.509 certificates (PFX + CER) registered with Entra ID

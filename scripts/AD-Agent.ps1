@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Office Sentry AD Agent — On-premises Active Directory agent for the M365 Audit Portal.
+    Office Sentry AD Agent — On-premises Active Directory agent for Office Sentry.
 
 .DESCRIPTION
     Polls the portal for commands, executes AD operations locally, and reports results.

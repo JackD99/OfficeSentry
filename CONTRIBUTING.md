@@ -1,4 +1,4 @@
-# Contributing to SPO-Audit-Toolkit
+# Contributing to Office Sentry
 
 Thank you for your interest in contributing! This document covers the development setup, coding conventions, and how to submit changes.
 
@@ -16,7 +16,7 @@ Thank you for your interest in contributing! This document covers the developmen
 ```bash
 # Clone the repository
 git clone https://github.com/JackD99/SPO-Audit-Toolkit.git
-cd SPO-Audit-Toolkit
+cd SPO-Audit-Toolkit  # repo name pending rename
 
 # Install Python dependencies
 pip install -r requirements.txt

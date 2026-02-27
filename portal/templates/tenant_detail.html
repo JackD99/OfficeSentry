@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ tenant.name }} — M365 Audit Portal{% endblock %}
+{% block title %}{{ tenant.name }} — Office Sentry{% endblock %}
 {% block breadcrumb %}
 <ul class="portal-breadcrumb">
   <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
@@ -209,7 +209,7 @@
               <p class="mb-1 fw-semibold">Do this once in your management tenant (your MSP's own tenant):</p>
               <ol class="mb-1 ps-3">
                 <li>Go to <strong>Entra ID → App registrations → New registration</strong></li>
-                <li>Name: <em>OfficeSentry Admin Connector</em></li>
+                <li>Name: <em>Office Sentry Admin Connector</em></li>
                 <li>Supported account types: <strong>Accounts in any organizational directory (Multi-tenant)</strong></li>
                 <li>No redirect URI — click Register</li>
                 <li>Open the app → <strong>Authentication → Advanced settings</strong></li>
@@ -356,13 +356,13 @@
           <div class="mb-2">
             <label class="form-label small">App Display Name</label>
             <input type="text" class="form-control form-control-sm" name="app_display_name"
-                   value="{{ tenant.app_display_name or 'OfficeSentry' }}">
+                   value="{{ tenant.app_display_name or 'Office Sentry' }}">
           </div>
           <div class="row g-2 mb-2">
             <div class="col-8">
               <label class="form-label small">Cert Subject</label>
               <input type="text" class="form-control form-control-sm" name="cert_subject"
-                     value="{{ tenant.cert_subject or 'CN=M365 Audit' }}">
+                     value="{{ tenant.cert_subject or 'CN=Office Sentry' }}">
             </div>
             <div class="col-4">
               <label class="form-label small">Cert Years</label>

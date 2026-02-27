@@ -1,5 +1,5 @@
 """
-portal/database.py — SQLite persistence layer for the M365 Audit Portal.
+portal/database.py — SQLite persistence layer for Office Sentry.
 Manages tenants, jobs, audit trail, and operator accounts.
 """
 
@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS tenants (
     domain           TEXT NOT NULL,
     tenant_id        TEXT DEFAULT '',
     client_id        TEXT DEFAULT '',
-    app_display_name TEXT DEFAULT 'OfficeSentry',
-    cert_subject     TEXT DEFAULT 'CN=M365 Audit',
+    app_display_name TEXT DEFAULT 'Office Sentry',
+    cert_subject     TEXT DEFAULT 'CN=Office Sentry',
     cert_years_valid INTEGER DEFAULT 2,
     pfx_password_enc TEXT DEFAULT '',
     notes            TEXT DEFAULT '',
@@ -3100,13 +3100,13 @@ def get_default_branding() -> dict:
         from helpers import read_portal_config
         cfg = read_portal_config()
         return cfg.get("branding", {
-            "company_name": "M365 Audit Portal",
+            "company_name": "Office Sentry",
             "logo_path": "",
             "accent_color": "#0d6efd",
         })
     except Exception:
         return {
-            "company_name": "M365 Audit Portal",
+            "company_name": "Office Sentry",
             "logo_path": "",
             "accent_color": "#0d6efd",
         }

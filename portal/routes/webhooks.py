@@ -121,7 +121,7 @@ def webhook_test(webhook_id):
 
     payload = {
         "event": "test",
-        "message": "This is a test webhook delivery from the M365 Audit Portal.",
+        "message": "This is a test webhook delivery from Office Sentry.",
         "webhook_id": webhook_id,
     }
     try:
