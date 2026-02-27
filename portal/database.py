@@ -397,10 +397,81 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
     delivered_at TEXT,
     FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
 );
+
+-- AD Agent / Hybrid Identity tables (v8)
+CREATE TABLE IF NOT EXISTS tenant_ad_config (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL UNIQUE,
+    hybrid_detected INTEGER DEFAULT 0,
+    hybrid_checked_at TEXT,
+    sync_server_names TEXT DEFAULT '[]',
+    notes           TEXT DEFAULT '',
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ad_agents (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    agent_name      TEXT NOT NULL DEFAULT 'Default Agent',
+    agent_secret_enc TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'active',
+    enrolled_at     TEXT DEFAULT (datetime('now')),
+    last_seen_at    TEXT,
+    last_ip         TEXT,
+    agent_version   TEXT,
+    server_names    TEXT DEFAULT '[]',
+    revoked_at      TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ad_agent_enrollment_tokens (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    token_hash      TEXT NOT NULL,
+    expires_at      TEXT NOT NULL,
+    used_at         TEXT,
+    used_by_agent_id TEXT,
+    created_by      TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ad_agent_commands (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    agent_id        TEXT,
+    command_type    TEXT NOT NULL,
+    parameters      TEXT DEFAULT '{}',
+    status          TEXT NOT NULL DEFAULT 'pending',
+    result          TEXT,
+    created_by      TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    picked_up_at    TEXT,
+    completed_at    TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (agent_id) REFERENCES ad_agents(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS ad_agent_templates (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    description     TEXT DEFAULT '',
+    template_data   TEXT DEFAULT '{}',
+    created_by      TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_agents_tenant ON ad_agents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ad_agent_commands_tenant ON ad_agent_commands(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ad_agent_commands_status ON ad_agent_commands(status);
+CREATE INDEX IF NOT EXISTS idx_ad_agent_templates_tenant ON ad_agent_templates(tenant_id);
 """
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _MIGRATIONS = {
     2: """
@@ -705,6 +776,77 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 
 CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix);
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
+""",
+    8: """
+CREATE TABLE IF NOT EXISTS tenant_ad_config (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL UNIQUE,
+    hybrid_detected INTEGER DEFAULT 0,
+    hybrid_checked_at TEXT,
+    sync_server_names TEXT DEFAULT '[]',
+    notes           TEXT DEFAULT '',
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ad_agents (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    agent_name      TEXT NOT NULL DEFAULT 'Default Agent',
+    agent_secret_enc TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'active',
+    enrolled_at     TEXT DEFAULT (datetime('now')),
+    last_seen_at    TEXT,
+    last_ip         TEXT,
+    agent_version   TEXT,
+    server_names    TEXT DEFAULT '[]',
+    revoked_at      TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ad_agent_enrollment_tokens (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    token_hash      TEXT NOT NULL,
+    expires_at      TEXT NOT NULL,
+    used_at         TEXT,
+    used_by_agent_id TEXT,
+    created_by      TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ad_agent_commands (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    agent_id        TEXT,
+    command_type    TEXT NOT NULL,
+    parameters      TEXT DEFAULT '{}',
+    status          TEXT NOT NULL DEFAULT 'pending',
+    result          TEXT,
+    created_by      TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    picked_up_at    TEXT,
+    completed_at    TEXT,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (agent_id) REFERENCES ad_agents(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS ad_agent_templates (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    description     TEXT DEFAULT '',
+    template_data   TEXT DEFAULT '{}',
+    created_by      TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_agents_tenant ON ad_agents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ad_agent_commands_tenant ON ad_agent_commands(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ad_agent_commands_status ON ad_agent_commands(status);
+CREATE INDEX IF NOT EXISTS idx_ad_agent_templates_tenant ON ad_agent_templates(tenant_id);
 """,
 }
 
@@ -2518,3 +2660,370 @@ def list_webhook_deliveries(webhook_id: str, limit: int = 50) -> list[dict]:
             (webhook_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# AD Agent — tenant hybrid config
+# ---------------------------------------------------------------------------
+
+def get_tenant_ad_config(tenant_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM tenant_ad_config WHERE tenant_id = ?", (tenant_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["sync_server_names"] = json.loads(d["sync_server_names"]) if d["sync_server_names"] else []
+        return d
+
+
+def upsert_tenant_ad_config(tenant_id: str, **fields) -> str:
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM tenant_ad_config WHERE tenant_id = ?", (tenant_id,)
+        ).fetchone()
+        if "sync_server_names" in fields and isinstance(fields["sync_server_names"], list):
+            fields["sync_server_names"] = json.dumps(fields["sync_server_names"])
+        if existing:
+            set_clause = ", ".join(f"{k} = ?" for k in fields)
+            values = list(fields.values()) + [tenant_id]
+            conn.execute(
+                f"UPDATE tenant_ad_config SET {set_clause} WHERE tenant_id = ?",
+                values,
+            )
+            return existing["id"]
+        else:
+            row_id = uuid.uuid4().hex[:12]
+            fields["id"] = row_id
+            fields["tenant_id"] = tenant_id
+            cols = ", ".join(fields.keys())
+            placeholders = ", ".join("?" for _ in fields)
+            conn.execute(
+                f"INSERT INTO tenant_ad_config ({cols}) VALUES ({placeholders})",
+                list(fields.values()),
+            )
+            return row_id
+
+
+# ---------------------------------------------------------------------------
+# AD Agent — agent instances
+# ---------------------------------------------------------------------------
+
+def create_ad_agent(tenant_id: str, agent_name: str,
+                    agent_secret_enc: str) -> str:
+    agent_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO ad_agents (id, tenant_id, agent_name, agent_secret_enc) "
+            "VALUES (?, ?, ?, ?)",
+            (agent_id, tenant_id, agent_name, agent_secret_enc),
+        )
+    return agent_id
+
+
+def get_ad_agent(agent_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM ad_agents WHERE id = ?", (agent_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["server_names"] = json.loads(d["server_names"]) if d["server_names"] else []
+        return d
+
+
+def get_ad_agent_for_tenant(tenant_id: str) -> dict | None:
+    """Get the active agent for a tenant (most recently enrolled)."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM ad_agents WHERE tenant_id = ? AND status = 'active' "
+            "ORDER BY enrolled_at DESC LIMIT 1",
+            (tenant_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["server_names"] = json.loads(d["server_names"]) if d["server_names"] else []
+        return d
+
+
+def list_ad_agents(tenant_id: str = None) -> list[dict]:
+    with get_db() as conn:
+        if tenant_id:
+            rows = conn.execute(
+                "SELECT * FROM ad_agents WHERE tenant_id = ? ORDER BY enrolled_at DESC",
+                (tenant_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM ad_agents ORDER BY enrolled_at DESC"
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["server_names"] = json.loads(d["server_names"]) if d["server_names"] else []
+            result.append(d)
+        return result
+
+
+def update_ad_agent(agent_id: str, **fields):
+    if not fields:
+        return
+    allowed = {
+        "agent_name", "status", "last_seen_at", "last_ip",
+        "agent_version", "server_names", "revoked_at", "agent_secret_enc",
+    }
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if not fields:
+        return
+    if "server_names" in fields and isinstance(fields["server_names"], list):
+        fields["server_names"] = json.dumps(fields["server_names"])
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [agent_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE ad_agents SET {set_clause} WHERE id = ?", values
+        )
+
+
+def revoke_ad_agent(agent_id: str):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE ad_agents SET status = 'revoked', "
+            "revoked_at = datetime('now') WHERE id = ?",
+            (agent_id,),
+        )
+
+
+def delete_ad_agent(agent_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM ad_agents WHERE id = ?", (agent_id,))
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# AD Agent — enrollment tokens
+# ---------------------------------------------------------------------------
+
+def create_enrollment_token(tenant_id: str, token_hash: str,
+                            expires_at: str, created_by: str) -> str:
+    token_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO ad_agent_enrollment_tokens "
+            "(id, tenant_id, token_hash, expires_at, created_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (token_id, tenant_id, token_hash, expires_at, created_by),
+        )
+    return token_id
+
+
+def validate_enrollment_token(tenant_id: str, token_hash: str) -> dict | None:
+    """Find a valid (unused, non-expired) enrollment token for a tenant."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM ad_agent_enrollment_tokens "
+            "WHERE tenant_id = ? AND token_hash = ? "
+            "AND used_at IS NULL AND expires_at > datetime('now')",
+            (tenant_id, token_hash),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def consume_enrollment_token(token_id: str, agent_id: str):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE ad_agent_enrollment_tokens SET used_at = datetime('now'), "
+            "used_by_agent_id = ? WHERE id = ?",
+            (agent_id, token_id),
+        )
+
+
+def list_enrollment_tokens(tenant_id: str) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, tenant_id, expires_at, used_at, used_by_agent_id, "
+            "created_by, created_at FROM ad_agent_enrollment_tokens "
+            "WHERE tenant_id = ? ORDER BY created_at DESC",
+            (tenant_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_enrollment_token(token_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM ad_agent_enrollment_tokens WHERE id = ?", (token_id,)
+        )
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# AD Agent — command queue
+# ---------------------------------------------------------------------------
+
+VALID_COMMAND_TYPES = {
+    "lookup_user", "update_user", "add_group_member",
+    "remove_group_member", "apply_template", "ping",
+}
+
+
+def create_agent_command(tenant_id: str, command_type: str,
+                         parameters: dict, created_by: str,
+                         agent_id: str = None) -> str:
+    cmd_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO ad_agent_commands "
+            "(id, tenant_id, agent_id, command_type, parameters, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (cmd_id, tenant_id, agent_id, command_type,
+             json.dumps(parameters), created_by),
+        )
+    return cmd_id
+
+
+def get_agent_command(command_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM ad_agent_commands WHERE id = ?", (command_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["parameters"] = json.loads(d["parameters"]) if d["parameters"] else {}
+        d["result"] = json.loads(d["result"]) if d["result"] else None
+        return d
+
+
+def poll_pending_commands(tenant_id: str, agent_id: str,
+                          limit: int = 10) -> list[dict]:
+    """Get pending commands for an agent and mark them as running."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM ad_agent_commands "
+            "WHERE tenant_id = ? AND status = 'pending' "
+            "AND (agent_id IS NULL OR agent_id = ?) "
+            "ORDER BY created_at ASC LIMIT ?",
+            (tenant_id, agent_id, limit),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["parameters"] = json.loads(d["parameters"]) if d["parameters"] else {}
+            conn.execute(
+                "UPDATE ad_agent_commands SET status = 'running', "
+                "agent_id = ?, picked_up_at = datetime('now') WHERE id = ?",
+                (agent_id, d["id"]),
+            )
+            result.append(d)
+        return result
+
+
+def complete_agent_command(command_id: str, result: dict, status: str = "completed"):
+    if status not in ("completed", "failed"):
+        status = "completed"
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE ad_agent_commands SET status = ?, result = ?, "
+            "completed_at = datetime('now') WHERE id = ?",
+            (status, json.dumps(result), command_id),
+        )
+
+
+def list_agent_commands(tenant_id: str, limit: int = 50,
+                        status: str = None) -> list[dict]:
+    with get_db() as conn:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM ad_agent_commands "
+                "WHERE tenant_id = ? AND status = ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (tenant_id, status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM ad_agent_commands WHERE tenant_id = ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (tenant_id, limit),
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["parameters"] = json.loads(d["parameters"]) if d["parameters"] else {}
+            d["result"] = json.loads(d["result"]) if d["result"] else None
+            result.append(d)
+        return result
+
+
+# ---------------------------------------------------------------------------
+# AD Agent — user templates
+# ---------------------------------------------------------------------------
+
+def create_agent_template(tenant_id: str, name: str, description: str,
+                          template_data: dict, created_by: str) -> str:
+    tmpl_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO ad_agent_templates "
+            "(id, tenant_id, name, description, template_data, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (tmpl_id, tenant_id, name, description,
+             json.dumps(template_data), created_by),
+        )
+    return tmpl_id
+
+
+def get_agent_template(template_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM ad_agent_templates WHERE id = ?", (template_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["template_data"] = json.loads(d["template_data"]) if d["template_data"] else {}
+        return d
+
+
+def list_agent_templates(tenant_id: str) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM ad_agent_templates WHERE tenant_id = ? "
+            "ORDER BY name",
+            (tenant_id,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["template_data"] = json.loads(d["template_data"]) if d["template_data"] else {}
+            result.append(d)
+        return result
+
+
+def update_agent_template(template_id: str, **fields):
+    if not fields:
+        return
+    allowed = {"name", "description", "template_data"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if not fields:
+        return
+    if "template_data" in fields and isinstance(fields["template_data"], dict):
+        fields["template_data"] = json.dumps(fields["template_data"])
+    fields["updated_at"] = datetime.now().isoformat()
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [template_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE ad_agent_templates SET {set_clause} WHERE id = ?", values
+        )
+
+
+def delete_agent_template(template_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM ad_agent_templates WHERE id = ?", (template_id,)
+        )
+        return cur.rowcount > 0

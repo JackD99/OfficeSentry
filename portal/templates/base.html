@@ -151,6 +151,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('ad_agent.') %}active{% endif %}"
+             href="{{ url_for('ad_agent.ad_agent_overview') }}">
+            <i class="bi bi-hdd-network me-2"></i>AD Agent
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link sidebar-submenu-toggle {% if request.endpoint and request.endpoint.startswith('conditional.') %}active{% endif %}"
              data-bs-toggle="collapse" href="#sidebar-ca" role="button"
              aria-expanded="{% if request.endpoint and request.endpoint.startswith('conditional.') %}true{% else %}false{% endif %}">

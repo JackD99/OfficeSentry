@@ -129,6 +129,22 @@
     </div>
     {% endif %}
 
+    <!-- AD Agent Section -->
+    <div class="card mb-4" id="ad-agent">
+      <div class="card-header fw-semibold d-flex align-items-center">
+        <i class="bi bi-hdd-network me-2 text-info"></i>Office Sentry AD Agent
+        <span class="badge bg-secondary ms-auto" id="agent-badge">Loading...</span>
+      </div>
+      <div class="card-body">
+        <div id="agent-status-area">
+          <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-secondary"></div>
+            <span class="text-muted ms-2 small">Loading agent status...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Setup accordion -->
     <div class="accordion" id="setupAccordion">
       <!-- Step 1: Certificate -->
@@ -594,6 +610,224 @@ function pollJob(jobId, logElId, onDone) {
     }
   }, 2000);
 }
+
+// ---- AD Agent Management ----
+async function loadAgentStatus() {
+  try {
+    const res = await fetch(`/tenants/${TENANT_ID}/ad-agent/status`);
+    const data = await res.json();
+    if (!data.ok) { renderAgentError(data.error); return; }
+    renderAgentUI(data);
+  } catch(e) {
+    renderAgentError('Failed to load agent status');
+  }
+}
+
+function renderAgentError(msg) {
+  document.getElementById('agent-status-area').innerHTML =
+    `<div class="alert alert-warning small mb-0 py-2"><i class="bi bi-exclamation-triangle me-1"></i>${msg}</div>`;
+  document.getElementById('agent-badge').textContent = 'Error';
+  document.getElementById('agent-badge').className = 'badge bg-warning ms-auto';
+}
+
+function renderAgentUI(data) {
+  const area = document.getElementById('agent-status-area');
+  const badge = document.getElementById('agent-badge');
+  const agent = data.agent;
+  const config = data.config;
+
+  if (agent && agent.status === 'active') {
+    badge.textContent = 'Active';
+    badge.className = 'badge bg-success ms-auto';
+    const lastSeen = agent.last_seen_at ? agent.last_seen_at.substring(0, 16) : 'Never';
+    const servers = (agent.server_names || []).join(', ') || 'None detected';
+    area.innerHTML = `
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <div class="small text-muted">Agent ID</div>
+          <div class="small font-monospace">${agent.id}</div>
+        </div>
+        <div class="col-6">
+          <div class="small text-muted">Last Seen</div>
+          <div class="small">${lastSeen}</div>
+        </div>
+        <div class="col-6">
+          <div class="small text-muted">Status</div>
+          <div class="small"><span class="badge bg-success">Active</span></div>
+        </div>
+        <div class="col-6">
+          <div class="small text-muted">IP Address</div>
+          <div class="small font-monospace">${agent.last_ip || '—'}</div>
+        </div>
+        <div class="col-12">
+          <div class="small text-muted">AD Server(s)</div>
+          <div class="small font-monospace">${servers}</div>
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <button class="btn btn-outline-primary btn-sm" onclick="showCommandModal()">
+          <i class="bi bi-terminal me-1"></i>Send Command
+        </button>
+        <button class="btn btn-outline-warning btn-sm" onclick="rotateAgent()">
+          <i class="bi bi-arrow-repeat me-1"></i>Rotate Credentials
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="revokeAgent()">
+          <i class="bi bi-x-circle me-1"></i>Revoke Agent
+        </button>
+      </div>
+      <div class="mb-3">
+        <div class="small fw-semibold mb-2">Manual Server Names</div>
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" id="server-names-input"
+                 placeholder="server1, server2" value="${servers !== 'None detected' ? servers : ''}">
+          <button class="btn btn-outline-secondary" onclick="updateServerNames()">
+            <i class="bi bi-save"></i> Save
+          </button>
+        </div>
+      </div>
+      ${renderRecentCommands(data.recent_commands)}
+    `;
+  } else {
+    badge.textContent = 'Not Configured';
+    badge.className = 'badge bg-secondary ms-auto';
+    const hybridDetected = config && config.hybrid_detected;
+    area.innerHTML = `
+      ${hybridDetected ? '<div class="alert alert-info small py-2 mb-3"><i class="bi bi-info-circle me-1"></i>Hybrid identity detected for this tenant. An AD Agent is recommended to enable on-prem AD operations.</div>' : ''}
+      <p class="text-muted small mb-3">
+        Deploy the Office Sentry AD Agent to this tenant's environment to unlock on-premises Active Directory operations:
+        user management, group membership changes, and onboarding/offboarding templates.
+      </p>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <a href="/tenants/${TENANT_ID}/ad-agent/download" class="btn btn-primary btn-sm">
+          <i class="bi bi-download me-1"></i>Download Agent (Tenant-Specific)
+        </a>
+        <button class="btn btn-outline-info btn-sm" onclick="checkHybrid()">
+          <i class="bi bi-search me-1"></i>Detect Hybrid Identity
+        </button>
+      </div>
+      <div class="d-none" id="agent-action-result"></div>
+    `;
+  }
+}
+
+function renderRecentCommands(commands) {
+  if (!commands || commands.length === 0) return '<div class="small text-muted">No recent commands.</div>';
+  let html = '<div class="small fw-semibold mb-2">Recent Commands</div><div class="list-group list-group-flush">';
+  for (const cmd of commands.slice(0, 5)) {
+    const statusIcon = cmd.status === 'completed' ? '<i class="bi bi-check-circle-fill text-success"></i>'
+      : cmd.status === 'failed' ? '<i class="bi bi-x-circle-fill text-danger"></i>'
+      : cmd.status === 'running' ? '<div class="spinner-border spinner-border-sm text-primary"></div>'
+      : '<i class="bi bi-clock text-muted"></i>';
+    html += `<div class="list-group-item d-flex align-items-center gap-2 px-0 py-1 border-0">
+      ${statusIcon}
+      <div class="flex-grow-1 small">
+        <span class="fw-semibold">${cmd.command_type}</span>
+        <span class="text-muted ms-2">${(cmd.created_at || '').substring(0, 16)}</span>
+      </div>
+    </div>`;
+  }
+  return html + '</div>';
+}
+
+async function checkHybrid() {
+  const fd = csrfFormData();
+  const res = await fetch(`/tenants/${TENANT_ID}/ad-agent/check-hybrid`, { method: 'POST', body: fd });
+  const data = await res.json();
+  if (data.ok) {
+    showToast('Hybrid detection started. Check jobs for progress.', 'info');
+  } else {
+    showToast(data.error || 'Failed to start hybrid detection', 'danger');
+  }
+}
+
+async function rotateAgent() {
+  if (!confirm('Rotate agent credentials? The agent will need to re-enroll.')) return;
+  const res = await fetch(`/tenants/${TENANT_ID}/ad-agent/rotate`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
+    body: JSON.stringify({})
+  });
+  const data = await res.json();
+  showToast(data.message || data.error, data.ok ? 'success' : 'danger');
+  if (data.ok) loadAgentStatus();
+}
+
+async function revokeAgent() {
+  if (!confirm('Revoke this agent? It will no longer be able to communicate with the portal.')) return;
+  const res = await fetch(`/tenants/${TENANT_ID}/ad-agent/revoke`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
+    body: JSON.stringify({})
+  });
+  const data = await res.json();
+  showToast(data.message || data.error, data.ok ? 'success' : 'danger');
+  if (data.ok) loadAgentStatus();
+}
+
+async function updateServerNames() {
+  const input = document.getElementById('server-names-input').value;
+  const names = input.split(',').map(s => s.trim()).filter(Boolean);
+  const res = await fetch(`/tenants/${TENANT_ID}/ad-agent/server-names`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
+    body: JSON.stringify({server_names: names})
+  });
+  const data = await res.json();
+  showToast(data.ok ? 'Server names updated' : (data.error || 'Failed'), data.ok ? 'success' : 'danger');
+}
+
+function showCommandModal() {
+  const types = ['lookup_user', 'update_user', 'add_group_member', 'remove_group_member', 'apply_template', 'ping'];
+  const options = types.map(t => `<option value="${t}">${t}</option>`).join('');
+  const html = `
+    <div class="mb-2">
+      <label class="form-label small">Command Type</label>
+      <select class="form-select form-select-sm" id="cmd-type">${options}</select>
+    </div>
+    <div class="mb-2">
+      <label class="form-label small">Parameters (JSON)</label>
+      <textarea class="form-control form-control-sm font-monospace" id="cmd-params" rows="3">{}</textarea>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="sendCommand()">
+      <i class="bi bi-send me-1"></i>Send
+    </button>
+    <div class="mt-2 d-none" id="cmd-result"></div>
+  `;
+  const area = document.getElementById('agent-status-area');
+  // Append modal-like section
+  let modal = document.getElementById('cmd-modal-section');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'cmd-modal-section';
+    modal.className = 'border-top pt-3 mt-3';
+    area.appendChild(modal);
+  }
+  modal.innerHTML = '<div class="small fw-semibold mb-2">Dispatch Command</div>' + html;
+}
+
+async function sendCommand() {
+  const cmdType = document.getElementById('cmd-type').value;
+  let params;
+  try { params = JSON.parse(document.getElementById('cmd-params').value); }
+  catch(e) { showToast('Invalid JSON in parameters', 'danger'); return; }
+
+  const res = await fetch(`/tenants/${TENANT_ID}/ad-agent/command`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
+    body: JSON.stringify({command_type: cmdType, parameters: params})
+  });
+  const data = await res.json();
+  const el = document.getElementById('cmd-result');
+  el.classList.remove('d-none');
+  if (data.ok) {
+    el.innerHTML = `<div class="alert alert-success small py-1 mb-0"><i class="bi bi-check-circle me-1"></i>Command queued (ID: ${data.command_id})</div>`;
+  } else {
+    el.innerHTML = `<div class="alert alert-danger small py-1 mb-0"><i class="bi bi-x-circle me-1"></i>${data.error}</div>`;
+  }
+}
+
+// Load agent status on page load
+loadAgentStatus();
 
 // Health check
 async function runHealthCheck() {
