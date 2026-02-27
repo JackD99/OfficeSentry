@@ -11,7 +11,7 @@
 
 {% block content %}
 <div class="row g-4">
-  <div class="col-lg-7">
+  <div class="col-lg-8">
     <div class="card">
       <div class="card-header d-flex align-items-center">
         <i class="bi bi-people me-2 text-primary"></i>
@@ -28,6 +28,7 @@
               <th>Username</th>
               <th>Display Name</th>
               <th>Role</th>
+              <th>Groups</th>
               <th>Created</th>
               <th class="text-end">Actions</th>
             </tr>
@@ -43,19 +44,33 @@
               </td>
               <td class="text-muted small">{{ u.display_name }}</td>
               <td>
-                {% if u.is_admin %}
+                {% set role = u.role if u.role else ('super_admin' if u.is_admin else 'operator') %}
+                {% if role == 'super_admin' %}
+                  <span class="badge bg-danger">Super Admin</span>
+                {% elif role == 'admin' %}
                   <span class="badge bg-warning text-dark">Admin</span>
-                {% else %}
+                {% elif role == 'operator' %}
                   <span class="badge bg-secondary">Operator</span>
+                {% else %}
+                  <span class="badge bg-dark">Viewer</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">
+                {% set groups = u.allowed_tenant_groups|default('[]') %}
+                {% if groups and groups != '[]' %}
+                  <span class="badge bg-info">{{ groups|from_json|length if groups != '[]' else 0 }} groups</span>
+                {% else %}
+                  <span class="text-muted">All</span>
                 {% endif %}
               </td>
               <td class="text-muted small">{{ u.created_at[:10] if u.created_at else '' }}</td>
               <td class="text-end">
                 {% if u.username != session.get('username') %}
                 <div class="btn-group btn-group-sm">
-                  <button class="btn btn-outline-secondary" title="Toggle admin"
-                          onclick="toggleAdmin('{{ u.username }}')">
-                    <i class="bi bi-shield-{{ 'minus' if u.is_admin else 'plus' }}"></i>
+                  <button class="btn btn-outline-secondary" title="Change role"
+                          data-bs-toggle="modal" data-bs-target="#roleModal"
+                          onclick="openRoleModal('{{ u.username }}', '{{ role }}')">
+                    <i class="bi bi-shield-lock"></i>
                   </button>
                   <button class="btn btn-outline-secondary" title="Reset password"
                           data-bs-toggle="modal" data-bs-target="#resetPwModal"
@@ -79,12 +94,14 @@
     </div>
   </div>
 
-  <div class="col-lg-5">
+  <div class="col-lg-4">
     <div class="card">
       <div class="card-header fw-semibold"><i class="bi bi-info-circle me-2 text-info"></i>About Roles</div>
       <div class="card-body small">
-        <p class="mb-2"><strong>Admin</strong> — Full access including user management, tenant setup, and all audit operations.</p>
-        <p class="mb-0"><strong>Operator</strong> — Can run audits, view reports, and manage tenants, but cannot manage user accounts.</p>
+        <p class="mb-2"><span class="badge bg-danger me-1">Super Admin</span> Full access — user management, settings, all tenants, all operation tiers.</p>
+        <p class="mb-2"><span class="badge bg-warning text-dark me-1">Admin</span> Assigned tenant groups, all audits, Tier 1-2 operations.</p>
+        <p class="mb-2"><span class="badge bg-secondary me-1">Operator</span> Assigned tenant groups, all audits, Tier 1 operations only.</p>
+        <p class="mb-0"><span class="badge bg-dark me-1">Viewer</span> Read-only access to assigned tenant groups. No audits or operations.</p>
       </div>
     </div>
   </div>
@@ -116,9 +133,14 @@
               <button type="button" class="btn-toggle-password" tabindex="-1"><i class="bi bi-eye"></i></button>
             </div>
           </div>
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="is_admin" id="new-user-admin">
-            <label class="form-check-label" for="new-user-admin">Grant admin privileges</label>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" name="role">
+              <option value="operator" selected>Operator</option>
+              <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -126,6 +148,36 @@
           <button type="submit" class="btn btn-primary btn-sm">
             <i class="bi bi-person-plus me-1"></i>Create User
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Set Role Modal -->
+<div class="modal fade" id="roleModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form id="role-form">
+        <input type="hidden" name="username" id="role-username">
+        <div class="modal-header">
+          <h6 class="modal-title fw-semibold">Set Role — <span id="role-title"></span></h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-0">
+            <label class="form-label">Role</label>
+            <select class="form-select" name="role" id="role-select">
+              <option value="viewer">Viewer</option>
+              <option value="operator">Operator</option>
+              <option value="admin">Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm text-dark">Update Role</button>
         </div>
       </form>
     </div>
@@ -174,6 +226,12 @@ document.querySelectorAll('.btn-toggle-password').forEach(btn => {
   });
 });
 
+function openRoleModal(username, currentRole) {
+  document.getElementById('role-username').value = username;
+  document.getElementById('role-title').textContent = username;
+  document.getElementById('role-select').value = currentRole;
+}
+
 async function apiPost(url, fd) {
   fd.append('csrf_token', window.CSRF_TOKEN);
   const res = await fetch(url, { method: 'POST', body: fd });
@@ -194,17 +252,18 @@ document.getElementById('add-user-form').addEventListener('submit', async (e) =>
   }
 });
 
-// Toggle admin
-async function toggleAdmin(username) {
-  const fd = new FormData();
-  const data = await apiPost(`/users/${username}/toggle-admin`, fd);
+// Set role
+document.getElementById('role-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('role-username').value;
+  const data = await apiPost(`/users/${username}/set-role`, new FormData(e.target));
   if (data.ok) {
     showToast(data.message, 'success');
     setTimeout(() => location.reload(), 500);
   } else {
     showToast(data.error, 'danger');
   }
-}
+});
 
 // Delete user
 async function deleteUser(username) {

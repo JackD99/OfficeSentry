@@ -164,59 +164,77 @@ async function cancelJob(jobId, btn) {
 {% set has_running = jobs|selectattr('status','eq','running')|list %}
 {% if has_running %}
 <script nonce="{{ g.csp_nonce }}">
-// Fetch-based polling — updates running jobs in-place without full page reload
-(function pollRunningJobs() {
+// SSE-based real-time updates with polling fallback
+(function initJobUpdates() {
   const runningCards = document.querySelectorAll('[data-job-status="running"]');
   if (runningCards.length === 0) return;
 
-  setTimeout(async () => {
-    let stillRunning = false;
-    for (const card of runningCards) {
-      if (card.dataset.jobStatus !== 'running') continue;
+  for (const card of runningCards) {
+    const jobId = card.dataset.jobId;
+    let useSSE = true;
+
+    // Try SSE first
+    try {
+      const source = new EventSource(`/jobs/${jobId}/stream`);
+      source.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          const pre = card.querySelector('.job-output');
+          if (pre && d.line !== null && d.line !== undefined) {
+            pre.textContent += d.line + '\n';
+            pre.scrollTop = pre.scrollHeight;
+          }
+          if (d.done || (d.status && d.status !== 'running')) {
+            source.close();
+            updateCardStatus(card, d.status);
+          }
+        } catch {}
+      };
+      source.onerror = () => {
+        source.close();
+        if (useSSE) {
+          useSSE = false;
+          pollJob(card, jobId);
+        }
+      };
+    } catch {
+      pollJob(card, jobId);
+    }
+  }
+
+  function updateCardStatus(card, status) {
+    card.dataset.jobStatus = status;
+    const icon = card.querySelector('.job-status-icon');
+    if (status === 'done') {
+      icon.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+      showToast('Job completed', 'success');
+    } else {
+      icon.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+      showToast('Job ' + status, 'danger');
+    }
+    const cancelBtn = card.querySelector('.cancel-btn');
+    if (cancelBtn) cancelBtn.remove();
+  }
+
+  function pollJob(card, jobId) {
+    if (card.dataset.jobStatus !== 'running') return;
+    setTimeout(async () => {
       try {
-        const r = await fetch(`/jobs/${card.dataset.jobId}/status`);
+        const r = await fetch(`/jobs/${jobId}/status`);
         const d = await r.json();
         const pre = card.querySelector('.job-output');
         if (pre) {
           pre.textContent = d.output.join('\n');
           pre.scrollTop = pre.scrollHeight;
         }
-        // Update duration badge
-        if (d.duration) {
-          const header = card.querySelector('.card-header');
-          let badge = header.querySelector('.duration-badge');
-          if (!badge) {
-            const timeSpan = header.querySelector('.ms-auto');
-            if (timeSpan) {
-              const b = document.createElement('span');
-              b.className = 'badge bg-dark fw-normal duration-badge';
-              b.innerHTML = `<i class="bi bi-clock me-1"></i>${d.duration}`;
-              timeSpan.prepend(b);
-            }
-          } else {
-            badge.innerHTML = `<i class="bi bi-clock me-1"></i>${d.duration}`;
-          }
-        }
         if (d.status !== 'running') {
-          card.dataset.jobStatus = d.status;
-          const icon = card.querySelector('.job-status-icon');
-          if (d.status === 'done') {
-            icon.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
-            showToast(`Job completed: ${d.label}`, 'success');
-          } else {
-            icon.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
-            showToast(`Job failed: ${d.label}`, 'danger');
-          }
-          // Remove cancel button
-          const cancelBtn = card.querySelector('.cancel-btn');
-          if (cancelBtn) cancelBtn.remove();
+          updateCardStatus(card, d.status);
         } else {
-          stillRunning = true;
+          pollJob(card, jobId);
         }
-      } catch { stillRunning = true; }
-    }
-    if (stillRunning) pollRunningJobs();
-  }, 3000);
+      } catch { pollJob(card, jobId); }
+    }, 3000);
+  }
 })();
 </script>
 {% endif %}

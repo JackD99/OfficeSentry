@@ -673,6 +673,13 @@ def operations_run():
 
     op = OPERATIONS[action]
 
+    # RBAC tier check
+    from database import get_user
+    from permissions import can_run_operation
+    user = get_user(current_user())
+    if user and not can_run_operation(user, op.get("tier", 1)):
+        return jsonify({"ok": False, "error": "Insufficient permissions for this operation tier."}), 403
+
     # Validate required target_user field
     target_user = request.form.get("target_user", "").strip()
     if "target_user" in op["fields"] and not target_user:

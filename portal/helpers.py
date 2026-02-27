@@ -17,7 +17,7 @@ from flask import session, redirect, url_for, request, g, current_app
 
 from database import (
     create_job, append_job_output, finish_job,
-    decrypt_value,
+    decrypt_value, update_job_task_id, get_job_task_id,
 )
 
 log = logging.getLogger("portal")
@@ -104,11 +104,37 @@ def admin_required(f):
         g.username = session["username"]
         from database import get_user
         user = get_user(session["username"])
-        if not user or not user.get("is_admin"):
+        if not user:
             from flask import abort
             abort(403)
+        # Support both legacy is_admin and new RBAC roles
+        from permissions import has_role
+        if not (user.get("is_admin") or has_role(user, "admin")):
+            from flask import abort
+            abort(403)
+        g.current_user = user
         return f(*args, **kwargs)
     return decorated
+
+
+def role_required(min_role):
+    """Decorator that requires a minimum RBAC role level."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if "username" not in session:
+                return redirect(url_for("auth.login", next=request.url))
+            g.username = session["username"]
+            from database import get_user
+            from permissions import has_role
+            user = get_user(session["username"])
+            if not user or not has_role(user, min_role):
+                from flask import abort
+                abort(403)
+            g.current_user = user
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
 
 
 def current_user() -> str:
@@ -133,20 +159,80 @@ def _ps_worker(job_id: str, cmd: list, env: dict = None):
         _running_processes[job_id] = proc
         for line in proc.stdout:
             append_job_output(job_id, line.rstrip())
+            # Publish to Redis pub/sub if available (for SSE)
+            _publish_job_line(job_id, line.rstrip())
         rc = proc.wait()
         status = "done" if rc == 0 else "failed"
         finish_job(job_id, status)
+        _publish_job_line(job_id, None, status=status)
+        _fire_job_webhook(job_id, status)
         log.info("Job %s finished: %s (rc=%d)", job_id, status, rc)
     except Exception as exc:
         append_job_output(job_id, f"ERROR: {exc}")
         finish_job(job_id, "failed")
+        _fire_job_webhook(job_id, "failed")
         log.error("Job %s error: %s", job_id, exc)
     finally:
         _running_processes.pop(job_id, None)
 
 
+def _publish_job_line(job_id: str, line: str | None, status: str = "running"):
+    """Publish a job output line to Redis pub/sub (for SSE streaming)."""
+    try:
+        import redis as _redis
+        r = _redis.Redis.from_url(
+            os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+        )
+        import json as _json
+        payload = _json.dumps({"line": line, "status": status})
+        r.publish(f"job:{job_id}", payload)
+    except Exception:
+        pass  # Redis not available — SSE will fall back to DB polling
+
+
+def _fire_job_webhook(job_id: str, status: str):
+    """Fire webhook events when a job completes or fails."""
+    try:
+        from database import get_job
+        job = get_job(job_id)
+        if not job:
+            return
+        event = f"job.{status}" if status in ("completed", "failed") else f"job.{status}"
+        if status == "done":
+            event = "job.completed"
+        payload = {
+            "job_id": job_id,
+            "label": job.get("label", ""),
+            "type": job.get("type", ""),
+            "tenant_id": job.get("tenant_id", ""),
+            "status": status,
+        }
+        try:
+            from tasks import fire_webhook_event
+            fire_webhook_event(event, payload)
+        except Exception:
+            pass  # Celery not available
+    except Exception:
+        pass
+
+
 def cancel_job(job_id: str) -> bool:
-    """Cancel a running job by terminating its subprocess."""
+    """Cancel a running job. Tries Celery revoke first, falls back to subprocess."""
+    # Try Celery revoke first
+    task_id = get_job_task_id(job_id)
+    if task_id:
+        try:
+            from celery_app import make_celery
+            celery = make_celery()
+            celery.control.revoke(task_id, terminate=True)
+            append_job_output(job_id, "--- Job cancelled by operator ---")
+            finish_job(job_id, "cancelled")
+            log.info("Job %s cancelled via Celery by %s", job_id, current_user())
+            return True
+        except Exception:
+            pass  # Fall through to subprocess termination
+
+    # Fall back to subprocess termination
     proc = _running_processes.get(job_id)
     if proc is None:
         return False
@@ -168,12 +254,23 @@ def cancel_job(job_id: str) -> bool:
 
 def start_job(label: str, job_type: str, cmd: list,
               tenant_id: str = None, env: dict = None) -> str:
+    """Start a background job. Uses Celery if available, falls back to threading."""
     operator = current_user()
     job_id = create_job(label, job_type, tenant_id=tenant_id, operator=operator)
     log.info("Starting job %s: %s (tenant=%s, operator=%s)",
              job_id, label, tenant_id, operator)
-    t = threading.Thread(target=_ps_worker, args=(job_id, cmd, env), daemon=True)
-    t.start()
+
+    # Try Celery dispatch first
+    try:
+        from tasks import run_ps_job
+        result = run_ps_job.delay(job_id, cmd, env)
+        update_job_task_id(job_id, result.id)
+        log.info("Job %s dispatched to Celery (task=%s)", job_id, result.id)
+    except Exception:
+        # Fall back to thread-based execution
+        t = threading.Thread(target=_ps_worker, args=(job_id, cmd, env), daemon=True)
+        t.start()
+
     return job_id
 
 

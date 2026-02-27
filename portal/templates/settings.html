@@ -114,6 +114,83 @@
       </div>
     </div>
   </div>
+
+  <!-- API Keys -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <div style="width:24px;height:24px;border-radius:var(--radius-sm);background:var(--color-accent-blue-soft);display:flex;align-items:center;justify-content:center" class="me-2">
+          <i class="bi bi-key-fill text-accent-blue" style="font-size:0.75rem"></i>
+        </div>
+        <span class="fw-semibold">API Keys</span>
+        <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#addKeyModal">
+          <i class="bi bi-plus-circle me-1"></i>Create Key
+        </button>
+      </div>
+      <div class="card-body">
+        <p class="small mb-3" style="color:var(--color-text-tertiary);max-width:640px">
+          API keys allow programmatic access to the REST API at <code>/api/v1/</code>.
+          Keys are shown only once on creation — store them securely.
+        </p>
+        <div id="api-keys-list">
+          <div class="text-muted small">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add API Key Modal -->
+<div class="modal fade" id="addKeyModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="add-key-form">
+        <div class="modal-header">
+          <h6 class="modal-title fw-semibold">Create API Key</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="name" required placeholder="e.g. CI/CD Pipeline">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" name="role">
+              <option value="viewer" selected>Viewer (read-only)</option>
+              <option value="operator">Operator</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Create Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Key Display Modal -->
+<div class="modal fade" id="keyDisplayModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-semibold">API Key Created</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning small mb-2">
+          <i class="bi bi-exclamation-triangle me-1"></i>Copy this key now. It won't be shown again.
+        </div>
+        <input type="text" class="form-control font-monospace small" id="new-api-key" readonly>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

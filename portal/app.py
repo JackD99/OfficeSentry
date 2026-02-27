@@ -120,6 +120,8 @@ def create_app() -> Flask:
     from routes.service_health import bp as service_health_bp
     from routes.licenses import bp as licenses_bp
     from routes.incidents import bp as incidents_bp
+    from routes.webhooks import bp as webhooks_bp
+    from routes.api_v1 import bp as api_v1_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tenants_bp)
@@ -138,6 +140,19 @@ def create_app() -> Flask:
     app.register_blueprint(service_health_bp)
     app.register_blueprint(licenses_bp)
     app.register_blueprint(incidents_bp)
+    app.register_blueprint(webhooks_bp)
+    app.register_blueprint(api_v1_bp)
+
+    # Exempt API routes from CSRF (they use Bearer token auth)
+    csrf.exempt(api_v1_bp)
+
+    # Initialize Celery (optional — works without Redis)
+    try:
+        from celery_app import make_celery
+        celery = make_celery(app)
+        app.extensions["celery"] = celery
+    except Exception:
+        pass  # Redis/Celery not available
 
     # Apply rate limit to login and initial setup
     limiter.limit("10/minute")(
