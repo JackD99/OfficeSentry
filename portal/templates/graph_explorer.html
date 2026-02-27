@@ -93,7 +93,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 const methodSelect = document.querySelector('[name="method"]');
 methodSelect.addEventListener('change', () => {
   document.getElementById('body-section').classList.toggle('d-none', !['POST','PATCH'].includes(methodSelect.value));

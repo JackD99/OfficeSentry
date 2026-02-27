@@ -197,7 +197,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('bpa-scan-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const checked = document.querySelectorAll('.tenant-cb:checked');

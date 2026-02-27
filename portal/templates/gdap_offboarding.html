@@ -53,7 +53,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('offboard-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!confirm('Are you sure you want to start offboarding this tenant?')) return;

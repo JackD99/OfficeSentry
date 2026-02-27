@@ -147,7 +147,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('fetch-scores-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const checked = document.querySelectorAll('.score-cb:checked');

@@ -64,6 +64,13 @@ class TestSecurityHeaders:
         assert "default-src 'self'" in csp
         assert "cdn.jsdelivr.net" in csp
 
+    def test_csp_uses_nonce_not_unsafe_inline(self, authed_client):
+        """CSP uses nonce-based policy instead of unsafe-inline."""
+        resp = authed_client.get("/")
+        csp = resp.headers.get("Content-Security-Policy", "")
+        assert "'unsafe-inline'" not in csp
+        assert "'nonce-" in csp
+
     def test_x_content_type_options(self, authed_client):
         """X-Content-Type-Options: nosniff is set."""
         resp = authed_client.get("/")
@@ -73,6 +80,20 @@ class TestSecurityHeaders:
         """X-Frame-Options: DENY is set."""
         resp = authed_client.get("/")
         assert resp.headers.get("X-Frame-Options") == "DENY"
+
+    def test_hsts_in_production(self, app):
+        """HSTS header is set when FLASK_ENV=production."""
+        import os
+        os.environ["FLASK_ENV"] = "production"
+        try:
+            client = app.test_client()
+            db.create_user("admin", "password123", is_admin=1)
+            client.post("/login", data={"username": "admin", "password": "password123"})
+            resp = client.get("/")
+            hsts = resp.headers.get("Strict-Transport-Security", "")
+            assert "max-age=31536000" in hsts
+        finally:
+            os.environ.pop("FLASK_ENV", None)
 
 
 class TestSessionTimeout:

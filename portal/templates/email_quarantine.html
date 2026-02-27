@@ -99,7 +99,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 function setRange(days) {
   const end = new Date();
   const start = new Date();

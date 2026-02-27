@@ -10,7 +10,7 @@
 {% block page_title %}Reports{% endblock %}
 
 {% block head_extra %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script nonce="{{ g.csp_nonce }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 {% endblock %}
 
 {% block content %}
@@ -214,7 +214,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 let activeType = '';
 
 function filterType(type, btn) {

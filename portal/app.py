@@ -9,6 +9,7 @@ Launch: python run.py (any OS), start.cmd (Windows), ./setup.sh (Linux/macOS)
 import json
 import logging
 import logging.handlers
+import os
 import secrets
 import uuid
 from datetime import timedelta
@@ -244,6 +245,7 @@ def create_app() -> Flask:
     @app.before_request
     def assign_request_id():
         g.request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
+        g.csp_nonce = secrets.token_hex(16)
 
     # ------------------------------------------------------------------
     # Error handlers
@@ -279,10 +281,11 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     @app.after_request
     def set_security_headers(response):
+        nonce = getattr(g, 'csp_nonce', '')
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
-            "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+            f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+            f"style-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data: blob:; "
             "connect-src 'self' http://ip-api.com"
@@ -293,6 +296,8 @@ def create_app() -> Flask:
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=(), payment=()"
         )
+        if request.is_secure or os.environ.get("FLASK_ENV") == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         if hasattr(g, "request_id"):
             response.headers["X-Request-ID"] = g.request_id
         return response
@@ -307,6 +312,8 @@ def create_app() -> Flask:
 if __name__ == "__main__":
     app = create_app()
     init_db()
+    from database import migrate_encryption
+    migrate_encryption(app.secret_key)
     TENANTS_DIR.mkdir(parents=True, exist_ok=True)
     log.info("M365 Audit Portal starting — http://127.0.0.1:5000")
     app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

@@ -105,7 +105,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 function selectType(card) {
   document.querySelectorAll('#type-cards .audit-card').forEach(c => c.classList.remove('active'));
   card.classList.add('active');

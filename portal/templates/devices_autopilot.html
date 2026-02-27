@@ -73,7 +73,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('autopilot-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const tenantId = document.getElementById('tenant-select').value;

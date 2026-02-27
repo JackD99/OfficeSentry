@@ -118,7 +118,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('admin-app-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('admin-app-btn');
