@@ -85,8 +85,11 @@ def initial_setup():
 @bp.route("/settings")
 @login_required
 def settings_page():
+    from database import list_api_keys
+    api_keys = list_api_keys()
     return render_template("settings.html",
-                           admin_client_id=get_admin_client_id())
+                           admin_client_id=get_admin_client_id(),
+                           api_keys=api_keys)
 
 
 @bp.route("/settings/admin-app", methods=["POST"])
@@ -131,7 +134,13 @@ def change_password():
 @admin_required
 def users_page():
     users = list_users()
-    return render_template("users.html", users=users)
+    from database import list_tenant_groups
+    from permissions import ROLE_HIERARCHY, ROLE_LABELS
+    tenant_groups = list_tenant_groups()
+    return render_template("users.html", users=users,
+                           tenant_groups=tenant_groups,
+                           roles=ROLE_HIERARCHY,
+                           role_labels=ROLE_LABELS)
 
 
 @bp.route("/users/new", methods=["POST"])
@@ -140,7 +149,16 @@ def user_create():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     display  = request.form.get("display_name", "").strip()
+    role     = request.form.get("role", "operator").strip()
     is_admin = 1 if request.form.get("is_admin") else 0
+
+    # Map role to is_admin for backward compat
+    from permissions import ROLE_HIERARCHY
+    valid_roles = list(ROLE_HIERARCHY.keys())
+    if role not in valid_roles:
+        role = "operator"
+    if role in ("super_admin", "admin"):
+        is_admin = 1
 
     if not username or not password:
         return jsonify({"ok": False, "error": "Username and password are required."})
@@ -150,24 +168,71 @@ def user_create():
         return jsonify({"ok": False, "error": f"User '{username}' already exists."})
 
     create_user(username, password, display_name=display or username, is_admin=is_admin)
-    log_action(current_user(), "user_created", details=f"User: {username}")
+    update_user(username, role=role)
+    log_action(current_user(), "user_created", details=f"User: {username}, Role: {role}")
     return jsonify({"ok": True, "message": f"User '{username}' created."})
 
 
 @bp.route("/users/<username>/toggle-admin", methods=["POST"])
 @admin_required
 def user_toggle_admin(username):
+    """Legacy toggle — kept for backward compatibility."""
     user = get_user(username)
     if not user:
         return jsonify({"ok": False, "error": "User not found."}), 404
     if username == current_user():
         return jsonify({"ok": False, "error": "Cannot change your own admin status."})
     new_val = 0 if user["is_admin"] else 1
-    update_user(username, is_admin=new_val)
-    role = "admin" if new_val else "operator"
+    new_role = "super_admin" if new_val else "operator"
+    update_user(username, is_admin=new_val, role=new_role)
+    log_action(current_user(), "user_role_changed",
+               details=f"User: {username}, Role: {new_role}")
+    return jsonify({"ok": True, "message": f"'{username}' is now {new_role}."})
+
+
+@bp.route("/users/<username>/set-role", methods=["POST"])
+@admin_required
+def user_set_role(username):
+    """Set a user's RBAC role."""
+    user = get_user(username)
+    if not user:
+        return jsonify({"ok": False, "error": "User not found."}), 404
+    if username == current_user():
+        return jsonify({"ok": False, "error": "Cannot change your own role."})
+
+    from permissions import ROLE_HIERARCHY
+    role = request.form.get("role", "").strip()
+    if role not in ROLE_HIERARCHY:
+        return jsonify({"ok": False, "error": f"Invalid role: {role}"})
+
+    is_admin = 1 if role in ("super_admin", "admin") else 0
+    update_user(username, role=role, is_admin=is_admin)
     log_action(current_user(), "user_role_changed",
                details=f"User: {username}, Role: {role}")
-    return jsonify({"ok": True, "message": f"'{username}' is now {role}."})
+    from permissions import ROLE_LABELS
+    label = ROLE_LABELS.get(role, role)
+    return jsonify({"ok": True, "message": f"'{username}' is now {label}."})
+
+
+@bp.route("/users/<username>/set-groups", methods=["POST"])
+@admin_required
+def user_set_groups(username):
+    """Set a user's allowed tenant groups."""
+    import json as _json
+    user = get_user(username)
+    if not user:
+        return jsonify({"ok": False, "error": "User not found."}), 404
+    groups_raw = request.form.get("groups", "[]")
+    try:
+        groups = _json.loads(groups_raw)
+        if not isinstance(groups, list):
+            raise ValueError
+    except (ValueError, _json.JSONDecodeError):
+        return jsonify({"ok": False, "error": "Invalid groups format."})
+    update_user(username, allowed_tenant_groups=_json.dumps(groups))
+    log_action(current_user(), "user_groups_changed",
+               details=f"User: {username}, Groups: {groups}")
+    return jsonify({"ok": True, "message": f"Tenant groups updated for '{username}'."})
 
 
 @bp.route("/users/<username>/reset-password", methods=["POST"])
@@ -194,3 +259,32 @@ def user_delete(username):
         return jsonify({"ok": False, "error": "User not found."}), 404
     log_action(current_user(), "user_deleted", details=f"User: {username}")
     return jsonify({"ok": True, "message": f"User '{username}' deleted."})
+
+
+# ---------------------------------------------------------------------------
+# API Key management (admin only)
+# ---------------------------------------------------------------------------
+
+@bp.route("/settings/api-keys/create", methods=["POST"])
+@admin_required
+def api_key_create():
+    from database import create_api_key
+    name = request.form.get("name", "").strip()
+    role = request.form.get("role", "viewer").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Key name is required."})
+    key_id, raw_key = create_api_key(
+        name=name, role=role, created_by=current_user()
+    )
+    log_action(current_user(), "api_key_created", details=f"Key: {name}")
+    return jsonify({"ok": True, "message": "API key created.", "key": raw_key, "id": key_id})
+
+
+@bp.route("/settings/api-keys/<key_id>/delete", methods=["POST"])
+@admin_required
+def api_key_delete(key_id):
+    from database import delete_api_key
+    if not delete_api_key(key_id):
+        return jsonify({"ok": False, "error": "Key not found."}), 404
+    log_action(current_user(), "api_key_deleted", details=f"Key: {key_id}")
+    return jsonify({"ok": True, "message": "API key deleted."})

@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT  NOT NULL,
     display_name TEXT,
     is_admin    INTEGER DEFAULT 0,
+    role        TEXT    DEFAULT 'operator',
+    allowed_tenant_groups TEXT DEFAULT '[]',
     created_at  TEXT    DEFAULT (datetime('now'))
 );
 
@@ -104,6 +106,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     started_at  TEXT DEFAULT (datetime('now')),
     ended_at    TEXT,
     output      TEXT DEFAULT '[]',
+    celery_task_id TEXT DEFAULT '',
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
 );
 
@@ -354,10 +357,50 @@ CREATE TABLE IF NOT EXISTS device_inventory_cache (
     fetched_at  TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    key_prefix  TEXT NOT NULL,
+    key_hash    TEXT NOT NULL,
+    scopes      TEXT DEFAULT '[]',
+    role        TEXT DEFAULT 'viewer',
+    allowed_tenant_groups TEXT DEFAULT '[]',
+    expires_at  TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    last_used_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS webhooks (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    secret      TEXT NOT NULL,
+    events      TEXT DEFAULT '[]',
+    enabled     INTEGER DEFAULT 1,
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    last_delivery_at TEXT,
+    last_status TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id          TEXT PRIMARY KEY,
+    webhook_id  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    payload     TEXT DEFAULT '{}',
+    status      TEXT DEFAULT 'pending',
+    response_code INTEGER,
+    attempts    INTEGER DEFAULT 0,
+    created_at  TEXT DEFAULT (datetime('now')),
+    delivered_at TEXT,
+    FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
+);
 """
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _MIGRATIONS = {
     2: """
@@ -612,6 +655,57 @@ CREATE INDEX IF NOT EXISTS idx_incident_cases_tenant ON incident_cases(tenant_id
 CREATE INDEX IF NOT EXISTS idx_service_health_cache_tenant ON service_health_cache(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_license_snapshots_tenant ON license_snapshots(tenant_id);
 """,
+    7: """
+ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'operator';
+ALTER TABLE users ADD COLUMN allowed_tenant_groups TEXT DEFAULT '[]';
+UPDATE users SET role = 'super_admin' WHERE is_admin = 1;
+UPDATE users SET role = 'operator' WHERE is_admin = 0;
+
+ALTER TABLE jobs ADD COLUMN celery_task_id TEXT DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    key_prefix  TEXT NOT NULL,
+    key_hash    TEXT NOT NULL,
+    scopes      TEXT DEFAULT '[]',
+    role        TEXT DEFAULT 'viewer',
+    allowed_tenant_groups TEXT DEFAULT '[]',
+    expires_at  TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    last_used_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS webhooks (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    secret      TEXT NOT NULL,
+    events      TEXT DEFAULT '[]',
+    enabled     INTEGER DEFAULT 1,
+    created_by  TEXT NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    last_delivery_at TEXT,
+    last_status TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id          TEXT PRIMARY KEY,
+    webhook_id  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    payload     TEXT DEFAULT '{}',
+    status      TEXT DEFAULT 'pending',
+    response_code INTEGER,
+    attempts    INTEGER DEFAULT 0,
+    created_at  TEXT DEFAULT (datetime('now')),
+    delivered_at TEXT,
+    FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
+""",
 }
 
 
@@ -691,11 +785,13 @@ def check_password(stored_hash: str, password: str) -> bool:
 
 def create_user(username: str, password: str, display_name: str = "",
                 is_admin: int = 0) -> int:
+    # Auto-set role based on is_admin for backward compatibility
+    role = "super_admin" if is_admin else "operator"
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO users (username, password_hash, display_name, is_admin) "
-            "VALUES (?, ?, ?, ?)",
-            (username, hash_password(password), display_name or username, is_admin)
+            "INSERT INTO users (username, password_hash, display_name, is_admin, role) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (username, hash_password(password), display_name or username, is_admin, role)
         )
         return cur.lastrowid
 
@@ -724,7 +820,8 @@ def update_password(username: str, new_password: str):
 def list_users() -> list[dict]:
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id, username, display_name, is_admin, created_at "
+            "SELECT id, username, display_name, is_admin, role, "
+            "allowed_tenant_groups, created_at "
             "FROM users ORDER BY username"
         ).fetchall()
         return [dict(r) for r in rows]
@@ -741,7 +838,7 @@ def delete_user(username: str) -> bool:
 def update_user(username: str, **fields):
     if not fields:
         return
-    allowed = {"display_name", "is_admin"}
+    allowed = {"display_name", "is_admin", "role", "allowed_tenant_groups"}
     fields = {k: v for k, v in fields.items() if k in allowed}
     if not fields:
         return
@@ -2166,3 +2263,258 @@ def get_latest_device_inventory(tenant_id: str) -> dict | None:
         d = dict(row)
         d["summary"] = json.loads(d["summary"]) if d["summary"] else {}
         return d
+
+
+# ---------------------------------------------------------------------------
+# Celery Task ID tracking
+# ---------------------------------------------------------------------------
+
+def update_job_task_id(job_id: str, task_id: str):
+    """Store the Celery task ID for a job (used for revocation)."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE jobs SET celery_task_id = ? WHERE id = ?",
+            (task_id, job_id),
+        )
+
+
+def get_job_task_id(job_id: str) -> str:
+    """Retrieve the Celery task ID for a job."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT celery_task_id FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+        return row["celery_task_id"] if row and row["celery_task_id"] else ""
+
+
+# ---------------------------------------------------------------------------
+# Report Schedule helpers
+# ---------------------------------------------------------------------------
+
+def get_due_schedules() -> list[dict]:
+    """Return enabled report schedules that are due for execution."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM report_schedules "
+            "WHERE enabled = 1 AND (next_run IS NULL OR next_run <= datetime('now'))"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_schedule_run(schedule_id: str):
+    """Update a schedule's last_run and calculate next_run."""
+    with get_db() as conn:
+        schedule = conn.execute(
+            "SELECT * FROM report_schedules WHERE id = ?", (schedule_id,)
+        ).fetchone()
+        if not schedule:
+            return
+        freq = schedule["frequency"]
+        # Calculate next run offset based on frequency
+        if freq == "daily":
+            offset = "+1 day"
+        elif freq == "weekly":
+            offset = "+7 days"
+        elif freq == "monthly":
+            offset = "+30 days"
+        else:
+            offset = "+7 days"
+        conn.execute(
+            "UPDATE report_schedules SET last_run = datetime('now'), "
+            f"next_run = datetime('now', '{offset}') WHERE id = ?",
+            (schedule_id,),
+        )
+
+
+# ---------------------------------------------------------------------------
+# API Keys
+# ---------------------------------------------------------------------------
+
+def create_api_key(name: str, role: str = "viewer",
+                   allowed_tenant_groups: str = "[]",
+                   scopes: str = "[]", expires_at: str = None,
+                   created_by: str = "") -> tuple[str, str]:
+    """Create a new API key. Returns (key_id, raw_key).
+
+    The raw key is only returned once — it is stored as a SHA256 hash.
+    """
+    import secrets as _secrets
+    key_id = uuid.uuid4().hex[:12]
+    raw_key = "spat_" + _secrets.token_hex(32)
+    key_prefix = raw_key[:13]  # "spat_" + 8 hex chars
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO api_keys (id, name, key_prefix, key_hash, scopes, "
+            "role, allowed_tenant_groups, expires_at, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (key_id, name, key_prefix, key_hash, scopes, role,
+             allowed_tenant_groups, expires_at, created_by),
+        )
+    return key_id, raw_key
+
+
+def validate_api_key(raw_key: str) -> dict | None:
+    """Validate an API key and return its record if valid, or None."""
+    if not raw_key or not raw_key.startswith("spat_"):
+        return None
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM api_keys WHERE key_hash = ?", (key_hash,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        # Check expiration
+        if d.get("expires_at"):
+            if d["expires_at"] < datetime.now().isoformat():
+                return None
+        # Update last_used_at
+        conn.execute(
+            "UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?",
+            (d["id"],),
+        )
+        return d
+
+
+def list_api_keys() -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, name, key_prefix, scopes, role, "
+            "allowed_tenant_groups, expires_at, created_by, "
+            "created_at, last_used_at FROM api_keys ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_api_key(key_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Webhooks
+# ---------------------------------------------------------------------------
+
+def create_webhook(name: str, url: str, secret: str, events: str = "[]",
+                   created_by: str = "") -> str:
+    wh_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO webhooks (id, name, url, secret, events, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (wh_id, name, url, secret, events, created_by),
+        )
+    return wh_id
+
+
+def get_webhook(webhook_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM webhooks WHERE id = ?", (webhook_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["events"] = json.loads(d["events"]) if d["events"] else []
+        return d
+
+
+def list_webhooks() -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM webhooks ORDER BY created_at DESC"
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["events"] = json.loads(d["events"]) if d["events"] else []
+            result.append(d)
+        return result
+
+
+def update_webhook(webhook_id: str, **fields):
+    if not fields:
+        return
+    allowed = {"name", "url", "secret", "events", "enabled"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if not fields:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [webhook_id]
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE webhooks SET {set_clause} WHERE id = ?", values
+        )
+
+
+def delete_webhook(webhook_id: str) -> bool:
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM webhooks WHERE id = ?", (webhook_id,))
+        return cur.rowcount > 0
+
+
+def toggle_webhook(webhook_id: str) -> bool | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT enabled FROM webhooks WHERE id = ?", (webhook_id,)
+        ).fetchone()
+        if not row:
+            return None
+        new_val = 0 if row["enabled"] else 1
+        conn.execute(
+            "UPDATE webhooks SET enabled = ? WHERE id = ?",
+            (new_val, webhook_id),
+        )
+        return bool(new_val)
+
+
+def update_webhook_delivery_status(webhook_id: str, status: str):
+    """Update the last delivery status on a webhook."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE webhooks SET last_delivery_at = datetime('now'), "
+            "last_status = ? WHERE id = ?",
+            (status, webhook_id),
+        )
+
+
+def create_webhook_delivery(webhook_id: str, event_type: str,
+                            payload: str = "{}") -> str:
+    d_id = uuid.uuid4().hex[:12]
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO webhook_deliveries "
+            "(id, webhook_id, event_type, payload) VALUES (?, ?, ?, ?)",
+            (d_id, webhook_id, event_type, payload),
+        )
+    return d_id
+
+
+def update_webhook_delivery(delivery_id: str, status: str,
+                            response_code: int = None, attempts: int = 1):
+    with get_db() as conn:
+        if status == "delivered":
+            conn.execute(
+                "UPDATE webhook_deliveries SET status = ?, response_code = ?, "
+                "attempts = ?, delivered_at = datetime('now') WHERE id = ?",
+                (status, response_code, attempts, delivery_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE webhook_deliveries SET status = ?, response_code = ?, "
+                "attempts = ? WHERE id = ?",
+                (status, response_code, attempts, delivery_id),
+            )
+
+
+def list_webhook_deliveries(webhook_id: str, limit: int = 50) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM webhook_deliveries WHERE webhook_id = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (webhook_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]

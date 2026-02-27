@@ -367,6 +367,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a class="nav-link {% if request.endpoint and 'webhooks' in request.endpoint %}active{% endif %}"
+             href="{{ url_for('webhooks.webhooks_page') }}">
+            <i class="bi bi-broadcast me-2"></i>Webhooks
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'auth.settings_page' %}active{% endif %}"
              href="{{ url_for('auth.settings_page') }}">
             <i class="bi bi-gear me-2"></i>Settings

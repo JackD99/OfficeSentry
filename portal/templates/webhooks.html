@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Webhooks — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">Webhooks</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}Webhooks{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center">
+        <i class="bi bi-broadcast me-2 text-primary"></i>
+        <span class="fw-semibold">Configured Webhooks</span>
+        <span class="badge bg-secondary ms-2">{{ webhooks|length }}</span>
+        <button class="btn btn-primary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#addWebhookModal">
+          <i class="bi bi-plus-circle me-1"></i>Add Webhook
+        </button>
+      </div>
+      {% if webhooks %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Name</th>
+              <th>URL</th>
+              <th>Events</th>
+              <th>Status</th>
+              <th>Last Delivery</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for wh in webhooks %}
+            <tr id="wh-row-{{ wh.id }}">
+              <td class="fw-semibold">{{ wh.name }}</td>
+              <td class="text-muted small font-monospace" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ wh.url }}</td>
+              <td>
+                {% for ev in wh.events %}
+                  <span class="badge bg-dark">{{ ev }}</span>
+                {% endfor %}
+                {% if not wh.events %}<span class="text-muted small">All</span>{% endif %}
+              </td>
+              <td>
+                {% if wh.enabled %}
+                  <span class="badge bg-success">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary">Disabled</span>
+                {% endif %}
+                {% if wh.last_status %}
+                  <span class="small text-muted ms-1">{{ wh.last_status }}</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ wh.last_delivery_at[:16] if wh.last_delivery_at else '—' }}</td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-primary" title="Test" onclick="testWebhook('{{ wh.id }}')">
+                    <i class="bi bi-send"></i>
+                  </button>
+                  <button class="btn btn-outline-secondary" title="{{ 'Disable' if wh.enabled else 'Enable' }}"
+                          onclick="toggleWebhook('{{ wh.id }}')">
+                    <i class="bi bi-toggle-{{ 'on' if wh.enabled else 'off' }}"></i>
+                  </button>
+                  <button class="btn btn-outline-danger" title="Delete"
+                          onclick="if(confirm('Delete this webhook?')) deleteWebhook('{{ wh.id }}')">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i class="bi bi-broadcast"></i>
+          <p>No webhooks configured.</p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-info-circle me-2 text-info"></i>About Webhooks</div>
+      <div class="card-body small">
+        <p class="mb-2">Webhooks send HTTP POST notifications to your endpoint when events occur.</p>
+        <p class="mb-2">Each delivery includes an <code>X-Webhook-Signature</code> header (HMAC-SHA256) for verification.</p>
+        <p class="mb-0"><strong>Available events:</strong></p>
+        <ul class="mb-0 mt-1">
+          {% for ev in available_events %}
+          <li><code>{{ ev }}</code></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Webhook Modal -->
+<div class="modal fade" id="addWebhookModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="add-webhook-form">
+        <div class="modal-header">
+          <h6 class="modal-title fw-semibold">Add Webhook</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="name" required placeholder="e.g. Slack Alerts">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">URL <span class="text-danger">*</span></label>
+            <input type="url" class="form-control font-monospace" name="url" required
+                   placeholder="https://example.com/webhook">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Events</label>
+            <div class="small text-muted mb-2">Leave all unchecked to receive all events.</div>
+            {% for ev in available_events %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="events" value="{{ ev }}" id="ev-{{ loop.index }}">
+              <label class="form-check-label" for="ev-{{ loop.index }}"><code>{{ ev }}</code></label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle me-1"></i>Create Webhook
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Secret Display Modal -->
+<div class="modal fade" id="secretModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-semibold">Webhook Secret</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning small mb-2">
+          <i class="bi bi-exclamation-triangle me-1"></i>Copy this secret now. It won't be shown again.
+        </div>
+        <input type="text" class="form-control font-monospace small" id="webhook-secret" readonly>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ g.csp_nonce }}">
+async function apiPost(url, fd) {
+  fd.append('csrf_token', window.CSRF_TOKEN);
+  const res = await fetch(url, { method: 'POST', body: fd });
+  return res.json();
+}
+
+document.getElementById('add-webhook-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = await apiPost('{{ url_for("webhooks.webhook_create") }}', new FormData(e.target));
+  if (data.ok) {
+    showToast(data.message, 'success');
+    if (data.secret) {
+      document.getElementById('webhook-secret').value = data.secret;
+      new bootstrap.Modal(document.getElementById('secretModal')).show();
+    }
+    setTimeout(() => location.reload(), 2000);
+  } else {
+    showToast(data.error, 'danger');
+  }
+});
+
+async function testWebhook(id) {
+  const fd = new FormData();
+  const data = await apiPost(`/webhooks/${id}/test`, fd);
+  showToast(data.ok ? data.message : data.error, data.ok ? 'success' : 'danger');
+}
+
+async function toggleWebhook(id) {
+  const fd = new FormData();
+  const data = await apiPost(`/webhooks/${id}/toggle`, fd);
+  if (data.ok) {
+    showToast(data.message, 'success');
+    setTimeout(() => location.reload(), 500);
+  } else {
+    showToast(data.error, 'danger');
+  }
+}
+
+async function deleteWebhook(id) {
+  const fd = new FormData();
+  const data = await apiPost(`/webhooks/${id}/delete`, fd);
+  if (data.ok) {
+    showToast(data.message, 'success');
+    document.getElementById(`wh-row-${id}`)?.remove();
+  } else {
+    showToast(data.error, 'danger');
+  }
+}
+</script>
+{% endblock %}
