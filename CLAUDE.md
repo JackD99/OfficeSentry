@@ -28,11 +28,12 @@ SPO-Audit-Toolkit/
 │
 ├── portal/                  # Flask web application (the main product)
 │   ├── app.py               # App factory, config, middleware, dashboard route, security headers
-│   ├── database.py          # SQLite persistence — 32 tables, schema migrations, CRUD functions
+│   ├── database.py          # SQLite persistence — 33 tables, schema migrations, CRUD functions
 │   ├── helpers.py           # Auth decorators, PS runner, tenant filesystem, input validation
 │   ├── permissions.py       # RBAC engine — role hierarchy, tenant group scoping, operation tiers
 │   ├── celery_app.py        # Celery + Redis task queue factory
-│   ├── tasks.py             # Celery tasks — PS job runner, webhook delivery, SSE publishing
+│   ├── tasks.py             # Celery tasks — PS job runner, webhook delivery, email, SSE publishing
+│   ├── report_engine.py     # PDF report generation engine (WeasyPrint)
 │   ├── agent_auth.py        # HMAC-SHA256 authentication middleware for AD Agent API
 │   ├── routes/              # 20 Blueprint modules (see Blueprint Reference below)
 │   │   ├── __init__.py
@@ -40,7 +41,7 @@ SPO-Audit-Toolkit/
 │   │   ├── tenants.py       # Tenant CRUD, cert generation, Entra app management
 │   │   ├── audits.py        # SPO audit, security scan, breach investigation, batch ops
 │   │   ├── jobs.py          # Job status polling, cancellation, SSE streaming
-│   │   ├── reports.py       # Report listing, interactive viewer, saved views, schedules
+│   │   ├── reports.py       # Reports, PDF generation, comparison, client dashboard, SMTP, branding
 │   │   ├── operations.py    # 50+ MSP operations (User, Exchange, Teams, SharePoint)
 │   │   ├── standards.py     # BPA, standards templates, secure scores, alerts, tenant groups
 │   │   ├── tenant_admin.py  # Tenant lookup, domains, auth methods, partner relationships
@@ -57,7 +58,8 @@ SPO-Audit-Toolkit/
 │   │   ├── api_v1.py        # REST API v1 with Bearer token authentication
 │   │   └── webhooks.py      # Webhook CRUD, delivery history
 │   ├── static/css/portal.css # Custom dark theme design system (~1,720 lines)
-│   └── templates/           # 86 Jinja2 templates (Bootstrap 5, dark theme)
+│   └── templates/           # 95 Jinja2 templates (Bootstrap 5, dark theme)
+│       └── reports/         # 7 PDF report templates (WeasyPrint)
 │
 ├── scripts/                 # 45 PowerShell scripts (audit, setup, admin, incident response, AD agent)
 │   ├── Shared.psm1          # Shared module (connection helpers, export, password handling)
@@ -76,7 +78,7 @@ SPO-Audit-Toolkit/
 │   └── Utilities/
 │       └── Write-ErrorLog.ps1
 │
-└── tests/                   # Python test suite (pytest) — 23 test files
+└── tests/                   # Python test suite (pytest) — 24 test files
     ├── conftest.py          # Shared fixtures, in-memory SQLite, test client
     ├── test_auth.py         # Login, logout, initial setup, session tests
     ├── test_database.py     # CRUD operations, encryption, schema integrity
@@ -97,6 +99,7 @@ SPO-Audit-Toolkit/
     ├── test_jobs_routes.py  # Job listing, status, cancellation
     ├── test_licenses.py     # License management
     ├── test_rbac.py         # Role-based access control
+    ├── test_reporting.py    # PDF generation, comparison, client dashboard, SMTP, branding
     ├── test_reports_routes.py # Report browser, viewer, schedules
     ├── test_service_health.py # Service health monitoring
     ├── test_sse.py          # Server-Sent Events streaming
@@ -115,14 +118,14 @@ SPO-Audit-Toolkit/
 
 | Component | Count | Detail |
 |-----------|-------|--------|
-| Route blueprints | 20 + dashboard | ~12,600 lines across `portal/routes/` + `app.py` + helpers |
-| Templates | 86 | Bootstrap 5 dark theme, Jinja2 |
-| Database tables | 32 | + schema_version; ~3,030 lines in `database.py` |
+| Route blueprints | 20 + dashboard | ~13,500 lines across `portal/routes/` + `app.py` + helpers |
+| Templates | 95 | Bootstrap 5 dark theme, Jinja2 (incl. 7 PDF report templates) |
+| Database tables | 33 | + schema_version; schema v9 |
 | PowerShell scripts | 45 | 44 `.ps1` + 1 `.psm1` in `scripts/` |
 | Security inspectors | 108 | `inspectors/Inspectors/` (365Inspect) |
 | CSS design system | ~1,720 lines | Custom dark theme in `portal/static/css/portal.css` |
-| Test files | 23 | + conftest.py |
-| Python dependencies | 6 | Flask, cryptography, Flask-WTF, Flask-Limiter, Celery, Redis |
+| Test files | 24 | + conftest.py; 658 tests total |
+| Python dependencies | 7 | Flask, cryptography, Flask-WTF, Flask-Limiter, Celery, Redis, WeasyPrint |
 
 ## Technology Stack
 
@@ -138,7 +141,7 @@ SPO-Audit-Toolkit/
 - **CSRF Protection**: Flask-WTF (CSRFProtect)
 - **Rate Limiting**: Flask-Limiter (10/min on login, in-memory storage)
 - **Task Queue**: Celery 5.4 + Redis (optional, falls back to threading)
-- **Database**: SQLite with WAL mode, version-tracked schema migrations (current version: 8)
+- **Database**: SQLite with WAL mode, version-tracked schema migrations (current version: 9)
 - **Encryption**: cryptography (Fernet) for PFX passwords at rest (PBKDF2 key derivation)
 - **Password hashing**: Werkzeug (bcrypt-based)
 - **Frontend**: Bootstrap 5.3 (dark theme, SRI hashes), Bootstrap Icons 1.11.3, Chart.js, Jinja2 templates
@@ -156,7 +159,7 @@ The PFX password is encrypted with Fernet (key derived from Flask `secret_key` v
 ### Portal Architecture
 The portal uses Flask Blueprints to organize routes by feature. The dashboard route lives in `app.py`; all 20 other blueprints are registered in `create_app()`.
 
-Shared helpers (`helpers.py`) provide auth decorators (`@login_required`, `@admin_required`, `@role_required`), PowerShell subprocess management, tenant filesystem operations, and input validation. RBAC is handled by `permissions.py` with a 4-tier role hierarchy (super_admin, admin, operator, viewer).
+Shared helpers (`helpers.py`) provide auth decorators (`@login_required`, `@admin_required`, `@role_required`), PowerShell subprocess management, tenant filesystem operations, and input validation. RBAC is handled by `permissions.py` with a 5-tier role hierarchy (super_admin, admin, operator, viewer, client).
 
 ### Job Execution
 The portal runs PowerShell scripts as background tasks via **Celery** (when Redis is available) or falls back to `threading.Thread`. Output is streamed line-by-line into SQLite (`jobs` table) and published via **Redis pub/sub** for real-time SSE streaming. The frontend uses **Server-Sent Events** (`/jobs/<id>/stream`) for instant updates, with graceful fallback to polling via `/jobs/<id>/status`. Batch operations (`/batch/audit`) allow running scans across multiple tenants simultaneously. Running processes are tracked in `_running_processes` dict for cancellation support via `cancel_job()` (or `celery.control.revoke()` when Celery is active).
@@ -181,7 +184,7 @@ Each inspector consists of two files:
 The `365Inspect.ps1` orchestrator loads all 108 inspectors, runs them, and generates HTML/CSV/JSON/XML reports. Inspector metadata is cached in memory during the app lifetime.
 
 ### Database Schema Versioning
-The SQLite database uses a `schema_version` table to track schema changes. On startup, `init_db()` checks the current version and applies incremental migrations from the `_MIGRATIONS` dict in `database.py`. Current version: 8.
+The SQLite database uses a `schema_version` table to track schema changes. On startup, `init_db()` checks the current version and applies incremental migrations from the `_MIGRATIONS` dict in `database.py`. Current version: 9.
 
 ### AD Agent Architecture
 On-premises Active Directory agents communicate with the portal via **HMAC-SHA256 signed HTTPS requests** (agent-initiated polling, outbound-only). Each agent is cryptographically bound to a single tenant. The enrollment flow uses one-time tokens (24h TTL, SHA256-hashed) exchanged for a shared secret. Agent credentials are encrypted with Fernet at rest in the portal and DPAPI on the Windows agent side. Commands are queued in the portal and polled by agents every 60 seconds.
@@ -202,7 +205,7 @@ Webhooks deliver HMAC-signed HTTP POST notifications for events (`job.completed`
 | **tenants** | `routes/tenants.py` | `/tenants`, `/tenants/<id>`, `/tenants/<id>/setup-*`, `/tenants/<id>/delete` | Tenant CRUD, cert gen, Entra app setup/removal |
 | **audits** | `routes/audits.py` | `/audits`, `/audits/spo`, `/audits/security`, `/audits/breach`, `/batch/audit` | SPO audit, 365Inspect security scan, breach investigation, batch ops |
 | **jobs** | `routes/jobs.py` | `/jobs`, `/jobs/<id>/status`, `/jobs/<id>/cancel` | Job listing, status polling, cancellation |
-| **reports** | `routes/reports.py` | `/reports`, `/report-viewer/<path>`, `/reports/download`, `/schedules/*`, `/audit-trail` | Report browser, interactive viewer, saved views, schedules, audit trail |
+| **reports** | `routes/reports.py` | `/reports`, `/report-viewer/<path>`, `/reports/<id>/pdf/<type>`, `/reports/compare`, `/client-dashboard`, `/reports/branding/*`, `/reports/smtp-config`, `/schedules/*`, `/audit-trail` | Reports, PDF generation, comparison, client dashboard, SMTP, branding, schedules |
 
 ### MSP Management Blueprints
 
@@ -240,7 +243,7 @@ Webhooks deliver HMAC-signed HTTP POST notifications for events (`job.completed`
 - `GET /api/chart-data` — chart data for AJAX refresh
 - `GET /health` — unauthenticated health check endpoint
 
-## Database Schema (32 tables)
+## Database Schema (33 tables)
 
 ### Core
 | Table | Purpose | Key Columns |
@@ -254,7 +257,8 @@ Webhooks deliver HMAC-signed HTTP POST notifications for events (`job.completed`
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | **saved_views** | Report viewer configs | columns, filters, sort, chart settings |
-| **report_schedules** | Scheduled report defs | frequency, day_of_week, hour, audit_type — *not yet executed* |
+| **report_schedules** | Scheduled report defs | frequency, day_of_week, hour, audit_type, recipients, email_on_completion |
+| **tenant_branding** | Per-tenant PDF branding | company_name, logo_path, accent_color |
 
 ### Compliance & Standards
 | Table | Purpose | Key Columns |
@@ -459,7 +463,7 @@ python -m pytest tests/ -v
 | tenants | `test_routes.py` (partial) | Partial |
 | audits | `test_audits.py` | Covered |
 | jobs | `test_jobs_routes.py` | Covered |
-| reports | `test_reports_routes.py` | Covered |
+| reports | `test_reports_routes.py`, `test_reporting.py` | Covered |
 | operations | `test_operations.py` | Covered |
 | standards | `test_standards.py` | Covered |
 | tenant_admin | `test_tenant_admin.py` | Covered |
@@ -496,7 +500,7 @@ Follow `tests/test_operations.py` as a model:
 - Rate limiting: Login (10/min), Initial setup (5/min) — in-memory storage
 - Security headers: Nonce-based CSP, HSTS, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy, Permissions-Policy
 - SRI hashes on CDN resources (Bootstrap CSS/JS)
-- RBAC: 4-tier role hierarchy (super_admin, admin, operator, viewer) with tenant group scoping
+- RBAC: 5-tier role hierarchy (super_admin, admin, operator, viewer, client) with tenant group scoping
 - API authentication: Bearer token with scoped API keys
 - AD Agent authentication: HMAC-SHA256 signed requests with replay protection (5-min timestamp window + nonce dedup)
 - Request tracking: X-Request-ID header on all responses
@@ -519,8 +523,6 @@ Follow `tests/test_operations.py` as a model:
 - No PowerShell Pester tests
 
 ### Missing Features
-- No PDF report generation
-- No email notifications (SMTP)
 - No PSA/RMM integration
 - No automated BPA remediation
 - No approval workflows for destructive operations
@@ -550,6 +552,7 @@ Place behind a reverse proxy (nginx, Caddy) for HTTPS, static files, proxy heade
 - Flask-Limiter==3.8.0 — rate limiting
 - celery[redis]==5.4.0 — distributed task queue (optional, falls back to threading)
 - redis==5.2.0 — Redis client for Celery broker, SSE pub/sub, and caching
+- weasyprint==63.1 — HTML-to-PDF report generation (requires system libraries: cairo, pango)
 
 ### Dev Dependencies (`requirements-dev.txt`)
 - pytest — test framework

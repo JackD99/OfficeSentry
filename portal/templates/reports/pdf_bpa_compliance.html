@@ -1,0 +1,52 @@
+{% extends "reports/pdf_base.html" %}
+{% block content %}
+<div class="header">
+  <h1>{{ report_title }}</h1>
+  <div class="header-tenant">{{ tenant.name }} ({{ tenant.domain }})</div>
+  <div class="header-meta">Generated {{ generated_at }}</div>
+</div>
+
+<h2>Compliance Summary</h2>
+<div class="metric-row">
+  <div class="metric-card">
+    <div class="metric-value" style="color: #198754;">{{ bpa_results | selectattr('status', 'equalto', 'pass') | list | length }}</div>
+    <div class="metric-label">Passed</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: #dc3545;">{{ bpa_results | selectattr('status', 'equalto', 'fail') | list | length }}</div>
+    <div class="metric-label">Failed</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: #ffc107;">{{ bpa_results | selectattr('status', 'equalto', 'warning') | list | length }}</div>
+    <div class="metric-label">Warnings</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{ bpa_results | length }}</div>
+    <div class="metric-label">Total Checks</div>
+  </div>
+</div>
+
+{% for category, checks in categories.items() %}
+<div class="section">
+  <h2>{{ category }}</h2>
+  <table>
+    <thead><tr><th>Check</th><th>Status</th><th>Expected</th><th>Actual</th><th>Impact</th></tr></thead>
+    <tbody>
+    {% for r in checks %}
+    <tr>
+      <td>{{ r.check_name }}</td>
+      <td><span class="badge badge-{{ r.status }}">{{ r.status | upper }}</span></td>
+      <td>{{ r.expected | truncate(50) }}</td>
+      <td>{{ r.actual | truncate(50) }}</td>
+      <td>{{ r.impact }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+
+{% if not bpa_results %}
+<p class="no-data">No BPA results available. Run a BPA scan to populate this report.</p>
+{% endif %}
+{% endblock %}

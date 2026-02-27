@@ -1,6 +1,7 @@
 """
 portal/routes/reports.py — Report listing, interactive viewer, saved views,
-scheduling, multi-format export, and audit trail routes.
+scheduling, multi-format export, PDF generation, report comparison,
+client dashboard, and audit trail routes.
 """
 
 import csv
@@ -20,6 +21,8 @@ from database import (
     get_tenant, list_tenants, get_audit_log, log_action,
     create_saved_view, get_saved_view, list_saved_views, delete_saved_view,
     create_schedule, list_schedules, get_schedule, update_schedule, delete_schedule,
+    get_bpa_results, get_latest_secure_score,
+    get_tenant_branding, get_default_branding, upsert_tenant_branding,
 )
 from helpers import (
     login_required, current_user,
@@ -147,6 +150,23 @@ def _parse_csv_file(file_path: Path, max_rows: int = 5000) -> dict:
         return {"headers": [], "rows": [], "total": 0, "error": str(exc)}
 
 
+def _parse_report_file(file_path: Path, max_rows: int = 50000) -> dict:
+    """Parse a CSV or JSON report file into headers + rows."""
+    ext = file_path.suffix.lower()
+    if ext == ".csv":
+        return _parse_csv_file(file_path, max_rows=max_rows)
+    elif ext == ".json":
+        try:
+            raw = json.loads(file_path.read_text(encoding="utf-8-sig", errors="replace"))
+            if isinstance(raw, list) and raw and isinstance(raw[0], dict):
+                headers = list(raw[0].keys())
+                rows = [[str(item.get(h, "")) for h in headers] for item in raw[:max_rows]]
+                return {"headers": headers, "rows": rows, "total": len(rows)}
+        except Exception as exc:
+            return {"headers": [], "rows": [], "total": 0, "error": str(exc)}
+    return {"headers": [], "rows": [], "total": 0}
+
+
 # ---------------------------------------------------------------------------
 # Reports listing
 # ---------------------------------------------------------------------------
@@ -166,13 +186,258 @@ def reports():
 
     tenant_list = list_tenants()
     saved = list_saved_views(current_user())
+
+    # Check if PDF generation is available
+    from report_engine import WEASYPRINT_AVAILABLE
+    pdf_available = WEASYPRINT_AVAILABLE
+
     return render_template("reports.html",
                            files=files, tenants=tenant_list,
                            filter_tenant=tenant_id,
                            type_counts=type_counts,
                            total_size=total_size,
                            type_badge_colors=TYPE_BADGE_COLORS,
-                           saved_views=saved)
+                           saved_views=saved,
+                           pdf_available=pdf_available)
+
+
+# ---------------------------------------------------------------------------
+# PDF Report Generation
+# ---------------------------------------------------------------------------
+
+@bp.route("/reports/<tenant_id>/pdf/<report_type>")
+@login_required
+def download_pdf(tenant_id, report_type):
+    """Generate and download a branded PDF report."""
+    from report_engine import REPORT_TYPES, WEASYPRINT_AVAILABLE
+
+    if not WEASYPRINT_AVAILABLE:
+        return jsonify({
+            "ok": False,
+            "error": "PDF generation requires WeasyPrint. "
+                     "Install system dependencies and run: pip install weasyprint"
+        }), 501
+
+    if report_type not in REPORT_TYPES:
+        return jsonify({"ok": False, "error": f"Unknown report type: {report_type}"}), 400
+
+    tenant = get_tenant(tenant_id)
+    if not tenant:
+        return jsonify({"ok": False, "error": "Tenant not found"}), 404
+
+    try:
+        from report_engine import generate_pdf
+        branding = get_tenant_branding(tenant_id) or get_default_branding()
+        pdf_bytes, filename = generate_pdf(report_type, tenant_id, branding=branding)
+        log_action(current_user(), "pdf_generated",
+                   tenant_id=tenant_id,
+                   details=f"PDF: {report_type}")
+
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as exc:
+        log.error("PDF generation failed for %s/%s: %s", tenant_id, report_type, exc)
+        return jsonify({"ok": False, "error": f"PDF generation failed: {exc}"}), 500
+
+
+@bp.route("/reports/pdf-types")
+@login_required
+def pdf_report_types():
+    """Return available PDF report types."""
+    from report_engine import REPORT_TYPES, WEASYPRINT_AVAILABLE
+    return jsonify({
+        "ok": True,
+        "available": WEASYPRINT_AVAILABLE,
+        "types": {k: {"title": v["title"], "description": v["description"]}
+                  for k, v in REPORT_TYPES.items()},
+    })
+
+
+# ---------------------------------------------------------------------------
+# Report Comparison
+# ---------------------------------------------------------------------------
+
+@bp.route("/reports/compare")
+@login_required
+def compare_reports():
+    """Compare two audit reports and highlight changes."""
+    file_a = request.args.get("a", "")
+    file_b = request.args.get("b", "")
+
+    # If no files selected, show selection form
+    if not file_a or not file_b:
+        files, _ = _collect_reports()
+        return render_template("report_comparison.html",
+                               files=files, data=None,
+                               type_badge_colors=TYPE_BADGE_COLORS)
+
+    # Validate both paths
+    resolved_a = _validate_report_path(file_a)
+    resolved_b = _validate_report_path(file_b)
+    if not resolved_a or not resolved_b:
+        abort(403)
+    if not resolved_a.exists() or not resolved_b.exists():
+        abort(404)
+
+    # Parse both files
+    data_a = _parse_report_file(resolved_a)
+    data_b = _parse_report_file(resolved_b)
+
+    # Use common headers (prefer B's headers as the newer version)
+    headers = data_b.get("headers") or data_a.get("headers", [])
+
+    # Convert rows to sets of tuples for comparison
+    rows_a = data_a.get("rows", [])
+    rows_b = data_b.get("rows", [])
+
+    # Normalize row lengths to match headers
+    def normalize(row):
+        return tuple(row[i] if i < len(row) else "" for i in range(len(headers)))
+
+    set_a = set(normalize(r) for r in rows_a)
+    set_b = set(normalize(r) for r in rows_b)
+
+    added = [list(r) for r in (set_b - set_a)]
+    removed = [list(r) for r in (set_a - set_b)]
+    unchanged = len(set_a & set_b)
+
+    # Detect changed rows using first column as key (if present)
+    changed = []
+    if headers:
+        key_map_a = {}
+        key_map_b = {}
+        for r in rows_a:
+            nr = normalize(r)
+            key_map_a[nr[0]] = nr
+        for r in rows_b:
+            nr = normalize(r)
+            key_map_b[nr[0]] = nr
+
+        for key in set(key_map_a.keys()) & set(key_map_b.keys()):
+            if key_map_a[key] != key_map_b[key]:
+                changed.append({"old": list(key_map_a[key]), "new": list(key_map_b[key])})
+
+    comparison = {
+        "headers": headers,
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+        "unchanged": unchanged,
+        "file_a_name": resolved_a.name,
+        "file_b_name": resolved_b.name,
+    }
+
+    files, _ = _collect_reports()
+    return render_template("report_comparison.html",
+                           files=files, data=comparison,
+                           type_badge_colors=TYPE_BADGE_COLORS)
+
+
+# ---------------------------------------------------------------------------
+# Client Dashboard
+# ---------------------------------------------------------------------------
+
+@bp.route("/client-dashboard")
+@login_required
+def client_dashboard():
+    """Read-only client-facing dashboard scoped to a single tenant."""
+    from database import get_user
+    from permissions import is_client_user, get_client_tenant_id
+    from report_engine import WEASYPRINT_AVAILABLE
+
+    user = get_user(current_user())
+    if not user:
+        abort(403)
+
+    # Determine tenant: client users get their scoped tenant,
+    # other users can view any tenant's client dashboard via query param
+    if is_client_user(user):
+        tenant_id = get_client_tenant_id(user)
+    else:
+        tenant_id = request.args.get("tenant_id")
+
+    if not tenant_id:
+        abort(404)
+
+    tenant = get_tenant(tenant_id)
+    if not tenant:
+        abort(404)
+
+    # Gather data
+    bpa = get_bpa_results(tenant_id)
+    score = get_latest_secure_score(tenant_id)
+    branding = get_tenant_branding(tenant_id) or get_default_branding()
+    reports_list, _ = _collect_reports(tenant_id)
+
+    bpa_pass = sum(1 for r in bpa if r.get("status") == "pass")
+    bpa_fail = sum(1 for r in bpa if r.get("status") == "fail")
+
+    return render_template("client_dashboard.html",
+                           tenant=tenant,
+                           secure_score=score,
+                           bpa_results=bpa,
+                           bpa_pass=bpa_pass,
+                           bpa_fail=bpa_fail,
+                           reports=reports_list,
+                           branding=branding,
+                           pdf_available=WEASYPRINT_AVAILABLE,
+                           type_badge_colors=TYPE_BADGE_COLORS)
+
+
+# ---------------------------------------------------------------------------
+# Branding Configuration
+# ---------------------------------------------------------------------------
+
+@bp.route("/reports/branding/<tenant_id>", methods=["GET"])
+@login_required
+def get_branding(tenant_id):
+    """Get branding configuration for a tenant."""
+    branding = get_tenant_branding(tenant_id)
+    defaults = get_default_branding()
+    return jsonify({"ok": True, "branding": branding or defaults})
+
+
+@bp.route("/reports/branding/<tenant_id>", methods=["POST"])
+@login_required
+def set_branding(tenant_id):
+    """Set branding configuration for a tenant."""
+    company_name = request.form.get("company_name", "").strip()
+    accent_color = request.form.get("accent_color", "#0d6efd").strip()
+    logo_path = request.form.get("logo_path", "").strip()
+
+    upsert_tenant_branding(
+        tenant_id,
+        company_name=company_name,
+        accent_color=accent_color,
+        logo_path=logo_path,
+    )
+    log_action(current_user(), "branding_updated", tenant_id=tenant_id,
+               details=f"Company: {company_name}")
+    return jsonify({"ok": True, "message": "Branding updated."})
+
+
+@bp.route("/reports/branding/default", methods=["POST"])
+@login_required
+def set_default_branding():
+    """Set default branding in portal.json."""
+    from helpers import read_portal_config, write_portal_config
+
+    company_name = request.form.get("company_name", "").strip()
+    accent_color = request.form.get("accent_color", "#0d6efd").strip()
+
+    cfg = read_portal_config()
+    cfg["branding"] = {
+        "company_name": company_name or "M365 Audit Portal",
+        "accent_color": accent_color,
+        "logo_path": "",
+    }
+    write_portal_config(cfg)
+    log_action(current_user(), "default_branding_updated",
+               details=f"Company: {company_name}")
+    return jsonify({"ok": True, "message": "Default branding updated."})
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +746,102 @@ def schedule_delete(schedule_id):
     delete_schedule(schedule_id)
     log_action(current_user(), "schedule_deleted", details=f"Schedule: {s['name']}")
     return jsonify({"ok": True, "message": f"Schedule '{s['name']}' deleted."})
+
+
+# ---------------------------------------------------------------------------
+# SMTP Configuration
+# ---------------------------------------------------------------------------
+
+@bp.route("/reports/smtp-config", methods=["GET"])
+@login_required
+def get_smtp_config():
+    """Get SMTP configuration (passwords redacted)."""
+    from helpers import read_portal_config
+    cfg = read_portal_config()
+    smtp = cfg.get("smtp", {})
+    # Redact password
+    if smtp.get("password_enc"):
+        smtp["has_password"] = True
+        del smtp["password_enc"]
+    else:
+        smtp["has_password"] = False
+    return jsonify({"ok": True, "smtp": smtp})
+
+
+@bp.route("/reports/smtp-config", methods=["POST"])
+@login_required
+def set_smtp_config():
+    """Save SMTP configuration."""
+    from helpers import read_portal_config, write_portal_config
+    from database import encrypt_value
+    from flask import current_app
+
+    host = request.form.get("smtp_host", "").strip()
+    port = request.form.get("smtp_port", "587").strip()
+    username = request.form.get("smtp_username", "").strip()
+    password = request.form.get("smtp_password", "").strip()
+    sender = request.form.get("smtp_sender", "").strip()
+    use_tls = request.form.get("smtp_use_tls", "true") == "true"
+
+    cfg = read_portal_config()
+    smtp_cfg = cfg.get("smtp", {})
+    smtp_cfg["host"] = host
+    smtp_cfg["port"] = int(port) if port.isdigit() else 587
+    smtp_cfg["username"] = username
+    smtp_cfg["sender"] = sender or username
+    smtp_cfg["use_tls"] = use_tls
+
+    # Only update password if a new one was provided
+    if password:
+        smtp_cfg["password_enc"] = encrypt_value(password, current_app.secret_key)
+
+    cfg["smtp"] = smtp_cfg
+    write_portal_config(cfg)
+    log_action(current_user(), "smtp_configured", details=f"Host: {host}")
+    return jsonify({"ok": True, "message": "SMTP configuration saved."})
+
+
+@bp.route("/reports/smtp-test", methods=["POST"])
+@login_required
+def test_smtp():
+    """Send a test email using the configured SMTP settings."""
+    recipient = request.form.get("recipient", "").strip()
+    if not recipient:
+        return jsonify({"ok": False, "error": "Recipient email is required."})
+
+    try:
+        from helpers import read_portal_config
+        from database import decrypt_value
+        from flask import current_app
+        import smtplib
+        from email.mime.text import MIMEText
+
+        cfg = read_portal_config()
+        smtp = cfg.get("smtp", {})
+        if not smtp.get("host"):
+            return jsonify({"ok": False, "error": "SMTP not configured."})
+
+        password = ""
+        if smtp.get("password_enc"):
+            password = decrypt_value(smtp["password_enc"], current_app.secret_key)
+
+        msg = MIMEText("This is a test email from M365 Audit Portal.")
+        msg["Subject"] = "M365 Audit Portal — SMTP Test"
+        msg["From"] = smtp.get("sender", smtp.get("username", ""))
+        msg["To"] = recipient
+
+        server = smtplib.SMTP(smtp["host"], smtp.get("port", 587))
+        if smtp.get("use_tls", True):
+            server.starttls()
+        if smtp.get("username") and password:
+            server.login(smtp["username"], password)
+        server.send_message(msg)
+        server.quit()
+
+        log_action(current_user(), "smtp_test", details=f"To: {recipient}")
+        return jsonify({"ok": True, "message": f"Test email sent to {recipient}."})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"SMTP test failed: {exc}"})
 
 
 # ---------------------------------------------------------------------------

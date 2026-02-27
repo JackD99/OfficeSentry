@@ -6,6 +6,7 @@ Roles (hierarchical):
   admin       — Access to assigned tenant groups, all audits, Tier 1-2 operations
   operator    — Access to assigned tenant groups, all audits, Tier 1 operations only
   viewer      — Read-only access to assigned tenant groups, no audits, no operations
+  client      — External client, read-only access to a single tenant, self-service downloads
 """
 
 import json
@@ -15,6 +16,7 @@ ROLE_HIERARCHY = {
     "admin": 3,
     "operator": 2,
     "viewer": 1,
+    "client": 0,
 }
 
 ROLE_LABELS = {
@@ -22,6 +24,7 @@ ROLE_LABELS = {
     "admin": "Admin",
     "operator": "Operator",
     "viewer": "Viewer",
+    "client": "Client",
 }
 
 
@@ -113,3 +116,28 @@ def filter_tenants_for_user(user: dict, tenants: list[dict]) -> list[dict]:
         allowed_ids = {r["tenant_id"] for r in rows}
 
     return [t for t in tenants if t["id"] in allowed_ids]
+
+
+def is_client_user(user: dict) -> bool:
+    """Check if a user has the client role."""
+    return user.get("role") == "client"
+
+
+def get_client_tenant_id(user: dict) -> str | None:
+    """Get the single tenant ID a client user is scoped to.
+
+    Client users have exactly one group containing one tenant.
+    Returns the tenant_id or None if not resolvable.
+    """
+    if not is_client_user(user):
+        return None
+    groups = get_user_groups(user)
+    if not groups:
+        return None
+    from database import get_db
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT tenant_id FROM tenant_group_members WHERE group_id = ? LIMIT 1",
+            (groups[0],),
+        ).fetchone()
+        return row["tenant_id"] if row else None

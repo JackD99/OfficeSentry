@@ -6,13 +6,13 @@ Each task includes specific file paths, function signatures, code patterns, and 
 
 ## Executive Summary
 
-The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a substantial M365 management portal — **20 route blueprints, 86 templates, 45 PowerShell scripts, 108 security inspectors, and a 32-table SQLite database**. Phases 1 and 2 are complete — the platform now has a solid foundation with CI/CD, comprehensive test coverage, proper security hardening, Celery task queue, RBAC, REST API, webhooks, SSE real-time updates, and an on-premises AD Agent system.
+The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a substantial M365 management portal — **20 route blueprints, 95 templates, 45 PowerShell scripts, 108 security inspectors, and a 33-table SQLite database**. Phases 1-3 are complete — the platform now has a solid foundation with CI/CD, comprehensive test coverage, proper security hardening, Celery task queue, RBAC, REST API, webhooks, SSE real-time updates, an on-premises AD Agent system, PDF report generation, SMTP email delivery, report comparison, and a client-facing dashboard.
 
 **Vision**: A self-hosted CIPP alternative — full MSP management platform built on Python + PowerShell.
 
 **Deployment model**: Multi-instance self-hosted. Each MSP runs their own instance. Docker + PostgreSQL support are priorities.
 
-**Strategy**: Core platform architecture first (task queue, RBAC, API, real-time), then expand features on a solid foundation. Phases 1-2 are complete.
+**Strategy**: Core platform architecture first (task queue, RBAC, API, real-time), then expand features on a solid foundation. Phases 1-3 are complete.
 
 ---
 
@@ -31,9 +31,10 @@ The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a
 - **Architecture (remaining)**: SQLite only (no PostgreSQL), no Docker support
 - ~~**Security**: CSP unsafe-inline, SHA256 key derivation, no SRI hashes, no HSTS, admin/non-admin only auth~~ → ✅ Resolved: Nonce-based CSP, PBKDF2, SRI, HSTS, 4-tier RBAC
 - **Security (remaining)**: No SSO/SAML
-- ~~**Testing**: 11 of 18 blueprints have zero test coverage, no CI/CD~~ → ✅ Resolved: 23 test files, GitHub Actions CI
+- ~~**Testing**: 11 of 18 blueprints have zero test coverage, no CI/CD~~ → ✅ Resolved: 24 test files, 658 tests, GitHub Actions CI
 - **Testing (remaining)**: No Docker, no Pester tests
-- **Features (remaining)**: No PDF reports, no email notifications, no PSA integration, no auto-remediation, no approval workflows
+- ~~**Features**: No PDF reports, no email notifications~~ → ✅ Resolved: WeasyPrint PDF generation, SMTP email delivery, report comparison, client dashboard
+- **Features (remaining)**: No PSA integration, no auto-remediation, no approval workflows
 
 ---
 
@@ -601,15 +602,17 @@ def deliver_webhook(self, webhook_id, event_type, payload):
 
 ---
 
-## Phase 3: Reporting & Client-Facing Output
+## Phase 3: Reporting & Client-Facing Output ✅ COMPLETE
 
 **Goal**: Transform raw audit data into polished, client-ready deliverables.
 
 **Prerequisites**: Phase 2 (task queue for scheduled delivery).
 
+**Status**: All 4 tasks completed. 50 new tests (658 total).
+
 ---
 
-### 3.1 PDF Report Generation
+### 3.1 PDF Report Generation ✅
 
 **Implementation**:
 
@@ -656,9 +659,11 @@ def download_pdf(tenant_id, report_type):
 **Files to create**: `portal/report_engine.py`, `portal/templates/reports/pdf_*.html`
 **Files to modify**: `portal/routes/reports.py`, `requirements.txt`
 
+**Implementation notes**: `portal/report_engine.py` created with 6 report types: `executive_summary`, `security_posture`, `bpa_compliance`, `identity_risk`, `license_optimization`, `breach_investigation`. Each has a dedicated Jinja2 template in `portal/templates/reports/pdf_*.html` extending `pdf_base.html`. `get_report_data()` fetches data from DB per report type. `generate_pdf()` returns `(pdf_bytes, filename)`. `WEASYPRINT_AVAILABLE` flag for graceful degradation when system libraries unavailable. Per-tenant branding stored in `tenant_branding` table with CRUD functions. Added `weasyprint==63.1` to `requirements.txt`. PDF download endpoint at `/reports/<tenant_id>/pdf/<report_type>`. PDF types listing at `/reports/pdf-types`.
+
 ---
 
-### 3.2 Scheduled Report Delivery (Email)
+### 3.2 Scheduled Report Delivery (Email) ✅
 
 **Implementation**:
 
@@ -703,9 +708,11 @@ def check_report_schedules():
 
 **Files to modify**: `portal/tasks.py`, `portal/database.py`, `portal/routes/reports.py`, `portal/templates/settings.html`
 
+**Implementation notes**: SMTP configuration stored in `portal.json` (host, port, username, encrypted password, sender, TLS). Routes: `GET/POST /reports/smtp-config` for configuration, `POST /reports/smtp-test` for testing. Celery task `send_report_email()` in `tasks.py` handles MIME multipart emails with PDF attachments, 3 retries with 60s delay. `check_report_schedules()` updated to call `send_report_email.delay()` when `email_on_completion` is set. Schema v9 migration adds `recipients TEXT DEFAULT '[]'` and `email_on_completion INTEGER DEFAULT 0` columns to `report_schedules` table.
+
 ---
 
-### 3.3 Report Comparison
+### 3.3 Report Comparison ✅
 
 **Implementation**: Add endpoint to diff two audit runs:
 
@@ -722,9 +729,11 @@ def compare_reports():
 **Files to modify**: `portal/routes/reports.py`
 **Files to create**: `portal/templates/report_comparison.html`
 
+**Implementation notes**: Report comparison endpoint at `GET /reports/compare`. Supports CSV and JSON files. CSV comparison uses set operations on normalized row tuples for added/removed detection, with first-column keying for change detection. JSON comparison shows structural diffs. Path traversal protection validates file paths against allowed base directories (returns 403 on traversal attempts). Template `report_comparison.html` shows file selection dropdowns and added/removed/changed/unchanged summary cards with full row tables.
+
 ---
 
-### 3.4 Client-Facing Dashboard (Phase 3b)
+### 3.4 Client-Facing Dashboard (Phase 3b) ✅
 
 **Implementation**:
 
@@ -735,6 +744,8 @@ def compare_reports():
 
 **Files to modify**: `portal/permissions.py`, `portal/routes/auth.py`
 **Files to create**: `portal/templates/client_dashboard.html`
+
+**Implementation notes**: `client` role added at level 0 (below viewer) in `permissions.py` ROLE_HIERARCHY. `is_client_user()` and `get_client_tenant_id()` helper functions added. Client dashboard at `GET /client-dashboard` shows read-only view: BPA summary, secure score, recent reports with self-service PDF downloads. Template `client_dashboard.html` with metrics cards, BPA compliance table, and report listing. Per-tenant branding via `tenant_branding` table: `GET/POST /reports/branding/<tenant_id>` for per-tenant, `POST /reports/branding/default` for global defaults. Branding data (company_name, logo_path, accent_color) applied to PDF reports and client dashboard. Schema v9 creates `tenant_branding` table with CRUD: `get_tenant_branding()`, `upsert_tenant_branding()`, `get_default_branding()`. Test coverage: 50 tests in `test_reporting.py` covering all Phase 3 features.
 
 ---
 
@@ -1200,18 +1211,19 @@ Phase 1 (Foundation) ✅
     v
 Phase 2 (Core Platform) ✅ ─────────────────────┐
     │                                             │
-    ├──> Phase 3 (Reporting)    ← READY          │
+    ├──> Phase 3 (Reporting) ✅                   │
     │        │                                    │
     ├──> Phase 4 (Operations & Automation) ← READY│
     │        │                                    │
     │        └──> Phase 6 (Compliance)           │
     │                                             │
-    ├──> Phase 5 (Integrations) ←── Phase 3      │
+    ├──> Phase 5 (Integrations) ← READY          │
     │                                             │
     └──> Phase 7 (Scale) ← READY ────────────────┘
 ```
 
-- **Phases 3, 4, 5, 7 can now start** — Phase 2 prerequisites are met
+- **Phases 4, 5, 7 can now start** — Phase 2 and 3 prerequisites are met
+- **Phase 5** is now unblocked (depends on Phase 3 for report delivery)
 - **Phase 6** depends on Phase 4 (remediation and drift detection)
 - **Phase 7** can start immediately (Celery + Redis already integrated)
 
@@ -1223,9 +1235,9 @@ Phase 2 (Core Platform) ✅ ─────────────────�
 |-------|:---:|:---:|:---:|:---:|
 | **1. Foundation** | High | Low | Medium | ✅ Complete |
 | **2. Core Platform** | Critical | Medium | Large | ✅ Complete |
-| **3. Reporting** | High (client-facing) | Low | Medium | Ready to start |
+| **3. Reporting** | High (client-facing) | Low | Medium | ✅ Complete |
 | **4. Operations** | High (MSP efficiency) | Medium | Large | Ready to start |
-| **5. Integrations** | Medium (ecosystem) | Medium | Large | After Phase 3 |
+| **5. Integrations** | Medium (ecosystem) | Medium | Large | Ready to start |
 | **6. Compliance** | Medium (regulated verticals) | Low | Medium | After Phase 4 |
 | **7. Scale** | Medium (growth) | High | Large | Ready to start |
 

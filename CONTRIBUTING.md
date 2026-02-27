@@ -1,6 +1,6 @@
 # Contributing to SPO-Audit-Toolkit
 
-Thank you for your interest in contributing. This document covers the development setup, coding conventions, and how to submit changes.
+Thank you for your interest in contributing! This document covers the development setup, coding conventions, and how to submit changes.
 
 ## Development Setup
 
@@ -9,6 +9,7 @@ Thank you for your interest in contributing. This document covers the developmen
 - Python 3.9+
 - PowerShell 7+ (`pwsh`)
 - pip
+- Redis (optional, for Celery task queue)
 
 ### Getting started
 
@@ -20,8 +21,8 @@ cd SPO-Audit-Toolkit
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Install test dependencies
-pip install pytest
+# Install dev/test dependencies
+pip install -r requirements-dev.txt
 
 # Download PowerShell modules (optional, needed for audit execution)
 pwsh -File Build-Toolkit.ps1
@@ -36,14 +37,31 @@ python portal/app.py
 python -m pytest tests/ -v
 ```
 
-All tests must pass before submitting changes. The test suite uses an isolated temporary SQLite database and resets state between tests.
+The test suite has **658 tests across 24 files**. All tests must pass before submitting changes. Tests use an isolated temporary SQLite database that resets between each test.
 
 ## Project Structure
 
-- `portal/` -- Flask web application (Python)
-- `scripts/` -- PowerShell audit and setup scripts
-- `inspectors/` -- 365Inspect security scanner
-- `tests/` -- pytest test suite
+| Directory | Purpose |
+|---|---|
+| `portal/` | Flask web application — app factory, 20 blueprints, 95 templates, 33-table database |
+| `portal/routes/` | Blueprint modules (auth, tenants, audits, reports, operations, etc.) |
+| `portal/templates/` | Jinja2 templates (Bootstrap 5 dark theme) |
+| `scripts/` | 45 PowerShell audit, setup, and admin scripts |
+| `inspectors/` | 365Inspect security scanner (108 inspectors) |
+| `tests/` | pytest test suite |
+
+### Key Files
+
+| File | Role |
+|---|---|
+| `portal/app.py` | App factory, dashboard route, middleware, security headers |
+| `portal/database.py` | SQLite persistence — 33 tables, schema migrations, all CRUD functions |
+| `portal/helpers.py` | Auth decorators, PowerShell runner, input validation |
+| `portal/permissions.py` | RBAC engine — 5-tier role hierarchy, tenant group scoping |
+| `portal/celery_app.py` | Celery + Redis task queue factory |
+| `portal/tasks.py` | Celery tasks — job runner, webhooks, email delivery, schedules |
+| `portal/report_engine.py` | PDF report generation (WeasyPrint) |
+| `portal/agent_auth.py` | HMAC-SHA256 authentication for AD Agent API |
 
 ## Coding Conventions
 
@@ -51,36 +69,62 @@ All tests must pass before submitting changes. The test suite uses an isolated t
 
 - **App factory pattern** in `app.py` via `create_app()`
 - **Blueprints** for route organization under `portal/routes/`
-- All routes behind `@login_required` (except `/login`, `/initial-setup`)
+- All routes behind `@login_required` (except `/login`, `/initial-setup`, `/health`)
+- Admin-only routes use `@admin_required`; role-gated routes use `@role_required(min_role)`
 - API endpoints return `jsonify({"ok": True/False, ...})`
-- CSRF protection via Flask-WTF on all POST routes
-- Database operations use the `with get_db() as conn:` context manager
+- CSRF protection via Flask-WTF on all POST routes (exempted on API and Agent endpoints)
+- Database operations use `with get_db() as conn:` context manager
 - Use `logging.getLogger("portal")` for logging
+- Input validation via `helpers.py`: `validate_domain()`, `validate_tenant_guid()`, `validate_site_url()`, `validate_email()`, `sanitize_text()`
 
 ### PowerShell Scripts
 
 - Use `Set-StrictMode -Version Latest` and `$ErrorActionPreference = "Stop"`
 - Use `[CmdletBinding()]` with typed parameters
+- Add `#requires -Modules <module>` directives
 - Import Shared.psm1: `$sharedModule = Join-Path $PSScriptRoot "Shared.psm1"`
-- Log with: `Write-Host "$(Get-Date) INFO: message"`
+- Log with: `Write-Host "$(Get-Date) INFO: message"` (also `WARN:` for warnings)
+- Use `Write-Progress` for long operations
 - Export data via `Export-AuditData` from Shared.psm1
-- Always disconnect sessions (`Disconnect-PnPOnline`, etc.)
+- Always disconnect sessions (`Disconnect-PnPOnline`, `Disconnect-ExchangeOnline`)
 
 ### Templates
 
 - Extend `base.html` with `{% block content %}`
 - Bootstrap 5 dark theme (`data-bs-theme="dark"`)
-- Use `url_for()` with blueprint-qualified names
-- Include CSRF tokens in all forms
+- Use `url_for()` with blueprint-qualified names (e.g., `url_for('tenants.tenant_detail', tenant_id=...)`)
+- Include CSRF tokens in all forms (`window.CSRF_TOKEN` for fetch calls)
+- Add `nonce="{{ g.csp_nonce }}"` to all inline script/style tags
 
 ### Testing
 
 - Use `client` fixture for unauthenticated requests
-- Use `authed_client` for authenticated requests
+- Use `authed_client` for authenticated requests (logged in as admin)
 - Use `app_csrf` / `client_csrf` for CSRF enforcement tests
 - Database resets automatically before each test
+- Mock PowerShell subprocess calls — don't test actual PS execution
+- Follow `tests/test_operations.py` as a model for new test files
 
-## Adding a New Audit Script
+## Adding New Features
+
+### Adding a New Blueprint
+
+1. Create `portal/routes/new_feature.py` with `bp = Blueprint("new_feature", __name__)`
+2. Import and register in `portal/app.py` in `create_app()`
+3. Add `@login_required` to all routes (or `@admin_required` for admin-only)
+4. Create templates in `portal/templates/`
+5. Add sidebar nav entry in `portal/templates/base.html`
+6. Add test file in `tests/test_new_feature.py`
+
+### Adding a New Database Table
+
+1. Add `CREATE TABLE` to the `SCHEMA` string in `database.py`
+2. Increment `SCHEMA_VERSION` constant
+3. Add the same `CREATE TABLE` as a new entry in `_MIGRATIONS` dict
+4. Add CRUD functions following existing patterns
+5. All functions must use `with get_db() as conn:` context manager
+
+### Adding a New Audit Script
 
 1. Create `scripts/New-AuditScript.ps1` following existing parameter patterns
 2. Add `#requires -Modules <module>` directive
@@ -89,7 +133,7 @@ All tests must pass before submitting changes. The test suite uses an isolated t
 5. Add a template or update an existing one
 6. Add tests for the new route
 
-## Adding a New Inspector
+### Adding a New Inspector
 
 1. Create `inspectors/Inspectors/Inspect-NewCheck.ps1` with a function returning finding messages
 2. Create matching `inspectors/Inspectors/Inspect-NewCheck.json` with finding metadata
@@ -100,7 +144,7 @@ All tests must pass before submitting changes. The test suite uses an isolated t
 1. Fork the repository
 2. Create a feature branch from `main`
 3. Make your changes with clear, descriptive commits
-4. Run the full test suite (`python -m pytest tests/ -v`)
+4. Run the full test suite (`python -m pytest tests/ -v`) — all 658 tests must pass
 5. Open a pull request with a description of what changed and why
 
 ### Commit Messages
@@ -116,3 +160,7 @@ Use the GitHub Issues tab to report bugs or request features. Include:
 - Expected vs actual behavior
 - Python/PowerShell version
 - Operating system
+
+## Security Vulnerabilities
+
+For security vulnerabilities, **do not open a public issue**. See [SECURITY.md](SECURITY.md) for responsible disclosure instructions.

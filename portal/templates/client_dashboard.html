@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Client Dashboard — {{ tenant.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2><i class="bi bi-building me-2"></i>{{ tenant.name }}</h2>
+    <p class="text-secondary mb-0">{{ tenant.domain }} — Client Dashboard</p>
+  </div>
+  {% if branding and branding.company_name %}
+  <span class="text-secondary">Managed by <strong>{{ branding.company_name }}</strong></span>
+  {% endif %}
+</div>
+
+{# Metric cards #}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <i class="bi bi-shield-check fs-3 text-primary"></i>
+        <div class="fs-2 fw-bold mt-2">{% if secure_score %}{{ "%.0f" | format(secure_score.current_score) }}{% else %}N/A{% endif %}</div>
+        <div class="text-secondary">Secure Score{% if secure_score %} / {{ "%.0f" | format(secure_score.max_score) }}{% endif %}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <i class="bi bi-clipboard-check fs-3 text-success"></i>
+        <div class="fs-2 fw-bold mt-2">{{ bpa_pass }}</div>
+        <div class="text-secondary">BPA Checks Passed</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <i class="bi bi-clipboard-x fs-3 text-danger"></i>
+        <div class="fs-2 fw-bold mt-2">{{ bpa_fail }}</div>
+        <div class="text-secondary">BPA Checks Failed</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <i class="bi bi-file-earmark-bar-graph fs-3 text-info"></i>
+        <div class="fs-2 fw-bold mt-2">{{ reports | length }}</div>
+        <div class="text-secondary">Available Reports</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# BPA Summary #}
+{% if bpa_results %}
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-clipboard-data me-2"></i>Best Practice Analysis</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead><tr><th>Check</th><th>Category</th><th>Status</th><th>Impact</th></tr></thead>
+        <tbody>
+        {% for r in bpa_results[:25] %}
+        <tr>
+          <td>{{ r.check_name }}</td>
+          <td>{{ r.category }}</td>
+          <td>
+            {% if r.status == 'pass' %}<span class="badge bg-success">PASS</span>
+            {% elif r.status == 'fail' %}<span class="badge bg-danger">FAIL</span>
+            {% else %}<span class="badge bg-warning text-dark">{{ r.status | upper }}</span>{% endif %}
+          </td>
+          <td>{{ r.impact }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if bpa_results | length > 25 %}
+    <div class="p-2 text-center text-secondary small">Showing 25 of {{ bpa_results | length }} checks.</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# Reports #}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-files me-2"></i>Reports</span>
+    {% if pdf_available %}
+    <div class="dropdown">
+      <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-file-pdf me-1"></i>Download PDF Report</button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="{{ url_for('reports.download_pdf', tenant_id=tenant.id, report_type='executive_summary') }}"><i class="bi bi-speedometer me-2"></i>Executive Summary</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('reports.download_pdf', tenant_id=tenant.id, report_type='bpa_compliance') }}"><i class="bi bi-clipboard-check me-2"></i>BPA Compliance</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('reports.download_pdf', tenant_id=tenant.id, report_type='security_posture') }}"><i class="bi bi-shield-exclamation me-2"></i>Security Posture</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('reports.download_pdf', tenant_id=tenant.id, report_type='identity_risk') }}"><i class="bi bi-person-exclamation me-2"></i>Identity Risk</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('reports.download_pdf', tenant_id=tenant.id, report_type='license_optimization') }}"><i class="bi bi-key me-2"></i>License Optimization</a></li>
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+  <div class="card-body p-0">
+    {% if reports %}
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead><tr><th>Report</th><th>Type</th><th>Date</th><th>Size</th><th>Action</th></tr></thead>
+        <tbody>
+        {% for f in reports[:50] %}
+        <tr>
+          <td><i class="bi bi-file-earmark me-1"></i>{{ f.name }}</td>
+          <td><span class="badge bg-{{ type_badge_colors.get(f.type, 'secondary') }}">{{ f.type }}</span></td>
+          <td>{{ f.mtime }}</td>
+          <td>{{ f.size }}</td>
+          <td><a href="{{ url_for('reports.report_download', path=f.full_path) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i></a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-secondary py-4">
+      <i class="bi bi-inbox fs-3"></i>
+      <p class="mt-2 mb-0">No reports available yet.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
