@@ -6,13 +6,13 @@ Each task includes specific file paths, function signatures, code patterns, and 
 
 ## Executive Summary
 
-The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a substantial M365 management portal — **17 route blueprints, 84 templates, 42 PowerShell scripts, 108 security inspectors, and a 24-table SQLite database**. The architecture, testing, and infrastructure need to catch up with the feature expansion.
+The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a substantial M365 management portal — **20 route blueprints, 86 templates, 45 PowerShell scripts, 108 security inspectors, and a 32-table SQLite database**. Phases 1 and 2 are complete — the platform now has a solid foundation with CI/CD, comprehensive test coverage, proper security hardening, Celery task queue, RBAC, REST API, webhooks, SSE real-time updates, and an on-premises AD Agent system.
 
 **Vision**: A self-hosted CIPP alternative — full MSP management platform built on Python + PowerShell.
 
 **Deployment model**: Multi-instance self-hosted. Each MSP runs their own instance. Docker + PostgreSQL support are priorities.
 
-**Strategy**: Core platform architecture first (task queue, RBAC, API, real-time), then expand features on a solid foundation.
+**Strategy**: Core platform architecture first (task queue, RBAC, API, real-time), then expand features on a solid foundation. Phases 1-2 are complete.
 
 ---
 
@@ -25,22 +25,27 @@ The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a
 - **Security & UI**: CSRF protection, rate limiting, security headers, Fernet encryption, modern dark UI with Chart.js dashboard
 - **Newer modules**: Email security, identity protection, device management, service health, license management, incident response playbooks
 
-### Critical Gaps
+### Critical Gaps (Updated — many resolved in Phase 1 & 2)
 
-- **Architecture**: SQLite only, jobs via threading.Thread (no retry/timeout/persistence), report schedules and alert rules are DB-only (no execution engine), no API auth, no real-time updates
-- **Security**: CSP unsafe-inline, SHA256 key derivation, no SRI hashes, no HSTS, admin/non-admin only auth, no SSO
-- **Testing**: 11 of 18 blueprints have zero test coverage, no CI/CD, no Docker, no Pester tests
-- **Features**: No PDF reports, no email/webhook notifications, no PSA integration, no auto-remediation, no approval workflows
+- ~~**Architecture**: jobs via threading.Thread, no API auth, no real-time updates~~ → ✅ Resolved: Celery task queue, REST API v1, SSE streaming
+- **Architecture (remaining)**: SQLite only (no PostgreSQL), no Docker support
+- ~~**Security**: CSP unsafe-inline, SHA256 key derivation, no SRI hashes, no HSTS, admin/non-admin only auth~~ → ✅ Resolved: Nonce-based CSP, PBKDF2, SRI, HSTS, 4-tier RBAC
+- **Security (remaining)**: No SSO/SAML
+- ~~**Testing**: 11 of 18 blueprints have zero test coverage, no CI/CD~~ → ✅ Resolved: 23 test files, GitHub Actions CI
+- **Testing (remaining)**: No Docker, no Pester tests
+- **Features (remaining)**: No PDF reports, no email notifications, no PSA integration, no auto-remediation, no approval workflows
 
 ---
 
-## Phase 1: Foundation & Hardening
+## Phase 1: Foundation & Hardening ✅ COMPLETE
 
 **Goal**: Fix security issues, establish CI/CD, expand test coverage, update docs. Make the app production-solid before adding features.
 
+**Status**: All 7 tasks completed.
+
 ---
 
-### 1.1 Security: Nonce-Based CSP (Replace unsafe-inline)
+### 1.1 Security: Nonce-Based CSP (Replace unsafe-inline) ✅
 
 **Problem**: `portal/app.py:282-288` sets CSP with `'unsafe-inline'` for both scripts and styles.
 
@@ -79,9 +84,11 @@ response.headers["Content-Security-Policy"] = (
 
 **Acceptance criteria**: All pages load without CSP console errors. `test_security.py` passes. No `'unsafe-inline'` in CSP header.
 
+**Implementation notes**: Nonce generated in `assign_request_id()` via `g.csp_nonce = secrets.token_hex(16)`. CSP header uses `'nonce-{nonce}'` for both `script-src` and `style-src`. All templates updated with `nonce="{{ g.csp_nonce }}"` on inline script/style tags.
+
 ---
 
-### 1.2 Security: Upgrade Key Derivation (SHA256 → PBKDF2)
+### 1.2 Security: Upgrade Key Derivation (SHA256 → PBKDF2) ✅
 
 **Problem**: `portal/database.py:24` uses `hashlib.sha256()` for key derivation — not a proper KDF.
 
@@ -132,9 +139,11 @@ migrate_encryption(app.secret_key)
 
 **Acceptance criteria**: Existing encrypted passwords still decrypt correctly. New encryptions use PBKDF2. `test_database.py` passes (update encryption tests).
 
+**Implementation notes**: `_derive_key()` uses `hashlib.pbkdf2_hmac('sha256', ..., b'spo-audit-toolkit-v2', 100_000)`. Legacy `_derive_key_legacy()` preserved. `migrate_encryption()` re-encrypts existing passwords on startup.
+
 ---
 
-### 1.3 Security: SRI Hashes on CDN Resources
+### 1.3 Security: SRI Hashes on CDN Resources ✅
 
 **Problem**: `portal/templates/base.html` loads Bootstrap CSS/JS and Chart.js from CDN without Subresource Integrity hashes.
 
@@ -148,9 +157,11 @@ migrate_encryption(app.secret_key)
 
 **Acceptance criteria**: All CDN resources load with SRI attributes. No integrity errors in browser console.
 
+**Implementation notes**: Bootstrap CSS and JS both have `integrity="sha384-..."` and `crossorigin="anonymous"` attributes in `base.html`.
+
 ---
 
-### 1.4 Security: HSTS Header
+### 1.4 Security: HSTS Header ✅
 
 **Implementation**: Add to `set_security_headers()` in `portal/app.py:280`:
 ```python
@@ -162,9 +173,11 @@ Only set when behind HTTPS or in production to avoid breaking local dev.
 
 **Files to modify**: `portal/app.py`
 
+**Implementation notes**: HSTS header set conditionally in `set_security_headers()` when `request.is_secure` or `FLASK_ENV=production`. Max-age: 31536000 (1 year) with `includeSubDomains`.
+
 ---
 
-### 1.5 CI/CD Pipeline
+### 1.5 CI/CD Pipeline ✅
 
 **Implementation**: Create `.github/workflows/ci.yml`:
 
@@ -198,9 +211,11 @@ mypy
 
 **Acceptance criteria**: CI runs on every push. Tests pass. Ruff has no errors. Bandit has no high/medium findings.
 
+**Implementation notes**: `.github/workflows/ci.yml` created with Python 3.11, `requirements-dev.txt` with pytest, pytest-cov, ruff, bandit. Triggers on push and pull_request.
+
 ---
 
-### 1.6 Test Coverage Expansion
+### 1.6 Test Coverage Expansion ✅
 
 **Current gaps**: audits, jobs, reports, email_security, identity, devices, service_health, licenses, incidents — all have zero test coverage.
 
@@ -243,9 +258,11 @@ def test_post_endpoint(authed_client):
 
 **Acceptance criteria**: All new tests pass. `python -m pytest tests/ -v` shows no failures.
 
+**Implementation notes**: 23 test files now cover all blueprints. New test files: `test_audits.py`, `test_reports_routes.py`, `test_jobs_routes.py`, `test_email_security.py`, `test_identity.py`, `test_devices.py`, `test_incidents.py`, `test_licenses.py`, `test_service_health.py`, `test_ad_agent.py`, `test_api_v1.py`, `test_rbac.py`, `test_sse.py`, `test_celery_tasks.py`, `test_webhooks.py`.
+
 ---
 
-### 1.7 Database Indexes
+### 1.7 Database Indexes ✅
 
 **Problem**: Missing indexes on frequently-queried foreign key columns.
 
@@ -268,17 +285,21 @@ Increment `SCHEMA_VERSION` accordingly.
 
 **Files to modify**: `portal/database.py`
 
+**Implementation notes**: 14 indexes added across migrations v6-v8 covering jobs, audit_log, cached_tenant_data, bpa_results, incident_cases, service_health_cache, license_snapshots, api_keys, webhook_deliveries, ad_agents, ad_agent_commands, ad_agent_templates.
+
 ---
 
-## Phase 2: Core Platform Architecture
+## Phase 2: Core Platform Architecture ✅ COMPLETE
 
 **Goal**: Replace single-process limitations. Unlock task scheduling, real-time updates, RBAC, and API access.
 
 **Prerequisites**: Phase 1 complete.
 
+**Status**: All 5 tasks completed. Additionally, an AD Agent system was implemented (beyond original scope).
+
 ---
 
-### 2.1 Task Queue (Celery + Redis)
+### 2.1 Task Queue (Celery + Redis) ✅
 
 **Problem**: Jobs run via `threading.Thread` in `helpers.py` — no retry, no timeout, no persistence across restarts. Report schedules and alert rules exist in DB but nothing executes them.
 
@@ -371,9 +392,11 @@ Browser → Flask → Redis (broker) → Celery Worker (runs PS scripts)
 
 **Acceptance criteria**: Jobs run via Celery worker. `start_job()` falls back to threading if Redis unavailable. Report schedules execute on time.
 
+**Implementation notes**: `portal/celery_app.py` creates Celery with Flask context. `portal/tasks.py` implements `run_ps_job`, `check_report_schedules`, `evaluate_alert_rules`, `deliver_webhook_task`. Beat schedule runs report checks hourly and alert evaluation every 5 minutes. `helpers.py` `start_job()` dispatches to Celery with threading fallback. Dependencies: `celery[redis]==5.4.0`, `redis==5.2.0`.
+
 ---
 
-### 2.2 Real-Time Updates (SSE)
+### 2.2 Real-Time Updates (SSE) ✅
 
 **Problem**: Frontend polls `/jobs/<id>/status` every 60 seconds — no instant updates.
 
@@ -401,9 +424,11 @@ def job_stream(job_id):
 
 **Files to modify**: `portal/routes/jobs.py`, `portal/tasks.py`, `portal/templates/jobs.html`, `portal/templates/dashboard.html`
 
+**Implementation notes**: Two SSE endpoints in `routes/jobs.py`: `/jobs/<id>/stream` (real-time job output) and `/events/dashboard` (running job count). Uses Redis pub/sub when available, falls back to DB polling every 2 seconds. Proper SSE headers with keepalive comments every 15 seconds. Frontend uses `EventSource` API. Test coverage in `test_sse.py`.
+
 ---
 
-### 2.3 Role-Based Access Control (RBAC)
+### 2.3 Role-Based Access Control (RBAC) ✅
 
 **Problem**: Binary auth — `is_admin` flag only. No granular permissions.
 
@@ -468,9 +493,11 @@ def role_required(min_role):
 **Files to create**: `portal/permissions.py`
 **Files to modify**: `portal/helpers.py`, `portal/routes/auth.py`, `portal/database.py`, `portal/templates/users.html`
 
+**Implementation notes**: `portal/permissions.py` implements 4-tier role hierarchy (super_admin=4, admin=3, operator=2, viewer=1). Functions: `has_role()`, `can_access_tenant()`, `can_run_operation()` (tier-based), `can_run_audit()`, `filter_tenants_for_user()`. Users table extended with `role TEXT DEFAULT 'operator'` and `allowed_tenant_groups TEXT DEFAULT '[]'`. `@role_required` decorator in helpers.py. Test coverage in `test_rbac.py`.
+
 ---
 
-### 2.4 REST API Layer
+### 2.4 REST API Layer ✅
 
 **Problem**: No programmatic access — no API keys, no bearer tokens.
 
@@ -519,9 +546,11 @@ csrf.exempt(api_v1_bp)
 **Files to create**: `portal/routes/api_v1.py`
 **Files to modify**: `portal/app.py`, `portal/database.py`, `portal/templates/settings.html`
 
+**Implementation notes**: `portal/routes/api_v1.py` blueprint with `/api/v1` prefix. Bearer token auth via `Authorization` header. `api_keys` table with `key_prefix`, `key_hash`, `role`, `allowed_tenant_groups`. CSRF exempted. RBAC integration via `filter_tenants_for_user()`. Endpoints: `/api/v1/health`, `/api/v1/tenants`, `/api/v1/jobs/*`. Test coverage in `test_api_v1.py`.
+
 ---
 
-### 2.5 Webhook System
+### 2.5 Webhook System ✅
 
 **Implementation**:
 
@@ -554,6 +583,21 @@ def deliver_webhook(self, webhook_id, event_type, payload):
 
 **Files to modify**: `portal/database.py`, `portal/tasks.py`
 **Files to create**: `portal/routes/webhooks.py` (or add to settings), `portal/templates/webhooks.html`
+
+**Implementation notes**: `portal/routes/webhooks.py` blueprint with CRUD routes. `webhooks` and `webhook_deliveries` tables in database. Events: `job.completed`, `job.failed`, `alert.triggered`, `bpa.drift_detected`, `report.generated`. HMAC-SHA256 signed payloads. Celery task `deliver_webhook_task()` with 5 retries and 30s backoff. Test coverage in `test_webhooks.py`.
+
+### 2.6 AD Agent System (Bonus — beyond original roadmap) ✅
+
+**Implementation**: Full on-premises Active Directory agent system for tenants with hybrid identity. Includes:
+- Hybrid identity detection via Graph API (`Get-HybridStatus.ps1`)
+- HMAC-SHA256 authenticated agent API (`portal/agent_auth.py`)
+- Agent enrollment with one-time tokens (24h TTL)
+- Command queue (lookup_user, update_user, add/remove_group_member, apply_template, ping)
+- Per-tenant downloadable agent package (ZIP with `AD-Agent.ps1`, `Install-ADAgent.ps1`, `enrollment.json`)
+- User onboarding templates
+- 5 new database tables: `tenant_ad_config`, `ad_agents`, `ad_agent_enrollment_tokens`, `ad_agent_commands`, `ad_agent_templates`
+
+**Files created**: `portal/agent_auth.py`, `portal/routes/ad_agent.py`, `portal/templates/ad_agent.html`, `scripts/AD-Agent.ps1`, `scripts/Install-ADAgent.ps1`, `scripts/Get-HybridStatus.ps1`, `tests/test_ad_agent.py`
 
 ---
 
@@ -1130,12 +1174,12 @@ class JSONFormatter(logging.Formatter):
 | Inspector error isolation | `inspectors/365Inspect.ps1` | Wrap each inspector in try/catch so one failure doesn't abort the scan |
 | Token refresh | `scripts/Shared.psm1` `Get-AuditGraphToken` | Add token cache with refresh for long operations |
 
-### Short-Term (Phase 2-3)
+### Short-Term (Phase 3-4)
 
 | Task | Detail |
 |------|--------|
 | Pester test framework | Add `tests/*.Tests.ps1` for `Shared.psm1` functions. Mock `Connect-PnPOnline`, `Invoke-RestMethod` |
-| Structured progress output | Scripts emit JSON lines: `{"progress": 50, "message": "..."}` for real-time UI updates |
+| Structured progress output | Scripts emit JSON lines: `{"progress": 50, "message": "..."}` for SSE real-time UI updates |
 | Inspector result caching | Cache Graph API responses within a scan session to avoid duplicate calls |
 
 ### Medium-Term (Phase 4-5)
@@ -1151,54 +1195,54 @@ class JSONFormatter(logging.Formatter):
 ## Phase Dependencies
 
 ```
-Phase 1 (Foundation)
+Phase 1 (Foundation) ✅
     │
     v
-Phase 2 (Core Platform) ────────────────────────┐
+Phase 2 (Core Platform) ✅ ─────────────────────┐
     │                                             │
-    ├──> Phase 3 (Reporting)                     │
+    ├──> Phase 3 (Reporting)    ← READY          │
     │        │                                    │
-    ├──> Phase 4 (Operations & Automation)       │
+    ├──> Phase 4 (Operations & Automation) ← READY│
     │        │                                    │
     │        └──> Phase 6 (Compliance)           │
     │                                             │
     ├──> Phase 5 (Integrations) ←── Phase 3      │
     │                                             │
-    └──> Phase 7 (Scale) ←───────────────────────┘
+    └──> Phase 7 (Scale) ← READY ────────────────┘
 ```
 
-- **Phases 3, 4, 5 can run in parallel** once Phase 2 is complete
+- **Phases 3, 4, 5, 7 can now start** — Phase 2 prerequisites are met
 - **Phase 6** depends on Phase 4 (remediation and drift detection)
-- **Phase 7** can start after Phase 2 but benefits from later phases
+- **Phase 7** can start immediately (Celery + Redis already integrated)
 
 ---
 
 ## Priority Matrix
 
-| Phase | Business Impact | Technical Risk | Effort | Start |
+| Phase | Business Impact | Technical Risk | Effort | Status |
 |-------|:---:|:---:|:---:|:---:|
-| **1. Foundation** | High | Low | Medium | Immediately |
-| **2. Core Platform** | Critical | Medium | Large | After Phase 1 |
-| **3. Reporting** | High (client-facing) | Low | Medium | After Phase 2 |
-| **4. Operations** | High (MSP efficiency) | Medium | Large | After Phase 2 |
-| **5. Integrations** | Medium (ecosystem) | Medium | Large | After Phase 2+3 |
+| **1. Foundation** | High | Low | Medium | ✅ Complete |
+| **2. Core Platform** | Critical | Medium | Large | ✅ Complete |
+| **3. Reporting** | High (client-facing) | Low | Medium | Ready to start |
+| **4. Operations** | High (MSP efficiency) | Medium | Large | Ready to start |
+| **5. Integrations** | Medium (ecosystem) | Medium | Large | After Phase 3 |
 | **6. Compliance** | Medium (regulated verticals) | Low | Medium | After Phase 4 |
-| **7. Scale** | Medium (growth) | High | Large | After Phase 2 |
+| **7. Scale** | Medium (growth) | High | Large | Ready to start |
 
 ---
 
 ## Quick Wins (Can Start Today)
 
-These need no architectural changes and provide immediate value:
+~~All original quick wins have been completed:~~
 
-1. **Add GitHub Actions CI** — `.github/workflows/ci.yml` running tests on every push
-2. **Fix CSP unsafe-inline** — add nonces in `app.py` + templates
-3. **Add SRI hashes** — to CDN links in `base.html`
-4. **Add database indexes** — migration for key FK columns
-5. **Add `requirements-dev.txt`** — pytest, pytest-cov, ruff, bandit
-6. **Graph throttling** — add 429 retry to `Invoke-GraphRequest` in `Shared.psm1`
-7. **Write missing tests** — start with `test_audits.py` and `test_jobs_routes.py`
-8. **HSTS header** — one line in `app.py`
+1. ~~**Add GitHub Actions CI** — `.github/workflows/ci.yml` running tests on every push~~ ✅
+2. ~~**Fix CSP unsafe-inline** — add nonces in `app.py` + templates~~ ✅
+3. ~~**Add SRI hashes** — to CDN links in `base.html`~~ ✅
+4. ~~**Add database indexes** — migration for key FK columns~~ ✅
+5. ~~**Add `requirements-dev.txt`** — pytest, pytest-cov, ruff, bandit~~ ✅
+6. **Graph throttling** — add 429 retry to `Invoke-GraphRequest` in `Shared.psm1` (still pending)
+7. ~~**Write missing tests** — start with `test_audits.py` and `test_jobs_routes.py`~~ ✅
+8. ~~**HSTS header** — one line in `app.py`~~ ✅
 
 ---
 
