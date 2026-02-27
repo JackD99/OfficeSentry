@@ -1,0 +1,75 @@
+{% extends "reports/pdf_base.html" %}
+{% block content %}
+<div class="header">
+  <h1>{{ report_title }}</h1>
+  <div class="header-tenant">{{ tenant.name }} ({{ tenant.domain }})</div>
+  <div class="header-meta">Generated {{ generated_at }}</div>
+</div>
+
+<h2>Investigation Summary</h2>
+<div class="metric-row">
+  <div class="metric-card">
+    <div class="metric-value">{{ cases | length }}</div>
+    <div class="metric-label">Total Cases</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: #dc3545;">{{ cases | selectattr('status', 'equalto', 'open') | list | length }}</div>
+    <div class="metric-label">Open Cases</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: #198754;">{{ cases | selectattr('status', 'equalto', 'closed') | list | length }}</div>
+    <div class="metric-label">Closed Cases</div>
+  </div>
+</div>
+
+{% if cases %}
+<div class="section">
+  <h2>Incident Cases</h2>
+  <table>
+    <thead><tr><th>Title</th><th>Playbook</th><th>Severity</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody>
+    {% for c in cases %}
+    <tr>
+      <td><strong>{{ c.title }}</strong></td>
+      <td>{{ c.playbook }}</td>
+      <td>
+        <span class="badge
+          {% if c.severity == 'critical' %}badge-critical
+          {% elif c.severity == 'high' %}badge-high
+          {% elif c.severity == 'medium' %}badge-medium
+          {% else %}badge-low{% endif %}">{{ c.severity | upper }}</span>
+      </td>
+      <td>{{ c.status }}</td>
+      <td>{{ c.created_at }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% for c in cases %}
+{% if c.findings %}
+<div class="section">
+  <h3>{{ c.title }} — Findings</h3>
+  {% if c.findings is mapping %}
+  <table>
+    {% for key, value in c.findings.items() %}
+    <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+    {% endfor %}
+  </table>
+  {% elif c.findings is iterable and c.findings is not string %}
+  <ul>
+    {% for item in c.findings %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>{{ c.findings }}</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endfor %}
+{% else %}
+<p class="no-data">No incident cases found for this tenant. Use the Incident Response module to create investigation cases.</p>
+{% endif %}
+{% endblock %}

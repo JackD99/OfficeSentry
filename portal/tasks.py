@@ -131,9 +131,97 @@ def check_report_schedules():
             )
             update_schedule_run(sched["id"])
             log.info("Executed schedule %s for tenant %s", sched["id"], tenant_id)
+
+            # Send email if configured
+            if sched.get("email_on_completion"):
+                recipients = sched.get("recipients", "[]")
+                if isinstance(recipients, str):
+                    try:
+                        recipients = json.loads(recipients)
+                    except (json.JSONDecodeError, TypeError):
+                        recipients = []
+                if recipients:
+                    send_report_email.delay(
+                        recipients=recipients,
+                        subject=f"Scheduled Report: {sched['name']}",
+                        body=f"The scheduled report '{sched['name']}' for tenant "
+                             f"'{tenant.get('name', '')}' has been executed.\n\n"
+                             f"Log in to the portal to view results.",
+                    )
+
         except Exception as exc:
             log.error("Schedule %s error: %s", sched["id"], exc)
             update_schedule_run(sched["id"])
+
+
+@celery.task(bind=True, max_retries=3, default_retry_delay=60)
+def send_report_email(self, recipients: list, subject: str, body: str,
+                      attachments: list | None = None):
+    """Send an email with optional attachments via SMTP.
+
+    Args:
+        recipients: List of email addresses.
+        subject: Email subject.
+        body: Email body text.
+        attachments: Optional list of dicts with 'filename' and 'data' (base64) keys.
+    """
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+    import base64
+
+    from helpers import read_portal_config
+    cfg = read_portal_config()
+    smtp_cfg = cfg.get("smtp", {})
+
+    if not smtp_cfg.get("host"):
+        log.warning("SMTP not configured — skipping email delivery")
+        return
+
+    password = ""
+    if smtp_cfg.get("password_enc"):
+        try:
+            from database import decrypt_value
+            from app import get_secret_key
+            password = decrypt_value(smtp_cfg["password_enc"], get_secret_key())
+        except Exception:
+            log.warning("Failed to decrypt SMTP password")
+
+    sender = smtp_cfg.get("sender", smtp_cfg.get("username", ""))
+
+    try:
+        msg = MIMEMultipart()
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = ", ".join(recipients)
+        msg.attach(MIMEText(body, "plain"))
+
+        # Add attachments
+        if attachments:
+            for att in attachments:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(base64.b64decode(att["data"]))
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename={att['filename']}",
+                )
+                msg.attach(part)
+
+        server = smtplib.SMTP(smtp_cfg["host"], smtp_cfg.get("port", 587))
+        if smtp_cfg.get("use_tls", True):
+            server.starttls()
+        if smtp_cfg.get("username") and password:
+            server.login(smtp_cfg["username"], password)
+        server.send_message(msg)
+        server.quit()
+
+        log.info("Email sent to %s: %s", recipients, subject)
+    except Exception as exc:
+        log.error("Email delivery failed: %s", exc)
+        raise self.retry(exc=exc)
 
 
 @celery.task

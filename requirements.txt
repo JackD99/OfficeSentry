@@ -4,3 +4,4 @@ Flask-WTF==1.2.2
 Flask-Limiter==3.8.0
 celery[redis]==5.4.0
 redis==5.2.0
+weasyprint==63.1

@@ -1,0 +1,86 @@
+{% extends "reports/pdf_base.html" %}
+{% block content %}
+<div class="header">
+  <h1>{{ report_title }}</h1>
+  <div class="header-tenant">{{ tenant.name }} ({{ tenant.domain }})</div>
+  <div class="header-meta">Generated {{ generated_at }} | Tenant ID: {{ tenant.tenant_id or 'Not configured' }}</div>
+</div>
+
+<h2>Key Metrics</h2>
+<div class="metric-row">
+  <div class="metric-card">
+    <div class="metric-value">{% if secure_score %}{{ "%.0f" | format(secure_score.current_score) }}%{% else %}N/A{% endif %}</div>
+    <div class="metric-label">Secure Score</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: {% if bpa_summary.fail > 0 %}#dc3545{% else %}#198754{% endif %}">{{ bpa_summary.fail }}</div>
+    <div class="metric-label">BPA Failures</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{ bpa_summary.pass }}</div>
+    <div class="metric-label">BPA Passed</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{ bpa_summary.total }}</div>
+    <div class="metric-label">Total Checks</div>
+  </div>
+</div>
+
+{% if secure_score %}
+<div class="section">
+  <h2>Microsoft Secure Score</h2>
+  <table>
+    <tr><th>Current Score</th><td>{{ "%.1f" | format(secure_score.current_score) }}</td></tr>
+    <tr><th>Max Score</th><td>{{ "%.1f" | format(secure_score.max_score) }}</td></tr>
+    <tr><th>Industry Average</th><td>{{ "%.1f" | format(secure_score.average_comparative_score) }}</td></tr>
+    <tr><th>Last Fetched</th><td>{{ secure_score.fetched_at }}</td></tr>
+  </table>
+</div>
+{% endif %}
+
+<div class="section">
+  <h2>Best Practice Analysis Summary</h2>
+  {% if bpa_results %}
+  <table>
+    <thead><tr><th>Check</th><th>Category</th><th>Status</th><th>Impact</th></tr></thead>
+    <tbody>
+    {% for r in bpa_results[:20] %}
+    <tr>
+      <td>{{ r.check_name }}</td>
+      <td>{{ r.category }}</td>
+      <td><span class="badge badge-{{ r.status }}">{{ r.status | upper }}</span></td>
+      <td>{{ r.impact }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if bpa_results | length > 20 %}
+  <p style="font-size: 9pt; color: #666;">Showing top 20 of {{ bpa_results | length }} results. See the full BPA Compliance Report for details.</p>
+  {% endif %}
+  {% else %}
+  <p class="no-data">No BPA results available. Run a BPA scan to populate this section.</p>
+  {% endif %}
+</div>
+
+{% if license_snapshot %}
+<div class="section">
+  <h2>License Overview</h2>
+  <table>
+    <tr><th>Total Licenses</th><td>{{ license_snapshot.total }}</td></tr>
+    <tr><th>Assigned</th><td>{{ license_snapshot.assigned }}</td></tr>
+    <tr><th>Available</th><td>{{ license_snapshot.total - license_snapshot.assigned }}</td></tr>
+  </table>
+</div>
+{% endif %}
+
+{% if device_inventory %}
+<div class="section">
+  <h2>Device Compliance</h2>
+  <table>
+    <tr><th>Total Devices</th><td>{{ device_inventory.device_count }}</td></tr>
+    <tr><th>Compliant</th><td>{{ device_inventory.compliant }}</td></tr>
+    <tr><th>Non-Compliant</th><td>{{ device_inventory.noncompliant }}</td></tr>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

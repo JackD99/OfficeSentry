@@ -339,15 +339,16 @@
 
         <li><span class="sidebar-label">Results</span></li>
         <li class="nav-item">
-          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}active{% endif %}"
+          <a class="nav-link sidebar-submenu-toggle {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page', 'reports.compare_reports', 'reports.client_dashboard') %}active{% endif %}"
              data-bs-toggle="collapse" href="#sidebar-reports" role="button"
-             aria-expanded="{% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}true{% else %}false{% endif %}">
+             aria-expanded="{% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page', 'reports.compare_reports', 'reports.client_dashboard') %}true{% else %}false{% endif %}">
             <i class="bi bi-file-earmark-bar-graph me-2"></i>Reports
             <i class="bi bi-chevron-down ms-auto sidebar-chevron"></i>
           </a>
-          <div class="collapse {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page') %}show{% endif %}" id="sidebar-reports">
+          <div class="collapse {% if request.endpoint in ('reports.reports', 'reports.report_viewer', 'reports.schedules_page', 'reports.compare_reports', 'reports.client_dashboard') %}show{% endif %}" id="sidebar-reports">
             <ul class="nav flex-column sidebar-subnav">
               <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'reports.reports' %}active{% endif %}" href="{{ url_for('reports.reports') }}"><i class="bi bi-files me-2"></i>All Reports</a></li>
+              <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'reports.compare_reports' %}active{% endif %}" href="{{ url_for('reports.compare_reports') }}"><i class="bi bi-arrow-left-right me-2"></i>Compare</a></li>
               <li class="nav-item"><a class="nav-link nav-link-sub {% if request.endpoint == 'reports.schedules_page' %}active{% endif %}" href="{{ url_for('reports.schedules_page') }}"><i class="bi bi-calendar-check me-2"></i>Schedules</a></li>
             </ul>
           </div>

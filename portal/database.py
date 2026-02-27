@@ -147,8 +147,19 @@ CREATE TABLE IF NOT EXISTS report_schedules (
     enabled     INTEGER DEFAULT 1,
     last_run    TEXT,
     next_run    TEXT,
+    recipients  TEXT DEFAULT '[]',
+    email_on_completion INTEGER DEFAULT 0,
     created_by  TEXT NOT NULL,
     created_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS tenant_branding (
+    tenant_id       TEXT PRIMARY KEY,
+    company_name    TEXT DEFAULT '',
+    logo_path       TEXT DEFAULT '',
+    accent_color    TEXT DEFAULT '#0d6efd',
+    updated_at      TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 
@@ -471,7 +482,7 @@ CREATE INDEX IF NOT EXISTS idx_ad_agent_templates_tenant ON ad_agent_templates(t
 """
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 _MIGRATIONS = {
     2: """
@@ -847,6 +858,20 @@ CREATE INDEX IF NOT EXISTS idx_ad_agents_tenant ON ad_agents(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_ad_agent_commands_tenant ON ad_agent_commands(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_ad_agent_commands_status ON ad_agent_commands(status);
 CREATE INDEX IF NOT EXISTS idx_ad_agent_templates_tenant ON ad_agent_templates(tenant_id);
+""",
+
+    9: """
+ALTER TABLE report_schedules ADD COLUMN recipients TEXT DEFAULT '[]';
+ALTER TABLE report_schedules ADD COLUMN email_on_completion INTEGER DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS tenant_branding (
+    tenant_id       TEXT PRIMARY KEY,
+    company_name    TEXT DEFAULT '',
+    logo_path       TEXT DEFAULT '',
+    accent_color    TEXT DEFAULT '#0d6efd',
+    updated_at      TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
 """,
 }
 
@@ -3027,3 +3052,61 @@ def delete_agent_template(template_id: str) -> bool:
             "DELETE FROM ad_agent_templates WHERE id = ?", (template_id,)
         )
         return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Tenant Branding
+# ---------------------------------------------------------------------------
+
+def get_tenant_branding(tenant_id: str) -> dict | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM tenant_branding WHERE tenant_id = ?", (tenant_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_tenant_branding(tenant_id: str, **fields):
+    allowed = {"company_name", "logo_path", "accent_color"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if not fields:
+        return
+    fields["updated_at"] = datetime.now().isoformat()
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT tenant_id FROM tenant_branding WHERE tenant_id = ?",
+            (tenant_id,),
+        ).fetchone()
+        if existing:
+            set_clause = ", ".join(f"{k} = ?" for k in fields)
+            values = list(fields.values()) + [tenant_id]
+            conn.execute(
+                f"UPDATE tenant_branding SET {set_clause} WHERE tenant_id = ?",
+                values,
+            )
+        else:
+            fields["tenant_id"] = tenant_id
+            cols = ", ".join(fields.keys())
+            placeholders = ", ".join("?" for _ in fields)
+            conn.execute(
+                f"INSERT INTO tenant_branding ({cols}) VALUES ({placeholders})",
+                list(fields.values()),
+            )
+
+
+def get_default_branding() -> dict:
+    """Return default branding from portal.json, or sensible defaults."""
+    try:
+        from helpers import read_portal_config
+        cfg = read_portal_config()
+        return cfg.get("branding", {
+            "company_name": "M365 Audit Portal",
+            "logo_path": "",
+            "accent_color": "#0d6efd",
+        })
+    except Exception:
+        return {
+            "company_name": "M365 Audit Portal",
+            "logo_path": "",
+            "accent_color": "#0d6efd",
+        }
