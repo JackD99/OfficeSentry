@@ -418,7 +418,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // --- Operation metadata (from server) ---
 const OPS_META = {{ operations | tojson }};
 let currentMode = 'single';

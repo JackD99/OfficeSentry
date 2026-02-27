@@ -182,7 +182,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 function toggleCategory(cat) {
   document.querySelectorAll('.check-cb').forEach(cb => {
     if (cb.dataset.category === cat) cb.checked = !cb.checked;

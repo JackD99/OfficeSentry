@@ -166,7 +166,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // Enable/disable run buttons based on tenant selection
 const tenantSelect = document.getElementById('cat-tenant');
 tenantSelect?.addEventListener('change', function() {

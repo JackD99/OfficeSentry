@@ -112,7 +112,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('create-group-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const fd = new FormData(this);

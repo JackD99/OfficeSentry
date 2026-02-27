@@ -417,7 +417,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 const TENANT_ID = "{{ tenant.id }}";
 
 function showResult(el, data, successMsg) {

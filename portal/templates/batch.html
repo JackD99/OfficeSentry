@@ -198,7 +198,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // --- Type selection ---
 function selectBatchType(card) {
   document.querySelectorAll('#batch-cards .audit-card').forEach(c => c.classList.remove('active'));

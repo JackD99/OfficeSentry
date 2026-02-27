@@ -163,7 +163,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // Re-bind password toggles for modals
 document.querySelectorAll('.btn-toggle-password').forEach(btn => {
   btn.addEventListener('click', () => {

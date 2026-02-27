@@ -102,7 +102,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // --- Status tab filtering ---
 function filterJobs(btn) {
   document.querySelectorAll('.job-tabs button').forEach(b => {
@@ -163,7 +163,7 @@ async function cancelJob(jobId, btn) {
 </script>
 {% set has_running = jobs|selectattr('status','eq','running')|list %}
 {% if has_running %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // Fetch-based polling — updates running jobs in-place without full page reload
 (function pollRunningJobs() {
   const runningCards = document.querySelectorAll('[data-job-status="running"]');

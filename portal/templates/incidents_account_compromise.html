@@ -128,7 +128,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('compromise-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const checked = document.querySelectorAll('input[name="steps"]:checked');

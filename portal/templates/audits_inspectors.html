@@ -130,7 +130,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // --- Impact filter ---
 const activeImpacts = new Set();
 

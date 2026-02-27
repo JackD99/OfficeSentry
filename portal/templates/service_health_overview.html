@@ -82,7 +82,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // --- Tenant selection ---
 document.querySelectorAll('.tenant-check').forEach(cb => {
   cb.addEventListener('change', updateCount);

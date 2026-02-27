@@ -75,7 +75,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('maintenance-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('run-btn');

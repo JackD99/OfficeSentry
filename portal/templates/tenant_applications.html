@@ -93,7 +93,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 const TENANT_ID = "{{ tenant.id }}";
 async function fetchApps(dataType) {
   const btn = document.getElementById('fetch-btn'); const spinner = document.getElementById('fetch-spinner');

@@ -101,6 +101,42 @@ class TestEncryption:
         with pytest.raises(Exception):
             db.decrypt_value(encrypted, "secret2")
 
+    def test_pbkdf2_key_derivation(self):
+        """Key derivation uses PBKDF2, not plain SHA256."""
+        import hashlib
+        secret = "test-secret"
+        key = db._derive_key(secret)
+        sha256_key = hashlib.sha256(secret.encode()).digest()
+        assert key != sha256_key  # PBKDF2 differs from raw SHA256
+
+    def test_migrate_encryption_from_legacy(self):
+        """migrate_encryption re-encrypts passwords from SHA256 to PBKDF2."""
+        import base64
+        from cryptography.fernet import Fernet
+
+        secret = "test-secret-key"
+        plaintext = "my-pfx-password"
+
+        # Encrypt with legacy SHA256 derivation
+        old_key = base64.urlsafe_b64encode(db._derive_key_legacy(secret))
+        old_enc = Fernet(old_key).encrypt(plaintext.encode()).decode()
+
+        # Store it in a tenant
+        tid = db.create_tenant("MigTest", "mig.com")
+        with db.get_db() as conn:
+            conn.execute(
+                "UPDATE tenants SET pfx_password_enc = ? WHERE id = ?",
+                (old_enc, tid)
+            )
+
+        # Run migration
+        db.migrate_encryption(secret)
+
+        # Verify new key can decrypt
+        t = db.get_tenant(tid)
+        decrypted = db.decrypt_value(t["pfx_password_enc"], secret)
+        assert decrypted == plaintext
+
 
 class TestJobs:
     def test_create_and_get_job(self):

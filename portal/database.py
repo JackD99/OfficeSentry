@@ -22,6 +22,12 @@ BACKUP_DIR = Path(__file__).parent.parent / "data" / "backups"
 # ---------------------------------------------------------------------------
 
 def _derive_key(secret: str) -> bytes:
+    """Derive a 32-byte Fernet key from the Flask secret using PBKDF2."""
+    return hashlib.pbkdf2_hmac('sha256', secret.encode(), b'spo-audit-toolkit-v2', 100_000)
+
+
+def _derive_key_legacy(secret: str) -> bytes:
+    """Legacy SHA256 key derivation (pre-v6 migration)."""
     return hashlib.sha256(secret.encode()).digest()
 
 
@@ -351,7 +357,7 @@ CREATE TABLE IF NOT EXISTS device_inventory_cache (
 """
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _MIGRATIONS = {
     2: """
@@ -596,6 +602,16 @@ CREATE TABLE IF NOT EXISTS device_inventory_cache (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 """,
+    6: """
+CREATE INDEX IF NOT EXISTS idx_jobs_tenant_id ON jobs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_id ON audit_log(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_cached_tenant_data_lookup ON cached_tenant_data(tenant_id, data_type);
+CREATE INDEX IF NOT EXISTS idx_bpa_results_tenant ON bpa_results(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_incident_cases_tenant ON incident_cases(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_service_health_cache_tenant ON service_health_cache(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_license_snapshots_tenant ON license_snapshots(tenant_id);
+""",
 }
 
 
@@ -634,6 +650,29 @@ def init_db():
                 (SCHEMA_VERSION,)
             )
         _run_migrations(conn)
+
+
+def migrate_encryption(secret: str):
+    """One-time migration: re-encrypt PFX passwords from SHA256 to PBKDF2 key derivation."""
+    from cryptography.fernet import Fernet, InvalidToken
+
+    old_key = base64.urlsafe_b64encode(_derive_key_legacy(secret))
+    new_key = base64.urlsafe_b64encode(_derive_key(secret))
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, pfx_password_enc FROM tenants WHERE pfx_password_enc != ''"
+        ).fetchall()
+        for row in rows:
+            try:
+                plaintext = Fernet(old_key).decrypt(row["pfx_password_enc"].encode()).decode()
+                new_enc = Fernet(new_key).encrypt(plaintext.encode()).decode()
+                conn.execute(
+                    "UPDATE tenants SET pfx_password_enc = ? WHERE id = ?",
+                    (new_enc, row["id"])
+                )
+            except (InvalidToken, Exception):
+                pass  # Already migrated or corrupt
 
 
 # ---------------------------------------------------------------------------

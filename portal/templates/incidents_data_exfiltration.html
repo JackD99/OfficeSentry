@@ -106,7 +106,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 function toggleScope() {
   const scope = document.querySelector('input[name="scope"]:checked').value;
   const userWrap = document.getElementById('target-user-wrap');

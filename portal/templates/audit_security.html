@@ -172,7 +172,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // --- Inspector filtering state ---
 let activeImpacts = new Set(['all']);
 

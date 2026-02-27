@@ -79,7 +79,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('add-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);

@@ -272,7 +272,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 // Toggle form fields based on alert type
 document.getElementById('alert-type-select').addEventListener('change', function() {
   document.getElementById('action-pattern-group').style.display = this.value === 'audit_log' ? '' : 'none';

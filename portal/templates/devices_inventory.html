@@ -94,7 +94,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('inventory-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const tenantId = document.getElementById('tenant-select').value;

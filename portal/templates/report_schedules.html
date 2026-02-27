@@ -199,7 +199,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 function updateFreqFields() {
   const freq = document.getElementById('sched-frequency').value;
   document.getElementById('sched-day-wrap').style.display = (freq === 'daily') ? 'none' : '';

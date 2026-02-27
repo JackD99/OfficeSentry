@@ -49,7 +49,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('check-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('check-btn'); const spinner = document.getElementById('check-spinner');

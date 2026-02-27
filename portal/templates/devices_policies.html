@@ -102,7 +102,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('policies-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('run-btn');

@@ -80,7 +80,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ g.csp_nonce }}">
 document.getElementById('backup-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('backup-btn'); const spinner = document.getElementById('backup-spinner');
