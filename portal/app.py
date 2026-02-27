@@ -122,6 +122,7 @@ def create_app() -> Flask:
     from routes.incidents import bp as incidents_bp
     from routes.webhooks import bp as webhooks_bp
     from routes.api_v1 import bp as api_v1_bp
+    from routes.ad_agent import bp as ad_agent_bp, agent_api_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(tenants_bp)
@@ -142,9 +143,12 @@ def create_app() -> Flask:
     app.register_blueprint(incidents_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(api_v1_bp)
+    app.register_blueprint(ad_agent_bp)
+    app.register_blueprint(agent_api_bp)
 
-    # Exempt API routes from CSRF (they use Bearer token auth)
+    # Exempt API routes from CSRF (they use Bearer token auth or HMAC)
     csrf.exempt(api_v1_bp)
+    csrf.exempt(agent_api_bp)
 
     # Initialize Celery (optional — works without Redis)
     try:

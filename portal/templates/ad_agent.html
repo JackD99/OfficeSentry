@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}AD Agent Management — M365 Audit Portal{% endblock %}
+{% block breadcrumb %}
+<ul class="portal-breadcrumb">
+  <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+  <li><span class="separator"><i class="bi bi-chevron-right"></i></span></li>
+  <li><span class="current">AD Agent</span></li>
+</ul>
+{% endblock %}
+{% block page_title %}AD Agent Management{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- Overview cards -->
+  <div class="col-12">
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="card h-100 border-primary">
+          <div class="card-body py-3">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-hdd-network fs-4 me-3 text-primary"></i>
+              <div>
+                <div class="small text-muted">Active Agents</div>
+                <div class="fs-5 fw-bold">{{ agent_map.values()|selectattr('status', 'eq', 'active')|list|length }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card h-100 border-info">
+          <div class="card-body py-3">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-building fs-4 me-3 text-info"></i>
+              <div>
+                <div class="small text-muted">Total Tenants</div>
+                <div class="fs-5 fw-bold">{{ tenants|length }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card h-100 border-success">
+          <div class="card-body py-3">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-check-circle fs-4 me-3 text-success"></i>
+              <div>
+                <div class="small text-muted">Agent-Enabled</div>
+                <div class="fs-5 fw-bold">{{ agent_map|length }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card h-100 border-warning">
+          <div class="card-body py-3">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-exclamation-triangle fs-4 me-3 text-warning"></i>
+              <div>
+                <div class="small text-muted">No Agent</div>
+                <div class="fs-5 fw-bold">{{ tenants|length - agent_map|length }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tenant agent status table -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-semibold d-flex align-items-center">
+        <i class="bi bi-table me-2 text-secondary"></i>Tenant Agent Status
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Agent Status</th>
+                <th>Last Seen</th>
+                <th>Server(s)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in tenants %}
+              {% set agent = agent_map.get(t.id) %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}">{{ t.name }}</a>
+                  <div class="small text-muted">{{ t.domain }}</div>
+                </td>
+                <td>
+                  {% if agent and agent.status == 'active' %}
+                    <span class="badge bg-success">Active</span>
+                  {% elif agent and agent.status == 'revoked' %}
+                    <span class="badge bg-danger">Revoked</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Not Configured</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if agent and agent.last_seen_at %}
+                    <span class="small">{{ agent.last_seen_at[:16] }}</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if agent and agent.server_names %}
+                    <span class="small font-monospace">{{ agent.server_names|join(', ') }}</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <a href="{{ url_for('tenants.tenant_detail', tenant_id=t.id) }}#ad-agent"
+                     class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-gear me-1"></i>Manage
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
