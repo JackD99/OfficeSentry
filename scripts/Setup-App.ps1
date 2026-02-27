@@ -1,6 +1,6 @@
 # Setup-App.ps1
 # Creates an Entra app registration with cert auth and all permissions needed
-# by both SPO-Audit-Toolkit and OfficeSentry inspectors.
+# by both Office Sentry audits and security inspectors.
 # Outputs a JSON result line that portal/app.py can parse.
 # Called by the Flask portal as a background job. Uses device code flow so any tenant admin
 # can authenticate from any browser without adding their account to this device.
@@ -80,7 +80,7 @@ try {
         Type          = "AsymmetricX509Cert"
         Usage         = "Verify"
         Key           = $cerBytes
-        DisplayName   = "M365 Audit Portal Cert"
+        DisplayName   = "Office Sentry Cert"
         StartDateTime = $cert.NotBefore.ToUniversalTime()
         EndDateTime   = $cert.NotAfter.ToUniversalTime()
     }
@@ -122,7 +122,7 @@ try {
     # SPO permissions (audit-only)
     Grant-Role -ResourceAppId $spo -RoleValue "Sites.Read.All"
 
-    # Graph permissions (superset covering both SPO toolkit + all OfficeSentry inspectors)
+    # Graph permissions (superset covering all Office Sentry audits + security inspectors)
     $graphRoles = @(
         "AuditLog.Read.All",
         "Directory.Read.All",

@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 :: ================================================================
-:: start.cmd — 1-click launcher for the M365 Audit Portal (Windows)
+:: start.cmd — 1-click launcher for Office Sentry (Windows)
 ::
 :: Double-click this file to:
 ::   1. Install Python dependencies
@@ -13,7 +13,7 @@ cd /d "%~dp0"
 
 echo.
 echo   ========================================
-echo     M365 Audit Portal — Quick Start
+echo     Office Sentry — Quick Start
 echo   ========================================
 echo.
 

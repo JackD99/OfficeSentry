@@ -430,7 +430,7 @@ def set_default_branding():
 
     cfg = read_portal_config()
     cfg["branding"] = {
-        "company_name": company_name or "M365 Audit Portal",
+        "company_name": company_name or "Office Sentry",
         "accent_color": accent_color,
         "logo_path": "",
     }
@@ -825,8 +825,8 @@ def test_smtp():
         if smtp.get("password_enc"):
             password = decrypt_value(smtp["password_enc"], current_app.secret_key)
 
-        msg = MIMEText("This is a test email from M365 Audit Portal.")
-        msg["Subject"] = "M365 Audit Portal — SMTP Test"
+        msg = MIMEText("This is a test email from Office Sentry.")
+        msg["Subject"] = "Office Sentry — SMTP Test"
         msg["From"] = smtp.get("sender", smtp.get("username", ""))
         msg["To"] = recipient
 

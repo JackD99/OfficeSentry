@@ -1,4 +1,4 @@
-# SPO-Audit-Toolkit
+# Office Sentry
 
 **Microsoft 365 Security Audit, Management & Breach Investigation Platform**
 
@@ -8,7 +8,7 @@ A self-hosted, multi-tenant MSP management platform for Microsoft 365 — built 
 
 ## Overview
 
-SPO-Audit-Toolkit is a self-hosted alternative to CIPP, combining:
+Office Sentry is a self-hosted alternative to CIPP, combining:
 
 - **Web Portal** — Multi-tenant Flask dashboard with 20+ route blueprints, 95 templates, and a modern dark UI
 - **PowerShell Audit Scripts** — 45 scripts for SharePoint Online, Exchange Online, and Microsoft Graph

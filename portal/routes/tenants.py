@@ -263,7 +263,7 @@ def tenant_cert(tenant_id):
 
     cer = str(tenant_cer_path(tenant_id))
     pfx = str(tenant_pfx_path(tenant_id))
-    subject = t.get("cert_subject") or "CN=M365 Audit"
+    subject = t.get("cert_subject") or "CN=Office Sentry"
     years = int(t.get("cert_years_valid") or 2)
 
     env = build_ps_env()
@@ -303,7 +303,7 @@ def tenant_app(tenant_id):
         )})
 
     years      = int(t.get("cert_years_valid") or 2)
-    app_name   = t.get("app_display_name") or "OfficeSentry"
+    app_name   = t.get("app_display_name") or "Office Sentry"
     tenant_val = t.get("tenant_id") or t.get("domain", "")
 
     cmd = [

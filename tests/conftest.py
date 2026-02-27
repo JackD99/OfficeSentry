@@ -1,5 +1,5 @@
 """
-tests/conftest.py — Shared fixtures for the M365 Audit Portal test suite.
+tests/conftest.py — Shared fixtures for the Office Sentry test suite.
 Uses an in-memory SQLite database and a Flask test client.
 """
 

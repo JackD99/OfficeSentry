@@ -1,4 +1,4 @@
-# SPO-Audit-Toolkit — Development Roadmap
+# Office Sentry — Development Roadmap
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Each task includes specific file paths, function signatures, code patterns, and 
 
 ## Executive Summary
 
-The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a substantial M365 management portal — **20 route blueprints, 95 templates, 45 PowerShell scripts, 108 security inspectors, and a 33-table SQLite database**. Phases 1-3 are complete — the platform now has a solid foundation with CI/CD, comprehensive test coverage, proper security hardening, Celery task queue, RBAC, REST API, webhooks, SSE real-time updates, an on-premises AD Agent system, PDF report generation, SMTP email delivery, report comparison, and a client-facing dashboard.
+Office Sentry has grown from a SharePoint audit script collection into a substantial M365 management portal — **20 route blueprints, 95 templates, 45 PowerShell scripts, 108 security inspectors, and a 33-table SQLite database**. Phases 1-3 are complete — the platform now has a solid foundation with CI/CD, comprehensive test coverage, proper security hardening, Celery task queue, RBAC, REST API, webhooks, SSE real-time updates, an on-premises AD Agent system, PDF report generation, SMTP email delivery, report comparison, and a client-facing dashboard.
 
 **Vision**: A self-hosted CIPP alternative — full MSP management platform built on Python + PowerShell.
 

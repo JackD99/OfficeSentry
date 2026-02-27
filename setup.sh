@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — 1-click setup and launcher for the M365 Audit Portal (Linux/macOS)
+# setup.sh — 1-click setup and launcher for Office Sentry (Linux/macOS)
 #
 # Usage:
 #   ./setup.sh              # install everything + launch portal
@@ -37,7 +37,7 @@ done
 
 echo ""
 echo -e "${BLUE}${BOLD}  ┌─────────────────────────────────────────┐${NC}"
-echo -e "${BLUE}${BOLD}  │     M365 Audit Portal — Quick Start     │${NC}"
+echo -e "${BLUE}${BOLD}  │       Office Sentry — Quick Start        │${NC}"
 echo -e "${BLUE}${BOLD}  └─────────────────────────────────────────┘${NC}"
 echo ""
 
@@ -125,7 +125,7 @@ fi
 
 # ---- Launch the portal ----
 echo ""
-echo -e "${GREEN}${BOLD}  Starting M365 Audit Portal...${NC}"
+echo -e "${GREEN}${BOLD}  Starting Office Sentry...${NC}"
 echo -e "  Open ${CYAN}http://127.0.0.1:5000${NC} in your browser."
 echo -e "  Press Ctrl+C to stop."
 echo ""

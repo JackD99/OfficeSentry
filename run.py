@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run.py — 1-click launcher for the M365 Audit Portal.
+run.py — 1-click launcher for Office Sentry.
 
 Handles everything automatically:
   1. Installs Python dependencies (if missing)
@@ -55,7 +55,7 @@ def info(msg):
 def banner():
     print()
     print(f"  {BOLD}========================================{NC}")
-    print(f"  {BOLD}  M365 Audit Portal — Quick Start{NC}")
+    print(f"  {BOLD}    Office Sentry — Quick Start{NC}")
     print(f"  {BOLD}========================================{NC}")
     print()
 
@@ -182,7 +182,7 @@ def create_dirs():
 def launch_portal():
     """Launch the Flask portal."""
     print()
-    print(f"  {BOLD}Starting M365 Audit Portal...{NC}")
+    print(f"  {BOLD}Starting Office Sentry...{NC}")
     print(f"  Open {CYAN}http://127.0.0.1:5000{NC} in your browser.")
     print(f"  Press Ctrl+C to stop.")
     print()

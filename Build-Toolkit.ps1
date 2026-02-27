@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "  ========================================"
-Write-Host "    M365 Audit Toolkit — Module Download"
+Write-Host "    Office Sentry — Module Download"
 Write-Host "  ========================================"
 Write-Host ""
 

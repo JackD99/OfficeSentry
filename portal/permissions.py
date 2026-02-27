@@ -1,5 +1,5 @@
 """
-portal/permissions.py — Role-Based Access Control (RBAC) for the M365 Audit Portal.
+portal/permissions.py — Role-Based Access Control (RBAC) for Office Sentry.
 
 Roles (hierarchical):
   super_admin — Full access including user management, settings, all tenants, all tiers

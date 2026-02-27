@@ -1,8 +1,8 @@
-# CLAUDE.md — SPO-Audit-Toolkit
+# CLAUDE.md — Office Sentry
 
 ## Project Overview
 
-SPO-Audit-Toolkit is a **Microsoft 365 security audit, management, and breach investigation platform** designed for MSPs and IT administrators. The core is a **web portal** (`portal/app.py`) — a multi-tenant Flask web app for managing hundreds of client tenants.
+Office Sentry is a **Microsoft 365 security audit, management, and breach investigation platform** designed for MSPs and IT administrators. The core is a **web portal** (`portal/app.py`) — a multi-tenant Flask web app for managing hundreds of client tenants.
 
 The portal uses **certificate-based app-only authentication** (Entra ID / Azure AD) to connect to SharePoint Online, Exchange Online, and Microsoft Graph without storing user credentials.
 

@@ -1,5 +1,5 @@
 """
-portal/app.py — M365 Audit Portal
+portal/app.py — Office Sentry
 Multi-tenant Flask web app for M365 auditing, security scanning, and breach
 investigation.  Designed for MSPs managing hundreds of client tenants.
 
@@ -334,5 +334,5 @@ if __name__ == "__main__":
     from database import migrate_encryption
     migrate_encryption(app.secret_key)
     TENANTS_DIR.mkdir(parents=True, exist_ok=True)
-    log.info("M365 Audit Portal starting — http://127.0.0.1:5000")
+    log.info("Office Sentry starting — http://127.0.0.1:5000")
     app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
