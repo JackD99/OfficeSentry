@@ -1,460 +1,921 @@
-# SPO-Audit-Toolkit — Comprehensive Improvement Roadmap
+# SPO-Audit-Toolkit — Development Roadmap
+
+## Purpose
+
+Each task includes specific file paths, function signatures, code patterns, and acceptance criteria so changes can be implemented without ambiguity.
 
 ## Executive Summary
 
-The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a substantial M365 management portal — **18 route blueprints, 84 templates, 42 PowerShell scripts, 108 security inspectors, and a 24-table SQLite database**. However, the architecture, testing, and infrastructure haven't kept pace with feature expansion.
+The SPO-Audit-Toolkit has grown from a SharePoint audit script collection into a substantial M365 management portal — **17 route blueprints, 84 templates, 42 PowerShell scripts, 108 security inspectors, and a 24-table SQLite database**. The architecture, testing, and infrastructure need to catch up with the feature expansion.
 
-**Vision**: Transform this into a **full MSP management platform** — M365 administration, compliance enforcement, automated remediation, incident response, client-facing reporting, and PSA/RMM integration. A self-hosted CIPP alternative built on Python + PowerShell.
+**Vision**: A self-hosted CIPP alternative — full MSP management platform built on Python + PowerShell.
 
-**Deployment model**: Multi-instance self-hosted. Each MSP runs their own instance. Docker + PostgreSQL support are priorities; multi-org SaaS is not.
+**Deployment model**: Multi-instance self-hosted. Each MSP runs their own instance. Docker + PostgreSQL support are priorities.
 
 **Strategy**: Core platform architecture first (task queue, RBAC, API, real-time), then expand features on a solid foundation.
 
 ---
 
-## Current State Audit
-
-### Metrics
-
-| Component | Count | Detail |
-|-----------|-------|--------|
-| Route blueprints | 18 | 7,085 lines across `portal/routes/` |
-| Templates | 84 | Bootstrap 5 dark theme, Jinja2 |
-| Database tables | 24 | 2,129 lines in `portal/database.py` |
-| PowerShell scripts | 42 | `scripts/` directory |
-| Security inspectors | 108 | `inspectors/Inspectors/` (365Inspect) |
-| CSS design system | 1,721 lines | Custom dark theme in `portal/static/css/portal.css` |
-| Test lines | 2,666 | 6 test files, ~152 test cases |
-| Python dependencies | 4 | Flask, cryptography, Flask-WTF, Flask-Limiter |
+## Current State Snapshot
 
 ### What's Working Well
 
-**Core Audit Pipeline**
-- 5 SPO audit types (groups, permissions, external sharing, OAuth consent, tenant-wide permissions)
-- 5 breach investigation types (unified audit log, inbox rules, sign-in logs, OAuth consent, message trace)
-- 108-inspector security scanning via 365Inspect framework
-- Background job execution with PS subprocess output streaming
-- Interactive report viewer (CSV/JSON) with saved views, column customization, export
-
-**MSP Management**
-- Tenant CRUD with certificate-based auth (cert generation + Entra app creation via PowerShell)
-- 50+ tiered MSP operations across 4 categories (User, Exchange, Teams, SharePoint)
-- BPA with 50+ built-in checks, standards templates, tenant assignment
-- Secure Score tracking across tenants
-- Alert rules and history system
-- Tenant groups, custom variables, configuration backup/restore
-- GDAP relationship management (onboarding/offboarding with role templates)
-- Conditional Access policy viewing and template management
-- Graph Explorer, GeoIP lookup, Domain Health tools
-- Batch operations across multiple tenants simultaneously
-
-**Security & UI**
-- CSRF protection (Flask-WTF) on all POST routes
-- Rate limiting on login (Flask-Limiter)
-- Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
-- Fernet encryption for PFX passwords at rest
-- Modern dark UI with custom design system and Chart.js dashboard analytics
-- Onboarding wizard, responsive sidebar with collapsible sections
-
-**Newer Modules (partially complete)**
-- Email Security: quarantine, transport rules, anti-phishing, Defender policies, threat reports
-- Identity Protection: risky users, risky sign-ins, MFA gap analysis, risk overview
-- Device Management: Intune inventory, compliance, Autopilot, device actions
-- Service Health: status, incidents, message center, planned maintenance
-- License Management: inventory, usage analysis, optimization recommendations
-- Incident Response: BEC, account compromise, data exfiltration, malware, privilege escalation playbooks
+- **Core audit pipeline**: 5 SPO audit types, 5 breach investigation types, 108-inspector security scanning, background job execution
+- **MSP management**: Tenant CRUD with cert-based auth, 50+ tiered operations, BPA with 50+ checks, secure score tracking, alert rules, tenant groups, GDAP management, CA policies, Graph Explorer
+- **Security & UI**: CSRF protection, rate limiting, security headers, Fernet encryption, modern dark UI with Chart.js dashboard
+- **Newer modules**: Email security, identity protection, device management, service health, license management, incident response playbooks
 
 ### Critical Gaps
 
-**Architecture**
-- SQLite only — no concurrent writer support, no connection pooling, limits multi-process deployments
-- Jobs run via `threading.Thread` — no retry, no timeout enforcement, no persistence across restarts
-- Report schedules exist in DB (`report_schedules` table) but nothing ever executes them
-- Alert rules exist in DB (`alert_rules` table) but no evaluation engine triggers them
-- In-memory rate limiter state resets on restart
-- No API authentication — no bearer tokens, no API keys, no programmatic access
-- Frontend polls every 60 seconds — no real-time updates
-- Only 4 Python dependencies — missing task queue, ORM, email, PDF generation
-
-**Security**
-- CSP allows `'unsafe-inline'` for scripts and styles
-- Key derivation uses plain SHA256 (`database.py:24`) instead of PBKDF2/scrypt
-- No HTTPS enforcement or HSTS header
-- No SRI hashes on CDN resources (Bootstrap, Chart.js)
-- Binary auth model — only admin/non-admin, no granular RBAC
-- No SSO/SAML for portal authentication
-- PFX passwords passed via environment variables
-
-**Testing & DevOps**
-- No CI/CD pipeline
-- No Docker support
-- Tests cover auth, database, routes, security, operations, standards, tenant_admin — but 11 of 18 blueprints have zero test coverage
-- No PowerShell Pester tests
-- CLAUDE.md documents 5 blueprints when 18 exist — severely outdated
-
-**MSP Platform**
-- No PDF report generation or client-facing output
-- No email/webhook notifications
-- No PSA/RMM/ticketing integration
-- No automated remediation (BPA reports but doesn't fix)
-- No approval workflows for destructive operations
-- No tenant onboarding wizard (guided multi-step flow)
+- **Architecture**: SQLite only, jobs via threading.Thread (no retry/timeout/persistence), report schedules and alert rules are DB-only (no execution engine), no API auth, no real-time updates
+- **Security**: CSP unsafe-inline, SHA256 key derivation, no SRI hashes, no HSTS, admin/non-admin only auth, no SSO
+- **Testing**: 11 of 18 blueprints have zero test coverage, no CI/CD, no Docker, no Pester tests
+- **Features**: No PDF reports, no email/webhook notifications, no PSA integration, no auto-remediation, no approval workflows
 
 ---
 
-## Roadmap
+## Phase 1: Foundation & Hardening
 
-### Phase 1: Foundation & Hardening
-**Goal**: Fix critical security issues, establish CI/CD, expand test coverage, update documentation. Make the existing app production-solid before adding new features.
-
-**Estimated scope**: 2-3 weeks focused effort
-
-#### 1.1 Security Hardening
-
-| Task | Files | Priority |
-|------|-------|----------|
-| Replace `'unsafe-inline'` with nonce-based CSP | `portal/app.py` (after_request handler), all templates with inline `<script>` | Critical |
-| Upgrade key derivation from SHA256 to PBKDF2 | `portal/database.py:24-37` (`_derive_key`, `encrypt_value`, `decrypt_value`) + migration to re-encrypt existing data | Critical |
-| Add SRI hashes to all CDN resources | `portal/templates/base.html` (Bootstrap CSS/JS, Chart.js) | High |
-| Add HSTS header + HTTPS redirect option | `portal/app.py` (after_request) | High |
-| Session hardening — IP binding + ID regeneration on login | `portal/routes/auth.py`, `portal/helpers.py` | Medium |
-| Replace env var password passing with stdin pipe | `portal/helpers.py:_ps_worker()`, `portal/helpers.py:build_ps_env()` | Medium |
-
-**Key consideration for key derivation migration**: Existing encrypted PFX passwords must be re-encrypted. Add a one-time migration in `init_db()` that detects old encryption format and re-encrypts with new key derivation.
-
-#### 1.2 CI/CD Pipeline
-
-| Task | Files | Priority |
-|------|-------|----------|
-| GitHub Actions workflow: lint + type check + test + security scan | `.github/workflows/ci.yml` (new) | High |
-| Add dev dependencies file | `requirements-dev.txt` (new): pytest, pytest-cov, ruff, mypy, bandit | High |
-| Pre-commit hooks config | `.pre-commit-config.yaml` (new) | Medium |
-| Dependabot config for Python + GitHub Actions | `.github/dependabot.yml` (new) | Medium |
-
-#### 1.3 Test Coverage Expansion
-
-Current coverage by blueprint:
-
-| Blueprint | Test File | Status |
-|-----------|-----------|--------|
-| auth | `test_auth.py` (150 lines) | Covered |
-| tenants | `test_routes.py` (partial) | Partial |
-| audits | — | **Missing** |
-| jobs | — | **Missing** |
-| reports | — | **Missing** |
-| operations | `test_operations.py` (568 lines) | Covered |
-| standards | `test_standards.py` (398 lines) | Covered |
-| tenant_admin | `test_tenant_admin.py` (472 lines) | Covered |
-| conditional | `test_new_features.py` (partial) | Partial |
-| gdap | `test_new_features.py` (partial) | Partial |
-| tools | `test_new_features.py` (partial) | Partial |
-| email_security | — | **Missing** |
-| identity | — | **Missing** |
-| devices | — | **Missing** |
-| service_health | — | **Missing** |
-| licenses | — | **Missing** |
-| incidents | — | **Missing** |
-
-**Target**: 70%+ line coverage. New test files needed:
-
-| Test File | Covers |
-|-----------|--------|
-| `tests/test_audits.py` | Audit catalogue, SPO audit launch, security scan, breach investigation, batch ops |
-| `tests/test_reports_routes.py` | Report listing, viewer, saved views, schedules, download path security |
-| `tests/test_jobs_routes.py` | Job status, cancellation, listing, edge cases |
-| `tests/test_email_security.py` | Quarantine, transport rules, anti-phishing, Defender policies |
-| `tests/test_identity.py` | Risky users/sign-ins, MFA analysis, risk overview |
-| `tests/test_devices.py` | Device inventory, compliance, Autopilot, actions |
-| `tests/test_incidents.py` | All incident playbook endpoints |
-| `tests/test_licenses.py` | License inventory, usage, optimization |
-| `tests/test_service_health.py` | Service health, incidents, message center |
-
-#### 1.4 Documentation
-
-| Task | Files |
-|------|-------|
-| Update CLAUDE.md to reflect all 18 blueprints, 24 tables, 42 scripts | `CLAUDE.md` |
-| Document all API/POST endpoints with request/response formats | `CLAUDE.md` or `docs/api.md` |
-| Add deployment guide with reverse proxy examples | `README.md` |
-| Update `.env.example` with all environment variables | `.env.example` |
-
-#### 1.5 Quick Database Wins
-
-| Task | Files |
-|------|-------|
-| Add indexes on `jobs.tenant_id`, `jobs.status`, `audit_log.tenant_id`, `cached_tenant_data.tenant_id` | `portal/database.py` (schema + migration) |
-| Add `VACUUM` to database maintenance | `portal/database.py` |
+**Goal**: Fix security issues, establish CI/CD, expand test coverage, update docs. Make the app production-solid before adding features.
 
 ---
 
-### Phase 2: Core Platform Architecture
-**Goal**: Replace single-process limitations with proper infrastructure. This is the highest-impact phase — it unlocks task scheduling, real-time updates, RBAC, and API access.
+### 1.1 Security: Nonce-Based CSP (Replace unsafe-inline)
 
-**Estimated scope**: 4-6 weeks focused effort | **Prerequisites**: Phase 1
+**Problem**: `portal/app.py:282-288` sets CSP with `'unsafe-inline'` for both scripts and styles.
 
-#### 2.1 Task Queue (Celery + Redis)
+**Implementation**:
 
-Replace `threading.Thread` in `portal/helpers.py` with Celery tasks backed by Redis.
+1. **Generate nonce per request** in `portal/app.py`:
+```python
+# In assign_request_id() (app.py ~line 245), add:
+import secrets
+g.csp_nonce = secrets.token_hex(16)
+```
 
-| Task | Detail |
-|------|--------|
-| Add Celery + Redis | `requirements.txt`: celery, redis. New `portal/celery_app.py` for Celery config |
-| Migrate job execution | Convert `_ps_worker()` → Celery task in `portal/tasks.py`. Keep `start_job()` API surface but backend becomes Celery |
-| Job progress tracking | Use Celery task state + Redis pub/sub for real-time progress (replace SQLite output polling) |
-| Report schedule executor | Celery Beat periodic task that checks `report_schedules` table and launches matching audits |
-| Alert rule evaluator | Celery Beat periodic task that evaluates `alert_rules` against recent audit data and creates alerts |
-| Job timeout enforcement | Celery `time_limit` and `soft_time_limit` per job type |
-| Job retry on failure | Configurable retry with exponential backoff for transient failures |
-| Redis session store | Move Flask sessions from cookie-based to Redis (for multi-process) |
-| Redis rate limiter | Configure Flask-Limiter to use Redis backend (persists across restarts) |
+2. **Pass nonce to templates** — it's already available via `g.csp_nonce` in Jinja2 (Flask makes `g` available in templates).
+
+3. **Update CSP header** in `set_security_headers()` (`app.py:280`):
+```python
+nonce = getattr(g, 'csp_nonce', '')
+response.headers["Content-Security-Policy"] = (
+    f"default-src 'self'; "
+    f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+    f"style-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+    f"font-src 'self' https://cdn.jsdelivr.net; "
+    f"img-src 'self' data: blob:; "
+    f"connect-src 'self' http://ip-api.com"
+)
+```
+
+4. **Add nonce to all inline `<script>` and `<style>` tags** across all 84 templates:
+   - Search all templates for `<script` and `<style` tags
+   - Add `nonce="{{ g.csp_nonce }}"` attribute to each
+   - The `base.html` template is the most important — it has the global inline scripts
+
+5. **Update `test_security.py`** — the CSP header test needs to expect nonce format instead of unsafe-inline.
+
+**Files to modify**: `portal/app.py`, `portal/templates/*.html` (all with inline scripts/styles), `tests/test_security.py`
+
+**Acceptance criteria**: All pages load without CSP console errors. `test_security.py` passes. No `'unsafe-inline'` in CSP header.
+
+---
+
+### 1.2 Security: Upgrade Key Derivation (SHA256 → PBKDF2)
+
+**Problem**: `portal/database.py:24` uses `hashlib.sha256()` for key derivation — not a proper KDF.
+
+**Implementation**:
+
+1. **Replace `_derive_key`** in `database.py:24-25`:
+```python
+import hashlib, base64
+
+def _derive_key(secret: str) -> bytes:
+    """Derive a 32-byte Fernet key from the Flask secret using PBKDF2."""
+    return hashlib.pbkdf2_hmac('sha256', secret.encode(), b'spo-audit-toolkit-v2', 100_000)
+```
+
+2. **Add re-encryption migration** in `database.py`. Add a new migration version (increment `SCHEMA_VERSION` to 6):
+   - The migration should detect PFX passwords encrypted with old key derivation
+   - Re-encrypt each with the new derivation
+   - This requires the Flask secret_key, so it must run inside the app context
+   - Add a `migrate_encryption()` function called from `app.py` after `init_db()`
+
+3. **Migration strategy**: Try decrypting with old method; if it works, re-encrypt with new method. If old method fails, the value is already using new format (or is corrupt).
+
+```python
+def migrate_encryption(secret: str):
+    """One-time migration: re-encrypt PFX passwords with PBKDF2 key derivation."""
+    old_key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+    new_key = base64.urlsafe_b64encode(_derive_key(secret))
+
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, pfx_password_enc FROM tenants WHERE pfx_password_enc != ''").fetchall()
+        for row in rows:
+            try:
+                from cryptography.fernet import Fernet
+                plaintext = Fernet(old_key).decrypt(row["pfx_password_enc"].encode()).decode()
+                new_enc = Fernet(new_key).encrypt(plaintext.encode()).decode()
+                conn.execute("UPDATE tenants SET pfx_password_enc = ? WHERE id = ?", (new_enc, row["id"]))
+            except Exception:
+                pass  # Already migrated or corrupt
+```
+
+4. **Call from app.py** after `init_db()`:
+```python
+from database import migrate_encryption
+migrate_encryption(app.secret_key)
+```
+
+**Files to modify**: `portal/database.py`, `portal/app.py`
+
+**Acceptance criteria**: Existing encrypted passwords still decrypt correctly. New encryptions use PBKDF2. `test_database.py` passes (update encryption tests).
+
+---
+
+### 1.3 Security: SRI Hashes on CDN Resources
+
+**Problem**: `portal/templates/base.html` loads Bootstrap CSS/JS and Chart.js from CDN without Subresource Integrity hashes.
+
+**Implementation**:
+
+1. Find all `<link>` and `<script>` tags referencing `cdn.jsdelivr.net` in `base.html`
+2. Generate SRI hashes: `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`
+3. Add `integrity="sha384-<hash>" crossorigin="anonymous"` to each tag
+
+**Files to modify**: `portal/templates/base.html`
+
+**Acceptance criteria**: All CDN resources load with SRI attributes. No integrity errors in browser console.
+
+---
+
+### 1.4 Security: HSTS Header
+
+**Implementation**: Add to `set_security_headers()` in `portal/app.py:280`:
+```python
+if request.is_secure or os.environ.get("FLASK_ENV") == "production":
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+```
+
+Only set when behind HTTPS or in production to avoid breaking local dev.
+
+**Files to modify**: `portal/app.py`
+
+---
+
+### 1.5 CI/CD Pipeline
+
+**Implementation**: Create `.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt pytest pytest-cov ruff bandit
+      - run: ruff check portal/ tests/
+      - run: python -m pytest tests/ -v --tb=short
+      - run: bandit -r portal/ -ll
+```
+
+Also create `requirements-dev.txt`:
+```
+pytest
+pytest-cov
+ruff
+bandit
+mypy
+```
+
+**Files to create**: `.github/workflows/ci.yml`, `requirements-dev.txt`
+
+**Acceptance criteria**: CI runs on every push. Tests pass. Ruff has no errors. Bandit has no high/medium findings.
+
+---
+
+### 1.6 Test Coverage Expansion
+
+**Current gaps**: audits, jobs, reports, email_security, identity, devices, service_health, licenses, incidents — all have zero test coverage.
+
+**Pattern for each new test file** (follow `tests/test_operations.py`):
+
+```python
+"""tests/test_<blueprint>.py"""
+
+def test_page_requires_auth(client):
+    """Unauthenticated access redirects to login."""
+    resp = client.get("/<route>")
+    assert resp.status_code in (302, 308)
+
+def test_page_loads(authed_client):
+    """Authenticated access returns 200."""
+    resp = authed_client.get("/<route>")
+    assert resp.status_code == 200
+
+def test_post_endpoint(authed_client):
+    """POST endpoint returns JSON with ok field."""
+    resp = authed_client.post("/<route>", data={...})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "ok" in data
+```
+
+**New test files needed** (in priority order):
+
+| File | Routes to test | Key assertions |
+|------|---------------|----------------|
+| `tests/test_audits.py` | `/audits`, `/audits/spo`, `/audits/security`, `/audits/breach`, `/batch/audit` | Page loads, audit launch validates tenant, batch requires tenant selection |
+| `tests/test_reports_routes.py` | `/reports`, `/report-viewer/*`, `/schedules/*`, `/audit-trail` | Page loads, download path validation, saved view CRUD |
+| `tests/test_jobs_routes.py` | `/jobs`, `/jobs/<id>/status`, `/jobs/<id>/cancel` | Job listing, status returns JSON, cancel returns ok |
+| `tests/test_email_security.py` | `/email-security/*` | All 5 sub-pages load, fetch endpoints validate tenant |
+| `tests/test_identity.py` | `/identity/*` | Risky users/sign-ins pages load, MFA report validates input |
+| `tests/test_devices.py` | `/devices/*` | Inventory/compliance/autopilot pages load, action validates tenant |
+| `tests/test_incidents.py` | `/incidents/*` | Dashboard + all 5 playbook pages load, run endpoints validate |
+| `tests/test_licenses.py` | `/licenses/*` | All 4 sub-pages load, fetch validates tenant |
+| `tests/test_service_health.py` | `/service-health/*` | All 5 sub-pages load, scan validates tenant selection |
+
+**Acceptance criteria**: All new tests pass. `python -m pytest tests/ -v` shows no failures.
+
+---
+
+### 1.7 Database Indexes
+
+**Problem**: Missing indexes on frequently-queried foreign key columns.
+
+**Implementation**: Add to `_MIGRATIONS` dict as the next version in `database.py`:
+
+```python
+6: """
+CREATE INDEX IF NOT EXISTS idx_jobs_tenant_id ON jobs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_id ON audit_log(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_cached_tenant_data_lookup ON cached_tenant_data(tenant_id, data_type);
+CREATE INDEX IF NOT EXISTS idx_bpa_results_tenant ON bpa_results(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_incident_cases_tenant ON incident_cases(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_service_health_cache_tenant ON service_health_cache(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_license_snapshots_tenant ON license_snapshots(tenant_id);
+"""
+```
+
+Increment `SCHEMA_VERSION` accordingly.
+
+**Files to modify**: `portal/database.py`
+
+---
+
+## Phase 2: Core Platform Architecture
+
+**Goal**: Replace single-process limitations. Unlock task scheduling, real-time updates, RBAC, and API access.
+
+**Prerequisites**: Phase 1 complete.
+
+---
+
+### 2.1 Task Queue (Celery + Redis)
+
+**Problem**: Jobs run via `threading.Thread` in `helpers.py` — no retry, no timeout, no persistence across restarts. Report schedules and alert rules exist in DB but nothing executes them.
+
+**Implementation plan**:
+
+1. **Add dependencies** to `requirements.txt`:
+```
+celery[redis]==5.4.0
+redis==5.2.0
+```
+
+2. **Create `portal/celery_app.py`**:
+```python
+from celery import Celery
+
+def make_celery(app=None):
+    celery = Celery(
+        "portal",
+        broker=os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+        backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
+    )
+    celery.conf.update(
+        task_serializer="json",
+        result_serializer="json",
+        accept_content=["json"],
+        timezone="UTC",
+        task_track_started=True,
+        worker_hijack_root_logger=False,
+    )
+    if app:
+        celery.conf.update(app.config)
+        TaskBase = celery.Task
+        class ContextTask(TaskBase):
+            def __call__(self, *args, **kwargs):
+                with app.app_context():
+                    return TaskBase.__call__(self, *args, **kwargs)
+        celery.Task = ContextTask
+    return celery
+```
+
+3. **Create `portal/tasks.py`** — migrate `_ps_worker` from `helpers.py`:
+```python
+from celery_app import make_celery
+celery = make_celery()
+
+@celery.task(bind=True, max_retries=2, soft_time_limit=3600, time_limit=3660)
+def run_ps_job(self, job_id, cmd, env=None):
+    """Run a PowerShell script as a Celery task."""
+    # Same logic as helpers.py _ps_worker(), but with:
+    # - Celery task state updates (self.update_state)
+    # - Redis pub/sub for real-time output streaming
+    # - Automatic retry on transient failures
+    # - Timeout enforcement via soft_time_limit
+```
+
+4. **Update `helpers.py`** — `start_job()` dispatches to Celery when available, falls back to threading:
+```python
+def start_job(label, job_type, cmd, tenant_id=None, env=None):
+    job_id = create_job(label, job_type, tenant_id=tenant_id, operator=current_user())
+    try:
+        from tasks import run_ps_job
+        run_ps_job.delay(job_id, cmd, env)
+    except Exception:
+        # Fallback to thread-based execution
+        t = threading.Thread(target=_ps_worker, args=(job_id, cmd, env), daemon=True)
+        t.start()
+    return job_id
+```
+
+5. **Update `cancel_job()`** in `helpers.py` — use `celery.control.revoke(job_id, terminate=True)` when Celery is active.
+
+6. **Add Celery Beat periodic tasks** for:
+   - Report schedule executor: check `report_schedules` table, launch matching audits
+   - Alert rule evaluator: check `alert_rules` against recent data, create `alert_history` entries
+
+7. **Wire into `app.py`**: Initialize Celery in `create_app()`, configure Redis session store.
+
+8. **Update `.env.example`** with Redis/Celery config vars.
 
 **Architecture**:
 ```
-Browser → Flask (web) → Redis (broker) → Celery Worker (runs PS scripts)
-                                       → Celery Beat (schedules, alert checks)
+Browser → Flask → Redis (broker) → Celery Worker (runs PS scripts)
+                                 → Celery Beat (schedules, alerts)
 ```
 
-**Key migration concern**: The current `_running_processes` dict in `helpers.py:123` tracks running subprocesses for cancellation. With Celery, cancellation uses `task.revoke(terminate=True)`. The `cancel_job()` function in `helpers.py:148` needs to be updated accordingly.
+**Key concern**: `_running_processes` dict in `helpers.py:123` tracks subprocesses for cancellation. With Celery, use `task.revoke(terminate=True)` instead.
 
-#### 2.2 Real-Time Updates
+**Files to create**: `portal/celery_app.py`, `portal/tasks.py`
+**Files to modify**: `portal/helpers.py`, `portal/app.py`, `requirements.txt`, `.env.example`
 
-| Task | Detail |
-|------|--------|
-| Add Flask-SocketIO or SSE | `requirements.txt`: flask-socketio (if WebSocket) or use native SSE with streaming responses |
-| Job output streaming | Celery task publishes output lines to Redis pub/sub → Flask streams to browser |
-| Live alert notifications | Push new alerts to connected clients |
-| Dashboard auto-refresh | Real-time stat updates without full page reload |
-| Job status updates | Instant status changes (running→done/failed) without 60s poll interval |
-
-**Recommendation**: Start with SSE (Server-Sent Events) — simpler than WebSocket, no additional dependency beyond Redis pub/sub, works through reverse proxies without special config. Fall back to polling for browsers that don't support SSE (rare).
-
-#### 2.3 Role-Based Access Control (RBAC)
-
-| Role | View Tenants | Run Audits | Run Operations | Manage Users | View Reports | Manage Settings |
-|------|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Super Admin** | All | All | All (Tier 1-3) | Yes | All | Yes |
-| **Admin** | Assigned groups | All | Tier 1-2 | No | Assigned | No |
-| **Operator** | Assigned groups | All | Tier 1 only | No | Assigned | No |
-| **Viewer / Account Manager** | Assigned groups | No | No | No | Assigned (read-only) | No |
-
-| Task | Detail |
-|------|--------|
-| Extend users table | Add `role TEXT DEFAULT 'operator'`, `allowed_tenant_groups TEXT DEFAULT '[]'` |
-| Permission system | New `portal/permissions.py` with capability checks |
-| RBAC decorators | `@role_required('admin')`, `@tenant_access_required` in `portal/helpers.py` |
-| Tenant-scoped access | Filter `list_tenants()` by user's allowed tenant groups |
-| Role management UI | Admin page for user role assignment and tenant group access |
-| Audit trail enrichment | Log role context with every action |
-
-#### 2.4 REST API Layer
-
-| Task | Detail |
-|------|--------|
-| API key model | New `api_keys` table: key hash, scopes, expiration, created_by |
-| API authentication middleware | Check `Authorization: Bearer <key>` header, validate against DB |
-| API key management | CRUD endpoints + UI page for managing API keys |
-| Versioned API routes | `portal/routes/api_v1.py` — new blueprint for `/api/v1/` prefix |
-| Core API endpoints | `GET /api/v1/tenants`, `GET /api/v1/jobs/{id}`, `POST /api/v1/audits/run`, `GET /api/v1/reports` |
-| Rate limiting per key | Separate rate limits for API keys vs web sessions |
-| OpenAPI documentation | Auto-generate or hand-write OpenAPI 3.0 spec |
-
-#### 2.5 Webhook System
-
-| Task | Detail |
-|------|--------|
-| Webhook model | New `webhooks` table: URL, secret, event types, enabled |
-| Webhook delivery | Background Celery task with HMAC signing and exponential retry |
-| Event types | `job.completed`, `job.failed`, `alert.triggered`, `bpa.drift_detected`, `report.generated` |
-| Webhook management UI | CRUD page for webhook configuration |
-| Delivery log | Track delivery attempts, response codes, failures |
-
-**New dependencies**: `celery`, `redis`, `flask-socketio` (optional)
-
-**Key files**:
-- `portal/celery_app.py` — New Celery configuration
-- `portal/tasks.py` — New Celery task definitions
-- `portal/permissions.py` — New RBAC module
-- `portal/routes/api_v1.py` — New API blueprint
-- `portal/helpers.py` — Updated job execution, new decorators
-- `portal/database.py` — Roles, API keys, webhooks tables + migrations
-- `portal/app.py` — Redis integration, SSE/SocketIO setup
+**Acceptance criteria**: Jobs run via Celery worker. `start_job()` falls back to threading if Redis unavailable. Report schedules execute on time.
 
 ---
 
-### Phase 3: Reporting & Client-Facing Output
-**Goal**: Transform raw audit data into polished, client-ready deliverables that account managers can present to clients.
+### 2.2 Real-Time Updates (SSE)
 
-**Estimated scope**: 3-4 weeks | **Prerequisites**: Phase 2 (task queue for scheduled delivery)
+**Problem**: Frontend polls `/jobs/<id>/status` every 60 seconds — no instant updates.
 
-#### 3.1 PDF Report Generation
+**Recommendation**: Use Server-Sent Events (SSE) — simpler than WebSocket, works through proxies, no extra dependency.
 
-| Task | Detail |
-|------|--------|
-| Add PDF engine | `requirements.txt`: weasyprint (HTML→PDF, uses same Jinja2 templates) |
-| Report template base | `portal/templates/reports/pdf_base.html` — branded PDF layout with header, footer, page numbers |
-| Executive Summary report | 1-page: risk score, key findings count by severity, top 5 action items, secure score gauge |
-| Security Posture report | 365Inspect findings grouped by severity, each with description + remediation steps |
-| SPO Permission report | Per-site permission breakdown with external sharing highlights |
-| BPA Compliance report | Pass/fail table with expected vs actual, improvement guidance |
-| Identity Risk report | MFA gaps, risky users, sign-in anomalies with recommendations |
-| License Optimization report | Unused licenses, cost savings opportunities, SKU breakdown |
-| Breach Investigation report | Timeline, indicators of compromise, affected accounts, remediation steps |
-| Branding configuration | Configurable logo, company name, accent color (stored in `config/portal.json`) |
-| Batch PDF generation | Generate reports across multiple tenants in one PDF with table of contents |
+**Implementation**:
 
-#### 3.2 Scheduled Report Delivery
+1. **Add SSE endpoint** in `portal/routes/jobs.py`:
+```python
+@bp.route("/jobs/<job_id>/stream")
+@login_required
+def job_stream(job_id):
+    def generate():
+        # Subscribe to Redis pub/sub channel f"job:{job_id}"
+        # Yield SSE events: data: {"line": "...", "status": "running"}
+        pass
+    return current_app.response_class(generate(), mimetype='text/event-stream')
+```
 
-| Task | Detail |
-|------|--------|
-| SMTP configuration | Settings page for SMTP server, credentials, sender address |
-| Email delivery Celery task | Send PDF/XLSX reports as attachments or download links |
-| Recipient management | Per-schedule recipients (portal users + external email addresses) |
-| Delivery log | Track sent reports, bounces, retry status |
-| Schedule activation | Wire Celery Beat to actually execute the existing `report_schedules` table entries |
+2. **Publish from Celery task** in `tasks.py`: Each output line published to Redis channel.
 
-#### 3.3 Report Enhancements
+3. **Update frontend** JS in job-related templates: Use `EventSource` API instead of `setInterval` polling.
 
-| Task | Detail |
-|------|--------|
-| Report comparison | Diff two audit runs to highlight changes (new permissions, removed users, score changes) |
-| Trend charts | Historical graphs for secure score, BPA compliance %, permission count |
-| Multi-format export | Add PDF export alongside existing CSV/JSON in report viewer |
-| Print stylesheet | CSS `@media print` styles for browser-based printing |
+4. **Add dashboard auto-refresh**: SSE channel for dashboard stat updates.
 
-#### 3.4 Client-Facing Dashboard (Future — Phase 3b)
-
-| Task | Detail |
-|------|--------|
-| Client user model | Separate login tier with `role='client'`, scoped to one tenant |
-| Read-only dashboard | Secure score trend, BPA status, recent reports, open action items |
-| Self-service downloads | Clients download their own reports without operator involvement |
-| Per-tenant branding | Custom logo/colors in client view |
-
-**New dependencies**: `weasyprint`
-
-**Key files**:
-- `portal/report_engine.py` — New PDF generation module
-- `portal/templates/reports/` — PDF-specific templates
-- `portal/routes/reports.py` — PDF endpoints, email delivery endpoints
-- `portal/database.py` — SMTP config, delivery log tables
+**Files to modify**: `portal/routes/jobs.py`, `portal/tasks.py`, `portal/templates/jobs.html`, `portal/templates/dashboard.html`
 
 ---
 
-### Phase 4: MSP Operations Expansion & Automation
-**Goal**: Expand operations, add automated remediation, approval workflows, and streamline tenant onboarding.
+### 2.3 Role-Based Access Control (RBAC)
 
-**Estimated scope**: 4-6 weeks | **Prerequisites**: Phase 2 (RBAC for approvals, task queue for remediation)
+**Problem**: Binary auth — `is_admin` flag only. No granular permissions.
 
-#### 4.1 Operations Catalogue Expansion
+**Role matrix**:
+
+| Role | View Tenants | Run Audits | Run Ops | Manage Users | Manage Settings |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **super_admin** | All | All | All (Tier 1-3) | Yes | Yes |
+| **admin** | Assigned groups | All | Tier 1-2 | No | No |
+| **operator** | Assigned groups | All | Tier 1 only | No | No |
+| **viewer** | Assigned groups | No | No | No | No |
+
+**Implementation**:
+
+1. **Extend users table** — add migration:
+```sql
+ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'operator';
+ALTER TABLE users ADD COLUMN allowed_tenant_groups TEXT DEFAULT '[]';
+```
+
+2. **Create `portal/permissions.py`**:
+```python
+ROLE_HIERARCHY = {'super_admin': 4, 'admin': 3, 'operator': 2, 'viewer': 1}
+
+def has_role(user, min_role):
+    return ROLE_HIERARCHY.get(user.get('role', 'viewer'), 0) >= ROLE_HIERARCHY[min_role]
+
+def can_access_tenant(user, tenant_id):
+    if user.get('role') == 'super_admin':
+        return True
+    # Check if tenant belongs to user's allowed groups
+    ...
+
+def can_run_operation(user, tier):
+    role = user.get('role', 'viewer')
+    if role == 'super_admin': return True
+    if role == 'admin': return tier <= 2
+    if role == 'operator': return tier <= 1
+    return False
+```
+
+3. **Add RBAC decorators** to `helpers.py`:
+```python
+def role_required(min_role):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user = get_user(session["username"])
+            if not has_role(user, min_role):
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+```
+
+4. **Update `@admin_required`** to use `role_required('admin')`.
+
+5. **Filter tenant listings** by user's `allowed_tenant_groups`.
+
+6. **Add role management UI** — extend `/users` page in `routes/auth.py`.
+
+**Files to create**: `portal/permissions.py`
+**Files to modify**: `portal/helpers.py`, `portal/routes/auth.py`, `portal/database.py`, `portal/templates/users.html`
+
+---
+
+### 2.4 REST API Layer
+
+**Problem**: No programmatic access — no API keys, no bearer tokens.
+
+**Implementation**:
+
+1. **Add `api_keys` table**:
+```sql
+CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    scopes TEXT DEFAULT '[]',
+    expires_at TEXT,
+    created_by TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    last_used_at TEXT
+);
+```
+
+2. **Create `portal/routes/api_v1.py`** blueprint:
+```python
+bp = Blueprint("api_v1", __name__, url_prefix="/api/v1")
+
+@bp.before_request
+def check_api_key():
+    key = request.headers.get("Authorization", "").removeprefix("Bearer ")
+    if not validate_api_key(key):
+        return jsonify({"ok": False, "error": "Invalid API key"}), 401
+```
+
+3. **Core API endpoints**:
+   - `GET /api/v1/tenants` — list tenants
+   - `GET /api/v1/tenants/<id>` — tenant detail
+   - `POST /api/v1/audits/run` — launch audit
+   - `GET /api/v1/jobs/<id>` — job status
+   - `GET /api/v1/reports` — list reports
+   - `GET /api/v1/bpa/<tenant_id>` — BPA results
+
+4. **API key management UI** in settings page.
+
+5. **Exempt API routes from CSRF** (they use Bearer auth instead):
+```python
+csrf.exempt(api_v1_bp)
+```
+
+**Files to create**: `portal/routes/api_v1.py`
+**Files to modify**: `portal/app.py`, `portal/database.py`, `portal/templates/settings.html`
+
+---
+
+### 2.5 Webhook System
+
+**Implementation**:
+
+1. **Add `webhooks` table**:
+```sql
+CREATE TABLE IF NOT EXISTS webhooks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,
+    events TEXT DEFAULT '[]',
+    enabled INTEGER DEFAULT 1,
+    created_by TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+2. **Delivery via Celery task** in `tasks.py`:
+```python
+@celery.task(bind=True, max_retries=5)
+def deliver_webhook(self, webhook_id, event_type, payload):
+    # HMAC-sign payload with webhook secret
+    # POST to webhook URL
+    # Retry with exponential backoff on failure
+```
+
+3. **Event types**: `job.completed`, `job.failed`, `alert.triggered`, `bpa.drift_detected`, `report.generated`
+
+4. **Webhook management UI** — new page linked from settings.
+
+**Files to modify**: `portal/database.py`, `portal/tasks.py`
+**Files to create**: `portal/routes/webhooks.py` (or add to settings), `portal/templates/webhooks.html`
+
+---
+
+## Phase 3: Reporting & Client-Facing Output
+
+**Goal**: Transform raw audit data into polished, client-ready deliverables.
+
+**Prerequisites**: Phase 2 (task queue for scheduled delivery).
+
+---
+
+### 3.1 PDF Report Generation
+
+**Implementation**:
+
+1. **Add dependency**: `weasyprint` to `requirements.txt` (HTML→PDF using same Jinja2 templates).
+
+2. **Create `portal/report_engine.py`**:
+```python
+from weasyprint import HTML
+
+def generate_pdf(template_name, context, output_path):
+    """Render a Jinja2 template to PDF."""
+    html_string = render_template(template_name, **context)
+    HTML(string=html_string).write_pdf(output_path)
+```
+
+3. **Create PDF templates** in `portal/templates/reports/`:
+   - `pdf_base.html` — branded layout with header, footer, page numbers
+   - `pdf_executive_summary.html` — 1-page risk overview
+   - `pdf_security_posture.html` — 365Inspect findings by severity
+   - `pdf_bpa_compliance.html` — pass/fail table with guidance
+   - `pdf_identity_risk.html` — MFA gaps, risky users
+   - `pdf_license_optimization.html` — unused licenses, cost savings
+   - `pdf_breach_investigation.html` — timeline, IOCs, affected accounts
+
+4. **Add PDF download endpoints** in `routes/reports.py`:
+```python
+@bp.route("/reports/<tenant_id>/pdf/<report_type>")
+@login_required
+def download_pdf(tenant_id, report_type):
+    ...
+```
+
+5. **Branding configuration** — add `branding` section to `config/portal.json`:
+```json
+{
+    "branding": {
+        "company_name": "Your MSP",
+        "logo_path": "",
+        "accent_color": "#0d6efd"
+    }
+}
+```
+
+**Files to create**: `portal/report_engine.py`, `portal/templates/reports/pdf_*.html`
+**Files to modify**: `portal/routes/reports.py`, `requirements.txt`
+
+---
+
+### 3.2 Scheduled Report Delivery (Email)
+
+**Implementation**:
+
+1. **SMTP configuration** — add to settings page and `portal.json`:
+```json
+{
+    "smtp": {
+        "host": "",
+        "port": 587,
+        "username": "",
+        "password_enc": "",
+        "sender": "",
+        "use_tls": true
+    }
+}
+```
+
+2. **Email delivery Celery task** in `tasks.py`:
+```python
+@celery.task
+def send_report_email(recipients, subject, body, attachments):
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    ...
+```
+
+3. **Wire Celery Beat** to execute `report_schedules` table entries:
+```python
+@celery.task
+def check_report_schedules():
+    """Run every hour. Check for due schedules and launch audits."""
+    with get_db() as conn:
+        due = conn.execute(
+            "SELECT * FROM report_schedules WHERE enabled=1 AND next_run <= datetime('now')"
+        ).fetchall()
+    for schedule in due:
+        # Launch audit job, generate PDF, send email
+        ...
+```
+
+4. **Recipient management** — add `recipients TEXT DEFAULT '[]'` column to `report_schedules` table.
+
+**Files to modify**: `portal/tasks.py`, `portal/database.py`, `portal/routes/reports.py`, `portal/templates/settings.html`
+
+---
+
+### 3.3 Report Comparison
+
+**Implementation**: Add endpoint to diff two audit runs:
+
+```python
+@bp.route("/reports/compare")
+@login_required
+def compare_reports():
+    """Compare two audit runs and highlight changes."""
+    file_a = request.args.get("a")
+    file_b = request.args.get("b")
+    # Parse both CSVs, compute diff, render comparison template
+```
+
+**Files to modify**: `portal/routes/reports.py`
+**Files to create**: `portal/templates/report_comparison.html`
+
+---
+
+### 3.4 Client-Facing Dashboard (Phase 3b)
+
+**Implementation**:
+
+1. **Client user model** — add `role='client'` to RBAC system, scoped to one tenant.
+2. **Read-only dashboard** — secure score trend, BPA status, recent reports, action items.
+3. **Self-service downloads** — clients download their own reports without operator involvement.
+4. **Per-tenant branding** — custom logo/colors in client view.
+
+**Files to modify**: `portal/permissions.py`, `portal/routes/auth.py`
+**Files to create**: `portal/templates/client_dashboard.html`
+
+---
+
+## Phase 4: MSP Operations Expansion & Automation
+
+**Goal**: Automated remediation, approval workflows, drift detection, tenant onboarding wizard.
+
+**Prerequisites**: Phase 2 (RBAC for approvals, task queue for remediation).
+
+---
+
+### 4.1 Operations Catalogue Expansion
 
 **Current**: 50+ operations across User, Exchange, Teams, SharePoint categories with 3 tiers.
+
+**New operations to add** (each needs: entry in `OPERATIONS` dict in `routes/operations.py`, PowerShell script in `scripts/Invoke-*.ps1`, parameter schema for form generation):
 
 | Category | New Operations |
 |----------|---------------|
 | **User** | Bulk password reset, bulk license assignment, user provisioning from template, guest user lifecycle |
 | **Exchange** | Shared mailbox CRUD, distribution list management, retention policies, journal rules |
-| **Teams** | Team provisioning from template, channel management, guest access policies, app permission policies |
-| **SharePoint** | Site provisioning from template, hub site management, sensitivity labels, storage quota management |
-| **Entra** | Dynamic group management, administrative units, app registration lifecycle, named location CRUD |
-| **Intune** | App deployment, compliance policy CRUD, configuration profile management, Autopilot profile assignment |
+| **Teams** | Team provisioning from template, channel management, guest access policies |
+| **SharePoint** | Site provisioning from template, hub site management, sensitivity labels, storage quotas |
+| **Entra** | Dynamic group management, administrative units, app registration lifecycle |
+| **Intune** | App deployment, compliance policy CRUD, configuration profiles, Autopilot profile assignment |
 
-Each new operation needs:
-1. Entry in `OPERATIONS` dict in `portal/routes/operations.py`
-2. PowerShell implementation in `scripts/Invoke-*.ps1`
-3. Parameter schema for dynamic form generation
-
-#### 4.2 Automated Remediation
-
-| Task | Detail |
-|------|--------|
-| Remediation script framework | `scripts/Invoke-Remediation.ps1` — takes check_key + tenant params, applies fix |
-| Link BPA checks to remediation | Add `remediation_script` field to BPA check definitions in `portal/routes/standards.py` |
-| One-click remediate | "Fix" button on BPA results that launches remediation job |
-| Remediation log | Track all changes with before/after state snapshots |
-| Dry-run mode | Preview what remediation would change before applying |
-| Safe defaults | Only auto-remediate low-risk items (enable audit log, etc.); high-risk items require approval |
-
-**Example remediations**:
-- Enable unified audit log
-- Disable legacy authentication
-- Enable security defaults
-- Block external forwarding
-- Enable mailbox auditing
-- Set password expiry policy
-
-#### 4.3 Drift Detection
-
-| Task | Detail |
-|------|--------|
-| Scheduled BPA runs | Celery Beat runs BPA against tenants with assigned standards on configurable schedule |
-| Drift detection | Compare new BPA results against previous — flag changes in status |
-| Drift alerts | Auto-create alerts when tenant drifts out of compliance |
-| Drift dashboard | Visual overview of standards compliance across all tenants |
-
-#### 4.4 Approval Workflows
-
-| Task | Detail |
-|------|--------|
-| Change request model | New `change_requests` table: operation, params, requestor, approver, status |
-| Tier-gated operations | Tier 2+ operations create a change request instead of executing immediately |
-| Approval queue UI | Dashboard showing pending approvals with operation details |
-| Approval notification | Email/webhook to approvers when request submitted |
-| Auto-expiration | Unapproved requests expire after configurable timeout (default: 72 hours) |
-| Execution on approval | Approved requests auto-execute as Celery tasks |
-
-#### 4.5 Tenant Onboarding Wizard
-
-| Task | Detail |
-|------|--------|
-| Multi-step wizard | Guided flow: Add tenant → Generate cert → Create Entra app → Grant admin consent → Run initial BPA |
-| Bulk onboarding | CSV import (columns: name, domain, tenant_id) with batch cert/app creation |
-| Onboarding checklist | Per-tenant progress tracker showing setup completion |
-| Baseline audit | Auto-launch BPA + security scan + secure score fetch on newly onboarded tenants |
-
-**Key files**:
-- `portal/routes/operations.py` — Expanded OPERATIONS dict
-- `portal/routes/standards.py` — Drift detection, remediation hooks
-- `portal/routes/workflows.py` — New approval workflow blueprint
-- `portal/database.py` — Change requests, remediation log tables
-- `scripts/Invoke-Remediation.ps1` — New remediation script
-- Various `scripts/Invoke-*.ps1` — Expanded operations
+**Files to modify**: `portal/routes/operations.py`
+**Files to create**: Additional `scripts/Invoke-*.ps1` scripts as needed
 
 ---
 
-### Phase 5: Integration Layer
-**Goal**: Connect to the MSP ecosystem — PSA ticketing, notifications, and external API consumers.
+### 4.2 Automated Remediation
 
-**Estimated scope**: 4-5 weeks | **Prerequisites**: Phase 2 (API layer, webhooks), Phase 3 (reports)
+**Implementation**:
 
-#### 5.1 PSA Integration
+1. **Create `scripts/Invoke-Remediation.ps1`** — takes check_key + tenant params, applies fix:
+```powershell
+param(
+    [Parameter(Mandatory)][string]$CheckKey,
+    [Parameter(Mandatory)][string]$TenantDomain,
+    [Parameter(Mandatory)][string]$ClientId,
+    [string]$CertificatePath,
+    [switch]$DryRun
+)
+# Switch on CheckKey to apply specific remediation
+```
 
-| PSA | Integration Points |
-|-----|-------------------|
-| **ConnectWise Manage** | Create tickets from alerts/findings, sync client list ↔ tenants, map agreements |
-| **Autotask/Datto** | Create tickets from alerts, sync client list |
-| **HaloPSA** | Create tickets from alerts, sync client list |
+2. **Add `remediation_script` field** to BPA check definitions in `routes/standards.py`.
 
-| Task | Detail |
-|------|--------|
-| PSA adapter interface | `portal/integrations/base.py` — abstract base class for PSA connectors |
-| ConnectWise connector | `portal/integrations/connectwise.py` — REST API client |
-| Autotask connector | `portal/integrations/autotask.py` — REST API client |
-| HaloPSA connector | `portal/integrations/halopsa.py` — REST API client |
-| Ticket creation rules | Map alert severity/type → ticket priority/board/status |
-| Client sync | Bi-directional: PSA client list ↔ portal tenant list |
-| Integration config UI | Settings page for PSA connection details, field mapping |
+3. **Add "Fix" button** on BPA results page that launches remediation job.
 
-#### 5.2 Notification Channels
+4. **Dry-run mode**: Preview changes before applying. Return what would change without making changes.
 
-| Task | Detail |
-|------|--------|
-| Microsoft Teams | Incoming webhook connector for alert/job notifications |
-| Slack | Incoming webhook connector |
-| Email notifications | SMTP-based notifications for alerts, job completions, approval requests |
-| Notification preferences | Per-user notification channel preferences |
-| Notification templates | Configurable message templates per event type |
+5. **Remediation log table**:
+```sql
+CREATE TABLE IF NOT EXISTS remediation_log (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    check_key TEXT NOT NULL,
+    action TEXT NOT NULL,
+    before_state TEXT DEFAULT '',
+    after_state TEXT DEFAULT '',
+    dry_run INTEGER DEFAULT 0,
+    operator TEXT NOT NULL,
+    executed_at TEXT DEFAULT (datetime('now'))
+);
+```
 
-#### 5.3 External Data Consumers
+**Example remediations** (safe, low-risk):
+- Enable unified audit log
+- Disable legacy authentication
+- Block external email forwarding
+- Enable mailbox auditing
+- Set password expiry policy
+
+**Files to create**: `scripts/Invoke-Remediation.ps1`
+**Files to modify**: `portal/routes/standards.py`, `portal/database.py`, `portal/templates/bpa.html`
+
+---
+
+### 4.3 Drift Detection
+
+**Implementation**:
+
+1. **Celery Beat task** runs BPA against tenants with assigned standards on configurable schedule.
+
+2. **Compare results** against previous scan — flag changes:
+```python
+@celery.task
+def check_bpa_drift():
+    """Compare latest BPA results against previous. Create alerts on drift."""
+    for tenant in tenants_with_standards:
+        current = get_latest_bpa_results(tenant.id)
+        previous = get_previous_bpa_results(tenant.id)
+        drifted = [c for c in current if c.status != previous.get(c.check_key, {}).get('status')]
+        for check in drifted:
+            create_alert(...)
+```
+
+3. **Drift dashboard** — visual overview of compliance across tenants.
+
+**Files to modify**: `portal/tasks.py`, `portal/routes/standards.py`
+**Files to create**: `portal/templates/drift_dashboard.html`
+
+---
+
+### 4.4 Approval Workflows
+
+**Implementation**:
+
+1. **Add `change_requests` table**:
+```sql
+CREATE TABLE IF NOT EXISTS change_requests (
+    id TEXT PRIMARY KEY,
+    operation TEXT NOT NULL,
+    params TEXT DEFAULT '{}',
+    tenant_id TEXT,
+    requestor TEXT NOT NULL,
+    approver TEXT,
+    status TEXT DEFAULT 'pending',
+    reason TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    resolved_at TEXT,
+    expires_at TEXT
+);
+```
+
+2. **Gate Tier 2+ operations** in `routes/operations.py`:
+```python
+if tier >= 2 and user_role != 'super_admin':
+    # Create change request instead of executing
+    create_change_request(operation, params, tenant_id, requestor=current_user())
+    return jsonify({"ok": True, "pending_approval": True})
+```
+
+3. **Approval queue UI** — dashboard showing pending requests.
+
+4. **Auto-execute on approval** via Celery task.
+
+5. **Auto-expiration** — unapproved requests expire after 72 hours.
+
+**Files to modify**: `portal/routes/operations.py`, `portal/database.py`
+**Files to create**: `portal/routes/workflows.py`, `portal/templates/approval_queue.html`
+
+---
+
+### 4.5 Tenant Onboarding Wizard
+
+**Implementation**: Multi-step guided flow:
+
+1. Add tenant (name, domain, tenant_id)
+2. Generate certificate (cert + PFX)
+3. Create Entra app (upload cert, assign permissions)
+4. Grant admin consent (instructions + link)
+5. Run initial BPA + security scan + secure score fetch
+
+Also support **bulk onboarding**: CSV import with columns `name,domain,tenant_id`.
+
+**Files to modify**: `portal/routes/tenants.py`
+**Files to create**: `portal/templates/tenant_onboarding_wizard.html`
+
+---
+
+## Phase 5: Integration Layer
+
+**Goal**: Connect to the MSP ecosystem — PSA ticketing, notifications.
+
+**Prerequisites**: Phase 2 (API layer, webhooks), Phase 3 (reports).
+
+---
+
+### 5.1 PSA Integration
+
+**Implementation**:
+
+1. **Create `portal/integrations/` directory** with:
+   - `base.py` — abstract base class for PSA connectors
+   - `connectwise.py` — ConnectWise Manage REST API client
+   - `autotask.py` — Autotask/Datto REST API client
+   - `halopsa.py` — HaloPSA REST API client
+
+2. **Integration interface**:
+```python
+class PSAConnector:
+    def create_ticket(self, alert, tenant): ...
+    def sync_clients(self): ...
+    def get_client_by_domain(self, domain): ...
+```
+
+3. **Ticket creation rules**: Map alert severity/type → ticket priority/board/status.
+
+4. **Client sync**: Bi-directional sync between PSA client list and portal tenants.
+
+5. **Integration config UI** in settings.
+
+**Files to create**: `portal/integrations/__init__.py`, `portal/integrations/base.py`, `portal/integrations/connectwise.py`, `portal/integrations/autotask.py`, `portal/integrations/halopsa.py`
+**Files to modify**: `portal/database.py`, `portal/templates/settings.html`
+
+---
+
+### 5.2 Notification Channels
+
+**Implementation**:
+
+1. **Create `portal/notifications.py`**:
+```python
+def send_notification(channel_type, config, message):
+    if channel_type == "teams":
+        requests.post(config["webhook_url"], json={"text": message})
+    elif channel_type == "slack":
+        requests.post(config["webhook_url"], json={"text": message})
+    elif channel_type == "email":
+        send_email(config["recipients"], "Alert", message)
+```
+
+2. **Per-user preferences** — `notification_preferences TEXT DEFAULT '{}'` column on users table.
+
+3. **Integration with alerts**: When alert is triggered, deliver via user's preferred channel.
+
+**Files to create**: `portal/notifications.py`
+**Files to modify**: `portal/database.py`, `portal/templates/settings.html`
+
+---
+
+### 5.3 External Data Consumers
 
 | Task | Detail |
 |------|--------|
@@ -462,185 +923,253 @@ Each new operation needs:
 | Scheduled data exports | CSV/JSON feeds to file shares or cloud storage |
 | Grafana metrics | Prometheus-format metrics endpoint for operational dashboards |
 
-**Key files**:
-- `portal/integrations/` — New directory for integration modules
-- `portal/routes/integrations.py` — New integration management blueprint
-- `portal/database.py` — Integration config tables, notification preferences
+---
+
+## Phase 6: Compliance & Governance
+
+**Goal**: Regulatory compliance framework mapping, evidence collection, governance reporting.
+
+**Prerequisites**: Phase 4 (remediation, drift detection).
 
 ---
 
-### Phase 6: Compliance & Governance
-**Goal**: Add regulatory compliance framework mapping, evidence collection, and governance reporting.
+### 6.1 Compliance Frameworks
 
-**Estimated scope**: 3-4 weeks | **Prerequisites**: Phase 4 (remediation, drift detection)
+**Implementation**:
 
-#### 6.1 Compliance Frameworks
+1. **Framework data model** — map BPA checks → framework controls (many-to-many):
+```sql
+CREATE TABLE IF NOT EXISTS compliance_frameworks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version TEXT DEFAULT '',
+    controls TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now'))
+);
 
-| Framework | Target Audience |
-|-----------|----------------|
-| **CIS Microsoft 365 Benchmark** | General enterprise security |
-| **NIST 800-171** | US DoD contractors |
-| **Essential Eight (ASD)** | Australian organizations |
-| **Cyber Essentials (UK)** | UK organizations |
-| **Custom frameworks** | MSP-defined compliance templates |
+CREATE TABLE IF NOT EXISTS control_check_mapping (
+    framework_id TEXT NOT NULL,
+    control_id TEXT NOT NULL,
+    check_key TEXT NOT NULL,
+    PRIMARY KEY (framework_id, control_id, check_key)
+);
+```
+
+2. **Built-in frameworks** as JSON files in `config/frameworks/`:
+   - `cis-m365.json` — CIS Microsoft 365 Benchmark
+   - `essential-eight.json` — Australian ASD Essential Eight
+   - `cyber-essentials.json` — UK Cyber Essentials
+   - Custom framework support (import/export)
+
+3. **Compliance score**: `(passing controls / total controls) × 100` per framework per tenant.
+
+4. **Compliance dashboard** — per-tenant scores with drill-down to individual controls.
+
+5. **Evidence collection** — auto-attach BPA results, audit logs, config snapshots.
+
+6. **Compliance PDF report** — client-facing report per framework (uses Phase 3 PDF engine).
+
+**Files to create**: `portal/routes/compliance.py`, `portal/templates/compliance_*.html`, `config/frameworks/*.json`
+**Files to modify**: `portal/database.py`, `portal/app.py`
+
+---
+
+### 6.2 Policy Governance
 
 | Task | Detail |
 |------|--------|
-| Framework data model | Map BPA checks → framework controls (many-to-many) |
-| Framework definitions | JSON/YAML files in `config/frameworks/` defining control-to-check mappings |
-| Framework import/export | Upload custom frameworks, export for sharing |
-| Compliance score | Per-framework percentage: (passing controls / total controls) |
-
-#### 6.2 Compliance Reporting
-
-| Task | Detail |
-|------|--------|
-| Compliance dashboard | Per-tenant framework compliance scores with drill-down |
-| Gap analysis view | Missing controls with remediation guidance and effort estimate |
-| Compliance trend | Historical score tracking with charts |
-| Multi-tenant heatmap | Cross-tenant compliance overview for MSP leadership |
-| Evidence collection | Auto-attach BPA results, audit logs, config snapshots as compliance evidence |
-| Compliance PDF report | Client-facing compliance report per framework |
-
-#### 6.3 Policy Governance
-
-| Task | Detail |
-|------|--------|
-| Desired state config | Define target tenant configuration, detect and flag deviations |
+| Desired state config | Define target tenant configuration, detect deviations |
 | Policy exceptions | Document and track approved exceptions to compliance requirements |
 | Policy inheritance | Tenant groups inherit policies; per-tenant overrides allowed |
 | Exception expiry | Exceptions auto-expire, trigger re-review alerts |
 
-**Key files**:
-- `portal/routes/compliance.py` — New compliance blueprint
-- `portal/templates/compliance_*.html` — Compliance dashboards and reports
-- `portal/database.py` — Framework tables, compliance score history, exceptions
-- `config/frameworks/` — Framework definition files
+---
+
+## Phase 7: Scale & Production Hardening
+
+**Goal**: Containerization, database options, observability.
+
+**Prerequisites**: Phase 2 (Redis, Celery).
 
 ---
 
-### Phase 7: Scale & Production Hardening
-**Goal**: Production-harden for multi-instance MSP deployment with containerization, database options, and observability.
+### 7.1 Docker Support
 
-**Estimated scope**: 4-6 weeks | **Prerequisites**: Phase 2 (Redis, Celery)
+**Implementation**:
 
-#### 7.1 Containerization
+1. **Create `Dockerfile`** (multi-stage):
+```dockerfile
+# Stage 1: Python deps
+FROM python:3.11-slim AS python-deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
-| Task | Detail |
-|------|--------|
-| Multi-stage Dockerfile | Stage 1: Python deps. Stage 2: PowerShell 7 + modules. Stage 3: Runtime with non-root user |
-| docker-compose.yml | Services: app (Flask+gunicorn), worker (Celery), beat (Celery Beat), redis, postgres (optional) |
-| .dockerignore | Exclude certs, database, output, tenants, logs, .git |
-| Volume mounts | `tenants/`, `data/`, `logs/`, `config/` as named volumes |
-| Health checks | Docker HEALTHCHECK using `/health` endpoint |
-| Environment config | All config via environment variables (12-factor app) |
-| Production compose | Separate `docker-compose.prod.yml` with resource limits, restart policies |
+# Stage 2: PowerShell + modules
+FROM mcr.microsoft.com/powershell:7.4-ubuntu-22.04 AS pwsh
+COPY Build-Toolkit.ps1 .
+RUN pwsh -File Build-Toolkit.ps1
 
-#### 7.2 Database Options
+# Stage 3: Runtime
+FROM python:3.11-slim
+COPY --from=python-deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=pwsh /opt/microsoft/powershell/7 /opt/microsoft/powershell/7
+COPY --from=pwsh /root/.local/share/powershell/Modules /app/modules
+COPY . /app
+WORKDIR /app
+RUN useradd -r portal && chown -R portal:portal /app
+USER portal
+HEALTHCHECK CMD curl -f http://localhost:5000/health || exit 1
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--chdir", "portal", "app:create_app()"]
+```
 
-| Task | Detail |
-|------|--------|
-| PostgreSQL support | Add psycopg2 adapter, make database backend configurable via `DATABASE_URL` env var |
-| Connection pooling | Connection pool for concurrent request handling |
-| Migration tool | Add Alembic for proper schema migrations (replace custom `_MIGRATIONS` dict) |
-| SQLite preservation | Keep SQLite as default for single-instance deployments |
-| Backup improvements | pg_dump support for PostgreSQL, scheduled backup Celery task |
+2. **Create `docker-compose.yml`**:
+```yaml
+services:
+  app:
+    build: .
+    ports: ["5000:5000"]
+    volumes: [./tenants:/app/tenants, ./data:/app/data, ./config:/app/config]
+    depends_on: [redis]
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+  worker:
+    build: .
+    command: celery -A portal.celery_app worker -l info
+    volumes: [./tenants:/app/tenants, ./data:/app/data]
+    depends_on: [redis]
+  beat:
+    build: .
+    command: celery -A portal.celery_app beat -l info
+    depends_on: [redis]
+  redis:
+    image: redis:7-alpine
+    volumes: [redis-data:/data]
+volumes:
+  redis-data:
+```
 
-**Approach**: Rather than full SQLAlchemy ORM (massive refactor), add a thin abstraction layer that handles PostgreSQL parameter syntax differences (`?` → `%s`) and connection management. This preserves all existing query logic while enabling PostgreSQL.
+3. **Create `.dockerignore`**: Exclude `data/`, `tenants/`, `logs/`, `.git`, `*.pfx`, `*.cer`.
 
-#### 7.3 Observability
+**Files to create**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`
 
-| Task | Detail |
-|------|--------|
-| Structured JSON logging | Replace text logging with JSON format including request_id, user, tenant context |
-| Prometheus metrics endpoint | `/metrics` — request latency, job duration, error rates, queue depth, active connections |
-| Health check expansion | Check Redis connectivity, Celery worker availability, database, PowerShell availability |
-| Log aggregation support | Structured logs compatible with ELK, Loki, CloudWatch |
+**Acceptance criteria**: `docker compose up` starts all services. `/health` returns 200. Jobs run via Celery worker.
 
-#### 7.4 Performance
+---
 
-| Task | Detail |
-|------|--------|
-| Response caching | Cache frequently-accessed data (tenant list, BPA checks, SKU maps) in Redis |
-| Database query optimization | Add missing indexes, optimize N+1 queries in listing endpoints |
-| Static file serving | Configure for CDN or nginx static serving in production |
-| Gzip compression | Add compression middleware for API responses |
+### 7.2 PostgreSQL Support
 
-#### 7.5 Authentication Enhancements
+**Implementation**: Add a thin abstraction layer rather than full SQLAlchemy refactor.
 
-| Task | Detail |
-|------|--------|
-| OIDC/SAML support | Portal login via Entra ID, Okta, Google Workspace (useful for MSPs with their own IdP) |
-| TOTP MFA | Optional TOTP-based MFA for portal accounts |
-| Session management | Active session list, remote revocation, concurrent session limits |
-| Password policies | Configurable minimum length, complexity, expiry |
+1. **Add dependency**: `psycopg2-binary` to `requirements.txt`.
 
-**Key files**:
-- `Dockerfile` — New multi-stage build
-- `docker-compose.yml` — Full stack orchestration
-- `docker-compose.prod.yml` — Production configuration
-- `portal/database.py` — PostgreSQL support, connection pooling
-- `portal/app.py` — Structured logging, metrics endpoint
-- `alembic/` — Migration directory (if Alembic adopted)
-- `portal/routes/auth.py` — SSO/MFA integration
+2. **Make database backend configurable** via `DATABASE_URL` env var:
+```python
+# database.py
+import os
+DB_URL = os.environ.get("DATABASE_URL", "")
+USE_POSTGRES = DB_URL.startswith("postgresql://")
+```
+
+3. **Abstract connection helper** — update `get_db()` to handle both backends.
+
+4. **Handle SQL dialect differences**: `?` → `%s` for parameters. Create helper function.
+
+5. **Keep SQLite as default** for single-instance deployments.
+
+**Files to modify**: `portal/database.py`, `requirements.txt`, `.env.example`
+
+---
+
+### 7.3 Observability
+
+**Implementation**:
+
+1. **Structured JSON logging** — replace text format in `app.py`:
+```python
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps({
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "request_id": getattr(record, "request_id", ""),
+        })
+```
+
+2. **Prometheus metrics endpoint** at `/metrics` — request latency, job duration, error rates, queue depth.
+
+3. **Expanded health check** — verify Redis, Celery worker, PowerShell availability in `/health`.
+
+**Files to modify**: `portal/app.py`
+
+---
+
+### 7.4 Authentication Enhancements
+
+1. **TOTP MFA**: Add `mfa_secret TEXT DEFAULT ''` to users table. Use `pyotp` library.
+
+2. **OIDC/SAML**: Portal login via Entra ID using `authlib` library.
+
+3. **Session management**: Active session list, remote revocation, concurrent session limits.
+
+4. **Password policies**: Configurable minimum length, complexity, expiry.
+
+**Files to modify**: `portal/routes/auth.py`, `portal/database.py`, `requirements.txt`
 
 ---
 
 ## PowerShell Improvements (Cross-Phase)
 
-These improvements apply across all phases and should be addressed incrementally alongside the Python work.
-
-### Immediate (During Phase 1)
+### Immediate (Phase 1)
 
 | Task | File | Detail |
 |------|------|--------|
 | Graph API throttling | `scripts/Shared.psm1` `Invoke-GraphRequest` | Add 429/Retry-After detection with exponential backoff |
-| Module version pinning | `Build-Toolkit.ps1` | Pin `RequiredVersion` to prevent breaking changes from upstream module updates |
-| Error continuation in inspector loop | `inspectors/365Inspect.ps1` | Wrap each inspector in try/catch so one failure doesn't abort entire scan |
-| Token refresh handling | `scripts/Shared.psm1` `Get-AuditGraphToken` | Add token cache with refresh for operations lasting >60 minutes |
+| Module version pinning | `Build-Toolkit.ps1` | Pin `RequiredVersion` to prevent breaking changes |
+| Inspector error isolation | `inspectors/365Inspect.ps1` | Wrap each inspector in try/catch so one failure doesn't abort the scan |
+| Token refresh | `scripts/Shared.psm1` `Get-AuditGraphToken` | Add token cache with refresh for long operations |
 
-### Short-Term (During Phase 2-3)
+### Short-Term (Phase 2-3)
 
 | Task | Detail |
 |------|--------|
 | Pester test framework | Add `tests/*.Tests.ps1` for `Shared.psm1` functions. Mock `Connect-PnPOnline`, `Invoke-RestMethod` |
-| Structured progress output | All scripts emit JSON progress lines (`{"progress": 50, "message": "..."}`) for real-time UI updates |
-| Inspector result caching | Cache Graph API responses within a scan session to avoid duplicate calls across inspectors |
-| Script input validation | Validate all URLs, GUIDs, emails before making API calls |
+| Structured progress output | Scripts emit JSON lines: `{"progress": 50, "message": "..."}` for real-time UI updates |
+| Inspector result caching | Cache Graph API responses within a scan session to avoid duplicate calls |
 
-### Medium-Term (During Phase 4-5)
+### Medium-Term (Phase 4-5)
 
 | Task | Detail |
 |------|--------|
-| Remediation scripts | New `scripts/Invoke-Remediation.ps1` for BPA auto-fix operations |
-| Replace deprecated modules | Migrate `Microsoft.Online.SharePoint.PowerShell` usage to Microsoft Graph equivalents |
-| Configurable timeouts | Per-script timeout parameters for long-running operations |
-| Parallel execution | Use PowerShell `ForEach-Object -Parallel` for multi-site operations |
+| Remediation scripts | `scripts/Invoke-Remediation.ps1` for BPA auto-fix |
+| Deprecated module migration | Replace `Microsoft.Online.SharePoint.PowerShell` with Graph equivalents |
+| Parallel execution | `ForEach-Object -Parallel` for multi-site operations |
 
 ---
 
-## Phase Dependencies & Parallelism
+## Phase Dependencies
 
 ```
 Phase 1 (Foundation)
-    |
+    │
     v
-Phase 2 (Core Platform) ────────────────────────────────┐
-    |                                                     |
-    ├──> Phase 3 (Reporting)                             |
-    |        |                                            |
-    ├──> Phase 4 (Operations & Automation)               |
-    |        |                                            |
-    |        └──> Phase 6 (Compliance)                   |
-    |                                                     |
-    ├──> Phase 5 (Integrations) ←── needs Phase 3 too    |
-    |                                                     |
-    └──> Phase 7 (Scale) ←───────────────────────────────┘
+Phase 2 (Core Platform) ────────────────────────┐
+    │                                             │
+    ├──> Phase 3 (Reporting)                     │
+    │        │                                    │
+    ├──> Phase 4 (Operations & Automation)       │
+    │        │                                    │
+    │        └──> Phase 6 (Compliance)           │
+    │                                             │
+    ├──> Phase 5 (Integrations) ←── Phase 3      │
+    │                                             │
+    └──> Phase 7 (Scale) ←───────────────────────┘
 ```
 
 - **Phases 3, 4, 5 can run in parallel** once Phase 2 is complete
 - **Phase 6** depends on Phase 4 (remediation and drift detection)
-- **Phase 7** can start after Phase 2 but should incorporate learnings from other phases
+- **Phase 7** can start after Phase 2 but benefits from later phases
 
 ---
 
@@ -658,28 +1187,26 @@ Phase 2 (Core Platform) ──────────────────�
 
 ---
 
-## Verification Criteria
+## Quick Wins (Can Start Today)
 
-After each phase, verify:
+These need no architectural changes and provide immediate value:
 
-1. **All existing tests pass**: `python -m pytest tests/ -v`
-2. **New tests added**: Coverage target met for modified/new code
-3. **Security scan**: `bandit -r portal/` — no new high/medium findings
-4. **Lint clean**: `ruff check portal/` — no errors
-5. **Manual smoke test**: Login → create tenant → run audit → view report → check job
-6. **PowerShell integration**: Cert generation, Graph Explorer, at least one audit type work end-to-end
-7. **Docker (Phase 7+)**: `docker compose up` starts cleanly, all services healthy
+1. **Add GitHub Actions CI** — `.github/workflows/ci.yml` running tests on every push
+2. **Fix CSP unsafe-inline** — add nonces in `app.py` + templates
+3. **Add SRI hashes** — to CDN links in `base.html`
+4. **Add database indexes** — migration for key FK columns
+5. **Add `requirements-dev.txt`** — pytest, pytest-cov, ruff, bandit
+6. **Graph throttling** — add 429 retry to `Invoke-GraphRequest` in `Shared.psm1`
+7. **Write missing tests** — start with `test_audits.py` and `test_jobs_routes.py`
+8. **HSTS header** — one line in `app.py`
 
 ---
 
-## Quick Wins (Can Start Today)
+## Verification Checklist (After Each Phase)
 
-These provide immediate value with minimal risk and no architectural changes:
-
-1. **Update CLAUDE.md** — document all 18 blueprints, 24 tables, 42 scripts (currently documents 5 blueprints)
-2. **Add GitHub Actions CI** — run existing tests on every push
-3. **Fix CSP unsafe-inline** — add nonces to `app.py` after_request handler
-4. **Add SRI hashes** — to Bootstrap and Chart.js CDN links in `base.html`
-5. **Add database indexes** — on `jobs.tenant_id`, `jobs.status`, `audit_log.tenant_id`, `cached_tenant_data(tenant_id, data_type)`
-6. **Add `requirements-dev.txt`** — pytest, pytest-cov, ruff, bandit
-7. **Graph throttling** — add 429 retry handling to `Invoke-GraphRequest` in `Shared.psm1`
+1. **Tests pass**: `python -m pytest tests/ -v`
+2. **Lint clean**: `ruff check portal/` (once CI is set up)
+3. **Security scan**: `bandit -r portal/` — no new high/medium findings
+4. **Manual smoke test**: Login → create tenant → run audit → view report → check job status
+5. **PowerShell integration**: Cert generation and at least one audit type work end-to-end
+6. **Docker (Phase 7+)**: `docker compose up` starts cleanly, all services healthy
