@@ -46,17 +46,17 @@
             <div class="d-flex gap-2 flex-wrap">
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="scope" id="scope-user" value="user" checked
-                       onchange="toggleScope()">
+                       >
                 <label class="form-check-label" for="scope-user">User</label>
               </div>
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="scope" id="scope-site" value="site"
-                       onchange="toggleScope()">
+                       >
                 <label class="form-check-label" for="scope-site">Site</label>
               </div>
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="scope" id="scope-tenant" value="tenant"
-                       onchange="toggleScope()">
+                       >
                 <label class="form-check-label" for="scope-tenant">Tenant-wide</label>
               </div>
             </div>
@@ -107,6 +107,7 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.querySelectorAll('input[name="scope"]').forEach(el => el.addEventListener('change', () => toggleScope()));
 function toggleScope() {
   const scope = document.querySelector('input[name="scope"]:checked').value;
   const userWrap = document.getElementById('target-user-wrap');

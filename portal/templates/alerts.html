@@ -100,10 +100,10 @@
                 </td>
                 <td>
                   <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-warning" onclick="toggleRule('{{ rule.id }}')" title="{{ 'Disable' if rule.enabled else 'Enable' }}">
+                    <button class="btn btn-outline-warning" data-action="toggle-rule" data-rule-id="{{ rule.id }}" title="{{ 'Disable' if rule.enabled else 'Enable' }}">
                       <i class="bi bi-{{ 'pause' if rule.enabled else 'play' }}"></i>
                     </button>
-                    <button class="btn btn-outline-danger" onclick="deleteRule('{{ rule.id }}', '{{ rule.name }}')" title="Delete">
+                    <button class="btn btn-outline-danger" data-action="delete-rule" data-rule-id="{{ rule.id }}" data-rule-name="{{ rule.name }}" title="Delete">
                       <i class="bi bi-trash"></i>
                     </button>
                   </div>
@@ -169,11 +169,11 @@
                   {% if alert.status != 'resolved' %}
                   <div class="btn-group btn-group-sm">
                     {% if alert.status == 'new' %}
-                    <button class="btn btn-outline-warning" onclick="ackAlert('{{ alert.id }}')" title="Acknowledge">
+                    <button class="btn btn-outline-warning" data-action="ack-alert" data-alert-id="{{ alert.id }}" title="Acknowledge">
                       <i class="bi bi-check"></i>
                     </button>
                     {% endif %}
-                    <button class="btn btn-outline-success" onclick="resolveAlert('{{ alert.id }}')" title="Resolve">
+                    <button class="btn btn-outline-success" data-action="resolve-alert" data-alert-id="{{ alert.id }}" title="Resolve">
                       <i class="bi bi-check2-all"></i>
                     </button>
                   </div>
@@ -273,6 +273,17 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+// Event delegation for rule/alert actions
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'toggle-rule') toggleRule(btn.dataset.ruleId);
+  else if (action === 'delete-rule') deleteRule(btn.dataset.ruleId, btn.dataset.ruleName);
+  else if (action === 'ack-alert') ackAlert(btn.dataset.alertId);
+  else if (action === 'resolve-alert') resolveAlert(btn.dataset.alertId);
+});
+
 // Toggle form fields based on alert type
 document.getElementById('alert-type-select').addEventListener('change', function() {
   document.getElementById('action-pattern-group').style.display = this.value === 'audit_log' ? '' : 'none';

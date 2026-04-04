@@ -35,7 +35,7 @@
                 <i class="bi bi-pencil me-1"></i>Manage
               </a>
               <form method="POST" action="{{ url_for('standards.group_delete', group_id=g.id) }}"
-                    onsubmit="return confirm('Delete group {{ g.name }}?')">
+                    class="group-delete-form" data-group-name="{{ g.name }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-sm btn-outline-danger">
                   <i class="bi bi-trash me-1"></i>Delete
@@ -82,8 +82,8 @@
               {% for c in group_colors %}
               <label class="color-option">
                 <input type="radio" name="color" value="{{ c }}" {% if c == 'primary' %}checked{% endif %} class="d-none">
-                <span class="badge bg-{{ c }} px-3 py-2 border border-2 {% if c == 'primary' %}border-white{% else %}border-transparent{% endif %}"
-                      style="cursor:pointer" onclick="this.closest('.d-flex').querySelectorAll('.badge').forEach(b=>b.classList.replace('border-white','border-transparent'));this.classList.replace('border-transparent','border-white')">
+                <span class="badge bg-{{ c }} px-3 py-2 border border-2 {% if c == 'primary' %}border-white{% else %}border-transparent{% endif %} color-badge"
+                      style="cursor:pointer">
                   {{ c }}
                 </span>
               </label>
@@ -113,6 +113,21 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.querySelectorAll('.group-delete-form').forEach(form => {
+  form.addEventListener('submit', function(e) {
+    if (!confirm('Delete group ' + this.dataset.groupName + '?')) {
+      e.preventDefault();
+    }
+  });
+});
+
+document.querySelectorAll('.color-badge').forEach(badge => {
+  badge.addEventListener('click', function() {
+    this.closest('.d-flex').querySelectorAll('.badge').forEach(b => b.classList.replace('border-white', 'border-transparent'));
+    this.classList.replace('border-transparent', 'border-white');
+  });
+});
+
 document.getElementById('create-group-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const fd = new FormData(this);

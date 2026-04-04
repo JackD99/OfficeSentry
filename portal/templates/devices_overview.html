@@ -35,7 +35,7 @@
           <div class="mb-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0">Select Tenants</label>
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-all-tenants-btn">
                 Select All
               </button>
             </div>
@@ -81,6 +81,7 @@
 document.querySelectorAll('.tenant-check').forEach(cb => {
   cb.addEventListener('change', updateCount);
 });
+document.getElementById('toggle-all-tenants-btn').addEventListener('click', toggleAllTenants);
 
 function updateCount() {
   document.getElementById('selected-count').textContent =

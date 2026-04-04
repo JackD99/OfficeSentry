@@ -274,6 +274,63 @@ def start_job(label: str, job_type: str, cmd: list,
     return job_id
 
 
+# ---------------------------------------------------------------------------
+# Python job runner (for migrated Graph API scripts)
+# ---------------------------------------------------------------------------
+
+def _python_worker(job_id: str, func, args: tuple, kwargs: dict):
+    """Run a Python callable as a background job.
+
+    The callable receives a ``log_line`` callback to write progress lines,
+    and should return a dict result (matching the PS JSON contract).
+    """
+    def log_line(line: str):
+        append_job_output(job_id, line)
+        _publish_job_line(job_id, line)
+
+    try:
+        result = func(*args, log_line=log_line, **kwargs)
+        # Write final JSON result as last output line
+        if result is not None:
+            import json as _json
+            append_job_output(job_id, _json.dumps(result, default=str))
+            _publish_job_line(job_id, _json.dumps(result, default=str))
+        status = "done" if result and result.get("ok") else "failed"
+        finish_job(job_id, status)
+        _publish_job_line(job_id, None, status=status)
+        _fire_job_webhook(job_id, status)
+        log.info("Python job %s finished: %s", job_id, status)
+    except Exception as exc:
+        append_job_output(job_id, f"ERROR: {exc}")
+        finish_job(job_id, "failed")
+        _publish_job_line(job_id, None, status="failed")
+        _fire_job_webhook(job_id, "failed")
+        log.error("Python job %s error: %s", job_id, exc)
+
+
+def start_python_job(
+    label: str,
+    job_type: str,
+    func,
+    args: tuple = (),
+    kwargs: dict | None = None,
+    tenant_id: str = None,
+) -> str:
+    """Start a background Python job. Falls back to threading (Celery support later)."""
+    operator = current_user()
+    job_id = create_job(label, job_type, tenant_id=tenant_id, operator=operator)
+    log.info("Starting Python job %s: %s (tenant=%s, operator=%s)",
+             job_id, label, tenant_id, operator)
+
+    t = threading.Thread(
+        target=_python_worker,
+        args=(job_id, func, args, kwargs or {}),
+        daemon=True,
+    )
+    t.start()
+    return job_id
+
+
 def run_ps_sync(script: Path, args: list, env: dict = None,
                 timeout: int = 120) -> dict:
     cmd = [PWSH, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",

@@ -58,15 +58,15 @@
               <td class="text-muted small">{{ wh.last_delivery_at[:16] if wh.last_delivery_at else '—' }}</td>
               <td class="text-end">
                 <div class="btn-group btn-group-sm">
-                  <button class="btn btn-outline-primary" title="Test" onclick="testWebhook('{{ wh.id }}')">
+                  <button class="btn btn-outline-primary test-webhook-btn" title="Test" data-webhook-id="{{ wh.id }}">
                     <i class="bi bi-send"></i>
                   </button>
-                  <button class="btn btn-outline-secondary" title="{{ 'Disable' if wh.enabled else 'Enable' }}"
-                          onclick="toggleWebhook('{{ wh.id }}')">
+                  <button class="btn btn-outline-secondary toggle-webhook-btn" title="{{ 'Disable' if wh.enabled else 'Enable' }}"
+                          data-webhook-id="{{ wh.id }}">
                     <i class="bi bi-toggle-{{ 'on' if wh.enabled else 'off' }}"></i>
                   </button>
-                  <button class="btn btn-outline-danger" title="Delete"
-                          onclick="if(confirm('Delete this webhook?')) deleteWebhook('{{ wh.id }}')">
+                  <button class="btn btn-outline-danger delete-webhook-btn" title="Delete"
+                          data-webhook-id="{{ wh.id }}">
                     <i class="bi bi-trash"></i>
                   </button>
                 </div>
@@ -169,6 +169,20 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.querySelectorAll('.test-webhook-btn').forEach(btn => {
+  btn.addEventListener('click', function() { testWebhook(this.dataset.webhookId); });
+});
+
+document.querySelectorAll('.toggle-webhook-btn').forEach(btn => {
+  btn.addEventListener('click', function() { toggleWebhook(this.dataset.webhookId); });
+});
+
+document.querySelectorAll('.delete-webhook-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    if (confirm('Delete this webhook?')) deleteWebhook(this.dataset.webhookId);
+  });
+});
+
 async function apiPost(url, fd) {
   fd.append('csrf_token', window.CSRF_TOKEN);
   const res = await fetch(url, { method: 'POST', body: fd });

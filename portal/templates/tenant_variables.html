@@ -57,7 +57,7 @@
             <td class="small">{{ v.var_value }}</td>
             <td>
               <button class="btn btn-outline-danger btn-sm py-0 px-1"
-                      onclick="deleteVar('{{ t.id }}', '{{ v.var_key }}')" title="Delete">
+                      data-action="delete-var" data-tenant-id="{{ t.id }}" data-var-key="{{ v.var_key }}" title="Delete">
                 <i class="bi bi-trash"></i>
               </button>
             </td>
@@ -80,6 +80,11 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action="delete-var"]');
+  if (btn) deleteVar(btn.dataset.tenantId, btn.dataset.varKey);
+});
+
 document.getElementById('add-var-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);

@@ -39,35 +39,35 @@
 
           <label class="form-label">Investigation Type</label>
           <div class="d-flex flex-column gap-2 mb-3" id="inv-cards">
-            <div class="audit-card active d-flex align-items-start gap-2" data-type="ual" onclick="selectInv(this)">
+            <div class="audit-card active d-flex align-items-start gap-2" data-type="ual">
               <span class="card-icon text-primary"><i class="bi bi-journal-text"></i></span>
               <div>
                 <div class="card-title">Unified Audit Log</div>
                 <div class="card-desc">Searches M365 unified audit log — file access, admin actions, mailbox changes, login events.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="inbox" onclick="selectInv(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="inbox">
               <span class="card-icon text-danger"><i class="bi bi-inbox"></i></span>
               <div>
                 <div class="card-title">Inbox Rules</div>
                 <div class="card-desc">Checks mailboxes for suspicious forwarding, deletion, and redirect rules (key BEC indicator).</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="signin" onclick="selectInv(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="signin">
               <span class="card-icon text-warning"><i class="bi bi-box-arrow-in-right"></i></span>
               <div>
                 <div class="card-title">Sign-In Logs</div>
                 <div class="card-desc">Pulls Azure AD sign-in history — failed attempts, unusual locations, risky sign-ins.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="oauth" onclick="selectInv(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="oauth">
               <span class="card-icon text-info"><i class="bi bi-key"></i></span>
               <div>
                 <div class="card-title">OAuth Consent</div>
                 <div class="card-desc">Reviews third-party apps with delegated or application permissions — detects consent phishing.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="msgtrace" onclick="selectInv(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="msgtrace">
               <span class="card-icon text-secondary"><i class="bi bi-envelope-arrow-up"></i></span>
               <div>
                 <div class="card-title">Message Trace</div>
@@ -86,9 +86,9 @@
           <div class="mb-3">
             <label class="form-label">Date Range</label>
             <div class="d-flex gap-1 flex-wrap mb-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setRange(7)">Last 7 days</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="setRange(30)">Last 30 days</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setRange(90)">Last 90 days</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-range="7">Last 7 days</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary active" data-range="30">Last 30 days</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-range="90">Last 90 days</button>
             </div>
             <div class="row g-2">
               <div class="col-6">
@@ -136,6 +136,17 @@ function selectInv(card) {
   document.getElementById('inv-type').value = card.dataset.type;
 }
 
+// Event delegation for investigation cards
+document.getElementById('inv-cards').addEventListener('click', (e) => {
+  const card = e.target.closest('.audit-card[data-type]');
+  if (card) selectInv(card);
+});
+
+// Event delegation for date range buttons
+document.querySelectorAll('[data-range]').forEach(btn => {
+  btn.addEventListener('click', () => setRange(parseInt(btn.dataset.range), btn));
+});
+
 // Pre-select investigation type from query param (e.g. ?type=inbox from catalogue)
 (function() {
   const params = new URLSearchParams(window.location.search);
@@ -146,15 +157,15 @@ function selectInv(card) {
   }
 })();
 
-function setRange(days) {
+function setRange(days, clickedBtn) {
   const end = new Date();
   const start = new Date();
   start.setDate(start.getDate() - days);
   document.getElementById('date-start').value = start.toISOString().slice(0, 10);
   document.getElementById('date-end').value = end.toISOString().slice(0, 10);
   // Toggle active button
-  document.querySelectorAll('[onclick^="setRange"]').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  document.querySelectorAll('[data-range]').forEach(b => b.classList.remove('active'));
+  if (clickedBtn) clickedBtn.classList.add('active');
 }
 
 // Set default date range (last 30 days)

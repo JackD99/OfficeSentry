@@ -117,14 +117,14 @@
 <!-- Search + type filter -->
 <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
   <input type="text" class="form-control form-control-sm search-input" style="max-width:260px"
-         id="report-search" placeholder="Search filenames..." oninput="filterReports()">
+         id="report-search" placeholder="Search filenames...">
   <div class="d-flex gap-1 flex-wrap">
-    <button class="btn btn-sm btn-outline-secondary active type-filter-btn" onclick="filterType('', this)" style="border-radius:var(--radius-full)">
+    <button class="btn btn-sm btn-outline-secondary active type-filter-btn" data-type-filter="" style="border-radius:var(--radius-full)">
       All <span class="badge bg-dark ms-1">{{ files|length }}</span>
     </button>
     {% for tname, tcount in type_counts.items()|sort(attribute='1', reverse=true) %}
     <button class="btn btn-sm btn-outline-{{ type_badge_colors.get(tname, 'secondary') }} type-filter-btn"
-            onclick="filterType('{{ tname }}', this)" style="border-radius:var(--radius-full)">
+            data-type-filter="{{ tname }}" style="border-radius:var(--radius-full)">
       {{ tname }} <span class="badge bg-dark ms-1">{{ tcount }}</span>
     </button>
     {% endfor %}
@@ -193,8 +193,8 @@
                class="btn btn-sm btn-outline-secondary me-1" title="Download file">
               <i class="bi bi-download"></i>
             </a>
-            <button class="btn btn-sm btn-outline-danger"
-                    onclick="deleteReport('{{ f.full_path|e }}', this)" title="Delete">
+            <button class="btn btn-sm btn-outline-danger delete-report-btn"
+                    data-path="{{ f.full_path|e }}" title="Delete">
               <i class="bi bi-trash"></i>
             </button>
           </td>
@@ -217,12 +217,22 @@
 <script nonce="{{ g.csp_nonce }}">
 let activeType = '';
 
-function filterType(type, btn) {
-  document.querySelectorAll('.type-filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  activeType = type;
-  filterReports();
-}
+document.getElementById('report-search').addEventListener('input', filterReports);
+
+document.querySelectorAll('.type-filter-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.type-filter-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    activeType = this.dataset.typeFilter;
+    filterReports();
+  });
+});
+
+document.querySelectorAll('.delete-report-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    deleteReport(this.dataset.path, this);
+  });
+});
 
 function filterReports() {
   const q = (document.getElementById('report-search').value || '').toLowerCase().trim();

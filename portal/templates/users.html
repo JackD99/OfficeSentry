@@ -69,16 +69,16 @@
                 <div class="btn-group btn-group-sm">
                   <button class="btn btn-outline-secondary" title="Change role"
                           data-bs-toggle="modal" data-bs-target="#roleModal"
-                          onclick="openRoleModal('{{ u.username }}', '{{ role }}')">
+                          data-action="open-role-modal" data-username="{{ u.username }}" data-role="{{ role }}">
                     <i class="bi bi-shield-lock"></i>
                   </button>
                   <button class="btn btn-outline-secondary" title="Reset password"
                           data-bs-toggle="modal" data-bs-target="#resetPwModal"
-                          onclick="document.getElementById('reset-pw-user').value='{{ u.username }}';document.getElementById('reset-pw-title').textContent='{{ u.username }}'">
+                          data-action="open-reset-pw-modal" data-username="{{ u.username }}">
                     <i class="bi bi-key"></i>
                   </button>
                   <button class="btn btn-outline-danger" title="Delete user"
-                          onclick="if(confirm('Delete user {{ u.username }}?')) deleteUser('{{ u.username }}')">
+                          data-action="delete-user" data-username="{{ u.username }}">
                     <i class="bi bi-trash"></i>
                   </button>
                 </div>
@@ -216,6 +216,28 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+// Event delegation for user action buttons
+document.addEventListener('click', function(e) {
+  const roleBtn = e.target.closest('[data-action="open-role-modal"]');
+  if (roleBtn) {
+    openRoleModal(roleBtn.dataset.username, roleBtn.dataset.role);
+    return;
+  }
+  const resetBtn = e.target.closest('[data-action="open-reset-pw-modal"]');
+  if (resetBtn) {
+    document.getElementById('reset-pw-user').value = resetBtn.dataset.username;
+    document.getElementById('reset-pw-title').textContent = resetBtn.dataset.username;
+    return;
+  }
+  const deleteBtn = e.target.closest('[data-action="delete-user"]');
+  if (deleteBtn) {
+    if (confirm('Delete user ' + deleteBtn.dataset.username + '?')) {
+      deleteUser(deleteBtn.dataset.username);
+    }
+    return;
+  }
+});
+
 // Re-bind password toggles for modals
 document.querySelectorAll('.btn-toggle-password').forEach(btn => {
   btn.addEventListener('click', () => {

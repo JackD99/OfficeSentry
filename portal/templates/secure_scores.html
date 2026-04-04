@@ -32,8 +32,8 @@
           {% endfor %}
         </div>
         <div class="mt-2">
-          <button type="button" class="btn btn-sm btn-outline-light" onclick="document.querySelectorAll('.score-cb').forEach(c=>c.checked=true)">Select All</button>
-          <button type="button" class="btn btn-sm btn-outline-light" onclick="document.querySelectorAll('.score-cb').forEach(c=>c.checked=false)">Clear</button>
+          <button type="button" class="btn btn-sm btn-outline-light" id="select-all-scores-btn">Select All</button>
+          <button type="button" class="btn btn-sm btn-outline-light" id="clear-scores-btn">Clear</button>
         </div>
       </div>
       <div class="col-md-4 text-end">
@@ -148,6 +148,13 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.getElementById('select-all-scores-btn').addEventListener('click', () => {
+  document.querySelectorAll('.score-cb').forEach(c => c.checked = true);
+});
+document.getElementById('clear-scores-btn').addEventListener('click', () => {
+  document.querySelectorAll('.score-cb').forEach(c => c.checked = false);
+});
+
 document.getElementById('fetch-scores-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const checked = document.querySelectorAll('.score-cb:checked');

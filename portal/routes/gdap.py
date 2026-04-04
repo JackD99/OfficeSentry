@@ -20,9 +20,8 @@ from database import (
 )
 from helpers import (
     login_required, current_user,
-    tenant_pfx_path, build_ps_env, start_job, get_tenant_pfx_password,
+    tenant_pfx_path, start_python_job, get_tenant_pfx_password,
     sanitize_text,
-    SCRIPTS_DIR, PWSH,
 )
 
 log = logging.getLogger("portal")
@@ -88,20 +87,15 @@ def tenant_gdap_relationships_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-PartnerRelationships.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-    ]
-
-    jid = start_job(f"Fetch GDAP Relationships — {t['name']}", "gdap", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_partner_relationships
+    jid = start_python_job(
+        f"Fetch GDAP Relationships — {t['name']}", "gdap",
+        fetch_partner_relationships,
+        args=(dict(t), pfx_path, pfx_pass),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "gdap_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})

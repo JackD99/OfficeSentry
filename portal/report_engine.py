@@ -6,7 +6,7 @@ WeasyPrint is optional — if not installed, PDF endpoints return a helpful erro
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import render_template
 
@@ -70,7 +70,7 @@ def get_report_data(report_type: str, tenant_id: str) -> dict | None:
 
     data = {
         "tenant": dict(tenant),
-        "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "report_title": REPORT_TYPES.get(report_type, {}).get("title", "Report"),
     }
 

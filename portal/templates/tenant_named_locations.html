@@ -15,7 +15,7 @@
 
 {% block content %}
 <div class="d-flex align-items-center mb-3 gap-2">
-  <button class="btn btn-primary btn-sm" onclick="fetchData()" id="fetch-btn">
+  <button class="btn btn-primary btn-sm" id="fetch-btn">
     <span class="spinner-border spinner-border-sm d-none me-1" id="fetch-spinner"></span>
     <i class="bi bi-arrow-clockwise me-1"></i>Fetch Named Locations
   </button>
@@ -55,6 +55,8 @@
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
 const TENANT_ID = "{{ tenant.id }}";
+document.getElementById('fetch-btn').addEventListener('click', fetchData);
+
 async function fetchData() {
   const btn = document.getElementById('fetch-btn'); const spinner = document.getElementById('fetch-spinner');
   btn.disabled = true; spinner.classList.remove('d-none');

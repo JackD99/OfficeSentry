@@ -38,92 +38,6 @@
 </div>
 
 <!-- ================================================================
-     SPO AUDITS
-     ================================================================ -->
-<div class="catalogue-section" id="section-spo">
-  <div class="catalogue-section-header">
-    <i class="bi bi-diagram-3 section-icon text-primary"></i>
-    <div>
-      <h5 class="mb-0 fw-semibold">SharePoint Audits</h5>
-      <small class="text-muted">Audit permissions, groups, external sharing, and user access across SharePoint Online sites.</small>
-    </div>
-  </div>
-  <div class="row g-3">
-    {% for a in audit_types if a.category == 'spo' %}
-    <div class="col-md-6 col-xl-3">
-      <div class="catalogue-card" id="card-spo-{{ a.key }}">
-        <div class="d-flex align-items-start gap-2 mb-2">
-          <i class="bi bi-{{ a.icon }} text-{{ a.color }} fs-4"></i>
-          <div>
-            <div class="fw-semibold">{{ a.name }}</div>
-            <span class="badge bg-primary" style="font-size:.6rem">SPO</span>
-          </div>
-        </div>
-        <p class="small text-muted mb-3">{{ a.desc }}</p>
-        <button class="btn btn-sm btn-outline-primary w-100 run-btn" disabled
-                onclick="launchAudit('spo', '{{ a.key }}')">
-          <i class="bi bi-play-fill me-1"></i>Run
-        </button>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-
-<!-- ================================================================
-     SECURITY SCAN
-     ================================================================ -->
-<div class="catalogue-section" id="section-security">
-  <div class="catalogue-section-header">
-    <i class="bi bi-shield-exclamation section-icon text-warning"></i>
-    <div>
-      <h5 class="mb-0 fw-semibold">M365 Security Scan</h5>
-      <small class="text-muted">Comprehensive security assessment using {{ inspector_count }} inspectors across all M365 services.</small>
-    </div>
-  </div>
-  <div class="row g-3">
-    <div class="col-md-6">
-      <div class="catalogue-card" id="card-security-scan">
-        <div class="d-flex align-items-start gap-2 mb-2">
-          <i class="bi bi-shield-exclamation text-warning fs-4"></i>
-          <div>
-            <div class="fw-semibold">Security Scan</div>
-            <span class="badge bg-warning text-dark" style="font-size:.6rem">365Inspect</span>
-          </div>
-        </div>
-        <p class="small text-muted mb-2">Runs {{ inspector_count }} security inspectors across Exchange, Azure AD, SharePoint, Teams, and more. Typical runtime: 10–30 minutes.</p>
-        <div class="d-flex gap-1 flex-wrap mb-3">
-          {% for impact, count in impact_counts|dictsort %}
-          <span class="badge bg-{{ impact_colors.get(impact, 'secondary') }}" style="font-size:.6rem">
-            {{ impact }}: {{ count }}
-          </span>
-          {% endfor %}
-        </div>
-        <button class="btn btn-sm btn-outline-warning w-100 run-btn" disabled
-                onclick="launchAudit('security', '')">
-          <i class="bi bi-play-fill me-1"></i>Run Security Scan
-        </button>
-      </div>
-    </div>
-    <div class="col-md-6">
-      <a href="{{ url_for('audits.inspectors_page') }}" class="catalogue-card d-block text-decoration-none" style="color:inherit">
-        <div class="d-flex align-items-start gap-2 mb-2">
-          <i class="bi bi-card-checklist text-info fs-4"></i>
-          <div>
-            <div class="fw-semibold">Browse Inspectors</div>
-            <span class="badge bg-info text-dark" style="font-size:.6rem">Reference</span>
-          </div>
-        </div>
-        <p class="small text-muted mb-3">View all {{ inspector_count }} security checks with descriptions, impact levels, remediation steps, and references.</p>
-        <span class="btn btn-sm btn-outline-info w-100">
-          <i class="bi bi-arrow-right me-1"></i>View All Inspectors
-        </span>
-      </a>
-    </div>
-  </div>
-</div>
-
-<!-- ================================================================
      BREACH INVESTIGATION
      ================================================================ -->
 <div class="catalogue-section" id="section-breach">
@@ -131,7 +45,7 @@
     <i class="bi bi-search section-icon text-danger"></i>
     <div>
       <h5 class="mb-0 fw-semibold">Breach Investigation</h5>
-      <small class="text-muted">Investigate compromised accounts — inbox rules, sign-in anomalies, consent grants, audit logs, and message traces.</small>
+      <small class="text-muted">Investigate compromised accounts — sign-in anomalies and consent grants.</small>
     </div>
   </div>
   <div class="row g-3">
@@ -147,7 +61,7 @@
         </div>
         <p class="small text-muted mb-3">{{ a.desc }}</p>
         <button class="btn btn-sm btn-outline-danger w-100 run-btn" disabled
-                onclick="launchAudit('breach', '{{ a.key }}')">
+                data-audit-category="breach" data-audit-type="{{ a.key }}">
           <i class="bi bi-play-fill me-1"></i>Run
         </button>
       </div>
@@ -177,13 +91,18 @@ tenantSelect?.addEventListener('change', function() {
     : 'Select a tenant to enable Run buttons';
 });
 
+// Attach click handlers to run buttons
+document.querySelectorAll('.run-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    launchAudit(this.dataset.auditCategory, this.dataset.auditType);
+  });
+});
+
 // Navigate to tenant-scoped audit page
 function launchAudit(category, type) {
   const tid = tenantSelect.value;
   if (!tid) { showToast('Select a tenant first', 'warning'); return; }
   const urls = {
-    spo:      `/tenants/${tid}/audit/spo` + (type ? `?type=${type}` : ''),
-    security: `/tenants/${tid}/audit/security`,
     breach:   `/tenants/${tid}/audit/breach` + (type ? `?type=${type}` : ''),
   };
   window.location.href = urls[category];

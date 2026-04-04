@@ -63,8 +63,8 @@
                 <td class="small">{{ b.started_at[:16] }}</td>
                 <td class="small">{{ b.components|length }}</td>
                 <td>
-                  <button class="btn btn-outline-danger btn-sm py-0 px-1"
-                          onclick="deleteBackup('{{ b.id }}')" title="Delete"><i class="bi bi-trash"></i></button>
+                  <button class="btn btn-outline-danger btn-sm py-0 px-1 delete-backup-btn"
+                          data-backup-id="{{ b.id }}" title="Delete"><i class="bi bi-trash"></i></button>
                 </td>
               </tr>
               {% else %}
@@ -81,6 +81,12 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.querySelectorAll('.delete-backup-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    deleteBackup(this.dataset.backupId);
+  });
+});
+
 document.getElementById('backup-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('backup-btn'); const spinner = document.getElementById('backup-spinner');

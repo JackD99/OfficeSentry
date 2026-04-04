@@ -58,8 +58,7 @@
       <div class="card-header fw-semibold d-flex align-items-center">
         <i class="bi bi-code-square me-2"></i>Response
         <span class="badge ms-2" id="response-badge"></span>
-        <button class="btn btn-outline-secondary btn-sm ms-auto py-0 px-2"
-                onclick="navigator.clipboard.writeText(document.getElementById('response-body').textContent);showToast('Copied!','success')">
+        <button class="btn btn-outline-secondary btn-sm ms-auto py-0 px-2" id="copy-response-btn">
           <i class="bi bi-clipboard me-1"></i>Copy
         </button>
       </div>
@@ -81,7 +80,7 @@
         <div class="list-group list-group-flush">
           {% for q in preset_queries %}
           <button class="list-group-item list-group-item-action small py-2"
-                  onclick="setPreset('{{ q.uri }}', '{{ q.method }}')">
+                  data-action="set-preset" data-uri="{{ q.uri }}" data-method="{{ q.method }}">
             <span class="badge bg-primary me-2">{{ q.method }}</span>{{ q.name }}
           </button>
           {% endfor %}
@@ -94,6 +93,16 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.getElementById('copy-response-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('response-body').textContent);
+  showToast('Copied!', 'success');
+});
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action="set-preset"]');
+  if (btn) setPreset(btn.dataset.uri, btn.dataset.method);
+});
+
 const methodSelect = document.querySelector('[name="method"]');
 methodSelect.addEventListener('change', () => {
   document.getElementById('body-section').classList.toggle('d-none', !['POST','PATCH'].includes(methodSelect.value));

@@ -85,8 +85,8 @@
               {% for c in group_colors %}
               <label>
                 <input type="radio" name="color" value="{{ c }}" {% if c == group.color %}checked{% endif %} class="d-none">
-                <span class="badge bg-{{ c }} px-3 py-2 border border-2 {% if c == group.color %}border-white{% else %}border-transparent{% endif %}"
-                      style="cursor:pointer" onclick="this.closest('.d-flex').querySelectorAll('.badge').forEach(b=>b.classList.replace('border-white','border-transparent'));this.classList.replace('border-transparent','border-white')">
+                <span class="badge bg-{{ c }} px-3 py-2 border border-2 {% if c == group.color %}border-white{% else %}border-transparent{% endif %} color-badge-option"
+                      style="cursor:pointer">
                   {{ c }}
                 </span>
               </label>
@@ -118,6 +118,13 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.querySelectorAll('.color-badge-option').forEach(badge => {
+  badge.addEventListener('click', () => {
+    badge.closest('.d-flex').querySelectorAll('.badge').forEach(b => b.classList.replace('border-white', 'border-transparent'));
+    badge.classList.replace('border-transparent', 'border-white');
+  });
+});
+
 document.getElementById('update-group-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const fd = new FormData(this);

@@ -13,7 +13,7 @@ The portal uses **certificate-based app-only authentication** (Entra ID / Azure 
 ```
 SPO-Audit-Toolkit/
 ├── CLAUDE.md                # This file — project context for Claude Code
-├── ROADMAP.md               # 7-phase development roadmap with implementation details
+├── ROADMAP.md               # Development roadmap — vision, priorities, phase tracking
 ├── README.md                # User-facing documentation and setup guide
 ├── CONTRIBUTING.md          # Development guidelines and conventions
 ├── SECURITY.md              # Security policy and vulnerability reporting

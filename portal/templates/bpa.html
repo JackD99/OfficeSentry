@@ -72,8 +72,8 @@
             {% endfor %}
           </div>
           <div class="mt-2">
-            <button type="button" class="btn btn-sm btn-outline-light me-1" onclick="document.querySelectorAll('.tenant-cb').forEach(c=>c.checked=true)">Select All</button>
-            <button type="button" class="btn btn-sm btn-outline-light me-1" onclick="document.querySelectorAll('.tenant-cb').forEach(c=>c.checked=false)">Clear All</button>
+            <button type="button" class="btn btn-sm btn-outline-light me-1" id="bpa-select-all">Select All</button>
+            <button type="button" class="btn btn-sm btn-outline-light me-1" id="bpa-clear-all">Clear All</button>
             <button type="submit" class="btn btn-sm btn-primary">
               <i class="bi bi-play-fill me-1"></i>Run BPA Scan
             </button>
@@ -198,6 +198,8 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.getElementById('bpa-select-all').addEventListener('click', () => document.querySelectorAll('.tenant-cb').forEach(c => c.checked = true));
+document.getElementById('bpa-clear-all').addEventListener('click', () => document.querySelectorAll('.tenant-cb').forEach(c => c.checked = false));
 document.getElementById('bpa-scan-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const checked = document.querySelectorAll('.tenant-cb:checked');

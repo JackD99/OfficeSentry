@@ -19,15 +19,97 @@ from helpers import (
     login_required, current_user,
     tenant_dir, tenant_pfx_path, tenant_cer_path, tenant_certs_dir,
     tenant_output_dir,
-    build_ps_env, run_ps_sync, start_job, get_tenant_pfx_password,
+    start_python_job, get_tenant_pfx_password,
     validate_domain, validate_tenant_guid, sanitize_text,
     get_admin_client_id,
-    SCRIPTS_DIR, MODULES_DIR, PWSH,
 )
 
 log = logging.getLogger("portal")
 
 bp = Blueprint("tenants", __name__)
+
+
+# ---------------------------------------------------------------------------
+# Cross-platform certificate generation (replaces Windows-only Setup-Cert.ps1)
+# ---------------------------------------------------------------------------
+
+def _generate_cert(subject: str, cer_path: Path, pfx_path: Path,
+                   years_valid: int, pfx_password: str) -> dict:
+    """Generate a self-signed certificate and export CER + PFX files.
+
+    Uses the ``cryptography`` library (already a project dependency) so this
+    works on macOS, Linux, and Windows — no PowerShell PKI module required.
+
+    Returns a dict matching the JSON contract of the old Setup-Cert.ps1 script:
+    ``{"ok": True, "thumbprint": "...", "notAfter": "...", "cerPath": "...", "pfxPath": "..."}``
+    """
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.serialization.pkcs12 import (
+            serialize_key_and_certificates,
+        )
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        import datetime
+
+        # Parse CN from subject string (e.g. "CN=Office Sentry")
+        cn = subject
+        if cn.upper().startswith("CN="):
+            cn = cn[3:]
+
+        # Generate RSA 2048 key
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+        # Build certificate
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
+        now = datetime.datetime.now(datetime.timezone.utc)
+        not_after = now + datetime.timedelta(days=years_valid * 365)
+
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now)
+            .not_valid_after(not_after)
+            .sign(key, hashes.SHA256())
+        )
+
+        # Thumbprint (SHA-1 fingerprint, matching Windows convention)
+        thumbprint = cert.fingerprint(hashes.SHA1()).hex().upper()
+
+        # Ensure output directories exist
+        cer_path.parent.mkdir(parents=True, exist_ok=True)
+        pfx_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Export CER (DER-encoded public certificate)
+        cer_path.write_bytes(cert.public_bytes(serialization.Encoding.DER))
+
+        # Export PFX / PKCS12 (private key + certificate, password-protected)
+        pfx_bytes = serialize_key_and_certificates(
+            name=cn.encode("utf-8"),
+            key=key,
+            cert=cert,
+            cas=None,
+            encryption_algorithm=serialization.BestAvailableEncryption(
+                pfx_password.encode("utf-8")
+            ),
+        )
+        pfx_path.write_bytes(pfx_bytes)
+
+        return {
+            "ok": True,
+            "thumbprint": thumbprint,
+            "notAfter": not_after.strftime("%Y-%m-%d"),
+            "cerPath": str(cer_path),
+            "pfxPath": str(pfx_path),
+        }
+
+    except Exception as exc:
+        log.error("Certificate generation failed: %s", exc)
+        return {"ok": False, "error": str(exc)}
 
 
 @bp.route("/tenants")
@@ -261,19 +343,12 @@ def tenant_cert(tenant_id):
     update_tenant(tenant_id,
                   pfx_password_enc=encrypt_value(password, current_app.secret_key))
 
-    cer = str(tenant_cer_path(tenant_id))
-    pfx = str(tenant_pfx_path(tenant_id))
+    cer_path = tenant_cer_path(tenant_id)
+    pfx_path = tenant_pfx_path(tenant_id)
     subject = t.get("cert_subject") or "CN=Office Sentry"
     years = int(t.get("cert_years_valid") or 2)
 
-    env = build_ps_env()
-    result = run_ps_sync(SCRIPTS_DIR / "Setup-Cert.ps1", [
-        "-Subject",     subject,
-        "-CerPath",     cer,
-        "-PfxPath",     pfx,
-        "-YearsValid",  str(years),
-        "-PfxPassword", password,
-    ], env=env, timeout=120)
+    result = _generate_cert(subject, cer_path, pfx_path, years, password)
 
     if result.get("ok"):
         log_action(current_user(), "cert_generated",
@@ -294,33 +369,20 @@ def tenant_app(tenant_id):
     if not Path(cer).exists():
         return jsonify({"ok": False, "error": "Certificate not found. Generate it first."})
 
-    admin_client_id = get_admin_client_id()
-    if not admin_client_id:
-        return jsonify({"ok": False, "error": (
-            "Admin Connector App not configured. "
-            "Go to Settings, register a public-client Entra app in your management tenant, "
-            "and enter its Client ID."
-        )})
+    # Use configured admin connector app or fall back to the well-known
+    # Microsoft Graph PowerShell client ID (supports device code flow)
+    admin_client_id = get_admin_client_id() or "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 
-    years      = int(t.get("cert_years_valid") or 2)
     app_name   = t.get("app_display_name") or "Office Sentry"
     tenant_val = t.get("tenant_id") or t.get("domain", "")
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Setup-App.ps1"),
-        "-AppDisplayName",  app_name,
-        "-CerPath",         cer,
-        "-CertYearsValid",  str(years),
-        "-ModulesPath",     str(MODULES_DIR),
-        "-AdminClientId",   admin_client_id,
-    ]
-    if tenant_val:
-        cmd += ["-TenantId", tenant_val]
-
-    env = build_ps_env()
-    job_id = start_job(f"Create Entra App — {t['name']}", "setup",
-                       cmd, tenant_id=tenant_id, env=env)
+    from graph_jobs import create_entra_app
+    job_id = start_python_job(
+        f"Create Entra App — {t['name']}", "setup",
+        create_entra_app,
+        args=(admin_client_id, cer, app_name, tenant_val),
+        tenant_id=tenant_id,
+    )
 
     log_action(current_user(), "app_creation_started",
                tenant_id=tenant_id, tenant_name=t["name"])
@@ -371,15 +433,14 @@ def tenant_remove_app(tenant_id):
     pfx = str(tenant_pfx_path(tenant_id))
     cer = str(tenant_cer_path(tenant_id))
 
-    env = build_ps_env()
-    job_id = start_job(f"Remove Entra App — {t['name']}", "setup", [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Setup-RemoveApp.ps1"),
-        "-ClientId",    client_id,
-        "-ModulesPath", str(MODULES_DIR),
-        "-PfxPath",     pfx,
-        "-CerPath",     cer,
-    ], tenant_id=tenant_id, env=env)
+    admin_cid = get_admin_client_id()
+    from graph_jobs import remove_entra_app
+    job_id = start_python_job(
+        f"Remove Entra App — {t['name']}", "setup",
+        remove_entra_app,
+        args=(admin_cid, client_id, pfx, cer),
+        tenant_id=tenant_id,
+    )
 
     update_tenant(tenant_id, client_id="", pfx_password_enc="")
     log_action(current_user(), "app_removal_started",

@@ -60,12 +60,12 @@
       </div>
       <div class="card-footer d-flex gap-2 border-secondary" style="background:var(--card-header-bg)">
         <button class="btn btn-sm btn-outline-{{ 'warning' if s.enabled else 'success' }} flex-fill"
-                onclick="toggleSchedule('{{ s.id }}', this)">
+                data-action="toggle-schedule" data-schedule-id="{{ s.id }}">
           <i class="bi bi-{% if s.enabled %}pause{% else %}play{% endif %}-circle me-1"></i>
           {{ 'Pause' if s.enabled else 'Enable' }}
         </button>
         <button class="btn btn-sm btn-outline-danger"
-                onclick="deleteSchedule('{{ s.id }}', '{{ s.name|e }}', this)">
+                data-action="delete-schedule" data-schedule-id="{{ s.id }}" data-schedule-name="{{ s.name|e }}">
           <i class="bi bi-trash"></i>
         </button>
       </div>
@@ -110,7 +110,7 @@
           </div>
           <div class="col-md-6">
             <label class="form-label small">Audit Type</label>
-            <select class="form-select form-select-sm" id="sched-audit-type" onchange="updateSchedParams()">
+            <select class="form-select form-select-sm" id="sched-audit-type">
               <optgroup label="Security">
                 <option value="security">Security Scan</option>
               </optgroup>
@@ -130,7 +130,7 @@
           </div>
           <div class="col-md-6">
             <label class="form-label small">Frequency</label>
-            <select class="form-select form-select-sm" id="sched-frequency" onchange="updateFreqFields()">
+            <select class="form-select form-select-sm" id="sched-frequency">
               <option value="daily">Daily</option>
               <option value="weekly" selected>Weekly</option>
               <option value="biweekly">Bi-weekly</option>
@@ -189,7 +189,7 @@
       </div>
       <div class="modal-footer border-secondary">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-sm btn-primary" onclick="createSchedule()">
+        <button type="button" class="btn btn-sm btn-primary" id="create-schedule-btn">
           <i class="bi bi-calendar-check me-1"></i>Create Schedule
         </button>
       </div>
@@ -200,6 +200,24 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+// Event delegation for schedule toggle/delete buttons
+document.addEventListener('click', function(e) {
+  const toggleBtn = e.target.closest('[data-action="toggle-schedule"]');
+  if (toggleBtn) {
+    toggleSchedule(toggleBtn.dataset.scheduleId, toggleBtn);
+    return;
+  }
+  const deleteBtn = e.target.closest('[data-action="delete-schedule"]');
+  if (deleteBtn) {
+    deleteSchedule(deleteBtn.dataset.scheduleId, deleteBtn.dataset.scheduleName, deleteBtn);
+    return;
+  }
+});
+
+document.getElementById('sched-audit-type').addEventListener('change', updateSchedParams);
+document.getElementById('sched-frequency').addEventListener('change', updateFreqFields);
+document.getElementById('create-schedule-btn').addEventListener('click', createSchedule);
+
 function updateFreqFields() {
   const freq = document.getElementById('sched-frequency').value;
   document.getElementById('sched-day-wrap').style.display = (freq === 'daily') ? 'none' : '';

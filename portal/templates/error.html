@@ -20,10 +20,16 @@
       <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-sm">
         <i class="bi bi-house me-1"></i>Dashboard
       </a>
-      <button onclick="history.back()" class="btn btn-outline-secondary btn-sm">
+      <button id="go-back-btn" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i>Go Back
       </button>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ g.csp_nonce }}">
+document.getElementById('go-back-btn').addEventListener('click', () => history.back());
+</script>
 {% endblock %}

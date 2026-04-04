@@ -45,10 +45,10 @@
                 <td class="small text-muted">{{ tmpl.created_by }}</td>
                 <td>
                   <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary" onclick="viewTemplate('{{ tmpl.id }}')" title="View">
+                    <button class="btn btn-outline-primary" data-action="view-template" data-template-id="{{ tmpl.id }}" title="View">
                       <i class="bi bi-eye"></i>
                     </button>
-                    <button class="btn btn-outline-danger" onclick="deleteTemplate('{{ tmpl.id }}', '{{ tmpl.name }}')" title="Delete">
+                    <button class="btn btn-outline-danger" data-action="delete-template" data-template-id="{{ tmpl.id }}" data-template-name="{{ tmpl.name }}" title="Delete">
                       <i class="bi bi-trash"></i>
                     </button>
                   </div>
@@ -135,11 +135,11 @@
           </div>
           <div class="mb-3">
             <label class="form-label small">Select Checks</label>
-            <div class="d-flex gap-1 mb-2">
-              <button type="button" class="btn btn-sm btn-outline-light" onclick="document.querySelectorAll('.check-cb').forEach(c=>c.checked=true)">All</button>
-              <button type="button" class="btn btn-sm btn-outline-light" onclick="document.querySelectorAll('.check-cb').forEach(c=>c.checked=false)">None</button>
+            <div class="d-flex gap-1 mb-2" id="check-filter-btns">
+              <button type="button" class="btn btn-sm btn-outline-light" data-action="select-all">All</button>
+              <button type="button" class="btn btn-sm btn-outline-light" data-action="select-none">None</button>
               {% for cat in bpa_checks|map(attribute='category')|unique %}
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleCategory('{{ cat }}')">{{ cat }}</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-action="toggle-category" data-category="{{ cat }}">{{ cat }}</button>
               {% endfor %}
             </div>
             <div style="max-height:350px; overflow-y:auto" class="border border-secondary rounded p-2">
@@ -188,6 +188,34 @@ function toggleCategory(cat) {
     if (cb.dataset.category === cat) cb.checked = !cb.checked;
   });
 }
+
+// Event delegation for template view/delete buttons
+document.addEventListener('click', function(e) {
+  const viewBtn = e.target.closest('[data-action="view-template"]');
+  if (viewBtn) {
+    viewTemplate(viewBtn.dataset.templateId);
+    return;
+  }
+  const deleteBtn = e.target.closest('[data-action="delete-template"]');
+  if (deleteBtn) {
+    deleteTemplate(deleteBtn.dataset.templateId, deleteBtn.dataset.templateName);
+    return;
+  }
+});
+
+// Event delegation for check filter buttons
+document.getElementById('check-filter-btns').addEventListener('click', function(e) {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'select-all') {
+    document.querySelectorAll('.check-cb').forEach(c => c.checked = true);
+  } else if (action === 'select-none') {
+    document.querySelectorAll('.check-cb').forEach(c => c.checked = false);
+  } else if (action === 'toggle-category') {
+    toggleCategory(btn.dataset.category);
+  }
+});
 
 function viewTemplate(id) {
   const modal = new bootstrap.Modal(document.getElementById('templateModal'));

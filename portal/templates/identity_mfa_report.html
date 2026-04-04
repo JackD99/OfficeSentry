@@ -37,7 +37,7 @@
           <div class="mb-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0">Select Tenants</label>
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-all-btn">
                 Select All
               </button>
             </div>
@@ -89,6 +89,8 @@ function updateCount() {
   document.getElementById('selected-count').textContent =
     document.querySelectorAll('.tenant-check:checked').length;
 }
+
+document.getElementById('toggle-all-btn')?.addEventListener('click', toggleAllTenants);
 
 function toggleAllTenants() {
   const checks = document.querySelectorAll('.tenant-check');

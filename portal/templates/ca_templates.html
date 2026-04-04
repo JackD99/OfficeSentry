@@ -31,8 +31,8 @@
             <td class="small">{{ t.description[:80] }}{{ '...' if t.description|length > 80 else '' }}</td>
             <td class="small">{{ t.created_at[:10] }}</td>
             <td>
-              <button class="btn btn-outline-danger btn-sm py-0 px-1"
-                      onclick="deleteTemplate('{{ t.id }}', '{{ t.name }}')" title="Delete">
+              <button class="btn btn-outline-danger btn-sm py-0 px-1 delete-template-btn"
+                      data-template-id="{{ t.id }}" data-template-name="{{ t.name }}" title="Delete">
                 <i class="bi bi-trash"></i>
               </button>
             </td>
@@ -94,6 +94,10 @@ document.getElementById('add-template-form').addEventListener('submit', async (e
   const d = await r.json();
   if (d.ok) { showToast(d.message, 'success'); setTimeout(() => location.reload(), 1000); }
   else { showToast(d.error, 'danger'); }
+});
+
+document.querySelectorAll('.delete-template-btn').forEach(btn => {
+  btn.addEventListener('click', () => deleteTemplate(btn.dataset.templateId, btn.dataset.templateName));
 });
 
 async function deleteTemplate(id, name) {

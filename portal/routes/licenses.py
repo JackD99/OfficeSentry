@@ -18,10 +18,8 @@ from database import (
 )
 from helpers import (
     login_required, current_user,
-    tenant_pfx_path, tenant_output_dir,
-    build_ps_env, start_job, get_tenant_pfx_password,
+    tenant_pfx_path, start_python_job, get_tenant_pfx_password,
     sanitize_text,
-    SCRIPTS_DIR, PWSH,
 )
 
 log = logging.getLogger("portal")
@@ -53,23 +51,16 @@ def licenses_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-LicenseReport.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "inventory",
-    ]
-
-    jid = start_job(f"License Inventory — {t['name']}", "licenses", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_license_report
+    jid = start_python_job(
+        f"License Inventory — {t['name']}", "licenses",
+        fetch_license_report,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "inventory"},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "licenses_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -99,10 +90,7 @@ def license_usage_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
 
     inactive_days = request.form.get("inactive_days", "90").strip()
     try:
@@ -110,19 +98,14 @@ def license_usage_fetch(tenant_id):
     except ValueError:
         inactive_days = "90"
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-LicenseReport.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "usage",
-        "-InactiveDays", inactive_days,
-    ]
-
-    jid = start_job(f"License Usage — {t['name']}", "licenses", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_license_report
+    jid = start_python_job(
+        f"License Usage — {t['name']}", "licenses",
+        fetch_license_report,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "usage", "inactive_days": int(inactive_days)},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "license_usage_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Inactive days threshold: {inactive_days}")
@@ -153,23 +136,16 @@ def license_optimization_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-LicenseReport.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "optimization",
-    ]
-
-    jid = start_job(f"License Optimization — {t['name']}", "licenses", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_license_report
+    jid = start_python_job(
+        f"License Optimization — {t['name']}", "licenses",
+        fetch_license_report,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "optimization"},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "license_optimization_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -205,23 +181,16 @@ def license_overview_scan():
         if not pfx_pass:
             continue
 
-        tenant_val = t["tenant_id"] or t["domain"]
         pfx_path = str(tenant_pfx_path(tid))
-        out_dir = str(tenant_output_dir(tid))
-        env = build_ps_env(pfx_pass)
 
-        cmd = [
-            PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-            str(SCRIPTS_DIR / "Get-LicenseReport.ps1"),
-            "-Tenant", tenant_val,
-            "-ClientId", t["client_id"],
-            "-CertificatePath", pfx_path,
-            "-OutputFolder", out_dir,
-            "-ReportType", "overview",
-        ]
-
-        jid = start_job(f"License Overview — {t['name']}", "licenses",
-                        cmd, tenant_id=tid, env=env)
+        from graph_jobs import fetch_license_report
+        jid = start_python_job(
+            f"License Overview — {t['name']}", "licenses",
+            fetch_license_report,
+            args=(dict(t), pfx_path, pfx_pass),
+            kwargs={"report_type": "overview"},
+            tenant_id=tid,
+        )
         job_ids.append(jid)
 
     log_action(current_user(), "license_overview_scan",
@@ -258,23 +227,16 @@ def license_user_detail_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-LicenseReport.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "userDetail",
-    ]
-
-    jid = start_job(f"User Licenses — {t['name']}", "licenses", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_license_report
+    jid = start_python_job(
+        f"User Licenses — {t['name']}", "licenses",
+        fetch_license_report,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "userDetail"},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "license_user_detail_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})

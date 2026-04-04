@@ -33,7 +33,7 @@
 
             <!-- Security -->
             <div class="small fw-semibold text-muted mb-0"><i class="bi bi-shield-exclamation me-1"></i>Security</div>
-            <div class="audit-card active d-flex align-items-start gap-2" data-type="security" onclick="selectBatchType(this)">
+            <div class="audit-card active d-flex align-items-start gap-2" data-type="security" >
               <span class="card-icon text-warning"><i class="bi bi-shield-exclamation"></i></span>
               <div>
                 <div class="card-title">Security Scan</div>
@@ -43,21 +43,21 @@
 
             <!-- SharePoint -->
             <div class="small fw-semibold text-muted mb-0 mt-2"><i class="bi bi-diagram-3 me-1"></i>SharePoint</div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_groups" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_groups" >
               <span class="card-icon text-primary"><i class="bi bi-people"></i></span>
               <div>
                 <div class="card-title">Groups Audit</div>
                 <div class="card-desc">Lists all SP groups, members, and permission levels for a specific site.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_permissions" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_permissions" >
               <span class="card-icon text-warning"><i class="bi bi-shield-lock"></i></span>
               <div>
                 <div class="card-title">Site Permissions</div>
                 <div class="card-desc">Full snapshot of who has access — includes unique permissions at list and item level.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_external" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="spo_external" >
               <span class="card-icon text-info"><i class="bi bi-globe"></i></span>
               <div>
                 <div class="card-title">External Sharing</div>
@@ -67,35 +67,35 @@
 
             <!-- Breach Investigation -->
             <div class="small fw-semibold text-muted mb-0 mt-2"><i class="bi bi-search me-1"></i>Breach Investigation</div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_ual" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_ual" >
               <span class="card-icon text-primary"><i class="bi bi-journal-text"></i></span>
               <div>
                 <div class="card-title">Unified Audit Log</div>
                 <div class="card-desc">File access, admin actions, mailbox changes, login events.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_inbox" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_inbox" >
               <span class="card-icon text-danger"><i class="bi bi-inbox"></i></span>
               <div>
                 <div class="card-title">Inbox Rules</div>
                 <div class="card-desc">Checks for suspicious forwarding, deletion, and redirect rules (BEC indicator).</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_signin" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_signin" >
               <span class="card-icon text-warning"><i class="bi bi-box-arrow-in-right"></i></span>
               <div>
                 <div class="card-title">Sign-In Logs</div>
                 <div class="card-desc">Azure AD sign-in history — failed attempts, unusual locations, risky sign-ins.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_oauth" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_oauth" >
               <span class="card-icon text-info"><i class="bi bi-key"></i></span>
               <div>
                 <div class="card-title">OAuth Consent</div>
                 <div class="card-desc">Reviews third-party app permissions — detects consent phishing.</div>
               </div>
             </div>
-            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_msgtrace" onclick="selectBatchType(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-type="breach_msgtrace" >
               <span class="card-icon text-secondary"><i class="bi bi-envelope-arrow-up"></i></span>
               <div>
                 <div class="card-title">Message Trace</div>
@@ -137,9 +137,9 @@
             <div class="mb-3">
               <label class="form-label">Date Range</label>
               <div class="d-flex gap-1 flex-wrap mb-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setBatchRange(7)">7 days</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary active" onclick="setBatchRange(30)">30 days</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setBatchRange(90)">90 days</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-batch-range="7">7 days</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary active" data-batch-range="30">30 days</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-batch-range="90">90 days</button>
               </div>
               <div class="row g-2">
                 <div class="col-6">
@@ -156,7 +156,7 @@
           <div class="mb-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0">Select Tenants</label>
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="batch-toggle-all">
                 Select All
               </button>
             </div>
@@ -199,6 +199,12 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+// Event listeners for buttons
+document.querySelectorAll('[data-batch-range]').forEach(btn => {
+  btn.addEventListener('click', () => setBatchRange(parseInt(btn.dataset.batchRange), btn));
+});
+document.getElementById('batch-toggle-all').addEventListener('click', () => toggleAllTenants());
+
 // --- Type selection ---
 function selectBatchType(card) {
   document.querySelectorAll('#batch-cards .audit-card').forEach(c => c.classList.remove('active'));
@@ -239,14 +245,14 @@ function toggleAllTenants() {
 }
 
 // --- Breach date presets ---
-function setBatchRange(days) {
+function setBatchRange(days, clickedBtn) {
   const end = new Date();
   const start = new Date();
   start.setDate(start.getDate() - days);
   document.getElementById('batch-date-start').value = start.toISOString().slice(0, 10);
   document.getElementById('batch-date-end').value = end.toISOString().slice(0, 10);
-  document.querySelectorAll('[onclick^="setBatchRange"]').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  document.querySelectorAll('[data-batch-range]').forEach(b => b.classList.remove('active'));
+  if (clickedBtn) clickedBtn.classList.add('active');
 }
 
 // --- Batch submission + per-tenant progress ---

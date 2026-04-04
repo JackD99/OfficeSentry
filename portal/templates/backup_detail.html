@@ -41,8 +41,7 @@
     <div class="card">
       <div class="card-header fw-semibold d-flex align-items-center">
         <i class="bi bi-code-square me-2"></i>Backup Data
-        <button class="btn btn-outline-secondary btn-sm ms-auto py-0 px-2"
-                onclick="navigator.clipboard.writeText(document.getElementById('backup-data').textContent);showToast('Copied!','success')">
+        <button class="btn btn-outline-secondary btn-sm ms-auto py-0 px-2" id="copy-backup-btn">
           <i class="bi bi-clipboard me-1"></i>Copy
         </button>
       </div>
@@ -52,4 +51,13 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ g.csp_nonce }}">
+document.getElementById('copy-backup-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('backup-data').textContent);
+  showToast('Copied!', 'success');
+});
+</script>
 {% endblock %}

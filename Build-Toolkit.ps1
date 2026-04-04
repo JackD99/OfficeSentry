@@ -17,7 +17,6 @@ $mods = @(
   "Microsoft.Graph.Users",
   "Microsoft.Graph.Groups",
   "Microsoft.Graph.DirectoryObjects",
-  "Microsoft.Online.SharePoint.PowerShell",
   "ExchangeOnlineManagement",
   "ImportExcel"
 )

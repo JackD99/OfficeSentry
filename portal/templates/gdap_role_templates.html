@@ -24,7 +24,7 @@
     <i class="bi bi-collection me-2"></i>{{ t.name }}
     <span class="badge bg-primary ms-2">{{ t.roles|length }} role(s)</span>
     <button class="btn btn-outline-danger btn-sm ms-auto py-0 px-1"
-            onclick="deleteTemplate('{{ t.id }}', '{{ t.name }}')" title="Delete"><i class="bi bi-trash"></i></button>
+            data-action="delete-template" data-template-id="{{ t.id }}" data-template-name="{{ t.name }}" title="Delete"><i class="bi bi-trash"></i></button>
   </div>
   <div class="card-body">
     {% if t.description %}<p class="small text-muted mb-2">{{ t.description }}</p>{% endif %}
@@ -80,6 +80,13 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-action="delete-template"]');
+  if (btn) {
+    deleteTemplate(btn.dataset.templateId, btn.dataset.templateName);
+  }
+});
+
 document.getElementById('add-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target); fd.append('csrf_token', window.CSRF_TOKEN);

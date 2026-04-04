@@ -20,9 +20,8 @@ from database import (
 )
 from helpers import (
     login_required, current_user,
-    tenant_pfx_path, build_ps_env, start_job, get_tenant_pfx_password,
-    sanitize_text,
-    SCRIPTS_DIR, PWSH,
+    tenant_pfx_path, start_python_job,
+    get_tenant_pfx_password, sanitize_text,
 )
 
 log = logging.getLogger("portal")
@@ -106,20 +105,15 @@ def tenant_domains_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-TenantDomains.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-    ]
-
-    jid = start_job(f"Fetch Domains — {t['name']}", "tenant_admin", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_tenant_domains
+    jid = start_python_job(
+        f"Fetch Domains — {t['name']}", "tenant_admin",
+        fetch_tenant_domains,
+        args=(dict(t), pfx_path, pfx_pass),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "domains_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -150,20 +144,15 @@ def tenant_auth_methods_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-AuthMethods.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-    ]
-
-    jid = start_job(f"Fetch Auth Methods — {t['name']}", "tenant_admin", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_auth_methods
+    jid = start_python_job(
+        f"Fetch Auth Methods — {t['name']}", "tenant_admin",
+        fetch_auth_methods,
+        args=(dict(t), pfx_path, pfx_pass),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "auth_methods_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -194,20 +183,15 @@ def tenant_partner_relationships_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-PartnerRelationships.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-    ]
-
-    jid = start_job(f"Fetch Partner Relationships — {t['name']}", "tenant_admin", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_partner_relationships
+    jid = start_python_job(
+        f"Fetch Partner Relationships — {t['name']}", "tenant_admin",
+        fetch_partner_relationships,
+        args=(dict(t), pfx_path, pfx_pass),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "partner_relationships_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -238,20 +222,15 @@ def tenant_app_consent_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-AppConsentRequests.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-    ]
-
-    jid = start_job(f"Fetch App Consent — {t['name']}", "tenant_admin", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_app_consent_requests
+    jid = start_python_job(
+        f"Fetch App Consent — {t['name']}", "tenant_admin",
+        fetch_app_consent_requests,
+        args=(dict(t), pfx_path, pfx_pass),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "app_consent_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -288,21 +267,15 @@ def tenant_applications_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-AppRegistrations.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-DataType", data_type,
-    ]
-
-    jid = start_job(f"Fetch Applications — {t['name']}", "tenant_admin", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_app_registrations
+    jid = start_python_job(
+        f"Fetch Applications — {t['name']}", "tenant_admin",
+        fetch_app_registrations,
+        args=(dict(t), pfx_path, pfx_pass, data_type),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "applications_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Type: {data_type}")
@@ -334,27 +307,18 @@ def tenant_directory_audits_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
-
     start_date = request.form.get("start_date", "").strip()
     end_date = request.form.get("end_date", "").strip()
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-DirectoryAuditLogs.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-    ]
-    if start_date:
-        cmd += ["-StartDate", start_date]
-    if end_date:
-        cmd += ["-EndDate", end_date]
-
-    jid = start_job(f"Fetch Directory Audits — {t['name']}", "tenant_admin", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_directory_audit_logs
+    jid = start_python_job(
+        f"Fetch Directory Audits — {t['name']}", "tenant_admin",
+        fetch_directory_audit_logs,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"start_date": start_date, "end_date": end_date},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "directory_audits_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})

@@ -104,12 +104,6 @@
       <div class="card-header fw-semibold"><i class="bi bi-lightning me-2 text-warning"></i>Audit Actions</div>
       <div class="card-body">
         <div class="d-flex gap-2 flex-wrap">
-          <a href="{{ url_for('audits.audit_spo', tenant_id=tenant.id) }}" class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-diagram-3 me-1"></i>SPO Audit
-          </a>
-          <a href="{{ url_for('audits.audit_security', tenant_id=tenant.id) }}" class="btn btn-outline-warning btn-sm">
-            <i class="bi bi-shield-exclamation me-1"></i>Security Scan
-          </a>
           <a href="{{ url_for('audits.audit_breach', tenant_id=tenant.id) }}" class="btn btn-outline-danger btn-sm">
             <i class="bi bi-search me-1"></i>Breach Investigation
           </a>
@@ -119,7 +113,7 @@
           <a href="{{ url_for('jobs.jobs_page', tenant_id=tenant.id) }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-activity me-1"></i>Jobs
           </a>
-          <button class="btn btn-outline-info btn-sm" onclick="runHealthCheck()" id="health-btn">
+          <button class="btn btn-outline-info btn-sm" id="health-btn">
             <span class="spinner-border spinner-border-sm d-none me-1" id="health-spinner"></span>
             <i class="bi bi-heart-pulse me-1"></i>Health Check
           </button>
@@ -200,32 +194,11 @@
         <div id="step2" class="accordion-collapse collapse {{ 'show' if cert_exists and not tenant.client_id }}" data-bs-parent="#setupAccordion">
           <div class="accordion-body">
 
-            {% if not admin_connector_configured %}
-            <div class="alert alert-warning small py-2 mb-3">
-              <strong><i class="bi bi-exclamation-triangle me-1"></i>One-time setup required before this step.</strong>
-              <p class="mb-1 mt-1">Microsoft Graph PowerShell requires a custom Entra app registered in your
-                <em>management tenant</em> to show the device-code login prompt. Without it, Windows will silently
-                reuse your own cached session and fail.</p>
-              <p class="mb-1 fw-semibold">Do this once in your management tenant (your MSP's own tenant):</p>
-              <ol class="mb-1 ps-3">
-                <li>Go to <strong>Entra ID → App registrations → New registration</strong></li>
-                <li>Name: <em>Office Sentry Admin Connector</em></li>
-                <li>Supported account types: <strong>Accounts in any organizational directory (Multi-tenant)</strong></li>
-                <li>No redirect URI — click Register</li>
-                <li>Open the app → <strong>Authentication → Advanced settings</strong></li>
-                <li>Set <strong>Allow public client flows → Yes</strong> and save</li>
-                <li>Copy the <strong>Application (client) ID</strong></li>
-                <li>Go to <a href="{{ url_for('auth.settings_page') }}" target="_blank"><strong>Settings → Admin Connector App</strong></a> and paste it</li>
-              </ol>
-              <p class="mb-0 text-muted">The connector app needs no API permissions — it requests them from the client admin at sign-in time.</p>
-            </div>
-            <button class="btn btn-secondary btn-sm" disabled>
-              <i class="bi bi-lock me-1"></i>Create Entra App — configure connector first
-            </button>
-
-            {% else %}
             <p class="text-muted small mb-2">
               Registers an app in the <strong>client's</strong> Entra tenant with all required API permissions.
+              {% if admin_connector_configured %}
+              <span class="badge bg-success">Custom connector configured</span>
+              {% endif %}
             </p>
             <div class="alert alert-info small py-2 mb-3">
               <strong><i class="bi bi-info-circle me-1"></i>How this works:</strong>
@@ -237,11 +210,10 @@
                 <li>The app is created in the client's tenant — Client ID is saved automatically</li>
               </ol>
             </div>
-            <button class="btn btn-primary btn-sm" id="app-btn" onclick="createApp()">
+            <button class="btn btn-primary btn-sm" id="app-btn">
               <span class="spinner-border spinner-border-sm d-none me-1" id="app-spinner"></span>
               Create Entra App
             </button>
-            {% endif %}
 
             <div class="mt-3 d-none" id="app-result"></div>
 
@@ -263,11 +235,9 @@
                     <div class="d-flex align-items-center gap-2 mb-2">
                       <code class="fs-4 fw-bold px-3 py-1 bg-dark rounded user-select-all" id="device-code-value"
                             style="letter-spacing:0.15em;cursor:pointer;border:2px dashed var(--bs-warning)"
-                            title="Click to copy"
-                            onclick="navigator.clipboard.writeText(this.textContent.trim());showToast('Code copied!','success')">
+                            title="Click to copy">
                       </code>
-                      <button type="button" class="btn btn-outline-light btn-sm"
-                              onclick="navigator.clipboard.writeText(document.getElementById('device-code-value').textContent.trim());showToast('Code copied!','success')">
+                      <button type="button" class="btn btn-outline-light btn-sm" id="device-code-copy-btn">
                         <i class="bi bi-clipboard me-1"></i>Copy
                       </button>
                     </div>
@@ -303,8 +273,7 @@
                 <strong>Reset Setup</strong> — clears local certificates and credentials so you can restart from Step 1.
                 Does <em>not</em> remove the Entra app from the client's tenant.
               </p>
-              <button class="btn btn-warning btn-sm" id="reset-btn"
-                      onclick="if(confirm('Reset setup? This deletes local certs and clears the Client ID. The Entra app (if any) will remain in the client tenant.')) resetSetup()">
+              <button class="btn btn-warning btn-sm" id="reset-btn">
                 <span class="spinner-border spinner-border-sm d-none me-1" id="reset-spinner"></span>
                 <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Setup
               </button>
@@ -315,8 +284,7 @@
                 <strong>Remove Entra App</strong> — deletes the app registration from the client's Entra tenant and removes local certs.
                 Requires Graph authentication.
               </p>
-              <button class="btn btn-danger btn-sm" id="remove-btn"
-                      onclick="if(confirm('Delete the Entra app and certificates for this tenant?')) removeApp()">
+              <button class="btn btn-danger btn-sm" id="remove-btn">
                 <span class="spinner-border spinner-border-sm d-none me-1" id="remove-spinner"></span>
                 <i class="bi bi-trash me-1"></i>Remove Entra App
               </button>
@@ -420,7 +388,7 @@
     <div class="card border-danger">
       <div class="card-body">
         <form method="POST" action="{{ url_for('tenants.tenant_delete', tenant_id=tenant.id) }}"
-              onsubmit="return confirm('Delete tenant {{ tenant.name }}? This removes all local data.')">
+              id="delete-tenant-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-outline-danger btn-sm w-100">
             <i class="bi bi-trash me-1"></i>Delete Tenant
@@ -474,12 +442,27 @@ async function createApp() {
   const btn = document.getElementById('app-btn');
   const spinner = document.getElementById('app-spinner');
   btn.disabled = true; spinner.classList.remove('d-none');
-  const fd = csrfFormData();
-  const res = await fetch(`/tenants/${TENANT_ID}/app`, { method: 'POST', body: fd });
-  const data = await res.json();
-  if (!data.ok) {
+  let data;
+  try {
+    const fd = csrfFormData();
+    const res = await fetch(`/tenants/${TENANT_ID}/app`, { method: 'POST', body: fd });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('createApp HTTP error:', res.status, text);
+      spinner.classList.add('d-none'); btn.disabled = false;
+      showResult(document.getElementById('app-result'), {ok: false, error: `HTTP ${res.status}: ${text.substring(0, 200)}`});
+      return;
+    }
+    data = await res.json();
+    if (!data.ok) {
+      spinner.classList.add('d-none'); btn.disabled = false;
+      showResult(document.getElementById('app-result'), data);
+      return;
+    }
+  } catch (err) {
+    console.error('createApp error:', err);
     spinner.classList.add('d-none'); btn.disabled = false;
-    showResult(document.getElementById('app-result'), data);
+    showResult(document.getElementById('app-result'), {ok: false, error: err.message});
     return;
   }
 
@@ -500,15 +483,23 @@ async function createApp() {
       logEl.scrollTop = logEl.scrollHeight;
     }
 
-    // Detect device code from MSAL.PS output
+    // Detect device code from job output
     if (!codeFound) {
       const fullOutput = d.output.join('\n');
-      const codeMatch = fullOutput.match(/enter the code\s+([A-Z0-9]{6,12})\s/i);
+      const codeMatch = fullOutput.match(/enter the code[:\s]+([A-Z0-9]{4,12})\b/i);
       if (codeMatch) {
         codeFound = true;
-        codeEl.textContent = codeMatch[1];
+        const code = codeMatch[1];
+        codeEl.textContent = code;
         banner.classList.remove('d-none');
-        showToast('Device code ready — sign in as the client admin', 'warning');
+        // Auto-copy to clipboard
+        navigator.clipboard.writeText(code).then(() => {
+          showToast(`Code ${code} copied to clipboard! Opening login page...`, 'warning');
+        }).catch(() => {
+          showToast(`Device code: ${code} — sign in as the client admin`, 'warning');
+        });
+        // Auto-open devicelogin in a new tab after a short delay
+        setTimeout(() => window.open('https://microsoft.com/devicelogin', '_blank'), 500);
       }
     }
 
@@ -555,6 +546,7 @@ async function createApp() {
     }
   }, 2000);
 }
+document.getElementById('app-btn').addEventListener('click', createApp);
 
 // Reset setup (local only)
 async function resetSetup() {
@@ -665,13 +657,13 @@ function renderAgentUI(data) {
         </div>
       </div>
       <div class="d-flex flex-wrap gap-2 mb-3">
-        <button class="btn btn-outline-primary btn-sm" onclick="showCommandModal()">
+        <button class="btn btn-outline-primary btn-sm" data-action="showCommandModal">
           <i class="bi bi-terminal me-1"></i>Send Command
         </button>
-        <button class="btn btn-outline-warning btn-sm" onclick="rotateAgent()">
+        <button class="btn btn-outline-warning btn-sm" data-action="rotateAgent">
           <i class="bi bi-arrow-repeat me-1"></i>Rotate Credentials
         </button>
-        <button class="btn btn-outline-danger btn-sm" onclick="revokeAgent()">
+        <button class="btn btn-outline-danger btn-sm" data-action="revokeAgent">
           <i class="bi bi-x-circle me-1"></i>Revoke Agent
         </button>
       </div>
@@ -680,7 +672,7 @@ function renderAgentUI(data) {
         <div class="input-group input-group-sm">
           <input type="text" class="form-control" id="server-names-input"
                  placeholder="server1, server2" value="${servers !== 'None detected' ? servers : ''}">
-          <button class="btn btn-outline-secondary" onclick="updateServerNames()">
+          <button class="btn btn-outline-secondary" data-action="updateServerNames">
             <i class="bi bi-save"></i> Save
           </button>
         </div>
@@ -701,7 +693,7 @@ function renderAgentUI(data) {
         <a href="/tenants/${TENANT_ID}/ad-agent/download" class="btn btn-primary btn-sm">
           <i class="bi bi-download me-1"></i>Download Agent (Tenant-Specific)
         </a>
-        <button class="btn btn-outline-info btn-sm" onclick="checkHybrid()">
+        <button class="btn btn-outline-info btn-sm" data-action="checkHybrid">
           <i class="bi bi-search me-1"></i>Detect Hybrid Identity
         </button>
       </div>
@@ -788,7 +780,7 @@ function showCommandModal() {
       <label class="form-label small">Parameters (JSON)</label>
       <textarea class="form-control form-control-sm font-monospace" id="cmd-params" rows="3">{}</textarea>
     </div>
-    <button class="btn btn-primary btn-sm" onclick="sendCommand()">
+    <button class="btn btn-primary btn-sm" data-action="sendCommand">
       <i class="bi bi-send me-1"></i>Send
     </button>
     <div class="mt-2 d-none" id="cmd-result"></div>
@@ -828,6 +820,33 @@ async function sendCommand() {
 
 // Load agent status on page load
 loadAgentStatus();
+
+// Event listeners for buttons (inline onclick blocked by CSP nonce policy)
+document.getElementById('health-btn').addEventListener('click', () => runHealthCheck());
+document.getElementById('delete-tenant-form').addEventListener('submit', (e) => {
+  if (!confirm('Delete tenant {{ tenant.name }}? This removes all local data.')) e.preventDefault();
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (confirm('Reset setup? This deletes local certs and clears the Client ID. The Entra app (if any) will remain in the client tenant.')) resetSetup();
+});
+document.getElementById('remove-btn').addEventListener('click', () => {
+  if (confirm('Delete the Entra app and certificates for this tenant?')) removeApp();
+});
+document.getElementById('device-code-value').addEventListener('click', function() {
+  navigator.clipboard.writeText(this.textContent.trim()); showToast('Code copied!', 'success');
+});
+document.getElementById('device-code-copy-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('device-code-value').textContent.trim()); showToast('Code copied!', 'success');
+});
+
+// Event delegation for dynamically generated agent buttons
+document.getElementById('agent-status-area').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const actions = { showCommandModal, rotateAgent, revokeAgent, updateServerNames, checkHybrid, sendCommand };
+  const fn = actions[btn.dataset.action];
+  if (fn) fn();
+});
 
 // Health check
 async function runHealthCheck() {

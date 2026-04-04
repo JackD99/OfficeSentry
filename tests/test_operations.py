@@ -36,9 +36,7 @@ class TestOperationsPage:
         db.update_tenant(tid, client_id="fake-client")
         resp = authed_client.get("/operations")
         assert b"User Management" in resp.data
-        assert b"Exchange Online" in resp.data
         assert b"Microsoft Teams" in resp.data
-        assert b"SharePoint" in resp.data
 
     def test_operations_page_shows_empty_state(self, authed_client):
         """When no tenants are configured, show guidance."""
@@ -114,31 +112,9 @@ class TestOperationsRun:
         assert data["ok"] is False
         assert "PFX" in data["error"]
 
-    def test_run_set_forwarding_requires_forward_to(self, authed_client):
-        resp = authed_client.post("/operations/run", data={
-            "action": "set_forwarding",
-            "tenant_id": "fake",
-            "target_user": "user@test.com",
-            "forward_to": "",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "Forwarding" in data["error"]
-
-    def test_run_invalid_forward_email(self, authed_client):
-        resp = authed_client.post("/operations/run", data={
-            "action": "set_forwarding",
-            "tenant_id": "fake",
-            "target_user": "user@test.com",
-            "forward_to": "bad-email",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "Invalid forwarding" in data["error"]
-
-    @patch("routes.operations.start_job", return_value="test-job-1")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="test-job-1")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_run_successful_block(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid = db.create_tenant("TestCo", "testco.onmicrosoft.com")
         db.update_tenant(tid, client_id="fake-client-id")
@@ -154,9 +130,9 @@ class TestOperationsRun:
         assert data["job_id"] == "test-job-1"
         mock_start.assert_called_once()
 
-    @patch("routes.operations.start_job", return_value="test-job-2")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_python_job", return_value="test-job-2")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.routes.tenant_pfx_path")
     def test_run_successful_license_report(self, mock_pfx, mock_pass, mock_start, authed_client):
         """License report does not require a target_user."""
         tid = db.create_tenant("LicTest", "lic.onmicrosoft.com")
@@ -171,26 +147,6 @@ class TestOperationsRun:
         assert data["ok"] is True
         assert data["job_id"] == "test-job-2"
 
-    @patch("routes.operations.start_job", return_value="test-job-3")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
-    def test_run_successful_offboard(self, mock_pfx, mock_pass, mock_start, authed_client):
-        tid = db.create_tenant("OffCo", "off.onmicrosoft.com")
-        db.update_tenant(tid, client_id="fake-client-id")
-        mock_pfx.return_value = Path("/fake/path.pfx")
-
-        resp = authed_client.post("/operations/run", data={
-            "action": "offboard",
-            "tenant_id": tid,
-            "target_user": "leaver@off.com",
-            "ooo_message": "This person has left the company.",
-            "forward_to": "manager@off.com",
-            "skip_convert": "",
-            "skip_licenses": "on",
-        })
-        data = resp.get_json()
-        assert data["ok"] is True
-
     # --- Teams operations ---
 
     def test_run_team_name_required(self, authed_client):
@@ -203,9 +159,9 @@ class TestOperationsRun:
         assert data["ok"] is False
         assert "Team name" in data["error"]
 
-    @patch("routes.operations.start_job", return_value="teams-job-1")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="teams-job-1")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_run_successful_list_teams(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid = db.create_tenant("TeamsCo", "teams.onmicrosoft.com")
         db.update_tenant(tid, client_id="fake-client-id")
@@ -219,9 +175,9 @@ class TestOperationsRun:
         assert data["ok"] is True
         assert data["job_id"] == "teams-job-1"
 
-    @patch("routes.operations.start_job", return_value="teams-job-2")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="teams-job-2")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_run_successful_add_team_member(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid = db.create_tenant("TeamAdd", "teamadd.onmicrosoft.com")
         db.update_tenant(tid, client_id="fake-client-id")
@@ -236,125 +192,11 @@ class TestOperationsRun:
         data = resp.get_json()
         assert data["ok"] is True
 
-    # --- Exchange admin operations ---
-
-    def test_run_group_name_required(self, authed_client):
-        resp = authed_client.post("/operations/run", data={
-            "action": "distro_members",
-            "tenant_id": "fake",
-            "group_name": "",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "Group name" in data["error"]
-
-    @patch("routes.operations.start_job", return_value="exch-job-1")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
-    def test_run_successful_mailbox_sizes(self, mock_pfx, mock_pass, mock_start, authed_client):
-        tid = db.create_tenant("ExchCo", "exch.onmicrosoft.com")
-        db.update_tenant(tid, client_id="fake-client-id")
-        mock_pfx.return_value = Path("/fake/path.pfx")
-
-        resp = authed_client.post("/operations/run", data={
-            "action": "mailbox_sizes",
-            "tenant_id": tid,
-        })
-        data = resp.get_json()
-        assert data["ok"] is True
-        assert data["job_id"] == "exch-job-1"
-
-    @patch("routes.operations.start_job", return_value="exch-job-2")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
-    def test_run_successful_set_mailbox_perms(self, mock_pfx, mock_pass, mock_start, authed_client):
-        tid = db.create_tenant("PermCo", "perm.onmicrosoft.com")
-        db.update_tenant(tid, client_id="fake-client-id")
-        mock_pfx.return_value = Path("/fake/path.pfx")
-
-        resp = authed_client.post("/operations/run", data={
-            "action": "set_mailbox_perms",
-            "tenant_id": tid,
-            "target_user": "owner@perm.com",
-            "delegate_user": "assistant@perm.com",
-            "permission_type": "FullAccess",
-        })
-        data = resp.get_json()
-        assert data["ok"] is True
-
-    def test_run_invalid_delegate_email(self, authed_client):
-        resp = authed_client.post("/operations/run", data={
-            "action": "set_mailbox_perms",
-            "tenant_id": "fake",
-            "target_user": "user@test.com",
-            "delegate_user": "not-valid",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "Invalid delegate" in data["error"]
-
-    # --- SharePoint operations ---
-
-    def test_run_site_url_required(self, authed_client):
-        resp = authed_client.post("/operations/run", data={
-            "action": "add_site_admin",
-            "tenant_id": "fake",
-            "target_user": "user@test.com",
-            "site_url": "",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "site url" in data["error"].lower()
-
-    def test_run_invalid_site_url(self, authed_client):
-        resp = authed_client.post("/operations/run", data={
-            "action": "add_site_admin",
-            "tenant_id": "fake",
-            "target_user": "user@test.com",
-            "site_url": "not-a-url",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "Invalid" in data["error"]
-
-    @patch("routes.operations.start_job", return_value="spo-job-1")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
-    def test_run_successful_list_sites(self, mock_pfx, mock_pass, mock_start, authed_client):
-        tid = db.create_tenant("SPOCo", "spo.onmicrosoft.com")
-        db.update_tenant(tid, client_id="fake-client-id")
-        mock_pfx.return_value = Path("/fake/path.pfx")
-
-        resp = authed_client.post("/operations/run", data={
-            "action": "list_sites",
-            "tenant_id": tid,
-        })
-        data = resp.get_json()
-        assert data["ok"] is True
-        assert data["job_id"] == "spo-job-1"
-
-    @patch("routes.operations.start_job", return_value="spo-job-2")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
-    def test_run_successful_add_site_admin(self, mock_pfx, mock_pass, mock_start, authed_client):
-        tid = db.create_tenant("SPOAdmin", "spoadm.onmicrosoft.com")
-        db.update_tenant(tid, client_id="fake-client-id")
-        mock_pfx.return_value = Path("/fake/path.pfx")
-
-        resp = authed_client.post("/operations/run", data={
-            "action": "add_site_admin",
-            "tenant_id": tid,
-            "target_user": "admin@spoadm.com",
-            "site_url": "https://spoadm.sharepoint.com/sites/hr",
-        })
-        data = resp.get_json()
-        assert data["ok"] is True
-
     # --- New user management operations ---
 
-    @patch("routes.operations.start_job", return_value="user-job-1")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="user-job-1")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_run_successful_create_user(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid = db.create_tenant("CreateCo", "create.onmicrosoft.com")
         db.update_tenant(tid, client_id="fake-client-id")
@@ -371,9 +213,9 @@ class TestOperationsRun:
         data = resp.get_json()
         assert data["ok"] is True
 
-    @patch("routes.operations.start_job", return_value="user-job-2")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="user-job-2")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_run_successful_assign_license(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid = db.create_tenant("LicAssign", "licassign.onmicrosoft.com")
         db.update_tenant(tid, client_id="fake-client-id")
@@ -388,9 +230,9 @@ class TestOperationsRun:
         data = resp.get_json()
         assert data["ok"] is True
 
-    @patch("routes.operations.start_job", return_value="user-job-3")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="user-job-3")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_run_successful_stale_accounts(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid = db.create_tenant("StaleCo", "stale.onmicrosoft.com")
         db.update_tenant(tid, client_id="fake-client-id")
@@ -437,9 +279,9 @@ class TestOperationsBulk:
         assert data["ok"] is False
         assert "required" in data["error"].lower()
 
-    @patch("routes.operations.start_job", return_value="bulk-job-1")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="bulk-job-1")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_bulk_successful(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid1 = db.create_tenant("Tenant A", "a.onmicrosoft.com")
         tid2 = db.create_tenant("Tenant B", "b.onmicrosoft.com")
@@ -458,9 +300,9 @@ class TestOperationsBulk:
         assert len(data["tenant_jobs"]) == 2
         assert "Tenant A" in data["tenant_jobs"][0]["tenant_name"]
 
-    @patch("routes.operations.start_job", return_value="bulk-job-2")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="bulk-job-2")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_bulk_skips_unconfigured(self, mock_pfx, mock_pass, mock_start, authed_client):
         tid1 = db.create_tenant("Configured", "c.onmicrosoft.com")
         tid2 = db.create_tenant("Not Configured", "nc.onmicrosoft.com")
@@ -477,9 +319,9 @@ class TestOperationsBulk:
         assert data["ok"] is True
         assert len(data["job_ids"]) == 1  # Only configured tenant
 
-    @patch("routes.operations.start_job", return_value="bulk-teams-1")
-    @patch("routes.operations.get_tenant_pfx_password", return_value="testpass")
-    @patch("routes.operations.tenant_pfx_path")
+    @patch("routes.operations.routes.start_job", return_value="bulk-teams-1")
+    @patch("routes.operations.routes.get_tenant_pfx_password", return_value="testpass")
+    @patch("routes.operations.commands.tenant_pfx_path")
     def test_bulk_teams_operation(self, mock_pfx, mock_pass, mock_start, authed_client):
         """Bulk list_teams across multiple tenants."""
         tid1 = db.create_tenant("Teams A", "ta.onmicrosoft.com")
@@ -496,27 +338,6 @@ class TestOperationsBulk:
         assert data["ok"] is True
         assert len(data["job_ids"]) == 2
 
-    def test_bulk_invalid_delegate_email(self, authed_client):
-        resp = authed_client.post("/operations/bulk", data={
-            "action": "set_mailbox_perms",
-            "tenant_ids": ["fake"],
-            "target_user": "user@test.com",
-            "delegate_user": "bad-email",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "Invalid delegate" in data["error"]
-
-    def test_bulk_invalid_site_url(self, authed_client):
-        resp = authed_client.post("/operations/bulk", data={
-            "action": "add_site_admin",
-            "tenant_ids": ["fake"],
-            "target_user": "user@test.com",
-            "site_url": "not-a-url",
-        })
-        data = resp.get_json()
-        assert data["ok"] is False
-        assert "Invalid" in data["error"]
 
 
 class TestOperationMetadata:
@@ -535,7 +356,7 @@ class TestOperationMetadata:
 
     def test_valid_script_types(self):
         from routes.operations import OPERATIONS
-        valid = {"user", "mailbox", "report", "offboard", "teams", "exchange_admin", "spo_admin"}
+        valid = {"user", "report", "teams"}
         for key, op in OPERATIONS.items():
             assert op["script"] in valid, f"Operation {key} has invalid script type"
 
@@ -555,7 +376,7 @@ class TestOperationMetadata:
     def test_operation_count(self):
         """Verify we have the expected number of operations."""
         from routes.operations import OPERATIONS
-        assert len(OPERATIONS) >= 42, f"Expected at least 42 operations, got {len(OPERATIONS)}"
+        assert len(OPERATIONS) >= 20, f"Expected at least 20 operations, got {len(OPERATIONS)}"
 
     def test_operations_per_category(self):
         from routes.operations import OPERATIONS

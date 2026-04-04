@@ -20,8 +20,8 @@ from database import (
 )
 from helpers import (
     login_required, current_user,
-    tenant_pfx_path, build_ps_env, start_job, get_tenant_pfx_password,
-    sanitize_text,
+    tenant_pfx_path, build_ps_env, start_job, start_python_job,
+    get_tenant_pfx_password, sanitize_text,
     SCRIPTS_DIR, PWSH,
 )
 
@@ -67,21 +67,15 @@ def tenant_ca_policies_fetch(tenant_id):
     if data_type not in ("policies", "namedLocations", "both"):
         data_type = "both"
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-ConditionalAccessPolicies.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-DataType", data_type,
-    ]
-
-    jid = start_job(f"Fetch CA Policies — {t['name']}", "conditional_access", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_conditional_access
+    jid = start_python_job(
+        f"Fetch CA Policies — {t['name']}", "conditional_access",
+        fetch_conditional_access,
+        args=(dict(t), pfx_path, pfx_pass, data_type),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "ca_policies_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Type: {data_type}")
@@ -113,21 +107,15 @@ def tenant_named_locations_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-ConditionalAccessPolicies.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-DataType", "namedLocations",
-    ]
-
-    jid = start_job(f"Fetch Named Locations — {t['name']}", "conditional_access", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_conditional_access
+    jid = start_python_job(
+        f"Fetch Named Locations — {t['name']}", "conditional_access",
+        fetch_conditional_access,
+        args=(dict(t), pfx_path, pfx_pass, "namedLocations"),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "named_locations_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})

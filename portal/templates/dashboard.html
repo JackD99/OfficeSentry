@@ -22,7 +22,7 @@
       <small style="color:var(--color-text-tertiary)">Complete these steps to run your first audit</small>
     </div>
     {% if audited_count > 0 %}
-    <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="this.closest('.onboarding-card').remove()">Dismiss</button>
+    <button class="btn btn-sm btn-outline-secondary ms-auto" id="dismiss-onboarding-btn">Dismiss</button>
     {% endif %}
   </div>
   <div class="onboarding-step">
@@ -209,7 +209,7 @@
         </select>
       </div>
       <div class="col-md-4">
-        <button class="btn btn-primary btn-sm w-100" onclick="quickLaunch()">
+        <button class="btn btn-primary btn-sm w-100" id="quick-launch-btn">
           <i class="bi bi-play-fill me-1"></i>Launch Audit
         </button>
       </div>
@@ -612,7 +612,14 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+// Dismiss onboarding card
+document.getElementById('dismiss-onboarding-btn')?.addEventListener('click', (e) => {
+  e.target.closest('.onboarding-card').remove();
+});
+
 // Quick launch navigation
+document.getElementById('quick-launch-btn')?.addEventListener('click', quickLaunch);
+
 function quickLaunch() {
   const tid = document.getElementById('ql-tenant').value;
   const sel = document.getElementById('ql-type');

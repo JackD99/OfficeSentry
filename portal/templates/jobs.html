@@ -29,19 +29,19 @@
 
 <!-- Status tabs -->
 <div class="d-flex align-items-center gap-2 mb-4 job-tabs">
-  <button class="btn btn-sm btn-secondary active" data-filter="all" onclick="filterJobs(this)">
+  <button class="btn btn-sm btn-secondary active" data-filter="all" data-action="filter-jobs">
     All <span class="badge bg-dark ms-1">{{ jobs|length }}</span>
   </button>
   {% if running_jobs %}
-  <button class="btn btn-sm btn-outline-primary" data-filter="running" onclick="filterJobs(this)">
+  <button class="btn btn-sm btn-outline-primary" data-filter="running" data-action="filter-jobs">
     Running <span class="badge bg-primary ms-1">{{ running_jobs|length }}</span>
   </button>
   {% endif %}
-  <button class="btn btn-sm btn-outline-success" data-filter="done" onclick="filterJobs(this)">
+  <button class="btn btn-sm btn-outline-success" data-filter="done" data-action="filter-jobs">
     Completed <span class="badge bg-success ms-1">{{ done_jobs|length }}</span>
   </button>
   {% if failed_jobs %}
-  <button class="btn btn-sm btn-outline-danger" data-filter="failed" onclick="filterJobs(this)">
+  <button class="btn btn-sm btn-outline-danger" data-filter="failed" data-action="filter-jobs">
     Failed <span class="badge bg-danger ms-1">{{ failed_jobs|length }}</span>
   </button>
   {% endif %}
@@ -52,7 +52,7 @@
   <div class="job-card animate-fade-in" data-job-id="{{ job.id }}" data-job-status="{{ job.status }}" style="animation-delay:{{ loop.index0 * 30 }}ms">
     <div class="card">
       <div class="card-header d-flex align-items-center gap-2 {{ '' if job.status == 'running' else 'collapsed' }}"
-           onclick="toggleOutput(this)" role="button">
+           data-action="toggle-output" role="button">
         <i class="bi bi-chevron-down collapse-icon small" style="color:var(--color-text-quaternary)"></i>
         <span class="job-status-icon">
         {% if job.status == 'running' %}
@@ -79,7 +79,7 @@
         </span>
         {% if job.status == 'running' %}
         <button class="btn btn-sm btn-outline-danger ms-2 cancel-btn" data-job-id="{{ job.id }}"
-                onclick="event.stopPropagation(); cancelJob('{{ job.id }}', this)" title="Cancel job">
+                title="Cancel job">
           <i class="bi bi-stop-circle me-1"></i>Cancel
         </button>
         {% elif job.status == 'cancelled' %}
@@ -160,6 +160,12 @@ async function cancelJob(jobId, btn) {
     btn.disabled = false;
   }
 }
+
+// Event delegation for cancel buttons
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.cancel-btn[data-job-id]');
+  if (btn) { e.stopPropagation(); cancelJob(btn.dataset.jobId, btn); }
+});
 </script>
 {% set has_running = jobs|selectattr('status','eq','running')|list %}
 {% if has_running %}

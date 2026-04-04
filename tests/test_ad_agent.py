@@ -161,7 +161,7 @@ class TestEnrollmentTokensDB:
         raw = secrets.token_urlsafe(48)
         token_hash = hashlib.sha256(raw.encode()).hexdigest()
         # Use SQLite-compatible datetime format (no timezone suffix)
-        expires = (datetime.utcnow() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        expires = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
         db.create_enrollment_token(tid, token_hash, expires, "admin")
         assert db.validate_enrollment_token(tid, token_hash) is None
 

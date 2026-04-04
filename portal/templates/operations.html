@@ -38,7 +38,7 @@
             <div class="btn-group btn-group-sm flex-wrap" id="category-filter">
               {% for cat_key, cat in categories.items() %}
               <button type="button" class="btn btn-outline-secondary{% if cat_key == 'all' %} active{% endif %}"
-                      data-category="{{ cat_key }}" onclick="filterCategory(this)">
+                      data-category="{{ cat_key }}" data-action="filter-category">
                 <i class="bi bi-{{ cat.icon }} me-1"></i>{{ cat.name }}
               </button>
               {% endfor %}
@@ -54,7 +54,7 @@
               <span class="badge bg-primary me-1">T1</span>1st Line — Service Desk
             </div>
             {% for key, op in tier1.items() %}
-            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" onclick="selectOp(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" data-action="select-op">
               <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
               <div>
                 <div class="card-title">{{ op.name }}</div>
@@ -68,7 +68,7 @@
               <span class="badge bg-warning text-dark me-1">T2</span>2nd Line — Technical Support
             </div>
             {% for key, op in tier2.items() %}
-            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" onclick="selectOp(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" data-action="select-op">
               <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
               <div>
                 <div class="card-title">{{ op.name }}</div>
@@ -82,7 +82,7 @@
               <span class="badge bg-danger me-1">T3</span>3rd Line — Engineering
             </div>
             {% for key, op in tier3.items() %}
-            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" onclick="selectOp(this)">
+            <div class="audit-card d-flex align-items-start gap-2" data-action="{{ key }}" data-category="{{ op.category }}" data-action="select-op">
               <span class="card-icon text-{{ op.color }}"><i class="bi bi-{{ op.icon }}"></i></span>
               <div>
                 <div class="card-title">{{ op.name }}</div>
@@ -301,8 +301,8 @@
             <div class="d-flex align-items-center gap-2 mb-2">
               <label class="form-label mb-0">Mode</label>
               <div class="btn-group btn-group-sm">
-                <button type="button" class="btn btn-outline-secondary active" id="mode-single" onclick="setMode('single')">Single Tenant</button>
-                <button type="button" class="btn btn-outline-secondary" id="mode-bulk" onclick="setMode('bulk')">Bulk (Multi-Tenant)</button>
+                <button type="button" class="btn btn-outline-secondary active" id="mode-single" data-action="set-mode" data-mode="single">Single Tenant</button>
+                <button type="button" class="btn btn-outline-secondary" id="mode-bulk" data-action="set-mode" data-mode="bulk">Bulk (Multi-Tenant)</button>
               </div>
             </div>
           </div>
@@ -322,7 +322,7 @@
           <div class="mb-3 d-none" id="bulk-tenant-wrap">
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label mb-0">Select Tenants</label>
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllTenants()">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-all-tenants-btn">
                 Select All
               </button>
             </div>
@@ -419,6 +419,24 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+// --- Event delegation for inline handlers ---
+document.getElementById('category-filter').addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-action="filter-category"]');
+  if (btn) filterCategory(btn);
+});
+
+document.getElementById('ops-cards').addEventListener('click', function(e) {
+  const card = e.target.closest('[data-action="select-op"]');
+  if (card) selectOp(card);
+});
+
+document.addEventListener('click', function(e) {
+  const modeBtn = e.target.closest('[data-action="set-mode"]');
+  if (modeBtn) setMode(modeBtn.dataset.mode);
+});
+
+document.getElementById('toggle-all-tenants-btn').addEventListener('click', toggleAllTenants);
+
 // --- Operation metadata (from server) ---
 const OPS_META = {{ operations | tojson }};
 let currentMode = 'single';

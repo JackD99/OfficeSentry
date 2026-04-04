@@ -42,7 +42,8 @@ from database import (
 )
 from helpers import (
     login_required, admin_required, current_user,
-    build_ps_env, start_job, sanitize_text, validate_tenant_guid,
+    build_ps_env, start_job, start_python_job, sanitize_text,
+    validate_tenant_guid, get_tenant_pfx_password, tenant_pfx_path,
     SCRIPTS_DIR, tenant_dir,
 )
 from agent_auth import agent_auth_required
@@ -86,27 +87,19 @@ def check_hybrid(tenant_id):
     if not t.get("client_id"):
         return jsonify({"ok": False, "error": "Tenant not configured (no Client ID)"}), 400
 
-    # Start a background job to run Get-HybridStatus.ps1
-    from helpers import get_tenant_pfx_password, tenant_pfx_path
     pfx_path = tenant_pfx_path(tenant_id)
     if not pfx_path.exists():
         return jsonify({"ok": False, "error": "Certificate not found"}), 400
 
     pfx_password = get_tenant_pfx_password(t)
-    env = build_ps_env(pfx_password)
-    script = SCRIPTS_DIR / "Get-HybridStatus.ps1"
 
-    cmd = [
-        "pwsh", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-        str(script),
-        "-TenantId", t["tenant_id"] or t["domain"],
-        "-ClientId", t["client_id"],
-        "-CertPath", str(pfx_path),
-    ]
-
-    job_id = start_job(
+    from graph_jobs import detect_hybrid_status
+    job_id = start_python_job(
         f"Hybrid detection — {t['name']}",
-        "hybrid_check", cmd, tenant_id=tenant_id, env=env,
+        "hybrid_check",
+        detect_hybrid_status,
+        args=(dict(t), str(pfx_path), pfx_password),
+        tenant_id=tenant_id,
     )
     log_action(current_user(), "hybrid_check_started",
                tenant_id=tenant_id, tenant_name=t["name"])

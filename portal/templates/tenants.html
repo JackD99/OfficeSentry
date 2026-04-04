@@ -16,14 +16,14 @@
   </div>
   {% if tenants %}
   <input type="text" class="form-control form-control-sm search-input" style="max-width:280px"
-         id="tenant-search" placeholder="Search tenants..." oninput="filterTenants(this.value)">
+         id="tenant-search" placeholder="Search tenants...">
   {% endif %}
   <div class="ms-auto d-flex gap-2">
     <div class="btn-group btn-group-sm">
       <a href="{{ url_for('tenants.tenants_export') }}" class="btn btn-outline-secondary" title="Export tenants">
         <i class="bi bi-download me-1"></i>Export
       </a>
-      <button class="btn btn-outline-secondary" onclick="document.getElementById('import-file').click()" title="Import tenants">
+      <button class="btn btn-outline-secondary" id="import-btn" title="Import tenants">
         <i class="bi bi-upload me-1"></i>Import
       </button>
     </div>
@@ -32,7 +32,7 @@
     </button>
   </div>
   <form id="import-form" class="d-none">
-    <input type="file" id="import-file" accept=".json" onchange="importTenants(this)">
+    <input type="file" id="import-file" accept=".json">
   </form>
 </div>
 
@@ -128,6 +128,10 @@
 
 {% block scripts %}
 <script nonce="{{ g.csp_nonce }}">
+document.getElementById('tenant-search')?.addEventListener('input', (e) => filterTenants(e.target.value));
+document.getElementById('import-btn')?.addEventListener('click', () => document.getElementById('import-file').click());
+document.getElementById('import-file')?.addEventListener('change', (e) => importTenants(e.target));
+
 function filterTenants(query) {
   const q = query.toLowerCase().trim();
   let visible = 0;

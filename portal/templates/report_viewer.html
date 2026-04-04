@@ -30,11 +30,11 @@
     </div>
     <div class="ms-auto d-flex gap-2 flex-wrap">
       <!-- Column selector toggle -->
-      <button class="btn btn-sm btn-outline-secondary" onclick="togglePanel('columns-panel')">
+      <button class="btn btn-sm btn-outline-secondary" id="toggle-columns-btn">
         <i class="bi bi-layout-three-columns me-1"></i>Columns
       </button>
       <!-- Chart toggle -->
-      <button class="btn btn-sm btn-outline-secondary" onclick="togglePanel('chart-panel')">
+      <button class="btn btn-sm btn-outline-secondary" id="toggle-chart-btn">
         <i class="bi bi-bar-chart me-1"></i>Chart
       </button>
       <!-- Export dropdown -->
@@ -43,13 +43,13 @@
           <i class="bi bi-download me-1"></i>Export
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" href="#" onclick="exportData('csv')"><i class="bi bi-filetype-csv me-2"></i>CSV</a></li>
-          <li><a class="dropdown-item" href="#" onclick="exportData('json')"><i class="bi bi-filetype-json me-2"></i>JSON</a></li>
-          <li><a class="dropdown-item" href="#" onclick="exportData('html')"><i class="bi bi-filetype-html me-2"></i>HTML Report</a></li>
+          <li><a class="dropdown-item" href="#" data-export="csv"><i class="bi bi-filetype-csv me-2"></i>CSV</a></li>
+          <li><a class="dropdown-item" href="#" data-export="json"><i class="bi bi-filetype-json me-2"></i>JSON</a></li>
+          <li><a class="dropdown-item" href="#" data-export="html"><i class="bi bi-filetype-html me-2"></i>HTML Report</a></li>
         </ul>
       </div>
       <!-- Save view -->
-      <button class="btn btn-sm btn-outline-success" onclick="showSaveModal()">
+      <button class="btn btn-sm btn-outline-success" id="show-save-modal-btn">
         <i class="bi bi-bookmark-plus me-1"></i>Save View
       </button>
       <!-- Download original -->
@@ -67,16 +67,15 @@
     <i class="bi bi-layout-three-columns me-2"></i>
     <span class="fw-semibold">Column Visibility</span>
     <div class="ms-auto d-flex gap-2">
-      <button class="btn btn-sm btn-outline-secondary" onclick="selectAllCols(true)">All</button>
-      <button class="btn btn-sm btn-outline-secondary" onclick="selectAllCols(false)">None</button>
+      <button class="btn btn-sm btn-outline-secondary" id="select-all-cols-btn">All</button>
+      <button class="btn btn-sm btn-outline-secondary" id="select-none-cols-btn">None</button>
     </div>
   </div>
   <div class="card-body">
     <div class="d-flex flex-wrap gap-2" id="col-checkboxes">
       {% for h in data.headers %}
       <label class="form-check-inline">
-        <input type="checkbox" class="form-check-input col-toggle" value="{{ loop.index0 }}" checked
-               onchange="toggleColumn(this)">
+        <input type="checkbox" class="form-check-input col-toggle" value="{{ loop.index0 }}" checked>
         <span class="small">{{ h }}</span>
       </label>
       {% endfor %}
@@ -94,7 +93,7 @@
     <div class="row g-3 mb-3">
       <div class="col-md-3">
         <label class="form-label small">Chart Type</label>
-        <select class="form-select form-select-sm" id="chart-type" onchange="updateChart()">
+        <select class="form-select form-select-sm" id="chart-type">
           <option value="bar">Bar Chart</option>
           <option value="doughnut">Donut Chart</option>
           <option value="pie">Pie Chart</option>
@@ -103,7 +102,7 @@
       </div>
       <div class="col-md-3">
         <label class="form-label small">Group By Column</label>
-        <select class="form-select form-select-sm" id="chart-group-col" onchange="updateChart()">
+        <select class="form-select form-select-sm" id="chart-group-col">
           {% for h in data.headers %}
           <option value="{{ loop.index0 }}">{{ h }}</option>
           {% endfor %}
@@ -111,7 +110,7 @@
       </div>
       <div class="col-md-3">
         <label class="form-label small">Value Column</label>
-        <select class="form-select form-select-sm" id="chart-value-col" onchange="updateChart()">
+        <select class="form-select form-select-sm" id="chart-value-col">
           <option value="_count">Count</option>
           {% for h in data.headers %}
           <option value="{{ loop.index0 }}">{{ h }}</option>
@@ -120,7 +119,7 @@
       </div>
       <div class="col-md-3">
         <label class="form-label small">Max Items</label>
-        <select class="form-select form-select-sm" id="chart-limit" onchange="updateChart()">
+        <select class="form-select form-select-sm" id="chart-limit">
           <option value="10">Top 10</option>
           <option value="20" selected>Top 20</option>
           <option value="50">Top 50</option>
@@ -147,7 +146,7 @@
       <div class="d-flex align-items-center gap-2">
         <i class="bi bi-funnel text-muted"></i>
         <input type="text" class="form-control form-control-sm search-input" style="max-width:220px"
-               id="global-search" placeholder="Search all columns..." oninput="applyFilters()">
+               id="global-search" placeholder="Search all columns...">
       </div>
       <div class="d-flex align-items-center gap-2">
         <span class="text-muted small">Showing:</span>
@@ -155,7 +154,7 @@
         <span class="text-muted small">of {{ data.total }} rows</span>
       </div>
       <div class="ms-auto d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+        <button class="btn btn-sm btn-outline-secondary" id="clear-filters-btn">
           <i class="bi bi-x-circle me-1"></i>Clear Filters
         </button>
       </div>
@@ -171,7 +170,7 @@
         <tr id="header-row">
           <th class="text-muted" style="width:50px">#</th>
           {% for h in data.headers %}
-          <th class="sortable-header" data-col="{{ loop.index0 }}" onclick="sortByColumn({{ loop.index0 }})">
+          <th class="sortable-header" data-col="{{ loop.index0 }}">
             {{ h }}
             <i class="bi bi-chevron-expand ms-1 sort-icon" style="font-size:.65rem;opacity:.4"></i>
           </th>
@@ -183,7 +182,7 @@
           {% for h in data.headers %}
           <td>
             <input type="text" class="form-control form-control-sm col-filter" style="font-size:.75rem"
-                   data-col="{{ loop.index0 }}" placeholder="Filter..." oninput="applyFilters()">
+                   data-col="{{ loop.index0 }}" placeholder="Filter...">
           </td>
           {% endfor %}
         </tr>
@@ -207,10 +206,10 @@
 <div class="d-flex justify-content-between align-items-center mt-3">
   <span class="text-muted small" id="page-info">Page 1 of {{ ((data.total - 1) // 100) + 1 }}</span>
   <div class="d-flex gap-2">
-    <button class="btn btn-sm btn-outline-secondary" id="prev-page" onclick="changePage(-1)" disabled>
+    <button class="btn btn-sm btn-outline-secondary" id="prev-page" disabled>
       <i class="bi bi-chevron-left"></i> Previous
     </button>
-    <button class="btn btn-sm btn-outline-secondary" id="next-page" onclick="changePage(1)">
+    <button class="btn btn-sm btn-outline-secondary" id="next-page">
       Next <i class="bi bi-chevron-right"></i>
     </button>
   </div>
@@ -235,7 +234,7 @@
       </div>
       <div class="modal-footer border-secondary">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-sm btn-primary" onclick="saveView()">
+        <button type="button" class="btn btn-sm btn-primary" id="save-view-btn">
           <i class="bi bi-bookmark-check me-1"></i>Save View
         </button>
       </div>
@@ -254,6 +253,32 @@ let currentPage = 0;
 const PAGE_SIZE = 100;
 let sortCol = -1;
 let sortDir = 'asc';
+
+// Event listeners (CSP nonce policy blocks inline handlers)
+document.getElementById('toggle-columns-btn').addEventListener('click', () => togglePanel('columns-panel'));
+document.getElementById('toggle-chart-btn').addEventListener('click', () => togglePanel('chart-panel'));
+document.querySelectorAll('[data-export]').forEach(el => {
+  el.addEventListener('click', (e) => { e.preventDefault(); exportData(el.dataset.export); });
+});
+document.getElementById('show-save-modal-btn').addEventListener('click', () => showSaveModal());
+document.getElementById('select-all-cols-btn').addEventListener('click', () => selectAllCols(true));
+document.getElementById('select-none-cols-btn').addEventListener('click', () => selectAllCols(false));
+document.getElementById('clear-filters-btn').addEventListener('click', () => clearFilters());
+document.getElementById('global-search').addEventListener('input', () => applyFilters());
+document.querySelectorAll('.col-filter').forEach(el => el.addEventListener('input', () => applyFilters()));
+document.getElementById('header-row').addEventListener('click', (e) => {
+  const th = e.target.closest('.sortable-header[data-col]');
+  if (th) sortByColumn(parseInt(th.dataset.col));
+});
+const prevBtn = document.getElementById('prev-page');
+const nextBtn = document.getElementById('next-page');
+if (prevBtn) prevBtn.addEventListener('click', () => changePage(-1));
+if (nextBtn) nextBtn.addEventListener('click', () => changePage(1));
+document.getElementById('save-view-btn').addEventListener('click', () => saveView());
+document.querySelectorAll('.col-toggle').forEach(el => el.addEventListener('change', () => toggleColumn(el)));
+['chart-type', 'chart-group-col', 'chart-value-col', 'chart-limit'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => updateChart());
+});
 let hiddenCols = new Set();
 let dataChart = null;
 

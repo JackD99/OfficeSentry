@@ -18,10 +18,8 @@ from database import (
 )
 from helpers import (
     login_required, current_user,
-    tenant_pfx_path, tenant_output_dir,
-    build_ps_env, start_job, get_tenant_pfx_password,
+    tenant_pfx_path, start_python_job, get_tenant_pfx_password,
     sanitize_text,
-    SCRIPTS_DIR, PWSH,
 )
 
 log = logging.getLogger("portal")
@@ -53,30 +51,19 @@ def devices_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
-
     platform_filter = request.form.get("platform", "all")
     compliance_filter = request.form.get("compliance", "all")
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IntuneDevices.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "inventory",
-    ]
-    if platform_filter != "all":
-        cmd += ["-Platform", platform_filter]
-    if compliance_filter != "all":
-        cmd += ["-ComplianceFilter", compliance_filter]
-
-    jid = start_job(f"Device Inventory — {t['name']}", "devices", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_intune_devices
+    jid = start_python_job(
+        f"Device Inventory — {t['name']}", "devices",
+        fetch_intune_devices,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "inventory", "platform": platform_filter,
+                "compliance_filter": compliance_filter},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "devices_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Platform: {platform_filter}, Compliance: {compliance_filter}")
@@ -107,23 +94,16 @@ def device_compliance_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IntuneDevices.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "compliance",
-    ]
-
-    jid = start_job(f"Device Compliance — {t['name']}", "devices", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_intune_devices
+    jid = start_python_job(
+        f"Device Compliance — {t['name']}", "devices",
+        fetch_intune_devices,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "compliance"},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "device_compliance_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -147,23 +127,16 @@ def device_compliance_scan():
         if not pfx_pass:
             continue
 
-        tenant_val = t["tenant_id"] or t["domain"]
         pfx_path = str(tenant_pfx_path(tid))
-        out_dir = str(tenant_output_dir(tid))
-        env = build_ps_env(pfx_pass)
 
-        cmd = [
-            PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-            str(SCRIPTS_DIR / "Get-IntuneDevices.ps1"),
-            "-Tenant", tenant_val,
-            "-ClientId", t["client_id"],
-            "-CertificatePath", pfx_path,
-            "-OutputFolder", out_dir,
-            "-ReportType", "compliance",
-        ]
-
-        jid = start_job(f"Device Compliance — {t['name']}", "devices",
-                        cmd, tenant_id=tid, env=env)
+        from graph_jobs import fetch_intune_devices
+        jid = start_python_job(
+            f"Device Compliance — {t['name']}", "devices",
+            fetch_intune_devices,
+            args=(dict(t), pfx_path, pfx_pass),
+            kwargs={"report_type": "compliance"},
+            tenant_id=tid,
+        )
         job_ids.append(jid)
 
     log_action(current_user(), "device_compliance_scan",
@@ -198,23 +171,16 @@ def autopilot_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IntuneDevices.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "autopilot",
-    ]
-
-    jid = start_job(f"Autopilot Devices — {t['name']}", "devices", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_intune_devices
+    jid = start_python_job(
+        f"Autopilot Devices — {t['name']}", "devices",
+        fetch_intune_devices,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "autopilot"},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "autopilot_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -251,22 +217,16 @@ def device_policies_fetch(tenant_id):
                            "endpoint", "appProtection"):
         return jsonify({"ok": False, "error": "Invalid policy type."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IntuneDevices.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-ReportType", "policies",
-        "-PolicyType", policy_type,
-    ]
-
-    jid = start_job(f"Device Policies ({policy_type}) — {t['name']}", "devices",
-                    cmd, tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_intune_devices
+    jid = start_python_job(
+        f"Device Policies ({policy_type}) — {t['name']}", "devices",
+        fetch_intune_devices,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "policies", "policy_type": policy_type},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "device_policies_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Type: {policy_type}")
@@ -299,22 +259,16 @@ def device_action(tenant_id):
     if action not in allowed_actions:
         return jsonify({"ok": False, "error": f"Invalid action: {action}"})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Invoke-DeviceAction.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-DeviceId", device_id,
-        "-Action", action,
-    ]
-
-    jid = start_job(f"Device {action.title()} — {t['name']}", "devices",
-                    cmd, tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_intune_devices
+    jid = start_python_job(
+        f"Device {action.title()} — {t['name']}", "devices",
+        fetch_intune_devices,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "action", "device_id": device_id, "action": action},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), f"device_action_{action}",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Device: {device_id}")
@@ -351,23 +305,16 @@ def devices_overview_scan():
         if not pfx_pass:
             continue
 
-        tenant_val = t["tenant_id"] or t["domain"]
         pfx_path = str(tenant_pfx_path(tid))
-        out_dir = str(tenant_output_dir(tid))
-        env = build_ps_env(pfx_pass)
 
-        cmd = [
-            PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-            str(SCRIPTS_DIR / "Get-IntuneDevices.ps1"),
-            "-Tenant", tenant_val,
-            "-ClientId", t["client_id"],
-            "-CertificatePath", pfx_path,
-            "-OutputFolder", out_dir,
-            "-ReportType", "overview",
-        ]
-
-        jid = start_job(f"Device Overview — {t['name']}", "devices",
-                        cmd, tenant_id=tid, env=env)
+        from graph_jobs import fetch_intune_devices
+        jid = start_python_job(
+            f"Device Overview — {t['name']}", "devices",
+            fetch_intune_devices,
+            args=(dict(t), pfx_path, pfx_pass),
+            kwargs={"report_type": "overview"},
+            tenant_id=tid,
+        )
         job_ids.append(jid)
 
     log_action(current_user(), "devices_overview_scan",

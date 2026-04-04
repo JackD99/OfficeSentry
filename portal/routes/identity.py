@@ -18,10 +18,8 @@ from database import (
 )
 from helpers import (
     login_required, current_user,
-    tenant_pfx_path, tenant_output_dir,
-    build_ps_env, start_job, get_tenant_pfx_password,
+    tenant_pfx_path, start_python_job, get_tenant_pfx_password,
     sanitize_text, validate_email,
-    SCRIPTS_DIR, PWSH,
 )
 
 log = logging.getLogger("portal")
@@ -53,27 +51,17 @@ def risky_users_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
-
     risk_level = request.form.get("risk_level", "all")
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IdentityProtection.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "riskyUsers",
-    ]
-    if risk_level != "all":
-        cmd += ["-RiskLevel", risk_level]
-
-    jid = start_job(f"Risky Users — {t['name']}", "identity", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_identity_protection
+    jid = start_python_job(
+        f"Risky Users — {t['name']}", "identity",
+        fetch_identity_protection,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "riskyUsers", "risk_level": risk_level},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "risky_users_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Risk level: {risk_level}")
@@ -96,22 +84,16 @@ def risky_user_dismiss(tenant_id):
     if not user_id:
         return jsonify({"ok": False, "error": "User ID is required."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IdentityProtection.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-ReportType", "dismissRisk",
-        "-TargetUserId", user_id,
-    ]
-
-    jid = start_job(f"Dismiss Risk — {t['name']}", "identity", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_identity_protection
+    jid = start_python_job(
+        f"Dismiss Risk — {t['name']}", "identity",
+        fetch_identity_protection,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "dismissRisk", "target_user_id": user_id},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "risky_user_dismiss",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"User: {user_id}")
@@ -142,29 +124,18 @@ def risky_signins_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    out_dir = str(tenant_output_dir(tenant_id))
-    env = build_ps_env(pfx_pass)
-
     days = request.form.get("days", "30").strip()
     risk_level = request.form.get("risk_level", "all")
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IdentityProtection.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-OutputFolder", out_dir,
-        "-ReportType", "riskySignIns",
-        "-Days", days,
-    ]
-    if risk_level != "all":
-        cmd += ["-RiskLevel", risk_level]
-
-    jid = start_job(f"Risky Sign-Ins — {t['name']}", "identity", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_identity_protection
+    jid = start_python_job(
+        f"Risky Sign-Ins — {t['name']}", "identity",
+        fetch_identity_protection,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "riskySignIns", "days": days, "risk_level": risk_level},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "risky_signins_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Days: {days}, Risk: {risk_level}")
@@ -201,23 +172,16 @@ def mfa_report_run():
         if not pfx_pass:
             continue
 
-        tenant_val = t["tenant_id"] or t["domain"]
         pfx_path = str(tenant_pfx_path(tid))
-        out_dir = str(tenant_output_dir(tid))
-        env = build_ps_env(pfx_pass)
 
-        cmd = [
-            PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-            str(SCRIPTS_DIR / "Get-IdentityProtection.ps1"),
-            "-Tenant", tenant_val,
-            "-ClientId", t["client_id"],
-            "-CertificatePath", pfx_path,
-            "-OutputFolder", out_dir,
-            "-ReportType", "mfaGap",
-        ]
-
-        jid = start_job(f"MFA Gap Analysis — {t['name']}", "identity",
-                        cmd, tenant_id=tid, env=env)
+        from graph_jobs import fetch_identity_protection
+        jid = start_python_job(
+            f"MFA Gap Analysis — {t['name']}", "identity",
+            fetch_identity_protection,
+            args=(dict(t), pfx_path, pfx_pass),
+            kwargs={"report_type": "mfaGap"},
+            tenant_id=tid,
+        )
         job_ids.append(jid)
 
     log_action(current_user(), "mfa_report_run",
@@ -254,22 +218,16 @@ def auth_strengths_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Invoke-GraphExplorer.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-GraphUri", "https://graph.microsoft.com/v1.0/policies/authenticationStrengthPolicies",
-        "-Method", "GET",
-    ]
-
-    jid = start_job(f"Fetch Auth Strengths — {t['name']}", "identity",
-                    cmd, tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_identity_protection
+    jid = start_python_job(
+        f"Fetch Auth Strengths — {t['name']}", "identity",
+        fetch_identity_protection,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "authStrengths"},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "auth_strengths_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -301,21 +259,16 @@ def password_protection_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-IdentityProtection.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-ReportType", "passwordProtection",
-    ]
-
-    jid = start_job(f"Password Protection — {t['name']}", "identity",
-                    cmd, tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_identity_protection
+    jid = start_python_job(
+        f"Password Protection — {t['name']}", "identity",
+        fetch_identity_protection,
+        args=(dict(t), pfx_path, pfx_pass),
+        kwargs={"report_type": "passwordProtection"},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "password_protection_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -351,23 +304,16 @@ def risk_overview_scan():
         if not pfx_pass:
             continue
 
-        tenant_val = t["tenant_id"] or t["domain"]
         pfx_path = str(tenant_pfx_path(tid))
-        out_dir = str(tenant_output_dir(tid))
-        env = build_ps_env(pfx_pass)
 
-        cmd = [
-            PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-            str(SCRIPTS_DIR / "Get-IdentityProtection.ps1"),
-            "-Tenant", tenant_val,
-            "-ClientId", t["client_id"],
-            "-CertificatePath", pfx_path,
-            "-OutputFolder", out_dir,
-            "-ReportType", "riskOverview",
-        ]
-
-        jid = start_job(f"Risk Overview — {t['name']}", "identity",
-                        cmd, tenant_id=tid, env=env)
+        from graph_jobs import fetch_identity_protection
+        jid = start_python_job(
+            f"Risk Overview — {t['name']}", "identity",
+            fetch_identity_protection,
+            args=(dict(t), pfx_path, pfx_pass),
+            kwargs={"report_type": "riskOverview"},
+            tenant_id=tid,
+        )
         job_ids.append(jid)
 
     log_action(current_user(), "risk_overview_scan",

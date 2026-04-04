@@ -18,9 +18,7 @@ from database import (
 )
 from helpers import (
     login_required, current_user,
-    tenant_pfx_path, tenant_output_dir,
-    build_ps_env, start_job, get_tenant_pfx_password,
-    SCRIPTS_DIR, PWSH,
+    tenant_pfx_path, start_python_job, get_tenant_pfx_password,
 )
 
 log = logging.getLogger("portal")
@@ -52,21 +50,15 @@ def service_health_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-ServiceHealth.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-ReportType", "status",
-    ]
-
-    jid = start_job(f"Service Health — {t['name']}", "service_health", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_service_health
+    jid = start_python_job(
+        f"Service Health — {t['name']}", "service_health",
+        fetch_service_health,
+        args=(dict(t), pfx_path, pfx_pass, "status"),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "service_health_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -90,21 +82,15 @@ def service_health_scan():
         if not pfx_pass:
             continue
 
-        tenant_val = t["tenant_id"] or t["domain"]
         pfx_path = str(tenant_pfx_path(tid))
-        env = build_ps_env(pfx_pass)
 
-        cmd = [
-            PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-            str(SCRIPTS_DIR / "Get-ServiceHealth.ps1"),
-            "-Tenant", tenant_val,
-            "-ClientId", t["client_id"],
-            "-CertificatePath", pfx_path,
-            "-ReportType", "status",
-        ]
-
-        jid = start_job(f"Service Health — {t['name']}", "service_health",
-                        cmd, tenant_id=tid, env=env)
+        from graph_jobs import fetch_service_health
+        jid = start_python_job(
+            f"Service Health — {t['name']}", "service_health",
+            fetch_service_health,
+            args=(dict(t), pfx_path, pfx_pass, "status"),
+            tenant_id=tid,
+        )
         job_ids.append(jid)
 
     log_action(current_user(), "service_health_scan",
@@ -139,25 +125,16 @@ def incidents_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
+    include_resolved = request.form.get("include_resolved", "false") == "true"
 
-    include_resolved = request.form.get("include_resolved", "false")
-
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-ServiceHealth.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-ReportType", "incidents",
-    ]
-    if include_resolved == "true":
-        cmd += ["-IncludeResolved"]
-
-    jid = start_job(f"Service Incidents — {t['name']}", "service_health", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_service_health
+    jid = start_python_job(
+        f"Service Incidents — {t['name']}", "service_health",
+        fetch_service_health,
+        args=(dict(t), pfx_path, pfx_pass, "incidents", include_resolved),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "service_incidents_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -187,25 +164,17 @@ def message_center_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
-
     msg_type = request.form.get("message_type", "all")
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-ServiceHealth.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-ReportType", "messageCenter",
-    ]
-    if msg_type != "all":
-        cmd += ["-MessageType", msg_type]
-
-    jid = start_job(f"Message Center — {t['name']}", "service_health", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_service_health
+    jid = start_python_job(
+        f"Message Center — {t['name']}", "service_health",
+        fetch_service_health,
+        args=(dict(t), pfx_path, pfx_pass, "messageCenter"),
+        kwargs={"message_type": msg_type if msg_type != "all" else ""},
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "message_center_fetch",
                tenant_id=tenant_id, tenant_name=t["name"],
                details=f"Type: {msg_type}")
@@ -236,21 +205,15 @@ def maintenance_fetch(tenant_id):
     if not pfx_pass:
         return jsonify({"ok": False, "error": "PFX password not configured."})
 
-    tenant_val = t["tenant_id"] or t["domain"]
     pfx_path = str(tenant_pfx_path(tenant_id))
-    env = build_ps_env(pfx_pass)
 
-    cmd = [
-        PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-        str(SCRIPTS_DIR / "Get-ServiceHealth.ps1"),
-        "-Tenant", tenant_val,
-        "-ClientId", t["client_id"],
-        "-CertificatePath", pfx_path,
-        "-ReportType", "maintenance",
-    ]
-
-    jid = start_job(f"Planned Maintenance — {t['name']}", "service_health", cmd,
-                    tenant_id=tenant_id, env=env)
+    from graph_jobs import fetch_service_health
+    jid = start_python_job(
+        f"Planned Maintenance — {t['name']}", "service_health",
+        fetch_service_health,
+        args=(dict(t), pfx_path, pfx_pass, "maintenance"),
+        tenant_id=tenant_id,
+    )
     log_action(current_user(), "maintenance_fetch",
                tenant_id=tenant_id, tenant_name=t["name"])
     return jsonify({"ok": True, "job_id": jid})
@@ -286,23 +249,15 @@ def health_overview_scan():
         if not pfx_pass:
             continue
 
-        tenant_val = t["tenant_id"] or t["domain"]
         pfx_path = str(tenant_pfx_path(tid))
-        out_dir = str(tenant_output_dir(tid))
-        env = build_ps_env(pfx_pass)
 
-        cmd = [
-            PWSH, "-NoProfile", "-ExecutionPolicy", "Bypass",
-            str(SCRIPTS_DIR / "Get-ServiceHealth.ps1"),
-            "-Tenant", tenant_val,
-            "-ClientId", t["client_id"],
-            "-CertificatePath", pfx_path,
-            "-OutputFolder", out_dir,
-            "-ReportType", "overview",
-        ]
-
-        jid = start_job(f"Health Overview — {t['name']}", "service_health",
-                        cmd, tenant_id=tid, env=env)
+        from graph_jobs import fetch_service_health
+        jid = start_python_job(
+            f"Health Overview — {t['name']}", "service_health",
+            fetch_service_health,
+            args=(dict(t), pfx_path, pfx_pass, "overview"),
+            tenant_id=tid,
+        )
         job_ids.append(jid)
 
     log_action(current_user(), "health_overview_scan",
