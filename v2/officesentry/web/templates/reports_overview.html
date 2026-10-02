@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Reports · Office Sentry{% endblock %}
+{% macro kpi(row, key, unit='') -%}
+{% set k = row.kpis[key] %}
+{% if k.value is none %}<span class="muted">n/a</span>{% else %}{{ '{:,.2f}'.format(k.value) if unit == 'money' else '%g'|format(k.value) }}{{ unit if unit not in ('', 'money') }}{% if k.delta %} <span class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}</span>{% endif %}{% endif %}
+{%- endmacro %}
+{% block content %}
+<div class="heading">
+  <h1>Security &amp; licensing overview</h1>
+  <span class="muted small">Latest data per tenant · changes vs 4 weeks ago</span>
+</div>
+{% if not rows %}
+<div class="card"><p>No tenants to show.</p></div>
+{% else %}
+<div class="card scroll">
+<table>
+  <thead><tr>
+    <th>Tenant</th><th>Critical</th><th>High</th><th>Medium</th>
+    <th class="num">Secure Score</th><th class="num">MFA</th><th class="num">Admins</th>
+    <th class="num">Inactive</th><th class="num">Waste / month ({{ currency }})</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for row in rows|sort(attribute='counts.critical', reverse=true) %}
+  <tr>
+    <td><a href="{{ url_for('reports.tenant_report', tenant_id=row.tenant.id) }}">{{ row.tenant.name }}</a>
+      {% if row.stale_data %}<div class="small warn-text">Some data is out of date</div>{% endif %}</td>
+    <td class="num">{% if row.counts.critical %}<span class="sev sev-critical">{{ row.counts.critical }}</span>{% else %}0{% endif %}</td>
+    <td class="num">{% if row.counts.high %}<span class="sev sev-high">{{ row.counts.high }}</span>{% else %}0{% endif %}</td>
+    <td class="num">{{ row.counts.medium }}</td>
+    <td class="num">{{ kpi(row, 'secure_score.pct', '%') }}</td>
+    <td class="num">{{ kpi(row, 'mfa.registered_pct', '%') }}</td>
+    <td class="num">{{ kpi(row, 'admins.privileged_principals') }}</td>
+    <td class="num">{{ kpi(row, 'stale') }}</td>
+    <td class="num">{{ kpi(row, 'waste', 'money') }}</td>
+    <td><a href="{{ url_for('reports.tenant_report_xlsx', tenant_id=row.tenant.id) }}">XLSX</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">Licence waste counts unassigned, disabled-user and inactive-user licences that have a price set under Licence prices.</p>
+{% endif %}
+{% endblock %}
