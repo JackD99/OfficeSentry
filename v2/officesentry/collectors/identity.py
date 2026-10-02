@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .. import store
-from ..graph import LicenseRequired, PermissionMissing
+from ..graph import GraphError, LicenseRequired, PermissionMissing
 from .base import Collector, RunContext, register
 
 # Built-in roles treated as privileged even where Graph doesn't flag
@@ -40,6 +40,7 @@ MFA_METHOD_TYPES = {
 }
 
 PER_USER_MFA_LIMIT = 2000
+CA_GROUP_LIMIT = 200
 
 
 def _principal_summary(principal: dict | None, principal_id: str) -> dict:
@@ -52,6 +53,7 @@ def _principal_summary(principal: dict | None, principal_id: str) -> dict:
         "userPrincipalName": principal.get("userPrincipalName"),
         "accountEnabled": principal.get("accountEnabled"),
         "userType": principal.get("userType"),
+        "appId": principal.get("appId"),
     }
 
 
@@ -138,10 +140,43 @@ class ConditionalAccess(Collector):
             ctx.warn("Conditional Access needs Entra ID P1")
             return
         ctx.objects("ca_policy", [(p["id"], p) for p in policies])
+        ctx.objects("ca_group", _expand_groups(ctx, policies))
         ctx.metric("ca.policies_total", len(policies))
         ctx.metric("ca.policies_enabled", sum(p.get("state") == "enabled" for p in policies))
         ctx.metric("ca.policies_report_only",
                    sum(p.get("state") == "enabledForReportingButNotEnforced" for p in policies))
+
+
+def _policy_group_ids(policies: list[dict]) -> list[str]:
+    ids = []
+    for p in policies:
+        users = (p.get("conditions") or {}).get("users") or {}
+        for key in ("includeGroups", "excludeGroups"):
+            for gid in users.get(key) or []:
+                if gid not in ids:
+                    ids.append(gid)
+    return ids
+
+
+def _expand_groups(ctx: RunContext, policies: list[dict]) -> list[tuple[str, dict]]:
+    """Name and transitive user members of every group a policy includes or excludes."""
+    ids = _policy_group_ids(policies)
+    if len(ids) > CA_GROUP_LIMIT:
+        ctx.warn(f"Expanded the first {CA_GROUP_LIMIT} of {len(ids)} groups used by Conditional Access")
+        ids = ids[:CA_GROUP_LIMIT]
+    rows = []
+    for gid in ids:
+        try:
+            name = ctx.graph.get(f"/groups/{gid}", params={"$select": "displayName"}).get("displayName")
+            members = ctx.paged(ctx.graph.get_all(f"/groups/{gid}/transitiveMembers", params={
+                "$select": "id", "$top": "999"}))
+        except GraphError as exc:
+            ctx.log(f"Could not read group {gid}: {exc.message}", "warning")
+            rows.append((gid, {"displayName": None, "members": None}))
+            continue
+        rows.append((gid, {"displayName": name, "members": sorted(
+            m["id"] for m in members if (m.get("@odata.type") or "#microsoft.graph.user") == "#microsoft.graph.user")}))
+    return rows
 
 
 @register

@@ -71,3 +71,85 @@ SECURE_SCORES = [
                         "scoreInPercentage": 100, "implementationStatus": "Done"}]},
     {"createdDateTime": "2026-09-30T00:00:00Z", "currentScore": 40.0, "maxScore": 100.0, "controlScores": []},
 ]
+
+# -- Phase 4: Exchange, inbox rules, apps, sharing ------------------------------
+
+MICROSOFT = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"
+
+SERVICE_PRINCIPALS = [
+    {"id": "sp-graph", "appId": "00000003-0000-0000-c000-000000000000", "displayName": "Microsoft Graph",
+     "appOwnerOrganizationId": MICROSOFT, "servicePrincipalType": "Application"},
+    {"id": "sp-evil", "appId": "app-evil", "displayName": "Mail Sync Pro", "appOwnerOrganizationId": "other",
+     "publisherName": "Unknown Ltd", "servicePrincipalType": "Application"},
+    {"id": "sp-zoom", "appId": "app-zoom", "displayName": "Zoom", "appOwnerOrganizationId": "zoom-tenant",
+     "verifiedPublisher": {"displayName": "Zoom Video Communications"}, "servicePrincipalType": "Application"},
+]
+GRAPH_APP_ROLES = {"appRoles": [{"id": "r-mailread", "value": "Mail.Read"},
+                                {"id": "r-userread", "value": "User.Read.All"}]}
+APP_ROLE_ASSIGNMENTS = {
+    "sp-evil": [{"id": "ara1", "resourceId": "sp-graph", "resourceDisplayName": "Microsoft Graph",
+                 "appRoleId": "r-mailread", "createdDateTime": "2026-09-20T00:00:00Z"}],
+    "sp-zoom": [{"id": "ara2", "resourceId": "sp-graph", "resourceDisplayName": "Microsoft Graph",
+                 "appRoleId": "r-userread", "createdDateTime": "2025-01-01T00:00:00Z"}],
+}
+DELEGATED_GRANTS = [
+    {"id": "g1", "clientId": "sp-zoom", "consentType": "AllPrincipals", "resourceId": "sp-graph",
+     "scope": "openid User.Read"},
+    {"id": "g2", "clientId": "sp-evil", "consentType": "Principal", "principalId": "u1", "resourceId": "sp-graph",
+     "scope": "Mail.Read offline_access"},
+]
+APPLICATIONS = [
+    {"id": "app1", "appId": "a1", "displayName": "Old connector", "createdDateTime": "2023-01-01T00:00:00Z",
+     "passwordCredentials": [{"displayName": "s1", "endDateTime": "2025-01-01T00:00:00Z"}], "keyCredentials": []},
+    {"id": "app2", "appId": "a2", "displayName": "Current connector", "createdDateTime": "2024-01-01T00:00:00Z",
+     "passwordCredentials": [{"displayName": "s1", "endDateTime": "2099-01-01T00:00:00Z"}], "keyCredentials": []},
+]
+AUTHORIZATION_POLICY = {
+    "allowInvitesFrom": "everyone", "guestUserRoleId": "10dae51f-b6af-4016-8d66-8c2a99b929b3",
+    "defaultUserRolePermissions": {"allowedToCreateApps": True,
+                                   "permissionGrantPoliciesAssigned": [
+                                       "ManagePermissionGrantsForSelf.microsoft-user-default-legacy"]},
+}
+SHAREPOINT_SETTINGS = {"sharingCapability": "externalUserAndGuestSharing", "sharingDomainRestrictionMode": "none"}
+
+INBOX_RULES = {
+    "u1": [
+        {"id": "r1", "displayName": ".", "isEnabled": True, "sequence": 1,
+         "conditions": {"bodyContains": ["invoice", "payment"]},
+         "actions": {"moveToFolder": "fid-rss", "markAsRead": True, "stopProcessingRules": True}},
+        {"id": "r2", "displayName": "Copy to home", "isEnabled": True, "sequence": 2, "conditions": {},
+         "actions": {"forwardTo": [{"emailAddress": {"address": "ann.home@gmail.com"}}]}},
+    ],
+    "u7": [
+        {"id": "r3", "displayName": "To manager", "isEnabled": True, "sequence": 1, "conditions": {},
+         "actions": {"redirectTo": [{"emailAddress": {"address": "boss@x.com"}}]}},
+    ],
+}
+FOLDERS = {"fid-rss": {"displayName": "RSS Feeds"}}
+
+EXCHANGE = {
+    "Get-AcceptedDomain": [{"DomainName": "x.com", "DomainType": "Authoritative", "Default": True}],
+    "Get-Mailbox": [
+        {"ExternalDirectoryObjectId": "u1", "Guid": "g-u1", "UserPrincipalName": "ann@x.com",
+         "PrimarySmtpAddress": "ann@x.com", "DisplayName": "Ann", "RecipientTypeDetails": "UserMailbox",
+         "ForwardingSmtpAddress": "smtp:ann@gmail.com", "DeliverToMailboxAndForward": True,
+         "GrantSendOnBehalfTo": []},
+        {"ExternalDirectoryObjectId": "u7", "Guid": "g-u7", "UserPrincipalName": "info@x.com",
+         "PrimarySmtpAddress": "info@x.com", "DisplayName": "Info", "RecipientTypeDetails": "SharedMailbox",
+         "GrantSendOnBehalfTo": ["Ann"]},
+    ],
+    "Get-MailboxPermission": {
+        "g-u1": [{"User": "NT AUTHORITY\\SELF", "AccessRights": ["FullAccess"], "IsInherited": False}],
+        "g-u7": [{"User": "ann@x.com", "AccessRights": ["FullAccess"], "IsInherited": False},
+                 {"User": "NT AUTHORITY\\SELF", "AccessRights": ["FullAccess"], "IsInherited": False}],
+    },
+    "Get-RecipientPermission": [{"Identity": "Info", "Trustee": "ann@x.com", "AccessRights": ["SendAs"]},
+                                {"Identity": "Ann", "Trustee": "NT AUTHORITY\\SELF", "AccessRights": ["SendAs"]}],
+    "Get-OrganizationConfig": [{"AuditDisabled": False}],
+    "Get-TransportConfig": [{"SmtpClientAuthenticationDisabled": False}],
+    "Get-HostedOutboundSpamFilterPolicy": [{"Name": "Default", "AutoForwardingMode": "Automatic", "IsDefault": True}],
+    "Get-RemoteDomain": [{"Name": "Default", "DomainName": "*", "AutoForwardEnabled": True}],
+    "Get-Recipient": [],
+}
+INFO_USER = {"id": "u7", "displayName": "Info", "userPrincipalName": "info@x.com", "userType": "Member",
+             "accountEnabled": True, "assignedLicenses": [], "signInActivity": {}}

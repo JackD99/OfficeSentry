@@ -15,7 +15,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from . import coverage
 from .licences import is_stale, last_sign_in, licence_summary, load_prices
+from .mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from .snapshot import TenantSnapshot
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
@@ -78,8 +80,8 @@ def _label(row: dict) -> str:
 def _names(snap: TenantSnapshot) -> dict[str, str]:
     """Best available label for any object ID seen in the tenant's snapshots."""
     names: dict[str, str] = {}
-    for rows in (snap.objects("admin_roles", "role_assignment"), snap.objects("mfa_registration", "mfa_registration"),
-                 snap.objects("users", "user")):
+    for rows in (snap.objects("conditional_access", "ca_group"), snap.objects("admin_roles", "role_assignment"),
+                 snap.objects("mfa_registration", "mfa_registration"), snap.objects("users", "user")):
         for r in rows or []:
             key = r.get("principalId") or r["_id"]
             label = r.get("userPrincipalName") or r.get("displayName")
@@ -152,7 +154,8 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
         for uid in excluded.get("excludeUsers") or []:
             findings.append(Finding("medium", names.get(uid, uid), f"Excluded from \"{p.get('displayName')}\"", uid))
         for gid in excluded.get("excludeGroups") or []:
-            findings.append(Finding("medium", f"Group {gid}", f"Group excluded from \"{p.get('displayName')}\"", gid))
+            findings.append(Finding("medium", names.get(gid, f"Group {gid}"),
+                                    f"Group excluded from \"{p.get('displayName')}\"", gid))
     policy_names = ", ".join(p.get("displayName", "?") for p in covering)
     if findings:
         return ("fail", f"Enforced by {policy_names}, with {len(findings)} exclusion(s) to review", findings)
@@ -245,8 +248,10 @@ def service_principal_admins(snap: TenantSnapshot, now: datetime):
     admins = _privileged_users(snap)
     if admins is None:
         return _unavailable("Admin role data hasn't been collected yet")
+    own = snap.own_app_id
     findings = [Finding("medium", a.get("displayName") or a["principalId"], f"App holding {a['roleName']}",
-                        a["principalId"]) for a in admins if a.get("principalType") == "servicePrincipal"]
+                        a["principalId"]) for a in admins if a.get("principalType") == "servicePrincipal"
+                and not (own and a.get("appId") == own and a.get("roleName") == "Global Reader")]
     return ("fail", f"{len(findings)} app(s) with privileged roles", findings) if findings else \
         ("pass", "No apps hold privileged roles", [])
 
@@ -326,6 +331,350 @@ def unassigned_licences(snap: TenantSnapshot, now: datetime):
                                 line.sku_id))
     return ("fail", f"{sum(1 for _ in findings)} subscription(s) with spare licences", findings) if findings else \
         ("pass", "Every paid licence is assigned", [])
+
+
+# -- Conditional Access coverage ---------------------------------------------------
+
+
+@rule("admins_ca_mfa", "Every admin is covered by an MFA policy", "Admins",
+      "Make sure each admin is included in an enabled Conditional Access policy that requires MFA for all "
+      "apps, and isn't excluded from it directly or through a group. Use a separate policy for break-glass accounts.")
+def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
+    defaults, _ = _ca_data(snap)
+    admins = _privileged_users(snap)
+    if defaults is None or admins is None:
+        return _unavailable("Needs Conditional Access and admin role data")
+    if defaults:
+        return ("pass", "Security Defaults require MFA for admins", [])
+    d = coverage.directory(snap)
+    policies = snap.objects("conditional_access", "ca_policy") or []
+    findings, seen = [], set()
+    for a in admins:
+        pid = a["principalId"]
+        if a.get("principalType") != "user" or pid in seen or a.get("accountEnabled") is False:
+            continue
+        seen.add(pid)
+        c = coverage.coverage_for(pid, _label(a), a.get("userType") or "Member", policies, d)
+        if not c.mfa:
+            why = f"excluded from {', '.join(c.excluded_from)}" if c.excluded_from else "no MFA policy applies"
+            findings.append(Finding("high", c.label, f"{a['roleName']}: {why}", pid))
+    return ("fail", f"{len(findings)} admin(s) not covered by MFA", findings) if findings else \
+        ("pass", f"All {len(seen)} active admin(s) are covered", [])
+
+
+# -- Email -----------------------------------------------------------------------
+
+
+def _exchange_missing(snap: TenantSnapshot):
+    status = snap.objects("mailboxes", "exchange_status")
+    if status and not status[0].get("available"):
+        return _unavailable("The tenant has no Exchange Online licence")
+    return None
+
+
+@rule("external_forwarding", "No mail is forwarded outside the organisation", "Email",
+      "Remove forwarding to outside addresses unless the client has a documented business reason. "
+      "Forwarding is the most common way attackers keep reading a mailbox after a password reset.")
+def external_forwarding(snap: TenantSnapshot, now: datetime):
+    if missing := _exchange_missing(snap):
+        return missing
+    mailboxes = snap.objects("mailboxes", "mailbox")
+    rules = snap.objects("inbox_rules", "inbox_rule")
+    domains = tenant_domains(snap)
+    if (mailboxes is None and rules is None) or domains is None:
+        return _unavailable("Mailbox and inbox rule data hasn't been collected yet")
+    findings = []
+    for m in mailboxes or []:
+        target = mailbox_forwarding(m)
+        if target and is_external(target, domains):
+            keep = "keeps a copy" if m.get("DeliverToMailboxAndForward") else "doesn't keep a copy"
+            findings.append(Finding("high", m.get("PrimarySmtpAddress") or m["_id"],
+                                    f"Mailbox forwarding to {target} ({keep})", f"mailbox:{m['_id']}"))
+    for r in rules or []:
+        risk = inbox_rule_risk(r, domains)
+        if risk.external:
+            state = "" if r.get("isEnabled", True) else " (disabled)"
+            findings.append(Finding("high" if r.get("isEnabled", True) else "low", r.get("mailbox") or "?",
+                                    f"Inbox rule \"{r.get('displayName')}\" forwards to {', '.join(risk.external)}"
+                                    f"{state}", f"rule:{r['_id']}"))
+    scope = "" if mailboxes is not None else " (inbox rules only; Exchange data not collected)"
+    return ("fail", f"{len(findings)} external forward(s){scope}", findings) if findings else \
+        ("pass", f"Nothing forwards outside the organisation{scope}", [])
+
+
+@rule("suspicious_inbox_rules", "No inbox rules hide mail", "Email",
+      "Check each rule with the mailbox owner. Rules that delete or bury messages about payments or "
+      "security alerts are a sign of a compromised account: reset the password, revoke sessions and review sign-ins.")
+def suspicious_inbox_rules(snap: TenantSnapshot, now: datetime):
+    if missing := _exchange_missing(snap):
+        return missing
+    rules = snap.objects("inbox_rules", "inbox_rule")
+    domains = tenant_domains(snap)
+    if rules is None or domains is None:
+        return _unavailable("Inbox rules haven't been collected yet")
+    findings = []
+    for r in rules:
+        risk = inbox_rule_risk(r, domains)
+        reasons = [x for x in risk.reasons if not x.startswith("Forwards to")]
+        if risk.severity and reasons:
+            findings.append(Finding(risk.severity, r.get("mailbox") or "?",
+                                    f"\"{r.get('displayName')}\": {'; '.join(reasons)}", f"rule:{r['_id']}"))
+    return ("fail", f"{len(findings)} suspicious inbox rule(s)", findings) if findings else \
+        ("pass", f"None of {len(rules)} inbox rule(s) hide mail", [])
+
+
+@rule("auto_forward_policy", "Automatic forwarding to outside addresses is off", "Email",
+      "Set the outbound spam filter policy's automatic forwarding to Off (or Automatic, which Microsoft treats "
+      "as Off), and allow forwarding only for named mailboxes with a separate policy.")
+def auto_forward_policy(snap: TenantSnapshot, now: datetime):
+    if missing := _exchange_missing(snap):
+        return missing
+    policies = snap.objects("mailboxes", "outbound_spam_policy")
+    if policies is None:
+        return _unavailable("Exchange data hasn't been collected yet")
+    findings = [Finding("medium", p.get("Name") or p["_id"], "Allows automatic forwarding to any outside address",
+                        p["_id"]) for p in policies if p.get("AutoForwardingMode") == "On"]
+    return ("fail", "Automatic external forwarding is allowed", findings) if findings else \
+        ("pass", "Outbound policies block automatic external forwarding", [])
+
+
+@rule("shared_mailbox_signin", "Shared mailboxes can't be signed in to", "Email",
+      "Block sign-in for each shared mailbox's account (it doesn't need a password). An enabled shared "
+      "mailbox account usually has no MFA and nobody watching it.")
+def shared_mailbox_signin(snap: TenantSnapshot, now: datetime):
+    if missing := _exchange_missing(snap):
+        return missing
+    mailboxes = snap.objects("mailboxes", "mailbox")
+    users = snap.objects("users", "user")
+    if mailboxes is None or users is None:
+        return _unavailable("Needs mailbox and user data")
+    enabled = {u["_id"] for u in users if u.get("accountEnabled")}
+    shared = [m for m in mailboxes if m.get("RecipientTypeDetails") == "SharedMailbox"]
+    findings = [Finding("medium", m.get("PrimarySmtpAddress") or m["_id"], "Shared mailbox account allows sign-in",
+                        m["_id"]) for m in shared if m.get("ExternalDirectoryObjectId") in enabled]
+    return ("fail", f"{len(findings)} of {len(shared)} shared mailbox(es) allow sign-in", findings) if findings else \
+        ("pass", f"All {len(shared)} shared mailbox(es) block sign-in", [])
+
+
+def _mail_setting(snap: TenantSnapshot, key: str):
+    rows = snap.objects("mailboxes", "mail_settings")
+    if not rows:
+        return None
+    return rows[0].get(key)
+
+
+@rule("mailbox_auditing", "Mailbox auditing is on", "Email",
+      "Turn mailbox auditing back on for the organisation (Set-OrganizationConfig -AuditDisabled $false). "
+      "Without it there's no record of who read or deleted mail during an incident.")
+def mailbox_auditing(snap: TenantSnapshot, now: datetime):
+    if missing := _exchange_missing(snap):
+        return missing
+    value = _mail_setting(snap, "AuditDisabled")
+    if value is None:
+        return _unavailable("Exchange data hasn't been collected yet")
+    return ("fail", "Mailbox auditing is turned off", [Finding("medium", "Organisation", "AuditDisabled is set")]) \
+        if value else ("pass", "Mailbox auditing is on for the organisation", [])
+
+
+@rule("smtp_auth", "SMTP AUTH is turned off", "Email",
+      "Turn off SMTP AUTH for the organisation and enable it only on the mailboxes of devices or apps that "
+      "still need it, such as scanners. It accepts passwords without MFA.")
+def smtp_auth(snap: TenantSnapshot, now: datetime):
+    if missing := _exchange_missing(snap):
+        return missing
+    value = _mail_setting(snap, "SmtpClientAuthenticationDisabled")
+    if value is None:
+        return _unavailable("Exchange data hasn't been collected yet")
+    return ("pass", "SMTP AUTH is off for the organisation", []) if value else \
+        ("fail", "SMTP AUTH is on for the organisation", [Finding("low", "Organisation", "SMTP AUTH is allowed")])
+
+
+# -- Apps ------------------------------------------------------------------------
+
+HIGH_RISK_PERMISSIONS = {
+    "Mail.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite", "full_access_as_app",
+    "Exchange.ManageAsApp", "Files.Read.All", "Files.ReadWrite.All", "Sites.Read.All", "Sites.ReadWrite.All",
+    "Sites.FullControl.All", "Directory.ReadWrite.All", "User.ReadWrite.All", "Group.ReadWrite.All",
+    "RoleManagement.ReadWrite.Directory", "Application.ReadWrite.All", "AppRoleAssignment.ReadWrite.All",
+    "Policy.ReadWrite.ConditionalAccess", "UserAuthenticationMethod.ReadWrite.All", "Domain.ReadWrite.All",
+}
+SENSITIVE_DELEGATED = {
+    "Mail.Read", "Mail.ReadWrite", "Mail.Send", "Mail.Read.Shared", "Mail.ReadWrite.Shared", "full_access_as_user",
+    "EWS.AccessAsUser.All", "Files.Read.All", "Files.ReadWrite.All", "Sites.Read.All", "Sites.ReadWrite.All",
+    "Directory.ReadWrite.All", "Directory.AccessAsUser.All", "User.ReadWrite.All", "MailboxSettings.ReadWrite",
+}
+
+
+def app_risks(snap: TenantSnapshot) -> list[dict] | None:
+    """Third-party apps with what they hold and how risky it is (shared with the Apps report)."""
+    sps = snap.objects("app_consents", "service_principal")
+    if sps is None:
+        return None
+    own = snap.own_app_id
+    perms = snap.objects("app_consents", "app_permission") or []
+    grants = snap.objects("app_consents", "delegated_grant") or []
+    out = []
+    for sp in sps:
+        if sp.get("microsoft") or sp.get("type") != "Application" or (own and sp.get("appId") == own):
+            continue
+        app_perms = sorted({p["permission"] for p in perms if p.get("clientId") == sp["_id"] and p.get("permission")})
+        tenant_scopes, user_scopes, users = set(), set(), set()
+        for g in grants:
+            if g.get("clientId") != sp["_id"]:
+                continue
+            if g.get("consentType") == "AllPrincipals":
+                tenant_scopes.update(g.get("scopes") or [])
+            else:
+                user_scopes.update(g.get("scopes") or [])
+                users.add(g.get("principalId"))
+        if not (app_perms or tenant_scopes or user_scopes):
+            continue
+        risky_app = sorted(set(app_perms) & HIGH_RISK_PERMISSIONS)
+        risky_tenant = sorted(tenant_scopes & SENSITIVE_DELEGATED)
+        risky_user = sorted(user_scopes & SENSITIVE_DELEGATED)
+        verified = bool(sp.get("verifiedPublisher"))
+        if risky_app:
+            severity = "medium" if verified else "high"
+        elif risky_tenant:
+            severity = "medium"
+        elif risky_user and not verified:
+            severity = "low"
+        else:
+            severity = None
+        out.append({"id": sp["_id"], "name": sp.get("displayName") or sp["_id"],
+                    "publisher": sp.get("verifiedPublisher") or sp.get("publisherName") or "",
+                    "verified": verified, "app_permissions": app_perms, "tenant_scopes": sorted(tenant_scopes),
+                    "user_scopes": sorted(user_scopes), "users": len(users), "severity": severity,
+                    "risky": risky_app + [s for s in risky_tenant + risky_user if s not in risky_app]})
+    out.sort(key=lambda a: (SEVERITY_RANK.get(a["severity"] or "info", 9), a["name"].lower()))
+    return out
+
+
+@rule("risky_app_permissions", "Third-party apps hold only the access they need", "Apps",
+      "Review each app with the client. Remove apps nobody recognises (Enterprise applications > Delete), "
+      "and for the rest confirm the vendor and that it still needs mailbox or file access.")
+def risky_app_permissions(snap: TenantSnapshot, now: datetime):
+    apps = app_risks(snap)
+    if apps is None:
+        return _unavailable("App data hasn't been collected yet")
+    findings = []
+    for a in apps:
+        if not a["severity"]:
+            continue
+        who = "unverified publisher" if not a["verified"] else f"verified publisher {a['publisher']}"
+        if set(a["risky"]) & set(a["app_permissions"]):
+            how = "application permission"
+        elif set(a["risky"]) & set(a["tenant_scopes"]):
+            how = "consented for all users"
+        else:
+            how = f"consented by {a['users']} user(s)"
+        findings.append(Finding(a["severity"], a["name"], f"{', '.join(a['risky'])} ({how}; {who})", a["id"]))
+    return ("fail", f"{len(findings)} app(s) with access to mail, files or the directory", findings) if findings \
+        else ("pass", f"No third-party app holds high-risk access ({len(apps)} app(s) reviewed)", [])
+
+
+def _authorization_policy(snap: TenantSnapshot):
+    rows = snap.objects("tenant_policies", "authorization_policy")
+    return rows[0] if rows else None
+
+
+@rule("user_consent", "Users can't consent to apps on their own", "Apps",
+      "Set user consent to \"Allow user consent for apps from verified publishers, for selected permissions\" "
+      "or turn it off and use the admin consent workflow. Consent phishing relies on this setting.")
+def user_consent(snap: TenantSnapshot, now: datetime):
+    policy = _authorization_policy(snap)
+    if policy is None:
+        return _unavailable("Consent settings haven't been collected yet")
+    assigned = [p for p in policy.get("permissionGrantPolicies") or [] if "ManagePermissionGrantsForSelf" in p]
+    if any(p.endswith("microsoft-user-default-legacy") for p in assigned):
+        return ("fail", "Users can consent to any app", [Finding(
+            "medium", "Tenant", "Any user can grant any app access to their mail and files")])
+    if assigned:
+        return ("pass", "Users can consent only to verified publishers' low-risk permissions", [])
+    return ("pass", "User consent is turned off", [])
+
+
+@rule("app_credentials", "App secrets and certificates are current", "Apps",
+      "Renew credentials before they expire to avoid an outage, and delete app registrations whose "
+      "credentials have all expired if nothing uses them any more.")
+def app_credentials(snap: TenantSnapshot, now: datetime):
+    apps = snap.objects("app_consents", "application")
+    if apps is None:
+        return _unavailable("App data hasn't been collected yet")
+    soon = now.timestamp() + 30 * 86400
+    findings = []
+    for a in apps:
+        ends = [c["endDateTime"] for c in a.get("credentials") or [] if c.get("endDateTime")]
+        if not ends:
+            continue
+        latest = max(ends)
+        latest_ts = datetime.fromisoformat(latest.replace("Z", "+00:00")).timestamp()
+        if latest_ts < now.timestamp():
+            findings.append(Finding("low", a.get("displayName") or a["_id"],
+                                    f"All {len(ends)} credential(s) expired, last on {latest[:10]}", a["_id"]))
+        elif latest_ts < soon:
+            findings.append(Finding("medium", a.get("displayName") or a["_id"],
+                                    f"Last valid credential expires {latest[:10]}", a["_id"]))
+    return ("fail", f"{len(findings)} app registration(s) with expiring or expired credentials", findings) \
+        if findings else ("pass", "No app registration credentials expire in the next 30 days", [])
+
+
+# -- Sharing and guests -------------------------------------------------------------
+
+SHARING_LEVELS = {
+    "disabled": "Only people in the organisation",
+    "existingExternalUserSharingOnly": "Existing guests only",
+    "externalUserSharingOnly": "New and existing guests",
+    "externalUserAndGuestSharing": "Anyone, including anonymous links",
+}
+
+
+@rule("sharepoint_sharing", "Files can't be shared with anonymous links", "Sharing",
+      "Change SharePoint external sharing to \"New and existing guests\" so every external person signs in. "
+      "If the client relies on Anyone links, set them to expire and to view-only.")
+def sharepoint_sharing(snap: TenantSnapshot, now: datetime):
+    rows = snap.objects("tenant_policies", "sharepoint_settings")
+    if snap.objects("tenant_policies", "authorization_policy") is None:
+        return _unavailable("Sharing settings haven't been collected yet")
+    if not rows:
+        return _unavailable("SharePoint sharing settings weren't available")
+    level = rows[0].get("sharingCapability")
+    label = SHARING_LEVELS.get(level, level or "unknown")
+    if level == "externalUserAndGuestSharing":
+        return ("fail", label, [Finding("medium", "SharePoint and OneDrive", "Anyone links are allowed")])
+    return ("pass", label, [])
+
+
+@rule("guest_invites", "Only admins and members can invite guests", "Guests",
+      "Restrict guest invitations to admins and the Guest Inviter role, or at least to members, under "
+      "External collaboration settings.")
+def guest_invites(snap: TenantSnapshot, now: datetime):
+    policy = _authorization_policy(snap)
+    if policy is None:
+        return _unavailable("Guest settings haven't been collected yet")
+    if policy.get("allowInvitesFrom") == "everyone":
+        return ("fail", "Anyone, including guests, can invite guests", [Finding(
+            "low", "Tenant", "Guests can invite other guests")])
+    return ("pass", {"none": "Nobody can invite guests", "adminsAndGuestInviters": "Only admins can invite guests",
+                     }.get(policy.get("allowInvitesFrom"), "Members and admins can invite guests"), [])
+
+
+@rule("pending_guests", "No old, unaccepted guest invitations", "Guests",
+      "Delete guest accounts whose invitation has gone unaccepted for 30 days; re-invite if still needed.")
+def pending_guests(snap: TenantSnapshot, now: datetime):
+    users = snap.objects("users", "user")
+    if users is None:
+        return _unavailable("User data hasn't been collected yet")
+    cutoff = now.timestamp() - 30 * 86400
+    findings = []
+    for u in users:
+        created = u.get("createdDateTime")
+        if u.get("userType") != "Guest" or u.get("externalUserState") != "PendingAcceptance" or not created:
+            continue
+        if datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp() < cutoff:
+            findings.append(Finding("low", _label(u), f"Invited {created[:10]}, never accepted", u["_id"]))
+    return ("fail", f"{len(findings)} guest invitation(s) unaccepted for 30+ days", findings) if findings else \
+        ("pass", "No stale guest invitations", [])
 
 
 def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResult]:

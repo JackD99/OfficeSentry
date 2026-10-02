@@ -49,13 +49,14 @@ def test_unavailable_checks_do_not_resolve(db, two_tenants):
 def test_accepted_risk_moves_out_of_report(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
+    highs = build(db, store.get_tenant(db, alpha)).counts["high"]
     fid = db.execute("SELECT id FROM findings WHERE rule_key = 'guest_admins'").fetchone()[0]
     findings.accept(db, fid, "jack", "Partner account, reviewed quarterly", None)
     report = build(db, store.get_tenant(db, alpha))
     by_key = {r.key: r for r in report.results}
     assert by_key["guest_admins"].status == "accepted"
     assert [(r.key, f.subject) for r, f, _ in report.accepted] == [("guest_admins", "g#EXT#@x.com")]
-    assert report.counts["high"] == 2  # was 3
+    assert report.counts["high"] == highs - 1
 
 
 def test_expired_acceptance_counts_again(db, two_tenants):
