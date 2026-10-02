@@ -16,6 +16,7 @@
     {% if current_user.role == 'admin' %}
     <a href="{{ url_for('admin.connections') }}">App connections</a>
     <a href="{{ url_for('reports.prices') }}">Licence prices</a>
+    <a href="{{ url_for('reports.email_settings') }}">Email</a>
     <a href="{{ url_for('admin.users') }}">Users</a>
     {% endif %}
   </nav>

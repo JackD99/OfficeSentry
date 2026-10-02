@@ -11,7 +11,7 @@ import traceback
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import store
+from . import findings, store
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .crypto import Vault
@@ -66,6 +66,13 @@ def execute_run(conn, run, graph_factory) -> str:
     status = "partial" if ctx.warnings else "succeeded"
     store.log_event(conn, run_id, "info", f"Finished: {status}")
     store.finish_run(conn, run_id, status, "; ".join(ctx.warnings) or None)
+    try:
+        stats = findings.sync(conn, store.get_tenant(conn, run["tenant_id"]))
+        if any(stats.values()):
+            store.log_event(conn, run_id, "info", "Findings: {new} new, {reopened} reopened, {resolved} resolved"
+                            .format(**stats))
+    except Exception:  # a rule bug must not mark a good collection as failed
+        store.log_event(conn, run_id, "error", "Updating findings failed:\n" + traceback.format_exc())
     return status
 
 
@@ -106,6 +113,10 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None) -> None:
     vault = Vault(cfg.encryption_keys)
     graph_factory = graph_factory or default_graph_factory(vault)
 
+    from . import mailer
+    from .web import create_app
+
+    app = create_app(cfg)  # for rendering emailed reports
     recovered = store.recover_orphaned_runs(conn)
     if recovered:
         log.warning("Marked %s orphaned run(s) as failed", recovered)
@@ -116,6 +127,10 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None) -> None:
         if time.monotonic() - last_tick > 60:
             schedule_tick(conn, cfg)
             last_tick = time.monotonic()
+            try:
+                mailer.run_due(app, conn, vault, cfg.timezone)
+            except Exception:  # never let email problems stop collections
+                log.exception("Sending scheduled reports failed")
             today = datetime.now(UTC).date()
             if today != last_prune_day:
                 removed = store.prune_snapshots(conn, cfg.retention_days)

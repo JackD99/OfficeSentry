@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Findings · {{ tenant.name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a></p>
+<div class="heading">
+  <h1>Findings</h1>
+  <nav class="tabs">
+    {% for v, label in [('open', 'Open'), ('accepted', 'Accepted risks'), ('resolved', 'Resolved')] %}
+    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id, view=v) }}" {% if v == view %}class="active"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+</div>
+<div class="card scroll">
+<table>
+  <thead><tr><th>Severity</th><th>Check</th><th>Account / item</th><th>Detail</th><th>First seen</th>
+    <th>{% if view == 'resolved' %}Resolved{% else %}Status{% endif %}</th></tr></thead>
+  <tbody>
+  {% for f in rows %}
+  <tr>
+    <td><span class="status sev-text-{{ f.severity }}">{{ f.severity }}</span></td>
+    <td>{{ titles.get(f.rule_key, f.rule_key) }}</td>
+    <td>{{ f.subject }}</td>
+    <td>{{ f.detail }}</td>
+    <td class="small">{{ f.first_seen[:10] }}</td>
+    <td class="small">
+      {% if view == 'resolved' %}{{ f.resolved_at[:10] }}
+      {% elif f.accepted_at %}
+        Accepted by {{ f.accepted_by }}{% if f.accepted_until %} until {{ f.accepted_until[:10] }}{% endif %}: {{ f.accepted_note }}
+        {% if current_user.role in ('admin', 'analyst') %}
+        <form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=f.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Undo</button></form>
+        {% endif %}
+      {% elif current_user.role in ('admin', 'analyst') %}
+        <details><summary>Accept risk</summary>
+          <form method="post" action="{{ url_for('reports.accept_finding', finding_id=f.id) }}" class="accept">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label>Reason <input name="note" maxlength="500" required></label>
+            <label>Until (optional) <input type="date" name="until"></label>
+            <button>Accept</button>
+          </form>
+        </details>
+      {% else %}open{% endif %}
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">Nothing here.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

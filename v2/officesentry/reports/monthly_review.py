@@ -9,14 +9,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
+from ..changes import Change, all_changes
 from ..collectors import REGISTRY
+from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
-from ..rules import SEVERITY_RANK, RuleResult, evaluate
+from ..rules import SEVERITY_RANK, Finding, RuleResult, evaluate
 from ..snapshot import TenantSnapshot
 from .charts import line_chart
 
 TITLE = "Monthly Security & Licensing Review"
 STALE_AFTER = timedelta(hours=36)  # data older than this is flagged in the report
+PERIOD = timedelta(days=28)
 
 
 @dataclass
@@ -64,6 +67,11 @@ class Report:
     secure_score_chart: str
     freshness: list[Freshness]
     counts: dict = field(default_factory=dict)
+    period_start: datetime | None = None
+    changes: list[Change] = field(default_factory=list)
+    resolved: list = field(default_factory=list)  # findings rows resolved in the period
+    accepted: list[tuple[RuleResult, Finding, object]] = field(default_factory=list)
+    new_count: int = 0
 
     @property
     def failing(self) -> list[RuleResult]:
@@ -113,6 +121,24 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
     snap = TenantSnapshot(conn, tenant)
     results = evaluate(snap, now)
     by_key = {r.key: r for r in results}
+    period_start = now - PERIOD
+    since = period_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Apply lifecycle: mark new findings, move accepted risks out of the totals.
+    lifecycle = lifecycle_map(conn, tenant["id"], now)
+    accepted = []
+    for r in results:
+        active = []
+        for f in r.findings:
+            life = lifecycle.get((r.key, finding_key(f)))
+            if life and life.accepted:
+                accepted.append((r, f, life))
+                continue
+            f.new = life is None or life.is_new_since(since)
+            active.append(f)
+        if r.status == "fail" and not active:
+            r.status = "accepted"
+        r.findings = active
 
     skus = snap.objects("tenant_profile", "subscribed_sku") or []
     users = snap.objects("users", "user")
@@ -142,14 +168,18 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
 
     points = _secure_score_points(snap)
     counts = {s: 0 for s in SEVERITY_RANK}
+    new_count = 0
     for r in results:
         for f in r.findings:
             counts[f.severity] += 1
+            new_count += f.new
 
     return Report(
         title=TITLE, tenant=dict(tenant), generated_at=now, currency=setting(conn, "currency", "GBP"),
         kpis=kpis, results=results, licences=licences,
         secure_score_chart=line_chart(points, label="Secure Score over time"), freshness=freshness, counts=counts,
+        period_start=period_start, changes=all_changes(conn, tenant["id"], since),
+        resolved=list(resolved_since(conn, tenant["id"], since)), accepted=accepted, new_count=new_count,
     )
 
 
@@ -161,6 +191,8 @@ def rollup_row(conn, tenant, now: datetime | None = None) -> dict:
         "kpis": {k.key: k for k in report.kpis},
         "counts": report.counts,
         "failing": len(report.failing),
+        "new": report.new_count,
+        "resolved": len(report.resolved),
         "unavailable": len(report.unavailable),
         "stale_data": any(f.stale for f in report.freshness),
     }

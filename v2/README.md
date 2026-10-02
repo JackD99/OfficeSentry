@@ -5,10 +5,11 @@ tenant, cross-tenant rollups, month-over-month changes and branded client
 reports. This is the rebuild planned in the 2026-10 review; the v1 portal
 remains in `../portal` until v2 replaces it.
 
-**Status: Phase 2.** Tenants can be connected and collected nightly, and the
-**Monthly Security & Licensing Review** is available per tenant (HTML, PDF,
-XLSX) with a cross-tenant overview. Next: findings history and "changes since
-last month" (Phase 3), then Exchange and SharePoint reports (Phase 4).
+**Status: Phase 3.** Tenants are collected nightly; the **Monthly Security &
+Licensing Review** is available per tenant (HTML, PDF, XLSX) with a
+cross-tenant overview, findings history, accepted risks, "since last month"
+changes and monthly emailed reports. Next: Exchange and SharePoint reports
+(Phase 4).
 
 ## Reports
 
@@ -18,6 +19,14 @@ last month" (Phase 3), then Exchange and SharePoint reports (Phase 4).
   tenant's licences can't support, and data freshness.
 - **Overview** (`/reports`): one row per tenant with severity counts and KPIs.
 - **Licence prices** (admin): enter monthly prices per SKU to cost waste.
+- **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
+  resolved and reopened dates. Analysts can accept a risk with a reason and an
+  optional expiry; accepted risks leave the totals and get their own section.
+- **Since last month**: new and fixed findings, admin role changes, new,
+  disabled and deleted accounts, and Conditional Access policies added,
+  switched or edited, compared with the snapshot from 4+ weeks earlier.
+- **Emailed reports** (`/tenants/<id>/schedules`, SMTP under Admin → Email):
+  monthly on a chosen day and hour, with PDF and XLSX attached.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, Global Admin count, guest admins, apps with
@@ -85,6 +94,9 @@ officesentry/
   rules.py       checks: snapshot -> pass / fail with findings / unavailable
   licences.py    SKU names, prices, licence-waste maths
   reports/       report builders (data only), SVG charts, XLSX/PDF export
+  findings.py    findings lifecycle (new, resolved, reopened, accepted)
+  changes.py     snapshot diffs for "since last month"
+  mailer.py      SMTP delivery and the monthly schedule
   worker.py      queue runner, nightly scheduler, orphan recovery
   web/           Flask app: access.py is the single authorization gate
 ```

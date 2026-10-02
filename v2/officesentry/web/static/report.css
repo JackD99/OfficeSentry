@@ -73,3 +73,10 @@ body.pdf { background: #fff; font-size: 11px; }
 body.pdf article { border: 0; padding: 0; max-width: none; margin: 0; }
 body.pdf .check, body.pdf .kpi, body.pdf .keep, body.pdf tr { break-inside: avoid; }
 body.pdf h2 { break-after: avoid; }
+
+ul.changes { list-style: none; padding: 0; margin: 0; }
+ul.changes li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.chg { display: inline-block; min-width: 64px; text-align: center; font-size: .7rem; font-weight: 700; text-transform: uppercase; border-radius: 10px; padding: 0 6px; border: 1.5px solid currentColor; margin-right: 6px; }
+.chg-added { color: var(--high); } .chg-removed { color: var(--low); } .chg-changed { color: var(--medium); }
+.chg-resolved { color: var(--ok); }
+.new { font-size: .68rem; font-weight: 700; text-transform: uppercase; color: var(--high); border: 1px solid currentColor; border-radius: 8px; padding: 0 5px; }

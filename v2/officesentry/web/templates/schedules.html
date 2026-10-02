@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Emailed reports · {{ tenant.name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a></p>
+<h1>Emailed reports</h1>
+{% if not mail_ready %}<div class="flash warning">Email isn't set up yet{% if current_user.role == 'admin' %}: <a href="{{ url_for('reports.email_settings') }}">configure SMTP</a>{% else %}; ask an admin to configure it{% endif %}.</div>{% endif %}
+<p class="muted">The Monthly Security &amp; Licensing Review is emailed once a month as a PDF and XLSX. Times are in {{ timezone }}.</p>
+<div class="card">
+<table>
+  <thead><tr><th>Recipients</th><th>When</th><th>Last sent</th><th></th></tr></thead>
+  <tbody>
+  {% for s in rows %}
+  <tr><td>{{ s.recipients }}</td><td>Day {{ s.day_of_month }} at {{ '%02d'|format(s.hour) }}:00</td><td>{{ s.last_period or 'not yet' }}</td>
+    <td>{% if current_user.role in ('admin', 'analyst') %}<div class="actions">
+      <form method="post" action="{{ url_for('reports.send_now', schedule_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Send now</button></form>
+      <form method="post" action="{{ url_for('reports.delete_schedule', schedule_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="danger">Remove</button></form>
+    </div>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">No emailed reports yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% if current_user.role in ('admin', 'analyst') %}
+<form method="post" class="card narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Add a monthly email</h2>
+  <label>Recipients <input name="recipients" placeholder="it@client.com, you@msp.com" required></label>
+  <label>Day of month <select name="day_of_month">{% for d in range(1, 29) %}<option {% if d == 1 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
+  <label>Hour <select name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if h == 8 %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></label>
+  <button class="primary">Add</button>
+</form>
+{% endif %}
+{% if deliveries %}
+<section class="card">
+  <h2>Recent deliveries</h2>
+  <table>{% for d in deliveries %}<tr><td class="small">{{ d.sent_at }}</td><td>{{ d.recipients }}</td><td><span class="status s-{{ 'succeeded' if d.status == 'sent' else 'failed' }}">{{ d.status }}</span></td><td class="small">{{ d.error or '' }}</td></tr>{% endfor %}</table>
+</section>
+{% endif %}
+{% endblock %}

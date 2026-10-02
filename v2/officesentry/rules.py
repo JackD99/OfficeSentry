@@ -28,6 +28,7 @@ class Finding:
     subject: str
     detail: str
     object_id: str = ""
+    new: bool = False  # set by reports: first seen (or reopened) in the period
 
 
 @dataclass

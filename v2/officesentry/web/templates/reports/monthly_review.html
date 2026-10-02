@@ -52,6 +52,21 @@
   </p>
 </section>
 
+<section class="keep">
+  <h2>Since {{ report.period_start.strftime('%d %B') }}</h2>
+  {% if not report.changes and not report.resolved and not report.new_count %}
+  <p class="muted">No changes recorded in this period{% if not report.changes %} (change tracking starts once there are two collections at least 4 weeks apart){% endif %}.</p>
+  {% else %}
+  <ul class="changes">
+    {% if report.new_count %}<li><span class="chg chg-added">new</span> {{ report.new_count }} new or returning finding(s), marked <span class="new">New</span> below</li>{% endif %}
+    {% for f in report.resolved[:15] %}<li><span class="chg chg-resolved">fixed</span> {{ f.subject }}: {{ f.detail }}</li>{% endfor %}
+    {% if report.resolved|length > 15 %}<li class="muted">…and {{ report.resolved|length - 15 }} more fixed</li>{% endif %}
+    {% for c in report.changes[:30] %}<li><span class="chg chg-{{ c.kind }}">{{ c.kind }}</span> <strong>{{ c.area }}:</strong> {{ c.subject }}: {{ c.detail }}</li>{% endfor %}
+    {% if report.changes|length > 30 %}<li class="muted">…and {{ report.changes|length - 30 }} more changes</li>{% endif %}
+  </ul>
+  {% endif %}
+</section>
+
 {% if report.secure_score_chart %}
 <section class="keep">
   <h2>Microsoft Secure Score</h2>
@@ -74,7 +89,7 @@
     <table class="findings">
       <thead><tr><th>Account / item</th><th>Detail</th><th>Severity</th></tr></thead>
       <tbody>
-      {% for f in r.findings[:25] %}<tr><td>{{ f.subject }}</td><td>{{ f.detail }}</td><td>{{ f.severity }}</td></tr>{% endfor %}
+      {% for f in r.findings[:25] %}<tr><td>{{ f.subject }}{% if f.new %} <span class="new">New</span>{% endif %}</td><td>{{ f.detail }}</td><td>{{ f.severity }}</td></tr>{% endfor %}
       {% if r.findings|length > 25 %}<tr><td colspan="3" class="muted">…and {{ r.findings|length - 25 }} more in the XLSX export.</td></tr>{% endif %}
       </tbody>
     </table>
@@ -108,6 +123,20 @@
   <ul class="passing">
     {% for r in report.passing %}<li><span class="ok-mark" aria-hidden="true">✓</span> <strong>{{ r.title }}</strong> <span class="muted">{{ r.summary }}</span></li>{% endfor %}
   </ul>
+</section>
+{% endif %}
+
+{% if report.accepted %}
+<section class="keep">
+  <h2>Accepted risks</h2>
+  <table class="findings">
+    <thead><tr><th>Check</th><th>Account / item</th><th>Accepted by</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for r, f, life in report.accepted %}<tr><td>{{ r.title }}</td><td>{{ f.subject }}</td>
+      <td>{{ life.accepted_by }}{% if life.accepted_until %}<div class="muted">until {{ life.accepted_until[:10] }}</div>{% endif %}</td>
+      <td>{{ life.accepted_note }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endif %}
 

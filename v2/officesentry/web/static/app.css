@@ -62,3 +62,9 @@ input.price { max-width: 120px; margin-left: auto; text-align: right; }
 .sev-critical { background: var(--bad); } .sev-high { background: var(--warn); }
 .delta { font-size: .78rem; } .delta.better { color: var(--ok); } .delta.worse { color: var(--bad); } .delta.flat { color: var(--muted); }
 .warn-text { color: var(--warn); }
+.tabs { display: flex; gap: 4px; }
+.tabs a { padding: 6px 12px; border-radius: 6px; border: 1px solid transparent; }
+.tabs a.active { border-color: var(--border); background: var(--panel); color: var(--text); font-weight: 600; }
+.sev-text-critical { color: var(--bad); } .sev-text-high { color: var(--warn); } .sev-text-medium, .sev-text-low, .sev-text-info { color: var(--muted); }
+form.accept { margin-top: 8px; min-width: 220px; }
+details summary { cursor: pointer; color: var(--accent); }

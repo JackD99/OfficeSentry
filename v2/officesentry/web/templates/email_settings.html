@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Email settings</h1>
+<form method="post" class="card narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>SMTP host <input name="smtp_host" value="{{ s.smtp_host or '' }}" placeholder="smtp.office365.com" required></label>
+  <label>Port <input name="smtp_port" value="{{ s.smtp_port or 587 }}" inputmode="numeric" required></label>
+  <label>Security <select name="smtp_security">
+    {% for v, label in [('starttls', 'STARTTLS (587)'), ('ssl', 'SSL/TLS (465)'), ('none', 'None (internal relay only)')] %}<option value="{{ v }}" {% if (s.smtp_security or 'starttls') == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select></label>
+  <label>Username <input name="smtp_user" value="{{ s.smtp_user or '' }}" autocomplete="off"></label>
+  <label>Password <input type="password" name="smtp_password" autocomplete="new-password" placeholder="{{ 'Saved; leave blank to keep' if has_password else '' }}"></label>
+  <p class="muted small">Changing the host clears the saved password, so it is never sent to a new server without you re-entering it.</p>
+  <label>From address <input name="smtp_from" value="{{ s.smtp_from or '' }}" placeholder="reports@msp.com" required></label>
+  <button class="primary">Save</button>
+</form>
+<form method="post" class="card narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="action" value="test">
+  <label>Send a test email to <input name="test_to" type="email" required></label>
+  <button>Send test</button>
+</form>
+{% endblock %}
