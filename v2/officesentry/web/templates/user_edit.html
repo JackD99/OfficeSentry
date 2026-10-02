@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="{{ url_for('admin.users') }}">&larr; Users</a></p>
+<h1>{{ user.username }}</h1>
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Role <select name="role">{% for r in roles %}<option value="{{ r }}" {% if r == user.role %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
+  <label class="check"><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> Analyst can see all tenants</label>
+  <fieldset>
+    <legend>Granted tenants</legend>
+    {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}</label>{% else %}<p class="muted">No tenants yet.</p>{% endfor %}
+  </fieldset>
+  <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disabled</label>
+  <label>Set a new password (optional) <input type="password" name="password" minlength="12" autocomplete="new-password"></label>
+  <button class="primary">Save</button>
+</form>
+<form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button class="danger">Delete user</button>
+</form>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status %}
+{% block content %}
+<div class="heading">
+  <h1>Tenants</h1>
+  {% if current_user.role == 'admin' %}<a class="button primary" href="{{ url_for('tenants.new_tenant') }}">Add tenant</a>{% endif %}
+</div>
+{% if not tenants %}
+<div class="card">
+  {% if current_user.role == 'admin' %}
+  <p>No tenants yet. Start by creating an <a href="{{ url_for('admin.connections') }}">app connection</a>, then add a tenant.</p>
+  {% else %}
+  <p>You haven't been given access to any tenants yet. Ask an admin to grant access.</p>
+  {% endif %}
+</div>
+{% else %}
+<table>
+  <thead><tr><th>Tenant</th><th>Consent</th>{% for key, c in collectors.items() %}<th>{{ c.title }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for t in tenants %}
+  <tr>
+    <td><a href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a><div class="muted small">{{ t.tenant_ref }}</div></td>
+    <td>{% if t.consented_at %}<span class="status s-succeeded">granted</span>{% else %}<span class="status s-none">pending</span>{% endif %}</td>
+    {% for key in collectors %}{% set r = latest[t.id].get(key) %}
+    <td>{% if r %}<a href="{{ url_for('tenants.run', run_id=r.id) }}">{{ status(r.status) }}</a><div class="muted small">{{ r.finished_at or r.created_at }}</div>{% else %}{{ status(None) }}{% endif %}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

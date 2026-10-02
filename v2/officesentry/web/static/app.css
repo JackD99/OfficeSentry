@@ -1,0 +1,56 @@
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #667085; --border: #e3e6eb;
+  --accent: #2557d6; --accent-text: #fff; --ok: #157f3b; --warn: #a15c00; --bad: #b42318; --idle: #667085;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #11151c; --panel: #181e27; --text: #e6e9ef; --muted: #98a2b3; --border: #2a3240;
+          --accent: #5b8cff; --accent-text: #0b0f15; --ok: #4cc27a; --warn: #f0a640; --bad: #f97066; --idle: #98a2b3; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 1.5rem; margin: 0 0 12px; }
+h2 { font-size: 1.05rem; margin: 0 0 12px; }
+code { font-size: .9em; }
+.topbar { display: flex; align-items: center; gap: 24px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.topbar .brand { font-weight: 700; color: var(--text); }
+.topbar nav { display: flex; gap: 16px; flex: 1; }
+.topbar .who { display: flex; gap: 10px; align-items: center; }
+.badge { font-size: .75rem; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--muted); }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 0 0 16px; }
+.card.narrow { max-width: 480px; }
+.card.scroll { overflow-x: auto; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.muted { color: var(--muted); }
+.small { font-size: .82rem; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+label { display: block; margin: 0 0 12px; font-weight: 500; }
+label.check { font-weight: 400; display: flex; gap: 8px; align-items: center; }
+input:not([type=checkbox]), select { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+fieldset { border: 1px solid var(--border); border-radius: 6px; margin: 0 0 12px; padding: 8px 12px; }
+form.inline { display: inline; }
+form.row { display: flex; gap: 8px; align-items: flex-end; }
+form.row label { flex: 1; margin: 0; }
+button, .button { display: inline-block; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+button.primary, .button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.danger { color: var(--bad); border-color: var(--bad); }
+button.link { border: 0; background: none; padding: 0; color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; border: 1px solid var(--border); background: var(--panel); }
+.flash.error { border-color: var(--bad); color: var(--bad); }
+.flash.warning { border-color: var(--warn); color: var(--warn); }
+.flash.success { border-color: var(--ok); color: var(--ok); }
+.status { font-size: .8rem; font-weight: 600; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+.s-succeeded { color: var(--ok); } .s-partial { color: var(--warn); } .s-failed { color: var(--bad); }
+.s-queued, .s-running, .s-none { color: var(--idle); }
+ul.caps { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+ul.caps li { padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); font-size: .82rem; }
+ul.caps li.yes { color: var(--ok); border-color: var(--ok); }
+ul.caps li.no { color: var(--muted); text-decoration: line-through; }
+pre.log { margin: 0; white-space: pre-wrap; font-size: .82rem; max-height: 420px; overflow: auto; }

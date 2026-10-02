@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf %}
+{% block content %}
+<h1>App connections</h1>
+<p>Office Sentry signs in to client tenants as one multi-tenant, <strong>read-only</strong> Entra app. Create it once:</p>
+<ol>
+  <li>Generate a certificate below. The private key stays encrypted in Office Sentry's database.</li>
+  <li>Create the app, either with <code>python -m officesentry create-app</code> (does steps 2 and 3 for you) or by hand in your own tenant's Entra admin center: <em>App registrations → New registration</em>, supported account types <em>"Accounts in any organizational directory"</em>, redirect URI (Web) <code>{{ redirect_uri }}</code>. Upload the .cer under <em>Certificates &amp; secrets</em> and add the application permissions listed below.</li>
+  <li>Save the app's <em>Application (client) ID</em> here.</li>
+  <li>Add each client tenant and send its admin the consent link shown on the tenant page.</li>
+</ol>
+
+{% for c in connections %}
+<section class="card" id="conn-{{ c.id }}">
+  <h2>{{ c.name }}</h2>
+  <p>Certificate thumbprint <code>{{ c.thumbprint }}</code>, expires {{ c.not_after }}. <a href="{{ url_for('admin.download_certificate', conn_id=c.id) }}">Download .cer</a></p>
+  <form method="post" action="{{ url_for('admin.set_client_id', conn_id=c.id) }}" class="row">
+    {{ csrf() }}
+    <label>Application (client) ID <input name="client_id" value="{{ c.client_id or '' }}" placeholder="00000000-0000-0000-0000-000000000000" required></label>
+    <button>Save</button>
+  </form>
+</section>
+{% endfor %}
+
+<section class="card narrow">
+  <h2>New app connection</h2>
+  <form method="post" action="{{ url_for('admin.create_connection') }}">
+    {{ csrf() }}
+    <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
+    <button class="primary">Generate certificate</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Permissions requested (Microsoft Graph, application, read-only)</h2>
+  <table>{% for p, why in permissions|dictsort %}<tr><td><code>{{ p }}</code></td><td>{{ why }}</td></tr>{% endfor %}</table>
+</section>
+{% endblock %}

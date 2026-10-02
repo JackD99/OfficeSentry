@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Users</h1>
+<table>
+  <thead><tr><th>Username</th><th>Role</th><th>Tenant access</th><th>Status</th><th>Last sign-in</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+  <tr><td><a href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a></td><td>{{ u.role }}</td>
+    <td>{% if u.role == 'admin' or u.all_tenants %}all tenants{% else %}granted only{% endif %}</td>
+    <td>{% if u.disabled %}disabled{% elif u.locked_until %}locked until {{ u.locked_until }}{% else %}active{% endif %}</td>
+    <td class="small">{{ u.last_login_at or 'never' }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<section class="card narrow">
+  <h2>Add user</h2>
+  <form method="post" action="{{ url_for('admin.create_user') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Username <input name="username" maxlength="64" required></label>
+    <label>Role <select name="role">{% for r in roles %}<option value="{{ r }}" {% if r == 'client' %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
+    <label>Initial password <input type="password" name="password" minlength="12" autocomplete="new-password" required></label>
+    <button class="primary">Add user</button>
+  </form>
+  <p class="muted small">New users see no tenants until you grant them.</p>
+</section>
+{% endblock %}

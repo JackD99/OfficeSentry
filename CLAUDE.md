@@ -1,5 +1,9 @@
 # CLAUDE.md — Office Sentry
 
+> **v2 rebuild in progress.** New work goes in `v2/` (read-only M365 reporting; see `v2/CLAUDE.md`).
+> The v1 portal described below is frozen: fix only what's needed until v2 replaces it.
+> Parts of this file are out of date (the Phase 4 commit removed 365Inspect, SPO audits and the Exchange features).
+
 ## Project Overview
 
 Office Sentry is a **Microsoft 365 security audit, management, and breach investigation platform** designed for MSPs and IT administrators. The core is a **web portal** (`portal/app.py`) — a multi-tenant Flask web app for managing hundreds of client tenants.

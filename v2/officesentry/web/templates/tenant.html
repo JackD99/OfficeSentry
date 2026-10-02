@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status, csrf %}
+{% block title %}{{ tenant.name }} · Office Sentry{% endblock %}
+{% block content %}
+<div class="heading">
+  <div><h1>{{ tenant.name }}</h1><div class="muted">{{ tenant.tenant_ref }}</div></div>
+  {% if current_user.role in ('admin', 'analyst') %}
+  <form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}">{{ csrf() }}<button class="primary">Refresh all data</button></form>
+  {% endif %}
+</div>
+
+<div class="grid">
+  <section class="card">
+    <h2>Connection</h2>
+    {% if not connection %}
+      <p>No app connection assigned.</p>
+    {% elif not connection.client_id %}
+      <p>App connection <strong>{{ connection.name }}</strong> has no client ID yet. Finish it under <a href="{{ url_for('admin.connections') }}">App connections</a>.</p>
+    {% else %}
+      <p>Signs in as <strong>{{ connection.name }}</strong> ({{ connection.client_id }}).</p>
+      {% if tenant.consented_at %}<p>Admin consent recorded {{ tenant.consented_at }}.</p>{% endif %}
+      {% if consent_link %}
+      <p>{% if tenant.consented_at %}To re-consent after permissions change, a{% else %}A{% endif %} Global Administrator of this tenant opens:</p>
+      <p><a class="button" href="{{ consent_link }}" rel="noopener">Grant admin consent</a></p>
+      <p class="muted small">The link is valid for one hour and returns to this portal.</p>
+      {% endif %}
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Licence capabilities</h2>
+    {% if capabilities %}
+    <ul class="caps">{% for k, v in capabilities|dictsort %}<li class="{{ 'yes' if v else 'no' }}">{{ k }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted">Collected by the tenant profile run.</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Data</h2>
+  <table>
+    <thead><tr><th>Collector</th><th>Last run</th><th>Finished</th><th></th></tr></thead>
+    <tbody>
+    {% for key, c in collectors.items() %}{% set r = latest.get(key) %}
+    <tr>
+      <td>{{ c.title }}<div class="muted small">{{ c.description }}</div></td>
+      <td>{% if r %}<a href="{{ url_for('tenants.run', run_id=r.id) }}">{{ status(r.status) }}</a>{% else %}{{ status(None) }}{% endif %}</td>
+      <td class="small">{{ r.finished_at if r else '' }}</td>
+      <td>{% if current_user.role in ('admin', 'analyst') %}
+        <form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}">{{ csrf() }}<input type="hidden" name="collector" value="{{ key }}"><button>Refresh</button></form>
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Run history</h2>
+  <table>
+    <thead><tr><th>#</th><th>Collector</th><th>Status</th><th>Trigger</th><th>Created</th><th>Objects</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+    <tr><td><a href="{{ url_for('tenants.run', run_id=r.id) }}">{{ r.id }}</a></td><td>{{ collectors[r.collector].title if r.collector in collectors else r.collector }}</td>
+      <td>{{ status(r.status) }}</td><td>{{ r.trigger }}{% if r.requested_by %} by {{ r.requested_by }}{% endif %}</td><td class="small">{{ r.created_at }}</td><td>{{ r.object_count }}</td></tr>
+    {% else %}<tr><td colspan="6" class="muted">No runs yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
