@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-32 checks, 12 data sources (collectors) and 6 detail reports.
+46 checks, 15 data sources (collectors) and 10 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -58,10 +58,20 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **Every domain enforces DMARC**<br>`dmarc_policy` | `domain_health` |  | Publish a DMARC record with a rua= reporting address, start at p=none to see who sends as the domain, then move to p=quarantine and p=reject. Without enforcement, spoofed mail from the domain is delivered. |
 | **No mail is forwarded outside the organisation**<br>`external_forwarding` | `inbox_rules`, `mailboxes`, `tenant_profile` | The tenant has no Exchange Online licence | Remove forwarding to outside addresses unless the client has a documented business reason. Forwarding is the most common way attackers keep reading a mailbox after a password reset. |
 | **Mailbox auditing is on**<br>`mailbox_auditing` | `mailboxes` | The tenant has no Exchange Online licence | Turn mailbox auditing back on for the organisation (Set-OrganizationConfig -AuditDisabled $false). Without it there's no record of who read or deleted mail during an incident. |
+| **Mail domains require encrypted delivery (MTA-STS)**<br>`mta_sts` | `domain_health` |  | Publish an MTA-STS policy so other mail servers only deliver to the domain over a verified, encrypted connection: a TXT record at _mta-sts.<domain> ("v=STSv1; id=20260101") and a policy file at https://mta-sts.<domain>/.well-known/mta-sts.txt listing the domain's MX hosts (for Microsoft 365, "mx: *.mail.protection.outlook.com"). Start with "mode: testing" and TLS-RPT reports, then switch to "mode: enforce" and change the id. |
 | **Shared mailboxes can't be signed in to**<br>`shared_mailbox_signin` | `mailboxes`, `users` | The tenant has no Exchange Online licence | Block sign-in for each shared mailbox's account (it doesn't need a password). An enabled shared mailbox account usually has no MFA and nobody watching it. |
 | **SMTP AUTH is turned off**<br>`smtp_auth` | `mailboxes` | The tenant has no Exchange Online licence | Turn off SMTP AUTH for the organisation and enable it only on the mailboxes of devices or apps that still need it, such as scanners. It accepts passwords without MFA. |
 | **Every domain has a working SPF record**<br>`spf_record` | `domain_health` |  | Publish one SPF record per domain ending in -all (or ~all while testing), e.g. "v=spf1 include:spf.protection.outlook.com -all". Domains that never send mail should publish "v=spf1 -all". |
 | **No inbox rules hide mail**<br>`suspicious_inbox_rules` | `inbox_rules`, `mailboxes`, `tenant_profile` | The tenant has no Exchange Online licence | Check each rule with the mailbox owner. Rules that delete or bury messages about payments or security alerts are a sign of a compromised account: reset the password, revoke sessions and review sign-ins. |
+| **Encrypted delivery failures are reported (TLS-RPT)**<br>`tls_rpt` | `domain_health` |  | Publish a TXT record at _smtp._tls.<domain> such as "v=TLSRPTv1; rua=mailto:tls-reports@<domain>" (or a reporting service's address), so someone hears when other servers can't deliver mail encrypted, before and after MTA-STS is enforced. |
+
+### Groups
+
+| Check | Reads data from | Licence note | Recommendation |
+|---|---|---|---|
+| **Only chosen people can create teams and groups**<br>`group_creation` | `groups` | Anyone can create teams and groups; limiting who can needs Entra ID P1 | Limit who can create teams and Microsoft 365 groups to a security group of people who will look after them (the Group.Unified directory setting, changed with Microsoft Graph PowerShell; needs Entra ID P1). Otherwise anyone can create a team, add guests to it and leave it behind. |
+| **Unused groups and teams expire**<br>`group_expiration` | `groups` | Group expiration needs Entra ID P1 | Set a Microsoft 365 group expiration policy for all groups (Entra admin center > Groups > Expiration), for example 365 days. Groups in use renew automatically, owners are asked to renew the rest, and an expired group can be restored for 30 days. Needs Entra ID P1. |
+| **Every team and Microsoft 365 group has an owner**<br>`ownerless_groups` | `groups` |  | Make an active person, ideally two, an owner of each listed team or group (Teams admin center or Microsoft 365 admin center > Teams & groups). Owners approve members and guests and renew the group; without one, nobody looks after its files and conversations. The ownerless group policy (Microsoft 365 admin center > Settings > Org settings > Microsoft 365 Groups) asks members to take over when the last owner leaves. |
 
 ### Guests
 
@@ -70,10 +80,19 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **Only admins and members can invite guests**<br>`guest_invites` | `tenant_policies` |  | Restrict guest invitations to admins and the Guest Inviter role, or at least to members, under External collaboration settings. |
 | **No old, unaccepted guest invitations**<br>`pending_guests` | `users` |  | Delete guest accounts whose invitation has gone unaccepted for 30 days; re-invite if still needed. |
 
+### Hybrid identity
+
+| Check | Reads data from | Licence note | Recommendation |
+|---|---|---|---|
+| **Admin accounts are cloud-only**<br>`cloud_only_admins` | `admin_roles`, `directory_sync`, `users` |  | Give each admin a separate cloud-only account (for example on the .onmicrosoft.com domain) for their admin roles, and remove the roles from accounts synced from Active Directory. Otherwise anyone who takes over on-premises AD can reset those passwords and become an admin in Microsoft 365. |
+| **Directory sync is running**<br>`directory_sync_running` | `directory_sync` |  | Check the Entra Connect server: that it is up, the Microsoft Azure AD Sync service is running and Synchronization Service Manager shows no errors. Until sync runs, accounts disabled or removed in Active Directory keep working in Microsoft 365. If the client has moved to cloud-only, turn directory sync off. |
+| **Password hash sync is on**<br>`password_hash_sync` | `directory_sync` |  | Turn on password hash synchronization in Entra Connect (Optional features), even when users sign in through federation or pass-through authentication. Entra ID can then detect leaked passwords, and sign-in can be switched to the cloud if the on-premises servers are down. |
+
 ### Identity
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
+| **No unexpected changes to how domains sign in**<br>`domain_federation_changed` | `admin_activity` |  | Confirm with the client that each change was planned (for example, setting up AD FS or another identity provider). If it wasn't, an attacker with admin rights may have federated the domain to their own identity provider so they can sign in as any user without a password or MFA: switch the domain back to managed sign-in, remove unknown federation settings, reset admin credentials and review the audit log. |
 | **Legacy authentication is blocked**<br>`legacy_auth_blocked` | `conditional_access` |  | Block legacy authentication (Exchange ActiveSync and other clients) with a Conditional Access policy for all users. Legacy protocols can't do MFA and are the most common password-spray target. |
 | **MFA is enforced for all users**<br>`mfa_enforced` | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |  | Create a Conditional Access policy requiring MFA for all users and all cloud apps, or turn on Security Defaults if the tenant has no Entra ID P1. Keep exclusions to break-glass accounts. |
 | **Every active user has MFA registered**<br>`users_mfa_registered` | `mfa_registration`, `users` |  | Ask these users to register the Microsoft Authenticator app. Until they do, anyone with their password can register MFA in their place. |
@@ -91,22 +110,35 @@ A check reads only the data its collectors stored. When that data is missing, or
 |---|---|---|---|
 | **Files can't be shared with anonymous links**<br>`sharepoint_sharing` | `tenant_policies` |  | Change SharePoint external sharing to "New and existing guests" so every external person signs in. If the client relies on Anyone links, set them to expire and to view-only. |
 
+### Tenant settings
+
+| Check | Reads data from | Licence note | Recommendation |
+|---|---|---|---|
+| **Users have a way to get apps approved**<br>`admin_consent_workflow` | `tenant_policies` |  | Turn on admin consent requests (Entra admin center > Enterprise apps > Consent and permissions > Admin consent settings) and choose reviewers, so users blocked from consenting can ask instead of looking for a workaround. |
+| **Users can't register apps**<br>`app_registration` | `tenant_policies` |  | Set "Users can register applications" to No (Entra admin center > Users > User settings) and give the Application Developer role to the people who need it. |
+| **People can't join the tenant just by verifying an email address**<br>`email_verified_join` | `tenant_policies` |  | Turn off email-verified sign-up with Microsoft Graph PowerShell (Update-MgPolicyAuthorizationPolicy -AllowEmailVerifiedUsersToJoinOrganization:$false), so accounts are only created by admins or invitation. |
+| **Guests have limited directory access**<br>`guest_access_level` | `tenant_policies` |  | Set guest user access to "Guest users have limited access to properties and memberships of directory objects", or to the most restrictive option (Entra admin center > External Identities > External collaboration settings). |
+| **Users can't create new tenants**<br>`tenant_creation` | `tenant_policies` |  | Set "Restrict non-admin users from creating tenants" to Yes (Entra admin center > Users > User settings). A tenant a user creates sits outside the client's policies, with that user as its Global Administrator. |
+
 ## Data sources (collectors)
 
 Each collector reads one area of a tenant and stores a snapshot. They run every night unless marked *on demand*.
 
 | Key | Title | What it reads | Permissions |
 |---|---|---|---|
+| `admin_activity` | Admin activity | Admin role, Conditional Access, app credential, consent, domain and account changes from the directory audit log (30 days with Entra ID P1, otherwise 7). | `AuditLog.Read.All` |
 | `admin_roles` | Admin roles | Who holds each directory role, active and PIM-eligible. | `RoleManagement.Read.Directory` |
 | `app_consents` | Apps and consents | Third-party apps, the permissions granted to them, and app secrets or certificates expiring. | `Application.Read.All`, `Directory.Read.All` |
 | `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
 | `devices` | Devices | Devices registered or joined to Entra ID, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All` |
-| `domain_health` | Email domains | SPF, DMARC and DKIM for each verified domain, checked in public DNS. | none |
+| `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in. | `Organization.Read.All`, `Directory.Read.All` |
+| `domain_health` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS. | none |
+| `groups` | Groups and Teams | Every group, the owners, members and guests of each team and Microsoft 365 group, who can create them and whether unused ones expire. | `Directory.Read.All` |
 | `inbox_rules` | Inbox rules | Every mailbox's inbox rules, to spot forwarding and rules that hide mail. | `MailboxSettings.Read` |
 | `mailboxes` | Mailboxes | Mailboxes, forwarding, delegated access and organisation mail settings (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mfa_registration` | MFA registration | Which users have registered a second factor. | `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All` |
 | `secure_score` | Secure Score | Current Secure Score, per-control scores and up to 90 days of daily history. | `SecurityEvents.Read.All` |
-| `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
+| `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions and licence capabilities. | `Organization.Read.All` |
 | `users` | Users | Members and guests with licences, password age and last sign-in (sign-in needs Entra ID P1). | `User.Read.All`, `AuditLog.Read.All` |
 
@@ -116,12 +148,16 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 
 | Key | Title | Description | Data from |
 |---|---|---|---|
+| `admin-activity` | Admin activity | Admin roles, Conditional Access, app credentials, consents, domains and account changes from the directory audit log, and who made them. | `admin_activity` |
 | `apps` | Apps and consents | Third-party apps with access to the tenant, and app credential expiry. | `app_consents` |
 | `conditional-access` | Conditional Access coverage | Every policy in plain words, and which accounts each one actually covers. | `admin_roles`, `conditional_access`, `users` |
 | `devices` | Devices | Intune compliance, encryption and Windows support, and every Entra ID device record. | `devices` |
-| `domains` | Email domains | SPF, DMARC and DKIM for each of the tenant's domains, from public DNS. | `domain_health` |
+| `domains` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from public DNS. | `domain_health` |
+| `groups` | Groups and Teams | Who can create teams and groups, which have no owner, and the guests in each. | `groups` |
 | `guests` | Guests and sharing | Who can invite and share externally, and every guest account. | `tenant_policies`, `users` |
+| `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
 | `mailboxes` | Mailbox access and forwarding | Forwarding, suspicious inbox rules, delegated access and shared mailboxes. | `inbox_rules`, `mailboxes`, `users` |
+| `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
 
 ## Permissions
 
@@ -130,13 +166,13 @@ Every application permission the app requests (all read-only) and the collectors
 | Permission | API | Purpose | Used by |
 |---|---|---|---|
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents` |
-| `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `mfa_registration`, `users` |
+| `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `mfa_registration`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
-| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `devices` |
+| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `devices`, `directory_sync`, `groups` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `mailboxes` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | not used by a collector yet |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `inbox_rules` |
-| `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `tenant_profile` |
+| `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
 | `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `conditional_access`, `tenant_policies` |
 | `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | not used by a collector yet |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles` |
