@@ -35,3 +35,19 @@ def test_friendly_times_and_labels():
     assert ago(None, now) == ""
     assert capability("entra_p1") == "Entra ID P1"
     assert money(1234.5, "GBP") == "£1,234"
+
+
+def test_no_platform_specific_date_formats():
+    """'%-d' crashes strftime on Windows; dates go through filters._strftime instead."""
+    import pathlib
+    import re
+    from datetime import datetime
+
+    from officesentry.web.filters import _strftime
+
+    assert _strftime(datetime(2026, 10, 2, 9, 5), "%-d %b %Y, %H:%M") == "2 Oct 2026, 09:05"
+    root = pathlib.Path(__file__).parent.parent / "officesentry"
+    for path in [*root.rglob("*.py"), *root.rglob("*.html")]:
+        if path.name == "filters.py":
+            continue
+        assert not re.search(r"strftime\([^)]*%-", path.read_text(encoding="utf-8")), path

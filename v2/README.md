@@ -125,6 +125,12 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 python -m officesentry worker                                 # second terminal
 ```
 
+On Windows, use `.venv\Scripts\activate` and `set OFFICESENTRY_INSECURE_COOKIES=1`.
+Everything except PDF export works natively. PDFs need the Pango libraries,
+which WeasyPrint can't install on Windows by itself, so Docker (Docker
+Desktop) is the recommended way to run Office Sentry on Windows. Without
+Pango, the PDF buttons are simply hidden and HTML and XLSX still work.
+
 Tests mock Microsoft Graph at the HTTP layer (`responses`), not the client
 class, so URL and paging bugs are caught.
 
