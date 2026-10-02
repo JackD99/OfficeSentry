@@ -27,6 +27,17 @@ overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
 3. Import it in `collectors/__init__.py`.
 4. Test it in `tests/test_collectors.py` with recorded Graph responses.
 
+## Adding a check or report
+
+- Checks go in `rules.py` with `@rule(...)`. They read `TenantSnapshot` only,
+  never Graph, and return `unavailable` (with the reason) when data or the
+  tenant's licence is missing, rather than passing or failing.
+- Report builders in `reports/` return plain data; templates and
+  `reports/export.py` only format it. Charts are server-side SVG
+  (`reports/charts.py`) so the PDF matches the page.
+- `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
+  for rule and report tests.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.

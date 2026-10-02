@@ -4,9 +4,12 @@
 {% block content %}
 <div class="heading">
   <div><h1>{{ tenant.name }}</h1><div class="muted">{{ tenant.tenant_ref }}</div></div>
-  {% if current_user.role in ('admin', 'analyst') %}
-  <form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}">{{ csrf() }}<button class="primary">Refresh all data</button></form>
-  {% endif %}
+  <div class="actions">
+    <a class="button primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">Security review</a>
+    {% if current_user.role in ('admin', 'analyst') %}
+    <form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}">{{ csrf() }}<button>Refresh all data</button></form>
+    {% endif %}
+  </div>
 </div>
 
 <div class="grid">

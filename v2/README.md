@@ -5,8 +5,24 @@ tenant, cross-tenant rollups, month-over-month changes and branded client
 reports. This is the rebuild planned in the 2026-10 review; the v1 portal
 remains in `../portal` until v2 replaces it.
 
-**Status: Phase 1 (foundation).** Tenants can be connected and collected
-(tenant profile + users). Reports arrive in Phase 2.
+**Status: Phase 2.** Tenants can be connected and collected nightly, and the
+**Monthly Security & Licensing Review** is available per tenant (HTML, PDF,
+XLSX) with a cross-tenant overview. Next: findings history and "changes since
+last month" (Phase 3), then Exchange and SharePoint reports (Phase 4).
+
+## Reports
+
+- **Monthly Security & Licensing Review** (`/tenants/<id>/report`): KPIs with
+  4-week change, Secure Score trend, failing checks with affected accounts and
+  recommendations, licence waste in money, passing checks, checks that the
+  tenant's licences can't support, and data freshness.
+- **Overview** (`/reports`): one row per tenant with severity counts and KPIs.
+- **Licence prices** (admin): enter monthly prices per SKU to cost waste.
+
+Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
+blocked, admins without MFA, Global Admin count, guest admins, apps with
+admin roles, users without MFA, inactive accounts, licences on disabled
+accounts, unassigned paid licences.
 
 ## What it does differently from v1
 
@@ -65,6 +81,10 @@ officesentry/
   graph.py       Graph client: retries, Retry-After, paging, typed errors
   store.py       tenants, connections, runs, objects, metrics, pruning
   collectors/    one module per data source; @register adds it
+  snapshot.py    latest successful data per collector, for rules/reports
+  rules.py       checks: snapshot -> pass / fail with findings / unavailable
+  licences.py    SKU names, prices, licence-waste maths
+  reports/       report builders (data only), SVG charts, XLSX/PDF export
   worker.py      queue runner, nightly scheduler, orphan recovery
   web/           Flask app: access.py is the single authorization gate
 ```

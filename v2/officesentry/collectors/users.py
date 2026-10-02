@@ -12,8 +12,10 @@ BASE_FIELDS = [
 ]
 
 
-def summarise(user: dict) -> dict:
-    activity = user.get("signInActivity") or {}
+def summarise(user: dict, activity_available: bool) -> dict:
+    """``activity_available``: sign-in activity was requested successfully for the
+    tenant. Graph omits ``signInActivity`` for users who never signed in."""
+    activity = (user.get("signInActivity") or {}) if activity_available else {}
     return {
         "displayName": user.get("displayName"),
         "userPrincipalName": user.get("userPrincipalName"),
@@ -27,13 +29,11 @@ def summarise(user: dict) -> dict:
         "passwordNeverExpires": "DisablePasswordExpiration" in (user.get("passwordPolicies") or ""),
         "onPremisesSyncEnabled": bool(user.get("onPremisesSyncEnabled")),
         "externalUserState": user.get("externalUserState"),
-        # None means "not available" (no P1), not "never signed in".
-        "lastSignInDateTime": activity.get("lastSignInDateTime") if "signInActivity" in user else None,
-        "lastNonInteractiveSignInDateTime":
-            activity.get("lastNonInteractiveSignInDateTime") if "signInActivity" in user else None,
-        "lastSuccessfulSignInDateTime":
-            activity.get("lastSuccessfulSignInDateTime") if "signInActivity" in user else None,
-        "signInActivityAvailable": "signInActivity" in user,
+        # With signInActivityAvailable False, None means "unknown", not "never signed in".
+        "lastSignInDateTime": activity.get("lastSignInDateTime"),
+        "lastNonInteractiveSignInDateTime": activity.get("lastNonInteractiveSignInDateTime"),
+        "lastSuccessfulSignInDateTime": activity.get("lastSuccessfulSignInDateTime"),
+        "signInActivityAvailable": activity_available,
     }
 
 
@@ -47,11 +47,13 @@ class Users(Collector):
     def collect(self, ctx: RunContext) -> None:
         want_activity = ctx.capabilities.get("entra_p1", True)
         users = None
+        activity = False
         if want_activity:
             try:
                 users = ctx.paged(ctx.graph.get_all("/users", params={
                     "$select": ",".join(BASE_FIELDS + ["signInActivity"]), "$top": "999",
                 }))
+                activity = True
             except LicenseRequired:
                 ctx.warn("Sign-in activity needs Entra ID P1; collected users without it")
         if users is None:
@@ -59,7 +61,7 @@ class Users(Collector):
                 "$select": ",".join(BASE_FIELDS), "$top": "999",
             }))
 
-        rows = [(u["id"], summarise(u)) for u in users]
+        rows = [(u["id"], summarise(u, activity)) for u in users]
         ctx.objects("user", rows)
 
         data = [r for _, r in rows]

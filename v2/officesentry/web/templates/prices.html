@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Licence prices</h1>
+<p class="muted">Monthly price per licence, used to put a cost on licence waste. Leave blank to show counts only. Licences appear here once a tenant that has them has been collected.</p>
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="narrow-field">Currency
+    <select name="currency">{% for c in currencies %}<option {% if c == currency %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+  </label>
+  <table>
+    <thead><tr><th>Licence</th><th>Part number</th><th class="num">Monthly price</th></tr></thead>
+    <tbody>
+    {% for part, name in skus %}
+    <tr><td>{{ name }}</td><td><code>{{ part }}</code></td>
+      <td class="num"><input class="price" name="price:{{ part }}" inputmode="decimal" value="{{ current.get(part, '') }}" aria-label="Monthly price for {{ name }}"></td></tr>
+    {% else %}<tr><td colspan="3" class="muted">No licences collected yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <button class="primary">Save prices</button>
+</form>
+{% endblock %}

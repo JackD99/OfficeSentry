@@ -54,3 +54,11 @@ ul.caps li { padding: 1px 8px; border-radius: 10px; border: 1px solid var(--bord
 ul.caps li.yes { color: var(--ok); border-color: var(--ok); }
 ul.caps li.no { color: var(--muted); text-decoration: line-through; }
 pre.log { margin: 0; white-space: pre-wrap; font-size: .82rem; max-height: 420px; overflow: auto; }
+.actions { display: flex; gap: 8px; align-items: center; }
+th.num { text-align: right; }
+.narrow-field { max-width: 200px; }
+input.price { max-width: 120px; margin-left: auto; text-align: right; }
+.sev { display: inline-block; min-width: 1.8em; text-align: center; font-weight: 700; border-radius: 10px; padding: 0 6px; color: #fff; }
+.sev-critical { background: var(--bad); } .sev-high { background: var(--warn); }
+.delta { font-size: .78rem; } .delta.better { color: var(--ok); } .delta.worse { color: var(--bad); } .delta.flat { color: var(--muted); }
+.warn-text { color: var(--warn); }

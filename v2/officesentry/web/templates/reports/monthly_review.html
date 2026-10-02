@@ -1,0 +1,132 @@
+{%- set symbols = {'GBP': '£', 'USD': '$', 'EUR': '€', 'AUD': 'A$', 'CAD': 'C$', 'NZD': 'NZ$'} -%}
+{%- set cur = symbols.get(report.currency, report.currency ~ ' ') -%}
+{%- macro money(v) -%}{{ cur }}{{ '{:,.2f}'.format(v) }}{%- endmacro -%}
+{%- macro fmt(k) -%}
+{%- if k.value is none -%}n/a
+{%- elif k.unit == 'currency' -%}{{ money(k.value) }}
+{%- else -%}{{ '%g'|format(k.value) }}{{ k.unit }}{%- endif -%}
+{%- endmacro -%}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ report.title }}: {{ report.tenant.name }}</title>
+  <link rel="stylesheet" href="{{ css_href }}">
+</head>
+<body class="report{% if pdf %} pdf{% endif %}">
+{% if not pdf %}
+<nav class="toolbar">
+  <a href="{{ url_for('tenants.tenant', tenant_id=report.tenant.id) }}">&larr; {{ report.tenant.name }}</a>
+  <span class="spacer"></span>
+  {% if pdf_available %}<a class="button" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}">Download PDF</a>{% endif %}
+  <a class="button" href="{{ url_for('reports.tenant_report_xlsx', tenant_id=report.tenant.id) }}">Download XLSX</a>
+</nav>
+{% endif %}
+<article>
+<header class="cover">
+  <div class="eyebrow">Office Sentry</div>
+  <h1>{{ report.title }}</h1>
+  <div class="tenant">{{ report.tenant.name }}</div>
+  <div class="meta">Prepared {{ report.generated_at.strftime('%d %B %Y') }} · {{ report.tenant.tenant_ref }}</div>
+</header>
+
+<section>
+  <h2>At a glance</h2>
+  <div class="kpis">
+    {% for k in report.kpis %}
+    <div class="kpi">
+      <div class="label">{{ k.label }}</div>
+      <div class="value">{{ fmt(k) }}</div>
+      {% if k.delta %}<div class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}{{ k.unit if k.unit != 'currency' }} in 4 weeks</div>
+      {% elif k.previous is not none %}<div class="delta flat">No change in 4 weeks</div>{% endif %}
+      {% if k.note %}<div class="note">{{ k.note }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="summary">
+    {% set failing = report.failing %}
+    {% if failing %}{{ failing|length }} of {{ report.results|length }} checks need attention:
+      {% for sev in ['critical', 'high', 'medium', 'low'] if report.counts[sev] %}<span class="sev sev-{{ sev }}">{{ report.counts[sev] }} {{ sev }}</span>{% endfor %}
+    {% else %}All {{ report.passing|length }} checks that could run passed.{% endif %}
+  </p>
+</section>
+
+{% if report.secure_score_chart %}
+<section class="keep">
+  <h2>Microsoft Secure Score</h2>
+  {{ report.secure_score_chart|safe }}
+</section>
+{% endif %}
+
+{% if report.failing %}
+<section>
+  <h2>What needs attention</h2>
+  {% for r in report.failing %}
+  <div class="check fail">
+    <div class="check-head">
+      <span class="sev sev-{{ r.severity }}">{{ r.severity }}</span>
+      <h3>{{ r.title }}</h3>
+      <span class="category">{{ r.category }}</span>
+    </div>
+    <p class="check-summary">{{ r.summary }}</p>
+    <p class="recommendation"><strong>Recommended:</strong> {{ r.recommendation }}</p>
+    <table class="findings">
+      <thead><tr><th>Account / item</th><th>Detail</th><th>Severity</th></tr></thead>
+      <tbody>
+      {% for f in r.findings[:25] %}<tr><td>{{ f.subject }}</td><td>{{ f.detail }}</td><td>{{ f.severity }}</td></tr>{% endfor %}
+      {% if r.findings|length > 25 %}<tr><td colspan="3" class="muted">…and {{ r.findings|length - 25 }} more in the XLSX export.</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if report.licences.lines %}
+<section>
+  <h2>Licences</h2>
+  {% if report.licences.monthly_waste %}<p>An estimated <strong>{{ money(report.licences.monthly_waste) }} a month</strong> ({{ money(report.licences.monthly_waste * 12) }} a year) is spent on licences that are unassigned or held by disabled or inactive accounts.</p>{% endif %}
+  <table class="licences">
+    <thead><tr><th>Licence</th><th class="num">Purchased</th><th class="num">Assigned</th><th class="num">Unassigned</th>
+      <th class="num">Disabled users</th><th class="num">Inactive users</th><th class="num">Waste / month</th></tr></thead>
+    <tbody>
+    {% for ln in report.licences.lines if not ln.free %}
+    <tr><td>{{ ln.name }}</td><td class="num">{{ ln.purchased }}</td><td class="num">{{ ln.assigned }}</td>
+      <td class="num">{{ ln.unassigned }}</td><td class="num">{{ ln.on_disabled_users }}</td>
+      <td class="num">{{ ln.on_stale_users if report.licences.stale_available else 'n/a' }}</td>
+      <td class="num">{% if ln.monthly_waste is not none %}{{ money(ln.monthly_waste) }}{% elif ln.wasted_units %}{{ ln.wasted_units }} unpriced{% else %}–{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if report.passing %}
+<section class="keep">
+  <h2>In good shape</h2>
+  <ul class="passing">
+    {% for r in report.passing %}<li><span class="ok-mark" aria-hidden="true">✓</span> <strong>{{ r.title }}</strong> <span class="muted">{{ r.summary }}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if report.unavailable %}
+<section class="keep">
+  <h2>Not checked</h2>
+  <ul class="unavailable">
+    {% for r in report.unavailable %}<li><strong>{{ r.title }}</strong> <span class="muted">{{ r.summary }}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<footer class="keep">
+  <h2>About this data</h2>
+  <p class="muted">Collected read-only from Microsoft 365. Changes are compared with the closest data from at least 4 weeks earlier.</p>
+  <table class="freshness">
+    {% for f in report.freshness %}<tr><td>{{ f.title }}</td><td>{% if f.finished_at %}{{ f.finished_at[:16]|replace('T', ' ') }} UTC{% else %}not collected{% endif %}{% if f.stale %} <span class="stale">out of date</span>{% endif %}</td></tr>{% endfor %}
+  </table>
+</footer>
+</article>
+</body>
+</html>

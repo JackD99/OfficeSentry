@@ -32,6 +32,7 @@ RETRY_STATUSES = {429, 500, 502, 503, 504}
 LICENSE_ERROR_CODES = {
     "Authentication_RequestFromNonPremiumTenantOrB2CTenant",
     "Authentication_RequestFromUnsupportedUserRole",
+    "AadPremiumLicenseRequired",
 }
 
 

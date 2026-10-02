@@ -5,6 +5,7 @@ import pytest
 import responses
 
 from officesentry import store
+from officesentry.collectors import REGISTRY
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import current_slot, execute_run, schedule_tick
 
@@ -157,14 +158,14 @@ def test_nightly_slot():
 
 def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
     now = datetime(2026, 10, 2, 3, 0, tzinfo=UTC)
-    assert schedule_tick(db, cfg, now) == 4  # 2 tenants x 2 collectors
+    assert schedule_tick(db, cfg, now) == 2 * len(REGISTRY)
     assert schedule_tick(db, cfg, now) == 0
     # Even after the runs finish, the same slot is not queued again.
     db.execute("UPDATE runs SET status = 'succeeded'")
     assert schedule_tick(db, cfg, now) == 0
     order = [r["collector"] for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? ORDER BY id",
                                                 (two_tenants[0],))]
-    assert order == ["tenant_profile", "users"]  # capabilities first
+    assert order[:2] == ["tenant_profile", "users"]  # capabilities first, then users
 
 
 def test_disabled_tenants_are_not_scheduled(db, cfg, two_tenants):
