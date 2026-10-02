@@ -39,6 +39,11 @@ pass, and a first run against a real tenant.
   - *Conditional Access coverage*: every policy in plain words, and for each
     account which enforced policy requires MFA, whether legacy sign-in is
     blocked, and which policies exclude it (group membership expanded).
+  - *Tenant settings*: what users and guests can do without an admin
+    (create tenants, register apps, join by verifying an email address,
+    sign up for trials, guest directory access) against the recommended
+    value, and the admin consent request workflow (reviewers, emails,
+    expiry).
   - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
     and every guest with invitation state and last sign-in.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
@@ -65,7 +70,9 @@ count, guest admins, apps with admin roles, users without MFA, inactive
 accounts, licences on disabled accounts, unassigned paid licences, external
 forwarding, inbox rules that hide mail, automatic forwarding policy, shared
 mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,
-user consent, app credential expiry, SharePoint anonymous links, guest
+user consent, app credential expiry, users creating tenants, users
+registering apps, guest directory access, joining by email verification,
+admin consent requests, SharePoint anonymous links, guest
 invitations, stale guest invitations, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
 checking in, stale device records.

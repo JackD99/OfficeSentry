@@ -14,7 +14,7 @@ from .. import coverage, devices, dnscheck
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
-from ..rules import SHARING_LEVELS, app_risks
+from ..rules import GUEST_ROLES, SHARING_LEVELS, app_risks, user_consent_level
 from ..snapshot import TenantSnapshot
 
 
@@ -315,6 +315,59 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.sections = sections
 
 
+# -- Tenant settings --------------------------------------------------------------------
+
+GUEST_ACCESS = {"member": "Same as members", "limited": "Limited (the default)",
+                "restricted": "Only their own objects (most restrictive)"}
+
+
+def tenant_settings(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    policy = (snap.objects("tenant_policies", "authorization_policy") or [None])[0]
+    if policy is None:
+        report.unavailable = ("Tenant settings haven't been collected yet. "
+                              "Refresh Sharing and consent settings on the tenant page.")
+        return
+
+    settings = Section("Settings", ["Setting", "Value", "Recommended"],
+                       intro="What users and guests can do without an admin. Most of these are allowed by default.")
+
+    def add(label: str, key: str, recommended: bool, severity: str | None = None) -> None:
+        v = policy.get(key)
+        flag = severity if v is not None and v != recommended else None
+        settings.add([label, "Not reported" if v is None else v, recommended], flag)
+
+    add("Users can create tenants", "allowedToCreateTenants", False, "low")
+    add("Users can register apps", "allowedToCreateApps", False, "low")
+    guest_role = policy.get("guestUserRoleId")
+    level = GUEST_ROLES.get(guest_role)
+    settings.add(["Guest access to the directory",
+                  GUEST_ACCESS[level] if level else (f"Unrecognised ({guest_role})" if guest_role else "Not reported"),
+                  "Limited or most restrictive"], "medium" if level == "member" else None)
+    add("People can join by verifying an email address", "allowEmailVerifiedUsersToJoinOrganization", False, "low")
+    add("Users can sign up for trials and free subscriptions", "allowedToSignUpEmailBasedSubscriptions", False, "low")
+    add("Users can create security groups", "allowedToCreateSecurityGroups", False)
+    add("Users can look up other users in the directory", "allowedToReadOtherUsers", True)
+    add("Self-service password reset allowed", "allowedToUseSSPR", True)
+    add("Legacy MSOnline PowerShell blocked", "blockMsolPowerShell", True)
+
+    consent = Section("Admin consent requests", ["Setting", "Value", "Recommended"],
+                      intro="Whether users who can't consent to an app themselves can ask an admin to approve it.",
+                      empty="Admin consent request settings weren't available.")
+    workflow = (snap.objects("tenant_policies", "admin_consent_policy") or [None])[0]
+    if workflow:
+        on = bool(workflow.get("isEnabled"))
+        blocked = user_consent_level(policy) != "any"
+        consent.add(["Admin consent requests", "On" if on else "Off", "On"], "low" if blocked and not on else None)
+        if on:
+            reviewers = len(workflow.get("reviewers") or [])
+            consent.add(["Reviewers", reviewers, "At least one"], None if reviewers else "low")
+            consent.add(["Reviewers are emailed about new requests", workflow.get("notifyReviewers"), True])
+            consent.add(["Reviewers get reminders", workflow.get("remindersEnabled"), True])
+            days = workflow.get("requestDurationInDays")
+            consent.add(["Requests expire after", f"{days} days" if days else "Not set", "30 days (the default)"])
+    report.sections = [settings, consent]
+
+
 # -- Email domains --------------------------------------------------------------------
 
 
@@ -469,6 +522,9 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
     "conditional-access": ("Conditional Access coverage",
                            "Every policy in plain words, and which accounts each one actually covers.",
                            ("conditional_access", "admin_roles", "users"), conditional_access),
+    "tenant-settings": ("Tenant settings",
+                        "What users and guests can do by default, and whether users can ask an admin to approve apps.",
+                        ("tenant_policies",), tenant_settings),
     "domains": ("Email domains", "SPF, DMARC and DKIM for each of the tenant's domains, from public DNS.",
                 ("domain_health",), domains),
     "guests": ("Guests and sharing", "Who can invite and share externally, and every guest account.",
