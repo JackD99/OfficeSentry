@@ -29,6 +29,13 @@ pass, and a first run against a real tenant.
   switched or edited, compared with the snapshot from 4+ weeks earlier.
 - **Emailed reports** (`/tenants/<id>/schedules`, SMTP under Admin → Email):
   monthly on a chosen day and hour, with PDF and XLSX attached.
+- **Alerts** (Admin → Alerts): a Microsoft Teams (Workflows), Slack or generic
+  JSON webhook message when a tenant gets new findings at or above a chosen
+  severity (one message per tenant per collection), when a collection fails
+  after working last time, and optionally when it works again. The webhook URL
+  and optional HMAC signing secret are stored encrypted; only https URLs that
+  resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
+  allows internal ones).
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as XLSX):
   - *Mailbox access and forwarding*: every forward (admin-set or inbox rule),
     inbox rules that hide mail, full access / send as / send on behalf, and
