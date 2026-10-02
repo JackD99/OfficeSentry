@@ -7,7 +7,9 @@ overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
 ## Rules that must not be broken
 
 - **Never write to a tenant.** No POST/PATCH/DELETE to Graph from collectors.
-  `GraphClient` exposes GET only; keep it that way. New permissions must be
+  `GraphClient` exposes GET only; keep it that way. `ExchangeClient` POSTs to
+  InvokeCommand, so it only runs cmdlets in `READ_ONLY_CMDLETS`; only ever add
+  `Get-*` cmdlets there. New permissions must be
   read-only and go in `entra.GRAPH_PERMISSIONS` (adding one forces every
   tenant to re-consent, so batch them).
 - **Every route needs `@login_required` or `@roles_required`.** Anything
@@ -27,11 +29,17 @@ overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
 3. Import it in `collectors/__init__.py`.
 4. Test it in `tests/test_collectors.py` with recorded Graph responses.
 
+Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
+`ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
+
 ## Adding a check or report
 
 - Checks go in `rules.py` with `@rule(...)`. They read `TenantSnapshot` only,
   never Graph, and return `unavailable` (with the reason) when data or the
   tenant's licence is missing, rather than passing or failing.
+- Detail reports are builders in `reports/data_reports.py` returning
+  `Section`s of rows; register them in `REPORTS` and they get a page, a tab
+  and an XLSX export.
 - Report builders in `reports/` return plain data; templates and
   `reports/export.py` only format it. Charts are server-side SVG
   (`reports/charts.py`) so the PDF matches the page.

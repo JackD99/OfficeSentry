@@ -96,6 +96,41 @@ def ca_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return out
 
 
+def forwarding_changes(conn, tenant_id: int, before: str) -> list[Change]:
+    from .mailflow import mailbox_forwarding
+
+    pair = _pair(conn, tenant_id, "mailboxes", "mailbox", before)
+    if pair is None:
+        return []
+    old, new = pair
+    out = []
+    for mid, m in new.items():
+        target, was = mailbox_forwarding(m), mailbox_forwarding(old.get(mid) or {})
+        name = m.get("PrimarySmtpAddress") or mid
+        if target and target != was:
+            out.append(Change("Mail", "added", name, f"Now forwards to {target}"))
+        elif was and not target:
+            out.append(Change("Mail", "removed", name, f"Stopped forwarding to {was}"))
+    return out
+
+
+def app_changes(conn, tenant_id: int, before: str) -> list[Change]:
+    pair = _pair(conn, tenant_id, "app_consents", "app_permission", before)
+    if pair is None:
+        return []
+    latest = store.latest_run(conn, tenant_id, "app_consents")
+    names = {o["_id"]: o.get("displayName") for o in store.run_objects(conn, latest["id"], "service_principal")}
+
+    def keyed(rows):
+        return {(o.get("clientId"), o.get("permission")) for o in rows.values()}
+
+    added: dict[str, list[str]] = {}
+    for client, perm in sorted(keyed(pair[1]) - keyed(pair[0])):
+        added.setdefault(client, []).append(perm)
+    return [Change("Apps", "added", names.get(c) or c, f"Granted {', '.join(p)}") for c, p in added.items()]
+
+
 def all_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return admin_changes(conn, tenant_id, before) + ca_changes(conn, tenant_id, before) + \
-        user_changes(conn, tenant_id, before)
+        user_changes(conn, tenant_id, before) + forwarding_changes(conn, tenant_id, before) + \
+        app_changes(conn, tenant_id, before)

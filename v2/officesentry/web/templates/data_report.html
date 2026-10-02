@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ report.title }} · {{ tenant.name }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a></p>
+<div class="heading">
+  <div>
+    <h1>{{ report.title }}</h1>
+    <div class="muted">{{ report.description }}</div>
+  </div>
+  {% if not report.unavailable %}
+  <a class="button" href="{{ url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key) }}">Download XLSX</a>
+  {% endif %}
+</div>
+<nav class="tabs" aria-label="Detail reports">
+  {% for key, r in reports.items() %}
+  <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=key) }}" {% if key == report.key %}class="active" aria-current="page"{% endif %}>{{ r[0] }}</a>
+  {% endfor %}
+</nav>
+
+{% if report.unavailable %}
+<section class="card"><p>{{ report.unavailable }}</p></section>
+{% else %}
+{% for section in report.sections %}
+<section class="card scroll">
+  <h2>{{ section.title }} <span class="muted small">{{ section.rows|length }}{% if section.flagged %} · {{ section.flagged }} to review{% endif %}</span></h2>
+  {% if section.intro %}<p class="muted small">{{ section.intro }}</p>{% endif %}
+  {% if section.rows %}
+  <table>
+    <thead><tr>{% for c in section.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for row in section.rows %}{% set flag = section.flags[loop.index0] %}
+    <tr{% if flag %} class="flag-{{ flag }}"{% endif %}>
+      {% for v in row %}<td>{% if loop.first and flag in ('critical', 'high', 'medium') %}<span class="status sev-text-{{ flag }}">{{ flag }}</span> {% endif %}{{ v }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">{{ section.empty }}</p>{% endif %}
+</section>
+{% endfor %}
+{% endif %}
+
+<p class="muted small">Data from:
+{% for title, finished in report.sources %}{{ title }} ({{ finished[:16]|replace('T', ' ') ~ ' UTC' if finished else 'not collected yet' }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+{% endblock %}

@@ -243,3 +243,88 @@ def test_expiring_credentials(db, two_tenants):
 
     status, _, found = app_credentials(Snap(), datetime(2026, 10, 2, tzinfo=UTC))
     assert status == "fail" and found[0].severity == "medium"
+
+
+# -- Detail reports ------------------------------------------------------------------
+
+
+def test_detail_reports_build(db, two_tenants):
+    from officesentry.reports.data_reports import REPORTS, build
+
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=USERS + [gd.INFO_USER])
+    tenant = store.get_tenant(db, alpha)
+    mail = {s.title: s for s in build(db, tenant, "mailboxes").sections}
+    assert [(r[0], r[1], r[3]) for r in mail["Forwarding"].rows] == [
+        ("ann@x.com", "ann@gmail.com", "Yes"), ("ann@x.com", "ann.home@gmail.com", "Yes"),
+        ("info@x.com", "boss@x.com", "No")]
+    assert mail["Forwarding"].flagged == 2
+    assert {r[3] for r in mail["Delegated access"].rows} == {"Full access", "Send as", "Send on behalf"}
+    assert mail["Shared mailboxes"].rows == [["info@x.com", "Yes", "No", 1]]
+    apps = {s.title: s for s in build(db, tenant, "apps").sections}
+    assert apps["Third-party apps with access"].rows[0][0] == "Mail Sync Pro"
+    ca = {s.title: s for s in build(db, tenant, "conditional-access").sections}
+    assert ca["Policies"].rows[0][:2] == ["Require MFA for all users", "On"]
+    assert ca["Coverage by account"].intro.startswith("3 of 3")
+    guests = {s.title: s for s in build(db, tenant, "guests").sections}
+    assert ["Who can invite guests", "Everyone, including guests"] in guests["External access settings"].rows
+    for key in REPORTS:
+        assert build(db, store.get_tenant(db, two_tenants[1]), key).unavailable  # never collected
+
+
+def test_detail_report_pages_and_access(client, db, two_tenants):
+    from openpyxl import load_workbook
+
+    from tests.conftest import login, make_user
+
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "client", role="client", tenants=[bravo])
+    login(client, "client")
+    assert client.get(f"/tenants/{alpha}/data/mailboxes").status_code == 404
+    client.post("/logout")
+    make_user(db, "admin")
+    login(client, "admin")
+    for key in ("mailboxes", "apps", "conditional-access", "guests"):
+        page = client.get(f"/tenants/{alpha}/data/{key}")
+        assert page.status_code == 200, key
+    assert "Mail Sync Pro" in client.get(f"/tenants/{alpha}/data/apps").get_data(as_text=True)
+    assert client.get(f"/tenants/{alpha}/data/nope").status_code == 404
+    resp = client.get(f"/tenants/{alpha}/data/mailboxes.xlsx")
+    assert resp.status_code == 200
+    from io import BytesIO
+    wb = load_workbook(BytesIO(resp.data))
+    assert "Forwarding" in wb.sheetnames
+
+
+def test_changes_include_new_forwarding_and_app_permissions(db, two_tenants):
+    from datetime import timedelta
+
+    from officesentry.changes import all_changes
+
+    alpha, _ = two_tenants
+    quiet = dict(gd.EXCHANGE, **{"Get-Mailbox": [dict(m, ForwardingSmtpAddress=None)
+                                                 for m in gd.EXCHANGE["Get-Mailbox"]]})
+    seed_tenant(db, alpha, exchange=quiet)
+    old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("DELETE FROM objects WHERE kind = 'app_permission' AND object_id = 'ara1'")
+    db.execute("UPDATE runs SET finished_at = ?", (old,))
+    seed_tenant(db, alpha)
+    since = (datetime.now(UTC) - timedelta(days=28)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    changes = {(c.area, c.subject, c.detail) for c in all_changes(db, alpha, since)}
+    assert ("Mail", "ann@x.com", "Now forwards to ann@gmail.com") in changes
+    assert ("Apps", "Mail Sync Pro", "Granted Mail.Read") in changes
+
+
+def test_exchange_allow_list_is_get_only():
+    from officesentry.entra import EXCHANGE_PERMISSIONS, required_resource_access
+    from officesentry.exchange import READ_ONLY_CMDLETS
+
+    assert all(c.startswith("Get-") for c in READ_ONLY_CMDLETS)
+    assert set(EXCHANGE_PERMISSIONS) == {"Exchange.ManageAsApp"}
+    graph = {"appRoles": [{"value": p, "id": p, "allowedMemberTypes": ["Application"]}
+                          for p in __import__("officesentry.entra", fromlist=["x"]).GRAPH_PERMISSIONS]}
+    exo = {"appRoles": [{"value": "Exchange.ManageAsApp", "id": "exo-id", "allowedMemberTypes": ["Application"]}]}
+    access = required_resource_access(graph, exo)
+    assert access[1] == {"resourceAppId": "00000002-0000-0ff1-ce00-000000000000",
+                         "resourceAccess": [{"id": "exo-id", "type": "Role"}]}

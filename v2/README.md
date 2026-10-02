@@ -5,11 +5,12 @@ tenant, cross-tenant rollups, month-over-month changes and branded client
 reports. This is the rebuild planned in the 2026-10 review; the v1 portal
 remains in `../portal` until v2 replaces it.
 
-**Status: Phase 3.** Tenants are collected nightly; the **Monthly Security &
+**Status: Phase 4.** Tenants are collected nightly; the **Monthly Security &
 Licensing Review** is available per tenant (HTML, PDF, XLSX) with a
 cross-tenant overview, findings history, accepted risks, "since last month"
-changes and monthly emailed reports. Next: Exchange and SharePoint reports
-(Phase 4).
+changes and monthly emailed reports, plus detail reports on mailboxes, apps,
+Conditional Access coverage and guests. Next: client-facing evidence
+(Phase 5).
 
 ## Reports
 
@@ -27,16 +28,43 @@ changes and monthly emailed reports. Next: Exchange and SharePoint reports
   switched or edited, compared with the snapshot from 4+ weeks earlier.
 - **Emailed reports** (`/tenants/<id>/schedules`, SMTP under Admin → Email):
   monthly on a chosen day and hour, with PDF and XLSX attached.
+- **Detail reports** (`/tenants/<id>/data/<report>`, each also as XLSX):
+  - *Mailbox access and forwarding*: every forward (admin-set or inbox rule),
+    inbox rules that hide mail, full access / send as / send on behalf, and
+    shared mailboxes that can sign in.
+  - *Apps and consents*: third-party apps with what they were granted
+    (application permissions, tenant-wide and per-user consent), and app
+    registration secrets or certificates expiring.
+  - *Conditional Access coverage*: every policy in plain words, and for each
+    account which enforced policy requires MFA, whether legacy sign-in is
+    blocked, and which policies exclude it (group membership expanded).
+  - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
+    and every guest with invitation state and last sign-in.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
-blocked, admins without MFA, Global Admin count, guest admins, apps with
-admin roles, users without MFA, inactive accounts, licences on disabled
-accounts, unassigned paid licences.
+blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
+count, guest admins, apps with admin roles, users without MFA, inactive
+accounts, licences on disabled accounts, unassigned paid licences, external
+forwarding, inbox rules that hide mail, automatic forwarding policy, shared
+mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,
+user consent, app credential expiry, SharePoint anonymous links, guest
+invitations, stale guest invitations.
+
+### Exchange data
+
+Mailbox forwarding, permissions and mail settings come from the Exchange
+Online admin API (the same one the ExchangeOnlineManagement module uses),
+limited in code to a fixed list of `Get-` cmdlets. It needs the app's
+`Exchange.ManageAsApp` permission and, in each client tenant, the **Global
+Reader** role assigned to the app (Entra admin center → Roles and admins →
+Global Reader → Add assignments). Inbox rules are read through Graph, so they
+work without it.
 
 ## What it does differently from v1
 
 - **Read-only by construction.** The Entra app requests only `*.Read*`
-  permissions, and the Graph client has no write methods.
+  Graph permissions, the Graph client has no write methods, and the Exchange
+  client only runs allow-listed `Get-` cmdlets.
 - **One multi-tenant app.** You register it once; each client admin opens a
   consent link to add their tenant. No per-tenant app or device-code step.
 - **No credential files.** The certificate's private key is encrypted in the

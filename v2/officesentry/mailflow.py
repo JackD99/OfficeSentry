@@ -90,10 +90,10 @@ def inbox_rule_risk(rule: dict, domains: set[str]) -> RuleRisk:
         where = "deletes" if actions.get("delete") or actions.get("permanentDelete") else \
             f"moves to {rule.get('moveToFolderName')}"
         if keywords:
-            risk.reasons.append(f"{where.capitalize()} mail mentioning {', '.join(keywords)}")
+            risk.reasons.append(f"{where[0].upper()}{where[1:]} mail mentioning {', '.join(keywords)}")
             severity = "high"
         elif actions.get("markAsRead"):
-            risk.reasons.append(f"{where.capitalize()} and marks as read")
+            risk.reasons.append(f"{where[0].upper()}{where[1:]} and marks as read")
             severity = severity or "medium"
     if odd_name and (risk.forwards_to or hides):
         risk.reasons.append(f"Rule name {rule.get('displayName')!r} looks deliberately blank")

@@ -7,6 +7,7 @@
   <div class="actions">
     <a class="button primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">Security review</a>
     <a class="button" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">Findings</a>
+    <a class="button" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key='mailboxes') }}">Detail reports</a>
     <a class="button" href="{{ url_for('reports.schedules', tenant_id=tenant.id) }}">Emailed reports</a>
     {% if current_user.role in ('admin', 'analyst') %}
     <form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}">{{ csrf() }}<button>Refresh all data</button></form>

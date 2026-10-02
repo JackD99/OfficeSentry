@@ -11,7 +11,7 @@ from flask import Blueprint, Response, abort, current_app, flash, g, redirect, r
 from .. import findings, mailer
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
-from ..reports import export
+from ..reports import data_reports, export
 from ..reports.monthly_review import build, rollup_row, setting
 from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
@@ -69,6 +69,31 @@ def tenant_report_xlsx(tenant_id: int):
         export.to_xlsx(build(g.db, t)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={_filename(t, 'xlsx')}"},
+    )
+
+
+@bp.get("/tenants/<int:tenant_id>/data/<key>")
+@login_required
+def data_report(tenant_id: int, key: str):
+    t = tenant_or_404(tenant_id)
+    if key not in data_reports.REPORTS:
+        abort(404)
+    return render_template("data_report.html", tenant=t, report=data_reports.build(g.db, t, key),
+                           reports=data_reports.REPORTS)
+
+
+@bp.get("/tenants/<int:tenant_id>/data/<key>.xlsx")
+@login_required
+def data_report_xlsx(tenant_id: int, key: str):
+    t = tenant_or_404(tenant_id)
+    if key not in data_reports.REPORTS:
+        abort(404)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")
+    slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
+    return Response(
+        data_reports.to_xlsx(data_reports.build(g.db, t, key)),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={key}-{slug}.xlsx"},
     )
 
 
