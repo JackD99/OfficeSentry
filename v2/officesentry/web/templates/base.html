@@ -13,6 +13,7 @@
   <nav>
     <a href="{{ url_for('tenants.dashboard') }}">Tenants</a>
     <a href="{{ url_for('reports.overview') }}">Reports</a>
+    {% if current_user.role in ('admin', 'analyst') %}<a href="{{ url_for('prospects.index') }}">Prospects</a>{% endif %}
     {% if current_user.role == 'admin' %}
     <a href="{{ url_for('admin.connections') }}">App connections</a>
     <a href="{{ url_for('reports.prices') }}">Licence prices</a>

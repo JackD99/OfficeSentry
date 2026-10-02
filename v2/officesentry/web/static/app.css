@@ -68,3 +68,5 @@ input.price { max-width: 120px; margin-left: auto; text-align: right; }
 .sev-text-critical { color: var(--bad); } .sev-text-high { color: var(--warn); } .sev-text-medium, .sev-text-low, .sev-text-info { color: var(--muted); }
 form.accept { margin-top: 8px; min-width: 220px; }
 details summary { cursor: pointer; color: var(--accent); }
+.grade { display: inline-block; min-width: 1.8em; text-align: center; font-weight: 800; border: 2px solid currentColor; border-radius: 6px; }
+.grade-F { color: var(--bad); } .grade-C { color: var(--warn); } .grade-A { color: var(--ok); }

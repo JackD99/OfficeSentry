@@ -80,3 +80,10 @@ ul.changes li { padding: 4px 0; border-bottom: 1px solid var(--border); }
 .chg-added { color: var(--high); } .chg-removed { color: var(--low); } .chg-changed { color: var(--medium); }
 .chg-resolved { color: var(--ok); }
 .new { font-size: .68rem; font-weight: 700; text-transform: uppercase; color: var(--high); border: 1px solid currentColor; border-radius: 8px; padding: 0 5px; }
+
+.verdict { display: flex; gap: 20px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+.verdict .headline { font-size: 1.1rem; font-weight: 600; margin: 0 0 4px; }
+.verdict p { margin: 0; }
+.grade-big { font-size: 3rem; font-weight: 800; line-height: 1; min-width: 64px; text-align: center; padding: 8px 0; border-radius: 8px; border: 3px solid currentColor; }
+.grade-box-F .grade-big { color: var(--critical); } .grade-box-C .grade-big { color: var(--medium); } .grade-box-A .grade-big { color: var(--ok); }
+table th[scope], table tr > th:first-child:not(:only-child) { width: 30%; }

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Email security check: {{ a.company }}</title>
+  <link rel="stylesheet" href="{{ css_href }}">
+</head>
+<body class="report{% if pdf %} pdf{% endif %}">
+{% if not pdf %}
+<nav class="toolbar">
+  <a href="{{ url_for('prospects.index') }}">&larr; Prospects</a>
+  <span class="spacer"></span>
+  {% if pdf_available %}<a class="button" href="{{ url_for('prospects.pdf', prospect_id=a.id) }}">Download PDF</a>{% endif %}
+</nav>
+{% endif %}
+<article>
+<header class="cover">
+  <div class="eyebrow">Email security check</div>
+  <h1>{{ a.company }}</h1>
+  <div class="meta">{{ a.domain }} · checked {{ a.checked_at.strftime('%d %B %Y') }} from public information only</div>
+</header>
+
+<section class="verdict grade-box-{{ a.grade }}">
+  <div class="grade-big">{{ a.grade }}</div>
+  <div>
+    <p class="headline">{{ a.headline }}</p>
+    <p class="muted">The grade reflects whether other people can send email pretending to be {{ a.domain }}: F means they can, C means only partly prevented, A means prevented.</p>
+  </div>
+</section>
+
+<section class="keep">
+  <h2>What we found</h2>
+  {% if a.issues %}
+  <table class="findings">
+    <thead><tr><th>Area</th><th>Finding</th><th>Severity</th></tr></thead>
+    <tbody>{% for i in a.issues %}<tr><td>{{ i.area }}</td><td>{{ i.detail }}</td><td><span class="sev sev-{{ i.severity }}">{{ i.severity }}</span></td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p>No problems found with SPF, DMARC or DKIM.</p>{% endif %}
+</section>
+
+<section class="keep">
+  <h2>Email authentication</h2>
+  <table>
+    <tr><th>Mail is received by</th><td>{% if a.health.microsoft_365 %}Microsoft 365{% elif a.health.mx %}{{ a.health.mx|join(', ') }}{% else %}No mail servers published{% endif %}</td></tr>
+    <tr><th>SPF</th><td>{{ a.health.spf or 'Not published' }}{% if a.health.spf %}<div class="muted">{{ a.health.spf_lookups }} DNS lookup(s); the limit is 10</div>{% endif %}</td></tr>
+    <tr><th>DMARC</th><td>{{ a.health.dmarc or 'Not published' }}</td></tr>
+    <tr><th>DKIM (Microsoft 365)</th><td>{% if not a.health.microsoft_365 %}Not applicable{% elif a.health.dkim.values()|select|list|length == 2 %}Both selectors published{% elif a.health.dkim.values()|select|list %}One selector published{% else %}Not set up{% endif %}</td></tr>
+    <tr><th>MTA-STS</th><td>{{ 'Published' if a.health.mta_sts else 'Not published' }}</td></tr>
+  </table>
+</section>
+
+<section class="keep">
+  <h2>Microsoft 365</h2>
+  <table>
+    {% if a.tenant.uses_microsoft_365 %}
+    <tr><th>Uses Microsoft 365</th><td>Yes{% if a.tenant.brand %} ({{ a.tenant.brand }}){% endif %}</td></tr>
+    <tr><th>Sign-in</th><td>{% if a.tenant.sign_in == 'Federated' %}Federated to {{ a.tenant.federation_host or 'another identity provider' }}{% elif a.tenant.sign_in == 'Managed' %}Microsoft Entra ID (cloud or synced passwords){% else %}Unknown{% endif %}</td></tr>
+    <tr><th>Tenant ID</th><td>{{ a.tenant.tenant_id }}</td></tr>
+    {% elif a.tenant.uses_microsoft_365 is none %}
+    <tr><th>Uses Microsoft 365</th><td>Couldn't tell{% if a.tenant.error %} ({{ a.tenant.error }}){% endif %}</td></tr>
+    {% else %}
+    <tr><th>Uses Microsoft 365</th><td>No tenant found for this domain</td></tr>
+    {% endif %}
+  </table>
+  <p class="muted">A full review of MFA, admin accounts, mailbox forwarding, third-party apps and licence waste needs read-only access granted by a tenant administrator.</p>
+</section>
+
+{% if a.health.errors %}
+<footer class="keep"><p class="muted">Some DNS lookups failed and may need checking again: {{ a.health.errors|join('; ') }}</p></footer>
+{% endif %}
+</article>
+</body>
+</html>
