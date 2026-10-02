@@ -158,13 +158,15 @@ def test_no_exchange_licence_makes_mail_checks_unavailable(db, two_tenants):
 def test_exchange_access_denied_fails_only_that_run(db, two_tenants):
     alpha, _ = two_tenants
     import re
+    from unittest.mock import patch
 
     from officesentry.collectors import REGISTRY
     from officesentry.graph import GraphClient
     from officesentry.worker import execute_run
     from tests.seed import exchange_factory, mock_tenant
 
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
+            patch("officesentry.dnscheck.lookup", gd.fake_dns):
         mock_tenant(rsps, exchange=False)
         rsps.post(re.compile(re.escape(EXCHANGE_ROOT) + r"/.*"), status=401)
         statuses = {}

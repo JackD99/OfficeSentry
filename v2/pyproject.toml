@@ -11,6 +11,7 @@ dependencies = [
     "requests>=2.32.4",
     "gunicorn>=23",
     "openpyxl>=3.1",
+    "dnspython>=2.6",
 ]
 
 [project.optional-dependencies]
@@ -26,7 +27,7 @@ build-backend = "setuptools.build_meta"
 include = ["officesentry*"]
 
 [tool.setuptools.package-data]
-officesentry = ["migrations/*.sql", "web/templates/*.html", "web/static/*"]
+officesentry = ["migrations/*.sql", "web/templates/*.html", "web/templates/reports/*.html", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

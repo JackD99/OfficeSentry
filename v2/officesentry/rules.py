@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from . import coverage
+from . import coverage, dnscheck
 from .licences import is_stale, last_sign_in, licence_summary, load_prices
 from .mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from .snapshot import TenantSnapshot
@@ -675,6 +675,63 @@ def pending_guests(snap: TenantSnapshot, now: datetime):
             findings.append(Finding("low", _label(u), f"Invited {created[:10]}, never accepted", u["_id"]))
     return ("fail", f"{len(findings)} guest invitation(s) unaccepted for 30+ days", findings) if findings else \
         ("pass", "No stale guest invitations", [])
+
+
+
+# -- Email domains ---------------------------------------------------------------------
+
+
+def _domain_rule(snap: TenantSnapshot, area: str):
+    rows = snap.objects("domain_health", "domain")
+    if not rows:
+        return None
+    findings = []
+    for row in rows:
+        health = dnscheck.DomainHealth.from_dict(row)
+        for issue in dnscheck.issues(health):
+            if issue.area == area:
+                findings.append(Finding(issue.severity, health.domain, issue.detail, f"{health.domain}:{area}"))
+    return findings, rows
+
+
+@rule("spf_record", "Every domain has a working SPF record", "Email",
+      "Publish one SPF record per domain ending in -all (or ~all while testing), e.g. "
+      "\"v=spf1 include:spf.protection.outlook.com -all\". Domains that never send mail should publish "
+      "\"v=spf1 -all\".")
+def spf_record(snap: TenantSnapshot, now: datetime):
+    result = _domain_rule(snap, "SPF")
+    if result is None:
+        return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
+    findings, rows = result
+    return ("fail", f"{len({f.subject for f in findings})} domain(s) with SPF problems", findings) if findings \
+        else ("pass", f"SPF is correct on all {len(rows)} domain(s)", [])
+
+
+@rule("dmarc_policy", "Every domain enforces DMARC", "Email",
+      "Publish a DMARC record with a rua= reporting address, start at p=none to see who sends as the domain, "
+      "then move to p=quarantine and p=reject. Without enforcement, spoofed mail from the domain is delivered.")
+def dmarc_policy(snap: TenantSnapshot, now: datetime):
+    result = _domain_rule(snap, "DMARC")
+    if result is None:
+        return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
+    findings, rows = result
+    return ("fail", f"{len({f.subject for f in findings})} domain(s) without DMARC enforcement", findings) \
+        if findings else ("pass", f"DMARC is enforced on all {len(rows)} domain(s)", [])
+
+
+@rule("dkim_enabled", "DKIM signing is on for every mail domain", "Email",
+      "Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), "
+      "publishing the two selector CNAME records it shows.")
+def dkim_enabled(snap: TenantSnapshot, now: datetime):
+    result = _domain_rule(snap, "DKIM")
+    if result is None:
+        return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
+    findings, rows = result
+    checked = [r for r in rows if dnscheck.DomainHealth.from_dict(r).microsoft_365]
+    if not checked:
+        return _unavailable("No domain receives mail through Microsoft 365")
+    return ("fail", f"{len(findings)} mail domain(s) without DKIM", findings) if findings else \
+        ("pass", f"DKIM is on for all {len(checked)} Microsoft 365 mail domain(s)", [])
 
 
 def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResult]:

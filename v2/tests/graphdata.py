@@ -153,3 +153,18 @@ EXCHANGE = {
 }
 INFO_USER = {"id": "u7", "displayName": "Info", "userPrincipalName": "info@x.com", "userType": "Member",
              "accountEnabled": True, "assignedLicenses": [], "signInActivity": {}}
+
+ORGANIZATION = {"id": "org", "displayName": "Org", "verifiedDomains": [
+    {"name": "x.com", "isDefault": True}, {"name": "parked.com"}, {"name": "x.onmicrosoft.com"}]}
+
+DNS = {
+    ("x.com", "MX"): ["x-com.mail.protection.outlook.com"],
+    ("x.com", "TXT"): ["v=spf1 include:spf.protection.outlook.com -all", "MS=ms123"],
+    ("spf.protection.outlook.com", "TXT"): ["v=spf1 ip4:40.92.0.0/15 -all"],
+    ("_dmarc.x.com", "TXT"): ["v=DMARC1; p=none; rua=mailto:dmarc@x.com"],
+    ("selector1._domainkey.x.com", "CNAME"): ["selector1-x-com._domainkey.x.onmicrosoft.com"],
+}
+
+
+def fake_dns(name, rdtype):
+    return list(DNS.get((name, rdtype), []))

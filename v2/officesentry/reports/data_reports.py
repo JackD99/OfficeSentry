@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .. import coverage
+from .. import coverage, dnscheck
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
@@ -315,6 +315,28 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.sections = sections
 
 
+# -- Email domains --------------------------------------------------------------------
+
+
+def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    rows = snap.objects("domain_health", "domain")
+    if not rows:
+        report.unavailable = "Domain checks haven't run yet, or the tenant has no custom domains."
+        return
+    overview = Section("Domains", ["Domain", "Receives mail via", "SPF", "DMARC", "DKIM", "What to fix"],
+                       intro="SPF, DMARC and DKIM stop other people sending email as the client's domains.")
+    records = Section("Published records", ["Domain", "SPF record", "DNS lookups", "DMARC record", "MX"])
+    for row in sorted(rows, key=lambda r: (not r.get("mx"), r["domain"])):
+        h = dnscheck.DomainHealth.from_dict(row)
+        found = dnscheck.issues(h)
+        words = dnscheck.summary(h)
+        via = "Microsoft 365" if h.microsoft_365 else (h.mx[0] if h.mx else "Doesn't receive mail")
+        overview.add([h.domain, via, words["SPF"], words["DMARC"], words["DKIM"],
+                      "; ".join(i.detail for i in found) or "Nothing"], found[0].severity if found else None)
+        records.add([h.domain, h.spf or "None", h.spf_lookups if h.spf else "", h.dmarc or "None", h.mx])
+    report.sections = [overview, records]
+
+
 # -- Registry ----------------------------------------------------------------------------
 
 Builder = Callable[[TenantSnapshot, datetime, DataReport], None]
@@ -328,6 +350,8 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
     "conditional-access": ("Conditional Access coverage",
                            "Every policy in plain words, and which accounts each one actually covers.",
                            ("conditional_access", "admin_roles", "users"), conditional_access),
+    "domains": ("Email domains", "SPF, DMARC and DKIM for each of the tenant's domains, from public DNS.",
+                ("domain_health",), domains),
     "guests": ("Guests and sharing", "Who can invite and share externally, and every guest account.",
                ("tenant_policies", "users"), guests),
 }

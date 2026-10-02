@@ -2,6 +2,7 @@
 
 import json
 import re
+from unittest.mock import patch
 
 import responses
 
@@ -65,7 +66,7 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 
 
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, **phase4):
-    rsps.get(f"{V1}/organization", json={"value": [{"id": "org", "displayName": "Org"}]})
+    rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
     rsps.get(f"{V1}/users", json={"value": users})
     rsps.get(f"{V1}/roleManagement/directory/roleDefinitions", json={"value": gd.ROLE_DEFINITIONS})
@@ -88,9 +89,10 @@ def exchange_factory(tenant, connection):
     return ExchangeClient(tenant["tenant_ref"], lambda: "t", sleep=lambda s: None)
 
 
-def seed_tenant(db, tenant_id, **kwargs):
+def seed_tenant(db, tenant_id, dns=None, **kwargs):
     factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
+            patch("officesentry.dnscheck.lookup", dns or gd.fake_dns):
         mock_tenant(rsps, **kwargs)
         for key in REGISTRY:
             store.enqueue_run(db, tenant_id, key)
