@@ -88,6 +88,17 @@ and `OFFICESENTRY_TEST_CLIENT_SECRET`, stores the result as tenant "Live test"
 and prints each collector's outcome and every check. The secret is only for
 this command; the product signs in with a certificate.
 
+## Documentation
+
+- [What Office Sentry reads](docs/what-office-sentry-reads.md): for clients
+  asked to approve access. Every permission, what is and isn't read, where the
+  data is kept and how to remove access.
+- [Onboarding a client](docs/onboarding-a-client.md): for technicians. Adding
+  a tenant, consent, Global Reader, the first collection, and the errors on the
+  Data collection tab.
+- [Check catalogue](docs/checks.md): every check, data source, detail report
+  and permission, generated from the code by `scripts/gen_check_catalogue.py`.
+
 ## What it does differently from v1
 
 - **Read-only by construction.** The Entra app requests only `*.Read*`
