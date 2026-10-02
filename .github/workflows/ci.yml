@@ -1,5 +1,11 @@
 name: CI
-on: [push, pull_request]
+# v1 portal checks. Scoped to v1 paths so v2-only changes (checked by v2.yml)
+# don't inherit v1's existing lint failures.
+on:
+  push:
+    paths: ["portal/**", "tests/**", "scripts/**", "requirements*.txt", "pyproject.toml"]
+  pull_request:
+    paths: ["portal/**", "tests/**", "scripts/**", "requirements*.txt", "pyproject.toml"]
 jobs:
   test:
     runs-on: ubuntu-latest
