@@ -578,6 +578,14 @@ def _authorization_policy(snap: TenantSnapshot):
     return rows[0] if rows else None
 
 
+def user_consent_level(policy: dict) -> str:
+    """'any' (legacy: any app), 'limited' (verified publishers, low-risk permissions) or 'off'."""
+    assigned = [p for p in policy.get("permissionGrantPolicies") or [] if "ManagePermissionGrantsForSelf" in p]
+    if any(p.endswith("microsoft-user-default-legacy") for p in assigned):
+        return "any"
+    return "limited" if assigned else "off"
+
+
 @rule("user_consent", "Users can't consent to apps on their own", "Apps",
       "Set user consent to \"Allow user consent for apps from verified publishers, for selected permissions\" "
       "or turn it off and use the admin consent workflow. Consent phishing relies on this setting.")
@@ -585,11 +593,11 @@ def user_consent(snap: TenantSnapshot, now: datetime):
     policy = _authorization_policy(snap)
     if policy is None:
         return _unavailable("Consent settings haven't been collected yet")
-    assigned = [p for p in policy.get("permissionGrantPolicies") or [] if "ManagePermissionGrantsForSelf" in p]
-    if any(p.endswith("microsoft-user-default-legacy") for p in assigned):
+    level = user_consent_level(policy)
+    if level == "any":
         return ("fail", "Users can consent to any app", [Finding(
             "medium", "Tenant", "Any user can grant any app access to their mail and files")])
-    if assigned:
+    if level == "limited":
         return ("pass", "Users can consent only to verified publishers' low-risk permissions", [])
     return ("pass", "User consent is turned off", [])
 
@@ -626,14 +634,6 @@ GUEST_ROLES = {
     "10dae51f-b6af-4016-8d66-8c2a99b929b3": "limited",
     "2af84b1e-32c8-42b7-82bc-daa82404023b": "restricted",
 }
-
-
-def user_consent_level(policy: dict) -> str:
-    """'any' (legacy: any app), 'limited' (verified publishers, low-risk permissions) or 'off'."""
-    assigned = [p for p in policy.get("permissionGrantPolicies") or [] if "ManagePermissionGrantsForSelf" in p]
-    if any(p.endswith("microsoft-user-default-legacy") for p in assigned):
-        return "any"
-    return "limited" if assigned else "off"
 
 
 def _setting(snap: TenantSnapshot, key: str) -> tuple[dict | None, str]:
@@ -707,7 +707,14 @@ def email_verified_join(snap: TenantSnapshot, now: datetime):
     return ("pass", "Nobody can join just by verifying an email address", [])
 
 
-@rule("admin_consent_workflow", "Users can ask an admin to approve an app", "Tenant settings",
+def admin_consent_missing(policy: dict) -> str:
+    """Why a run that stored the authorization policy has no admin consent request settings."""
+    if "allowedToCreateSecurityGroups" not in policy:  # stored by the same version of the collector
+        return "Collected before admin consent requests were recorded; refresh Sharing and consent settings"
+    return "Microsoft didn't return the admin consent request settings (see the run's warnings)"
+
+
+@rule("admin_consent_workflow", "Users have a way to get apps approved", "Tenant settings",
       "Turn on admin consent requests (Entra admin center > Enterprise apps > Consent and permissions > Admin "
       "consent settings) and choose reviewers, so users blocked from consenting can ask instead of looking for "
       "a workaround.")
@@ -717,24 +724,25 @@ def admin_consent_workflow(snap: TenantSnapshot, now: datetime):
         return _unavailable("Consent settings haven't been collected yet")
     rows = snap.objects("tenant_policies", "admin_consent_policy")
     if not rows:
-        return _unavailable("Admin consent request settings weren't available")
+        return _unavailable(admin_consent_missing(policy))
     workflow = rows[0]
     if workflow.get("isEnabled"):
         reviewers = len(workflow.get("reviewers") or [])
         if not reviewers:
             return ("fail", "Admin consent requests are on but have no reviewers", [Finding(
                 "low", "Tenant", "Users can send requests, but nobody can approve them")])
-        return ("pass", f"Admin consent requests are on, with {reviewers} reviewer(s)", [])
+        return ("pass", f"Users can ask an admin: requests are on, with {reviewers} reviewer(s)", [])
     consent = user_consent_level(policy)
     if consent == "any":
-        return ("pass", "Off, but users can consent to most apps themselves (see the user consent check)", [])
-    if consent == "off":
-        return ("fail", "Users can't consent to apps and have no way to ask", [Finding(
-            "low", "Tenant", "User consent and admin consent requests are both off, so users are blocked from "
-                             "any app that needs consent, with no way to ask for it")])
-    return ("fail", "Users have no way to ask for apps that need more than low-risk permissions", [Finding(
-        "info", "Tenant", "Admin consent requests are off, so users are blocked from apps that need more than "
-                          "low-risk permissions, with no way to ask for them")])
+        return ("pass", "Users can consent to most apps themselves, so admin consent requests are off "
+                        "(see the user consent check)", [])
+    if consent == "limited":
+        # Microsoft's default for new tenants: worth turning on, but not a standing failure.
+        return ("pass", "Users can consent to low-risk apps themselves; admin consent requests are off, so they "
+                        "can't ask for anything else", [])
+    return ("fail", "Users can't consent to apps and have no way to ask", [Finding(
+        "low", "Tenant", "User consent and admin consent requests are both off, so users are blocked from "
+                         "any app that needs consent, with no way to ask for it")])
 
 
 # -- Sharing and guests -------------------------------------------------------------

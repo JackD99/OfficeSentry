@@ -14,7 +14,7 @@ from .. import coverage, devices, dnscheck
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
-from ..rules import GUEST_ROLES, SHARING_LEVELS, app_risks, user_consent_level
+from ..rules import GUEST_ROLES, SHARING_LEVELS, admin_consent_missing, app_risks, user_consent_level
 from ..snapshot import TenantSnapshot
 
 
@@ -279,10 +279,9 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         settings.add(["Who can invite guests", INVITES.get(policy.get("allowInvitesFrom"),
                                                              policy.get("allowInvitesFrom"))],
                      "low" if policy.get("allowInvitesFrom") == "everyone" else None)
-        grants = policy.get("permissionGrantPolicies") or []
-        legacy = any(p.endswith("microsoft-user-default-legacy") for p in grants)
-        settings.add(["User consent to apps", "Any app" if legacy else (
-            "Verified publishers, low-risk permissions" if grants else "Off")], "medium" if legacy else None)
+        consent = user_consent_level(policy)
+        settings.add(["User consent to apps", {"any": "Any app", "limited": "Verified publishers, low-risk permissions",
+                                               "off": "Off"}[consent]], "medium" if consent == "any" else None)
         settings.add(["Users can register apps", policy.get("allowedToCreateApps")])
     if sharepoint:
         level = sharepoint.get("sharingCapability")
@@ -352,12 +351,12 @@ def tenant_settings(snap: TenantSnapshot, now: datetime, report: DataReport) -> 
 
     consent = Section("Admin consent requests", ["Setting", "Value", "Recommended"],
                       intro="Whether users who can't consent to an app themselves can ask an admin to approve it.",
-                      empty="Admin consent request settings weren't available.")
+                      empty=admin_consent_missing(policy) + ".")
     workflow = (snap.objects("tenant_policies", "admin_consent_policy") or [None])[0]
     if workflow:
         on = bool(workflow.get("isEnabled"))
-        blocked = user_consent_level(policy) != "any"
-        consent.add(["Admin consent requests", "On" if on else "Off", "On"], "low" if blocked and not on else None)
+        stuck = not on and user_consent_level(policy) == "off"  # same as the admin_consent_workflow check
+        consent.add(["Admin consent requests", "On" if on else "Off", "On"], "low" if stuck else None)
         if on:
             reviewers = len(workflow.get("reviewers") or [])
             consent.add(["Reviewers", reviewers, "At least one"], None if reviewers else "low")

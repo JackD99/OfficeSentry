@@ -85,18 +85,18 @@ def test_admin_consent_policy_forbidden_is_partial(db, two_tenants, factory):
     assert _run(db, alpha, "tenant_policies", factory)[1] == "partial"
     r = _results(db, alpha)
     assert r["admin_consent_workflow"].status == "unavailable"
-    assert "weren't available" in r["admin_consent_workflow"].summary
+    assert "didn't return" in r["admin_consent_workflow"].summary  # not "refresh": that wouldn't help
     assert r["tenant_creation"].status == "fail"  # the rest of the run still counts
     assert r["sharepoint_sharing"].status == "fail"
     report = data_reports.build(db, store.get_tenant(db, alpha), "tenant-settings")
     consent = {s.title: s for s in report.sections}["Admin consent requests"]
-    assert consent.rows == [] and "weren't available" in consent.empty
+    assert consent.rows == [] and "didn't return" in consent.empty
 
 
 # -- Checks ------------------------------------------------------------------------------
 
 
-def test_open_tenant_fails_each_check(db, two_tenants):
+def test_open_tenant_fails_each_setting_check(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha, auth_policy=tsd.OPEN_POLICY)
     r = _results(db, alpha)
@@ -105,7 +105,8 @@ def test_open_tenant_fails_each_check(db, two_tenants):
         "app_registration": ("fail", "low"),
         "guest_access_level": ("fail", "medium"),
         "email_verified_join": ("fail", "low"),
-        "admin_consent_workflow": ("fail", "info"),  # consent limited to low-risk apps, nowhere to ask for more
+        # Microsoft's default (low-risk consent, requests off) is advice, not a standing failure.
+        "admin_consent_workflow": ("pass", None),
     }
     assert all(r[k].category == "Tenant settings" for k in KEYS)
     assert all(r[k].recommendation for k in KEYS)
@@ -119,7 +120,7 @@ def test_locked_down_tenant_passes(db, two_tenants, monkeypatch):
     for key in KEYS:
         assert r[key].status == "pass", (key, r[key].summary)
     assert "most restrictive" in r["guest_access_level"].summary
-    assert r["admin_consent_workflow"].summary == "Admin consent requests are on, with 2 reviewer(s)"
+    assert r["admin_consent_workflow"].summary == "Users can ask an admin: requests are on, with 2 reviewer(s)"
 
 
 def test_guest_access_levels():
@@ -134,6 +135,9 @@ def test_admin_consent_workflow_depends_on_user_consent():
     legacy = {"permissionGrantPolicies": ["ManagePermissionGrantsForSelf.microsoft-user-default-legacy"]}
     status, summary, _ = _check("admin_consent_workflow", legacy, off)
     assert status == "pass" and "consent to most apps themselves" in summary
+    low = {"permissionGrantPolicies": ["ManagePermissionGrantsForSelf.microsoft-user-default-low"]}
+    status, summary, found = _check("admin_consent_workflow", low, off)
+    assert (status, found) == ("pass", []) and "can't ask for anything else" in summary
     status, _, found = _check("admin_consent_workflow", {"permissionGrantPolicies": []}, off)
     assert status == "fail" and found[0].severity == "low"  # users blocked from every app
     status, _, found = _check("admin_consent_workflow", {"permissionGrantPolicies": []},
@@ -149,8 +153,13 @@ def test_missing_settings_are_unavailable_not_passed(db, two_tenants):
     status, summary, _ = _check("email_verified_join", {"guestUserRoleId": tsd.LIMITED_GUESTS})
     assert status == "unavailable" and "refresh" in summary
     assert _check("tenant_creation", {"allowedToCreateTenants": None})[0] == "unavailable"
-    # Collected by an older version, with no admin consent policy stored.
-    assert _check("admin_consent_workflow", {"permissionGrantPolicies": []}, [])[0] == "unavailable"
+    # Collected by an older version, with no admin consent policy stored: refreshing fixes it.
+    status, summary, _ = _check("admin_consent_workflow", {"permissionGrantPolicies": []}, [])
+    assert status == "unavailable" and "refresh Sharing and consent settings" in summary
+    # Collected by this version, but Microsoft didn't return it: refreshing won't help.
+    status, summary, _ = _check("admin_consent_workflow", {"permissionGrantPolicies": [],
+                                                           "allowedToCreateSecurityGroups": True}, [])
+    assert status == "unavailable" and "didn't return" in summary and "refresh" not in summary
 
 
 def test_existing_fixture_without_new_fields(db, two_tenants):
@@ -201,6 +210,48 @@ def test_tenant_settings_report_workflow_off(db, two_tenants):
     consent = sections["Admin consent requests"]
     assert consent.rows == [["Admin consent requests", "Off", "On"]]
     assert consent.flags == ["low"]  # user consent is off, so users have nowhere to ask
+    assert _results(db, alpha)["admin_consent_workflow"].severity == "low"  # the check agrees
+
+
+def test_report_and_check_agree_on_default_consent(db, two_tenants):
+    """Low-risk user consent with requests off is Microsoft's default: neither the check nor the report flags it."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, auth_policy=tsd.OPEN_POLICY)
+    report = data_reports.build(db, store.get_tenant(db, alpha), "tenant-settings")
+    consent = {s.title: s for s in report.sections}["Admin consent requests"]
+    assert consent.rows == [["Admin consent requests", "Off", "On"]] and consent.flags == [None]
+    assert _results(db, alpha)["admin_consent_workflow"].status == "pass"
+
+
+def test_stale_run_says_refresh(db, two_tenants):
+    """A run from before this version stored the authorization policy without the admin consent settings."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    db.execute("DELETE FROM objects WHERE kind = 'admin_consent_policy'")
+    new_fields = ("allowedToCreateSecurityGroups", "allowedToReadOtherUsers",
+                  "allowEmailVerifiedUsersToJoinOrganization", "allowedToUseSSPR", "blockMsolPowerShell")
+    for field in new_fields:
+        db.execute("UPDATE objects SET data = json_remove(data, ?) WHERE kind = 'authorization_policy'",
+                   (f"$.{field}",))
+    r = _results(db, alpha)["admin_consent_workflow"]
+    assert r.status == "unavailable" and "refresh Sharing and consent settings" in r.summary
+    report = data_reports.build(db, store.get_tenant(db, alpha), "tenant-settings")
+    consent = {s.title: s for s in report.sections}["Admin consent requests"]
+    assert consent.rows == [] and "refresh Sharing and consent settings" in consent.empty
+
+
+def test_guests_report_uses_the_same_consent_reading(db, two_tenants):
+    """Only ManagePermissionGrantsForSelf policies are user consent; a Teams owner policy alone means it's off."""
+    alpha, _ = two_tenants
+    policy = {**tsd.LOCKED_POLICY, "defaultUserRolePermissions": {
+        **tsd.LOCKED_POLICY["defaultUserRolePermissions"],
+        "permissionGrantPoliciesAssigned": [
+            "ManagePermissionGrantsForOwnedResource.microsoft-dynamically-managed-permissions-for-team"]}}
+    seed_tenant(db, alpha, auth_policy=policy)
+    report = data_reports.build(db, store.get_tenant(db, alpha), "guests")
+    rows = {row[0]: row[1] for row in report.sections[0].rows}
+    assert rows["User consent to apps"] == "Off"
+    assert _results(db, alpha)["user_consent"].summary == "User consent is turned off"
 
 
 def test_tenant_settings_report_without_data(db, two_tenants):
