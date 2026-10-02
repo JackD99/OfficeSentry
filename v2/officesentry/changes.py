@@ -166,7 +166,28 @@ def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
                   for did, d in old.items() if did not in new]
 
 
+def group_changes(conn, tenant_id: int, before: str) -> list[Change]:
+    """Teams and Microsoft 365 groups created or deleted, and those left without an enabled owner."""
+    pair = _pair(conn, tenant_id, "groups", "group", before)
+    if pair is None:
+        return []
+    old, new = ({gid: g for gid, g in rows.items() if g.get("kind") == "microsoft365"} for rows in pair)
+    out = []
+    for gid, g in new.items():
+        name, label = g.get("displayName") or gid, "team" if g.get("isTeam") else "Microsoft 365 group"
+        if gid not in old:
+            visibility = {"Public": "public ", "Private": "private "}.get(g.get("visibility"), "")
+            out.append(Change("Teams and groups", "added", name, f"New {visibility}{label}"))
+        elif old[gid].get("enabledOwnerCount") and g.get("examined") and not g.get("enabledOwnerCount"):
+            out.append(Change("Teams and groups", "changed", name,
+                              "Last owner removed" if not g.get("ownerCount") else "Last enabled owner disabled"))
+    out += [Change("Teams and groups", "removed", g.get("displayName") or gid,
+                   "Team deleted" if g.get("isTeam") else "Group deleted") for gid, g in old.items() if gid not in new]
+    return out
+
+
 def all_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return admin_changes(conn, tenant_id, before) + ca_changes(conn, tenant_id, before) + \
         user_changes(conn, tenant_id, before) + forwarding_changes(conn, tenant_id, before) + \
-        app_changes(conn, tenant_id, before) + device_changes(conn, tenant_id, before)
+        app_changes(conn, tenant_id, before) + device_changes(conn, tenant_id, before) + \
+        group_changes(conn, tenant_id, before)

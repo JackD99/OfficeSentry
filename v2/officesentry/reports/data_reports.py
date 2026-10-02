@@ -14,7 +14,7 @@ from .. import coverage, devices, dnscheck
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
-from ..rules import SHARING_LEVELS, app_risks
+from ..rules import SHARING_LEVELS, app_risks, group_owner_problem, group_type, m365_groups
 from ..snapshot import TenantSnapshot
 
 
@@ -337,6 +337,110 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.sections = [overview, records]
 
 
+# -- Groups and Teams --------------------------------------------------------------------
+
+VISIBILITY = {"Public": "Public", "Private": "Private", "HiddenMembership": "Hidden membership"}
+OTHER_GROUPS = (("security", "Security groups"), ("mail_security", "Mail-enabled security groups"),
+                ("distribution", "Distribution lists"))
+FLAG_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, None: 5}
+
+
+def _owner_names(g: dict) -> str:
+    if not g.get("examined"):
+        return "Not checked"
+    names = [(o.get("name") or "?") + ("" if o.get("enabled") else " (app)" if o.get("type") != "user"
+                                       else " (disabled)") for o in g.get("owners") or []]
+    more = (g.get("ownerCount") or 0) - len(names)
+    return ", ".join(names + ([f"{more} more"] if more > 0 else [])) or "None"
+
+
+def _group_settings_section(snap: TenantSnapshot) -> Section:
+    settings = (snap.objects("groups", "group_settings") or [{}])[0]
+    policy = (snap.objects("groups", "expiration_policy") or [{}])[0]
+    section = Section("Settings", ["Setting", "Value"])
+    if settings.get("available"):
+        if settings.get("source") == "default":
+            section.intro = "No group settings have been saved in this tenant, so Microsoft's defaults apply."
+        allowed = settings.get("allowedGroupName") or settings.get("allowedGroupId")
+        if settings.get("enableGroupCreation"):
+            section.add(["Who can create teams and groups", "Everyone"], "low")
+        else:
+            section.add(["Who can create teams and groups", f"Admins and members of {allowed}" if allowed
+                         else "Admins only"])
+        section.add(["Guests can access group content", settings.get("allowGuestsToAccessGroups")])
+        section.add(["Owners can add guests", settings.get("allowToAddGuests")])
+        section.add(["Usage guidelines", settings.get("usageGuidelinesUrl") or "None"])
+    else:
+        section.add(["Who can create teams and groups", "Couldn't be read"])
+    if policy.get("available"):
+        days, managed = policy.get("groupLifetimeInDays"), policy.get("managedGroupTypes")
+        if managed == "All":
+            section.add(["Expiration", f"After {days} days unless in use or renewed"])
+        elif managed == "Selected":
+            section.add(["Expiration", f"After {days} days, selected groups only"], "low")
+        else:
+            section.add(["Expiration", "Off: teams and groups are kept until someone deletes them"],
+                        "info" if snap.capabilities.get("entra_p1") is False else "low")
+        if policy.get("alternateNotificationEmails"):
+            section.add(["Expiry notices for groups without an owner go to", policy["alternateNotificationEmails"]])
+    else:
+        section.add(["Expiration", "Couldn't be read"])
+    return section
+
+
+def group_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    rows = snap.objects("groups", "group")
+    if rows is None:
+        report.unavailable = "Group data hasn't been collected yet. Refresh Groups and Teams on the tenant page."
+        return
+    groups = sorted(m365_groups(snap) or [], key=lambda g: (g.get("displayName") or "").lower())
+    checked = [g for g in groups if g.get("examined")]
+
+    attention = Section("Needs attention", ["Team or group", "Type", "Problem", "Owners"],
+                        intro="Teams and groups without an enabled owner, or with only one. Owners approve members "
+                              "and guests and renew the group.",
+                        empty="Every team and group has at least two enabled owners.")
+    every = Section("Teams and groups", ["Name", "Team", "Visibility", "Owners", "Members", "Guests", "Created"],
+                    intro="Every team and Microsoft 365 group." + (
+                        f" Owners and members were read for {len(checked)} of {len(groups)}."
+                        if len(checked) < len(groups) else ""),
+                    empty="The tenant has no teams or Microsoft 365 groups.")
+    outside = Section("Guests in teams and groups", ["Guest", "Team or group", "Type"],
+                      intro="People from outside the organisation who are members of a team or group, and can read "
+                            "its files and conversations.", empty="No team or group has guest members.")
+    needs = []
+    for g in groups:
+        name, kind = g.get("displayName") or g["_id"], group_type(g)
+        problem = group_owner_problem(g)
+        flag = ("medium" if g.get("isTeam") else "low") if problem else None
+        if problem:
+            needs.append(([name, kind, problem, _owner_names(g)], flag))
+        elif g.get("examined") and g.get("enabledOwnerCount") == 1:
+            needs.append(([name, kind, "Single owner", _owner_names(g)], "info"))
+        examined = g.get("examined")
+        every.add([name, g.get("isTeam"), VISIBILITY.get(g.get("visibility"), g.get("visibility") or ""),
+                   _owner_names(g), g.get("memberCount") if examined else "", g.get("guestCount") if examined else "",
+                   _date(g.get("createdDateTime"))], flag)
+        for guest in g.get("guests") or []:
+            outside.rows.append([guest, name, kind])
+        if (g.get("guestCount") or 0) > len(g.get("guests") or []):
+            outside.rows.append([f"{g['guestCount'] - len(g.get('guests') or [])} more guest(s)", name, kind])
+    for row, flag in sorted(needs, key=lambda n: (FLAG_ORDER[n[1]], n[0][0].lower())):
+        attention.add(row, flag)
+    outside.rows.sort(key=lambda r: (r[0].lower(), r[1].lower()))
+    outside.flags = [None] * len(outside.rows)
+
+    other = Section("Other groups", ["Kind", "Groups", "Synced from on-premises", "Dynamic membership"],
+                    intro="Groups that aren't teams or Microsoft 365 groups. They grant access and deliver mail, "
+                          "but have no shared files or conversations.", empty="No other groups.")
+    for kind, label in OTHER_GROUPS:
+        of_kind = [g for g in rows if g.get("kind") == kind]
+        if of_kind:
+            other.add([label, len(of_kind), sum(bool(g.get("synced")) for g in of_kind),
+                       sum(bool(g.get("dynamic")) for g in of_kind)])
+    report.sections = [_group_settings_section(snap), attention, every, outside, other]
+
+
 # -- Devices -----------------------------------------------------------------------------
 
 COMPLIANCE = {"compliant": "Compliant", "noncompliant": "Not compliant", "inGracePeriod": "Grace period",
@@ -473,6 +577,8 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
                 ("domain_health",), domains),
     "guests": ("Guests and sharing", "Who can invite and share externally, and every guest account.",
                ("tenant_policies", "users"), guests),
+    "groups": ("Groups and Teams", "Who can create teams and groups, which have no owner, and the guests in each.",
+               ("groups",), group_report),
     "devices": ("Devices", "Intune compliance, encryption and Windows support, and every Entra ID device record.",
                 ("devices",), device_report),
 }

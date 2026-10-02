@@ -41,6 +41,11 @@ pass, and a first run against a real tenant.
     blocked, and which policies exclude it (group membership expanded).
   - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
     and every guest with invitation state and last sign-in.
+  - *Groups and Teams*: who can create teams and groups, whether guests are
+    allowed and unused groups expire, teams and Microsoft 365 groups with no
+    enabled owner or a single one, every team and group with its owners,
+    members and guests, every guest in a team or group, and counts of security
+    groups and distribution lists.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS.
   - *Devices*: operating systems with Windows support dates, Intune devices
@@ -66,7 +71,8 @@ accounts, licences on disabled accounts, unassigned paid licences, external
 forwarding, inbox rules that hide mail, automatic forwarding policy, shared
 mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,
 user consent, app credential expiry, SharePoint anonymous links, guest
-invitations, stale guest invitations, device compliance, disk encryption,
+invitations, stale guest invitations, teams and groups without an owner, who
+can create teams and groups, group expiration, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
 checking in, stale device records.
 
