@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash
 from .. import store
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
-from ..entra import GRAPH_PERMISSIONS
+from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
 from .access import ROLES, roles_required
 from .auth import password_problem
 
@@ -126,6 +126,7 @@ def delete_user(user_id: int):
 def connections():
     return render_template(
         "connections.html", connections=store.list_connections(g.db), permissions=GRAPH_PERMISSIONS,
+        exchange_permissions=EXCHANGE_PERMISSIONS,
         redirect_uri=current_app.extensions["officesentry.config"].base_url + url_for("tenants.consent_callback"),
     )
 

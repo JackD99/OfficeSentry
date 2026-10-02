@@ -8,6 +8,7 @@
   <li>Create the app, either with <code>python -m officesentry create-app</code> (does steps 2 and 3 for you) or by hand in your own tenant's Entra admin center: <em>App registrations → New registration</em>, supported account types <em>"Accounts in any organizational directory"</em>, redirect URI (Web) <code>{{ redirect_uri }}</code>. Upload the .cer under <em>Certificates &amp; secrets</em> and add the application permissions listed below.</li>
   <li>Save the app's <em>Application (client) ID</em> here.</li>
   <li>Add each client tenant and send its admin the consent link shown on the tenant page.</li>
+  <li>For Exchange reports (forwarding, mailbox permissions, shared mailboxes), the tenant admin also assigns the <em>Global Reader</em> role to the app in that tenant: <em>Entra admin center → Roles and admins → Global Reader → Add assignments</em>. Global Reader can't change anything.</li>
 </ol>
 
 {% for c in connections %}
@@ -34,5 +35,8 @@
 <section class="card">
   <h2>Permissions requested (Microsoft Graph, application, read-only)</h2>
   <table>{% for p, why in permissions|dictsort %}<tr><td><code>{{ p }}</code></td><td>{{ why }}</td></tr>{% endfor %}</table>
+  <h2>Office 365 Exchange Online (application)</h2>
+  <table>{% for p, why in exchange_permissions|dictsort %}<tr><td><code>{{ p }}</code></td><td>{{ why }}</td></tr>{% endfor %}</table>
+  <p class="muted small">Office Sentry only ever runs Exchange <code>Get-</code> cmdlets from a fixed list.</p>
 </section>
 {% endblock %}

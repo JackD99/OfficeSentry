@@ -13,6 +13,7 @@ from typing import ClassVar
 
 from .. import store
 from ..db import transaction
+from ..exchange import ExchangeClient
 from ..graph import GraphClient
 
 REGISTRY: dict[str, type[Collector]] = {}
@@ -34,6 +35,17 @@ class RunContext:
     capabilities: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     truncated: bool = False
+    exchange_factory: Callable[[], ExchangeClient] | None = None
+    _exchange: ExchangeClient | None = None
+
+    @property
+    def exchange(self) -> ExchangeClient:
+        """Exchange admin API client, created on first use (most collectors don't need it)."""
+        if self._exchange is None:
+            if self.exchange_factory is None:
+                raise RuntimeError("no Exchange client configured for this run")
+            self._exchange = self.exchange_factory()
+        return self._exchange
 
     def log(self, message: str, level: str = "info") -> None:
         store.log_event(self.conn, self.run_id, level, message)
@@ -71,3 +83,4 @@ class Collector:
 
 
 GraphFactory = Callable[[dict, dict], GraphClient]
+ExchangeFactory = Callable[[dict, dict], ExchangeClient]

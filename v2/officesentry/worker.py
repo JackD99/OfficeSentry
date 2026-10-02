@@ -16,6 +16,7 @@ from .collectors import REGISTRY, RunContext
 from .config import Config
 from .crypto import Vault
 from .db import connect, migrate
+from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError, LicenseRequired, PermissionMissing
 
 log = logging.getLogger(__name__)
@@ -36,7 +37,18 @@ def default_graph_factory(vault: Vault):
     return factory
 
 
-def execute_run(conn, run, graph_factory) -> str:
+def default_exchange_factory(vault: Vault):
+    def factory(tenant: dict, connection: dict | None) -> ExchangeClient:
+        if not connection or not connection["client_id"]:
+            raise NotConnected("tenant has no app connection with a client ID")
+        return ExchangeClient.from_certificate(
+            tenant["tenant_ref"], connection["client_id"],
+            vault.decrypt(connection["key_enc"]), connection["thumbprint"],
+        )
+    return factory
+
+
+def execute_run(conn, run, graph_factory, exchange_factory=None) -> str:
     """Execute one claimed run. Returns the final status."""
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
@@ -51,8 +63,10 @@ def execute_run(conn, run, graph_factory) -> str:
         graph = graph_factory(dict(tenant), dict(connection) if connection else None)
         ctx = RunContext(conn=conn, run_id=run_id, tenant=dict(tenant), graph=graph,
                          capabilities=store.tenant_capabilities(tenant))
+        if exchange_factory is not None:
+            ctx.exchange_factory = lambda: exchange_factory(dict(tenant), dict(connection) if connection else None)
         collector_cls().collect(ctx)
-    except (NotConnected, PermissionMissing, LicenseRequired, GraphError) as exc:
+    except (NotConnected, PermissionMissing, LicenseRequired, GraphError, ExchangeError) as exc:
         store.log_event(conn, run_id, "error", str(exc))
         store.finish_run(conn, run_id, "failed", str(exc))
         return "failed"
@@ -107,11 +121,12 @@ def schedule_tick(conn, cfg: Config, now: datetime | None = None) -> int:
     return queued
 
 
-def run_worker(cfg: Config, *, once: bool = False, graph_factory=None) -> None:
+def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None) -> None:
     conn = connect(cfg.db_path)
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
     graph_factory = graph_factory or default_graph_factory(vault)
+    exchange_factory = exchange_factory or default_exchange_factory(vault)
 
     from . import mailer
     from .web import create_app
@@ -141,7 +156,7 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None) -> None:
         run = store.claim_next_run(conn)
         if run is not None:
             log.info("Run %s: %s for tenant %s", run["id"], run["collector"], run["tenant_id"])
-            execute_run(conn, run, graph_factory)
+            execute_run(conn, run, graph_factory, exchange_factory)
             continue
         if once:
             return

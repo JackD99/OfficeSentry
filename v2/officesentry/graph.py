@@ -97,21 +97,15 @@ class GraphClient:
     @classmethod
     def from_certificate(cls, tenant_ref: str, client_id: str, key_pem: str,
                          thumbprint: str, **kwargs) -> GraphClient:
-        import msal
+        from .msauth import TokenError, certificate_token_provider
 
-        app = msal.ConfidentialClientApplication(
-            client_id=client_id,
-            authority=f"https://login.microsoftonline.com/{tenant_ref}",
-            client_credential={"private_key": key_pem, "thumbprint": thumbprint},
-        )
+        provider = certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, GRAPH_ROOT)
 
         def token() -> str:
-            # MSAL caches the token in memory and renews it before expiry.
-            result = app.acquire_token_for_client(scopes=[f"{GRAPH_ROOT}/.default"])
-            if "access_token" not in result:
-                raise GraphError(401, result.get("error", "auth_failed"),
-                                 result.get("error_description", "token request failed"))
-            return result["access_token"]
+            try:
+                return provider()
+            except TokenError as exc:
+                raise GraphError(401, exc.code, exc.message) from exc
 
         return cls(token, **kwargs)
 
