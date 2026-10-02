@@ -29,5 +29,5 @@ CONTRIBUTING.md     development setup
 ## History
 
 The v1 portal (Flask MSP console, 365Inspect, PowerShell scripts, AD agent)
-was removed. Its last state is the git tag `v1-final`; look there if you
+was removed. Its last state is the `v1-final` branch; look there if you
 need to see how v1 did something, but don't bring its code back wholesale.

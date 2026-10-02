@@ -28,7 +28,7 @@ Then open the portal, create the first admin, and follow the steps in
 
 The original Flask portal (MSP operations, 365Inspect, PowerShell scripts,
 AD agent, GDAP management, Graph Explorer) has been removed. Its last state
-is kept at the git tag `v1-final`:
+is kept on the `v1-final` branch:
 
 ```bash
 git checkout v1-final
