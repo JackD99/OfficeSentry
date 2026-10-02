@@ -33,6 +33,15 @@ pass, and a first run against a real tenant.
   - *Mailbox access and forwarding*: every forward (admin-set or inbox rule),
     inbox rules that hide mail, full access / send as / send on behalf, and
     shared mailboxes that can sign in.
+  - *Admin activity*: security-relevant changes from the Entra ID directory
+    audit log over the last 30 days (7 without Entra ID P1, which is all the
+    tenant keeps): admin roles granted or removed (including PIM), Conditional
+    Access policies added, changed or deleted, consents and app permissions,
+    secrets and certificates added to apps, domain and federation changes,
+    admin password resets, deleted users and security info changed by admins.
+    Federation changes, new app credentials, role grants and Conditional Access
+    policies deleted or switched off are listed first, then every change and
+    who made them. Reads at most 10,000 events per run and says so if it stops.
   - *Apps and consents*: third-party apps with what they were granted
     (application permissions, tenant-wide and per-user consent), and app
     registration secrets or certificates expiring.
@@ -68,7 +77,7 @@ mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,
 user consent, app credential expiry, SharePoint anonymous links, guest
 invitations, stale guest invitations, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
-checking in, stale device records.
+checking in, stale device records, domain federation changes.
 
 ### Exchange data
 
