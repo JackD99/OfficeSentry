@@ -365,7 +365,7 @@ def _device_issues(d: dict, now: datetime) -> tuple[list[str], str | None]:
     if devices.is_windows(d):
         support = devices.windows_support(d.get("osVersion"), now.date())
         if support.status in ("ended", "pro_ended", "ending"):
-            add(support.detail, {"ended": "high", "pro_ended": "medium", "ending": "low"}[support.status])
+            add(support.detail.rstrip("."), {"ended": "high", "pro_ended": "medium", "ending": "low"}[support.status])
     days = devices.days_since(d.get("lastSyncDateTime"), now)
     if days is not None and days > devices.NO_SYNC_DAYS:
         add(f"No check-in for {days} days", "low")

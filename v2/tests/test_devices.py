@@ -1,6 +1,6 @@
 """Devices: collector, checks, Windows support dates and the Devices report."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
 
 import pytest
@@ -8,6 +8,7 @@ import responses
 from openpyxl import load_workbook
 
 from officesentry import store
+from officesentry.changes import all_changes
 from officesentry.devices import windows_support
 from officesentry.graph import GraphClient
 from officesentry.reports import data_reports, evidence
@@ -111,29 +112,20 @@ def test_device_checks(db, two_tenants):
     assert all(r[k].category == "Devices" for k in ("device_compliance", "stale_devices"))
 
 
-def test_jailbroken_device_is_high(db, two_tenants):
+def test_jailbroken_device_is_high(db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
     phone = {**dd.MANAGED_DEVICES[2], "jailBroken": "True"}
-    with_jailbreak = dd.MANAGED_DEVICES[:2] + [phone]
-    orig = dd.MANAGED_DEVICES
-    dd.MANAGED_DEVICES = with_jailbreak
-    try:
-        seed_tenant(db, alpha)
-    finally:
-        dd.MANAGED_DEVICES = orig
+    monkeypatch.setattr(dd, "MANAGED_DEVICES", dd.MANAGED_DEVICES[:2] + [phone])
+    seed_tenant(db, alpha)
     findings = _results(db, alpha)["device_compliance"].findings
     assert findings[0].severity == "high" and findings[0].detail == "Jailbroken or rooted"
 
 
-def test_clean_estate_passes(db, two_tenants):
+def test_clean_estate_passes(db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
-    orig = dd.MANAGED_DEVICES, dd.ENTRA_DEVICES
-    dd.MANAGED_DEVICES = [dd.MANAGED_DEVICES[0], dd.MANAGED_DEVICES[2]]
-    dd.ENTRA_DEVICES = [dd.ENTRA_DEVICES[0], dd.ENTRA_DEVICES[4]]
-    try:
-        seed_tenant(db, alpha)
-    finally:
-        dd.MANAGED_DEVICES, dd.ENTRA_DEVICES = orig
+    monkeypatch.setattr(dd, "MANAGED_DEVICES", [dd.MANAGED_DEVICES[0], dd.MANAGED_DEVICES[2]])
+    monkeypatch.setattr(dd, "ENTRA_DEVICES", [dd.ENTRA_DEVICES[0], dd.ENTRA_DEVICES[4]])
+    seed_tenant(db, alpha)
     r = _results(db, alpha)
     for key in ("device_compliance", "device_encryption", "supported_windows", "intune_enrolled",
                 "device_checkin", "stale_devices"):
@@ -152,6 +144,27 @@ def test_insurance_pack_has_devices_control(db, two_tenants):
     control = {c.control.key: c for c in evidence.build(db, store.get_tenant(db, alpha)).controls}["devices"]
     assert control.status == evidence.NOT_IN_PLACE  # unencrypted laptop on Windows 10, nothing passes
     assert any("not encrypted" in g for g in control.gaps)
+
+
+def test_device_changes_since_last_month(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("UPDATE runs SET finished_at = ?", (old,))
+    ann = {**dd.MANAGED_DEVICES[0], "complianceState": "noncompliant", "isEncrypted": False}
+    new = {**dd.MANAGED_DEVICES[0], "id": "md9", "deviceName": "LAPTOP-NEW", "userPrincipalName": None}
+    bob = {**dd.MANAGED_DEVICES[1], "complianceState": "compliant"}
+    monkeypatch.setattr(dd, "MANAGED_DEVICES", [ann, bob, new])  # the iPhone was retired
+    seed_tenant(db, alpha)
+    since = (datetime.now(UTC) - timedelta(days=28)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    got = {(c.kind, c.subject, c.detail) for c in all_changes(db, alpha, since) if c.area == "Devices"}
+    assert got == {
+        ("added", "LAPTOP-NEW", "Enrolled Windows"),
+        ("changed", "LAPTOP-ANN (ann@x.com)", "Now not compliant"),
+        ("changed", "LAPTOP-ANN (ann@x.com)", "Disk no longer encrypted"),
+        ("changed", "LAPTOP-BOB (bob@x.com)", "Compliant again"),
+        ("removed", "Ann's iPhone", "Removed from Intune"),
+    }
 
 
 # -- Report ------------------------------------------------------------------------------

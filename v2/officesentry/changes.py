@@ -130,7 +130,43 @@ def app_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return [Change("Apps", "added", names.get(c) or c, f"Granted {', '.join(p)}") for c, p in added.items()]
 
 
+COMPLIANCE_WORDS = {"compliant": "compliant", "noncompliant": "not compliant", "inGracePeriod": "in grace period"}
+
+
+def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
+    """Intune enrolments, retirements and compliance or encryption lost; Entra records without Intune."""
+    pair = _pair(conn, tenant_id, "devices", "managed_device", before)
+    if pair is not None and (pair[0] or pair[1]):
+        old, new = pair
+        out = []
+        for did, d in new.items():
+            name = d.get("deviceName") or did
+            user = f" ({d['userPrincipalName']})" if d.get("userPrincipalName") else ""
+            if did not in old:
+                enrolled = f"Enrolled {d.get('operatingSystem') or ''}".strip()
+                out.append(Change("Devices", "added", name + user, enrolled))
+                continue
+            was, now = old[did].get("complianceState"), d.get("complianceState")
+            if was == "compliant" and now != "compliant" and now in COMPLIANCE_WORDS:
+                out.append(Change("Devices", "changed", name + user, f"Now {COMPLIANCE_WORDS[now]}"))
+            elif was != "compliant" and now == "compliant" and was in COMPLIANCE_WORDS:
+                out.append(Change("Devices", "changed", name + user, "Compliant again"))
+            if old[did].get("isEncrypted") and d.get("isEncrypted") is False:
+                out.append(Change("Devices", "changed", name + user, "Disk no longer encrypted"))
+        out += [Change("Devices", "removed", d.get("deviceName") or did, "Removed from Intune")
+                for did, d in old.items() if did not in new]
+        return out
+    pair = _pair(conn, tenant_id, "devices", "entra_device", before)
+    if pair is None:
+        return []
+    old, new = pair
+    out = [Change("Devices", "added", d.get("displayName") or did, f"New {d.get('operatingSystem') or 'device'} "
+                  "registered") for did, d in new.items() if did not in old]
+    return out + [Change("Devices", "removed", d.get("displayName") or did, "Removed from Entra ID")
+                  for did, d in old.items() if did not in new]
+
+
 def all_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return admin_changes(conn, tenant_id, before) + ca_changes(conn, tenant_id, before) + \
         user_changes(conn, tenant_id, before) + forwarding_changes(conn, tenant_id, before) + \
-        app_changes(conn, tenant_id, before)
+        app_changes(conn, tenant_id, before) + device_changes(conn, tenant_id, before)
