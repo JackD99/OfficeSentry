@@ -1,111 +1,69 @@
 # Security Policy
 
-## Reporting Vulnerabilities
+## Reporting a vulnerability
 
-If you discover a security vulnerability in Office Sentry, please report it responsibly. **Do not open a public issue.**
+Please report vulnerabilities privately. **Don't open a public issue.**
 
-Instead, please contact the maintainers privately through GitHub's [security advisory feature](https://github.com/JackD99/Office Sentry/security/advisories/new). Include:
+Use GitHub's [private vulnerability reporting](https://github.com/JackD99/OfficeSentry/security/advisories/new) and include:
 
-1. A description of the vulnerability
-2. Steps to reproduce
-3. The potential impact
-4. Any suggested fixes (optional)
+1. What the vulnerability is
+2. Steps to reproduce it
+3. The likely impact
+4. A suggested fix, if you have one
 
-We aim to acknowledge reports within 48 hours and provide an initial assessment within 7 days.
+We aim to acknowledge reports within 48 hours and give an initial assessment within 7 days.
 
-## Security Model
+## Security model
 
-### Authentication
+Office Sentry reads data from many client tenants, so it is built to do as
+little as possible with that access. Details and code references are in
+[v2/README.md](v2/README.md) and [v2/CLAUDE.md](v2/CLAUDE.md).
 
-Office Sentry uses **certificate-based app-only authentication** to connect to Microsoft 365 services. This means:
+### Access to Microsoft 365
 
-- No user passwords for M365 tenants are ever stored
-- Authentication uses X.509 certificates (PFX + CER) registered with Entra ID
-- PFX passwords are encrypted at rest using Fernet symmetric encryption
-- The encryption key is derived from the Flask secret key via **PBKDF2** with 100,000 iterations
-- The master key is stored in `config/portal.json`
+- **Read-only by construction.** One multi-tenant Entra app requests only
+  read Graph permissions (`*.Read*`) plus `Exchange.ManageAsApp`. The Graph
+  client has no write methods, and the Exchange client only runs an
+  allow-list of `Get-` cmdlets.
+- **Certificate sign-in, no stored user passwords.** The app signs in with a
+  certificate. Its private key is encrypted in the database and is never
+  written to disk as a file or sent to the browser. Only the public `.cer`
+  can be downloaded, by admins.
+- **Signed consent.** The admin-consent callback is signed, expires, and
+  checks that the returning tenant is the one that was invited.
 
-### Portal Security Controls
+### The portal
 
 | Control | Implementation |
 |---|---|
-| **CSRF Protection** | Flask-WTF CSRFProtect on all POST routes (exempted on API and Agent endpoints) |
-| **Rate Limiting** | Login: 10/min, Initial setup: 5/min (Flask-Limiter, in-memory) |
-| **Session Timeout** | Sessions expire after 8 hours |
-| **Password Hashing** | Werkzeug bcrypt-based hashing |
-| **Security Headers** | Nonce-based CSP, HSTS, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy, Permissions-Policy |
-| **SRI Hashes** | Subresource Integrity on all CDN resources (Bootstrap CSS/JS) |
-| **Path Traversal Protection** | File download paths validated against allowed base directories |
-| **Encrypted Secrets** | Fernet encryption with PBKDF2-derived keys (100k iterations) |
-| **RBAC** | 5-tier role hierarchy (super_admin, admin, operator, viewer, client) with tenant group scoping |
-| **API Authentication** | Bearer token with scoped API keys (SHA256 hashed, expiration enforced) |
-| **Agent Authentication** | HMAC-SHA256 signed requests with 5-minute timestamp window and nonce deduplication |
-| **Request Tracking** | X-Request-ID header on all responses |
-| **Audit Trail** | All operator actions logged with tenant, timestamp, and details |
+| Tenant isolation | Deny by default. Users see only tenants granted to them; others return 404. One gate (`web/access.py`) loads every tenant. |
+| Roles | Admin, analyst, client. Clients see only their own reports. |
+| Sessions | 8-hour lifetime, HttpOnly, SameSite=Lax, Secure over HTTPS. Ended on disable, delete, role change or password change. |
+| Login | 5 failed attempts lock the account for 15 minutes. Same-site redirects only. |
+| CSRF | Flask-WTF on every form. |
+| Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, `Cache-Control: no-store`. |
+| Secrets | Session key and encryption key are separate. Encryption keys can be rotated (`python -m officesentry rotate-keys`). Generated secrets are written with mode `0600`. |
 
-### Sensitive Files
+### What should never be committed
 
-The following files and directories contain sensitive data and are excluded from version control via `.gitignore`:
+- Certificates and keys: `*.pfx`, `*.cer`, `*.pem`, `*.key`, `*.p12`
+- `.env` files and any credential, key or token
+- The data directory (`data/`, or the `/data` Docker volume): it holds the
+  database, encrypted keys and tenant snapshots
+- Report exports: `*.csv`, `*.xlsx`
 
-| Path | Contents |
-|---|---|
-| `config/portal.json` | Flask secret key (encryption master key), SMTP config |
-| `data/portal.db` | Tenant metadata, encrypted PFX passwords, API key hashes, agent secrets, job history |
-| `tenants/*/certs/` | X.509 certificates (PFX, CER) |
-| `tenants/*/output/` | Audit output files (may contain tenant data) |
-| `logs/` | Application logs |
+## Deployment
 
-### What Should Never Be Committed
+- Run it with Docker (`v2/docker-compose.yml`) behind a TLS-terminating
+  reverse proxy such as Caddy, nginx or Traefik. The compose file only binds
+  to `127.0.0.1`.
+- Only use `OFFICESENTRY_INSECURE_COOKIES=1` for local development over HTTP.
+- Back up the data volume, including `secrets.json`. Losing the encryption
+  key means the stored certificate can't be decrypted and must be replaced.
+- Review the Entra app's permissions and sign-in logs in your own tenant
+  from time to time.
 
-- Certificates: `*.pfx`, `*.cer`, `*.pem`, `*.key`, `*.p12`
-- Credentials, API keys, or tokens of any kind
-- Database files (`*.db`)
-- Audit output: `*.csv`, `*.xlsx`
-- Configuration with secrets: `config/portal.json`
-- Environment files: `.env`
+## Known limitations
 
-## Deployment Considerations
-
-### Development
-
-The built-in Flask development server is suitable only for local development and testing. It should **not** be exposed to untrusted networks.
-
-### Production
-
-For production deployments:
-
-1. Use a WSGI server (gunicorn) behind a reverse proxy (nginx, Caddy)
-2. Enable HTTPS with a valid TLS certificate
-3. Set `FLASK_ENV=production`
-4. Back up `config/portal.json` securely — losing it invalidates all encrypted PFX passwords, SMTP passwords, and agent secrets
-5. Restrict network access to trusted operators
-6. Monitor `logs/portal.log` for suspicious activity
-7. Use Redis for Celery task queue and Flask-Limiter in multi-process deployments
-8. Configure SSE proxy support (disable response buffering for `/jobs/*/stream`)
-
-### Entra ID App Permissions
-
-The Entra app created for each tenant will have API permissions for SharePoint, Exchange, and Microsoft Graph. Follow the principle of least privilege:
-
-- Only grant the permissions required for the audits you intend to run
-- Review and audit app permissions regularly
-- Remove unused Entra apps via the portal's "Remove App" function
-- Monitor the Azure AD audit logs for any unauthorized use of the app credentials
-
-### AD Agent Security
-
-On-premises AD Agents communicate via HMAC-SHA256 signed HTTPS requests:
-
-- Agent-initiated polling only (outbound from on-premises, no inbound connections required)
-- Each agent is cryptographically bound to a single tenant
-- Enrollment uses one-time tokens with 24-hour TTL
-- Agent secrets are encrypted with Fernet at rest in the portal and DPAPI on Windows
-- All requests include timestamp and nonce for replay protection
-
-## Known Limitations
-
-- SQLite is not suitable for high-concurrency production deployments (WAL mode helps but has limits)
-- Login rate limiting uses in-memory storage and resets on application restart
-- No multi-factor authentication for portal login (relies on network access controls)
-- No SSO/SAML integration
-- Session tokens are cookie-based; ensure HTTPS in production to prevent interception
+- SQLite suits one server; it isn't built for several web servers sharing a database.
+- Portal sign-in is username and password. There's no MFA or SSO for the portal yet, so keep it behind network controls.
