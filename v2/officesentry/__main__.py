@@ -13,6 +13,7 @@ from . import store
 from .config import load_config
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
+from .mailer import ENCRYPTED_KEYS as ENCRYPTED_SETTINGS
 
 
 def cmd_web(args, cfg):
@@ -72,7 +73,14 @@ def cmd_rotate_keys(args, cfg):
         for row in rows:
             conn.execute("UPDATE app_connections SET key_enc = ? WHERE id = ?",
                          (vault.rotate(row["key_enc"]), row["id"]))
-    print(f"Re-encrypted {len(rows)} key(s). Old keys can now be removed from the configuration.")
+        # Mail passwords and secrets are encrypted with the same keys.
+        secrets = conn.execute(
+            f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(ENCRYPTED_SETTINGS))})"
+            " AND value <> ''", ENCRYPTED_SETTINGS).fetchall()
+        for row in secrets:
+            conn.execute("UPDATE settings SET value = ? WHERE key = ?", (vault.rotate(row["value"]), row["key"]))
+    print(f"Re-encrypted {len(rows)} key(s) and {len(secrets)} mail secret(s)."
+          " Old keys can now be removed from the configuration.")
 
 
 def cmd_live_test(args, cfg):

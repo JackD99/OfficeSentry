@@ -27,7 +27,7 @@ build-backend = "setuptools.build_meta"
 include = ["officesentry*"]
 
 [tool.setuptools.package-data]
-officesentry = ["migrations/*.sql", "web/templates/*.html", "web/templates/reports/*.html", "web/static/*"]
+officesentry = ["migrations/*.sql", "web/templates/*.html", "web/templates/reports/*.html", "web/templates/emails/*.html", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

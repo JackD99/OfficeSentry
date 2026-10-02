@@ -128,7 +128,7 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     graph_factory = graph_factory or default_graph_factory(vault)
     exchange_factory = exchange_factory or default_exchange_factory(vault)
 
-    from . import mailer
+    from . import delivery
     from .web import create_app
 
     app = create_app(cfg)  # for rendering emailed reports
@@ -143,9 +143,9 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
             schedule_tick(conn, cfg)
             last_tick = time.monotonic()
             try:
-                mailer.run_due(app, conn, vault, cfg.timezone)
+                delivery.tick(app, conn, vault, cfg)
             except Exception:  # never let email problems stop collections
-                log.exception("Sending scheduled reports failed")
+                log.exception("Sending scheduled emails failed")
             today = datetime.now(UTC).date()
             if today != last_prune_day:
                 removed = store.prune_snapshots(conn, cfg.retention_days)

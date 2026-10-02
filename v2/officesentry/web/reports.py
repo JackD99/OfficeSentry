@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import re
-import smtplib
 from pathlib import Path
 
-from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import findings, mailer
+from .. import findings
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
 from ..reports import data_reports, evidence, export
@@ -244,112 +243,3 @@ def unaccept_finding(finding_id: int):
     findings.unaccept(g.db, row["id"])
     audit(g.db, g.user["username"], "finding_unaccepted", row["tenant_id"], f"{row['rule_key']}:{row['subject']}")
     return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"], view="accepted"))
-
-
-# -- Emailed reports -------------------------------------------------------------
-
-
-@bp.route("/tenants/<int:tenant_id>/schedules", methods=["GET", "POST"])
-@login_required
-def schedules(tenant_id: int):
-    t = tenant_or_404(tenant_id)
-    if request.method == "POST":
-        if g.user["role"] not in ("admin", "analyst"):
-            abort(403)
-        recipients = mailer.parse_recipients(request.form.get("recipients", ""))
-        day = request.form.get("day_of_month", type=int)
-        hour = request.form.get("hour", type=int)
-        if recipients is None:
-            flash(f"Enter up to {mailer.MAX_RECIPIENTS} valid email addresses.", "error")
-        elif day is None or not 1 <= day <= 28 or hour is None or not 0 <= hour <= 23:
-            abort(400)
-        else:
-            g.db.execute(
-                "INSERT INTO report_schedules (tenant_id, recipients, day_of_month, hour, created_by, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (t["id"], ", ".join(recipients), day, hour, g.user["username"], utcnow()),
-            )
-            audit(g.db, g.user["username"], "schedule_created", t["id"], ", ".join(recipients))
-            flash("Monthly email scheduled.", "success")
-        return redirect(url_for("reports.schedules", tenant_id=t["id"]))
-    rows = g.db.execute("SELECT * FROM report_schedules WHERE tenant_id = ? ORDER BY id", (t["id"],)).fetchall()
-    deliveries = g.db.execute(
-        "SELECT * FROM report_deliveries WHERE tenant_id = ? ORDER BY id DESC LIMIT 20", (t["id"],)).fetchall()
-    cfg = current_app.extensions["officesentry.config"]
-    return render_template("schedules.html", tenant=t, rows=rows, deliveries=deliveries, timezone=cfg.timezone,
-                           mail_ready=bool(mailer.smtp_settings(g.db).get("smtp_host")))
-
-
-def _schedule_or_404(schedule_id: int):
-    row = g.db.execute("SELECT * FROM report_schedules WHERE id = ?", (schedule_id,)).fetchone()
-    if row is None:
-        abort(404)
-    tenant_or_404(row["tenant_id"])
-    return row
-
-
-@bp.post("/schedules/<int:schedule_id>/delete")
-@roles_required("admin", "analyst")
-def delete_schedule(schedule_id: int):
-    row = _schedule_or_404(schedule_id)
-    g.db.execute("DELETE FROM report_schedules WHERE id = ?", (row["id"],))
-    audit(g.db, g.user["username"], "schedule_deleted", row["tenant_id"], row["recipients"])
-    return redirect(url_for("reports.schedules", tenant_id=row["tenant_id"]))
-
-
-@bp.post("/schedules/<int:schedule_id>/send")
-@roles_required("admin", "analyst")
-def send_now(schedule_id: int):
-    row = _schedule_or_404(schedule_id)
-    tenant = tenant_or_404(row["tenant_id"])
-    error = mailer.deliver(current_app, g.db, current_app.extensions["officesentry.vault"], tenant,
-                           mailer.parse_recipients(row["recipients"]) or [], row["id"])
-    audit(g.db, g.user["username"], "report_sent", tenant["id"], row["recipients"])
-    flash(f"Sending failed: {error}" if error else f"Report sent to {row['recipients']}.",
-          "error" if error else "success")
-    return redirect(url_for("reports.schedules", tenant_id=tenant["id"]))
-
-
-@bp.route("/admin/email", methods=["GET", "POST"])
-@roles_required("admin")
-def email_settings():
-    vault = current_app.extensions["officesentry.vault"]
-    current = mailer.smtp_settings(g.db)
-    if request.method == "POST":
-        if request.form.get("action") == "test":
-            to = mailer.parse_recipients(request.form.get("test_to", ""))
-            if to is None:
-                flash("Enter a valid address to send the test to.", "error")
-            else:
-                try:
-                    mailer.send(g.db, vault, to, "Office Sentry test email",
-                                "Email from Office Sentry is working.")
-                    flash(f"Test email sent to {', '.join(to)}.", "success")
-                except (mailer.MailNotConfigured, OSError, smtplib.SMTPException) as exc:
-                    flash(f"Test failed: {exc}", "error")
-            return redirect(url_for("reports.email_settings"))
-        host = request.form.get("smtp_host", "").strip()
-        port = request.form.get("smtp_port", type=int)
-        security = request.form.get("smtp_security", "starttls")
-        sender = request.form.get("smtp_from", "").strip()
-        if security not in ("starttls", "ssl", "none") or port is None or not 1 <= port <= 65535:
-            abort(400)
-        if not host or not mailer.EMAIL_RE.match(sender.split("<")[-1].rstrip(">").strip()):
-            flash("Enter the SMTP host and a valid From address.", "error")
-            return redirect(url_for("reports.email_settings"))
-        values = {"smtp_host": host, "smtp_port": str(port), "smtp_security": security,
-                  "smtp_user": request.form.get("smtp_user", "").strip(), "smtp_from": sender}
-        password = request.form.get("smtp_password", "")
-        # A changed host must not receive the stored password: require it again.
-        if password:
-            values["smtp_password_enc"] = vault.encrypt(password)
-        elif current.get("smtp_host") and current["smtp_host"] != host:
-            values["smtp_password_enc"] = ""
-        with transaction(g.db):
-            for key, value in values.items():
-                g.db.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                             " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
-            audit(g.db, g.user["username"], "email_settings_updated", detail=host)
-        flash("Email settings saved.", "success")
-        return redirect(url_for("reports.email_settings"))
-    return render_template("email_settings.html", s=current, has_password=bool(current.get("smtp_password_enc")))

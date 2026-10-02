@@ -27,8 +27,19 @@ pass, and a first run against a real tenant.
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, and Conditional Access policies added,
   switched or edited, compared with the snapshot from 4+ weeks earlier.
-- **Emailed reports** (`/tenants/<id>/schedules`, SMTP under Admin → Email):
-  monthly on a chosen day and hour, with PDF and XLSX attached.
+- **Emailed reports** (a tenant's *Emailed reports* tab, and *Email reports*
+  for everything at once):
+  - Send any mix of reports (the monthly review, the evidence pack, any detail
+    report) weekly, monthly or quarterly, at a time in the schedule's own timezone.
+  - Recipients are contacts: the client's people get the email, your team gets a
+    hidden copy. Optional note at the top of the email.
+  - A cross-tenant **digest** for your team, worst tenants first.
+  - **Alerts** when a scan finds something new and critical (or high), for one
+    tenant or all of them. A tenant's first scan never alerts.
+  - Preview (desktop and phone width), Send now, pause, and a delivery history
+    with failures, automatic retries (5 min, 30 min, 2 h) and a Retry button.
+  - Sent over SMTP or Microsoft 365 (Graph `sendMail` from a mailbox in your own
+    tenant, through a separate send-only app), under Settings → Email delivery.
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as XLSX):
   - *Mailbox access and forwarding*: every forward (admin-set or inbox rule),
     inbox rules that hide mail, full access / send as / send on behalf, and
@@ -146,7 +157,8 @@ officesentry/
   reports/       report builders (data only), SVG charts, XLSX/PDF export
   findings.py    findings lifecycle (new, resolved, reopened, accepted)
   changes.py     snapshot diffs for "since last month"
-  mailer.py      SMTP delivery and the monthly schedule
+  mailer.py      sends a finished email over SMTP or Graph sendMail
+  delivery.py    schedules, digests, alerts, retries and email rendering
   worker.py      queue runner, nightly scheduler, orphan recovery
   web/           Flask app: access.py is the single authorization gate
 ```

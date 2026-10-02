@@ -1,0 +1,667 @@
+"""Scheduled email delivery: what gets sent, to whom, and when.
+
+* **Report schedules** send one tenant a bundle of reports (the monthly review,
+  the insurance evidence pack, any detail report) weekly, monthly or quarterly,
+  at a time in the schedule's own timezone.
+* **Digests** send the MSP's own team one cross-tenant summary.
+* **Alerts** email when a check finds something new at or above a severity.
+
+``tick()`` is the only entry point the worker needs. It is idempotent and
+cheap, so it can run every minute: each schedule remembers the period it last
+completed ("2026-10", "2026-W41", "2026-Q4"), and failures are retried with
+backoff before the period is given up and shown as failed.
+
+Recipients are contacts. A tenant's contacts get the email in "To"; the MSP's
+team (contacts with no tenant) get a hidden copy, so client contacts never see
+internal addresses.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from contextlib import nullcontext
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
+from functools import lru_cache
+from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
+
+from . import mailer, store
+from .db import utcnow
+from .mailer import Email, MailError
+from .reports import data_reports, evidence, export, monthly_review
+from .rules import RULES
+
+log = logging.getLogger(__name__)
+
+ISO = "%Y-%m-%dT%H:%M:%SZ"
+FREQUENCIES = {"weekly": "Weekly", "monthly": "Monthly", "quarterly": "Quarterly"}
+DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+ALERT_LEVELS = {"critical": ("critical",), "high": ("critical", "high")}
+RETRY_DELAYS = (timedelta(minutes=5), timedelta(minutes=30), timedelta(hours=2))
+MAX_ATTEMPTS = len(RETRY_DELAYS) + 1
+DIGEST_LOOKBACK = {"weekly": timedelta(days=7), "monthly": timedelta(days=30), "quarterly": timedelta(days=91)}
+RULE_TITLES = {r.key: r.title for r in RULES}
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# Offered in the schedule form; the server's own timezone and the schedule's
+# current one are always added.
+COMMON_TIMEZONES = (
+    "UTC", "Europe/London", "Europe/Dublin", "Europe/Amsterdam", "Europe/Berlin", "Europe/Paris",
+    "Europe/Madrid", "Europe/Stockholm", "Europe/Helsinki", "Africa/Johannesburg", "Asia/Dubai",
+    "Asia/Kolkata", "Asia/Singapore", "Asia/Hong_Kong", "Asia/Tokyo", "Australia/Perth",
+    "Australia/Brisbane", "Australia/Adelaide", "Australia/Sydney", "Australia/Melbourne", "Pacific/Auckland",
+    "America/St_Johns", "America/Halifax", "America/New_York", "America/Toronto", "America/Chicago",
+    "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Vancouver", "America/Anchorage",
+    "Pacific/Honolulu",
+)
+
+
+# -- What can be sent ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReportOption:
+    key: str
+    title: str
+    description: str
+    pdf: bool
+    xlsx: bool
+
+
+def catalog() -> list[ReportOption]:
+    """Every report a schedule can include. Detail reports registered later appear automatically."""
+    options = [
+        ReportOption("review", monthly_review.TITLE,
+                     "Key figures, what needs attention, what changed and licence waste.", True, True),
+        ReportOption("evidence", "Insurance evidence pack",
+                     "The controls cyber-insurance questionnaires ask about, answered from the data.", True, True),
+    ]
+    for key, (title, description, _collectors, _builder) in data_reports.REPORTS.items():
+        options.append(ReportOption(f"data:{key}", title, description, False, True))
+    return options
+
+
+def catalog_map() -> dict[str, ReportOption]:
+    return {o.key: o for o in catalog()}
+
+
+def report_titles(reports_json: str) -> list[str]:
+    known = catalog_map()
+    return [known[k].title for k in json.loads(reports_json or "[]") if k in known]
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "tenant"
+
+
+def attachment_plan(tenant, keys: list[str], include_xlsx: bool) -> list[tuple[str, str]]:
+    """(report key, filename) for every file a bundle attaches, in order. Builds nothing."""
+    slug = _slug(tenant["name"])
+    pdf = export.pdf_available()
+    known = catalog_map()
+    out = []
+    for key in keys:
+        if key not in known:
+            continue
+        if key in ("review", "evidence"):
+            stem = "security-review" if key == "review" else "security-evidence"
+            if pdf:
+                out.append((key, f"{stem}-{slug}.pdf"))
+            if include_xlsx or not pdf:
+                out.append((key, f"{stem}-{slug}.xlsx"))
+        else:
+            out.append((key, f"{key[5:]}-{slug}.xlsx"))
+    return out
+
+
+# -- When ------------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _timezones() -> frozenset[str]:
+    return frozenset(available_timezones())
+
+
+def valid_timezone(name: str) -> bool:
+    return bool(name) and name in _timezones()
+
+
+def schedule_tz(schedule, default_tz: str) -> str:
+    tz = schedule["timezone"] or default_tz
+    try:
+        ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        return "UTC"
+    return tz
+
+
+def slot(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str,
+         now: datetime) -> tuple[str, datetime]:
+    """The period containing ``now`` and when its email is due (UTC)."""
+    zone = ZoneInfo(tz)
+    d = now.astimezone(zone).date()
+    if frequency == "weekly":
+        monday = d - timedelta(days=d.weekday())
+        iso_year, week, _ = monday.isocalendar()
+        key, day = f"{iso_year}-W{week:02d}", monday + timedelta(days=day_of_week)
+    elif frequency == "monthly":
+        key, day = f"{d.year}-{d.month:02d}", date(d.year, d.month, day_of_month)
+    else:
+        q = (d.month - 1) // 3
+        key, day = f"{d.year}-Q{q + 1}", date(d.year, 3 * q + 1, day_of_month)
+    return key, datetime.combine(day, time(hour), tzinfo=zone).astimezone(UTC)
+
+
+def _next_period_start(frequency: str, d: date) -> date:
+    if frequency == "weekly":
+        return d - timedelta(days=d.weekday()) + timedelta(days=7)
+    months = 1 if frequency == "monthly" else 3
+    first = d.month if frequency == "monthly" else 3 * ((d.month - 1) // 3) + 1
+    month = first + months
+    return date(d.year + (month - 1) // 12, (month - 1) % 12 + 1, 1)
+
+
+def schedule_slot(s, default_tz: str, now: datetime) -> tuple[str, datetime]:
+    return slot(s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], schedule_tz(s, default_tz), now)
+
+
+def initial_period(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str,
+                   now: datetime) -> str | None:
+    """A new or edited schedule whose send time this period has passed waits for the next one."""
+    key, due = slot(frequency, day_of_week, day_of_month, hour, tz, now)
+    return key if due <= now else None
+
+
+def next_send(s, default_tz: str, now: datetime | None = None) -> datetime | None:
+    """When the schedule will next send, in its own timezone. None when paused."""
+    if not s["enabled"]:
+        return None
+    now = now or datetime.now(UTC)
+    tz = schedule_tz(s, default_tz)
+    key, due = schedule_slot(s, default_tz, now)
+    if s["last_period"] != key:
+        if due <= now and s["retry_at"]:
+            due = datetime.fromisoformat(s["retry_at"].replace("Z", "+00:00"))
+        return due.astimezone(ZoneInfo(tz))
+    start = _next_period_start(s["frequency"], now.astimezone(ZoneInfo(tz)).date())
+    _, due = schedule_slot(s, default_tz, datetime.combine(start, time(0), tzinfo=ZoneInfo(tz)))
+    return due.astimezone(ZoneInfo(tz))
+
+
+def ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def describe(s) -> str:
+    at = f"at {s['hour']:02d}:00"
+    if s["frequency"] == "weekly":
+        return f"Every {DAYS[s['day_of_week']]} {at}"
+    if s["frequency"] == "monthly":
+        return f"Monthly on the {ordinal(s['day_of_month'])} {at}"
+    return f"Quarterly on the {ordinal(s['day_of_month'])} of Jan, Apr, Jul and Oct {at}"
+
+
+def period_label(frequency: str, local: datetime) -> str:
+    if frequency == "weekly":
+        monday = local.date() - timedelta(days=local.weekday())
+        return f"week of {monday.day} {monday.strftime('%b %Y')}"
+    if frequency == "quarterly":
+        return f"Q{(local.month - 1) // 3 + 1} {local.year}"
+    return local.strftime("%B %Y")
+
+
+# -- Who ---------------------------------------------------------------------------------
+
+
+def tenant_contacts(conn, tenant_id: int) -> list:
+    return conn.execute("SELECT * FROM contacts WHERE tenant_id = ? ORDER BY name COLLATE NOCASE, email",
+                        (tenant_id,)).fetchall()
+
+
+def team_contacts(conn) -> list:
+    return conn.execute("SELECT * FROM contacts WHERE tenant_id IS NULL ORDER BY name COLLATE NOCASE, email"
+                        ).fetchall()
+
+
+def add_contact(conn, tenant_id: int | None, name: str, email: str) -> int:
+    """Add a contact, or return the existing one with that address (filling in a missing name)."""
+    existing = conn.execute("SELECT * FROM contacts WHERE IFNULL(tenant_id, 0) = ? AND email = ?",
+                            (tenant_id or 0, email)).fetchone()
+    if existing:
+        if name and not existing["name"]:
+            conn.execute("UPDATE contacts SET name = ? WHERE id = ?", (name, existing["id"]))
+        return existing["id"]
+    return conn.execute("INSERT INTO contacts (tenant_id, name, email, created_at) VALUES (?, ?, ?, ?)",
+                        (tenant_id, name, email, utcnow())).lastrowid
+
+
+def recipients(conn, owner: str, owner_id: int) -> list:
+    table, col = ("email_schedule_recipients", "schedule_id") if owner == "schedule" else \
+        ("email_alert_recipients", "alert_id")
+    return conn.execute(
+        f"SELECT c.* FROM contacts c JOIN {table} r ON r.contact_id = c.id WHERE r.{col} = ?"
+        " ORDER BY c.tenant_id IS NULL, c.name COLLATE NOCASE, c.email", (owner_id,)).fetchall()
+
+
+def set_recipients(conn, owner: str, owner_id: int, contact_ids: list[int]) -> None:
+    table, col = ("email_schedule_recipients", "schedule_id") if owner == "schedule" else \
+        ("email_alert_recipients", "alert_id")
+    conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (owner_id,))
+    conn.executemany(f"INSERT OR IGNORE INTO {table} ({col}, contact_id) VALUES (?, ?)",
+                     [(owner_id, cid) for cid in contact_ids])
+
+
+def split_recipients(contacts) -> tuple[list[str], list[str]]:
+    """Client contacts in To, the MSP's team as a hidden copy (or in To when there's no client)."""
+    to = [c["email"] for c in contacts if c["tenant_id"] is not None]
+    team = [c["email"] for c in contacts if c["tenant_id"] is None]
+    return (to, team) if to else (team, [])
+
+
+def contact_label(c) -> str:
+    return c["name"] or c["email"]
+
+
+# -- Rendering --------------------------------------------------------------------------
+
+
+def _cfg(app):
+    return app.extensions["officesentry.config"]
+
+
+def render(app, template: str, **context) -> str:
+    """Render a template outside a web request too (the worker), with links to the portal."""
+    from flask import has_request_context, render_template, url_for
+
+    base = _cfg(app).base_url
+
+    def link(endpoint, **values):
+        return base + url_for(endpoint, **values)
+
+    # Inside a web request ("Send now") reuse it: a nested request context would
+    # run teardown and close the request's database connection.
+    ctx = nullcontext() if has_request_context() else app.test_request_context(base_url=base)
+    with ctx:
+        return render_template(template, link=link, **context)
+
+
+def _pdf(app, template: str, **context) -> bytes:
+    static = Path(app.static_folder)
+    html = render(app, template, pdf=True, css_href=(static / "report.css").as_uri(), pdf_available=True,
+                   **context)
+    return export.to_pdf(html, static.as_uri() + "/")
+
+
+def _msp_name(conn) -> str:
+    return mailer.mail_settings(conn).get("msp_name") or "Office Sentry"
+
+
+def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None) -> list[tuple[str, str, bytes]]:
+    files, built = [], {}
+    for key, filename in attachment_plan(tenant, keys, include_xlsx):
+        if key == "review":
+            report = built.setdefault(key, review or monthly_review.build(conn, tenant, now))
+            data = _pdf(app, "reports/monthly_review.html", report=report) if filename.endswith(".pdf") \
+                else export.to_xlsx(report)
+        elif key == "evidence":
+            pack = built.setdefault(key, evidence.build(conn, tenant, now))
+            data = _pdf(app, "reports/evidence.html", pack=pack) if filename.endswith(".pdf") \
+                else evidence.to_xlsx(pack)
+        else:
+            data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now))
+        files.append((filename, "application/pdf" if filename.endswith(".pdf") else XLSX, data))
+    return files
+
+
+@dataclass
+class Built:
+    email: Email
+    attachment_names: list[str]
+
+
+def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime | None = None,
+                       attach: bool = True) -> Built:
+    now = now or datetime.now(UTC)
+    keys = json.loads(schedule["reports"] or "[]")
+    local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
+    label = period_label(schedule["frequency"], local)
+    review = monthly_review.build(conn, tenant, now)
+    known = catalog_map()
+    plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]))
+    files = [(known[k].title, name) for k, name in plan]
+    failing = review.failing
+    stale = any(f.stale for f in review.freshness)
+    subject = f"{tenant['name']} security report · {label}"
+    msp = _msp_name(conn)
+    html = render(app, "emails/report.html", subject=subject, tenant=tenant, review=review, label=label,
+                   failing=failing[:6], more=max(0, len(failing) - 6), files=files, stale=stale,
+                   message=schedule["message"], msp_name=msp, frequency=schedule["frequency"],
+                   kpis=[k for k in review.kpis if k.value is not None])
+
+    lines = [f"{tenant['name']}: security report for {label}", ""]
+    if schedule["message"]:
+        lines += [schedule["message"], ""]
+    for k in review.kpis:
+        if k.value is None:
+            continue
+        value = f"{review.currency} {k.value:,.2f}" if k.unit == "currency" else f"{k.value:g}{k.unit}"
+        change = f" ({k.delta:+g} in 4 weeks)" if k.delta else ""
+        lines.append(f"  {k.label}: {value}{change}")
+    lines += ["", f"Needs attention: {len(failing)} check(s)"]
+    for r in failing[:6]:
+        lines.append(f"  [{(r.severity or 'info').upper()}] {r.title}: {r.summary}")
+    if review.new_count or review.resolved:
+        lines.append(f"New: {review.new_count} · Fixed: {len(review.resolved)}")
+    if files:
+        lines += ["", "Attached:"] + [f"  {name} ({title})" for title, name in files]
+    lines += ["", f"Sent by {msp} with Office Sentry."]
+
+    to, bcc = split_recipients(contacts)
+    attachments = _attachments(app, conn, tenant, keys, bool(schedule["include_xlsx"]), now, review) \
+        if attach else []
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
+                       attachments=attachments), [name for _, name in files])
+
+
+def digest_data(conn, frequency: str, now: datetime) -> dict:
+    """Cross-tenant summary for the MSP digest: the worst tenants first, and what's new."""
+    since = (now - DIGEST_LOOKBACK[frequency]).strftime(ISO)
+    rows = []
+    for t in conn.execute("SELECT * FROM tenants WHERE enabled = 1 ORDER BY name COLLATE NOCASE"):
+        row = monthly_review.rollup_row(conn, t, now)
+        counts = conn.execute(
+            "SELECT"
+            " SUM(resolved_at IS NULL AND severity IN ('critical', 'high')"
+            "     AND (first_seen >= :since OR IFNULL(reopened_at, '') >= :since)) AS new_severe,"
+            " SUM(resolved_at >= :since) AS fixed"
+            " FROM findings WHERE tenant_id = :tid", {"since": since, "tid": t["id"]}).fetchone()
+        row["new_severe"] = counts["new_severe"] or 0
+        row["fixed"] = counts["fixed"] or 0
+        rows.append(row)
+    rows.sort(key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["new_severe"],
+                             r["tenant"]["name"].lower()))
+    scores = [r["kpis"]["secure_score.pct"].value for r in rows if r["kpis"]["secure_score.pct"].value is not None]
+    new_findings = conn.execute(
+        "SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
+        " WHERE t.enabled = 1 AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
+        " AND (f.first_seen >= :since OR IFNULL(f.reopened_at, '') >= :since)"
+        " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= :now))"
+        " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key"
+        " LIMIT 10", {"since": since, "now": now.strftime(ISO)}).fetchall()
+    return {
+        "rows": rows,
+        "since": since,
+        "tenants": len(rows),
+        "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in rows),
+        "new_severe": sum(r["new_severe"] for r in rows),
+        "fixed": sum(r["fixed"] for r in rows),
+        "avg_score": round(sum(scores) / len(scores), 1) if scores else None,
+        "stale": sum(r["stale_data"] for r in rows),
+        "new_findings": new_findings,
+        "currency": monthly_review.setting(conn, "currency", "GBP"),
+    }
+
+
+def digest_xlsx(data: dict) -> bytes:
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tenants"
+    header = ["Tenant", "Critical", "High", "Medium", "Low", "New critical/high", "Fixed", "Secure Score %",
+              "Secure Score change", "Users with MFA %", f"Licence waste / month ({data['currency']})",
+              "Data up to date"]
+    ws.append(header)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for r in data["rows"]:
+        score, mfa, waste = (r["kpis"][k] for k in ("secure_score.pct", "mfa.registered_pct", "waste"))
+        ws.append([r["tenant"]["name"], r["counts"]["critical"], r["counts"]["high"], r["counts"]["medium"],
+                   r["counts"]["low"], r["new_severe"], r["fixed"], score.value, score.delta, mfa.value,
+                   waste.value, "No" if r["stale_data"] else "Yes"])
+    ws.column_dimensions["A"].width = 32
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = None,
+                       attach: bool = True) -> Built:
+    now = now or datetime.now(UTC)
+    local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
+    label = period_label(schedule["frequency"], local)
+    data = digest_data(conn, schedule["frequency"], now)
+    msp = _msp_name(conn)
+    subject = f"Tenant digest · {label}"
+    filename = f"tenant-digest-{local.strftime('%Y-%m-%d')}.xlsx"
+    html = render(app, "emails/digest.html", subject=subject, d=data, label=label, msp_name=msp,
+                   message=schedule["message"], titles=RULE_TITLES, frequency=schedule["frequency"],
+                   files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [])
+    lines = [f"Tenant digest for {label}", "",
+             f"Tenants: {data['tenants']}", f"Needing attention (critical or high): {data['urgent']}",
+             f"New critical or high findings: {data['new_severe']}", f"Fixed: {data['fixed']}"]
+    if data["avg_score"] is not None:
+        lines.append(f"Average Secure Score: {data['avg_score']:g}%")
+    lines += ["", "Tenants needing attention:"]
+    for r in data["rows"]:
+        if r["counts"]["critical"] or r["counts"]["high"]:
+            lines.append(f"  {r['tenant']['name']}: {r['counts']['critical']} critical, {r['counts']['high']} high")
+    to, bcc = split_recipients(contacts)
+    attachments = [(filename, XLSX, digest_xlsx(data))] if attach and schedule["include_xlsx"] else []
+    names = [filename] if schedule["include_xlsx"] else []
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
+                       attachments=attachments), names)
+
+
+def new_alert_findings(conn, alert, now: datetime | None = None) -> list:
+    """Unaccepted findings at the alert's level first seen (or reopened) after its watermark.
+
+    Findings from a tenant's very first scan are left out, so onboarding a tenant
+    doesn't send an alert for everything it already had.
+    """
+    ts = (now or datetime.now(UTC)).strftime(ISO)
+    levels = ALERT_LEVELS[alert["min_severity"]]
+    return conn.execute(
+        f"SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
+        f" WHERE t.enabled = 1 AND f.resolved_at IS NULL AND f.severity IN ({','.join('?' * len(levels))})"
+        " AND (? IS NULL OR f.tenant_id = ?)"
+        " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= ?))"
+        " AND ((f.first_seen > ? AND f.first_seen >"
+        "        (SELECT MIN(first_seen) FROM findings f2 WHERE f2.tenant_id = f.tenant_id))"
+        "      OR IFNULL(f.reopened_at, '') > ?)"
+        " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key, f.subject",
+        (*levels, alert["tenant_id"], alert["tenant_id"], ts, alert["watermark"], alert["watermark"]),
+    ).fetchall()
+
+
+def build_alert_email(app, conn, alert, findings, contacts, *, preview: bool = False) -> Built:
+    tenants = list(dict.fromkeys(f["tenant_name"] for f in findings))
+    n = len(findings)
+    level = "critical" if alert["min_severity"] == "critical" else "critical or high"
+    noun = f"new {level} finding{'s' if n != 1 else ''}"
+    where = tenants[0] if len(tenants) == 1 else f"{len(tenants)} tenants"
+    subject = f"{n} {noun} in {where}"
+    groups: dict[str, list] = {}
+    for f in findings:
+        groups.setdefault(f["tenant_name"], []).append(f)
+    html = render(app, "emails/alert.html", subject=subject, groups=groups, titles=RULE_TITLES,
+                   msp_name=_msp_name(conn), level=level, preview=preview)
+    lines = [subject, ""]
+    for name, items in groups.items():
+        lines.append(name)
+        for f in items:
+            lines.append(f"  [{f['severity'].upper()}] {RULE_TITLES.get(f['rule_key'], f['rule_key'])}: "
+                         f"{f['subject']} ({f['detail']})")
+        lines.append("")
+    to, bcc = split_recipients(contacts)
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html), [])
+
+
+# -- Sending and history ------------------------------------------------------------------
+
+
+def record(conn, *, kind: str, email: Email | None, subject: str, error: str | None, transport: str | None,
+            trigger: str, user: str | None, schedule_id=None, alert_id=None, tenant_id=None, period=None,
+            payload=None, to=(), bcc=()) -> int:
+    if email is not None:
+        to, bcc = email.to, email.bcc
+    return conn.execute(
+        "INSERT INTO email_deliveries (kind, schedule_id, alert_id, tenant_id, period, subject, recipients, bcc,"
+        " attachments, payload, transport, trigger, status, error, sent_by, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (kind, schedule_id, alert_id, tenant_id, period, subject, ", ".join(to), ", ".join(bcc),
+         json.dumps([a[0] for a in email.attachments] if email else []), payload, transport, trigger,
+         "failed" if error else "sent", error[:1000] if error else None, user, utcnow()),
+    ).lastrowid
+
+
+def _send(conn, vault, build, *, kind: str, fallback_subject: str, trigger: str, user: str | None,
+          **fields) -> str | None:
+    """Build and send one email, and log it. Returns the error shown to people, or None."""
+    email, transport = None, None
+    try:
+        email = build().email
+        transport = mailer.send(conn, vault, email)
+        error = None
+    except MailError as exc:
+        error = str(exc)
+    except Exception as exc:  # a report bug must not stop other emails
+        log.exception("Building %s email failed", kind)
+        error = f"Couldn't build the email: {type(exc).__name__}: {exc}"
+    record(conn, kind=kind, email=email, subject=email.subject if email else fallback_subject, error=error,
+            transport=transport, trigger=trigger, user=user, **fields)
+    return error
+
+
+def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: str | None = None,
+                  now: datetime | None = None) -> str | None:
+    """Send a report or digest schedule now. Returns an error message or None."""
+    now = now or datetime.now(UTC)
+    default_tz = _cfg(app).timezone
+    period, due = schedule_slot(schedule, default_tz, now)
+    contacts = recipients(conn, "schedule", schedule["id"])
+    if schedule["kind"] == "report":
+        tenant = store.get_tenant(conn, schedule["tenant_id"])
+
+        def build():
+            return build_report_email(app, conn, schedule, tenant, contacts, now=now)
+        fallback = f"{tenant['name']} security report"
+    else:
+        def build():
+            return build_digest_email(app, conn, schedule, contacts, now=now)
+        fallback = "Tenant digest"
+    error = _send(conn, vault, build, kind=schedule["kind"], fallback_subject=fallback, trigger=trigger, user=user,
+                  schedule_id=schedule["id"], tenant_id=schedule["tenant_id"], period=period)
+    ts = now.strftime(ISO)
+    if trigger == "schedule":
+        if error is None:
+            conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
+                         " last_status = 'sent', last_sent_at = ? WHERE id = ?", (period, ts, schedule["id"]))
+        else:
+            attempts = schedule["attempts"] + 1
+            if attempts >= MAX_ATTEMPTS:  # give up on this period; it shows as failed with a Retry button
+                conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
+                             " last_status = 'failed' WHERE id = ?", (period, schedule["id"]))
+            else:
+                conn.execute("UPDATE email_schedules SET attempts = ?, retry_at = ?, last_status = 'failed'"
+                             " WHERE id = ?",
+                             (attempts, (now + RETRY_DELAYS[attempts - 1]).strftime(ISO), schedule["id"]))
+    elif error is None:
+        # Sent by hand after this period's send time: that counts as this period's email.
+        done = due <= now
+        conn.execute(
+            "UPDATE email_schedules SET last_status = 'sent', last_sent_at = ?,"
+            " last_period = CASE WHEN ? THEN ? ELSE last_period END,"
+            " attempts = CASE WHEN ? THEN 0 ELSE attempts END,"
+            " retry_at = CASE WHEN ? THEN NULL ELSE retry_at END WHERE id = ?",
+            (ts, done, period, done, done, schedule["id"]))
+    else:
+        conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
+    return error
+
+
+def send_alert(app, conn, vault, alert, findings, *, trigger: str = "schedule", user: str | None = None) -> str | None:
+    contacts = recipients(conn, "alert", alert["id"])
+    return _send(conn, vault, lambda: build_alert_email(app, conn, alert, findings, contacts), kind="alert",
+                 fallback_subject="New findings alert", trigger=trigger, user=user, alert_id=alert["id"],
+                 tenant_id=alert["tenant_id"], payload=json.dumps([f["id"] for f in findings]))
+
+
+def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
+    """Send a failed email again: the schedule's current content, or the same alert."""
+    if delivery["schedule_id"]:
+        schedule = conn.execute("SELECT * FROM email_schedules WHERE id = ?", (delivery["schedule_id"],)).fetchone()
+        if schedule is None:
+            return "That schedule has been removed"
+        return send_schedule(app, conn, vault, schedule, trigger="retry", user=user)
+    if delivery["alert_id"] and delivery["payload"]:
+        alert = conn.execute("SELECT * FROM email_alerts WHERE id = ?", (delivery["alert_id"],)).fetchone()
+        if alert is None:
+            return "That alert has been removed"
+        ids = json.loads(delivery["payload"])
+        findings = conn.execute(
+            f"SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
+            f" WHERE f.id IN ({','.join('?' * len(ids))})", ids).fetchall() if ids else []
+        if not findings:
+            return "Those findings no longer exist"
+        return send_alert(app, conn, vault, alert, findings, trigger="retry", user=user)
+    return "This email can't be sent again"
+
+
+def _tick_schedule(app, conn, vault, s, default_tz: str, now: datetime) -> bool:
+    period, due = schedule_slot(s, default_tz, now)
+    if s["last_period"] == period or now < due:
+        return False
+    if s["retry_at"] and now.strftime(ISO) < s["retry_at"]:
+        return False
+    if not recipients(conn, "schedule", s["id"]):
+        return False  # the schedules page shows "No recipients"
+    if s["kind"] == "report" and store.get_tenant(conn, s["tenant_id"])["enabled"] == 0:
+        return False
+    send_schedule(app, conn, vault, s, trigger="schedule", now=now)
+    return True
+
+
+def _tick_alert(app, conn, vault, a, now: datetime) -> bool:
+    if a["retry_at"] and now.strftime(ISO) < a["retry_at"]:
+        return False
+    findings = new_alert_findings(conn, a, now)
+    if not findings:
+        return False
+    newest = max(max(f["first_seen"], f["reopened_at"] or "") for f in findings)
+    if not recipients(conn, "alert", a["id"]):
+        conn.execute("UPDATE email_alerts SET watermark = ? WHERE id = ?", (newest, a["id"]))
+        return False
+    error = send_alert(app, conn, vault, a, findings)
+    attempts = a["attempts"] + 1
+    if error is None or attempts >= MAX_ATTEMPTS:
+        conn.execute("UPDATE email_alerts SET watermark = ?, attempts = 0, retry_at = NULL WHERE id = ?",
+                     (newest, a["id"]))
+    else:
+        conn.execute("UPDATE email_alerts SET attempts = ?, retry_at = ? WHERE id = ?",
+                     (attempts, (now + RETRY_DELAYS[attempts - 1]).strftime(ISO), a["id"]))
+    return True
+
+
+def tick(app, conn, vault, cfg, now: datetime | None = None) -> int:
+    """Send every schedule and alert that is due. Safe to call every minute. Returns emails attempted."""
+    now = now or datetime.now(UTC)
+    attempted = 0
+    for s in conn.execute("SELECT * FROM email_schedules WHERE enabled = 1 ORDER BY id").fetchall():
+        try:
+            attempted += _tick_schedule(app, conn, vault, s, cfg.timezone, now)
+        except Exception:
+            log.exception("Scheduled email %s failed", s["id"])
+    for a in conn.execute("SELECT * FROM email_alerts WHERE enabled = 1 ORDER BY id").fetchall():
+        try:
+            attempted += _tick_alert(app, conn, vault, a, now)
+        except Exception:
+            log.exception("Alert email %s failed", a["id"])
+    return attempted

@@ -12,6 +12,9 @@ overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
   `Get-*` cmdlets there. New permissions must be
   read-only and go in `entra.GRAPH_PERMISSIONS` (adding one forces every
   tenant to re-consent, so batch them).
+- **The one non-GET Graph call is `mailer._send_graph`** (`sendMail` from the
+  MSP's own mailbox, via a separate single-tenant app with `Mail.Send`). Never
+  add mail permissions to the multi-tenant read-only app.
 - **Every route needs `@login_required` or `@roles_required`.** Anything
   tenant-scoped loads the tenant with `access.tenant_or_404()`.
   `tests/test_access.py::test_every_page_requires_login` enforces the first.
@@ -57,6 +60,15 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 - Tables that people read on phones get `class="stack-sm"` and a
   `data-label` on every cell after the first.
 - Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.
+
+## Email delivery
+
+`delivery.tick()` is the worker's only email entry point (call it every
+minute). Schedules store their own timezone and the last period they finished
+("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
+show up in the schedule form automatically. Email templates live in
+`web/templates/emails/` and use inline styles and tables only (email clients
+ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 
 ## Schema changes
 

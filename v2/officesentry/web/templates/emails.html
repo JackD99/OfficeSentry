@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf %}
+{% from "_email.html" import people, schedule_item, deliveries_table, contact_checks, next_tile, busy_script with context %}
+{% block title %}Email reports · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Email reports</h1>
+    <div class="sub">Every scheduled report, digest and alert, and whether they arrived.</div></div>
+</div>
+
+{% if not mail_ready %}
+<div class="callout warn">{{ icon('alert') }}<div>Email isn't set up yet, so nothing will be sent.
+  {% if admin %}<a href="{{ url_for('email.settings') }}">Set up email delivery</a>{% else %}Ask an admin to set it up.{% endif %}</div></div>
+{% endif %}
+
+<div class="tiles">
+  {{ next_tile(upcoming, (tenants[upcoming.tenant_id].name if upcoming.tenant_id else 'Tenant digest') if upcoming else '') }}
+  <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests)|selectattr('enabled')|list|length }}</div>
+    <div class="foot">{{ schedules|map(attribute='tenant_id')|unique|list|length }} of {{ tenants|length }} tenants covered</div></div>
+  <div class="tile"><div class="label">Sent in the last 30 days</div><div class="value">{{ sent }}</div>
+    <div class="foot">{{ tenant_alerts }} tenant alert{{ 's' if tenant_alerts != 1 }} on</div></div>
+  <div class="tile"><div class="label">Failed in the last 30 days</div><div class="value {{ 'bad-text' if failed }}">{{ failed }}</div>
+    <div class="foot">{% if failing %}<span class="bad-text">{{ failing|length }} schedule{{ 's' if failing|length != 1 }} need{{ 's' if failing|length == 1 }} a look</span>{% else %}Everything arrived{% endif %}</div></div>
+</div>
+
+{% for s in failing %}{% set d = last.get(s.id) %}
+<div class="callout bad">{{ icon('alert') }}<div class="grow"><strong>{{ tenants[s.tenant_id].name ~ ': ' if s.tenant_id }}“{{ s.titles|join(' + ') }}” didn't send{% if d %} {{ ts(d.created_at) }}{% endif %}.</strong>
+  {% if d and d.error %}<div class="small">{{ d.error }}</div>{% endif %}</div>
+  {% if d %}<form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="overview"><button class="sm">{{ icon('refresh') }} Retry</button></form>{% endif %}
+</div>
+{% endfor %}
+
+<div class="grid-main">
+<div>
+  <section class="card flush">
+    <div class="card-head toolbar"><h2>Client report emails</h2><span class="meta">Add one from a tenant's Emailed reports tab</span></div>
+    {% if schedules %}
+    <ul class="list sched-list">{% for s in schedules %}{{ schedule_item(s, True, tenants[s.tenant_id].name) }}{% endfor %}</ul>
+    {% else %}
+    <div class="empty"><h3>No client report emails yet</h3>
+      <p>Open a tenant and use its <strong>Emailed reports</strong> tab to send its reports every week, month or quarter.</p>
+      <a class="btn" href="{{ url_for('tenants.dashboard') }}">Go to tenants</a></div>
+    {% endif %}
+  </section>
+
+  <section class="card flush">
+    <div class="card-head toolbar"><h2>Delivery history</h2>{% if deliveries %}<span class="meta">Last {{ deliveries|length }}</span>{% endif %}</div>
+    {% if deliveries %}{{ deliveries_table(deliveries, True, 'overview') }}
+    {% else %}<div class="empty compact"><p>Nothing has been sent yet.</p></div>{% endif %}
+  </section>
+</div>
+
+<div>
+  {% if admin %}
+  <section class="card">
+    <div class="card-head"><h2>{{ icon('send') }} Tenant digest</h2></div>
+    {% if digests %}
+    <ul class="list sched-list compact-sched">{% for s in digests %}{{ schedule_item(s) }}{% endfor %}</ul>
+    <a class="btn sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Another digest</a>
+    {% else %}
+    <p class="muted small">One email for your team with every tenant ranked worst first: what needs attention, what's new and what's fixed.</p>
+    <a class="btn primary sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Set up a digest</a>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>{{ icon('bell') }} Alerts for every tenant</h2>{% if global_alert %}<span class="pill ok">On</span>{% endif %}</div>
+    {% if global_alert %}
+    <p class="small">Emails {{ people(global_alert.recipients) }} when any tenant gets a new <strong>{{ 'critical' if global_alert.min_severity == 'critical' else 'critical or high' }}</strong> finding.</p>
+    <div class="form-actions">
+      <a class="btn sm" href="{{ url_for('email.preview_alert', alert_id=global_alert.id) }}">{{ icon('eye') }} Preview</a>
+      <form method="post" action="{{ url_for('email.delete_alert', alert_id=global_alert.id) }}">{{ csrf() }}<button class="sm danger">Turn off</button></form>
+    </div>
+    <details class="alert-edit"><summary class="small">Change who gets them</summary>
+    {% else %}
+    <p class="muted small">Tell your team the moment a nightly scan finds something new and serious in any tenant. A tenant's first scan never triggers alerts.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('email.save_global_alert') }}">
+      {{ csrf() }}
+      <fieldset class="choices compact">
+        <label class="choice"><input type="radio" name="min_severity" value="critical" {% if not global_alert or global_alert.min_severity == 'critical' %}checked{% endif %}><span>Critical only</span></label>
+        <label class="choice"><input type="radio" name="min_severity" value="high" {% if global_alert and global_alert.min_severity == 'high' %}checked{% endif %}><span>Critical and high</span></label>
+      </fieldset>
+      {% set chosen = global_alert.recipients|map(attribute='id')|list if global_alert else team|map(attribute='id')|list %}
+      {{ contact_checks(team, chosen, 'Add your team below first.') }}
+      <div class="form-actions"><button class="{{ 'sm' if global_alert else 'primary sm' }}" {% if not team %}disabled{% endif %}>{{ 'Save' if global_alert else 'Turn on alerts' }}</button></div>
+    </form>
+    {% if global_alert %}</details>{% endif %}
+  </section>
+  {% endif %}
+
+  <section class="card" id="team">
+    <div class="card-head"><h2>{{ icon('users') }} Your team</h2><span class="meta">Shared by every tenant</span></div>
+    {% if team %}
+    <ul class="list compact contacts">
+      {% for c in team %}
+      <li><div class="grow"><div class="title">{{ c.name or c.email }}</div>{% if c.name %}<div class="desc">{{ c.email }}</div>{% endif %}</div>
+        {% if admin %}<form method="post" action="{{ url_for('email.delete_contact', contact_id=c.id) }}" data-confirm="Remove {{ c.name or c.email }} from every email?">{{ csrf() }}<input type="hidden" name="from" value="overview"><button class="sm ghost">Remove</button></form>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted small">People at your MSP who should get digests and alerts, or a hidden copy of client emails.</p>{% endif %}
+    {% if admin %}
+    <form method="post" action="{{ url_for('email.add_team_contact') }}" class="add-contact">
+      {{ csrf() }}
+      <div class="form-row tight">
+        <label>Name <input name="name" placeholder="Alex Morgan" autocomplete="off"></label>
+        <label>Email <input name="email" type="email" placeholder="alex@msp.com" required autocomplete="off"></label>
+      </div>
+      <div class="form-actions"><button class="sm">{{ icon('plus') }} Add to team</button></div>
+    </form>
+    {% endif %}
+  </section>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}{{ busy_script() }}{% endblock %}

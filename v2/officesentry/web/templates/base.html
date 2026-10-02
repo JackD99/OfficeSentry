@@ -17,14 +17,15 @@
   {% if current_user.role == 'client' %}
   {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('reports', 'tenants')) }}
   {% else %}
-  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'reports.schedules', 'reports.overview')) }}
+  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'reports.overview')) }}
+  {{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest')) }}
   {{ nav_link('prospects.index', 'Prospects', 'prospects', ('prospects',)) }}
   {% endif %}
   {% if current_user.role == 'admin' %}
   <div class="nav-label">Settings</div>
   {{ nav_link('admin.connections', 'App connection', 'connection') }}
   {{ nav_link('reports.prices', 'Licence prices', 'price') }}
-  {{ nav_link('reports.email_settings', 'Email', 'mail') }}
+  {{ nav_link('email.settings', 'Email delivery', 'mail') }}
   {{ nav_link('admin.users', 'Users', 'users', ('admin.edit_user',)) }}
   {% endif %}
 </nav>
