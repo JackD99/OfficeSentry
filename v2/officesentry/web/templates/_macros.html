@@ -1,6 +1,69 @@
-{% macro status(value) -%}
-<span class="status s-{{ value or 'none' }}">{{ value or 'never run' }}</span>
-{%- endmacro %}
 {% macro csrf() -%}
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{%- endmacro %}
+
+{# Inline icons (24px grid, stroked) so the CSP needs no extra sources. #}
+{% set ICONS = {
+  'logo': '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/>',
+  'tenants': '<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/>',
+  'prospects': '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  'connection': '<path d="M15 7h2a5 5 0 010 10h-2M9 17H7A5 5 0 017 7h2M8 12h8"/>',
+  'price': '<path d="M3 12l9-9h7v7l-9 9-7-7z"/><circle cx="15.5" cy="8.5" r="1.2"/>',
+  'mail': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M21.5 20a6.5 6.5 0 00-4-6"/>',
+  'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  'download': '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  'refresh': '<path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/>',
+  'doc': '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
+  'shield': '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/>',
+  'plus': '<path d="M12 5v14M5 12h14"/>',
+  'arrow': '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  'check': '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  'alert': '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17h.01"/>',
+} %}
+{% macro icon(name, cls='') -%}
+<svg class="icon {{ cls }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ ICONS[name]|safe }}</svg>
+{%- endmacro %}
+
+{% macro ts(value, empty='never') -%}
+{% if value %}<time datetime="{{ value }}" title="{{ value|when }}">{{ value|ago }}</time>{% else %}<span class="muted">{{ empty }}</span>{% endif %}
+{%- endmacro %}
+
+{% set RUN_STATUS = {
+  'succeeded': ('ok', 'Succeeded'), 'partial': ('warn', 'Partial'), 'failed': ('bad', 'Failed'),
+  'queued': ('info', 'Queued'), 'running': ('accent', 'Running'), 'cancelled': ('info', 'Cancelled'),
+} %}
+{% macro status(value) -%}
+{% set s = RUN_STATUS.get(value, ('', 'Never run')) %}<span class="pill {{ s[0] }}">{{ s[1] }}</span>
+{%- endmacro %}
+
+{% macro sev_counts(counts, levels=('critical', 'high', 'medium', 'low')) -%}
+<span class="sevbar">{% for s in levels %}<span class="sev sev-{{ s }}{{ ' zero' if not counts[s] }}" title="{{ counts[s] }} {{ s }}">{{ counts[s] }}</span>{% endfor %}</span>
+{%- endmacro %}
+
+{# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. #}
+{% macro tenant_header(tenant, active, title=None, counts=None) -%}
+{% set staff = current_user.role in ('admin', 'analyst') %}
+<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">{{ 'Tenants' if staff else 'Your reports' }}</a><span>/</span><span>{{ tenant.name }}</span></div>
+<div class="page-head">
+  <div>
+    <h1>{{ title or tenant.name }}</h1>
+    <div class="sub">{% if title %}{{ tenant.name }} · {% endif %}<span class="mono">{{ tenant.tenant_ref }}</span></div>
+  </div>
+  <div class="actions">{{ caller() if caller }}
+    <a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('doc') }} Monthly review</a>
+  </div>
+</div>
+<nav class="tabs" aria-label="{{ tenant.name }}">
+  {% set tabs = [] %}
+  {% if staff %}{% set _ = tabs.append(('overview', 'Overview', url_for('tenants.tenant', tenant_id=tenant.id))) %}{% endif %}
+  {% set _ = tabs.append(('findings', 'Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) %}
+  {% set _ = tabs.append(('data', 'Detail reports', url_for('reports.data_report', tenant_id=tenant.id, key='mailboxes'))) %}
+  {% set _ = tabs.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
+  {% set _ = tabs.append(('schedules', 'Emailed reports', url_for('reports.schedules', tenant_id=tenant.id))) %}
+  {% if staff %}{% set _ = tabs.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
+  {% for key, label, href in tabs %}
+  <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}{% if counts and counts.get(key) %}<span class="count">{{ counts[key] }}</span>{% endif %}</a>
+  {% endfor %}
+</nav>
 {%- endmacro %}

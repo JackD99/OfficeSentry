@@ -13,9 +13,25 @@ def test_admin_pages_render_with_data(client, db, two_tenants):
     store.finish_run(db, run_id, "partial", "Sign-in activity needs Entra ID P1")
     store.set_capabilities(db, alpha, {"entra_p1": True, "intune": False})
     login(client, "admin")
-    for url in ["/", f"/tenants/{alpha}", f"/runs/{run_id}", f"/runs/{run_id}?kind=user", "/tenants/new",
+    for url in ["/", f"/tenants/{alpha}", f"/tenants/{alpha}/collection", f"/runs/{run_id}",
+                f"/runs/{run_id}?kind=user", "/tenants/new",
                 "/admin/users", f"/admin/users/{uid}", "/admin/connections", "/account/password"]:
         resp = client.get(url)
         assert resp.status_code == 200, url
     page = client.get(f"/runs/{run_id}?kind=user").get_data(as_text=True)
     assert "<script>x</script>" not in page and "&lt;script&gt;" in page
+
+
+def test_friendly_times_and_labels():
+    from datetime import UTC, datetime
+
+    from officesentry.web.filters import ago, capability, money
+
+    now = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
+    assert ago("2026-10-02T11:59:30Z", now) == "just now"
+    assert ago("2026-10-02T09:00:00Z", now) == "3 hours ago"
+    assert ago("2026-10-01T09:00:00Z", now) == "yesterday"
+    assert ago("2026-09-02T12:00:00Z", now) == "30 days ago"
+    assert ago(None, now) == ""
+    assert capability("entra_p1") == "Entra ID P1"
+    assert money(1234.5, "GBP") == "£1,234"

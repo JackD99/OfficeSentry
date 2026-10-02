@@ -1,38 +1,47 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status %}
+{% from "_macros.html" import ts, status %}
+{% block title %}Run {{ run.id }} · {{ tenant.name }}{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a></p>
-<div class="heading">
-  <h1>Run #{{ run.id }}: {{ collectors[run.collector].title if run.collector in collectors else run.collector }}</h1>
-  {{ status(run.status) }}
+{% set title = collectors[run.collector].title if run.collector in collectors else run.collector %}
+<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span>
+  <a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">{{ tenant.name }}</a><span>/</span>
+  <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a></div>
+<div class="page-head">
+  <div>
+    <h1>{{ title }} {{ status(run.status) }}</h1>
+    <div class="sub">Run {{ run.id }} · queued {{ ts(run.created_at) }}{% if run.finished_at %} · finished {{ ts(run.finished_at) }}{% endif %}{% if run.requested_by %} · by {{ run.requested_by }}{% endif %}{% if run.truncated %} · <strong>truncated</strong>{% endif %}</div>
+  </div>
 </div>
-<p class="muted">Created {{ run.created_at }}{% if run.started_at %} · started {{ run.started_at }}{% endif %}{% if run.finished_at %} · finished {{ run.finished_at }}{% endif %}{% if run.truncated %} · <strong>truncated</strong>{% endif %}</p>
-{% if run.error %}<div class="flash {{ 'warning' if run.status == 'partial' else 'error' }}">{{ run.error }}</div>{% endif %}
+{% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' else 'bad' }}">{{ run.error }}</div>{% endif %}
 
-<div class="grid">
+<div class="grid-2">
   <section class="card">
-    <h2>Metrics</h2>
-    <table>{% for m in metrics %}<tr><td>{{ m.key }}</td><td class="num">{{ '%g' % m.value }}</td></tr>{% else %}<tr><td class="muted">None</td></tr>{% endfor %}</table>
+    <h2>Numbers recorded</h2>
+    {% if metrics %}<dl class="kv">{% for m in metrics %}<dt class="mono small">{{ m.key }}</dt><dd class="num-left">{{ '%g' % m.value }}</dd>{% endfor %}</dl>
+    {% else %}<p class="muted">None.</p>{% endif %}
   </section>
   <section class="card">
-    <h2>Objects</h2>
-    <table>{% for k in kinds %}<tr><td><a href="{{ url_for('tenants.run', run_id=run.id, kind=k.kind) }}">{{ k.kind }}</a></td><td class="num">{{ k.n }}</td></tr>{% else %}<tr><td class="muted">None</td></tr>{% endfor %}</table>
+    <h2>Items collected</h2>
+    {% if kinds %}<ul class="list compact">{% for k in kinds %}<li><a class="grow" href="{{ url_for('tenants.run', run_id=run.id, kind=k.kind) }}">{{ k.kind|replace('_', ' ')|capitalize }}</a><span class="count-badge">{{ k.n }}</span></li>{% endfor %}</ul>
+    {% else %}<p class="muted">None.</p>{% endif %}
   </section>
 </div>
 
 {% if kind %}
-<section class="card scroll">
-  <h2>{{ kind }} <span class="muted small">(first 200)</span></h2>
-  <table>
+<section class="card flush">
+  <div class="card-head toolbar"><h2>{{ kind|replace('_', ' ')|capitalize }}</h2><span class="meta">Raw data, first 200 items</span></div>
+  <div class="scroll-x">
+  <table class="raw">
     <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>{% for row in sample %}<tr>{% for c in columns %}<td>{{ row.get(c) if row.get(c) is not none else '' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
   </table>
+  </div>
 </section>
 {% endif %}
 
 <section class="card">
   <h2>Log</h2>
-  <pre class="log">{% for e in events %}{{ e.ts }} {{ e.level|upper }} {{ e.message }}
-{% endfor %}</pre>
+  <pre class="log">{% for e in events %}<span class="{{ e.level }}">{{ e.ts[11:19] }}  {{ '%-7s'|format(e.level|upper) }} {{ e.message }}</span>
+{% else %}No log entries.{% endfor %}</pre>
 </section>
 {% endblock %}

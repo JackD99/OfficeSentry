@@ -1,48 +1,61 @@
 {% extends "base.html" %}
+{% from "_macros.html" import csrf, tenant_header with context %}
 {% block title %}Findings · {{ tenant.name }}{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a></p>
-<div class="heading">
-  <h1>Findings</h1>
-  <nav class="tabs">
+{{ tenant_header(tenant, 'findings') }}
+{% set staff = current_user.role in ('admin', 'analyst') %}
+<div class="toolbar">
+  <nav class="subtabs" aria-label="Finding status">
     {% for v, label in [('open', 'Open'), ('accepted', 'Accepted risks'), ('resolved', 'Resolved')] %}
-    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id, view=v) }}" {% if v == view %}class="active"{% endif %}>{{ label }}</a>
+    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id, view=v) }}"{% if v == view %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>
+  <span class="muted small">{{ rows|length }} {{ 'item' if rows|length == 1 else 'items' }}</span>
 </div>
-<div class="card scroll">
-<table>
-  <thead><tr><th>Severity</th><th>Check</th><th>Account / item</th><th>Detail</th><th>First seen</th>
-    <th>{% if view == 'resolved' %}Resolved{% else %}Status{% endif %}</th></tr></thead>
+{% if view == 'open' %}<p class="muted small intro-line">Each row is an account or setting a check flagged. Findings close on their own once the next collection no longer sees the problem.{% if staff %} If something is intentional, accept the risk so it moves out of the totals.{% endif %}</p>{% endif %}
+
+{% if rows %}
+<div class="card flush">
+<table class="stack-sm findings-table">
+  <thead><tr><th>Account or item</th><th>Severity</th><th>Detail</th><th>First seen</th>
+    <th>{% if view == 'resolved' %}Resolved{% elif view == 'accepted' %}Accepted{% else %}{% if staff %}Action{% endif %}{% endif %}</th></tr></thead>
   <tbody>
-  {% for f in rows %}
+  {% for rule_key, items in groups %}
+  <tr class="group"><td colspan="5">{{ titles.get(rule_key, rule_key) }} <span class="faint">· {{ items|length }}</span></td></tr>
+  {% for f in items %}
   <tr>
-    <td><span class="status sev-text-{{ f.severity }}">{{ f.severity }}</span></td>
-    <td>{{ titles.get(f.rule_key, f.rule_key) }}</td>
-    <td>{{ f.subject }}</td>
-    <td>{{ f.detail }}</td>
-    <td class="small">{{ f.first_seen[:10] }}</td>
-    <td class="small">
-      {% if view == 'resolved' %}{{ f.resolved_at[:10] }}
+    <td class="wrap"><span class="strong">{{ f.subject }}</span></td>
+    <td data-label="Severity"><span class="sevtext {{ f.severity }}">{{ f.severity }}</span></td>
+    <td data-label="Detail" class="wrap">{{ f.detail }}</td>
+    <td data-label="First seen" class="nowrap">{{ f.first_seen|day }}</td>
+    <td data-label="{{ 'Resolved' if view == 'resolved' else 'Status' }}">
+      {% if view == 'resolved' %}{{ f.resolved_at|day }}
       {% elif f.accepted_at %}
-        Accepted by {{ f.accepted_by }}{% if f.accepted_until %} until {{ f.accepted_until[:10] }}{% endif %}: {{ f.accepted_note }}
-        {% if current_user.role in ('admin', 'analyst') %}
-        <form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=f.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Undo</button></form>
-        {% endif %}
-      {% elif current_user.role in ('admin', 'analyst') %}
-        <details><summary>Accept risk</summary>
+        <span class="small">By {{ f.accepted_by }}{% if f.accepted_until %} until {{ f.accepted_until|day }}{% endif %}</span>
+        <span class="sub">“{{ f.accepted_note }}”</span>
+        {% if staff %}<form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=f.id) }}">{{ csrf() }}<button class="link small">Undo</button></form>{% endif %}
+      {% elif staff %}
+        <details class="accept-risk"><summary>Accept risk</summary>
           <form method="post" action="{{ url_for('reports.accept_finding', finding_id=f.id) }}" class="accept">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label>Reason <input name="note" maxlength="500" required></label>
-            <label>Until (optional) <input type="date" name="until"></label>
-            <button>Accept</button>
+            {{ csrf() }}
+            <label>Reason <input name="note" maxlength="500" required placeholder="e.g. Break-glass account, monitored"></label>
+            <label>Review on (optional) <input type="date" name="until"></label>
+            <button class="sm primary">Accept risk</button>
           </form>
         </details>
-      {% else %}open{% endif %}
+      {% endif %}
     </td>
   </tr>
-  {% else %}<tr><td colspan="6" class="muted">Nothing here.</td></tr>{% endfor %}
+  {% endfor %}
+  {% endfor %}
   </tbody>
 </table>
 </div>
+{% else %}
+<div class="card empty">
+  {% if view == 'open' %}<h3>No open findings</h3><p>Either everything passed or no data has been collected yet.</p>
+  {% elif view == 'accepted' %}<h3>No accepted risks</h3><p>Risks you accept on the Open tab appear here, with the reason given.</p>
+  {% else %}<h3>Nothing resolved yet</h3><p>Findings move here when a later collection no longer sees the problem.</p>{% endif %}
+</div>
+{% endif %}
 {% endblock %}

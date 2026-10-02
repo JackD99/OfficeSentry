@@ -12,9 +12,9 @@ from .. import findings, mailer
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
 from ..reports import data_reports, evidence, export
-from ..reports.monthly_review import build, rollup_row, setting
+from ..reports.monthly_review import build, setting
 from ..rules import RULES
-from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .access import login_required, roles_required, tenant_or_404
 
 RULE_TITLES = {r.key: r.title for r in RULES}
 
@@ -32,8 +32,7 @@ def _filename(tenant, ext: str) -> str:
 @bp.get("/reports")
 @login_required
 def overview():
-    rows = [rollup_row(g.db, t) for t in visible_tenants(g.db, g.user)]
-    return render_template("reports_overview.html", rows=rows, currency=setting(g.db, "currency", "GBP"))
+    return redirect(url_for("tenants.dashboard"))  # the dashboard now carries the overview
 
 
 @bp.get("/tenants/<int:tenant_id>/report")
@@ -80,8 +79,7 @@ def _evidence_name(tenant, ext: str) -> str:
 @login_required
 def evidence_pack(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    return render_template("reports/evidence.html", pack=evidence.build(g.db, t), pdf=False,
-                           css_href=url_for("static", filename="report.css"), pdf_available=export.pdf_available())
+    return render_template("evidence_page.html", pack=evidence.build(g.db, t), pdf_available=export.pdf_available())
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.pdf")
@@ -206,7 +204,12 @@ def tenant_findings(tenant_id: int):
         " WHEN 'low' THEN 3 ELSE 4 END, rule_key, subject",
         (t["id"],),
     ).fetchall()
-    return render_template("findings.html", tenant=t, rows=rows, view=view, titles=RULE_TITLES)
+    # Group by check, worst check first, so one check's findings sit together.
+    groups: dict[str, list] = {}
+    for row in rows:
+        groups.setdefault(row["rule_key"], []).append(row)
+    return render_template("findings.html", tenant=t, rows=rows, groups=list(groups.items()), view=view,
+                           titles=RULE_TITLES)
 
 
 def _finding_or_404(finding_id: int):

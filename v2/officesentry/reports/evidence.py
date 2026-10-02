@@ -100,11 +100,6 @@ def _extra_evidence(key: str, snap: TenantSnapshot) -> list[str]:
             out.append(f"{sum(c.mfa for c in cov)} of {len(cov)} enabled accounts are covered by an enforced "
                        "Conditional Access policy requiring MFA.")
         return out
-    if key == "privileged":
-        ga = snap.metric("admins.global_admins")
-        priv = snap.metric("admins.privileged_principals")
-        if ga is not None:
-            return [f"{ga:g} Global Administrator(s); {priv:g} account(s) hold a privileged role."]
     return []
 
 
@@ -123,9 +118,9 @@ def build(conn, tenant, now: datetime | None = None) -> EvidencePack:
         evidence, gaps = [], []
         for r in results:
             if r.status == "pass":
-                evidence.append(f"{r.title}: {r.summary}.")
+                evidence.append(_sentence(r.summary))
             elif r.status == "unavailable":
-                evidence.append(f"{r.title}: not checked ({r.summary.rstrip('.')}).")
+                evidence.append(f"Not checked: {r.title[0].lower() + r.title[1:]} ({r.summary.rstrip('.')}).")
             elif r.status == "accepted":
                 evidence.append(f"{r.title}: exceptions accepted as a documented risk.")
             else:
@@ -140,6 +135,11 @@ def build(conn, tenant, now: datetime | None = None) -> EvidencePack:
     finished = [r["finished_at"] for r in snap.runs.values() if r["finished_at"]]
     return EvidencePack(dict(tenant), review.generated_at, controls, snap.metric("secure_score.pct"),
                         min(finished) if finished else None)
+
+
+def _sentence(text: str) -> str:
+    text = text.strip()
+    return text[:1].upper() + text[1:] + ("" if text.endswith(".") else ".")
 
 
 def _as_pass(r: RuleResult) -> RuleResult:

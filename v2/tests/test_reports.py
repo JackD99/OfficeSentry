@@ -43,7 +43,7 @@ def test_report_pages(client, db, two_tenants):
     xlsx = client.get(f"/tenants/{alpha}/report.xlsx")
     wb = load_workbook(__import__("io").BytesIO(xlsx.data))
     assert wb.sheetnames == ["Summary", "Checks", "Findings", "Licences", "Data freshness"]
-    overview = client.get("/reports").get_data(as_text=True)
+    overview = client.get("/reports", follow_redirects=True).get_data(as_text=True)
     assert "Alpha Ltd" in overview and "Bravo Inc" in overview
     # A tenant with no data still renders (everything "not checked").
     assert client.get(f"/tenants/{bravo}/report").status_code == 200
@@ -67,7 +67,7 @@ def test_client_sees_only_own_report(client, db, two_tenants):
     assert client.get(f"/tenants/{alpha}/report").status_code == 200
     for url in (f"/tenants/{bravo}/report", f"/tenants/{bravo}/report.xlsx", f"/tenants/{bravo}/report.pdf"):
         assert client.get(url).status_code == 404
-    overview = client.get("/reports").get_data(as_text=True)
+    overview = client.get("/reports", follow_redirects=True).get_data(as_text=True)
     assert "Alpha Ltd" in overview and "Bravo Inc" not in overview
     assert client.get("/admin/prices").status_code == 403
 

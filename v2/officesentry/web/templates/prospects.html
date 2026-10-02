@@ -1,30 +1,35 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf %}
+{% from "_macros.html" import csrf, icon %}
 {% block title %}Prospects · Office Sentry{% endblock %}
 {% block content %}
-<div class="heading"><div><h1>Prospect assessments</h1>
-  <div class="muted">Check any domain's email security and Microsoft 365 sign-in from public information. No access to the tenant is needed.</div></div></div>
-<section class="card narrow">
-  <h2>New assessment</h2>
-  <form method="post">
-    {{ csrf() }}
-    <label>Domain <input name="domain" placeholder="contoso.com" required autocomplete="off"></label>
-    <label>Company name (optional) <input name="company" maxlength="100"></label>
-    <button class="primary">Assess</button>
-  </form>
-</section>
-<section class="card scroll">
-  <h2>Recent</h2>
-  <table>
-    <thead><tr><th>Company</th><th>Domain</th><th>Grade</th><th>Microsoft 365</th><th>Checked</th><th>By</th></tr></thead>
+<div class="page-head"><div><h1>Prospects</h1>
+  <div class="sub">Check any company's email security from public records. No access to their tenant is needed, so it works before they sign.</div></div></div>
+
+<form method="post" class="card hero-form">
+  {{ csrf() }}
+  <div class="form-row">
+    <label class="grow-2">Domain <input name="domain" placeholder="contoso.com" required autocomplete="off" autofocus></label>
+    <label>Company name <span class="faint">(optional)</span><input name="company" maxlength="100" placeholder="Contoso Ltd"></label>
+    <button class="primary">{{ icon('prospects') }} Check domain</button>
+  </div>
+  <p class="footnote">Looks up SPF, DMARC, DKIM, MX and whether the domain uses Microsoft 365. Takes a few seconds and gives a shareable one-page PDF.</p>
+</form>
+
+<section class="card flush">
+  <div class="card-head toolbar"><h2>Recent checks</h2></div>
+  {% if rows %}
+  <table class="stack-sm">
+    <thead><tr><th>Company</th><th>Grade</th><th>Summary</th><th>Microsoft 365</th><th>Checked</th></tr></thead>
     <tbody>
     {% for a in rows %}
-    <tr><td><a href="{{ url_for('prospects.view', prospect_id=a.id) }}">{{ a.company }}</a></td><td>{{ a.domain }}</td>
-      <td><span class="grade grade-{{ a.grade }}">{{ a.grade }}</span></td>
-      <td>{% if a.tenant.uses_microsoft_365 %}Yes{% elif a.tenant.uses_microsoft_365 is none %}Unknown{% else %}No{% endif %}</td>
-      <td class="small">{{ a.checked_at.strftime('%Y-%m-%d %H:%M') }}</td><td class="small">{{ a.created_by }}</td></tr>
-    {% else %}<tr><td colspan="6" class="muted">No assessments yet.</td></tr>{% endfor %}
+    <tr><td><a class="strong" href="{{ url_for('prospects.view', prospect_id=a.id) }}">{{ a.company }}</a><span class="sub">{{ a.domain }}</span></td>
+      <td data-label="Grade"><span class="grade grade-{{ a.grade }}">{{ a.grade }}</span></td>
+      <td data-label="Summary" class="wrap small">{{ a.headline }}</td>
+      <td data-label="Microsoft 365">{% if a.tenant.uses_microsoft_365 %}Yes{% elif a.tenant.uses_microsoft_365 is none %}<span class="muted">Unknown</span>{% else %}No{% endif %}</td>
+      <td data-label="Checked" class="nowrap"><time title="{{ a.checked_at|when }}">{{ a.checked_at|ago }}</time><span class="sub">by {{ a.created_by }}</span></td></tr>
+    {% endfor %}
     </tbody>
   </table>
+  {% else %}<div class="empty compact"><p>No checks yet. Try a prospect's domain above.</p></div>{% endif %}
 </section>
 {% endblock %}

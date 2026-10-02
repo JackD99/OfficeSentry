@@ -11,7 +11,7 @@ from flask_wtf.csrf import CSRFProtect
 from ..config import Config, load_config
 from ..crypto import Vault
 from ..db import connect, migrate
-from . import access, admin, auth, prospects, reports, tenants
+from . import access, admin, auth, filters, prospects, reports, tenants
 
 csrf = CSRFProtect()
 
@@ -38,6 +38,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     conn.close()
 
     csrf.init_app(app)
+    filters.register(app)
 
     @app.before_request
     def _open_db():

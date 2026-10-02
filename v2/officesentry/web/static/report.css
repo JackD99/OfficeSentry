@@ -93,3 +93,17 @@ table th[scope], table tr > th:first-child:not(:only-child) { width: 30%; }
 ul.evidence, .gaps ul { margin: 8px 0 0; padding-left: 18px; }
 .gaps { margin-top: 8px; }
 .gaps li.sub { list-style: circle; margin-left: 16px; color: var(--muted); }
+
+.priorities { margin-top: 16px; border-left: 4px solid var(--critical); background: color-mix(in srgb, var(--critical) 6%, var(--paper)); border-radius: 0 8px 8px 0; padding: 12px 16px; }
+.priorities-title { font-weight: 700; margin-bottom: 4px; }
+.priorities ol { margin: 0; padding-left: 20px; }
+.priorities li { margin: 3px 0; }
+.tidy { border: 1px solid var(--border); border-radius: 8px; }
+.tidy-item { padding: 12px 16px; border-bottom: 1px solid var(--border); break-inside: avoid; }
+.tidy-item:last-child { border-bottom: 0; }
+.tidy-item h3 { font-size: .95rem; }
+.tidy-found { margin: 6px 0 2px; }
+.tidy-rec { margin: 0; color: var(--muted); font-size: .9em; }
+.toolbar { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.toolbar .button:hover { border-color: var(--accent); }
+.toolbar .button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }

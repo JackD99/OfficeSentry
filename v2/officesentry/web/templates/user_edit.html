@@ -1,21 +1,46 @@
 {% extends "base.html" %}
+{% from "_roles.html" import ROLE_HELP %}
+{% block title %}{{ user.username }} · Users{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('admin.users') }}">&larr; Users</a></p>
-<h1>{{ user.username }}</h1>
-<form method="post" class="card">
+<div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><span>{{ user.username }}</span></div>
+<div class="page-head"><div><h1>{{ user.username }}</h1>
+  <div class="sub">{{ 'Last signed in ' ~ (user.last_login_at|ago) if user.last_login_at else 'Has never signed in' }}</div></div></div>
+<form method="post" class="card narrow-lg">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>Role <select name="role">{% for r in roles %}<option value="{{ r }}" {% if r == user.role %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
-  <label class="check"><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> Analyst can see all tenants</label>
-  <fieldset>
-    <legend>Granted tenants</legend>
-    {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}</label>{% else %}<p class="muted">No tenants yet.</p>{% endfor %}
+  <fieldset class="choices">
+    <legend>Role</legend>
+    {% for r in roles %}
+    <label class="choice"><input type="radio" name="role" value="{{ r }}" {% if r == user.role %}checked{% endif %}>
+      <span><span class="strong">{{ r|capitalize }}</span><span class="hint">{{ ROLE_HELP.get(r, '') }}</span></span></label>
+    {% endfor %}
   </fieldset>
-  <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disabled</label>
-  <label>Set a new password (optional) <input type="password" name="password" minlength="12" autocomplete="new-password"></label>
-  <button class="primary">Save</button>
+  <fieldset>
+    <legend>Tenant access</legend>
+    <label class="check"><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> All tenants, including ones added later <span class="faint small">(analysts only)</span></label>
+    <div class="check-grid">
+    {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}</label>{% else %}<p class="muted">No tenants yet.</p>{% endfor %}
+    </div>
+  </fieldset>
+  <label>New password <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
+    <span class="hint">Leave blank to keep the current password. Changing it signs them out.</span></label>
+  <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
+  <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>
-<form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button class="danger">Delete user</button>
-</form>
+{% if user.id != current_user.id %}
+<section class="card narrow-lg danger-zone">
+  <h2>Delete user</h2>
+  <p class="muted small">Removes the account for good. Disabling is usually better, as it keeps their name in the activity history.</p>
+  <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger" data-confirm="Delete {{ user.username }}? This can't be undone.">Delete {{ user.username }}</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+document.querySelectorAll('[data-confirm]').forEach(function (b) {
+  b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
+});
+</script>
 {% endblock %}

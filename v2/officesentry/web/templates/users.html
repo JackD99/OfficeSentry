@@ -1,26 +1,40 @@
 {% extends "base.html" %}
+{% from "_roles.html" import ROLE_HELP %}
+{% block title %}Users · Office Sentry{% endblock %}
 {% block content %}
-<h1>Users</h1>
-<table>
-  <thead><tr><th>Username</th><th>Role</th><th>Tenant access</th><th>Status</th><th>Last sign-in</th></tr></thead>
-  <tbody>
-  {% for u in users %}
-  <tr><td><a href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a></td><td>{{ u.role }}</td>
-    <td>{% if u.role == 'admin' or u.all_tenants %}all tenants{% else %}granted only{% endif %}</td>
-    <td>{% if u.disabled %}disabled{% elif u.locked_until %}locked until {{ u.locked_until }}{% else %}active{% endif %}</td>
-    <td class="small">{{ u.last_login_at or 'never' }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-<section class="card narrow">
-  <h2>Add user</h2>
+<div class="page-head"><div><h1>Users</h1><div class="sub">People who can sign in to Office Sentry.</div></div></div>
+<div class="grid-main">
+<section class="card flush">
+  <table class="stack-sm">
+    <thead><tr><th>User</th><th>Role</th><th>Tenants</th><th>Status</th><th>Last sign-in</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr><td><a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a>{% if u.id == current_user.id %} <span class="faint small">(you)</span>{% endif %}</td>
+      <td data-label="Role"><span class="pill {{ 'accent' if u.role == 'admin' else '' }}">{{ u.role|capitalize }}</span></td>
+      <td data-label="Tenants">{% if u.role == 'admin' or u.all_tenants %}All{% else %}Granted only{% endif %}</td>
+      <td data-label="Status">{% if u.disabled %}<span class="pill">Disabled</span>{% elif u.locked_until %}<span class="pill warn" title="Locked until {{ u.locked_until|when }}">Locked</span>{% else %}<span class="pill ok">Active</span>{% endif %}</td>
+      <td data-label="Last sign-in" class="nowrap">{% if u.last_login_at %}<time title="{{ u.last_login_at|when }}">{{ u.last_login_at|ago }}</time>{% else %}<span class="muted">Never</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h2>Add a user</h2>
   <form method="post" action="{{ url_for('admin.create_user') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Username <input name="username" maxlength="64" required></label>
-    <label>Role <select name="role">{% for r in roles %}<option value="{{ r }}" {% if r == 'client' %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
-    <label>Initial password <input type="password" name="password" minlength="12" autocomplete="new-password" required></label>
-    <button class="primary">Add user</button>
+    <label>Username <input name="username" maxlength="64" required autocomplete="off"></label>
+    <fieldset class="choices">
+      <legend>Role</legend>
+      {% for r in roles %}
+      <label class="choice"><input type="radio" name="role" value="{{ r }}" {% if r == 'client' %}checked{% endif %}>
+        <span><span class="strong">{{ r|capitalize }}</span><span class="hint">{{ ROLE_HELP.get(r, '') }}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    <label>Initial password <input type="password" name="password" minlength="12" autocomplete="new-password" required>
+      <span class="hint">At least 12 characters. Share it with them securely.</span></label>
+    <div class="form-actions"><button class="primary">Add user</button></div>
+    <p class="footnote">New users see no tenants until you grant them on their page.</p>
   </form>
-  <p class="muted small">New users see no tenants until you grant them.</p>
 </section>
+</div>
 {% endblock %}

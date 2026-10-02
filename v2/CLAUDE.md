@@ -46,6 +46,18 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
 
+## Web UI conventions
+
+- Styles live in `web/static/app.css` (tokens at the top, light and dark).
+  Reports that also become PDFs use `report.css` instead.
+- Every tenant page starts with `tenant_header(tenant, '<tab>')` from
+  `_macros.html` (import it `with context`). Add new tenant pages as a tab there.
+- Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
+  ISO strings. Licence flags go through the `capability` filter.
+- Tables that people read on phones get `class="stack-sm"` and a
+  `data-label` on every cell after the first.
+- Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.

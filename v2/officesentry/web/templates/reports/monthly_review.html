@@ -19,7 +19,7 @@
 <nav class="toolbar">
   <a href="{{ url_for('tenants.tenant', tenant_id=report.tenant.id) }}">&larr; {{ report.tenant.name }}</a>
   <span class="spacer"></span>
-  {% if pdf_available %}<a class="button" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}">Download PDF</a>{% endif %}
+  {% if pdf_available %}<a class="button primary" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}">Download PDF</a>{% endif %}
   <a class="button" href="{{ url_for('reports.tenant_report_xlsx', tenant_id=report.tenant.id) }}">Download XLSX</a>
 </nav>
 {% endif %}
@@ -50,6 +50,13 @@
       {% for sev in ['critical', 'high', 'medium', 'low'] if report.counts[sev] %}<span class="sev sev-{{ sev }}">{{ report.counts[sev] }} {{ sev }}</span>{% endfor %}
     {% else %}All {{ report.passing|length }} checks that could run passed.{% endif %}
   </p>
+  {% set top = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list %}
+  {% if top %}
+  <div class="priorities">
+    <div class="priorities-title">Top priorities this month</div>
+    <ol>{% for r in top[:3] %}<li><strong>{{ r.title }}.</strong> {{ r.summary }}.</li>{% endfor %}</ol>
+  </div>
+  {% endif %}
 </section>
 
 <section class="keep">
@@ -74,10 +81,12 @@
 </section>
 {% endif %}
 
-{% if report.failing %}
+{% set urgent = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list %}
+{% set other = report.failing|rejectattr('severity', 'in', ['critical', 'high'])|list %}
+{% if urgent %}
 <section>
-  <h2>What needs attention</h2>
-  {% for r in report.failing %}
+  <h2>Fix first</h2>
+  {% for r in urgent %}
   <div class="check fail">
     <div class="check-head">
       <span class="sev sev-{{ r.severity }}">{{ r.severity }}</span>
@@ -89,12 +98,29 @@
     <table class="findings">
       <thead><tr><th>Account / item</th><th>Detail</th><th>Severity</th></tr></thead>
       <tbody>
-      {% for f in r.findings[:25] %}<tr><td>{{ f.subject }}{% if f.new %} <span class="new">New</span>{% endif %}</td><td>{{ f.detail }}</td><td>{{ f.severity }}</td></tr>{% endfor %}
-      {% if r.findings|length > 25 %}<tr><td colspan="3" class="muted">…and {{ r.findings|length - 25 }} more in the XLSX export.</td></tr>{% endif %}
+      {% for f in r.findings[:10] %}<tr><td>{{ f.subject }}{% if f.new %} <span class="new">New</span>{% endif %}</td><td>{{ f.detail }}</td><td>{{ f.severity }}</td></tr>{% endfor %}
+      {% if r.findings|length > 10 %}<tr><td colspan="3" class="muted">…and {{ r.findings|length - 10 }} more in the XLSX export.</td></tr>{% endif %}
       </tbody>
     </table>
   </div>
   {% endfor %}
+</section>
+{% endif %}
+
+{% if other %}
+<section>
+  <h2>{{ 'Also worth fixing' if urgent else 'What needs attention' }}</h2>
+  <p class="muted">Lower-risk items. Each line lists the accounts or settings affected; the XLSX export has the full detail.</p>
+  <div class="tidy">
+  {% for r in other %}
+  <div class="tidy-item">
+    <div class="check-head"><span class="sev sev-{{ r.severity }}">{{ r.severity }}</span><h3>{{ r.title }}</h3><span class="category">{{ r.category }}</span></div>
+    <p class="tidy-found"><strong>{{ r.summary }}.</strong>
+      {% if r.findings %}<span class="muted">Affects {% for f in r.findings[:4] %}{{ f.subject }}{% if f.new %} <span class="new">New</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if r.findings|length > 4 %} and {{ r.findings|length - 4 }} more{% endif %}.</span>{% endif %}</p>
+    <p class="tidy-rec">{{ r.recommendation }}</p>
+  </div>
+  {% endfor %}
+  </div>
 </section>
 {% endif %}
 

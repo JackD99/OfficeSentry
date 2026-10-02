@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, tenant_header with context %}
+{% block title %}Insurance evidence · {{ pack.tenant.name }}{% endblock %}
+{% set TONE = {'In place': 'ok', 'Partly in place': 'warn', 'Not in place': 'bad', 'Not assessed': ''} %}
+{% block content %}
+{{ tenant_header(pack.tenant, 'evidence') }}
+<div class="toolbar">
+  <p class="muted small m0 intro-line">Answers to the questions cyber insurers and security questionnaires ask, based on settings read from Microsoft 365 rather than self-assessment.</p>
+  <div class="row-actions">
+    {% if pdf_available %}<a class="btn" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}">{{ icon('download') }} PDF</a>{% endif %}
+    <a class="btn" href="{{ url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id) }}">{{ icon('download') }} XLSX</a>
+  </div>
+</div>
+<div class="tiles">
+  {% for status, n in pack.counts.items() %}
+  <div class="tile"><div class="label"><span class="dot {{ TONE[status] }}"></span> {{ status }}</div><div class="value">{{ n }}</div><div class="foot">of {{ pack.controls|length }} controls</div></div>
+  {% endfor %}
+</div>
+<section class="card flush">
+  {% for c in pack.controls %}
+  <details class="control"{% if c.status in ('Not in place', 'Partly in place') %} open{% endif %}>
+    <summary>
+      <span class="pill {{ TONE[c.status] }} answer">{{ c.status }}</span>
+      <span class="q">{{ c.control.question }}</span>
+    </summary>
+    <div class="control-body">
+      {% if c.evidence %}<ul class="ticks">{% for e in c.evidence %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      {% if c.gaps %}<div class="gap-list"><div class="strong small">Gaps</div><ul>{% for gap in c.gaps %}<li{% if gap.startswith('  ') %} class="sub"{% endif %}>{{ gap.strip() }}</li>{% endfor %}</ul></div>{% endif %}
+    </div>
+  </details>
+  {% endfor %}
+</section>
+<p class="footnote">Oldest data used: {{ ts(pack.oldest_data, 'not collected yet') }}. Accepted risks count as documented exceptions.</p>
+{% endblock %}

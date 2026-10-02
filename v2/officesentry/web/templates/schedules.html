@@ -1,38 +1,66 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
 {% block title %}Emailed reports · {{ tenant.name }}{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a></p>
-<h1>Emailed reports</h1>
-{% if not mail_ready %}<div class="flash warning">Email isn't set up yet{% if current_user.role == 'admin' %}: <a href="{{ url_for('reports.email_settings') }}">configure SMTP</a>{% else %}; ask an admin to configure it{% endif %}.</div>{% endif %}
-<p class="muted">The Monthly Security &amp; Licensing Review is emailed once a month as a PDF and XLSX. Times are in {{ timezone }}.</p>
-<div class="card">
-<table>
-  <thead><tr><th>Recipients</th><th>When</th><th>Last sent</th><th></th></tr></thead>
-  <tbody>
-  {% for s in rows %}
-  <tr><td>{{ s.recipients }}</td><td>Day {{ s.day_of_month }} at {{ '%02d'|format(s.hour) }}:00</td><td>{{ s.last_period or 'not yet' }}</td>
-    <td>{% if current_user.role in ('admin', 'analyst') %}<div class="actions">
-      <form method="post" action="{{ url_for('reports.send_now', schedule_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Send now</button></form>
-      <form method="post" action="{{ url_for('reports.delete_schedule', schedule_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="danger">Remove</button></form>
-    </div>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="4" class="muted">No emailed reports yet.</td></tr>{% endfor %}
-  </tbody>
-</table>
-</div>
-{% if current_user.role in ('admin', 'analyst') %}
-<form method="post" class="card narrow">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <h2>Add a monthly email</h2>
-  <label>Recipients <input name="recipients" placeholder="it@client.com, you@msp.com" required></label>
-  <label>Day of month <select name="day_of_month">{% for d in range(1, 29) %}<option {% if d == 1 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
-  <label>Hour <select name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if h == 8 %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></label>
-  <button class="primary">Add</button>
-</form>
+{{ tenant_header(tenant, 'schedules') }}
+{% set staff = current_user.role in ('admin', 'analyst') %}
+{% if not mail_ready %}
+<div class="callout warn">{{ icon('alert') }} Email isn't set up yet, so nothing will be sent.
+  {% if current_user.role == 'admin' %}<a href="{{ url_for('reports.email_settings') }}">Set up email</a>{% else %}Ask an admin to set it up.{% endif %}</div>
 {% endif %}
-{% if deliveries %}
+<p class="muted intro-line">The monthly review is emailed as a PDF with an XLSX attached. Times are in {{ timezone }}.</p>
+
+<div class="{{ 'grid-main' if staff else '' }}">
+<section class="card flush">
+  <div class="card-head toolbar"><h2>Scheduled emails</h2></div>
+  {% if rows %}
+  <table class="stack-sm">
+    <thead><tr><th>Recipients</th><th>Sent</th><th>Last sent</th>{% if staff %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for s in rows %}
+    <tr><td class="wrap">{{ s.recipients }}</td>
+      <td data-label="Sent" class="nowrap">Monthly on day {{ s.day_of_month }}, {{ '%02d'|format(s.hour) }}:00</td>
+      <td data-label="Last sent">{{ s.last_period or 'Not yet' }}</td>
+      {% if staff %}<td class="num"><div class="row-actions">
+        <form method="post" action="{{ url_for('reports.send_now', schedule_id=s.id) }}">{{ csrf() }}<button class="sm">Send now</button></form>
+        <form method="post" action="{{ url_for('reports.delete_schedule', schedule_id=s.id) }}">{{ csrf() }}<button class="sm danger">Remove</button></form>
+      </div></td>{% endif %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="empty compact"><p>No scheduled emails yet.</p></div>{% endif %}
+</section>
+
+{% if staff %}
 <section class="card">
-  <h2>Recent deliveries</h2>
-  <table>{% for d in deliveries %}<tr><td class="small">{{ d.sent_at }}</td><td>{{ d.recipients }}</td><td><span class="status s-{{ 'succeeded' if d.status == 'sent' else 'failed' }}">{{ d.status }}</span></td><td class="small">{{ d.error or '' }}</td></tr>{% endfor %}</table>
+  <h2>Add a monthly email</h2>
+  <form method="post">
+    {{ csrf() }}
+    <label>Recipients <input name="recipients" placeholder="it@client.com, you@msp.com" required>
+      <span class="hint">Separate addresses with commas.</span></label>
+    <div class="form-row">
+      <label>Day of month <select name="day_of_month">{% for d in range(1, 29) %}<option {% if d == 1 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
+      <label>Time <select name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if h == 8 %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></label>
+    </div>
+    <div class="form-actions"><button class="primary">Add schedule</button></div>
+  </form>
+</section>
+{% endif %}
+</div>
+
+{% if deliveries %}
+<section class="card flush">
+  <div class="card-head toolbar"><h2>Recent deliveries</h2></div>
+  <table class="stack-sm">
+    <thead><tr><th>Recipients</th><th>Result</th><th>When</th></tr></thead>
+    <tbody>
+    {% for d in deliveries %}
+    <tr><td class="wrap">{{ d.recipients }}{% if d.error %}<span class="sub bad-text">{{ d.error }}</span>{% endif %}</td>
+      <td data-label="Result"><span class="pill {{ 'ok' if d.status == 'sent' else 'bad' }}">{{ d.status|capitalize }}</span></td>
+      <td data-label="When" class="nowrap">{{ ts(d.sent_at) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endif %}
 {% endblock %}

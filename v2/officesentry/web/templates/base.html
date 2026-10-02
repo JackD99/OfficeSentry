@@ -1,3 +1,4 @@
+{% from "_macros.html" import icon, csrf %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -7,35 +8,75 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
-{% if current_user %}
-<header class="topbar">
-  <a class="brand" href="{{ url_for('tenants.dashboard') }}">Office Sentry</a>
-  <nav>
-    <a href="{{ url_for('tenants.dashboard') }}">Tenants</a>
-    <a href="{{ url_for('reports.overview') }}">Reports</a>
-    {% if current_user.role in ('admin', 'analyst') %}<a href="{{ url_for('prospects.index') }}">Prospects</a>{% endif %}
-    {% if current_user.role == 'admin' %}
-    <a href="{{ url_for('admin.connections') }}">App connections</a>
-    <a href="{{ url_for('reports.prices') }}">Licence prices</a>
-    <a href="{{ url_for('reports.email_settings') }}">Email</a>
-    <a href="{{ url_for('admin.users') }}">Users</a>
-    {% endif %}
-  </nav>
-  <div class="who">
-    <a href="{{ url_for('auth.change_password') }}">{{ current_user.username }}</a>
-    <span class="badge">{{ current_user.role }}</span>
-    <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="link">Sign out</button>
-    </form>
+{% macro nav_link(endpoint, label, ico, match=()) -%}
+{% set ep = request.endpoint or '' %}
+<a href="{{ url_for(endpoint) }}"{% if ep == endpoint or ep.split('.')[0] in match or ep in match %} class="active" aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
+{%- endmacro %}
+{% macro navigation() -%}
+<nav class="nav" aria-label="Main">
+  {% if current_user.role == 'client' %}
+  {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('reports', 'tenants')) }}
+  {% else %}
+  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'reports.schedules', 'reports.overview')) }}
+  {{ nav_link('prospects.index', 'Prospects', 'prospects', ('prospects',)) }}
+  {% endif %}
+  {% if current_user.role == 'admin' %}
+  <div class="nav-label">Settings</div>
+  {{ nav_link('admin.connections', 'App connection', 'connection') }}
+  {{ nav_link('reports.prices', 'Licence prices', 'price') }}
+  {{ nav_link('reports.email_settings', 'Email', 'mail') }}
+  {{ nav_link('admin.users', 'Users', 'users', ('admin.edit_user',)) }}
+  {% endif %}
+</nav>
+{%- endmacro %}
+{% macro account() -%}
+<div class="account">
+  <span class="name">{{ current_user.username }}</span>
+  <span class="role">{{ current_user.role }}</span>
+  <div class="links">
+    <a href="{{ url_for('auth.change_password') }}">Password</a>
+    <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="link">Sign out</button></form>
   </div>
-</header>
+</div>
+{%- endmacro %}
+{% macro flashes() -%}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% for category, message in messages %}<div class="flash {{ category }}" role="status">{{ message }}</div>{% endfor %}
+{% endwith %}
+{%- endmacro %}
+{% macro brand() -%}
+<a class="brand" href="{{ url_for('tenants.dashboard') if current_user else url_for('auth.login') }}"><span class="logo">{{ icon('logo') }}</span>Office Sentry</a>
+{%- endmacro %}
+
+{% if current_user %}
+<div class="app">
+  <aside class="sidebar">
+    {{ brand() }}
+    {{ navigation() }}
+    <div class="spacer"></div>
+    {{ account() }}
+  </aside>
+  <div class="content">
+    <details class="mobile-bar">
+      <summary>{{ brand() }}<span class="sr-only">Menu</span>{{ icon('menu', 'menu-icon') }}</summary>
+      {{ navigation() }}
+      {{ account() }}
+    </details>
+    <main>
+      {{ flashes() }}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    {{ brand() }}
+    {{ flashes() }}
+    <div class="card">{% block auth %}{% endblock %}</div>
+  </div>
+</div>
 {% endif %}
-<main>
-  {% with messages = get_flashed_messages(with_categories=true) %}
-  {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
-  {% endwith %}
-  {% block content %}{% endblock %}
-</main>
+{% block scripts %}{% endblock %}
 </body>
 </html>

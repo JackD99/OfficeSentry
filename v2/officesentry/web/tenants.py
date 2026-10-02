@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -36,19 +37,53 @@ def _latest_runs(tenant_id: int) -> dict:
     return {r["collector"]: r for r in rows}
 
 
+def data_health(tenant, latest: dict) -> tuple[str, str, str]:
+    """(tone, label, detail) summarising a tenant's collection state for people."""
+    from ..reports.monthly_review import STALE_AFTER
+
+    if not tenant["consented_at"]:
+        return "info", "Awaiting consent", "A tenant admin needs to grant access."
+    if not latest:
+        return "info", "Not collected", "No data collected yet."
+    failed = [k for k, r in latest.items() if r["status"] == "failed"]
+    if failed:
+        names = ", ".join(REGISTRY[k].title for k in failed if k in REGISTRY)
+        return "bad", f"{len(failed)} failed", names
+    if any(r["status"] in ("queued", "running") for r in latest.values()):
+        return "accent", "Collecting", "A collection is in progress."
+    finished = [r["finished_at"] for r in latest.values() if r["finished_at"]]
+    oldest = min(finished) if finished else None
+    cutoff = (datetime.now(UTC) - STALE_AFTER).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if len(latest) < len(REGISTRY) or (oldest and oldest < cutoff):
+        return "warn", "Out of date", "Some data is more than 36 hours old or missing."
+    return "ok", "Up to date", ""
+
+
 @bp.get("/")
 @login_required
 def dashboard():
+    from ..reports.monthly_review import rollup_row, setting
+
     tenants = visible_tenants(g.db, g.user)
+    rows = [rollup_row(g.db, t) for t in tenants]
     if g.user["role"] == "client":
         from ..reports.data_reports import REPORTS
         from ..reports.export import pdf_available
-        from ..reports.monthly_review import rollup_row
 
-        return render_template("client_home.html", rows=[rollup_row(g.db, t) for t in tenants],
-                               data_reports=REPORTS, pdf_available=pdf_available())
-    latest = {t["id"]: _latest_runs(t["id"]) for t in tenants}
-    return render_template("dashboard.html", tenants=tenants, latest=latest, collectors=REGISTRY)
+        return render_template("client_home.html", rows=rows, data_reports=REPORTS, pdf_available=pdf_available())
+    for row in rows:
+        row["health"] = data_health(row["tenant"], _latest_runs(row["tenant"]["id"]))
+    rows.sort(key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["counts"]["medium"],
+                             r["tenant"]["name"].lower()))
+    scores = [r["kpis"]["secure_score.pct"].value for r in rows if r["kpis"]["secure_score.pct"].value is not None]
+    summary = {
+        "up_to_date": sum(r["health"][0] == "ok" for r in rows),
+        "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in rows),
+        "severe": sum(r["counts"]["critical"] + r["counts"]["high"] for r in rows),
+        "avg_score": sum(scores) / len(scores) if scores else None,
+        "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
+    }
+    return render_template("dashboard.html", rows=rows, summary=summary, currency=setting(g.db, "currency", "GBP"))
 
 
 @bp.route("/tenants/new", methods=["GET", "POST"])
@@ -74,27 +109,47 @@ def new_tenant():
     return render_template("tenant_new.html", connections=connections)
 
 
+def _consent_link(t, connection):
+    if g.user["role"] != "admin" or not connection or not connection["client_id"]:
+        return None
+    state = _consent_serializer().dumps({"t": t["id"]})
+    return admin_consent_url(connection["client_id"], t["tenant_ref"],
+                             _cfg().base_url + url_for("tenants.consent_callback"), state)
+
+
 @bp.get("/tenants/<int:tenant_id>")
 @login_required
 def tenant(tenant_id: int):
+    from ..reports.data_reports import REPORTS
+    from ..reports.monthly_review import build
+
     t = tenant_or_404(tenant_id)
     if g.user["role"] == "client":  # clients see reports, not collection internals
         return redirect(url_for("tenants.dashboard"))
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
-    consent_link = None
-    if g.user["role"] == "admin" and connection and connection["client_id"]:
-        state = _consent_serializer().dumps({"t": t["id"]})
-        consent_link = admin_consent_url(
-            connection["client_id"], t["tenant_ref"],
-            _cfg().base_url + url_for("tenants.consent_callback"), state,
-        )
+    latest = _latest_runs(t["id"])
+    report = build(g.db, t)
+    sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    attention = sorted(report.failing, key=lambda r: (sev_rank.get(r.severity, 5), -len(r.findings)))
+    return render_template(
+        "tenant.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
+        report=report, attention=attention, health=data_health(t, latest), data_reports=REPORTS,
+    )
+
+
+@bp.get("/tenants/<int:tenant_id>/collection")
+@roles_required("admin", "analyst")
+def collection(tenant_id: int):
+    t = tenant_or_404(tenant_id)
+    connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     runs = g.db.execute(
         "SELECT * FROM runs WHERE tenant_id = ? ORDER BY id DESC LIMIT 50", (t["id"],)
     ).fetchall()
+    latest = _latest_runs(t["id"])
     return render_template(
-        "tenant.html", tenant=t, connection=connection, consent_link=consent_link,
-        capabilities=store.tenant_capabilities(t), runs=runs, latest=_latest_runs(t["id"]),
-        collectors=REGISTRY,
+        "collection.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
+        capabilities=store.tenant_capabilities(t), runs=runs, latest=latest,
+        collectors=REGISTRY, health=data_health(t, latest),
     )
 
 
@@ -110,7 +165,7 @@ def collect(tenant_id: int):
         store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
     audit(g.db, g.user["username"], "collect_requested", t["id"], ",".join(keys))
     flash(f"Queued {len(keys)} collection(s). The worker picks them up shortly.", "success")
-    return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
+    return redirect(url_for("tenants.collection", tenant_id=t["id"]))
 
 
 @bp.get("/consent/callback")

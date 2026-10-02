@@ -1,18 +1,29 @@
 {% extends "base.html" %}
+{% block title %}Add tenant · Office Sentry{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <h1>Add tenant</h1>
-  <form method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Display name <input name="name" maxlength="200" required autofocus></label>
-    <label>Tenant ID or domain <input name="tenant_ref" placeholder="contoso.onmicrosoft.com" required></label>
-    <label>App connection
-      <select name="connection_id">
-        {% for c in connections %}<option value="{{ c.id }}">{{ c.name }}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
-      </select>
-    </label>
-    {% if not connections %}<p class="muted">No app connection yet. <a href="{{ url_for('admin.connections') }}">Create one</a> first.</p>{% endif %}
-    <button class="primary" {% if not connections %}disabled{% endif %}>Add tenant</button>
-  </form>
+<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span><span>Add tenant</span></div>
+<div class="page-head"><div><h1>Add a tenant</h1><div class="sub">You'll get a consent link to send to the client's Global Administrator next.</div></div></div>
+{% if not connections %}
+<div class="card empty narrow-lg">
+  <h3>Set up the app connection first</h3>
+  <p>Office Sentry needs its read-only app before it can connect to tenants.</p>
+  <a class="btn primary" href="{{ url_for('admin.connections') }}">Set up the app connection</a>
 </div>
+{% else %}
+<form method="post" class="card narrow-lg">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Client name <input name="name" maxlength="200" required autofocus placeholder="Contoso Ltd">
+    <span class="hint">How the tenant appears in Office Sentry and on reports.</span></label>
+  <label>Tenant ID or domain <input name="tenant_ref" placeholder="contoso.onmicrosoft.com" required autocomplete="off">
+    <span class="hint">The Directory (tenant) ID, or any domain the tenant uses. It's replaced with the tenant ID once consent is granted.</span></label>
+  {% if connections|length > 1 %}
+  <label>App connection
+    <select name="connection_id">
+      {% for c in connections %}<option value="{{ c.id }}">{{ c.name }}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
+    </select>
+  </label>
+  {% else %}<input type="hidden" name="connection_id" value="{{ connections[0].id }}">{% endif %}
+  <div class="form-actions"><button class="primary">Add tenant</button><a class="btn ghost" href="{{ url_for('tenants.dashboard') }}">Cancel</a></div>
+</form>
+{% endif %}
 {% endblock %}
