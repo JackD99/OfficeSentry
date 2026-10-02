@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .. import coverage, dnscheck
+from .. import coverage, devices, dnscheck
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
@@ -337,6 +337,125 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.sections = [overview, records]
 
 
+# -- Devices -----------------------------------------------------------------------------
+
+COMPLIANCE = {"compliant": "Compliant", "noncompliant": "Not compliant", "inGracePeriod": "Grace period",
+              "conflict": "Conflict", "error": "Error", "unknown": "Unknown", "configManager": "Config Manager"}
+JOIN_TYPES = {"AzureAd": "Entra joined", "ServerAd": "Hybrid joined", "Workplace": "Registered (personal)"}
+SUPPORT = {"supported": "Supported", "ending": "Ending soon", "pro_ended": "Ended (Home/Pro)",
+           "ended": "Ended", "unknown": "Unknown"}
+
+
+def _device_issues(d: dict, now: datetime) -> tuple[list[str], str | None]:
+    issues, flag = [], None
+    rank = {"high": 0, "medium": 1, "low": 2}
+
+    def add(text: str, severity: str) -> None:
+        nonlocal flag
+        issues.append(text)
+        if flag is None or rank[severity] < rank[flag]:
+            flag = severity
+
+    if str(d.get("jailBroken")).lower() == "true":
+        add("Jailbroken or rooted", "high")
+    if d.get("complianceState") == "noncompliant":
+        add("Not compliant", "medium")
+    if devices.is_computer(d) and d.get("isEncrypted") is False:
+        add("Not encrypted", "high")
+    if devices.is_windows(d):
+        support = devices.windows_support(d.get("osVersion"), now.date())
+        if support.status in ("ended", "pro_ended", "ending"):
+            add(support.detail, {"ended": "high", "pro_ended": "medium", "ending": "low"}[support.status])
+    days = devices.days_since(d.get("lastSyncDateTime"), now)
+    if days is not None and days > devices.NO_SYNC_DAYS:
+        add(f"No check-in for {days} days", "low")
+    return issues, flag
+
+
+def _seen(value: str | None, now: datetime) -> str:
+    days = devices.days_since(value, now)
+    if days is None:
+        return "Never"
+    return "Today" if days == 0 else f"{_date(value)} ({days}d)"
+
+
+def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    entra = snap.objects("devices", "entra_device")
+    if entra is None:
+        report.unavailable = "Device data hasn't been collected yet. Refresh Devices on the tenant page."
+        return
+    status = snap.objects("devices", "intune_status") or []
+    intune = bool(status and status[0].get("available"))
+    managed = (snap.objects("devices", "managed_device") or []) if intune else []
+
+    # Operating systems: Intune's view when there is one, otherwise devices active in Entra.
+    if managed:
+        population, version_key = managed, "osVersion"
+    else:
+        population = [d for d in entra if d.get("accountEnabled") and (devices.days_since(
+            d.get("approximateLastSignInDateTime"), now) or 0) <= devices.STALE_DAYS]
+        version_key = "operatingSystemVersion"
+    counts: dict[tuple[str, str], int] = {}
+    for d in population:
+        if devices.is_windows(d):
+            support = devices.windows_support(d.get(version_key), now.date())
+            key = (support.release, support.status)
+        else:
+            key = (d.get("operatingSystem") or "Unknown", "")
+        counts[key] = counts.get(key, 0) + 1
+    systems = Section("Operating systems", ["Operating system", "Devices", "Security updates"],
+                      intro=("Devices enrolled in Intune." if managed else
+                             f"Devices that signed in to Entra ID in the last {devices.STALE_DAYS} days."),
+                      empty="No devices.")
+    flags = {"ended": "high", "pro_ended": "medium", "ending": "low"}
+    for (name, state), n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0][0])):
+        systems.add([name, n, SUPPORT.get(state, "")], flags.get(state))
+    sections = [systems]
+
+    if intune:
+        attention = Section("Needs attention", ["Device", "User", "Operating system", "Problems"],
+                            intro="Managed devices that aren't compliant, aren't encrypted, run an unsupported "
+                                  "Windows release or have stopped checking in.",
+                            empty="Every managed device is compliant, encrypted, supported and checking in.")
+        every = Section("Managed devices", ["Device", "User", "Owner", "Operating system", "Compliance",
+                                            "Encrypted", "Last check-in", "Enrolled", "Model"],
+                        empty="No devices are enrolled in Intune.")
+        for d in sorted(managed, key=lambda d: (d.get("deviceName") or "").lower()):
+            issues, flag = _device_issues(d, now)
+            if issues:
+                attention.add([d.get("deviceName"), d.get("userPrincipalName"), devices.os_label(d),
+                               "; ".join(issues)], flag)
+            every.add([d.get("deviceName"), d.get("userPrincipalName"),
+                       (d.get("managedDeviceOwnerType") or "").capitalize(), devices.os_label(d),
+                       COMPLIANCE.get(d.get("complianceState"), d.get("complianceState")),
+                       d.get("isEncrypted") if devices.is_computer(d) else "",
+                       _seen(d.get("lastSyncDateTime"), now), _date(d.get("enrolledDateTime")),
+                       " ".join(p for p in (d.get("manufacturer"), d.get("model")) if p)], flag)
+        attention.rows, attention.flags = _by_flag(attention)
+        sections += [attention, every]
+
+    records = Section("Entra ID device records", ["Device", "Operating system", "Join type", "In Intune",
+                                                  "Last seen", "Registered", "Enabled"],
+                      intro="Every device known to Entra ID, least recently seen first. "
+                            + ("" if intune else "The tenant has no Intune, so these are the only device data."),
+                      empty="No devices are registered in Entra ID.")
+    for d in sorted(entra, key=lambda d: d.get("approximateLastSignInDateTime") or ""):
+        days = devices.days_since(d.get("approximateLastSignInDateTime"), now)
+        stale = d.get("accountEnabled") and days is not None and days > devices.STALE_DAYS
+        records.add([d.get("displayName"), devices.os_label(d),
+                     JOIN_TYPES.get(d.get("trustType"), d.get("trustType") or "Unknown"), d.get("isManaged"),
+                     _seen(d.get("approximateLastSignInDateTime"), now), _date(d.get("registrationDateTime")),
+                     d.get("accountEnabled")], "low" if stale else None)
+    sections.append(records)
+    report.sections = sections
+
+
+def _by_flag(section: Section) -> tuple[list, list]:
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3, None: 4}
+    pairs = sorted(zip(section.rows, section.flags, strict=True), key=lambda p: order[p[1]])
+    return [p[0] for p in pairs], [p[1] for p in pairs]
+
+
 # -- Registry ----------------------------------------------------------------------------
 
 Builder = Callable[[TenantSnapshot, datetime, DataReport], None]
@@ -354,6 +473,8 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
                 ("domain_health",), domains),
     "guests": ("Guests and sharing", "Who can invite and share externally, and every guest account.",
                ("tenant_policies", "users"), guests),
+    "devices": ("Devices", "Intune compliance, encryption and Windows support, and every Entra ID device record.",
+                ("devices",), device_report),
 }
 
 

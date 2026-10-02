@@ -11,6 +11,7 @@ from officesentry.collectors import REGISTRY
 from officesentry.exchange import EXCHANGE_ROOT, ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
+from tests import devicedata as dd
 from tests import graphdata as gd
 from tests.test_collectors import SKUS, USERS
 
@@ -82,6 +83,8 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(re.compile(re.escape(V1) + r"/groups/[^/?]+(\?.*)?$"), json={"displayName": "Break glass"})
     rsps.get(re.compile(re.escape(V1) + r"/groups/[^/]+/transitiveMembers"),
              json={"value": [{"@odata.type": "#microsoft.graph.user", "id": "u4"}]})
+    rsps.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
+    rsps.get(f"{V1}/deviceManagement/managedDevices", json={"value": dd.MANAGED_DEVICES})
     mock_phase4(rsps, **phase4)
 
 

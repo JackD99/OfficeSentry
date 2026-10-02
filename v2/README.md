@@ -43,9 +43,13 @@ pass, and a first run against a real tenant.
     and every guest with invitation state and last sign-in.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS.
+  - *Devices*: operating systems with Windows support dates, Intune devices
+    that are non-compliant, unencrypted, out of support or not checking in,
+    every managed device, and every Entra ID device record by last activity.
+    Tenants without Intune still get the Entra records and Windows versions.
 - **Insurance evidence** (`/tenants/<id>/evidence`, PDF, XLSX): the controls
   cyber-insurance questionnaires ask about (MFA, admin accounts, legacy auth,
-  email authentication, forwarding, logging, leavers, apps, sharing), each
+  email authentication, forwarding, logging, leavers, apps, sharing, devices), each
   answered In place / Partly / Not in place from the checks, with the gaps
   listed. Backups and training are marked "Not assessed".
 - **Prospect assessments** (`/prospects`, admins and analysts): enter any
@@ -62,7 +66,9 @@ accounts, licences on disabled accounts, unassigned paid licences, external
 forwarding, inbox rules that hide mail, automatic forwarding policy, shared
 mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,
 user consent, app credential expiry, SharePoint anonymous links, guest
-invitations, stale guest invitations.
+invitations, stale guest invitations, device compliance, disk encryption,
+Windows releases out of support, joined computers not in Intune, devices not
+checking in, stale device records.
 
 ### Exchange data
 
