@@ -13,9 +13,11 @@ from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
 from tests import devicedata as dd
 from tests import graphdata as gd
+from tests import hybriddata as hd
 from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
+BETA = f"{GRAPH_ROOT}/beta"
 
 
 def exchange_callback(data):
@@ -85,6 +87,8 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
              json={"value": [{"@odata.type": "#microsoft.graph.user", "id": "u4"}]})
     rsps.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
     rsps.get(f"{V1}/deviceManagement/managedDevices", json={"value": dd.MANAGED_DEVICES})
+    rsps.get(f"{BETA}/organization", json={"value": [gd.ORGANIZATION]})
+    rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
     mock_phase4(rsps, **phase4)
 
 
