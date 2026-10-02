@@ -71,7 +71,7 @@
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Since {{ report.period_start.strftime('%-d %B') }}</h2></div>
+    <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2></div>
     <div class="mini-stats">
       <div><span class="value">{{ report.new_count }}</span><span class="label">new findings</span></div>
       <div><span class="value">{{ report.resolved|length }}</span><span class="label">fixed</span></div>
