@@ -12,6 +12,7 @@ from officesentry.exchange import EXCHANGE_ROOT, ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
 from tests import graphdata as gd
+from tests.sharepoint_data import mock_sharepoint
 from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
@@ -65,7 +66,8 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
         mock_exchange(rsps, exchange)
 
 
-def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, **phase4):
+def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
+                **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
     rsps.get(f"{V1}/users", json={"value": users})
@@ -83,6 +85,7 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(re.compile(re.escape(V1) + r"/groups/[^/]+/transitiveMembers"),
              json={"value": [{"@odata.type": "#microsoft.graph.user", "id": "u4"}]})
     mock_phase4(rsps, **phase4)
+    mock_sharepoint(rsps, **(sharepoint_kw or {}))
 
 
 def exchange_factory(tenant, connection):

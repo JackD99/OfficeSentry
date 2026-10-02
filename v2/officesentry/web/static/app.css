@@ -376,3 +376,15 @@ ul.ticks li { margin: 3px 0; }
 .gap-list li.sub { list-style: circle; margin-left: 14px; color: var(--muted); }
 .tile .label .dot { margin-right: 4px; vertical-align: 1px; }
 @media (max-width: 640px) { details.control > summary { flex-direction: column; gap: 6px; } .control-body { padding-left: 20px; } }
+
+/* -- Detail report headline figures and charts ------------------------------ */
+.tile.tone-bad .value { color: var(--bad); }
+.tile.tone-warn .value { color: var(--warn); }
+.tile.tone-ok .value { color: var(--ok); }
+svg.chart { width: 100%; height: auto; display: block; max-height: 220px; }
+svg.chart .grid { stroke: var(--border); }
+svg.chart .axis { fill: var(--muted); }
+svg.chart .series { stroke: var(--accent); }
+svg.chart .hit:hover { fill: var(--accent); fill-opacity: .25; }
+svg.chart .end { fill: var(--accent); stroke: var(--surface); }
+svg.chart .value { fill: var(--text); }

@@ -742,3 +742,7 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
         findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
         results.append(RuleResult(r.key, r.title, r.category, status, summary, r.recommendation, findings))
     return results
+
+
+# Checks kept in their own modules register themselves into RULES on import.
+from . import sharepoint_rules  # noqa: E402, F401, I001

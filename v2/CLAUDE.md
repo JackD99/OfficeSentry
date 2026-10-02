@@ -34,12 +34,17 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 
 ## Adding a check or report
 
-- Checks go in `rules.py` with `@rule(...)`. They read `TenantSnapshot` only,
+- Checks go in `rules.py` with `@rule(...)`, or in a module imported at the
+  bottom of `rules.py` (see `sharepoint_rules.py`). They read `TenantSnapshot` only,
   never Graph, and return `unavailable` (with the reason) when data or the
   tenant's licence is missing, rather than passing or failing.
 - Detail reports are builders in `reports/data_reports.py` returning
   `Section`s of rows; register them in `REPORTS` and they get a page, a tab
   and an XLSX export.
+- Detail reports can also live in their own module (see `reports/sharepoint.py`)
+  and register in `reports/__init__.py`. A builder can set `tiles` (headline
+  figures), `chart`, `notice` (something the admin must fix first) and use
+  `Link` cells; the page and XLSX render them.
 - Report builders in `reports/` return plain data; templates and
   `reports/export.py` only format it. Charts are server-side SVG
   (`reports/charts.py`) so the PDF matches the page.
