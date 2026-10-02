@@ -15,6 +15,7 @@ from tests import devicedata as dd
 from tests import graphdata as gd
 from tests import groupdata as grp
 from tests import hybriddata as hd
+from tests import tenantsettingsdata as tsd
 from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
@@ -99,6 +100,7 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(f"{V1}/groupLifecyclePolicies", json={"value": grp.LIFECYCLE_POLICIES})
     rsps.get(f"{BETA}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
+    rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
     mock_phase4(rsps, **phase4)
 
 

@@ -16,7 +16,8 @@ SHAREPOINT_FIELDS = (
 class TenantPolicies(Collector):
     key = "tenant_policies"
     title = "Sharing and consent settings"
-    description = "Guest invitations, user consent to apps, and SharePoint external sharing."
+    description = "Guest invitations, user consent to apps, default user permissions, admin consent requests, and " \
+                  "SharePoint external sharing."
     permissions = ("Policy.Read.All", "SharePointTenantSettings.Read.All")
 
     def collect(self, ctx: RunContext) -> None:
@@ -32,7 +33,25 @@ class TenantPolicies(Collector):
             "permissionGrantPolicies": perms.get("permissionGrantPoliciesAssigned") or [],
             "allowedToCreateApps": perms.get("allowedToCreateApps"),
             "allowedToCreateTenants": perms.get("allowedToCreateTenants"),
+            "allowedToCreateSecurityGroups": perms.get("allowedToCreateSecurityGroups"),
+            "allowedToReadOtherUsers": perms.get("allowedToReadOtherUsers"),
+            "allowEmailVerifiedUsersToJoinOrganization": auth.get("allowEmailVerifiedUsersToJoinOrganization"),
+            "allowedToUseSSPR": auth.get("allowedToUseSSPR"),
+            "blockMsolPowerShell": auth.get("blockMsolPowerShell"),
         })])
+
+        try:
+            consent = ctx.graph.get("/policies/adminConsentRequestPolicy")
+        except GraphError as exc:
+            ctx.warn(f"Admin consent request settings unavailable: {exc.message}")
+        else:
+            ctx.objects("admin_consent_policy", [("admin_consent_policy", {
+                "isEnabled": consent.get("isEnabled"),
+                "notifyReviewers": consent.get("notifyReviewers"),
+                "remindersEnabled": consent.get("remindersEnabled"),
+                "requestDurationInDays": consent.get("requestDurationInDays"),
+                "reviewers": [r.get("query") for r in consent.get("reviewers") or [] if r.get("query")],
+            })])
 
         if ctx.capabilities.get("sharepoint") is False:
             ctx.log("Tenant has no SharePoint licence; skipping sharing settings")
