@@ -6,6 +6,8 @@
   * open findings no longer reported are marked resolved.
 Checks that are "unavailable" leave their findings untouched, so missing data
 never looks like a fix.
+It returns counts, plus ``opened``: the ids of findings new or reopened by
+this sync (for alerts).
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
     ts = now.strftime(ISO)
     results = evaluate(TenantSnapshot(conn, tenant), now)
     stats = {"new": 0, "reopened": 0, "resolved": 0}
+    opened: list[int] = []
     with transaction(conn, immediate=True):
         for r in results:
             if r.status == "unavailable":
@@ -39,11 +42,11 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
             for key, f in current.items():
                 row = existing.get(key)
                 if row is None:
-                    conn.execute(
+                    opened.append(conn.execute(
                         "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail,"
                         " first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (tenant["id"], r.key, key, f.severity, f.subject, f.detail, ts, ts),
-                    )
+                    ).lastrowid)
                     stats["new"] += 1
                 else:
                     reopened = row["resolved_at"] is not None
@@ -53,11 +56,13 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
                         (f.severity, f.subject, f.detail, ts, int(reopened), ts, row["id"]),
                     )
                     stats["reopened"] += int(reopened)
+                    if reopened:
+                        opened.append(row["id"])
             for key, row in existing.items():
                 if key not in current and row["resolved_at"] is None:
                     conn.execute("UPDATE findings SET resolved_at = ? WHERE id = ?", (ts, row["id"]))
                     stats["resolved"] += 1
-    return stats
+    return {**stats, "opened": opened}
 
 
 @dataclass
