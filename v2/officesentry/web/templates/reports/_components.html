@@ -1,0 +1,49 @@
+{#- Building blocks for client-facing reports. Import with
+    {% import "reports/_components.html" as ui with context %} -#}
+
+{% set SEVERITIES = (('critical', 'Critical'), ('high', 'High'), ('medium', 'Medium'), ('low', 'Low')) %}
+
+{# Overall verdict from summary.Verdict #}
+{% macro verdict(v) -%}
+<div class="verdict tone-{{ v.tone }}">
+  <div class="verdict-body">
+    <span class="status-pill">{{ v.label }}</span>
+    <p class="headline">{{ v.headline }}</p>
+  </div>
+</div>
+{%- endmacro %}
+
+{# A KPI tile. value: preformatted string or none; delta_text: preformatted change; trend: better|worse|flat #}
+{% macro kpi(label, value, delta_text='', trend='flat', note='', meter_value=none) -%}
+<div class="kpi">
+  <div class="label">{{ label }}</div>
+  {% if value is none %}<div class="value none">Not available</div>{% else %}<div class="value">{{ value }}</div>{% endif %}
+  {% if meter_value is not none %}{{ meter(meter_value, color=brand.accent)|safe }}{% endif %}
+  {% if delta_text %}<div class="delta {{ trend }}">{{ delta_text|safe }}</div>{% endif %}
+  {% if note %}<div class="note">{{ note }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Bar plus text legend. items: [(label, count, status)] #}
+{% macro breakdown(title, items) -%}
+<div class="breakdown keep">
+  <div class="breakdown-title">{{ title }}</div>
+  {{ stacked_bar(items, label=title)|safe }}
+  <div class="legend">{% for label, n, status in items %}<span class="k-{{ status }}"><b>{{ n }}</b> {{ label }}</span>{% endfor %}</div>
+</div>
+{%- endmacro %}
+
+{# Numbered next steps from summary.Action #}
+{% macro actions(items) -%}
+<ol class="actions">
+  {% for a in items %}<li>
+    <div class="act-title">{{ a.title }}</div>
+    {% if a.why or a.anchor %}<p class="act-why">{{ a.why }}{{ '.' if a.why and not a.why.endswith('.') }}
+      {% if a.anchor %}<a class="ref" href="#{{ a.anchor }}">{% if not pdf %}See the detail{% endif %}</a>{% endif %}</p>{% endif %}
+  </li>{% endfor %}
+</ol>
+{%- endmacro %}
+
+{% macro sev(level) -%}<span class="sev sev-{{ level }}">{{ level }}</span>{%- endmacro %}
+
+{% macro meta(label, value) -%}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{%- endmacro %}

@@ -45,6 +45,13 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   (`reports/charts.py`) so the PDF matches the page.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
+- Client-facing reports (page + PDF) extend `templates/reports/_layout.html`
+  (cover, MSP branding, running headers and page numbers) and build from the
+  macros in `reports/_components.html` (verdict, KPI tile, severity bar,
+  numbered actions). Plain-English summaries live in `reports/summary.py`.
+  Styles are `report.css`; brand colours arrive as CSS variables (`--brand`,
+  `--brand-ink`, ...), from `/brand.css` on the web and inline in PDFs, since
+  the CSP blocks inline styles in the browser. Render the PDF and look at it.
 
 ## Web UI conventions
 
