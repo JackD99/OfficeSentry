@@ -1,9 +1,6 @@
 name: v2
-on:
-  push:
-    paths: ["v2/**", ".github/workflows/v2.yml"]
-  pull_request:
-    paths: ["v2/**", ".github/workflows/v2.yml"]
+# v2 is the whole product now, so it runs on every change.
+on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
