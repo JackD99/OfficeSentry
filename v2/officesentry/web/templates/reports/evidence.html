@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Security controls evidence: {{ pack.tenant.name }}</title>
+  <link rel="stylesheet" href="{{ css_href }}">
+</head>
+<body class="report{% if pdf %} pdf{% endif %}">
+{% if not pdf %}
+<nav class="toolbar">
+  <a href="{{ url_for('tenants.tenant', tenant_id=pack.tenant.id) }}">&larr; {{ pack.tenant.name }}</a>
+  <span class="spacer"></span>
+  {% if pdf_available %}<a class="button" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}">Download PDF</a>{% endif %}
+  <a class="button" href="{{ url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id) }}">Download XLSX</a>
+</nav>
+{% endif %}
+<article>
+<header class="cover">
+  <div class="eyebrow">Security controls evidence</div>
+  <h1>{{ pack.tenant.name }}</h1>
+  <div class="meta">Prepared {{ pack.generated_at.strftime('%d %B %Y') }} for cyber-insurance and security questionnaires · Microsoft 365 tenant {{ pack.tenant.tenant_ref }}</div>
+</header>
+
+<section>
+  <h2>Summary</h2>
+  <div class="kpis">
+    {% for status, n in pack.counts.items() %}
+    <div class="kpi"><div class="label">{{ status }}</div><div class="value">{{ n }}</div></div>
+    {% endfor %}
+    {% if pack.secure_score is not none %}<div class="kpi"><div class="label">Microsoft Secure Score</div><div class="value">{{ '%g'|format(pack.secure_score) }}%</div></div>{% endif %}
+  </div>
+  <p class="muted">Each answer is based on settings and accounts read from Microsoft 365, not on self-assessment. "Partly in place" means the control exists but has the gaps listed.</p>
+</section>
+
+<section>
+  <h2>Controls</h2>
+  {% for c in pack.controls %}
+  <div class="check control">
+    <div class="check-head">
+      <span class="answer answer-{{ c.status|lower|replace(' ', '-') }}">{{ c.status }}</span>
+      <h3>{{ c.control.question }}</h3>
+    </div>
+    {% if c.evidence %}<ul class="evidence">{% for e in c.evidence %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    {% if c.gaps %}<div class="gaps"><strong>Gaps</strong><ul>{% for gap in c.gaps %}<li{% if gap.startswith('  ') %} class="sub"{% endif %}>{{ gap.strip() }}</li>{% endfor %}</ul></div>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<footer class="keep">
+  <h2>About this evidence</h2>
+  <p class="muted">Collected read-only from Microsoft 365 by Office Sentry. The oldest data used was collected {{ pack.oldest_data[:16]|replace('T', ' ') ~ ' UTC' if pack.oldest_data else 'never' }}. Accepted risks are exceptions the organisation has reviewed and documented.</p>
+</footer>
+</article>
+</body>
+</html>

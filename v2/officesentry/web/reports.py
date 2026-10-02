@@ -11,7 +11,7 @@ from flask import Blueprint, Response, abort, current_app, flash, g, redirect, r
 from .. import findings, mailer
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
-from ..reports import data_reports, export
+from ..reports import data_reports, evidence, export
 from ..reports.monthly_review import build, rollup_row, setting
 from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
@@ -69,6 +69,43 @@ def tenant_report_xlsx(tenant_id: int):
         export.to_xlsx(build(g.db, t)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={_filename(t, 'xlsx')}"},
+    )
+
+
+def _evidence_name(tenant, ext: str) -> str:
+    return _filename(tenant, ext).replace("security-review", "security-evidence")
+
+
+@bp.get("/tenants/<int:tenant_id>/evidence")
+@login_required
+def evidence_pack(tenant_id: int):
+    t = tenant_or_404(tenant_id)
+    return render_template("reports/evidence.html", pack=evidence.build(g.db, t), pdf=False,
+                           css_href=url_for("static", filename="report.css"), pdf_available=export.pdf_available())
+
+
+@bp.get("/tenants/<int:tenant_id>/evidence.pdf")
+@login_required
+def evidence_pdf(tenant_id: int):
+    t = tenant_or_404(tenant_id)
+    if not export.pdf_available():
+        abort(404)
+    html = render_template("reports/evidence.html", pack=evidence.build(g.db, t), pdf=True,
+                           css_href=(STATIC_DIR / "report.css").as_uri(), pdf_available=True)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.pdf")
+    return Response(export.to_pdf(html, STATIC_DIR.as_uri() + "/"), mimetype="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename={_evidence_name(t, 'pdf')}"})
+
+
+@bp.get("/tenants/<int:tenant_id>/evidence.xlsx")
+@login_required
+def evidence_xlsx(tenant_id: int):
+    t = tenant_or_404(tenant_id)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.xlsx")
+    return Response(
+        evidence.to_xlsx(evidence.build(g.db, t)),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={_evidence_name(t, 'xlsx')}"},
     )
 
 

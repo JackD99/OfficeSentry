@@ -34,8 +34,11 @@ def test_client_sees_only_granted_tenant(client, db, two_tenants):
     login(client, "client")
     page = client.get("/").get_data(as_text=True)
     assert "Alpha Ltd" in page and "Bravo Inc" not in page
-    assert client.get(f"/tenants/{alpha}").status_code == 200
+    assert "Monthly review" in page  # clients get the report home, not the collection dashboard
+    assert client.get(f"/tenants/{alpha}").status_code == 302
     assert client.get(f"/tenants/{bravo}").status_code == 404
+    run_id = store.enqueue_run(db, alpha, "users")
+    assert client.get(f"/runs/{run_id}").status_code == 403
 
 
 def test_run_of_other_tenant_is_hidden(client, db, two_tenants):

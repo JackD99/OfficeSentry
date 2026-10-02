@@ -70,3 +70,6 @@ form.accept { margin-top: 8px; min-width: 220px; }
 details summary { cursor: pointer; color: var(--accent); }
 .grade { display: inline-block; min-width: 1.8em; text-align: center; font-weight: 800; border: 2px solid currentColor; border-radius: 6px; }
 .grade-F { color: var(--bad); } .grade-C { color: var(--warn); } .grade-A { color: var(--ok); }
+.client-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 4px 0 12px; }
+.client-kpis strong { font-size: 1.4rem; }
+.client-tenant .heading { margin-bottom: 8px; }

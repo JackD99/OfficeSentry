@@ -5,12 +5,13 @@ tenant, cross-tenant rollups, month-over-month changes and branded client
 reports. This is the rebuild planned in the 2026-10 review; the v1 portal
 remains in `../portal` until v2 replaces it.
 
-**Status: Phase 4.** Tenants are collected nightly; the **Monthly Security &
+**Status: Phase 5.** Tenants are collected nightly; the **Monthly Security &
 Licensing Review** is available per tenant (HTML, PDF, XLSX) with a
 cross-tenant overview, findings history, accepted risks, "since last month"
 changes and monthly emailed reports, plus detail reports on mailboxes, apps,
-Conditional Access coverage and guests. Next: client-facing evidence
-(Phase 5).
+Conditional Access coverage, email domains and guests, a cyber-insurance
+evidence pack, prospect assessments and a client view. Next: a UX and design
+pass, and a first run against a real tenant.
 
 ## Reports
 
@@ -40,6 +41,19 @@ Conditional Access coverage and guests. Next: client-facing evidence
     blocked, and which policies exclude it (group membership expanded).
   - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
     and every guest with invitation state and last sign-in.
+  - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
+    verified domain, from public DNS.
+- **Insurance evidence** (`/tenants/<id>/evidence`, PDF, XLSX): the controls
+  cyber-insurance questionnaires ask about (MFA, admin accounts, legacy auth,
+  email authentication, forwarding, logging, leavers, apps, sharing), each
+  answered In place / Partly / Not in place from the checks, with the gaps
+  listed. Backups and training are marked "Not assessed".
+- **Prospect assessments** (`/prospects`, admins and analysts): enter any
+  domain to grade its email security from public DNS and see whether it uses
+  Microsoft 365 and how it signs in. No access to the tenant needed; PDF for
+  sending to the prospect.
+- **Client view**: client users land on a page with their reports, key
+  numbers and downloads, and don't see collection internals or run logs.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
@@ -59,6 +73,14 @@ limited in code to a fixed list of `Get-` cmdlets. It needs the app's
 Reader** role assigned to the app (Entra admin center → Roles and admins →
 Global Reader → Add assignments). Inbox rules are read through Graph, so they
 work without it.
+
+### Testing against a real tenant
+
+`python -m officesentry live-test [--out DIR]` runs every collector against a
+test tenant using `OFFICESENTRY_TEST_TENANT_ID`, `OFFICESENTRY_TEST_CLIENT_ID`
+and `OFFICESENTRY_TEST_CLIENT_SECRET`, stores the result as tenant "Live test"
+and prints each collector's outcome and every check. The secret is only for
+this command; the product signs in with a certificate.
 
 ## What it does differently from v1
 

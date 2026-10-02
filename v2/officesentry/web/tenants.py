@@ -40,6 +40,13 @@ def _latest_runs(tenant_id: int) -> dict:
 @login_required
 def dashboard():
     tenants = visible_tenants(g.db, g.user)
+    if g.user["role"] == "client":
+        from ..reports.data_reports import REPORTS
+        from ..reports.export import pdf_available
+        from ..reports.monthly_review import rollup_row
+
+        return render_template("client_home.html", rows=[rollup_row(g.db, t) for t in tenants],
+                               data_reports=REPORTS, pdf_available=pdf_available())
     latest = {t["id"]: _latest_runs(t["id"]) for t in tenants}
     return render_template("dashboard.html", tenants=tenants, latest=latest, collectors=REGISTRY)
 
@@ -71,6 +78,8 @@ def new_tenant():
 @login_required
 def tenant(tenant_id: int):
     t = tenant_or_404(tenant_id)
+    if g.user["role"] == "client":  # clients see reports, not collection internals
+        return redirect(url_for("tenants.dashboard"))
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     consent_link = None
     if g.user["role"] == "admin" and connection and connection["client_id"]:
@@ -135,7 +144,7 @@ def consent_callback():
 
 
 @bp.get("/runs/<int:run_id>")
-@login_required
+@roles_required("admin", "analyst")
 def run(run_id: int):
     r = g.db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
     if r is None:

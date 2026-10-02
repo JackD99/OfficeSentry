@@ -87,3 +87,9 @@ ul.changes li { padding: 4px 0; border-bottom: 1px solid var(--border); }
 .grade-big { font-size: 3rem; font-weight: 800; line-height: 1; min-width: 64px; text-align: center; padding: 8px 0; border-radius: 8px; border: 3px solid currentColor; }
 .grade-box-F .grade-big { color: var(--critical); } .grade-box-C .grade-big { color: var(--medium); } .grade-box-A .grade-big { color: var(--ok); }
 table th[scope], table tr > th:first-child:not(:only-child) { width: 30%; }
+.answer { display: inline-block; white-space: nowrap; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 2px 8px; border-radius: 10px; border: 1.5px solid currentColor; }
+.answer-in-place { color: var(--ok); } .answer-partly-in-place { color: var(--medium); }
+.answer-not-in-place { color: var(--critical); } .answer-not-assessed { color: var(--low); }
+ul.evidence, .gaps ul { margin: 8px 0 0; padding-left: 18px; }
+.gaps { margin-top: 8px; }
+.gaps li.sub { list-style: circle; margin-left: 16px; color: var(--muted); }
