@@ -134,7 +134,19 @@ class DomainHealth:
 
     @classmethod
     def from_dict(cls, data: dict) -> DomainHealth:
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        """Rebuild from a stored snapshot; missing or mistyped fields (older or damaged rows) fall back to defaults."""
+        defaults = cls(domain=str(data.get("domain") or data.get("_id") or "?"))
+        values = {}
+        for name in cls.__dataclass_fields__:
+            value, default = data.get(name), getattr(defaults, name)
+            if name == "domain":
+                value = defaults.domain
+            elif value is None or (default is not None and not isinstance(value, type(default))) \
+                    or (default is None and isinstance(value, (list, dict, bool))) \
+                    or isinstance(value, bool) != isinstance(default, bool):
+                value = default
+            values[name] = value
+        return cls(**values)
 
 
 def _tag(record: str, name: str) -> str | None:

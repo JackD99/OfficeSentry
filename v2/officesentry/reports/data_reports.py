@@ -11,13 +11,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .. import coverage, devices, dnscheck, hybrid
-from .. import adminactivity, coverage, devices, dnscheck
+from .. import adminactivity, coverage, devices, dnscheck, hybrid
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
-from ..rules import SHARING_LEVELS, app_risks, group_owner_problem, group_type, m365_groups
-from ..rules import GUEST_ROLES, SHARING_LEVELS, admin_consent_missing, app_risks, user_consent_level
+from ..rules import (
+    GUEST_ROLES,
+    SHARING_LEVELS,
+    admin_consent_missing,
+    app_risks,
+    group_owner_problem,
+    group_type,
+    m365_groups,
+    user_consent_level,
+)
 from ..snapshot import TenantSnapshot
 
 
@@ -787,12 +794,11 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
     "conditional-access": ("Conditional Access coverage",
                            "Every policy in plain words, and which accounts each one actually covers.",
                            ("conditional_access", "admin_roles", "users"), conditional_access),
-    "domains": ("Email domains", "SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from "
-                "public DNS.",
     "tenant-settings": ("Tenant settings",
                         "What users and guests can do by default, and whether users can ask an admin to approve apps.",
                         ("tenant_policies",), tenant_settings),
-    "domains": ("Email domains", "SPF, DMARC and DKIM for each of the tenant's domains, from public DNS.",
+    "domains": ("Email domains", "SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from "
+                "public DNS.",
                 ("domain_health",), domains),
     "guests": ("Guests and sharing", "Who can invite and share externally, and every guest account.",
                ("tenant_policies", "users"), guests),

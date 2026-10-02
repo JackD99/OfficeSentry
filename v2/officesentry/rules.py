@@ -16,8 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from . import coverage, devices, dnscheck, hybrid
-from . import adminactivity, coverage, devices, dnscheck
+from . import adminactivity, coverage, devices, dnscheck, hybrid
 from .licences import is_stale, last_sign_in, licence_summary, load_prices
 from .mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from .snapshot import TenantSnapshot
@@ -685,7 +684,8 @@ def guest_access_level(snap: TenantSnapshot, now: datetime):
     policy, reason = _setting(snap, "guestUserRoleId")
     if policy is None:
         return _unavailable(reason)
-    level = GUEST_ROLES.get(policy["guestUserRoleId"])
+    role = policy["guestUserRoleId"]
+    level = GUEST_ROLES.get(role) if isinstance(role, str) else None
     if level == "member":
         return ("fail", "Guests have the same directory access as members", [Finding(
             "medium", "Tenant", "Guests can look up every user and group and their details")])
