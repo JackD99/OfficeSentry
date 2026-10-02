@@ -75,6 +75,15 @@ def cmd_rotate_keys(args, cfg):
     print(f"Re-encrypted {len(rows)} key(s). Old keys can now be removed from the configuration.")
 
 
+def cmd_live_test(args, cfg):
+    """Collect from a real test tenant with a client secret (development only)."""
+    from pathlib import Path
+
+    from .livetest import run
+
+    sys.exit(run(cfg, args.collector or None, Path(args.out) if args.out else None))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="officesentry")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -99,6 +108,11 @@ def main(argv=None):
 
     rotate = sub.add_parser("rotate-keys", help="re-encrypt credentials with the newest key")
     rotate.set_defaults(func=cmd_rotate_keys)
+
+    live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
+    live.add_argument("--collector", action="append", help="only run this collector (repeatable)")
+    live.add_argument("--out", help="also write XLSX exports to this folder")
+    live.set_defaults(func=cmd_live_test)
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

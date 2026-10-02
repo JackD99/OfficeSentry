@@ -12,6 +12,23 @@ class TokenError(Exception):
         self.message = message
 
 
+def secret_token_provider(tenant_ref: str, client_id: str, secret: str, resource: str) -> Callable[[], str]:
+    """Client-secret variant, used only by the ``live-test`` command against a test tenant."""
+    import msal
+
+    app = msal.ConfidentialClientApplication(
+        client_id=client_id, authority=f"https://login.microsoftonline.com/{tenant_ref}", client_credential=secret)
+
+    def token() -> str:
+        result = app.acquire_token_for_client(scopes=[f"{resource}/.default"])
+        if "access_token" not in result:
+            raise TokenError(result.get("error", "auth_failed"),
+                             result.get("error_description", "token request failed"))
+        return result["access_token"]
+
+    return token
+
+
 def certificate_token_provider(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str,
                                resource: str) -> Callable[[], str]:
     """Return a callable giving a token for ``resource`` (e.g. https://graph.microsoft.com).

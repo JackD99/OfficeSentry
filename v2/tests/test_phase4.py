@@ -330,3 +330,21 @@ def test_exchange_allow_list_is_get_only():
     access = required_resource_access(graph, exo)
     assert access[1] == {"resourceAppId": "00000002-0000-0ff1-ce00-000000000000",
                          "resourceAccess": [{"id": "exo-id", "type": "Role"}]}
+
+
+def test_live_test_command_runs_every_collector(cfg, db, monkeypatch, capsys):
+    from unittest.mock import patch
+
+    from officesentry import livetest
+    from tests.seed import mock_tenant
+
+    assert livetest.run(cfg) == 2  # variables missing
+    for k in livetest.ENV:
+        monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")
+    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: (lambda: "tok"))
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
+            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+        mock_tenant(rsps)
+        assert livetest.run(cfg) == 0
+    out = capsys.readouterr().out
+    assert "Mailboxes" in out and "0 collector(s) failed" in out
