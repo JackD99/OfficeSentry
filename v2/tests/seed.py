@@ -14,9 +14,11 @@ from officesentry.worker import execute_run
 from tests import devicedata as dd
 from tests import graphdata as gd
 from tests import groupdata as grp
+from tests import hybriddata as hd
 from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
+BETA = f"{GRAPH_ROOT}/beta"
 
 
 def exchange_callback(data):
@@ -95,6 +97,8 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
                       callback=people, content_type="application/json")
     rsps.get(f"{V1}/groupSettings", json={"value": grp.GROUP_SETTINGS})
     rsps.get(f"{V1}/groupLifecyclePolicies", json={"value": grp.LIFECYCLE_POLICIES})
+    rsps.get(f"{BETA}/organization", json={"value": [gd.ORGANIZATION]})
+    rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
     mock_phase4(rsps, **phase4)
 
 

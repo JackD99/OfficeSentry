@@ -34,7 +34,7 @@ CONTROLS = (
     Control("legacy_auth", "Are legacy authentication protocols (which can't do MFA) blocked?",
             ("legacy_auth_blocked", "smtp_auth")),
     Control("privileged", "Is administrative access limited to named, internal accounts?",
-            ("global_admin_count", "guest_admins", "service_principal_admins")),
+            ("global_admin_count", "guest_admins", "service_principal_admins", "cloud_only_admins")),
     Control("email_auth", "Are SPF, DKIM and DMARC configured for your email domains?",
             ("spf_record", "dkim_enabled", "dmarc_policy")),
     Control("forwarding", "Is automatic forwarding of email to external addresses blocked or monitored?",

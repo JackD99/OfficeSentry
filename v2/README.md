@@ -52,6 +52,10 @@ pass, and a first run against a real tenant.
     that are non-compliant, unencrypted, out of support or not checking in,
     every managed device, and every Entra ID device record by last activity.
     Tenants without Intune still get the Entra records and Windows versions.
+  - *Hybrid identity*: whether accounts are synced from on-premises Active
+    Directory, when directory sync and password hash sync last ran, which
+    domains are federated, admin accounts synced from AD, and synced versus
+    cloud-only account counts. Cloud-only tenants are labelled as such.
 - **Insurance evidence** (`/tenants/<id>/evidence`, PDF, XLSX): the controls
   cyber-insurance questionnaires ask about (MFA, admin accounts, legacy auth,
   email authentication, forwarding, logging, leavers, apps, sharing, devices), each
@@ -75,6 +79,8 @@ invitations, stale guest invitations, teams and groups without an owner, who
 can create teams and groups, group expiration, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
 checking in, stale device records.
+For tenants synced from on-premises AD: directory sync running, password
+hash sync on, and admin accounts that are cloud-only.
 
 ### Exchange data
 

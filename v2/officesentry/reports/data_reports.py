@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .. import coverage, devices, dnscheck
+from .. import coverage, devices, dnscheck, hybrid
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
@@ -560,6 +560,83 @@ def _by_flag(section: Section) -> tuple[list, list]:
     return [p[0] for p in pairs], [p[1] for p in pairs]
 
 
+# -- Hybrid identity ---------------------------------------------------------------------
+
+
+def _synced_at(value: str | None, now: datetime) -> str:
+    hours = hybrid.hours_since(value, now)
+    return "Never" if hours is None else f"{value[:16].replace('T', ' ')} UTC ({hybrid.age(hours)})"
+
+
+def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    status = hybrid.sync_status(snap)
+    if status is None:
+        report.unavailable = "Directory sync data hasn't been collected yet. Refresh Directory sync on the tenant page."
+        return
+    users = snap.objects("users", "user")
+    enabled = bool(status.get("enabled"))
+
+    sync = Section("Sync status", ["Setting", "Value"])
+    if not enabled and status.get("onPremisesSyncEnabled") is False:
+        sync.intro = ("Cloud-only tenant: directory sync was turned off, so accounts that came from on-premises "
+                      "Active Directory are now managed in Microsoft 365.")
+        sync.add(["Directory sync", "Turned off"])
+    elif not enabled:
+        sync.intro = ("Cloud-only tenant: accounts are created and managed in Microsoft 365, not synced from an "
+                      "on-premises Active Directory.")
+        sync.add(["Directory sync", "Never turned on"])
+    else:
+        sync.intro = ("Accounts are synced from on-premises Active Directory, normally every 30 minutes by "
+                      "Entra Connect.")
+        sync.add(["Directory sync", "On"])
+        problem = hybrid.sync_problem(status, now)
+        sync.add(["Last directory sync", _synced_at(status.get("lastSyncDateTime"), now)], problem and problem[0])
+        if status.get("passwordSyncChecked"):
+            problem = hybrid.password_sync_problem(status, now)
+            sync.add(["Last password hash sync", _synced_at(status.get("lastPasswordSyncDateTime"), now)],
+                     problem and problem[0])
+        else:
+            sync.add(["Last password hash sync", "Couldn't be read"])
+    federated = hybrid.federated_domains(snap)
+    sync.add(["Federated domains", federated or "None"])
+
+    domains = Section("Domains", ["Domain", "Sign-in", "Verified", "Default", "Used for"],
+                      intro="Managed domains sign in through Entra ID (checking synced passwords in the cloud, or "
+                            "on-premises with pass-through authentication). Federated domains send sign-in to "
+                            "another identity provider, usually AD FS: if it is down, those users can't sign in.",
+                      empty="No domains.")
+    rows = snap.objects("directory_sync", "domain") or []
+    for d in sorted(rows, key=lambda d: (not d.get("isDefault"), d["_id"].endswith(".onmicrosoft.com"), d["_id"])):
+        domains.add([d["_id"], d.get("authenticationType"), d.get("isVerified"), d.get("isDefault"),
+                     d.get("supportedServices") or []])
+    sections = [sync, domains]
+
+    synced_users = [u for u in users or [] if u.get("onPremisesSyncEnabled")]
+    if enabled or synced_users:
+        admins = Section("Synced admin accounts", ["Account", "Roles", "Enabled"],
+                         intro="Admins whose account comes from on-premises AD. Anyone who takes over AD can reset "
+                               "their password and sign in as them, so admin roles belong on cloud-only accounts.",
+                         empty="No admin account is synced from on-premises AD.")
+        found = hybrid.synced_admins(snap)
+        if found is None:
+            admins.empty = "Admin role and user data haven't been collected yet."
+        for a in found or []:
+            admins.add([a["label"], a["roles"], a["accountEnabled"]], "high" if a["accountEnabled"] else "medium")
+        sections.append(admins)
+
+    source = Section("Accounts by source", ["Accounts", "Synced from AD", "Cloud-only", "Total"],
+                     intro="Synced accounts are managed in Active Directory: changes made to them in Microsoft 365 "
+                           "are overwritten at the next sync.",
+                     empty="User data hasn't been collected yet.")
+    if users is not None:
+        for label, kind in (("Members", "Member"), ("Guests", "Guest"), ("All accounts", None)):
+            group = [u for u in users if kind is None or (u.get("userType") or "Member") == kind]
+            synced = sum(bool(u.get("onPremisesSyncEnabled")) for u in group)
+            source.add([label, synced, len(group) - synced, len(group)])
+    sections.append(source)
+    report.sections = sections
+
+
 # -- Registry ----------------------------------------------------------------------------
 
 Builder = Callable[[TenantSnapshot, datetime, DataReport], None]
@@ -581,6 +658,8 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
                ("groups",), group_report),
     "devices": ("Devices", "Intune compliance, encryption and Windows support, and every Entra ID device record.",
                 ("devices",), device_report),
+    "hybrid": ("Hybrid identity", "Directory sync from on-premises AD, password hash sync, how each domain signs in, "
+               "and admin accounts synced from AD.", ("directory_sync", "users", "admin_roles"), hybrid_report),
 }
 
 
