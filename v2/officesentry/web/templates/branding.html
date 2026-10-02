@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Report branding · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Report branding</h1><div class="sub">Your company name, logo and colour on every report and PDF your clients receive.</div></div>
+  {% if b.is_default %}<span class="pill warn">Not set up</span>{% else %}<span class="pill ok">Set up</span>{% endif %}</div>
+<div class="grid-main">
+<form method="post" class="card" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Your company</h2>
+  <label>Company name <input name="name" value="{{ b.name }}" maxlength="80" placeholder="e.g. Harbour IT Services"></label>
+  <p class="footnote">Shown on report covers as "Prepared by". Leave blank to show Office Sentry.</p>
+  <label>Contact line <input name="contact" value="{{ b.contact }}" maxlength="160" placeholder="support@harbourit.co.uk · 01234 567890 · harbourit.co.uk"></label>
+  <p class="footnote">Printed at the bottom of report covers and on prospect assessments, so readers know how to reach you.</p>
+  <div class="form-row">
+    <label>Accent colour <input type="color" name="accent" value="{{ b.accent }}"></label>
+    <label>Logo <input type="file" name="logo" accept="image/png,image/jpeg"></label>
+  </div>
+  <p class="footnote">Use a PNG or JPEG under 512 KB, ideally wide and with a transparent background. If the colour is too light for text, reports darken it automatically so it stays readable. The default is {{ default_accent }}.</p>
+  {% if b.logo %}<label class="check-line"><input type="checkbox" name="remove_logo" value="1"> Remove the current logo</label>{% endif %}
+  <div class="form-actions"><button class="primary">Save</button></div>
+</form>
+<section class="card">
+  <h2>Preview</h2>
+  <p class="muted small">How the top of a report cover looks with these settings.</p>
+  <svg viewBox="0 0 320 200" role="img" aria-label="Report cover preview" xmlns="http://www.w3.org/2000/svg" class="brand-preview">
+    <rect x="0.5" y="0.5" width="319" height="199" rx="6" fill="#ffffff" stroke="#d6dae1"/>
+    <rect x="1" y="1" width="318" height="112" rx="5" fill="{{ b.accent }}"/>
+    <rect x="1" y="100" width="318" height="13" fill="{{ b.accent }}"/>
+    {% if b.logo %}<rect x="16" y="14" width="96" height="30" rx="4" fill="#ffffff"/><image href="{{ b.logo }}" x="20" y="17" width="88" height="24" preserveAspectRatio="xMinYMid meet"/>
+    {% else %}<text x="18" y="34" font-size="12" font-weight="700" font-family="sans-serif" fill="{{ b.on_accent }}">{{ b.display_name }}</text>{% endif %}
+    <text x="18" y="70" font-size="8" font-weight="700" letter-spacing="1" font-family="sans-serif" fill="{{ b.on_accent }}" opacity=".85">MONTHLY SECURITY &amp; LICENSING REVIEW</text>
+    <text x="18" y="92" font-size="17" font-weight="700" font-family="sans-serif" fill="{{ b.on_accent }}">Client name</text>
+    <text x="18" y="138" font-size="8" font-family="sans-serif" fill="#5d6676">PREPARED BY</text>
+    <text x="18" y="151" font-size="10" font-weight="600" font-family="sans-serif" fill="#1d2330">{{ b.display_name }}</text>
+    <line x1="18" x2="302" y1="172" y2="172" stroke="#e3e6eb"/>
+    <text x="18" y="187" font-size="8" font-family="sans-serif" fill="#5d6676">{{ b.contact or 'Your contact details' }}</text>
+  </svg>
+  {% if sample_tenant %}<p class="small"><a href="{{ url_for('reports.tenant_report', tenant_id=sample_tenant) }}">Open a real report to check it &rarr;</a></p>{% endif %}
+</section>
+</div>
+{% endblock %}

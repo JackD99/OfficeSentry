@@ -1,56 +1,72 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Security controls evidence: {{ pack.tenant.name }}</title>
-  <link rel="stylesheet" href="{{ css_href }}">
-</head>
-<body class="report{% if pdf %} pdf{% endif %}">
-{% if not pdf %}
-<nav class="toolbar">
-  <a href="{{ url_for('tenants.tenant', tenant_id=pack.tenant.id) }}">&larr; {{ pack.tenant.name }}</a>
-  <span class="spacer"></span>
-  {% if pdf_available %}<a class="button primary" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}">Download PDF</a>{% endif %}
-  <a class="button" href="{{ url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id) }}">Download XLSX</a>
-</nav>
-{% endif %}
-<article>
-<header class="cover">
-  <div class="eyebrow">Security controls evidence</div>
-  <h1>{{ pack.tenant.name }}</h1>
-  <div class="meta">Prepared {{ pack.generated_at.strftime('%d %B %Y') }} for cyber-insurance and security questionnaires · Microsoft 365 tenant {{ pack.tenant.tenant_ref }}</div>
-</header>
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{%- set es = summary.evidence(pack) -%}
+{%- set ANSWER_TONE = {'In place': 'ok', 'Partly in place': 'medium', 'Not in place': 'critical', 'Not assessed': 'none'} -%}
 
-<section>
+{% block doc_title %}Security controls evidence{% endblock %}
+{% block client %}{{ pack.tenant.name }}{% endblock %}
+{% block toolbar %}
+  <a class="back" href="{{ url_for('tenants.tenant', tenant_id=pack.tenant.id) }}">&larr; {{ pack.tenant.name }}</a>
+  <span class="spacer"></span>
+  {% if pdf_available %}<a class="button primary" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}"><span class="wide">Download </span>PDF</a>{% endif %}
+  <a class="button" href="{{ url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id) }}"><span class="wide">Download </span>XLSX</a>
+{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', pack.generated_at.day ~ ' ' ~ pack.generated_at.strftime('%B %Y')) }}
+  {{ ui.meta('For', 'Cyber insurance and security questionnaires') }}
+  {{ ui.meta('Microsoft 365 tenant', pack.tenant.tenant_ref) }}
+{% endblock %}
+{% block cover_status %}{{ ui.verdict(es.verdict) }}{% endblock %}
+{% block contents %}
+  <li><a href="#summary">Summary</a></li>
+  {% if es.actions %}<li><a href="#gaps">Gaps to close</a></li>{% endif %}
+  <li><a href="#controls">Controls, one by one</a></li>
+  <li><a href="#about">About this evidence</a></li>
+{% endblock %}
+
+{% block body %}
+<section id="summary" class="keep">
   <h2>Summary</h2>
+  <div class="summary-text">{% for p in es.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+  {% set items = [] %}
+  {% for status, n in pack.counts.items() %}{% set _ = items.append((status, n, ANSWER_TONE[status])) %}{% endfor %}
+  {{ ui.breakdown(pack.controls|length ~ ' controls checked', items) }}
+  {% if pack.secure_score is not none %}
   <div class="kpis">
-    {% for status, n in pack.counts.items() %}
-    <div class="kpi"><div class="label">{{ status }}</div><div class="value">{{ n }}</div></div>
-    {% endfor %}
-    {% if pack.secure_score is not none %}<div class="kpi"><div class="label">Microsoft Secure Score</div><div class="value">{{ '%g'|format(pack.secure_score) }}%</div></div>{% endif %}
+    {{ ui.kpi('Microsoft Secure Score', '%g'|format(pack.secure_score) ~ '%', note="Microsoft's own measure of recommended security settings", meter_value=pack.secure_score) }}
   </div>
-  <p class="muted">Each answer is based on settings and accounts read from Microsoft 365, not on self-assessment. "Partly in place" means the control exists but has the gaps listed.</p>
+  {% endif %}
 </section>
 
-<section>
-  <h2>Controls</h2>
+{% if es.actions %}
+<section id="gaps" class="keep">
+  <h2>Gaps to close</h2>
+  <p class="section-intro">The controls insurers are most likely to query. Closing these usually improves the answers on the form straight away.</p>
+  {{ ui.actions(es.actions) }}
+</section>
+{% endif %}
+
+<section id="controls" class="page-break">
+  <h2>Controls, one by one</h2>
+  <p class="section-intro">"Partly in place" means the control exists but has the gaps listed. "Not assessed" means Microsoft 365 can't show it, so evidence has to come from elsewhere.</p>
   {% for c in pack.controls %}
-  <div class="check control">
-    <div class="check-head">
-      <span class="answer answer-{{ c.status|lower|replace(' ', '-') }}">{{ c.status }}</span>
-      <h3>{{ c.control.question }}</h3>
+  <div class="control" id="control-{{ c.control.key }}">
+    <div class="check-head"><h3>{{ c.control.question }}</h3><span class="answer answer-{{ c.status|lower|replace(' ', '-') }}">{{ c.status }}</span></div>
+    {% if c.status == 'Not assessed' %}
+    <p class="outside">{{ c.evidence|join(' ') }}</p>
+    {% else %}
+    <div class="control-cols{% if not (c.evidence and c.gaps) %} single{% endif %}">
+      {% if c.evidence %}<div><div class="col-title">What we found</div><ul class="evidence">{% for e in c.evidence %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+      {% if c.gaps %}<div class="gaps"><div class="col-title">Gaps</div><ul>{% for gap in c.gaps %}<li{% if gap.startswith('  ') %} class="sub"{% endif %}>{{ gap.strip() }}</li>{% endfor %}</ul></div>{% endif %}
     </div>
-    {% if c.evidence %}<ul class="evidence">{% for e in c.evidence %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-    {% if c.gaps %}<div class="gaps"><strong>Gaps</strong><ul>{% for gap in c.gaps %}<li{% if gap.startswith('  ') %} class="sub"{% endif %}>{{ gap.strip() }}</li>{% endfor %}</ul></div>{% endif %}
+    {% endif %}
   </div>
   {% endfor %}
 </section>
 
-<footer class="keep">
+<footer class="about keep" id="about">
   <h2>About this evidence</h2>
-  <p class="muted">Collected read-only from Microsoft 365 by Office Sentry. The oldest data used was collected {{ pack.oldest_data[:16]|replace('T', ' ') ~ ' UTC' if pack.oldest_data else 'never' }}. Accepted risks are exceptions the organisation has reviewed and documented.</p>
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Collected from Microsoft 365 with read-only access; nothing was changed. The oldest data used was collected {{ pack.oldest_data|when if pack.oldest_data else 'never' }}. Accepted risks are exceptions the organisation has reviewed and documented.</p>
 </footer>
-</article>
-</body>
-</html>
+{% endblock %}
