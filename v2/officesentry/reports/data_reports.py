@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from .. import coverage, devices, dnscheck, hybrid
+from .. import adminactivity, coverage, devices, dnscheck
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
@@ -218,6 +219,63 @@ def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
 
 def _ts(iso: str) -> float:
     return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+
+
+# -- Admin activity ----------------------------------------------------------------------
+
+
+def _when(iso: str | None) -> str:
+    return f"{iso[:10]} {iso[11:16]}" if iso and len(iso) >= 16 else (iso or "")
+
+
+def _targets(e: dict) -> str:
+    names = ", ".join(e.get("targets") or [])
+    return names + (f" and {e['more_targets']} more" if e.get("more_targets") else "")
+
+
+def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    events = snap.objects("admin_activity", "admin_event")
+    window = (snap.objects("admin_activity", "audit_window") or [None])[0]
+    if events is None:
+        report.unavailable = "Admin activity hasn't been collected yet. Refresh Admin activity on the tenant page."
+        return
+    if window and not window.get("available", True):
+        report.unavailable = f"The tenant's directory audit log couldn't be read: {window.get('reason') or ''}"
+        return
+    covered = adminactivity.window_text(window)
+    events = sorted(events, key=lambda e: e.get("time") or "", reverse=True)
+
+    review = Section("Changes to review", ["When (UTC)", "Change", "By", "Target", "Detail", "Why it matters"],
+                     intro=f"Changes in {covered} that are worth confirming with the client: domain sign-in "
+                           "(federation) changes, new app secrets and certificates, admin roles granted, and "
+                           "Conditional Access policies deleted or switched off. Failed attempts are left out.",
+                     empty="No change in the window needs a second look.")
+    every = Section("All admin changes", ["When (UTC)", "Area", "Change", "By", "Target", "Detail", "Result",
+                                          "IP address"],
+                    intro=f"Every admin role, Conditional Access, policy, app, domain and account change "
+                          f"in {covered}, newest first.",
+                    empty="No admin changes in the window.")
+    actors: dict[str, dict] = {}
+    for e in events:
+        flag = adminactivity.review(e)
+        if flag:
+            review.add([_when(e.get("time")), e.get("activity"), e.get("actor"), _targets(e), e.get("detail"),
+                        flag[1]], flag[0])
+        result = "Succeeded" if e.get("result") == "success" else \
+            ("Failed" + (f": {e['reason']}" if e.get("reason") else ""))
+        every.add([_when(e.get("time")), e.get("area"), e.get("activity"), e.get("actor"), _targets(e),
+                   e.get("detail"), result, e.get("ip")], flag[0] if flag else None)
+        a = actors.setdefault(e.get("actor") or "Unknown", {"type": e.get("actor_type"), "count": 0, "last": ""})
+        a["count"] += 1
+        a["last"] = max(a["last"], e.get("time") or "")
+    review.rows, review.flags = _by_flag(review)
+
+    who = Section("Who made changes", ["Who", "Type", "Changes", "Last change (UTC)"],
+                  intro="Everyone (and every app) that made one of the changes above, most active first.",
+                  empty="Nobody made admin changes in the window.")
+    for name, a in sorted(actors.items(), key=lambda kv: (-kv[1]["count"], kv[0].lower())):
+        who.add([name, {"user": "User", "app": "App"}.get(a["type"], ""), a["count"], _when(a["last"])])
+    report.sections = [review, every, who]
 
 
 # -- Conditional Access coverage -------------------------------------------------------
@@ -719,6 +777,10 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
     "mailboxes": ("Mailbox access and forwarding",
                   "Forwarding, suspicious inbox rules, delegated access and shared mailboxes.",
                   ("mailboxes", "inbox_rules", "users"), mailboxes),
+    "admin-activity": ("Admin activity",
+                       "Admin roles, Conditional Access, app credentials, consents, domains and account changes "
+                       "from the directory audit log, and who made them.",
+                       ("admin_activity",), admin_activity),
     "apps": ("Apps and consents", "Third-party apps with access to the tenant, and app credential expiry.",
              ("app_consents",), apps),
     "conditional-access": ("Conditional Access coverage",

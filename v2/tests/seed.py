@@ -11,6 +11,7 @@ from officesentry.collectors import REGISTRY
 from officesentry.exchange import EXCHANGE_ROOT, ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
+from tests import adminactivitydata as ad
 from tests import devicedata as dd
 from tests import graphdata as gd
 from tests import groupdata as grp
@@ -101,6 +102,7 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(f"{BETA}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
+    rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
     mock_phase4(rsps, **phase4)
 
 
