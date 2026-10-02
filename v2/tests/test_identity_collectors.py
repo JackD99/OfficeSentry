@@ -17,6 +17,8 @@ def test_admin_roles_active_and_eligible(db, two_tenants, factory):  # noqa: F81
     assert rows["a1"]["privileged"] and rows["a1"]["principalType"] == "user"
     assert not rows["a4"]["privileged"]
     assert rows["eligible:e1"]["assignment"] == "eligible"
+    # isPrivileged only exists in beta; selecting it on v1.0 is a 400 from Graph.
+    assert "isPrivileged" not in responses.calls[0].request.url
     m = _metrics(db, run_id)
     assert m["admins.global_admins"] == 2
     assert m["admins.privileged_principals"] == 4  # u1, u4, u3, sp1

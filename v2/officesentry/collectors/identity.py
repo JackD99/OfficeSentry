@@ -6,8 +6,8 @@ from .. import store
 from ..graph import GraphError, LicenseRequired, PermissionMissing
 from .base import Collector, RunContext, register
 
-# Built-in roles treated as privileged even where Graph doesn't flag
-# isPrivileged. Matched by display name, which is stable for built-in roles.
+# Built-in roles treated as privileged. Graph v1.0 has no isPrivileged property
+# (selecting it is a 400), so match by display name, which is stable for built-in roles.
 PRIVILEGED_ROLE_NAMES = {
     "Global Administrator",
     "Privileged Role Administrator",
@@ -66,14 +66,14 @@ class AdminRoles(Collector):
 
     def collect(self, ctx: RunContext) -> None:
         definitions = ctx.paged(ctx.graph.get_all("/roleManagement/directory/roleDefinitions", params={
-            "$select": "id,displayName,isBuiltIn,isPrivileged,templateId"}))
+            "$select": "id,displayName,isBuiltIn,templateId"}))
         roles = {}
         for d in definitions:
             roles[d["id"]] = {
                 "displayName": d.get("displayName"),
                 "isBuiltIn": d.get("isBuiltIn"),
                 "templateId": d.get("templateId"),
-                "privileged": bool(d.get("isPrivileged")) or d.get("displayName") in PRIVILEGED_ROLE_NAMES,
+                "privileged": d.get("displayName") in PRIVILEGED_ROLE_NAMES,
             }
         ctx.objects("role_definition", list(roles.items()))
 
