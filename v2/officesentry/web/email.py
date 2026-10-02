@@ -11,6 +11,7 @@ from .. import delivery, mailer
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .filters import _strftime as datefmt
 
 bp = Blueprint("email", __name__)
 
@@ -240,7 +241,7 @@ def _save_schedule(tenant, existing=None):
               f"{kind} {values['frequency']} to {len(ids)} recipient(s)")
     s = g.db.execute("SELECT * FROM email_schedules WHERE id = ?", (schedule_id,)).fetchone()
     nxt = delivery.next_send(s, _cfg().timezone)
-    flash("Saved. " + (f"Next email: {nxt.strftime('%a %-d %b, %H:%M')} ({nxt.tzname()})." if nxt
+    flash("Saved. " + (f"Next email: {datefmt(nxt, '%a %-d %b, %H:%M')} ({nxt.tzname()})." if nxt
                        else "It's paused, so nothing will be sent."), "success")
     return _back(tenant_id)
 

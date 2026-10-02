@@ -11,7 +11,7 @@
 {%- endmacro %}
 
 {% macro when_local(dt) -%}
-{{ dt.strftime('%a %-d %b, %H:%M') }}
+{{ dt|datefmt('%a %-d %b, %H:%M') }}
 {%- endmacro %}
 
 {# The "Next email" tile on the tenant and overview pages. #}

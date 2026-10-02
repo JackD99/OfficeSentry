@@ -36,8 +36,9 @@ def test_secrets_file_is_private_and_keys_are_separate(tmp_path, monkeypatch):
     for var in ("SECRET_KEY", "ENCRYPTION_KEYS"):
         monkeypatch.delenv("OFFICESENTRY_" + var, raising=False)
     cfg = load_config(data_dir=tmp_path / "d")
-    mode = stat.S_IMODE(os.stat(tmp_path / "d" / "secrets.json").st_mode)
-    assert mode == 0o600
+    if os.name != "nt":  # Windows has no POSIX file modes; access is controlled by ACLs
+        mode = stat.S_IMODE(os.stat(tmp_path / "d" / "secrets.json").st_mode)
+        assert mode == 0o600
     assert cfg.secret_key not in cfg.encryption_keys
     assert load_config(data_dir=tmp_path / "d").secret_key == cfg.secret_key
 
