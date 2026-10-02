@@ -6,6 +6,7 @@ the XLSX export only format them. Nothing here calls Microsoft.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -380,13 +381,13 @@ def _seen(value: str | None, now: datetime) -> str:
 
 
 def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
-    entra = snap.objects("devices", "entra_device")
+    entra = devices.objects(snap, "entra_device")
     if entra is None:
         report.unavailable = "Device data hasn't been collected yet. Refresh Devices on the tenant page."
         return
-    status = snap.objects("devices", "intune_status") or []
+    status = devices.objects(snap, "intune_status") or []
     intune = bool(status and status[0].get("available"))
-    managed = (snap.objects("devices", "managed_device") or []) if intune else []
+    managed = (devices.objects(snap, "managed_device") or []) if intune else []
 
     # Operating systems: Intune's view when there is one, otherwise devices active in Entra.
     if managed:
@@ -485,7 +486,12 @@ def build(conn, tenant, key: str, now: datetime | None = None) -> DataReport:
     report = DataReport(key, title, description, dict(tenant), now)
     report.sources = [(REGISTRY[c].title, (snap.runs.get(c) or {"finished_at": None})["finished_at"])
                       for c in collectors]
-    builder(snap, now, report)
+    try:
+        builder(snap, now, report)
+    except Exception as exc:  # show the page with a reason rather than an error
+        logging.getLogger(__name__).exception("Report %s failed", key)
+        report.sections = []
+        report.unavailable = f"This report couldn't be built: {type(exc).__name__}"
     return report
 
 

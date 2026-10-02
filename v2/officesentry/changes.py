@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from . import store
+from .devices import clean as clean_device
 
 
 @dataclass
@@ -133,9 +134,14 @@ def app_changes(conn, tenant_id: int, before: str) -> list[Change]:
 COMPLIANCE_WORDS = {"compliant": "compliant", "noncompliant": "not compliant", "inGracePeriod": "in grace period"}
 
 
+def _device_pair(conn, tenant_id: int, kind: str, before: str):
+    pair = _pair(conn, tenant_id, "devices", kind, before)
+    return None if pair is None else tuple({k: clean_device(d) for k, d in side.items()} for side in pair)
+
+
 def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
     """Intune enrolments, retirements and compliance or encryption lost; Entra records without Intune."""
-    pair = _pair(conn, tenant_id, "devices", "managed_device", before)
+    pair = _device_pair(conn, tenant_id, "managed_device", before)
     if pair is not None and (pair[0] or pair[1]):
         old, new = pair
         out = []
@@ -156,7 +162,7 @@ def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
         out += [Change("Devices", "removed", d.get("deviceName") or did, "Removed from Intune")
                 for did, d in old.items() if did not in new]
         return out
-    pair = _pair(conn, tenant_id, "devices", "entra_device", before)
+    pair = _device_pair(conn, tenant_id, "entra_device", before)
     if pair is None:
         return []
     old, new = pair

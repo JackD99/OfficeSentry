@@ -11,6 +11,7 @@ Rules never call Graph; they only read stored snapshots.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -739,15 +740,15 @@ def dkim_enabled(snap: TenantSnapshot, now: datetime):
 
 def _managed_devices(snap: TenantSnapshot):
     """Intune devices, or the reason they can't be checked."""
-    status = snap.objects("devices", "intune_status")
+    status = devices.objects(snap, "intune_status")
     if status is None:
         return None, "Device data hasn't been collected yet"
     if not status or not status[0].get("available"):
         return None, "The tenant has no Intune licence, or Intune isn't readable"
-    devices = snap.objects("devices", "managed_device") or []
-    if not devices:
+    managed = devices.objects(snap, "managed_device") or []
+    if not managed:
         return None, "No devices are enrolled in Intune"
-    return devices, ""
+    return managed, ""
 
 
 def _device_label(d: dict) -> str:
@@ -801,7 +802,7 @@ def supported_windows(snap: TenantSnapshot, now: datetime):
     if managed is not None:
         windows, source = [d for d in managed if devices.is_windows(d)], "osVersion"
     else:
-        entra = snap.objects("devices", "entra_device")
+        entra = devices.objects(snap, "entra_device")
         if entra is None:
             return _unavailable("Device data hasn't been collected yet")
         # Without Intune, use Entra's record of devices that signed in recently.
@@ -828,8 +829,8 @@ def supported_windows(snap: TenantSnapshot, now: datetime):
       "Enrol Entra-joined and hybrid-joined computers in Intune (automatic enrolment under Devices > "
       "Enrollment > Windows) so compliance, encryption and updates can be enforced on them.")
 def intune_enrolled(snap: TenantSnapshot, now: datetime):
-    status = snap.objects("devices", "intune_status")
-    entra = snap.objects("devices", "entra_device")
+    status = devices.objects(snap, "intune_status")
+    entra = devices.objects(snap, "entra_device")
     if status is None or entra is None:
         return _unavailable("Device data hasn't been collected yet")
     if not status or not status[0].get("available"):
@@ -868,7 +869,7 @@ def device_checkin(snap: TenantSnapshot, now: datetime):
       "center > Devices > All devices, filter by activity). Old records can still hold BitLocker keys and "
       "count toward device limits.")
 def stale_devices(snap: TenantSnapshot, now: datetime):
-    entra = snap.objects("devices", "entra_device")
+    entra = devices.objects(snap, "entra_device")
     if entra is None:
         return _unavailable("Device data hasn't been collected yet")
     findings = []
@@ -885,7 +886,11 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
     now = now or datetime.now(UTC)
     results = []
     for r in RULES:
-        status, summary, findings = r.check(snap, now)
-        findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
+        try:
+            status, summary, findings = r.check(snap, now)
+            findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
+        except Exception as exc:  # one broken check mustn't blank the whole report
+            logging.getLogger(__name__).exception("Check %s failed", r.key)
+            status, summary, findings = "unavailable", f"This check couldn't run: {type(exc).__name__}", []
         results.append(RuleResult(r.key, r.title, r.category, status, summary, r.recommendation, findings))
     return results

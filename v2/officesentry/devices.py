@@ -74,6 +74,25 @@ def windows_support(version: str | None, today: date) -> OsSupport:
     return OsSupport(release.name, "supported", release.pro_end, f"{release.name}, supported")
 
 
+BOOL_FIELDS = frozenset({"accountEnabled", "isCompliant", "isManaged", "isEncrypted", "available"})
+
+
+def clean(record: dict) -> dict:
+    """A stored device record with wrongly typed values treated as missing.
+
+    Every device field is text apart from the flags in ``BOOL_FIELDS``, so a value of the
+    wrong type (a list where Graph should have sent a name, say) becomes ``None`` instead of
+    breaking a check, the Devices report or "what changed".
+    """
+    return {k: v if isinstance(v, bool if k in BOOL_FIELDS else str) else None for k, v in record.items()}
+
+
+def objects(snap, kind: str) -> list[dict] | None:
+    """``snap.objects("devices", kind)``, cleaned."""
+    rows = snap.objects("devices", kind)
+    return None if rows is None else [clean(r) for r in rows if isinstance(r, dict)]
+
+
 def is_windows(device: dict) -> bool:
     return (device.get("operatingSystem") or "").lower().startswith("windows")
 
