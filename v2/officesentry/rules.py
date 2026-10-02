@@ -688,10 +688,58 @@ def _domain_rule(snap: TenantSnapshot, area: str):
     findings = []
     for row in rows:
         health = dnscheck.DomainHealth.from_dict(row)
-        for issue in dnscheck.issues(health):
+        for issue in dnscheck.issues(health, transport=True):
             if issue.area == area:
                 findings.append(Finding(issue.severity, health.domain, issue.detail, f"{health.domain}:{area}"))
     return findings, rows
+
+
+def _transport_rule(snap: TenantSnapshot, area: str):
+    """Findings and the mail domains checked for MTA-STS/TLS-RPT, or None and why not."""
+    result = _domain_rule(snap, area)
+    if result is None:
+        return None, "Domain checks haven't run yet, or the tenant has no custom domains"
+    findings, rows = result
+    mail = [h for h in map(dnscheck.DomainHealth.from_dict, rows) if h.sends_mail]
+    if not mail:
+        return None, "No domain receives mail"
+    checked = [h for h in mail if h.transport_checked]
+    if not checked:
+        return None, "Domains haven't been checked for MTA-STS yet; refresh Email domains on the tenant page"
+    return (findings, checked), ""
+
+
+@rule("mta_sts", "Mail domains require encrypted delivery (MTA-STS)", "Email",
+      "Publish an MTA-STS policy so other mail servers only deliver to the domain over a verified, encrypted "
+      "connection: a TXT record at _mta-sts.<domain> (\"v=STSv1; id=20260101\") and a policy file at "
+      "https://mta-sts.<domain>/.well-known/mta-sts.txt listing the domain's MX hosts (for Microsoft 365, "
+      "\"mx: *.mail.protection.outlook.com\"). Start with \"mode: testing\" and TLS-RPT reports, then switch to "
+      "\"mode: enforce\" and change the id.")
+def mta_sts(snap: TenantSnapshot, now: datetime):
+    result, reason = _transport_rule(snap, "MTA-STS")
+    if result is None:
+        return _unavailable(reason)
+    findings, mail = result
+    return ("fail", f"{len({f.subject for f in findings})} of {len(mail)} mail domain(s) don't fully enforce "
+                    "MTA-STS", findings) if findings \
+        else ("pass", f"MTA-STS is enforced on all {len(mail)} mail domain(s)", [])
+
+
+@rule("tls_rpt", "Encrypted delivery failures are reported (TLS-RPT)", "Email",
+      "Publish a TXT record at _smtp._tls.<domain> such as \"v=TLSRPTv1; rua=mailto:tls-reports@<domain>\" "
+      "(or a reporting service's address), so someone hears when other servers can't deliver mail encrypted, "
+      "before and after MTA-STS is enforced.")
+def tls_rpt(snap: TenantSnapshot, now: datetime):
+    result, reason = _transport_rule(snap, "TLS-RPT")
+    if result is None:
+        return _unavailable(reason)
+    findings, mail = result
+    scope = [h for h in mail if h.mta_sts or h.tls_rpt]
+    if not scope:
+        return _unavailable("TLS-RPT is checked on mail domains that use MTA-STS, and none do yet")
+    return ("fail", f"{len({f.subject for f in findings})} of {len(scope)} domain(s) without working TLS-RPT",
+            findings) if findings else ("pass", f"TLS-RPT reports are set up on all {len(scope)} domain(s) "
+                                                "that use MTA-STS or TLS-RPT", [])
 
 
 @rule("spf_record", "Every domain has a working SPF record", "Email",

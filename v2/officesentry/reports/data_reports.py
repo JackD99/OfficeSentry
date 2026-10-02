@@ -323,18 +323,41 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if not rows:
         report.unavailable = "Domain checks haven't run yet, or the tenant has no custom domains."
         return
-    overview = Section("Domains", ["Domain", "Receives mail via", "SPF", "DMARC", "DKIM", "What to fix"],
-                       intro="SPF, DMARC and DKIM stop other people sending email as the client's domains.")
-    records = Section("Published records", ["Domain", "SPF record", "DNS lookups", "DMARC record", "MX"])
-    for row in sorted(rows, key=lambda r: (not r.get("mx"), r["domain"])):
-        h = dnscheck.DomainHealth.from_dict(row)
-        found = dnscheck.issues(h)
+    overview = Section("Domains", ["Domain", "Receives mail via", "SPF", "DMARC", "DKIM", "MTA-STS", "TLS-RPT",
+                                   "What to fix"],
+                       intro="SPF, DMARC and DKIM stop other people sending email as the client's domains. "
+                             "MTA-STS and TLS-RPT make other servers deliver mail to them encrypted, and report "
+                             "when they can't.")
+    records = Section("Published records", ["Domain", "SPF record", "DNS lookups", "DMARC record", "MTA-STS policy",
+                                            "TLS-RPT record", "MX"])
+    healths = [dnscheck.DomainHealth.from_dict(row) for row in rows]
+    for h in sorted(healths, key=lambda h: (not h.sends_mail, h.domain)):
+        found = dnscheck.issues(h, transport=True)
         words = dnscheck.summary(h)
-        via = "Microsoft 365" if h.microsoft_365 else (h.mx[0] if h.mx else "Doesn't receive mail")
-        overview.add([h.domain, via, words["SPF"], words["DMARC"], words["DKIM"],
-                      "; ".join(i.detail for i in found) or "Nothing"], found[0].severity if found else None)
-        records.add([h.domain, h.spf or "None", h.spf_lookups if h.spf else "", h.dmarc or "None", h.mx])
+        delivery = dnscheck.transport_summary(h)
+        via = "Microsoft 365" if h.microsoft_365 else (h.mx[0] if h.sends_mail else "Doesn't receive mail")
+        overview.add([h.domain, via, words["SPF"], words["DMARC"], words["DKIM"], delivery["MTA-STS"],
+                      delivery["TLS-RPT"], "; ".join(i.detail for i in found) or "Nothing"],
+                     found[0].severity if found else None)
+        records.add([h.domain, h.spf or "None", h.spf_lookups if h.spf else "", h.dmarc or "None", _mta_sts_text(h),
+                     h.tls_rpt or ("None" if h.transport_checked else "Not checked"),
+                     h.mx if h.sends_mail or not h.mx else "Null MX (accepts no mail)"])
     report.sections = [overview, records]
+
+
+def _mta_sts_text(h: dnscheck.DomainHealth) -> str:
+    if not h.transport_checked:
+        return "Not checked"
+    if not h.mta_sts:
+        return "None"
+    text = f"id={h.mta_sts_id}" if h.mta_sts_id else "Record without id="
+    if h.mta_sts_records > 1:
+        text += f" (and {h.mta_sts_records - 1} more record(s))"
+    if h.mta_sts_error:
+        return f"{text}; {h.mta_sts_error}"
+    if h.mta_sts_mode:
+        text += f"; mode: {h.mta_sts_mode}; mx: {', '.join(h.mta_sts_mx) or 'none'}; max_age: {h.mta_sts_max_age}"
+    return text
 
 
 # -- Devices -----------------------------------------------------------------------------
@@ -469,7 +492,8 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
     "conditional-access": ("Conditional Access coverage",
                            "Every policy in plain words, and which accounts each one actually covers.",
                            ("conditional_access", "admin_roles", "users"), conditional_access),
-    "domains": ("Email domains", "SPF, DMARC and DKIM for each of the tenant's domains, from public DNS.",
+    "domains": ("Email domains", "SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from "
+                "public DNS.",
                 ("domain_health",), domains),
     "guests": ("Guests and sharing", "Who can invite and share externally, and every guest account.",
                ("tenant_policies", "users"), guests),

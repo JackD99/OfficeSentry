@@ -42,7 +42,15 @@ pass, and a first run against a real tenant.
   - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
     and every guest with invitation state and last sign-in.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
-    verified domain, from public DNS.
+    verified domain, from public DNS. SPF checks also catch multiple records,
+    +all/?all, the ptr mechanism and includes that publish no SPF record;
+    DMARC checks catch multiple records, a missing p= policy, pct below 100,
+    sp=none and no rua= address. Domains that receive mail are also checked
+    for MTA-STS (the `_mta-sts` record and the policy file at
+    `https://mta-sts.<domain>/.well-known/mta-sts.txt`: mode, mx hosts
+    covering the domain's MX, max_age; fetched like sending servers do, with
+    no redirects) and TLS-RPT (`_smtp._tls`). MTA-STS and TLS-RPT have their own
+    checks and don't change prospect grades.
   - *Devices*: operating systems with Windows support dates, Intune devices
     that are non-compliant, unencrypted, out of support or not checking in,
     every managed device, and every Entra ID device record by last activity.
