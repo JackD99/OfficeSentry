@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from .db import transaction, utcnow
 
@@ -160,25 +161,55 @@ def metric_history(conn, tenant_id: int, key: str, since: str | None = None) -> 
     return conn.execute(sql + " ORDER BY captured_at", args).fetchall()
 
 
-def prune_snapshots(conn, retention_days: int) -> int:
-    """Delete object rows of runs older than the retention window.
+def snapshots_to_keep(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC") -> set[int]:
+    """Run IDs whose objects the retention policy keeps.
 
-    The latest successful run per tenant+collector is always kept, and metrics
-    are never pruned (they are small and carry the long-term trends).
+    Per tenant and collector, among successful runs: the last run of each of
+    the ``keep_daily`` most recent days with a run, and the last run of each
+    of the ``keep_monthly`` most recent months. The latest run is always one
+    of those. Days and months are in the portal's timezone.
     """
-    cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    with transaction(conn, immediate=True):
-        cur = conn.execute(
-            """
-            DELETE FROM objects WHERE run_id IN (
-                SELECT r.id FROM runs r
-                WHERE r.finished_at < ?
-                  AND r.id NOT IN (
-                      SELECT MAX(id) FROM runs WHERE status IN ('succeeded', 'partial')
-                      GROUP BY tenant_id, collector
-                  )
-            )
-            """,
-            (cutoff,),
-        )
-        return cur.rowcount
+    zone = ZoneInfo(tz)
+    keep: set[int] = set()
+    days: dict[tuple, list] = {}
+    months: dict[tuple, list] = {}
+    rows = conn.execute(
+        "SELECT id, tenant_id, collector, finished_at FROM runs"
+        " WHERE status IN ('succeeded', 'partial') AND finished_at IS NOT NULL"
+        " ORDER BY tenant_id, collector, finished_at DESC, id DESC"
+    )
+    for r in rows:
+        group = (r["tenant_id"], r["collector"])
+        local = datetime.fromisoformat(r["finished_at"].replace("Z", "+00:00")).astimezone(zone)
+        # Rows arrive newest first, so the first run seen in a day/month is its last.
+        for buckets, label, limit in ((days, local.date(), keep_daily),
+                                      (months, (local.year, local.month), keep_monthly)):
+            seen = buckets.setdefault(group, [])
+            if len(seen) < limit and (not seen or seen[-1] != label):
+                seen.append(label)
+                keep.add(r["id"])
+    return keep
+
+
+def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC",
+                    grace_hours: int = 24, batch: int = 200) -> int:
+    """Delete the objects of runs the retention policy doesn't keep. Returns runs pruned.
+
+    Metrics, findings, the run rows and their logs are never pruned. Runs that
+    finished within ``grace_hours`` are left alone, so today's extra runs stay
+    inspectable until tomorrow. Deletes go in small batches so the portal
+    stays responsive.
+    """
+    keep = snapshots_to_keep(conn, keep_daily, keep_monthly, tz)
+    cutoff = (datetime.now(UTC) - timedelta(hours=grace_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    candidates = [r["id"] for r in conn.execute(
+        "SELECT id FROM runs WHERE status IN ('succeeded', 'partial', 'failed') AND finished_at < ?"
+        " AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id) ORDER BY id",
+        (cutoff,),
+    ) if r["id"] not in keep]
+    for i in range(0, len(candidates), batch):
+        chunk = candidates[i:i + batch]
+        with transaction(conn, immediate=True):
+            conn.execute(f"DELETE FROM objects WHERE run_id IN ({','.join('?' * len(chunk))})", chunk)
+    return len(candidates)
+

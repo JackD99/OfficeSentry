@@ -58,10 +58,23 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   `data-label` on every cell after the first.
 - Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.
 
+## Background work
+
+`worker.py` is the only background process: one loop that claims queued runs
+and, once a minute, queues the collection slot (`schedule.py`, cron +
+timezone, skipping collectors fresher than `max_age_hours`) and sends due
+report emails (which first refresh stale collectors). It prunes snapshots once
+a day with `store.prune_snapshots` (latest run per day for 30 days and per
+month for 12; metrics, findings and run rows are never pruned), so code that
+reads an older run must cope with its objects being gone (see
+`changes._baseline_run`). A side thread records the heartbeat that the
+portal banner and `healthcheck worker` read. Don't add Celery or Redis.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 
 ## Commands
 
-`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,create-app,rotate-keys}`
+`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,create-app,rotate-keys,backup,healthcheck}`.
+Docker: `docker compose up -d --build` (see DEPLOY.md).

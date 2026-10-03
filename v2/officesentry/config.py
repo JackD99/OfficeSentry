@@ -34,8 +34,10 @@ class Config:
     encryption_keys: list[str]
     base_url: str = "http://localhost:8000"
     timezone: str = "UTC"
-    nightly_hour: int = 2
-    retention_days: int = 730
+    collect_cron: str = "0 2 * * *"
+    max_age_hours: float = 12
+    keep_daily: int = 30
+    keep_monthly: int = 12
     secure_cookies: bool = True
     testing: bool = False
     extra: dict = field(default_factory=dict)
@@ -78,10 +80,35 @@ def load_config(**overrides) -> Config:
         encryption_keys=keys,
         base_url=_env("BASE_URL", "http://localhost:8000").rstrip("/"),
         timezone=_env("TIMEZONE", "UTC"),
-        nightly_hour=int(_env("NIGHTLY_HOUR", "2")),
-        retention_days=int(_env("RETENTION_DAYS", "730")),
+        collect_cron=_collect_cron(),
+        max_age_hours=float(_env("MAX_AGE_HOURS", "12")),
+        keep_daily=int(_env("KEEP_DAILY", "30")),
+        keep_monthly=int(_env("KEEP_MONTHLY", "12")),
         secure_cookies=_env("INSECURE_COOKIES", "") != "1",
     )
     for key, value in overrides.items():
         setattr(cfg, key, value)
+    _check(cfg)
     return cfg
+
+
+def _collect_cron() -> str:
+    if cron := _env("COLLECT_CRON").strip():
+        return cron
+    # OFFICESENTRY_NIGHTLY_HOUR is the older, simpler setting.
+    return f"0 {int(_env('NIGHTLY_HOUR', '2'))} * * *"
+
+
+def _check(cfg: Config) -> None:
+    """Fail at startup with a plain message rather than later in the worker."""
+    from .schedule import cron_problem, timezone_problem
+
+    problems = []
+    if p := timezone_problem(cfg.timezone):
+        problems.append(f"{ENV_PREFIX}TIMEZONE: {p}")
+    if p := cron_problem(cfg.collect_cron):
+        problems.append(f"{ENV_PREFIX}COLLECT_CRON: {p}")
+    if cfg.max_age_hours < 0 or cfg.keep_daily < 1 or cfg.keep_monthly < 0:
+        problems.append(f"{ENV_PREFIX}MAX_AGE_HOURS, KEEP_DAILY and KEEP_MONTHLY must be positive")
+    if problems:
+        raise ValueError("Configuration problem: " + "; ".join(problems))

@@ -1,16 +1,55 @@
-# Put a TLS-terminating reverse proxy (Caddy, nginx, Traefik) in front of "web".
+# Office Sentry: the portal ("web") and the background worker share one image
+# and one data volume. Setup steps are in DEPLOY.md.
+x-officesentry: &officesentry
+  image: officesentry:latest
+  build: .
+  env_file: .env
+  volumes: ["officesentry-data:/data"]
+  restart: unless-stopped
+  init: true
+
 services:
   web:
-    build: .
-    env_file: .env
+    <<: *officesentry
+    # Only reachable from this server. Put HTTPS in front: the "https" profile
+    # below, or your own reverse proxy (nginx, Traefik).
     ports: ["127.0.0.1:8000:8000"]
-    volumes: ["officesentry-data:/data"]
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "web"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+
   worker:
-    build: .
-    env_file: .env
+    <<: *officesentry
     command: ["python", "-m", "officesentry", "worker"]
-    volumes: ["officesentry-data:/data"]
+    # Let a running collection finish on "docker compose down".
+    stop_grace_period: 2m
+    # The portal applies database upgrades first.
+    depends_on:
+      web: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "worker"]
+      interval: 1m
+      timeout: 10s
+      start_period: 2m
+
+  # Optional automatic HTTPS: set OFFICESENTRY_DOMAIN in .env, point the
+  # domain's DNS at this server, then: docker compose --profile https up -d
+  caddy:
+    image: caddy:2
+    profiles: ["https"]
+    environment:
+      SITE_ADDRESS: ${OFFICESENTRY_DOMAIN:-localhost}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web]
     restart: unless-stopped
+
 volumes:
   officesentry-data:
+  caddy-data:
+  caddy-config:

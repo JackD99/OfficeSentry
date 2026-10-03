@@ -94,19 +94,23 @@ this command; the product signs in with a certificate.
 - **Deny-by-default access.** Users see only tenants granted to them (admins
   and "all tenants" analysts excepted). Hidden tenants return 404.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
-  can show history and changes. Metrics are kept forever; full snapshots for
-  `OFFICESENTRY_RETENTION_DAYS`.
-- **One worker process, no Redis/Celery.** It recovers runs left behind by a
-  crash and queues each nightly slot once.
+  can show history and changes. Metrics and findings are kept forever; full
+  snapshots for the last 30 days plus one per month for 12 months.
+- **One worker process, no Redis/Celery.** It collects on a cron schedule in
+  your timezone, skips data that is already fresh, refreshes stale data before
+  an emailed report, prunes old snapshots, and recovers runs left behind by a
+  crash.
 
 ## Quick start (Docker)
 
 ```bash
 cp .env.example .env          # set OFFICESENTRY_BASE_URL at least
-docker compose up -d --build
+docker compose --profile https up -d --build
 ```
 
-Open the portal, create the first admin, then:
+[DEPLOY.md](DEPLOY.md) has the full steps: HTTPS, schedule and retention
+settings, backups and updating. Then open the portal, create the first admin,
+and:
 
 1. **App connections → Generate certificate.**
 2. Create the app: `docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>`
@@ -147,6 +151,7 @@ officesentry/
   findings.py    findings lifecycle (new, resolved, reopened, accepted)
   changes.py     snapshot diffs for "since last month"
   mailer.py      SMTP delivery and the monthly schedule
-  worker.py      queue runner, nightly scheduler, orphan recovery
+  schedule.py    cron slots in a timezone, freshness (max age)
+  worker.py      queue runner, schedule, retention, heartbeat
   web/           Flask app: access.py is the single authorization gate
 ```

@@ -18,7 +18,10 @@ class Change:
 def _baseline_run(conn, tenant_id: int, collector: str, before: str):
     return conn.execute(
         "SELECT * FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
-        " AND finished_at <= ? ORDER BY finished_at DESC, id DESC LIMIT 1",
+        " AND finished_at <= ?"
+        # Skip runs whose objects the retention policy has removed.
+        " AND (object_count = 0 OR EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id))"
+        " ORDER BY finished_at DESC, id DESC LIMIT 1",
         (tenant_id, collector, before),
     ).fetchone()
 

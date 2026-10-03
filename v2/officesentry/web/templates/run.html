@@ -23,6 +23,7 @@
   <section class="card">
     <h2>Items collected</h2>
     {% if kinds %}<ul class="list compact">{% for k in kinds %}<li><a class="grow" href="{{ url_for('tenants.run', run_id=run.id, kind=k.kind) }}">{{ k.kind|replace('_', ' ')|capitalize }}</a><span class="count-badge">{{ k.n }}</span></li>{% endfor %}</ul>
+    {% elif pruned %}<p class="muted">{{ run.object_count }} items were collected. They have since been removed to save space; the numbers are kept.</p>
     {% else %}<p class="muted">None.</p>{% endif %}
   </section>
 </div>

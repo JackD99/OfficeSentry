@@ -99,10 +99,11 @@ def test_unconfigured_email_records_failure(client, db, two_tenants):
 def test_due_schedules(db, two_tenants):
     alpha, _ = two_tenants
     db.execute("INSERT INTO report_schedules (tenant_id, recipients, day_of_month, hour, created_at)"
-               " VALUES (?, 'a@x.com', 5, 8, '2026-01-01T00:00:00Z')", (alpha,))
+               " VALUES (?, 'a@x.com', 5, 8, '2026-10-01T00:00:00Z')", (alpha,))
+    # September's send time is before the schedule existed.
     assert mailer.due_schedules(db, "UTC", datetime(2026, 10, 5, 7, 0, tzinfo=UTC)) == []
     due = mailer.due_schedules(db, "UTC", datetime(2026, 10, 5, 8, 0, tzinfo=UTC))
-    assert [p for _, p in due] == ["2026-10"]
+    assert [d[1] for d in due] == ["2026-10"]
     db.execute("UPDATE report_schedules SET last_period = '2026-10'")
     assert mailer.due_schedules(db, "UTC", datetime(2026, 10, 20, 8, 0, tzinfo=UTC)) == []
     assert len(mailer.due_schedules(db, "UTC", datetime(2026, 11, 6, 0, 0, tzinfo=UTC))) == 1

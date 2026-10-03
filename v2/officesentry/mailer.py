@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
-from . import store
+from . import schedule, store
 from .db import utcnow
 
 EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
@@ -126,37 +126,52 @@ def deliver(app, conn, vault, tenant, recipients: list[str], schedule_id: int | 
     return error
 
 
-def due_schedules(conn, tz: str, now: datetime | None = None) -> list:
-    """Enabled schedules whose day/hour has passed this month and haven't sent this month.
+def schedule_cron(row) -> str:
+    """A monthly schedule (day of month + hour) as a cron expression."""
+    return f"0 {int(row['hour'])} {int(row['day_of_month'])} * *"
 
-    A failed attempt is retried after an hour rather than every tick.
+
+def due_schedules(conn, tz: str, now: datetime | None = None) -> list:
+    """Enabled schedules whose latest send time has passed and that haven't sent for it.
+
+    A send time missed while the worker was down is caught up later.
+
+    Returns ``(schedule, period, slot)`` tuples: ``period`` is the local month
+    ("2026-10") recorded once sent, ``slot`` the UTC send time. A failed attempt
+    is retried after an hour rather than every tick.
     """
-    local = (now or datetime.now(UTC)).astimezone(ZoneInfo(tz))
-    period = local.strftime("%Y-%m")
-    retry_cutoff = ((now or datetime.now(UTC)).timestamp() - 3600)
+    now = now or datetime.now(UTC)
+    retry_cutoff = now.timestamp() - 3600
     due = []
     for s in conn.execute("SELECT * FROM report_schedules WHERE enabled = 1"):
-        if s["last_period"] == period:
+        slot = schedule.previous_fire(schedule_cron(s), tz, now)
+        period = slot.astimezone(ZoneInfo(tz)).strftime("%Y-%m")
+        if s["last_period"] is not None and s["last_period"] >= period:
             continue
-        if (local.day, local.hour) < (s["day_of_month"], s["hour"]):
-            continue
+        if schedule.iso(slot) < s["created_at"]:
+            continue  # a new schedule starts at its next send time, not a past one
         last_fail = conn.execute(
             "SELECT sent_at FROM report_deliveries WHERE schedule_id = ? AND status = 'failed'"
             " ORDER BY id DESC LIMIT 1", (s["id"],)).fetchone()
         if last_fail and datetime.fromisoformat(last_fail["sent_at"].replace("Z", "+00:00")).timestamp() > retry_cutoff:
             continue
-        due.append((s, period))
+        due.append((s, period, slot))
     return due
 
 
-def run_due(app, conn, vault, tz: str, now: datetime | None = None) -> int:
+def run_due(app, conn, vault, tz: str, now: datetime | None = None, max_age_hours: float | None = None) -> int:
+    """Send due reports. With ``max_age_hours``, stale data is refreshed first."""
+    now = now or datetime.now(UTC)
     sent = 0
-    for schedule, period in due_schedules(conn, tz, now):
-        tenant = store.get_tenant(conn, schedule["tenant_id"])
-        recipients = parse_recipients(schedule["recipients"]) or []
+    for sched, period, slot in due_schedules(conn, tz, now):
+        tenant = store.get_tenant(conn, sched["tenant_id"])
+        recipients = parse_recipients(sched["recipients"]) or []
         if tenant is None or not recipients:
             continue
-        if deliver(app, conn, vault, tenant, recipients, schedule["id"]) is None:
-            conn.execute("UPDATE report_schedules SET last_period = ? WHERE id = ?", (period, schedule["id"]))
+        if max_age_hours is not None and tenant["enabled"] and tenant["connection_id"] \
+                and not schedule.refresh_for_report(conn, tenant["id"], slot, max_age_hours, now):
+            continue  # waiting for fresh data; checked again next minute
+        if deliver(app, conn, vault, tenant, recipients, sched["id"]) is None:
+            conn.execute("UPDATE report_schedules SET last_period = ? WHERE id = ?", (period, sched["id"]))
             sent += 1
     return sent
