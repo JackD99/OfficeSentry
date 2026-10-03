@@ -135,13 +135,7 @@ def _grants(snap: TenantSnapshot, d: _Directory) -> list[tuple[dict | None, str,
         if box is None and "@" not in label:
             continue  # system objects, not mailboxes people use
         out.append((box, (box or {}).get("PrimarySmtpAddress") or _text(p.get("Identity")), label, user, "Send as"))
-    for box in d.boxes.values():
-        pass
-    seen = set()
     for m in snap.objects("mailboxes", "mailbox") or []:
-        if id(m) in seen:
-            continue
-        seen.add(id(m))
         for who in m.get("GrantSendOnBehalfTo") or []:
             label, user = d.person(who)
             out.append((m, _text(m.get("PrimarySmtpAddress")), label, user, "Send on behalf"))
@@ -221,7 +215,7 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
     users = {u["_id"]: u for u in snap.objects("users", "user") or []}
     d = _Directory(boxes, list(users.values()))
     access: dict[str, dict[str, list[str]]] = {}
-    for box, box_label, person, _, right in _grants(snap, d):
+    for _box, box_label, person, _, right in _grants(snap, d):
         access.setdefault(box_label.lower(), {}).setdefault(right, []).append(person)
     sizes = {s.get("mailboxId"): s for s in snap.objects("mailbox_usage", "mailbox_size") or []}
     recent = now - timedelta(days=30)

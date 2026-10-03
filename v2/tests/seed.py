@@ -61,6 +61,7 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
         return 200, {}, json.dumps(gd.FOLDERS.get(fid, {"displayName": fid}))
     rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/(?!inbox)[^/?]+"),
                       callback=folder, content_type="application/json")
+    rsps.get(f"{V1}/auditLogs/signIns", json={"value": gd.LEGACY_SIGNINS})
     if exchange is not False:
         mock_exchange(rsps, exchange)
 
