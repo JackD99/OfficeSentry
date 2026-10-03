@@ -14,6 +14,7 @@ from .. import coverage
 from ..rules import RuleResult
 from ..snapshot import TenantSnapshot
 from .monthly_review import build as build_review
+from .safe_xlsx import no_formulas
 
 IN_PLACE, PARTLY, NOT_IN_PLACE, NOT_ASSESSED = "In place", "Partly in place", "Not in place", "Not assessed"
 
@@ -34,7 +35,7 @@ CONTROLS = (
     Control("legacy_auth", "Are legacy authentication protocols (which can't do MFA) blocked?",
             ("legacy_auth_blocked", "smtp_auth")),
     Control("privileged", "Is administrative access limited to named, internal accounts?",
-            ("global_admin_count", "guest_admins", "service_principal_admins")),
+            ("global_admin_count", "guest_admins", "service_principal_admins", "cloud_only_admins")),
     Control("email_auth", "Are SPF, DKIM and DMARC configured for your email domains?",
             ("spf_record", "dkim_enabled", "dmarc_policy")),
     Control("forwarding", "Is automatic forwarding of email to external addresses blocked or monitored?",
@@ -44,7 +45,9 @@ CONTROLS = (
             ("stale_users", "licensed_disabled", "pending_guests")),
     Control("apps", "Is access by third-party applications controlled?",
             ("user_consent", "risky_app_permissions")),
-    Control("sharing", "Is external file sharing restricted?", ("sharepoint_sharing", "guest_invites")),
+    Control("sharing", "Is external file sharing restricted?", ("sharepoint_sharing", "anyone_links", "guest_invites")),
+    Control("devices", "Are company devices managed, encrypted and kept on supported operating systems?",
+            ("device_encryption", "device_compliance", "supported_windows")),
     Control("backups", "Are backups of Microsoft 365 data taken and kept separately?", (),
             "Backups are outside what Microsoft 365 reports. Provide evidence from the backup product."),
     Control("training", "Do staff receive security awareness and phishing training?", (),
@@ -172,6 +175,7 @@ def to_xlsx(pack: EvidencePack) -> bytes:
     info.append(["Prepared (UTC)", pack.generated_at.strftime("%Y-%m-%d %H:%M")])
     info.append(["Oldest data used (UTC)", (pack.oldest_data or "")[:16].replace("T", " ")])
     info.append(["Secure Score", f"{pack.secure_score:g}%" if pack.secure_score is not None else "n/a"])
+    no_formulas(wb)
     out = BytesIO()
     wb.save(out)
     return out.getvalue()
