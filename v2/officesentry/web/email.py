@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import delivery, mailer
+from .. import alerts, delivery, mailer, store
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
@@ -359,15 +359,23 @@ def preview_schedule_body(schedule_id: int):
 
 
 def _alert_example(a):
-    """Open findings at the alert's level, as an example of what an alert looks like."""
+    """Open findings at the alert's level, as an example of what an alert looks like.
+    An alert for every tenant uses the tenant with the most recent such finding."""
     levels = delivery.ALERT_LEVELS[a["min_severity"]]
-    rows = g.db.execute(
-        f"SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
-        f" WHERE f.resolved_at IS NULL AND f.accepted_at IS NULL AND f.severity IN ({','.join('?' * len(levels))})"
-        " AND (? IS NULL OR f.tenant_id = ?) ORDER BY f.first_seen DESC LIMIT 5",
-        (*levels, a["tenant_id"], a["tenant_id"])).fetchall()
-    return delivery.build_alert_email(current_app, g.db, a, rows, delivery.recipients(g.db, "alert", a["id"]),
-                                      preview=True) if rows else None
+    marks = ",".join("?" * len(levels))
+    tenant_id = a["tenant_id"] or (g.db.execute(
+        f"SELECT tenant_id FROM findings WHERE resolved_at IS NULL AND severity IN ({marks})"
+        " ORDER BY first_seen DESC LIMIT 1", levels).fetchone() or [None])[0]
+    if tenant_id is None:
+        return None
+    ids = [r[0] for r in g.db.execute(
+        f"SELECT id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND severity IN ({marks})"
+        " ORDER BY first_seen DESC LIMIT 20", (tenant_id, *levels))]
+    items = alerts.opened_items(g.db, tenant_id, ids, a["min_severity"])[:5]
+    if not items:
+        return None
+    return delivery.build_alert_email(current_app, g.db, a, store.get_tenant(g.db, tenant_id), items,
+                                      delivery.recipients(g.db, "alert", a["id"]), preview=True)
 
 
 @bp.get("/alerts/<int:alert_id>/preview")
@@ -461,8 +469,8 @@ def _save_alert(tenant_id: int | None):
             g.db.execute("UPDATE email_alerts SET min_severity = ?, enabled = 1 WHERE id = ?", (severity, alert_id))
         else:
             alert_id = g.db.execute(
-                "INSERT INTO email_alerts (tenant_id, min_severity, watermark, created_by, created_at)"
-                " VALUES (?, ?, ?, ?, ?)", (tenant_id, severity, utcnow(), g.user["username"], utcnow())).lastrowid
+                "INSERT INTO email_alerts (tenant_id, min_severity, created_by, created_at)"
+                " VALUES (?, ?, ?, ?)", (tenant_id, severity, g.user["username"], utcnow())).lastrowid
         delivery.set_recipients(g.db, "alert", alert_id, ids)
         audit(g.db, g.user["username"], "email_alert_saved", tenant_id, f"{severity} to {len(ids)} recipient(s)")
     flash("Alerts are on. You'll get an email when a scan finds something new.", "success")

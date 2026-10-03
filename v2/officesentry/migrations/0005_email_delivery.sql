@@ -44,16 +44,14 @@ CREATE TABLE email_schedule_recipients (
     PRIMARY KEY (schedule_id, contact_id)
 );
 
--- Email when a check finds something new at or above min_severity.
--- tenant_id NULL watches every tenant (MSP team only).
+-- Who gets an email when a collection opens findings at or above min_severity
+-- (the same event that posts webhook alerts, see alerts.after_sync).
+-- tenant_id NULL covers every tenant (MSP team only).
 CREATE TABLE email_alerts (
     id           INTEGER PRIMARY KEY,
     tenant_id    INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
     min_severity TEXT NOT NULL CHECK (min_severity IN ('critical', 'high')),
     enabled      INTEGER NOT NULL DEFAULT 1,
-    watermark    TEXT NOT NULL,  -- findings first seen or reopened after this are new
-    attempts     INTEGER NOT NULL DEFAULT 0,
-    retry_at     TEXT,
     created_by   TEXT,
     created_at   TEXT NOT NULL
 );
@@ -76,6 +74,8 @@ CREATE TABLE email_deliveries (
     bcc         TEXT NOT NULL DEFAULT '',
     attachments TEXT NOT NULL DEFAULT '[]',
     payload     TEXT,                    -- alert: JSON list of finding ids, so a retry resends the same alert
+    attempt     INTEGER NOT NULL DEFAULT 1,
+    retry_at    TEXT,                    -- alert: when the worker tries a failed send again
     transport   TEXT,
     trigger     TEXT NOT NULL DEFAULT 'schedule' CHECK (trigger IN ('schedule', 'manual', 'retry')),
     status      TEXT NOT NULL CHECK (status IN ('sent', 'failed')),

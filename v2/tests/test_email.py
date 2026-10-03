@@ -1,12 +1,13 @@
 import base64
 import json
+import socket
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import responses
 
+from officesentry import alerts, delivery, mailer, store
 from officesentry import db as db_module
-from officesentry import delivery, mailer
 from officesentry.db import connect, migrate
 from officesentry.reports.export import pdf_available
 from tests.conftest import login, make_user
@@ -388,48 +389,109 @@ def _finding(db, tenant_id, key, severity, first_seen, object_id="x", reopened_a
          first_seen if accepted else None)).lastrowid
 
 
-def test_alert_on_new_critical_finding(app, client, db, two_tenants, vault, cfg):
+def _alerting(app, cfg, vault):
+    return alerts.Alerting(cfg.base_url, vault, app)
+
+
+def test_alert_email_on_new_critical_finding(app, client, db, two_tenants, vault, cfg):
     alpha, _ = two_tenants
+    tenant = store.get_tenant(db, alpha)
     _smtp_ready(db)
     make_user(db, "admin")
     login(client, "admin")
     me = delivery.add_contact(db, None, "Me", "me@msp.com")
-    _finding(db, alpha, "admin_mfa", "critical", "2026-10-01T02:00:00Z", "first-scan")
+    first = _finding(db, alpha, "admin_mfa", "critical", "2026-10-01T02:00:00Z", "first-scan")
     client.post(f"/tenants/{alpha}/alert", data={"min_severity": "critical", "contacts": [str(me)]})
     alert = db.execute("SELECT * FROM email_alerts").fetchone()
     assert alert["tenant_id"] == alpha
-    db.execute("UPDATE email_alerts SET watermark = '2026-10-01T00:00:00Z'")
-    now = datetime(2026, 10, 3, 3, tzinfo=UTC)
-    assert delivery.tick(app, db, vault, cfg, now) == 0  # the tenant's first scan never alerts
-    _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "new-one")
-    _finding(db, alpha, "admin_mfa", "high", "2026-10-02T02:00:00Z", "only-high")
-    _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "accepted", accepted=True)
-    assert delivery.tick(app, db, vault, cfg, now) == 1
+    alerting = _alerting(app, cfg, vault)
+    # Webhook alerts are off; the email still goes out on the same event.
+    assert alerts.after_sync(db, alerting, tenant, {"opened": [first]}) is None
+    assert sends() == []  # the tenant's first scan never emails
+    ids = [_finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "new-one"),
+           _finding(db, alpha, "admin_mfa", "high", "2026-10-02T02:00:00Z", "only-high"),
+           _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "accepted", accepted=True)]
+    alerts.after_sync(db, alerting, tenant, {"opened": ids})
     (_, _, msg, to_addrs), = sends()
     assert to_addrs == ["me@msp.com"] and msg["Subject"] == "1 new critical finding in Alpha Ltd"
     html = msg.get_body(("html",)).get_content()
     assert "subject new-one" in html and "subject only-high" not in html and "subject accepted" not in html
-    assert db.execute("SELECT watermark FROM email_alerts").fetchone()[0] == "2026-10-02T02:00:00Z"
-    assert delivery.tick(app, db, vault, cfg, now) == 0  # nothing new, nothing sent
-    # A finding that was fixed and came back alerts again.
-    db.execute("UPDATE findings SET reopened_at = '2026-10-03T02:00:00Z' WHERE object_id = 'first-scan'")
-    assert delivery.tick(app, db, vault, cfg, now) == 1
+    alerts.after_sync(db, alerting, tenant, {"opened": []})
+    assert len(sends()) == 1  # nothing opened, nothing sent
+    # A finding that was fixed and came back emails again.
+    db.execute("UPDATE findings SET reopened_at = '2026-10-03T02:00:00Z' WHERE id = ?", (first,))
+    alerts.after_sync(db, alerting, tenant, {"opened": [first]})
+    assert len(sends()) == 2 and "has come back" in sends()[1][2].get_body(("html",)).get_content()
     payload = json.loads(db.execute("SELECT payload FROM email_deliveries ORDER BY id DESC").fetchone()[0])
-    assert len(payload) == 1
+    assert payload == [first]
     assert client.get(f"/alerts/{alert['id']}/preview").status_code == 200
 
 
-def test_global_alert_covers_every_tenant(app, db, two_tenants, vault, cfg):
+def test_global_alert_emails_each_tenant(app, db, two_tenants, vault, cfg):
     alpha, bravo = two_tenants
     _smtp_ready(db)
-    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, watermark, created_at)"
-                     " VALUES (NULL, 'high', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')").lastrowid
+    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at)"
+                     " VALUES (NULL, 'high', '2026-10-01T00:00:00Z')").lastrowid
     delivery.set_recipients(db, "alert", aid, [delivery.add_contact(db, None, "", "me@msp.com")])
+    alerting = _alerting(app, cfg, vault)
     for t in (alpha, bravo):
         _finding(db, t, "admin_mfa", "low", "2026-09-01T00:00:00Z", "old")
-        _finding(db, t, "admin_mfa", "high", "2026-10-02T00:00:00Z", f"new-{t}")
-    assert delivery.tick(app, db, vault, cfg, datetime(2026, 10, 3, tzinfo=UTC)) == 1
-    assert sends()[0][2]["Subject"] == "2 new critical or high findings in 2 tenants"
+        new = _finding(db, t, "admin_mfa", "high", "2026-10-02T00:00:00Z", f"new-{t}")
+        alerts.after_sync(db, alerting, store.get_tenant(db, t), {"opened": [new]})
+    assert [m[2]["Subject"] for m in sends()] == ["1 new critical or high finding in Alpha Ltd",
+                                                   "1 new critical or high finding in Bravo Inc"]
+
+
+@responses.activate
+def test_webhook_and_email_alerts_share_one_event(app, db, two_tenants, vault, cfg, monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setattr(socket, "getaddrinfo",
+                        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))])
+    hook = "https://hooks.example.com/run"
+    responses.add(responses.POST, hook, status=202)
+    alerts.save_settings(db, {"alerts.enabled": "1", "alerts.format": "slack", "alerts.min_severity": "high",
+                              "alerts.url_enc": vault.encrypt(hook)})
+    _smtp_ready(db)
+    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at)"
+                     " VALUES (?, 'critical', '2026-10-01T00:00:00Z')", (alpha,)).lastrowid
+    delivery.set_recipients(db, "alert", aid, [delivery.add_contact(db, alpha, "", "it@alpha.com")])
+    _finding(db, alpha, "admin_mfa", "low", "2026-09-01T00:00:00Z", "old")
+    new = _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T00:00:00Z", "new")
+    run = db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at)"
+                     " VALUES (?, 'users', 'succeeded', 'schedule', '2026-10-02T00:00:00Z')", (alpha,)).lastrowid
+    assert alerts.after_sync(db, _alerting(app, cfg, vault), store.get_tenant(db, alpha), {"opened": [new]}, run)
+    assert len(responses.calls) == 1 and len(sends()) == 1
+    events = [r[0] for r in db.execute("SELECT message FROM run_events WHERE run_id = ?", (run,))]
+    assert "Alert sent" in events and "Alert email sent" in events
+
+
+def test_failed_alert_email_retries_then_gives_up(app, db, two_tenants, vault, cfg):
+    alpha, _ = two_tenants
+    tenant = store.get_tenant(db, alpha)
+    _smtp_ready(db)
+    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at)"
+                     " VALUES (?, 'critical', '2026-10-01T00:00:00Z')", (alpha,)).lastrowid
+    delivery.set_recipients(db, "alert", aid, [delivery.add_contact(db, alpha, "", "it@alpha.com")])
+    _finding(db, alpha, "admin_mfa", "low", "2026-09-01T00:00:00Z", "old")
+    new = _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T00:00:00Z", "new")
+    FakeSMTP.fail_with = OSError("connection refused")
+    alerts.after_sync(db, _alerting(app, cfg, vault), tenant, {"opened": [new]})
+    first = db.execute("SELECT * FROM email_deliveries").fetchone()
+    assert first["status"] == "failed" and first["attempt"] == 1 and first["retry_at"]
+    now = datetime.fromisoformat(first["retry_at"].replace("Z", "+00:00"))
+    assert delivery.tick(app, db, vault, cfg, now - timedelta(minutes=1)) == 0  # waiting for the retry
+    for minutes in (0, 31, 152):
+        assert delivery.tick(app, db, vault, cfg, now + timedelta(minutes=minutes)) == 1
+    rows = db.execute("SELECT attempt, retry_at FROM email_deliveries ORDER BY id").fetchall()
+    assert [r["attempt"] for r in rows] == [1, 2, 3, 4]
+    assert [r["retry_at"] is None for r in rows] == [True, True, True, True]  # given up after the 4th
+    assert delivery.tick(app, db, vault, cfg, now + timedelta(days=1)) == 0
+    # The Retry button sends what is still open; once it's fixed there's nothing to send.
+    FakeSMTP.fail_with = None
+    last = db.execute("SELECT * FROM email_deliveries ORDER BY id DESC").fetchone()
+    assert delivery.retry_delivery(app, db, vault, last, "admin") is None and len(sends()) == 1
+    db.execute("UPDATE findings SET resolved_at = '2026-10-03T00:00:00Z' WHERE id = ?", (new,))
+    assert "fixed or accepted" in delivery.retry_delivery(app, db, vault, last, "admin")
 
 
 # -- Pages and access ----------------------------------------------------------------------------

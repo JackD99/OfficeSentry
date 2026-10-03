@@ -4,7 +4,9 @@
   the insurance evidence pack, any detail report) weekly, monthly or quarterly,
   at a time in the schedule's own timezone.
 * **Digests** send the MSP's own team one cross-tenant summary.
-* **Alerts** email when a check finds something new at or above a severity.
+* **Alert emails** go out when a collection opens findings at or above a
+  severity: the same event (``alerts.after_sync``) that posts to Teams, Slack
+  or a webhook. Failed ones are retried by ``tick()``.
 
 ``tick()`` is the only entry point the worker needs. It is idempotent and
 cheap, so it can run every minute: each schedule remembers the period it last
@@ -28,7 +30,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import mailer, store
+from . import alerts, mailer, store
 from .db import utcnow
 from .mailer import Email, MailError
 from .reports import data_reports, evidence, export, monthly_review
@@ -460,46 +462,25 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
                        attachments=attachments), names)
 
 
-def new_alert_findings(conn, alert, now: datetime | None = None) -> list:
-    """Unaccepted findings at the alert's level first seen (or reopened) after its watermark.
-
-    Findings from a tenant's very first scan are left out, so onboarding a tenant
-    doesn't send an alert for everything it already had.
-    """
-    ts = (now or datetime.now(UTC)).strftime(ISO)
-    levels = ALERT_LEVELS[alert["min_severity"]]
-    return conn.execute(
-        f"SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
-        f" WHERE t.enabled = 1 AND f.resolved_at IS NULL AND f.severity IN ({','.join('?' * len(levels))})"
-        " AND (? IS NULL OR f.tenant_id = ?)"
-        " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= ?))"
-        " AND ((f.first_seen > ? AND f.first_seen >"
-        "        (SELECT MIN(first_seen) FROM findings f2 WHERE f2.tenant_id = f.tenant_id))"
-        "      OR IFNULL(f.reopened_at, '') > ?)"
-        " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key, f.subject",
-        (*levels, alert["tenant_id"], alert["tenant_id"], ts, alert["watermark"], alert["watermark"]),
-    ).fetchall()
+def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[alerts.Item]:
+    """The findings an alert email covers: what ``alerts.opened_items`` would post to Teams or Slack,
+    less anything from the tenant's very first scan, so onboarding a tenant doesn't email everything it
+    already had. Reopened findings always count."""
+    items = alerts.opened_items(conn, tenant_id, finding_ids, min_severity)
+    first = conn.execute("SELECT MIN(first_seen) FROM findings WHERE tenant_id = ?", (tenant_id,)).fetchone()[0]
+    return [i for i in items if i.data["reopened"] or i.data["first_seen"] != first]
 
 
-def build_alert_email(app, conn, alert, findings, contacts, *, preview: bool = False) -> Built:
-    tenants = list(dict.fromkeys(f["tenant_name"] for f in findings))
-    n = len(findings)
+def build_alert_email(app, conn, alert, tenant, items: list[alerts.Item], contacts, *,
+                      preview: bool = False) -> Built:
+    n = len(items)
     level = "critical" if alert["min_severity"] == "critical" else "critical or high"
-    noun = f"new {level} finding{'s' if n != 1 else ''}"
-    where = tenants[0] if len(tenants) == 1 else f"{len(tenants)} tenants"
-    subject = f"{n} {noun} in {where}"
-    groups: dict[str, list] = {}
-    for f in findings:
-        groups.setdefault(f["tenant_name"], []).append(f)
-    html = render(app, "emails/alert.html", subject=subject, groups=groups, titles=RULE_TITLES,
-                   msp_name=_msp_name(conn), level=level, preview=preview)
+    subject = f"{n} new {level} finding{'s' if n != 1 else ''} in {tenant['name']}"
+    html = render(app, "emails/alert.html", subject=subject, tenant=tenant, items=items,
+                  msp_name=_msp_name(conn), level=level, preview=preview)
     lines = [subject, ""]
-    for name, items in groups.items():
-        lines.append(name)
-        for f in items:
-            lines.append(f"  [{f['severity'].upper()}] {RULE_TITLES.get(f['rule_key'], f['rule_key'])}: "
-                         f"{f['subject']} ({f['detail']})")
-        lines.append("")
+    for i in items:
+        lines.append(f"[{i.severity.upper()}] {i.title}: {i.subject}" + (f" ({i.detail})" if i.detail else ""))
     to, bcc = split_recipients(contacts)
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html), [])
 
@@ -509,16 +490,17 @@ def build_alert_email(app, conn, alert, findings, contacts, *, preview: bool = F
 
 def record(conn, *, kind: str, email: Email | None, subject: str, error: str | None, transport: str | None,
             trigger: str, user: str | None, schedule_id=None, alert_id=None, tenant_id=None, period=None,
-            payload=None, to=(), bcc=()) -> int:
+            payload=None, attempt: int = 1, retry_at: str | None = None, to=(), bcc=()) -> int:
     if email is not None:
         to, bcc = email.to, email.bcc
     return conn.execute(
         "INSERT INTO email_deliveries (kind, schedule_id, alert_id, tenant_id, period, subject, recipients, bcc,"
-        " attachments, payload, transport, trigger, status, error, sent_by, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " attachments, payload, attempt, retry_at, transport, trigger, status, error, sent_by, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (kind, schedule_id, alert_id, tenant_id, period, subject, ", ".join(to), ", ".join(bcc),
-         json.dumps([a[0] for a in email.attachments] if email else []), payload, transport, trigger,
-         "failed" if error else "sent", error[:1000] if error else None, user, utcnow()),
+         json.dumps([a[0] for a in email.attachments] if email else []), payload, attempt,
+         retry_at if error else None, transport, trigger, "failed" if error else "sent",
+         error[:1000] if error else None, user, utcnow()),
     ).lastrowid
 
 
@@ -587,11 +569,54 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     return error
 
 
-def send_alert(app, conn, vault, alert, findings, *, trigger: str = "schedule", user: str | None = None) -> str | None:
+def send_alert(app, conn, vault, alert, tenant, items: list[alerts.Item], *, trigger: str = "schedule",
+               user: str | None = None, attempt: int = 1, now: datetime | None = None) -> str | None:
+    """Email one alert. An automatic send that fails is tried again by ``tick()`` with backoff."""
+    now = now or datetime.now(UTC)
     contacts = recipients(conn, "alert", alert["id"])
-    return _send(conn, vault, lambda: build_alert_email(app, conn, alert, findings, contacts), kind="alert",
-                 fallback_subject="New findings alert", trigger=trigger, user=user, alert_id=alert["id"],
-                 tenant_id=alert["tenant_id"], payload=json.dumps([f["id"] for f in findings]))
+    retry_at = None
+    if trigger == "schedule" and attempt < MAX_ATTEMPTS:
+        retry_at = (now + RETRY_DELAYS[attempt - 1]).strftime(ISO)
+    return _send(conn, vault, lambda: build_alert_email(app, conn, alert, tenant, items, contacts), kind="alert",
+                 fallback_subject=f"New findings in {tenant['name']}", trigger=trigger, user=user,
+                 alert_id=alert["id"], tenant_id=tenant["id"], payload=json.dumps([i.data["id"] for i in items]),
+                 attempt=attempt, retry_at=retry_at)
+
+
+def after_sync(app, conn, vault, tenant, finding_ids, run_id: int | None = None) -> int:
+    """Email everyone whose alert covers ``tenant`` about the findings one sync opened.
+
+    Called from ``alerts.after_sync``, so emails go out on the same event as Teams, Slack and webhook
+    alerts. Never raises. Returns the number of emails attempted.
+    """
+    if not finding_ids:
+        return 0
+    attempted = 0
+    rows = conn.execute("SELECT * FROM email_alerts WHERE enabled = 1 AND (tenant_id IS NULL OR tenant_id = ?)"
+                        " ORDER BY id", (tenant["id"],)).fetchall()
+    for a in rows:
+        try:
+            items = alert_items(conn, tenant["id"], finding_ids, a["min_severity"])
+            if not items or not recipients(conn, "alert", a["id"]):
+                continue
+            error = send_alert(app, conn, vault, a, tenant, items)
+            attempted += 1
+            if run_id is not None:
+                store.log_event(conn, run_id, "warning" if error else "info",
+                                f"Alert email not sent: {error}"[:500] if error else "Alert email sent")
+        except Exception:
+            log.exception("Alert email %s failed", a["id"])
+    return attempted
+
+
+def _alert_resend(conn, delivery) -> tuple:
+    """(alert, tenant, items) to send a failed alert again; items are only what is still open."""
+    alert = conn.execute("SELECT * FROM email_alerts WHERE id = ?", (delivery["alert_id"],)).fetchone()
+    tenant = store.get_tenant(conn, delivery["tenant_id"]) if delivery["tenant_id"] else None
+    if alert is None or tenant is None:
+        return alert, tenant, []
+    ids = json.loads(delivery["payload"] or "[]")
+    return alert, tenant, alerts.opened_items(conn, tenant["id"], ids, alert["min_severity"])
 
 
 def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
@@ -602,16 +627,13 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
             return "That schedule has been removed"
         return send_schedule(app, conn, vault, schedule, trigger="retry", user=user)
     if delivery["alert_id"] and delivery["payload"]:
-        alert = conn.execute("SELECT * FROM email_alerts WHERE id = ?", (delivery["alert_id"],)).fetchone()
-        if alert is None:
+        conn.execute("UPDATE email_deliveries SET retry_at = NULL WHERE id = ?", (delivery["id"],))
+        alert, tenant, items = _alert_resend(conn, delivery)
+        if alert is None or tenant is None:
             return "That alert has been removed"
-        ids = json.loads(delivery["payload"])
-        findings = conn.execute(
-            f"SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
-            f" WHERE f.id IN ({','.join('?' * len(ids))})", ids).fetchall() if ids else []
-        if not findings:
-            return "Those findings no longer exist"
-        return send_alert(app, conn, vault, alert, findings, trigger="retry", user=user)
+        if not items:
+            return "Those findings have been fixed or accepted since, so there's nothing to send"
+        return send_alert(app, conn, vault, alert, tenant, items, trigger="retry", user=user)
     return "This email can't be sent again"
 
 
@@ -629,29 +651,19 @@ def _tick_schedule(app, conn, vault, s, default_tz: str, now: datetime) -> bool:
     return True
 
 
-def _tick_alert(app, conn, vault, a, now: datetime) -> bool:
-    if a["retry_at"] and now.strftime(ISO) < a["retry_at"]:
+def _retry_alert(app, conn, vault, d, now: datetime) -> bool:
+    conn.execute("UPDATE email_deliveries SET retry_at = NULL WHERE id = ?", (d["id"],))
+    alert, tenant, items = _alert_resend(conn, d)
+    if alert is None or not alert["enabled"] or tenant is None or not items:
         return False
-    findings = new_alert_findings(conn, a, now)
-    if not findings:
-        return False
-    newest = max(max(f["first_seen"], f["reopened_at"] or "") for f in findings)
-    if not recipients(conn, "alert", a["id"]):
-        conn.execute("UPDATE email_alerts SET watermark = ? WHERE id = ?", (newest, a["id"]))
-        return False
-    error = send_alert(app, conn, vault, a, findings)
-    attempts = a["attempts"] + 1
-    if error is None or attempts >= MAX_ATTEMPTS:
-        conn.execute("UPDATE email_alerts SET watermark = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                     (newest, a["id"]))
-    else:
-        conn.execute("UPDATE email_alerts SET attempts = ?, retry_at = ? WHERE id = ?",
-                     (attempts, (now + RETRY_DELAYS[attempts - 1]).strftime(ISO), a["id"]))
+    send_alert(app, conn, vault, alert, tenant, items, attempt=d["attempt"] + 1, now=now)
     return True
 
 
 def tick(app, conn, vault, cfg, now: datetime | None = None) -> int:
-    """Send every schedule and alert that is due. Safe to call every minute. Returns emails attempted."""
+    """Send every schedule that is due and retry failed alerts. Safe to call every minute.
+
+    Returns emails attempted."""
     now = now or datetime.now(UTC)
     attempted = 0
     for s in conn.execute("SELECT * FROM email_schedules WHERE enabled = 1 ORDER BY id").fetchall():
@@ -659,9 +671,11 @@ def tick(app, conn, vault, cfg, now: datetime | None = None) -> int:
             attempted += _tick_schedule(app, conn, vault, s, cfg.timezone, now)
         except Exception:
             log.exception("Scheduled email %s failed", s["id"])
-    for a in conn.execute("SELECT * FROM email_alerts WHERE enabled = 1 ORDER BY id").fetchall():
+    # Alert emails are sent when a collection opens findings (alerts.after_sync); here only failed ones retry.
+    for d in conn.execute("SELECT * FROM email_deliveries WHERE kind = 'alert' AND status = 'failed'"
+                          " AND retry_at IS NOT NULL AND retry_at <= ? ORDER BY id", (now.strftime(ISO),)).fetchall():
         try:
-            attempted += _tick_alert(app, conn, vault, a, now)
+            attempted += _retry_alert(app, conn, vault, d, now)
         except Exception:
-            log.exception("Alert email %s failed", a["id"])
+            log.exception("Retrying alert email %s failed", d["id"])
     return attempted

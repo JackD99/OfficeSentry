@@ -86,6 +86,7 @@
       <div class="form-actions"><button class="{{ 'sm' if global_alert else 'primary sm' }}" {% if not team %}disabled{% endif %}>{{ 'Save' if global_alert else 'Turn on alerts' }}</button></div>
     </form>
     {% if global_alert %}</details>{% endif %}
+    <p class="footnote">One email per tenant per scan. To post the same alerts to Teams or Slack, use <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</p>
   </section>
   {% endif %}
 

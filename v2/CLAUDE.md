@@ -63,8 +63,10 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 
 ## Email delivery
 
-`delivery.tick()` is the worker's only email entry point (call it every
-minute). Schedules store their own timezone and the last period they finished
+`delivery.tick()` sends scheduled emails and retries failed alert emails (call
+it every minute). Alert emails are not a separate engine: `alerts.after_sync()`
+(the Teams/Slack/webhook alert event after each collection) calls
+`delivery.after_sync()`, so both go out on the same findings. Schedules store their own timezone and the last period they finished
 ("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
 show up in the schedule form automatically. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
