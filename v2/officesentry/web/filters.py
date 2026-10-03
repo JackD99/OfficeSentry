@@ -27,6 +27,11 @@ def _parse(value) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
+def _strftime(dt: datetime, fmt: str) -> str:
+    """strftime with ``%-d`` (day without padding) on every platform; Windows rejects ``%-d``."""
+    return dt.strftime(fmt.replace("%-d", str(dt.day)))
+
+
 def ago(value, now: datetime | None = None) -> str:
     """'just now', '5 minutes ago', '3 hours ago', 'yesterday', '12 days ago', or a date."""
     dt = _parse(value)
@@ -46,12 +51,12 @@ def ago(value, now: datetime | None = None) -> str:
         return "yesterday"
     if days < 45:
         return f"{days} days ago"
-    return dt.strftime("%-d %b %Y")
+    return _strftime(dt, "%-d %b %Y")
 
 
 def when(value, fmt: str = "%-d %b %Y, %H:%M UTC") -> str:
     dt = _parse(value)
-    return dt.strftime(fmt) if dt else ""
+    return _strftime(dt, fmt) if dt else ""
 
 
 def day(value) -> str:
@@ -72,4 +77,4 @@ def money(value, currency: str = "GBP", decimals: int = 0) -> str:
 
 
 def register(app) -> None:
-    app.jinja_env.filters.update(ago=ago, when=when, day=day, capability=capability, money=money)
+    app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money)

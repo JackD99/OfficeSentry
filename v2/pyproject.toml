@@ -13,7 +13,7 @@ dependencies = [
     "openpyxl>=3.1",
     "dnspython>=2.6",
     "croniter>=6",
-    "tzdata>=2024.1",
+    "tzdata>=2024.1; sys_platform == 'win32'",  # zoneinfo has no system time zones on Windows
 ]
 
 [project.optional-dependencies]
