@@ -203,6 +203,10 @@ class UserCoverage:
         return bool(self.mfa_policies)
 
 
+def policy_name(p: dict) -> str:
+    return p.get("displayName") or p.get("id") or p.get("_id") or "Unnamed policy"
+
+
 def directory(snap) -> Directory | None:
     policies = snap.objects("conditional_access", "ca_policy")
     if policies is None:
@@ -213,7 +217,8 @@ def directory(snap) -> Directory | None:
     for rid, r in definitions.items():
         role_names[r.get("templateId") or rid] = r.get("displayName")
     for a in snap.objects("admin_roles", "role_assignment") or []:
-        if a.get("assignment") != "active" or a.get("directoryScopeId") not in (None, "/"):
+        if a.get("assignment") != "active" or a.get("directoryScopeId") not in (None, "/") \
+                or not a.get("principalId"):
             continue
         template = (definitions.get(a.get("roleDefinitionId")) or {}).get("templateId") or a.get("roleDefinitionId")
         user_roles.setdefault(a["principalId"], set()).add(template)
@@ -229,7 +234,7 @@ def coverage_for(uid: str, label: str, user_type: str, policies: list[dict], d: 
         if p.get("state") != "enabled":
             continue
         spec = (p.get("conditions") or {}).get("users") or {}
-        name = p.get("displayName") or p.get("id")
+        name = policy_name(p)
         if not applies(p, uid, user_type, d):
             if _matches(uid, user_type, spec, "include", d, unknown=False):
                 cov.excluded_from.append(name)

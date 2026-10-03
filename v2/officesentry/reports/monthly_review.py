@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from ..changes import Change, all_changes
 from ..collectors import REGISTRY
+from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
 from ..rules import SEVERITY_RANK, Finding, RuleResult, evaluate
@@ -110,8 +111,9 @@ def _secure_score_points(snap: TenantSnapshot) -> list[tuple[date, float]]:
     for ts, value in snap.history("secure_score.pct"):
         points[date.fromisoformat(ts[:10])] = value
     for row in snap.objects("secure_score", "secure_score_daily") or []:
-        if row.get("maxScore"):
-            points.setdefault(date.fromisoformat(row["date"]), round(100 * row["currentScore"] / row["maxScore"], 1))
+        day, current, most = parse_day(row.get("date")), row.get("currentScore"), row.get("maxScore")
+        if day and most and current is not None:
+            points.setdefault(day, round(100 * current / most, 1))
     return sorted(points.items())
 
 

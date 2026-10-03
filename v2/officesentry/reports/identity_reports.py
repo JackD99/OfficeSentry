@@ -13,6 +13,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from .. import coverage
+from ..devices import parse_day, parse_ts
 from ..licences import (
     FREE_SKUS,
     FREE_UNIT_THRESHOLD,
@@ -50,8 +51,7 @@ class Money(float):
 # -- Shared helpers ------------------------------------------------------------------
 
 
-def _parse(value: str | None) -> datetime | None:
-    return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+_parse = parse_ts
 
 
 def _day(value) -> str:
@@ -92,6 +92,8 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
         return None
     out: dict[str, dict] = {}
     for r in rows:
+        if not r.get("principalId"):
+            continue
         p = out.setdefault(r["principalId"], {
             "id": r["principalId"], "label": _label(r), "type": r.get("principalType") or "unknown",
             "userType": r.get("userType") or "Member", "enabled": r.get("accountEnabled"), "appId": r.get("appId"),
@@ -209,15 +211,15 @@ class Enforcement:
         if self.p1 is False:
             rows.append((["Conditional Access", f"Not available: needs {P1}"], None))
         elif self.policies is not None:
-            enforced = [p.get("displayName") for p in self.policies
+            enforced = [coverage.policy_name(p) for p in self.policies
                         if p.get("state") == "enabled" and coverage.requires_mfa_everywhere(p)]
-            report_only = [p.get("displayName") for p in self.policies
+            report_only = [coverage.policy_name(p) for p in self.policies
                            if p.get("state") == "enabledForReportingButNotEnforced" and "mfa" in coverage.grants(p)]
             rows.append((["Conditional Access policies requiring MFA", ", ".join(enforced) or "None"],
                          None if enforced or self.security_defaults else "high"))
             if report_only:
                 rows.append((["Report-only MFA policies (not enforced)", ", ".join(report_only)], "low"))
-            legacy = [p.get("displayName") for p in self.policies
+            legacy = [coverage.policy_name(p) for p in self.policies
                       if p.get("state") == "enabled" and coverage.blocks_legacy(p)]
             rows.append((["Legacy sign-in blocked by", ", ".join(legacy) or (
                 "Security Defaults" if self.security_defaults else "Nothing")],
@@ -522,7 +524,7 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                        intro="People holding a licence whose features are all included in another licence they "
                              "already have.", empty="Nobody holds overlapping licences.")
     plans = {s["skuId"]: {p.get("servicePlanId") for p in s.get("servicePlans") or [] if p.get("servicePlanId")}
-             for s in skus}
+             for s in skus if s.get("skuId")}
     account_rows = []
     for u in users or []:
         held = [sid for sid in dict.fromkeys(u.get("skuIds") or []) if sid in paid]
@@ -597,8 +599,8 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     activity = any(u.get("signInActivityAvailable") for u in users)
     roles = _admin_role_names(_roles(snap))
     skus = {s["skuId"]: s.get("skuPartNumber") for s in snap.objects("tenant_profile", "subscribed_sku") or []
-            if s.get("skuPartNumber") not in FREE_SKUS and (s.get("prepaidUnits") or {}).get("enabled", 0)
-            < FREE_UNIT_THRESHOLD}
+            if s.get("skuId") and s.get("skuPartNumber") not in FREE_SKUS
+            and ((s.get("prepaidUnits") or {}).get("enabled") or 0) < FREE_UNIT_THRESHOLD}
     if not activity:
         report.notes.append(f"Sign-in dates need {P1}, so inactive members and guests aren't checked. "
                             "Unaccepted invitations and disabled accounts still holding licences or roles are listed.")
@@ -688,15 +690,15 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     if daily is None:
         report.unavailable = "Secure Score hasn't been collected yet. Refresh Secure Score on the tenant page."
         return
-    daily = [d for d in daily if d.get("maxScore")]
+    daily = [d for d in daily if d.get("maxScore") and parse_day(d.get("date"))]
     if not daily:
         report.unavailable = "Microsoft hasn't produced a Secure Score for this tenant yet. It appears within a day."
         return
     latest = max(daily, key=lambda d: d["date"])
-    current, maximum = latest["currentScore"] or 0, latest["maxScore"]
+    current, maximum = latest.get("currentScore") or 0, latest["maxScore"]
     pct = round(100 * current / maximum, 1)
     points = _secure_score_points(snap)
-    latest_day = date.fromisoformat(latest["date"])
+    latest_day = parse_day(latest["date"])
 
     def change(days: int) -> tuple[float | None, date | None]:
         earlier = [(d, v) for d, v in points if d <= latest_day - timedelta(days=days)]
@@ -721,6 +723,8 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                       empty="No control changed." if past else
                       "Microsoft has only one day of Secure Score history for this tenant, so there's nothing to "
                       "compare with yet.")
+    past = [p for p in past if p.get("controlName")]
+    controls = [c for c in controls if c.get("controlName")]
     then = {p["controlName"]: p.get("score") or 0 for p in past}
     now_scores = {c["controlName"]: c.get("score") or 0 for c in controls}
     category = {c["controlName"]: c.get("controlCategory") for c in controls}

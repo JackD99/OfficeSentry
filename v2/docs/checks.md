@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-46 checks, 15 data sources (collectors) and 10 detail reports.
+47 checks, 18 data sources (collectors) and 18 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -18,7 +18,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
-| **No inactive accounts**<br>`stale_users` | `users` | Sign-in activity needs Entra ID P1 | Disable accounts that haven't signed in for 90 days (after checking with the client), then remove their licences. Inactive accounts are a common foothold for attackers. |
+| **No inactive accounts**<br>`stale_users` | `users` | Sign-in activity needs Entra ID P1 | Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used (after checking with the client), then remove their licences. Inactive accounts are a common foothold for attackers. |
 
 ### Admins
 
@@ -108,6 +108,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
+| **No files are shared with anyone links**<br>`anyone_links` | `shared_files`, `sharepoint_usage` | The tenant has no SharePoint licence | Remove anyone links that are no longer needed, and set the rest to view-only with an expiry date. The Shared files report lists each one. |
 | **Files can't be shared with anonymous links**<br>`sharepoint_sharing` | `tenant_policies` |  | Change SharePoint external sharing to "New and existing guests" so every external person signs in. If the client relies on Anyone links, set them to expire and to view-only. |
 
 ### Tenant settings
@@ -137,7 +138,10 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `inbox_rules` | Inbox rules | Every mailbox's inbox rules, to spot forwarding and rules that hide mail. | `MailboxSettings.Read` |
 | `mailboxes` | Mailboxes | Mailboxes, forwarding, delegated access and organisation mail settings (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mfa_registration` | MFA registration | Which users have registered a second factor. | `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All` |
+| `per_user_mfa` | Per-user MFA | The per-user MFA setting on each member, for tenants without Entra ID P1. | `Policy.Read.All` |
 | `secure_score` | Secure Score | Current Secure Score, per-control scores and up to 90 days of daily history. | `SecurityEvents.Read.All` |
+| `shared_files` | Shared files | Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, or people outside it. Needs the Sites.Read.All permission. | `Sites.Read.All` |
+| `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
 | `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions and licence capabilities. | `Organization.Read.All` |
 | `users` | Users | Members and guests with licences, password age and last sign-in (sign-in needs Entra ID P1). | `User.Read.All`, `AuditLog.Read.All` |
@@ -149,6 +153,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | Key | Title | Description | Data from |
 |---|---|---|---|
 | `admin-activity` | Admin activity | Admin roles, Conditional Access, app credentials, consents, domains and account changes from the directory audit log, and who made them. | `admin_activity` |
+| `admins` | Admins and roles | Every admin role holder with MFA, PIM and sign-in status, and a break-glass check. | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |
 | `apps` | Apps and consents | Third-party apps with access to the tenant, and app credential expiry. | `app_consents` |
 | `conditional-access` | Conditional Access coverage | Every policy in plain words, and which accounts each one actually covers. | `admin_roles`, `conditional_access`, `users` |
 | `devices` | Devices | Intune compliance, encryption and Windows support, and every Entra ID device record. | `devices` |
@@ -156,7 +161,14 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `groups` | Groups and Teams | Who can create teams and groups, which have no owner, and the guests in each. | `groups` |
 | `guests` | Guests and sharing | Who can invite and share externally, and every guest account. | `tenant_policies`, `users` |
 | `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
+| `inactive` | Inactive accounts | Members and guests who haven't signed in for a long time, and old invitations. | `admin_roles`, `tenant_profile`, `users` |
+| `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `tenant_profile`, `users` |
 | `mailboxes` | Mailbox access and forwarding | Forwarding, suspicious inbox rules, delegated access and shared mailboxes. | `inbox_rules`, `mailboxes`, `users` |
+| `mfa` | MFA coverage | Who has set up MFA, who is required to use it, and where the two don't match. | `admin_roles`, `conditional_access`, `mfa_registration`, `per_user_mfa`, `users` |
+| `onedrive` | OneDrive | Each person's OneDrive: storage, activity, sharing, and OneDrives of people who've left. | `shared_files`, `sharepoint_usage`, `users` |
+| `secure-score` | Secure Score trend | Secure Score over time, which controls changed, and where the points are. | `secure_score` |
+| `shared-files` | Shared files | Every file and folder shared with anyone, people outside, or the whole organisation. | `shared_files`, `sharepoint_usage` |
+| `sharepoint` | SharePoint sites | Storage and growth, inactive sites, and which sites are shared outside. | `sharepoint_usage` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
 
 ## Permissions
@@ -173,10 +185,11 @@ Every application permission the app requests (all read-only) and the collectors
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | not used by a collector yet |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
-| `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `conditional_access`, `tenant_policies` |
-| `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | not used by a collector yet |
+| `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `conditional_access`, `per_user_mfa`, `tenant_policies` |
+| `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `sharepoint_usage` |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
+| `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files` |
 | `User.Read.All` | Microsoft Graph | Users, licences, password age | `users` |
 | `UserAuthenticationMethod.Read.All` | Microsoft Graph | Registered MFA methods | `mfa_registration` |

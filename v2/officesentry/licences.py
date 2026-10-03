@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from .devices import parse_ts
+
 # Friendly names for common SKUs. Anything else shows its part number.
 SKU_NAMES = {
     "O365_BUSINESS_ESSENTIALS": "Microsoft 365 Business Basic",
@@ -61,7 +63,7 @@ def load_prices(conn) -> dict[str, float]:
 def last_sign_in(user: dict) -> datetime | None:
     values = [user.get("lastSignInDateTime"), user.get("lastNonInteractiveSignInDateTime"),
               user.get("lastSuccessfulSignInDateTime")]
-    parsed = [datetime.fromisoformat(v.replace("Z", "+00:00")) for v in values if v]
+    parsed = [dt for dt in map(parse_ts, values) if dt]
     return max(parsed) if parsed else None
 
 
@@ -72,9 +74,9 @@ def is_stale(user: dict, now: datetime, days: int = STALE_DAYS) -> bool | None:
     last = last_sign_in(user)
     if last is not None:
         return last < now - timedelta(days=days)
-    created = user.get("createdDateTime")
+    created = parse_ts(user.get("createdDateTime"))
     if created:
-        return datetime.fromisoformat(created.replace("Z", "+00:00")) < now - timedelta(days=30)
+        return created < now - timedelta(days=30)
     return True
 
 
@@ -130,13 +132,14 @@ def licence_summary(skus: list[dict], users: list[dict] | None, prices: dict[str
     for s in skus:
         if s.get("appliesTo") != "User":
             continue
-        purchased = (s.get("prepaidUnits") or {}).get("enabled", 0)
-        if purchased == 0 and not s.get("consumedUnits"):
+        purchased = (s.get("prepaidUnits") or {}).get("enabled") or 0
+        assigned = s.get("consumedUnits") or 0
+        if (purchased == 0 and not assigned) or not s.get("skuId"):
             continue  # expired or suspended subscription with nothing assigned
-        part = s.get("skuPartNumber", "")
+        part = s.get("skuPartNumber") or ""
         line = SkuLine(
             sku_id=s["skuId"], part_number=part, name=sku_name(part), purchased=purchased,
-            assigned=s.get("consumedUnits", 0), unassigned=max(purchased - s.get("consumedUnits", 0), 0),
+            assigned=assigned, unassigned=max(purchased - assigned, 0),
             monthly_price=prices.get(part),
             free=part in FREE_SKUS or purchased >= FREE_UNIT_THRESHOLD,
         )
