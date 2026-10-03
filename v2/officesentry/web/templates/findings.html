@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, tenant_header with context %}
+{% block title %}Findings · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'findings') }}
+{% set staff = current_user.role in ('admin', 'analyst') %}
+<div class="toolbar">
+  <nav class="subtabs" aria-label="Finding status">
+    {% for v, label in [('open', 'Open'), ('accepted', 'Accepted risks'), ('resolved', 'Resolved')] %}
+    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id, view=v) }}"{% if v == view %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <span class="muted small">{{ rows|length }} {{ 'item' if rows|length == 1 else 'items' }}</span>
+</div>
+{% if view == 'open' %}<p class="muted small intro-line">Each row is an account or setting a check flagged. Findings close on their own once the next collection no longer sees the problem.{% if staff %} If something is intentional, accept the risk so it moves out of the totals.{% endif %}</p>{% endif %}
+
+{% if rows %}
+<div class="card flush">
+<table class="stack-sm findings-table">
+  <thead><tr><th>Account or item</th><th>Severity</th><th>Detail</th><th>First seen</th>
+    <th>{% if view == 'resolved' %}Resolved{% elif view == 'accepted' %}Accepted{% else %}{% if staff %}Action{% endif %}{% endif %}</th></tr></thead>
+  <tbody>
+  {% for rule_key, items in groups %}
+  <tr class="group"><td colspan="5">{{ titles.get(rule_key, rule_key) }} <span class="faint">· {{ items|length }}</span></td></tr>
+  {% for f in items %}
+  <tr>
+    <td class="wrap"><span class="strong">{{ f.subject }}</span></td>
+    <td data-label="Severity"><span class="sevtext {{ f.severity }}">{{ f.severity }}</span></td>
+    <td data-label="Detail" class="wrap">{{ f.detail }}</td>
+    <td data-label="First seen" class="nowrap">{{ f.first_seen|day }}</td>
+    <td data-label="{{ 'Resolved' if view == 'resolved' else 'Status' }}">
+      {% if view == 'resolved' %}{{ f.resolved_at|day }}
+      {% elif f.accepted_at %}
+        <span class="small">By {{ f.accepted_by }}{% if f.accepted_until %} until {{ f.accepted_until|day }}{% endif %}</span>
+        <span class="sub">“{{ f.accepted_note }}”</span>
+        {% if staff %}<form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=f.id) }}">{{ csrf() }}<button class="link small">Undo</button></form>{% endif %}
+      {% elif staff %}
+        <details class="accept-risk"><summary>Accept risk</summary>
+          <form method="post" action="{{ url_for('reports.accept_finding', finding_id=f.id) }}" class="accept">
+            {{ csrf() }}
+            <label>Reason <input name="note" maxlength="500" required placeholder="e.g. Break-glass account, monitored"></label>
+            <label>Review on (optional) <input type="date" name="until"></label>
+            <button class="sm primary">Accept risk</button>
+          </form>
+        </details>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card empty">
+  {% if view == 'open' %}<h3>No open findings</h3><p>Either everything passed or no data has been collected yet.</p>
+  {% elif view == 'accepted' %}<h3>No accepted risks</h3><p>Risks you accept on the Open tab appear here, with the reason given.</p>
+  {% else %}<h3>Nothing resolved yet</h3><p>Findings move here when a later collection no longer sees the problem.</p>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

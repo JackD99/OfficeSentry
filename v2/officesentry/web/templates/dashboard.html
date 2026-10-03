@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, sev_counts %}
+{% block title %}Tenants · Office Sentry{% endblock %}
+{% macro kpi(row, key, unit='') -%}
+{% set k = row.kpis[key] %}
+{% if k.value is none %}<span class="faint">–</span>{% else %}{{ k.value|money(currency) if unit == 'money' else '%g'|format(k.value) ~ unit }}{% if k.delta %} <span class="delta {{ k.trend }} tiny">{{ '%+g'|format(k.delta) }}</span>{% endif %}{% endif %}
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Tenants</h1>
+    <div class="sub">Latest results for every tenant you look after, worst first.</div>
+  </div>
+  {% if current_user.role == 'admin' %}
+  <div class="actions"><a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a></div>
+  {% endif %}
+</div>
+
+{% if not rows %}
+<div class="card empty">
+  {% if current_user.role == 'admin' %}
+  <h3>No tenants yet</h3>
+  <p>Set up the app connection once, then add each client tenant.</p>
+  <a class="btn primary" href="{{ url_for('admin.connections') }}">Set up the app connection</a>
+  {% else %}
+  <h3>No tenants to show</h3>
+  <p>You haven't been given access to any tenants yet. Ask an admin to grant access.</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="tiles">
+  <div class="tile"><div class="label">Tenants</div><div class="value">{{ rows|length }}</div>
+    <div class="foot">{{ summary.up_to_date }} with up-to-date data</div></div>
+  <div class="tile"><div class="label">Need urgent attention</div><div class="value">{{ summary.urgent }}</div>
+    <div class="foot">with critical or high findings</div></div>
+  <div class="tile"><div class="label">Critical and high findings</div>
+    <div class="value">{{ summary.severe }}</div>
+    <div class="foot">across all tenants</div></div>
+  <div class="tile"><div class="label">Average Secure Score</div>
+    <div class="value">{{ '%.0f%%'|format(summary.avg_score) if summary.avg_score is not none else '–' }}</div>
+    <div class="foot">{{ summary.data_issues }} tenant{{ 's' if summary.data_issues != 1 }} with data problems</div></div>
+</div>
+
+<div class="card flush">
+  <div class="card-head toolbar">
+    <h2>All tenants</h2>
+    {% if rows|length > 5 %}<input class="search" type="search" id="tenant-filter" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
+  </div>
+  <div class="scroll-x">
+  <table class="stack-sm" id="tenant-table">
+    <thead><tr>
+      <th>Tenant</th><th title="Critical, high, medium and low">Open findings</th>
+      <th class="num">Secure Score</th><th class="num">Users with MFA</th><th class="num">Licence waste / mo</th><th>Data</th>
+    </tr></thead>
+    <tbody>
+    {% for row in rows %}{% set t = row.tenant %}
+    <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
+      <td><a class="strong" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
+      <td data-label="Open findings">{{ sev_counts(row.counts) }}</td>
+      <td class="num" data-label="Secure Score">{{ kpi(row, 'secure_score.pct', '%') }}</td>
+      <td class="num" data-label="Users with MFA">{{ kpi(row, 'mfa.registered_pct', '%') }}</td>
+      <td class="num" data-label="Licence waste / mo">{{ kpi(row, 'waste', 'money') }}</td>
+      <td data-label="Data"><span class="pill {{ row.health[0] }}" {% if row.health[2] %}title="{{ row.health[2] }}"{% endif %}>{{ row.health[1] }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+<p class="footnote">Arrows show the change over the last 4 weeks. Licence waste counts licences that are unassigned or held by disabled or inactive users, priced under <em>Licence prices</em>.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if rows|length > 5 %}
+<script nonce="{{ csp_nonce }}">
+document.getElementById('tenant-filter').addEventListener('input', function (e) {
+  var q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('#tenant-table tbody tr').forEach(function (tr) {
+    tr.hidden = q && tr.dataset.name.indexOf(q) === -1;
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

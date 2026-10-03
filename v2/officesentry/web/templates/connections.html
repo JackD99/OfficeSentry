@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}App connection · Office Sentry{% endblock %}
+{% block content %}
+{% set ready = connections|selectattr('client_id')|list %}
+<div class="page-head"><div><h1>App connection</h1>
+  <div class="sub">Office Sentry signs in to every client tenant as one multi-tenant, <strong>read-only</strong> Entra app. You set it up once.</div></div></div>
+
+<ol class="setup-steps card">
+  <li class="{{ 'done' if connections else 'current' }}">
+    <div class="step-title">Generate a certificate</div>
+    <div class="step-body">The private key is created and kept encrypted inside Office Sentry. It never leaves it.
+      {% if not connections %}
+      <form method="post" action="{{ url_for('admin.create_connection') }}" class="form-row step-form">
+        {{ csrf() }}
+        <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
+        <button class="primary">Generate certificate</button>
+      </form>
+      {% endif %}
+    </div>
+  </li>
+  <li class="{{ 'done' if ready else ('current' if connections else '') }}">
+    <div class="step-title">Create the app in your own Entra tenant</div>
+    <div class="step-body">
+      Easiest: run <code>python -m officesentry create-app</code> on the server. It registers the app, uploads the certificate and adds the permissions.
+      <details class="by-hand"><summary>Or do it by hand</summary>
+        <ol class="small">
+          <li>In the Entra admin center: <em>App registrations → New registration</em>.</li>
+          <li>Supported account types: <em>Accounts in any organizational directory</em>.</li>
+          <li>Redirect URI (Web): <code>{{ redirect_uri }}</code></li>
+          <li>Under <em>Certificates &amp; secrets</em>, upload the .cer file below.</li>
+          <li>Under <em>API permissions</em>, add the application permissions listed at the bottom of this page.</li>
+        </ol>
+      </details>
+    </div>
+  </li>
+  <li class="{{ 'done' if ready else '' }}">
+    <div class="step-title">Save the app's client ID</div>
+    <div class="step-body">Copy the <em>Application (client) ID</em> from the app's overview page into the form below.</div>
+  </li>
+  <li class="{{ 'current' if ready else '' }}">
+    <div class="step-title">Add client tenants</div>
+    <div class="step-body">Each tenant gets a consent link for its Global Administrator. For mailbox reports they also give the app the read-only <em>Global Reader</em> role.
+      {% if ready %}<div class="step-action"><a class="btn sm" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a tenant</a></div>{% endif %}</div>
+  </li>
+</ol>
+
+{% for c in connections %}
+<section class="card" id="conn-{{ c.id }}">
+  <div class="card-head"><h2>{{ c.name }}</h2>{% if c.client_id %}<span class="pill ok">Ready</span>{% else %}<span class="pill warn">Needs client ID</span>{% endif %}</div>
+  <dl class="kv">
+    <dt>Certificate</dt><dd><span class="mono small">{{ c.thumbprint }}</span> · <a href="{{ url_for('admin.download_certificate', conn_id=c.id) }}">{{ icon('download') }} Download .cer</a></dd>
+    <dt>Expires</dt><dd>{{ c.not_after|day }}</dd>
+  </dl>
+  <form method="post" action="{{ url_for('admin.set_client_id', conn_id=c.id) }}" class="form-row step-form">
+    {{ csrf() }}
+    <label>Application (client) ID <input name="client_id" value="{{ c.client_id or '' }}" placeholder="00000000-0000-0000-0000-000000000000" required class="mono" autocomplete="off"></label>
+    <button>{{ 'Update' if c.client_id else 'Save' }}</button>
+  </form>
+</section>
+{% endfor %}
+
+{% if connections %}
+<details class="card add-another">
+  <summary>{{ icon('plus') }} Create another app connection</summary>
+  <p class="muted small">Only needed if you want separate apps, for example per region. Most MSPs use one.</p>
+  <form method="post" action="{{ url_for('admin.create_connection') }}" class="form-row">
+    {{ csrf() }}
+    <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
+    <button>Generate certificate</button>
+  </form>
+</details>
+{% endif %}
+
+<details class="card flush perms">
+  <summary><h2>Permissions the app asks for</h2><span class="meta">{{ permissions|length + exchange_permissions|length }} application permissions, all read-only. Show</span></summary>
+  <table class="stack-sm">
+    <thead><tr><th>Permission</th><th>Why</th></tr></thead>
+    <tbody>
+    {% for p, why in permissions|dictsort %}<tr><td><code>{{ p }}</code><span class="sub">Microsoft Graph</span></td><td data-label="Why">{{ why }}</td></tr>{% endfor %}
+    {% for p, why in exchange_permissions|dictsort %}<tr><td><code>{{ p }}</code><span class="sub">Office 365 Exchange Online</span></td><td data-label="Why">{{ why }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <p class="footnote pad">Exchange access only ever runs <code>Get-</code> commands from a fixed list, so it can't change anything.</p>
+</details>
+{% endblock %}

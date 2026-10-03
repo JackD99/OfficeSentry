@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts %}
+{% block title %}Your reports · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ rows[0].tenant.name if rows|length == 1 else 'Your Microsoft 365 reports' }}</h1>
+  <div class="sub">Read-only reports on your Microsoft 365 security and licences, updated every night.</div></div></div>
+{% for row in rows %}{% set t = row.tenant %}
+<section class="client-tenant">
+  {% if rows|length > 1 %}<h2 class="section-title">{{ t.name }}</h2>{% endif %}
+  {% set ss = row.kpis['secure_score.pct'] %}{% set mfa = row.kpis['mfa.registered_pct'] %}
+  <div class="tiles">
+    <div class="tile"><div class="label">Microsoft Secure Score</div><div class="value">{{ '%g%%'|format(ss.value) if ss.value is not none else '–' }}</div>
+      <div class="foot">{% if ss.delta %}<span class="delta {{ ss.trend }}">{{ '%+g'|format(ss.delta) }}%</span> in 4 weeks{% else %}&nbsp;{% endif %}</div></div>
+    <div class="tile"><div class="label">Users with MFA</div><div class="value">{{ '%g%%'|format(mfa.value) if mfa.value is not none else '–' }}</div>
+      <div class="foot">{% if mfa.delta %}<span class="delta {{ mfa.trend }}">{{ '%+g'|format(mfa.delta) }}%</span> in 4 weeks{% else %}&nbsp;{% endif %}</div></div>
+    <div class="tile"><div class="label">Checks needing attention</div><div class="value">{{ row.failing }}</div>
+      <div class="foot">{% if row.counts.critical or row.counts.high %}<span class="bad-text">{{ row.counts.critical + row.counts.high }} critical or high</span>{% else %}none critical or high{% endif %}</div></div>
+    <div class="tile"><div class="label">Fixed in the last 4 weeks</div><div class="value">{{ row.resolved }}</div><div class="foot">&nbsp;</div></div>
+  </div>
+  <div class="report-links">
+    <a class="report-link primary" href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}">
+      <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Your security and licensing summary, with what to fix first.</span></a>
+    <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=t.id) }}">
+      <span class="title">Insurance evidence {{ icon('arrow') }}</span><span class="desc">Answers to the security questions on cyber insurance forms.</span></a>
+    <a class="report-link" href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">
+      <span class="title">Findings {{ icon('arrow') }}</span><span class="desc">Every account and setting the checks flagged.</span></a>
+    <a class="report-link" href="{{ url_for('reports.data_report', tenant_id=t.id, key='mailboxes') }}">
+      <span class="title">Detail reports {{ icon('arrow') }}</span><span class="desc">{% for key, r in data_reports.items() %}{{ r[0] }}{{ ', ' if not loop.last }}{% endfor %}.</span></a>
+  </div>
+  {% if row.stale_data %}<p class="footnote warn-text">Some of this data is more than a day old.</p>{% endif %}
+</section>
+{% else %}
+<div class="card empty"><h3>No reports yet</h3><p>You haven't been given access to any reports yet. Ask your IT provider to grant access.</p></div>
+{% endfor %}
+{% endblock %}

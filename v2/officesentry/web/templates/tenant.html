@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, tenant_header with context %}
+{% block title %}{{ tenant.name }} · Office Sentry{% endblock %}
+{% macro kpi_value(k) -%}
+{% if k.value is none %}<span class="faint">–</span>{% elif k.unit == 'currency' %}{{ k.value|money(report.currency) }}{% else %}{{ '%g'|format(k.value) }}{{ k.unit }}{% endif %}
+{%- endmacro %}
+{% block content %}
+{% set open_total = report.counts.values()|sum %}
+{{ tenant_header(tenant, 'overview', counts={'findings': open_total}) }}
+
+{% if not tenant.consented_at %}
+<section class="card setup">
+  <div class="card-head"><h2>{{ icon('shield') }} Finish connecting this tenant</h2></div>
+  {% if not connection or not connection.client_id %}
+  <p>This tenant has no working app connection yet.
+    {% if current_user.role == 'admin' %}Finish it under <a href="{{ url_for('admin.connections') }}">App connection</a>, then come back here.{% else %}Ask an admin to finish the app connection.{% endif %}</p>
+  {% elif consent_link %}
+  <ol class="steps">
+    <li>Send this link to a Global Administrator of <strong>{{ tenant.name }}</strong>, or open it yourself if you are one. It lets Office Sentry <strong>read</strong> the tenant and can't change anything.
+      <div class="step-action"><a class="btn primary" href="{{ consent_link }}" rel="noopener">Grant admin consent</a> <span class="muted small">The link works for one hour.</span></div></li>
+    <li>For mailbox and forwarding reports, they also assign the <em>Global Reader</em> role to the app in Entra (Roles and admins → Global Reader → Add assignments).</li>
+    <li>Data is collected automatically once consent is recorded. The first results appear within a few minutes.</li>
+  </ol>
+  {% else %}
+  <p>Waiting for a Global Administrator of this tenant to grant consent. An admin can send them the link.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<div class="tiles">
+  {% for k in report.kpis %}
+  <div class="tile">
+    <div class="label">{{ k.label }}</div>
+    <div class="value">{{ kpi_value(k) }}</div>
+    <div class="foot">
+      {% if k.delta %}<span class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}{{ k.unit if k.unit != 'currency' }}</span> in 4 weeks
+      {% elif k.note %}{{ k.note }}
+      {% elif k.previous is not none %}No change in 4 weeks
+      {% elif k.value is none %}Not collected yet
+      {% else %}&nbsp;{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head">
+      <h2>Needs attention</h2>
+      {% if attention %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All {{ open_total }} findings</a>{% endif %}
+    </div>
+    {% if attention %}
+    <ul class="list">
+      {% for r in attention[:6] %}
+      <li>
+        <span class="sevtext {{ r.severity }} sevcol">{{ r.severity }}</span>
+        <div class="grow">
+          <div class="title">{{ r.title }}</div>
+          <div class="desc">{{ r.summary }}</div>
+        </div>
+        <span class="pill" title="Accounts or items affected">{{ r.findings|length }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if attention|length > 6 %}<p class="footnote">…and {{ attention|length - 6 }} more checks in the <a href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">monthly review</a>.</p>{% endif %}
+    {% elif report.passing %}
+    <div class="empty compact">{{ icon('check', 'big ok') }}<h3>Nothing needs attention</h3><p>All {{ report.passing|length }} checks that could run passed.</p></div>
+    {% else %}
+    <div class="empty compact"><h3>No results yet</h3><p>Checks run once data has been collected.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2></div>
+    <div class="mini-stats">
+      <div><span class="value">{{ report.new_count }}</span><span class="label">new findings</span></div>
+      <div><span class="value">{{ report.resolved|length }}</span><span class="label">fixed</span></div>
+      <div><span class="value">{{ report.changes|length }}</span><span class="label">changes spotted</span></div>
+    </div>
+    {% if report.changes %}
+    <ul class="list compact">
+      {% for c in report.changes[:5] %}
+      <li><span class="chg chg-{{ c.kind }}">{{ c.kind }}</span><div class="grow"><span class="title">{{ c.area }}</span> <span class="desc">{{ c.subject }}: {{ c.detail }}</span></div></li>
+      {% endfor %}
+    </ul>
+    {% if report.changes|length > 5 %}<p class="footnote">{{ report.changes|length - 5 }} more in the monthly review.</p>{% endif %}
+    {% else %}
+    <p class="muted small">No configuration changes spotted. Change tracking needs two collections at least 4 weeks apart.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Reports</h2><span class="meta">Everything here can be shared with the client.</span></div>
+  <div class="report-links">
+    <a class="report-link primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">
+      <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Security and licensing summary with recommendations. PDF and XLSX.</span></a>
+    <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">
+      <span class="title">Insurance evidence {{ icon('arrow') }}</span><span class="desc">Answers to the controls cyber insurers ask about.</span></a>
+    {% for key, r in data_reports.items() %}
+    <a class="report-link" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=key) }}">
+      <span class="title">{{ r[0] }} {{ icon('arrow') }}</span><span class="desc">{{ r[1] }}</span></a>
+    {% endfor %}
+  </div>
+</section>
+
+<p class="footnote data-line">
+  <span class="pill {{ health[0] }}">{{ health[1] }}</span>
+  {% set finished = report.freshness|map(attribute='finished_at')|select|list %}
+  {% if finished %}<span>Data last collected {{ ts(finished|max) }}.</span>{% endif %}
+  {% if health[2] %}<span>{{ health[2] }}</span>{% endif %}
+  <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection details</a>
+</p>
+{% endblock %}

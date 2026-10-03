@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Licence prices · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Licence prices</h1>
+  <div class="sub">What you pay per licence per month. Used to put a cost on unused licences in reports. Leave a price blank to show counts only.</div></div></div>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card flush">
+    <div class="card-head toolbar">
+      <h2>{{ skus|length }} licence{{ 's' if skus|length != 1 }} seen across your tenants</h2>
+      <label class="inline-label">Currency
+        <select name="currency">{% for c in currencies %}<option {% if c == currency %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    {% if skus %}
+    <table>
+      <thead><tr><th>Licence</th><th class="num">Monthly price</th></tr></thead>
+      <tbody>
+      {% for part, name in skus %}
+      <tr><td><span class="strong">{{ name }}</span><span class="sub mono">{{ part }}</span></td>
+        <td class="num"><input class="price" name="price:{{ part }}" inputmode="decimal" placeholder="–" value="{{ current.get(part, '') }}" aria-label="Monthly price for {{ name }}"></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty"><h3>No licences yet</h3><p>Licences appear here once a tenant has been collected.</p></div>
+    {% endif %}
+  </div>
+  {% if skus %}<div class="form-actions sticky-actions"><button class="primary">Save prices</button></div>{% endif %}
+</form>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} · Office Sentry{% endblock %}
+{% macro body() %}
+<div class="empty">
+  <div class="error-code">{{ code }}</div>
+  <h3>{{ message }}</h3>
+  <a class="btn" href="{{ url_for('tenants.dashboard') }}">Go to the start page</a>
+</div>
+{% endmacro %}
+{% block content %}<div class="card">{{ body() }}</div>{% endblock %}
+{% block auth %}{{ body() }}{% endblock %}

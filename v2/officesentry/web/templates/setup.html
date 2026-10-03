@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}First-run setup · Office Sentry{% endblock %}
+{% block auth %}
+<h1>Create the first admin</h1>
+<p class="sub">This page is only available until the first account exists.</p>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Username <input name="username" autocomplete="username" required autofocus></label>
+  <label>Password <input type="password" name="password" minlength="{{ min_password }}" autocomplete="new-password" required>
+    <span class="hint">At least {{ min_password }} characters.</span></label>
+  <label>Confirm password <input type="password" name="confirm" minlength="{{ min_password }}" autocomplete="new-password" required></label>
+  <button class="primary">Create admin</button>
+</form>
+{% endblock %}

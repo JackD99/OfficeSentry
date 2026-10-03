@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Office Sentry{% endblock %}
+{% block auth %}
+<h1>Sign in</h1>
+<p class="sub">Microsoft 365 security and licensing reports.</p>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Username <input name="username" autocomplete="username" required autofocus></label>
+  <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+  <button class="primary">Sign in</button>
+</form>
+{% endblock %}
