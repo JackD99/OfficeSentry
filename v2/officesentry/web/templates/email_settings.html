@@ -1,34 +1,94 @@
 {% extends "base.html" %}
-{% block title %}Email · Office Sentry{% endblock %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}Email delivery · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Email</h1><div class="sub">The mail server used to send scheduled reports.</div></div>
-  {% if s.smtp_host %}<span class="pill ok">Set up</span>{% else %}<span class="pill warn">Not set up</span>{% endif %}</div>
+<div class="page-head"><div><h1>Email delivery</h1><div class="sub">How Office Sentry sends scheduled reports, digests and alerts.</div></div>
+  {% if ready %}<span class="pill ok">{{ icon('check') }} Set up</span>{% else %}<span class="pill warn">Not set up</span>{% endif %}</div>
+
 <div class="grid-main">
-<form method="post" class="card">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <h2>Mail server (SMTP)</h2>
-  <div class="form-row">
-    <label class="grow-2">Server <input name="smtp_host" value="{{ s.smtp_host or '' }}" placeholder="smtp.office365.com" required></label>
-    <label>Port <input name="smtp_port" value="{{ s.smtp_port or 587 }}" inputmode="numeric" required></label>
+<form method="post" class="card" id="mail-form">
+  {{ csrf() }}
+  <h2>Send with</h2>
+  <fieldset class="choices">
+    <legend class="sr-only">Send with</legend>
+    <label class="choice"><input type="radio" name="mail_transport" value="graph" {% if transport == 'graph' %}checked{% endif %}>
+      <span><span class="choice-title">Microsoft 365</span><span class="hint">Send from a mailbox in your own Microsoft 365 tenant. No SMTP password needed. Attachments up to about 3 MB per email.</span></span></label>
+    <label class="choice"><input type="radio" name="mail_transport" value="smtp" {% if transport == 'smtp' %}checked{% endif %}>
+      <span><span class="choice-title">An SMTP server</span><span class="hint">Any mail server or relay service (SendGrid, Mailgun, your own).</span></span></label>
+  </fieldset>
+
+  <div data-transport="graph">
+    <h2>Microsoft 365 mailbox</h2>
+    <div class="form-row">
+      <label class="grow-2">Send from <input name="graph_sender" type="email" value="{{ s.graph_sender or '' }}" placeholder="reports@msp.com" autocomplete="off">
+        <span class="hint">A mailbox (a shared mailbox is fine) in your own tenant.</span></label>
+    </div>
+    <div class="form-row">
+      <label>Your tenant ID <input name="graph_tenant" value="{{ s.graph_tenant or '' }}" placeholder="msp.onmicrosoft.com" autocomplete="off"></label>
+      <label>Mail app client ID <input name="graph_client_id" value="{{ s.graph_client_id or '' }}" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
+    </div>
+    <label>Client secret <input type="password" name="graph_secret" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if has_secret else '' }}">
+      <span class="hint">Changing the tenant or client ID clears the saved secret, so it's only ever used for the app it was made for.</span></label>
   </div>
-  <label>Security <select name="smtp_security">
-    {% for v, label in [('starttls', 'STARTTLS (usually port 587)'), ('ssl', 'SSL/TLS (usually port 465)'), ('none', 'None (internal relay only)')] %}<option value="{{ v }}" {% if (s.smtp_security or 'starttls') == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select></label>
-  <div class="form-row">
-    <label>Username <input name="smtp_user" value="{{ s.smtp_user or '' }}" autocomplete="off"></label>
-    <label>Password <input type="password" name="smtp_password" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if has_password else '' }}"></label>
+
+  <div data-transport="smtp">
+    <h2>SMTP server</h2>
+    <div class="form-row">
+      <label class="grow-2">Server <input name="smtp_host" value="{{ s.smtp_host or '' }}" placeholder="smtp.example.com"></label>
+      <label>Port <input name="smtp_port" value="{{ s.smtp_port or 587 }}" inputmode="numeric"></label>
+    </div>
+    <label>Security <select name="smtp_security">
+      {% for v, label in [('starttls', 'STARTTLS (usually port 587)'), ('ssl', 'SSL/TLS (usually port 465)'), ('none', 'None (internal relay only)')] %}<option value="{{ v }}" {% if (s.smtp_security or 'starttls') == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></label>
+    <div class="form-row">
+      <label>Username <input name="smtp_user" value="{{ s.smtp_user or '' }}" autocomplete="off"></label>
+      <label>Password <input type="password" name="smtp_password" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if has_password else '' }}"></label>
+    </div>
+    <p class="footnote">Changing the server clears the saved password, so it's never sent to a new server without you entering it again.</p>
+    <label>From address <input name="smtp_from" value="{{ s.smtp_from or '' }}" placeholder="reports@msp.com"></label>
   </div>
-  <p class="footnote">Changing the server clears the saved password, so it's never sent to a new server without you entering it again.</p>
-  <label>From address <input name="smtp_from" value="{{ s.smtp_from or '' }}" placeholder="Reports &lt;reports@msp.com&gt;" required></label>
+
+  <h2>How emails are signed</h2>
+  <label>Your company name <input name="msp_name" value="{{ s.msp_name or '' }}" placeholder="Contoso IT" maxlength="80">
+    <span class="hint">Shown at the top of every email and as the sender's name.</span></label>
   <div class="form-actions"><button class="primary">Save</button></div>
 </form>
-<form method="post" class="card">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="action" value="test">
-  <h2>Send a test</h2>
-  <p class="muted small">Save first, then check the settings work.</p>
-  <label>Send to <input name="test_to" type="email" required placeholder="you@msp.com"></label>
-  <div class="form-actions"><button {% if not s.smtp_host %}disabled{% endif %}>Send test email</button></div>
-</form>
+
+<div>
+  <form method="post" class="card">
+    {{ csrf() }}
+    <input type="hidden" name="action" value="test">
+    <h2>Send a test</h2>
+    <p class="muted small">Save first, then check it works.</p>
+    <label>Send to <input name="test_to" type="email" required placeholder="you@msp.com"></label>
+    <div class="form-actions"><button {% if not ready %}disabled{% endif %}>{{ icon('send') }} Send test email</button></div>
+  </form>
+
+  <section class="card" data-transport="graph">
+    <h2>Setting up the Microsoft 365 option</h2>
+    <p class="small muted">This uses a small separate app in <strong>your own</strong> tenant that can only send mail. Client tenants are never asked for mail permissions.</p>
+    <ol class="steps small">
+      <li>Open <strong>entra.microsoft.com</strong> signed in to your own tenant, then go to <strong>App registrations → New registration</strong>. Name it “Office Sentry mail”, keep “Single tenant”, and select <strong>Register</strong>.</li>
+      <li>Copy the <strong>Application (client) ID</strong> and <strong>Directory (tenant) ID</strong> into the boxes on the left.</li>
+      <li>Go to <strong>API permissions → Add a permission → Microsoft Graph → Application permissions</strong>, tick <strong>Mail.Send</strong>, select <strong>Add</strong>, then <strong>Grant admin consent</strong>.</li>
+      <li>Go to <strong>Certificates &amp; secrets → New client secret</strong>. Copy the <strong>Value</strong> (not the ID) into “Client secret”. Note its expiry date so you can renew it.</li>
+      <li>Recommended: limit the app to the one mailbox. In Exchange Online PowerShell run:
+        <pre class="log">New-ApplicationAccessPolicy -AppId &lt;client ID&gt; -PolicyScopeGroupId reports@msp.com -AccessRight RestrictAccess -Description "Office Sentry mail"</pre></li>
+      <li>Save, then send yourself a test.</li>
+    </ol>
+  </section>
 </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  function update() {
+    var t = document.querySelector('input[name=mail_transport]:checked').value;
+    document.querySelectorAll('[data-transport]').forEach(function (el) { el.hidden = el.dataset.transport !== t; });
+  }
+  document.querySelectorAll('input[name=mail_transport]').forEach(function (r) { r.addEventListener('change', update); });
+  update();
+})();
+</script>
 {% endblock %}

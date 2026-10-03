@@ -5,7 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 
 from .monthly_review import Report
-from .tables import no_formulas
+from .safe_xlsx import no_formulas
 
 
 def pdf_available() -> bool:

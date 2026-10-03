@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
 
+from .safe_xlsx import no_formulas
+
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n")
 
 
@@ -45,15 +47,6 @@ def to_csv(table: Table) -> bytes:
     for row in table.rows:
         writer.writerow([csv_cell(v) for v in row])
     return ("﻿" + out.getvalue()).encode("utf-8")  # BOM so Excel reads UTF-8
-
-
-def no_formulas(wb) -> None:
-    """Store every cell openpyxl would treat as a formula (text starting with '=') as text."""
-    for ws in wb.worksheets:
-        for row in ws.iter_rows():
-            for cell in row:
-                if cell.data_type == "f":
-                    cell.data_type = "s"
 
 
 def sheet_name(title: str, used: set[str]) -> str:

@@ -7,11 +7,13 @@ from datetime import timedelta
 
 from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from ..config import Config, load_config
+from .. import worker
+from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
-from . import access, admin, alerts, auth, filters, prospects, reports, tenants
+from . import access, admin, alerts, auth, branding, email, filters, prospects, reports, tenants
 
 csrf = CSRFProtect()
 
@@ -21,10 +23,14 @@ def create_app(cfg: Config | None = None) -> Flask:
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=cfg.secret_key,
+        # "__Host-" makes browsers insist on Secure, path=/ and no Domain, so a
+        # sibling subdomain can't plant or read the cookie.
+        SESSION_COOKIE_NAME="__Host-officesentry" if cfg.secure_cookies else "officesentry",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=cfg.secure_cookies,
-        PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+        # The server-side session (web/sessions.py) enforces the real limits.
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=cfg.session_hours),
         WTF_CSRF_TIME_LIMIT=None,
         TESTING=cfg.testing,
         WTF_CSRF_ENABLED=not cfg.extra.get("disable_csrf", False),
@@ -33,8 +39,16 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.extensions["officesentry.config"] = cfg
     app.extensions["officesentry.vault"] = Vault(cfg.encryption_keys)
 
+    if cfg.trusted_proxies > 0:
+        # Behind a reverse proxy: take the client IP, scheme and host from its headers.
+        n = cfg.trusted_proxies
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n, x_port=n, x_prefix=n)
+
     conn = connect(cfg.db_path)
     migrate(conn)
+    if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
+        app.logger.warning("No admin account yet. To create one, open %s/setup?token=%s",
+                           cfg.base_url, setup_token(cfg.data_dir))
     conn.close()
 
     csrf.init_app(app)
@@ -55,13 +69,15 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.after_request
     def _security_headers(resp):
         nonce = getattr(g, "csp_nonce", "")
-        resp.headers["Content-Security-Policy"] = (
+        # A rendered email preview sets its own, stricter policy and may be framed by the portal.
+        override = g.get("csp_override")
+        resp.headers["Content-Security-Policy"] = override or (
             f"default-src 'self'; script-src 'self' 'nonce-{nonce}'; style-src 'self'; "
             "img-src 'self' data:; object-src 'none'; base-uri 'none'; "
             "frame-ancestors 'none'; form-action 'self'"
         )
         resp.headers["X-Content-Type-Options"] = "nosniff"
-        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["X-Frame-Options"] = "SAMEORIGIN" if override else "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if cfg.secure_cookies:
@@ -72,7 +88,11 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.context_processor
     def _inject():
-        return {"current_user": g.get("user"), "csp_nonce": g.get("csp_nonce", "")}
+        user = g.get("user")
+        # Admins are told when the background worker isn't running: without it
+        # nothing is collected and no scheduled email goes out.
+        worker_down = bool(user and user["role"] == "admin" and "db" in g and not worker.is_alive(g.db))
+        return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down}
 
     @app.errorhandler(403)
     def _forbidden(_e):
@@ -91,5 +111,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(admin.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(prospects.bp)
+    app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)
+    app.register_blueprint(branding.bp)
     return app

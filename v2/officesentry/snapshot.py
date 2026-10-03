@@ -24,7 +24,9 @@ class TenantSnapshot:
 
     @cached_property
     def runs(self) -> dict:
-        cutoff = " AND finished_at <= ?" if self.as_of else ""
+        # An older snapshot skips runs whose objects the retention policy has removed.
+        cutoff = (" AND finished_at <= ? AND (object_count = 0 OR EXISTS"
+                  " (SELECT 1 FROM objects o WHERE o.run_id = runs.id))") if self.as_of else ""
         rows = self.conn.execute(
             f"""
             SELECT r.* FROM runs r JOIN (

@@ -1,0 +1,106 @@
+{# Pieces shared by the emailed-reports pages. Import "with context". #}
+{% from "_macros.html" import icon, ts, csrf %}
+
+{# Names of the people an email goes to. Clients only ever see their own contacts. #}
+{% macro people(contacts, staff=True, limit=4) -%}
+{% set shown = contacts if staff else contacts|selectattr('tenant_id')|list %}
+{% if not shown %}<span class="bad-text">No one to send to</span>{% else %}
+{% for c in shown[:limit] %}<span class="person{{ ' team' if c.tenant_id is none }}" title="{{ c.email }}{{ ' · your team, hidden copy' if c.tenant_id is none }}">{{ c.name or c.email }}</span>{% endfor %}
+{% if shown|length > limit %}<span class="muted small">+{{ shown|length - limit }} more</span>{% endif %}
+{% endif %}
+{%- endmacro %}
+
+{% macro when_local(dt) -%}
+{{ dt|datefmt('%a %-d %b, %H:%M') }}
+{%- endmacro %}
+
+{# The "Next email" tile on the tenant and overview pages. #}
+{% macro next_tile(s, foot) -%}
+<div class="tile"><div class="label">Next email</div>
+  {% if not s %}<div class="value small-value faint">Nothing scheduled</div><div class="foot">&nbsp;</div>
+  {% elif s.due_now %}<div class="value small-value">Due now</div><div class="foot">{{ foot }} · goes out once the latest data is collected</div>
+  {% else %}<div class="value small-value">{{ when_local(s.next) }}</div><div class="foot">{{ foot }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{# The one status that matters for a schedule, as a pill. #}
+{% macro schedule_status(s) -%}
+{% if not s.enabled %}<span class="pill">Paused</span>
+{% elif not s.recipients %}<span class="pill warn">No recipients</span>
+{% elif s.last_status == 'failed' %}<span class="pill bad">Last send failed</span>
+{% elif s.due_now %}<span class="pill accent">Due now</span>
+{% else %}<span class="pill info" title="{{ s.tz }}">{{ icon('clock') }} {{ when_local(s.next) }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro schedule_item(s, staff=True, tenant_name=None) -%}
+<li class="sched{{ ' paused' if not s.enabled }}">
+  <div class="sched-icon">{{ icon('send') }}</div>
+  <div class="grow">
+    <div class="sched-top">
+      <div>
+        {% if tenant_name %}<div class="tiny muted">{{ tenant_name }}</div>{% endif %}
+        <div class="title">{{ s.titles|join(' + ') or 'No reports chosen' }}</div>
+      </div>
+      {{ schedule_status(s) }}
+    </div>
+    <div class="desc">{{ s.describe }} <span class="faint">({{ s.tz }})</span></div>
+    <div class="people-line">{{ people(s.recipients, staff) }}</div>
+    {% if staff %}
+    <div class="row-actions sched-actions">
+      <a class="btn sm ghost" href="{{ url_for('email.preview_schedule', schedule_id=s.id) }}">{{ icon('eye') }} Preview</a>
+      <form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm ghost">{{ icon('send') }} Send now</button></form>
+      <a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>
+    </div>
+    {% endif %}
+  </div>
+</li>
+{%- endmacro %}
+
+{% set KINDS = {'report': 'Report', 'digest': 'Digest', 'alert': 'Alert', 'test': 'Test'} %}
+{% macro deliveries_table(rows, staff=True, origin='tenant') -%}
+<table class="stack-sm deliveries">
+  <thead><tr><th>Email</th><th>To</th><th>Result</th><th>When</th>{% if staff %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for d in rows %}
+  <tr class="{{ 'failed' if d.status == 'failed' }}">
+    <td class="wrap"><span class="strong">{{ d.subject }}</span>
+      {% set files = d.attachments|fromjson %}
+      <span class="sub">{{ KINDS.get(d.kind, d.kind) }}{% if files %} · {{ files|length }} attachment{{ 's' if files|length != 1 }}{% endif %}{% if d.trigger == 'manual' %} · sent by {{ d.sent_by }}{% elif d.trigger == 'retry' %} · retried by {{ d.sent_by }}{% endif %}</span></td>
+    <td data-label="To" class="wrap small">{{ d.recipients }}{% if staff and d.bcc %}<span class="sub">Hidden copy: {{ d.bcc }}</span>{% endif %}</td>
+    <td data-label="Result" class="wrap">{% if d.status == 'sent' %}<span class="pill ok">Sent</span>{% else %}<span class="pill bad">Failed</span>{% if staff and d.error %}<span class="sub bad-text">{{ d.error }}</span>{% endif %}{% endif %}</td>
+    <td data-label="When" class="nowrap">{{ ts(d.created_at) }}</td>
+    {% if staff %}<td class="num">{% if d.status == 'failed' and d.kind != 'test' %}
+      <form method="post" action="{{ url_for('email.retry', delivery_id=d.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="{{ origin }}"><button class="sm">{{ icon('refresh') }} Retry</button></form>
+    {% endif %}</td>{% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{# Tick boxes for choosing recipients. #}
+{% macro contact_checks(contacts, chosen, empty_text) -%}
+{% if contacts %}
+<div class="check-list">
+{% for c in contacts %}
+<label class="check"><input type="checkbox" name="contacts" value="{{ c.id }}" {% if c.id in chosen %}checked{% endif %}>
+  <span>{{ c.name or c.email }}{% if c.name %} <span class="muted small">{{ c.email }}</span>{% endif %}</span></label>
+{% endfor %}
+</div>
+{% else %}<p class="muted small m0">{{ empty_text }}</p>{% endif %}
+{%- endmacro %}
+
+{# Makes long-running POST buttons say what they're doing, so nobody double-clicks. #}
+{% macro busy_script() -%}
+<script nonce="{{ csp_nonce }}">
+document.querySelectorAll('form[data-busy]').forEach(function (f) {
+  f.addEventListener('submit', function () {
+    var b = f.querySelector('button');
+    if (b) { b.disabled = true; b.textContent = f.dataset.busy; }
+  });
+});
+document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+});
+</script>
+{%- endmacro %}

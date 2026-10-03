@@ -1,55 +1,29 @@
-# -------------------------------------------------------
-# Build artifacts & bundled runtimes
-# Run Build-Toolkit.ps1 to restore these locally
-# -------------------------------------------------------
-bin/
-modules/
-
-# -------------------------------------------------------
-# Certificates & credentials  (NEVER commit these)
-# -------------------------------------------------------
+# Certificates & credentials (never commit these)
 *.pfx
 *.cer
 *.key
 *.pem
 *.p12
-
-# -------------------------------------------------------
-# Audit output  (may contain sensitive tenant data)
-# -------------------------------------------------------
-*.csv
-*.xlsx
-
-# -------------------------------------------------------
-# Python cache
-# -------------------------------------------------------
-__pycache__/
-*.pyc
-
-# -------------------------------------------------------
-# Portal data (SQLite DB, tenant data, logs)
-# -------------------------------------------------------
-data/
-tenants/
-logs/
-config/portal.json
-
-# -------------------------------------------------------
-# Logs & temp files
-# -------------------------------------------------------
-*.log
-*.tmp
-
-# -------------------------------------------------------
-# Environment files (may contain secrets)
-# -------------------------------------------------------
 .env
 .env.local
 .env.production
 
-# -------------------------------------------------------
+# Report exports (may contain tenant data)
+*.csv
+*.xlsx
+
+# Local data and logs
+data/
+logs/
+*.log
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # Windows / editor noise
-# -------------------------------------------------------
 Thumbs.db
 desktop.ini
 .vscode/

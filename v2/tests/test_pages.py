@@ -15,7 +15,7 @@ def test_admin_pages_render_with_data(client, db, two_tenants):
     login(client, "admin")
     for url in ["/", f"/tenants/{alpha}", f"/tenants/{alpha}/collection", f"/runs/{run_id}",
                 f"/runs/{run_id}?kind=user", "/tenants/new",
-                "/admin/users", f"/admin/users/{uid}", "/admin/connections", "/account/password"]:
+                "/admin/users", f"/admin/users/{uid}", "/admin/connections", "/account"]:
         resp = client.get(url)
         assert resp.status_code == 200, url
     page = client.get(f"/runs/{run_id}?kind=user").get_data(as_text=True)

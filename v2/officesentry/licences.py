@@ -143,7 +143,7 @@ def licence_summary(skus: list[dict], users: list[dict] | None, prices: dict[str
         by_id[line.sku_id] = line
     for u in users or []:
         stale = is_stale(u, now) if u.get("accountEnabled") else False
-        if stale is not None:
+        if u.get("accountEnabled") and stale is not None:  # a disabled user says nothing about sign-in data
             summary.stale_available = True
         for sku_id in u.get("skuIds") or []:
             line = by_id.get(sku_id)

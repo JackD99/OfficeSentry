@@ -22,8 +22,10 @@ def settings():
     recent = g.db.execute(
         "SELECT a.*, t.name AS tenant_name FROM audit_log a LEFT JOIN tenants t ON t.id = a.tenant_id"
         " WHERE a.action IN ('alert_sent', 'alert_failed') ORDER BY a.id DESC LIMIT 10").fetchall()
+    email_alerts = g.db.execute("SELECT COUNT(*) FROM email_alerts WHERE enabled = 1").fetchone()[0]
     return render_template("alerts.html", s=s, url_hint=alerts.masked_url(_vault(), s),
-                           formats=alerts.FORMATS, severities=alerts.ALERT_SEVERITIES, recent=recent)
+                           formats=alerts.FORMATS, severities=alerts.ALERT_SEVERITIES, recent=recent,
+                           email_alerts=email_alerts)
 
 
 @bp.post("/alerts")

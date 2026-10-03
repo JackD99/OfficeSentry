@@ -37,6 +37,7 @@ GRAPH_PERMISSIONS: dict[str, str] = {
     "IdentityRiskyUser.Read.All": "Risky users (Entra ID P2)",
     "DeviceManagementManagedDevices.Read.All": "Intune device compliance",
     "SharePointTenantSettings.Read.All": "SharePoint sharing settings",
+    "Sites.Read.All": "Which files are shared, and with whom (read-only)",
     "MailboxSettings.Read": "Inbox rules",
 }
 

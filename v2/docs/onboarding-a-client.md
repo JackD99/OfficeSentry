@@ -97,8 +97,8 @@ later.
 Recording consent queues only **Tenant profile and licences**. To collect
 everything straight away, open the **Data collection** tab and press
 **Refresh all data**. Otherwise the rest arrives with the nightly collection
-(at `OFFICESENTRY_NIGHTLY_HOUR`, default 02:00, in `OFFICESENTRY_TIMEZONE`,
-default UTC).
+(`OFFICESENTRY_COLLECT_CRON`, default 02:00 every night, in
+`OFFICESENTRY_TIMEZONE`, default UTC).
 
 *Refresh all data* queues every data source, tenant profile first: it finds
 out which licences the tenant has, and the others use that to skip what the
