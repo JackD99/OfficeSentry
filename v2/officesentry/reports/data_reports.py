@@ -26,6 +26,7 @@ from ..rules import (
     user_consent_level,
 )
 from ..snapshot import TenantSnapshot
+from .safe_xlsx import no_formulas
 
 
 @dataclass
@@ -898,6 +899,7 @@ def to_xlsx(report: DataReport) -> bytes:
         for i in range(1, ws.max_column + 1):
             width = max((len(str(c.value or "")) for c in ws[get_column_letter(i)]), default=10)
             ws.column_dimensions[get_column_letter(i)].width = min(max(width + 2, 10), 60)
+    no_formulas(wb)
     out = BytesIO()
     wb.save(out)
     return out.getvalue()
