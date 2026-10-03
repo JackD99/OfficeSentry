@@ -18,7 +18,7 @@
 {% macro next_tile(s, foot) -%}
 <div class="tile"><div class="label">Next email</div>
   {% if not s %}<div class="value small-value faint">Nothing scheduled</div><div class="foot">&nbsp;</div>
-  {% elif s.due_now %}<div class="value small-value">Due now</div><div class="foot">{{ foot }} · goes out within a minute</div>
+  {% elif s.due_now %}<div class="value small-value">Due now</div><div class="foot">{{ foot }} · goes out once the latest data is collected</div>
   {% else %}<div class="value small-value">{{ when_local(s.next) }}</div><div class="foot">{{ foot }}</div>{% endif %}
 </div>
 {%- endmacro %}

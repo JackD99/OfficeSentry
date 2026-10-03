@@ -7,7 +7,7 @@ import responses
 from officesentry import store
 from officesentry.collectors import REGISTRY
 from officesentry.graph import GRAPH_ROOT, GraphClient
-from officesentry.worker import current_slot, execute_run, schedule_tick
+from officesentry.worker import execute_run, schedule_tick
 
 V1 = f"{GRAPH_ROOT}/v1.0"
 
@@ -150,13 +150,6 @@ def test_orphaned_runs_are_failed_on_startup(db, two_tenants):
     assert db.execute("SELECT status FROM runs").fetchone()[0] == "failed"
 
 
-def test_nightly_slot():
-    now = datetime(2026, 10, 2, 1, 30, tzinfo=UTC)
-    assert current_slot(now, "UTC", 2) == datetime(2026, 10, 1, 2, 0, tzinfo=UTC)
-    # 02:00 in London during BST is 01:00 UTC.
-    assert current_slot(now, "Europe/London", 2) == datetime(2026, 10, 2, 1, 0, tzinfo=UTC)
-
-
 def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
     now = datetime(2026, 10, 2, 3, 0, tzinfo=UTC)
     assert schedule_tick(db, cfg, now) == 2 * len(REGISTRY)
@@ -172,23 +165,6 @@ def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
 def test_disabled_tenants_are_not_scheduled(db, cfg, two_tenants):
     db.execute("UPDATE tenants SET enabled = 0")
     assert schedule_tick(db, cfg, datetime(2026, 10, 2, 3, 0, tzinfo=UTC)) == 0
-
-
-def test_prune_keeps_latest_run_and_metrics(db, two_tenants):
-    alpha, _ = two_tenants
-    ids = []
-    for _ in range(2):
-        rid = store.enqueue_run(db, alpha, "users")
-        store.claim_next_run(db)
-        store.add_objects(db, rid, "user", [("u1", {"x": 1})])
-        store.add_metric(db, rid, alpha, "users.total", 1)
-        store.finish_run(db, rid, "succeeded")
-        ids.append(rid)
-    db.execute("UPDATE runs SET finished_at = '2020-01-01T00:00:00Z'")
-    assert store.prune_snapshots(db, retention_days=30) == 1
-    assert store.run_objects(db, ids[0]) == []
-    assert len(store.run_objects(db, ids[1])) == 1
-    assert len(store.metric_history(db, alpha, "users.total")) == 2
 
 
 def test_objects_are_json(db, two_tenants):

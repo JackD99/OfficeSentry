@@ -83,6 +83,47 @@ def cmd_rotate_keys(args, cfg):
           " Old keys can now be removed from the configuration.")
 
 
+def cmd_healthcheck(args, cfg):
+    """Exit 0 if the web portal answers, or the worker has checked in recently (for Docker)."""
+    if args.service == "web":
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/health", timeout=5) as resp:  # noqa: S310
+                sys.exit(0 if resp.status == 200 else 1)
+        except OSError as exc:
+            sys.exit(f"web: {exc}")
+    from .worker import is_alive, last_seen
+
+    conn = connect(cfg.db_path)
+    if not is_alive(conn):
+        sys.exit(f"worker: last seen {last_seen(conn) or 'never'}")
+
+
+def cmd_backup(args, cfg):
+    """Write a consistent copy of the database, safe while the portal is running."""
+    import os
+    import sqlite3
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    folder = Path(args.dir) if args.dir else cfg.data_dir / "backups"
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    dest = folder / f"officesentry-{datetime.now(UTC):%Y%m%d-%H%M%S}.db"
+    src = connect(cfg.db_path)
+    out = sqlite3.connect(dest)
+    with out:
+        src.backup(out)
+    out.close()
+    os.chmod(dest, 0o600)
+    old = sorted(folder.glob("officesentry-*.db"))[:-args.keep] if args.keep else []
+    for path in old:
+        path.unlink()
+    print(f"Saved {dest}" + (f" (removed {len(old)} older backup(s))" if old else ""))
+    print("Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
+          " without it the stored certificates can't be decrypted.")
+
+
 def cmd_live_test(args, cfg):
     """Collect from a real test tenant with a client secret (development only)."""
     from pathlib import Path
@@ -101,7 +142,7 @@ def main(argv=None):
     web.add_argument("--port", type=int, default=8000)
     web.set_defaults(func=cmd_web)
 
-    worker = sub.add_parser("worker", help="run collector jobs and the nightly schedule")
+    worker = sub.add_parser("worker", help="run collections, the schedule, emailed reports and retention")
     worker.add_argument("--once", action="store_true", help="drain the queue and exit")
     worker.set_defaults(func=cmd_worker)
 
@@ -116,6 +157,16 @@ def main(argv=None):
 
     rotate = sub.add_parser("rotate-keys", help="re-encrypt credentials with the newest key")
     rotate.set_defaults(func=cmd_rotate_keys)
+
+    health = sub.add_parser("healthcheck", help="exit 0 if the web portal or worker is healthy (for Docker)")
+    health.add_argument("service", choices=["web", "worker"])
+    health.add_argument("--port", type=int, default=8000)
+    health.set_defaults(func=cmd_healthcheck)
+
+    backup = sub.add_parser("backup", help="save a consistent copy of the database")
+    backup.add_argument("--dir", help="folder for backups (default: <data dir>/backups)")
+    backup.add_argument("--keep", type=int, default=7, help="how many backups to keep (0 = all)")
+    backup.set_defaults(func=cmd_backup)
 
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")

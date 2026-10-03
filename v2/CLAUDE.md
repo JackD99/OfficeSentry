@@ -73,10 +73,29 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   `data-label` on every cell after the first.
 - Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.
 
+## Background work
+
+`worker.py` is the only background process: one loop that claims queued runs
+and, once a minute, queues the collection slot (`schedule.py`, cron +
+timezone, skipping collectors fresher than `max_age_hours`) and sends due
+report emails (which first refresh stale collectors). It prunes snapshots once
+a day with `store.prune_snapshots` (latest run per day for 30 days and per
+month for 12; metrics, findings and run rows are never pruned), so code that
+reads an older run must cope with its objects being gone (see
+`changes._baseline_run`). A side thread records the heartbeat that the
+portal banner and `healthcheck worker` read. Don't add Celery or Redis.
+
+To add timed work (emails, digests), register a job in its own module with
+`@schedule.periodic("name")`; it gets a `TickContext` every minute and uses
+`schedule.due_slot(cron, tz, ctx.now, last_slot=..., not_before=...)` to
+decide whether to act. Add the module to `worker.JOB_MODULES`. See
+`delivery._email_job` and `schedule.refresh_for_report`.
+
 ## Email delivery
 
-`delivery.tick()` sends scheduled emails and retries failed alert emails (call
-it every minute). Alert emails are not a separate engine: `alerts.after_sync()`
+`delivery.tick()` (the `email_delivery` periodic job) sends scheduled emails
+and retries failed alert emails. A report schedule's send time is a cron slot
+(`delivery.schedule_cron`), and stale collectors are refreshed first. Alert emails are not a separate engine: `alerts.after_sync()`
 (the Teams/Slack/webhook alert event after each collection) calls
 `delivery.after_sync()`, so both go out on the same findings. Schedules store their own timezone and the last period they finished
 ("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
@@ -90,4 +109,5 @@ Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 
 ## Commands
 
-`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,create-app,rotate-keys}`
+`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,create-app,rotate-keys,backup,healthcheck}`.
+Docker: `docker compose up -d --build` (see DEPLOY.md).

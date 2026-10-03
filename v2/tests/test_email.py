@@ -192,10 +192,13 @@ def test_unconfigured_email_records_failure(client, db, two_tenants):
 
 def test_periods_and_due_times():
     now = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)  # a Wednesday
+    # The latest send time at or before now, and the period it belongs to.
     assert delivery.slot("weekly", 0, 1, 8, "UTC", now) == ("2026-W41", datetime(2026, 10, 5, 8, tzinfo=UTC))
-    assert delivery.slot("weekly", 4, 1, 8, "UTC", now)[1] == datetime(2026, 10, 9, 8, tzinfo=UTC)
-    assert delivery.slot("monthly", 0, 15, 9, "UTC", now) == ("2026-10", datetime(2026, 10, 15, 9, tzinfo=UTC))
+    assert delivery.slot("weekly", 4, 1, 8, "UTC", now) == ("2026-W40", datetime(2026, 10, 2, 8, tzinfo=UTC))
+    assert delivery.slot("monthly", 0, 15, 9, "UTC", now) == ("2026-09", datetime(2026, 9, 15, 9, tzinfo=UTC))
     assert delivery.slot("quarterly", 0, 2, 7, "UTC", now) == ("2026-Q4", datetime(2026, 10, 2, 7, tzinfo=UTC))
+    assert delivery.schedule_cron("weekly", 6, 1, 8) == "0 8 * * 0"  # Sunday
+    assert delivery.schedule_cron("quarterly", 0, 3, 7) == "0 7 3 1,4,7,10 *"
     # Times are in the schedule's own timezone: 08:00 in London is 07:00 UTC in summer.
     assert delivery.slot("monthly", 0, 1, 8, "Europe/London", now)[1] == datetime(2026, 10, 1, 7, tzinfo=UTC)
     # Late on 31 Dec UTC is already January in Auckland.
@@ -211,9 +214,14 @@ def test_next_send(db, two_tenants):
         datetime(2027, 1, 3, 8, tzinfo=UTC)
     sid = _schedule(db, alpha, [], frequency="weekly", day_of_week=2, hour=9, last_period="2026-W41")
     assert delivery.next_send(_row(db, "email_schedules", sid), "UTC", now) == datetime(2026, 10, 14, 9, tzinfo=UTC)
-    sid = _schedule(db, alpha, [], frequency="monthly", day_of_month=20)
+    # Saved now, so September's send time doesn't count: next is 20 October.
+    sid = _schedule(db, alpha, [], frequency="monthly", day_of_month=20,
+                    last_period=delivery.initial_period("monthly", 0, 20, 8, "UTC", now))
     assert delivery.next_send(_row(db, "email_schedules", sid), "UTC", now) == datetime(2026, 10, 20, 8, tzinfo=UTC)
     assert delivery.describe(_row(db, "email_schedules", sid)) == "Monthly on the 20th at 08:00"
+    # A send time that was missed (the worker was down) is due now.
+    db.execute("UPDATE email_schedules SET last_period = '2026-08' WHERE id = ?", (sid,))
+    assert delivery.next_send(_row(db, "email_schedules", sid), "UTC", now) == datetime(2026, 9, 20, 8, tzinfo=UTC)
 
 
 # -- Schedules -------------------------------------------------------------------------------
@@ -288,7 +296,12 @@ def test_tick_sends_once_per_period(app, db, two_tenants, vault, cfg):
     assert delivery.tick(app, db, vault, cfg, now) == 1
     assert delivery.tick(app, db, vault, cfg, now + timedelta(days=3)) == 0
     assert _row(db, "email_schedules", sid)["last_period"] == "2026-10"
-    assert delivery.tick(app, db, vault, cfg, datetime(2026, 11, 1, 0, 5, tzinfo=UTC)) == 1
+    # November's send time: the data is weeks old, so it is collected again first.
+    nov = datetime(2026, 11, 1, 0, 5, tzinfo=UTC)
+    assert delivery.tick(app, db, vault, cfg, nov) == 0
+    assert db.execute("SELECT COUNT(*) FROM runs WHERE status = 'queued'").fetchone()[0] > 0
+    db.execute("UPDATE runs SET status = 'succeeded', finished_at = '2026-11-01T00:20:00Z' WHERE status = 'queued'")
+    assert delivery.tick(app, db, vault, cfg, nov + timedelta(minutes=20)) == 1
     assert len(sends()) == 2
 
 

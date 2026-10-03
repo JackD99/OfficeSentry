@@ -280,7 +280,10 @@ def test_failure_alerts_on_state_change_only(db, vault, alerting, two_tenants):
 def test_run_worker_alerts_when_a_collection_starts_failing(cfg, db, vault, two_tenants):
     alpha, _ = two_tenants
     configure(db, vault, fmt="generic")
-    add_run(db, alpha, "succeeded", collector="users")
+    ok = add_run(db, alpha, "succeeded", collector="users")
+    # Old enough that the worker collects again (newer data counts as fresh and is skipped).
+    db.execute("UPDATE runs SET created_at = '2026-01-01T00:00:00Z', finished_at = '2026-01-01T00:00:00Z'"
+               " WHERE id = ?", (ok,))
 
     def broken(tenant, connection):
         raise NotConnected("tenant has no app connection with a client ID")

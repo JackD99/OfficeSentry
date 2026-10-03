@@ -25,12 +25,12 @@ import logging
 import re
 from contextlib import nullcontext
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import alerts, mailer, store
+from . import alerts, mailer, schedule, store
 from .db import utcnow
 from .mailer import Email, MailError
 from .reports import data_reports, evidence, export, monthly_review
@@ -140,30 +140,34 @@ def schedule_tz(schedule, default_tz: str) -> str:
     return tz
 
 
+def schedule_cron(frequency: str, day_of_week: int, day_of_month: int, hour: int) -> str:
+    """A schedule's send time as a cron expression for ``schedule.py`` (cron counts Sunday as 0)."""
+    if frequency == "weekly":
+        return f"0 {hour} * * {(day_of_week + 1) % 7}"
+    if frequency == "monthly":
+        return f"0 {hour} {day_of_month} * *"
+    return f"0 {hour} {day_of_month} 1,4,7,10 *"
+
+
+def period_key(frequency: str, d: date) -> str:
+    if frequency == "weekly":
+        iso_year, week, _ = d.isocalendar()
+        return f"{iso_year}-W{week:02d}"
+    if frequency == "monthly":
+        return f"{d.year}-{d.month:02d}"
+    return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
+
+
 def slot(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str,
          now: datetime) -> tuple[str, datetime]:
-    """The period containing ``now`` and when its email is due (UTC)."""
-    zone = ZoneInfo(tz)
-    d = now.astimezone(zone).date()
-    if frequency == "weekly":
-        monday = d - timedelta(days=d.weekday())
-        iso_year, week, _ = monday.isocalendar()
-        key, day = f"{iso_year}-W{week:02d}", monday + timedelta(days=day_of_week)
-    elif frequency == "monthly":
-        key, day = f"{d.year}-{d.month:02d}", date(d.year, d.month, day_of_month)
-    else:
-        q = (d.month - 1) // 3
-        key, day = f"{d.year}-Q{q + 1}", date(d.year, 3 * q + 1, day_of_month)
-    return key, datetime.combine(day, time(hour), tzinfo=zone).astimezone(UTC)
+    """The latest send time at or before ``now`` (UTC) and the period it belongs to.
 
-
-def _next_period_start(frequency: str, d: date) -> date:
-    if frequency == "weekly":
-        return d - timedelta(days=d.weekday()) + timedelta(days=7)
-    months = 1 if frequency == "monthly" else 3
-    first = d.month if frequency == "monthly" else 3 * ((d.month - 1) // 3) + 1
-    month = first + months
-    return date(d.year + (month - 1) // 12, (month - 1) % 12 + 1, 1)
+    The schedule is due while its ``last_period`` isn't that period. Only the
+    latest slot counts, so a worker that was down sends once, not once per
+    missed period.
+    """
+    due = schedule.previous_fire(schedule_cron(frequency, day_of_week, day_of_month, hour), tz, now)
+    return period_key(frequency, due.astimezone(ZoneInfo(tz)).date()), due
 
 
 def schedule_slot(s, default_tz: str, now: datetime) -> tuple[str, datetime]:
@@ -171,10 +175,9 @@ def schedule_slot(s, default_tz: str, now: datetime) -> tuple[str, datetime]:
 
 
 def initial_period(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str,
-                   now: datetime) -> str | None:
-    """A new or edited schedule whose send time this period has passed waits for the next one."""
-    key, due = slot(frequency, day_of_week, day_of_month, hour, tz, now)
-    return key if due <= now else None
+                   now: datetime) -> str:
+    """A new or edited schedule counts its latest send time as done, so saving never sends straight away."""
+    return slot(frequency, day_of_week, day_of_month, hour, tz, now)[0]
 
 
 def next_send(s, default_tz: str, now: datetime | None = None) -> datetime | None:
@@ -184,13 +187,12 @@ def next_send(s, default_tz: str, now: datetime | None = None) -> datetime | Non
     now = now or datetime.now(UTC)
     tz = schedule_tz(s, default_tz)
     key, due = schedule_slot(s, default_tz, now)
-    if s["last_period"] != key:
-        if due <= now and s["retry_at"]:
+    if s["last_period"] != key:  # due now, or waiting for a retry
+        if s["retry_at"]:
             due = datetime.fromisoformat(s["retry_at"].replace("Z", "+00:00"))
         return due.astimezone(ZoneInfo(tz))
-    start = _next_period_start(s["frequency"], now.astimezone(ZoneInfo(tz)).date())
-    _, due = schedule_slot(s, default_tz, datetime.combine(start, time(0), tzinfo=ZoneInfo(tz)))
-    return due.astimezone(ZoneInfo(tz))
+    cron = schedule_cron(s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"])
+    return schedule.next_fire(cron, tz, now).astimezone(ZoneInfo(tz))
 
 
 def ordinal(n: int) -> str:
@@ -637,16 +639,22 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
     return "This email can't be sent again"
 
 
-def _tick_schedule(app, conn, vault, s, default_tz: str, now: datetime) -> bool:
-    period, due = schedule_slot(s, default_tz, now)
-    if s["last_period"] == period or now < due:
+def _tick_schedule(app, conn, vault, s, cfg, now: datetime) -> bool:
+    period, due = schedule_slot(s, cfg.timezone, now)
+    if s["last_period"] == period:
         return False
     if s["retry_at"] and now.strftime(ISO) < s["retry_at"]:
         return False
     if not recipients(conn, "schedule", s["id"]):
         return False  # the schedules page shows "No recipients"
-    if s["kind"] == "report" and store.get_tenant(conn, s["tenant_id"])["enabled"] == 0:
-        return False
+    if s["kind"] == "report":
+        tenant = store.get_tenant(conn, s["tenant_id"])
+        if not tenant["enabled"]:
+            return False
+        # Collect anything older than OFFICESENTRY_MAX_AGE_HOURS first; checked again next minute.
+        if tenant["connection_id"] and not schedule.refresh_for_report(
+                conn, tenant["id"], due, cfg.max_age_hours, now):
+            return False
     send_schedule(app, conn, vault, s, trigger="schedule", now=now)
     return True
 
@@ -668,7 +676,7 @@ def tick(app, conn, vault, cfg, now: datetime | None = None) -> int:
     attempted = 0
     for s in conn.execute("SELECT * FROM email_schedules WHERE enabled = 1 ORDER BY id").fetchall():
         try:
-            attempted += _tick_schedule(app, conn, vault, s, cfg.timezone, now)
+            attempted += _tick_schedule(app, conn, vault, s, cfg, now)
         except Exception:
             log.exception("Scheduled email %s failed", s["id"])
     # Alert emails are sent when a collection opens findings (alerts.after_sync); here only failed ones retry.
@@ -679,3 +687,9 @@ def tick(app, conn, vault, cfg, now: datetime | None = None) -> int:
         except Exception:
             log.exception("Retrying alert email %s failed", d["id"])
     return attempted
+
+
+@schedule.periodic("email_delivery")
+def _email_job(ctx) -> None:
+    """Registered with the worker through ``worker.JOB_MODULES``."""
+    tick(ctx.app, ctx.conn, ctx.vault, ctx.cfg, ctx.now)
