@@ -1,0 +1,200 @@
+# What Office Sentry reads in your Microsoft 365
+
+This page is for the owner of a business, or their IT contact, who has been
+asked by their IT provider (MSP) to approve access for **Office Sentry**. It
+explains what you are approving, what it can and can't see, where the
+information goes and how to take the access away again.
+
+Words used on this page:
+
+- **Tenant**: your organisation's Microsoft 365 account, with all its users,
+  mailboxes and settings.
+- **Microsoft Graph**: the official Microsoft service that programs use to
+  read information from Microsoft 365.
+- **Permission**: a specific thing Microsoft lets a program do, such as "read
+  the list of users". A program can only do what its permissions allow.
+- **Consent**: your approval for a program to use its permissions in your
+  tenant. Only a Global Administrator can give it for the whole organisation.
+
+## What Office Sentry is
+
+Office Sentry is a reporting tool your MSP runs. Every night it reads the
+security and licence settings of your Microsoft 365 tenant and turns them into
+reports: a monthly security and licensing review, lists of things to fix, and
+detail reports on mailboxes, apps, sign-in policies, email domains, guests and
+devices.
+
+It connects as a program (an "app"), not as a person. It signs in with a
+certificate that your MSP holds, not with anybody's password.
+
+## Read-only by design
+
+Office Sentry is built so that it can't change anything in your tenant.
+
+- **It asks only for read permissions.** Every permission in the table below
+  ends in `.Read`, `.Read.All` or `.Read.Directory`, except
+  `Exchange.ManageAsApp`, which is explained under
+  [Exchange Online](#exchange-online-and-the-global-reader-role).
+- **The program can only read.** The part of Office Sentry that talks to
+  Microsoft Graph has no way to send changes: it can only make "GET" (read)
+  requests. The only other request it makes is to Microsoft's login service,
+  to sign in.
+- **Exchange commands are limited to a fixed list.** Exchange Online's admin
+  service uses the same kind of request for reading and for changing things,
+  so Office Sentry refuses to run any command that isn't on its list. Every
+  command on the list starts with `Get-` (Exchange's word for "show me"):
+
+  `Get-AcceptedDomain`, `Get-HostedOutboundSpamFilterPolicy`, `Get-Mailbox`,
+  `Get-MailboxPermission`, `Get-OrganizationConfig`, `Get-Recipient`,
+  `Get-RecipientPermission`, `Get-RemoteDomain`, `Get-TransportConfig`.
+
+  None of these return the contents of any email.
+
+The only thing Office Sentry ever creates is its own app registration, once,
+in your **MSP's** tenant when they set it up. It never creates or changes
+anything in yours. (Approving consent makes Microsoft add the Office Sentry
+app to your *Enterprise applications* list; deleting it from there is how you
+remove access.)
+
+## The permissions you are approving
+
+The Microsoft consent page shows these permissions, in Microsoft's wording,
+before you approve. All of
+them are *application* permissions: they apply to the whole tenant, not to one
+person's account, which is why a Global Administrator has to approve them.
+
+"Used by" names the Office Sentry reports that rely on the permission. The
+*Monthly Security & Licensing Review* and the *insurance evidence pack* are
+built from the checks, so they use all of the information below.
+
+| Permission | What it lets Office Sentry read | Why it's needed | Used by |
+|---|---|---|---|
+| `Organization.Read.All` | Your organisation's name, domains and subscriptions (which licences you've bought and how many are in use). | To know which licences you have, so it only runs checks your licences support, and to work out unused licences. | Licence figures; email domain checks (to know your domains). |
+| `User.Read.All` | Every user and guest account: name, email address, whether it's enabled, which licences it holds, when its password was last changed. | Account and licence checks. | Licence checks; inactive accounts; guests; shared mailboxes. |
+| `AuditLog.Read.All` | Sign-in and audit records. Office Sentry reads the date each account last signed in, and Microsoft's MFA registration summary. | To find accounts nobody uses and accounts without MFA. Last sign-in dates need Entra ID P1. | Inactive accounts; MFA registration. |
+| `UserAuthenticationMethod.Read.All` | Which kinds of sign-in method each user has registered, such as the Authenticator app or a phone number. Not the codes or secrets. | MFA registration, for tenants without Entra ID P1. | MFA registration. |
+| `Directory.Read.All` | Directory information: groups and their members, devices, and which apps users have agreed to. | Which accounts a sign-in policy covers, device records, and app consents. | Conditional Access coverage; Devices; Apps and consents. |
+| `RoleManagement.Read.Directory` | Who holds each admin role, including roles that can be activated on demand (PIM). | Admin account checks. | Admins checks; Conditional Access coverage. |
+| `Policy.Read.All` | Sign-in policies (Conditional Access, Security Defaults) and organisation-wide settings for guests and app consent. | MFA and legacy sign-in checks; guest and consent settings. | MFA checks; Conditional Access coverage; Guests and sharing; the app consent check. |
+| `Application.Read.All` | Apps connected to your tenant, what they've been allowed to do, and when app secrets or certificates expire. Not the secrets themselves. | To list third-party apps with access to your data and expiring app credentials. | Apps and consents. |
+| `SecurityEvents.Read.All` | Your Microsoft Secure Score and its history. | The Secure Score trend in reports. | Secure Score. |
+| `DeviceManagementManagedDevices.Read.All` | Devices managed by Intune: name, operating system, whether they're compliant, encrypted and checking in, and their main user. | Device checks. Needs an Intune licence. | Devices. |
+| `SharePointTenantSettings.Read.All` | SharePoint's organisation-wide sharing settings (for example whether "anyone" links are allowed). Not sites or files. | The external sharing check. | Guests and sharing. |
+| `MailboxSettings.Read` | Mailbox settings, including inbox rules. **Not** emails. | Inbox rules that forward or hide mail are a common sign of a hacked mailbox. | Mailbox access and forwarding. |
+| `Reports.Read.All` | Microsoft 365 usage reports. | Requested now so you don't have to approve again later. No current report uses it. | None yet. |
+| `IdentityRiskyUser.Read.All` | Accounts Microsoft has flagged as risky (needs Entra ID P2). | Requested now so you don't have to approve again later. No current report uses it. | None yet. |
+| `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes and organisation mail settings. Works only with the Global Reader role (below). | Mailbox access and forwarding; email checks. |
+
+A few things Office Sentry checks come from **public DNS**, not from your
+tenant: the SPF, DKIM and DMARC records of your email domains. Anyone on the
+internet can look these up; no permission is involved.
+
+Adding a new permission later means a Global Administrator must approve again,
+so the list is kept stable. Within the permissions above, newer versions of
+Office Sentry may read more of what a permission allows (for example audit
+records under `AuditLog.Read.All`) without asking again. Your MSP's
+[check catalogue](checks.md) lists exactly which checks use which data.
+
+## Exchange Online and the Global Reader role
+
+Microsoft Graph doesn't show mailbox forwarding, mailbox permissions or
+organisation mail settings. Those come from Exchange Online's admin service,
+which only answers a program that has an admin role in your tenant.
+
+Your MSP will ask you to give the Office Sentry app the **Global Reader**
+role. Global Reader is Microsoft's built-in role that can view settings
+across Microsoft 365 but can't change any of them. It does not give access to
+the contents of mailboxes. Office Sentry uses it only for the Exchange
+commands listed above.
+
+This step is optional. Without it, the mailbox reports and the email checks
+that need Exchange stay empty, and everything else works. Inbox rules are read
+through Microsoft Graph instead, so they work either way.
+
+## What Office Sentry does not access
+
+Office Sentry has no permission to read, and never reads:
+
+- **Email contents**: messages, attachments, calendars or contacts. It doesn't
+  have `Mail.Read` or any similar permission.
+- **Files**: nothing in OneDrive, SharePoint sites or Teams files.
+- **Teams**: no chats or channel messages.
+- **Passwords or MFA secrets**: Microsoft never gives these to any program.
+  Office Sentry sees only *which kinds* of sign-in method someone has
+  registered.
+
+What it does read about mailboxes is settings: forwarding addresses, who can
+open or send from a mailbox, and inbox rules. An inbox rule includes its name,
+its conditions (for example "subject contains *invoice*" or "from
+*someone@example.com*") and what it does (for example "move to folder" or
+"forward to"). For rules that move mail, it also tries to look up the name of
+the destination folder. It never opens the folder.
+
+## Where the information is kept
+
+Office Sentry runs on hosting your MSP chooses, so some of the details below
+depend on your MSP. Ask them where their server is and who can access it.
+
+- **Storage.** Everything Office Sentry collects is kept in one database file
+  on the MSP's Office Sentry server. It isn't sent to anyone else. The
+  database file itself is not encrypted by Office Sentry; protecting the
+  server and its disks is part of your MSP's hosting.
+- **The certificate key.** The private key Office Sentry signs in with is
+  stored encrypted (Fernet: AES with an integrity check) inside the database.
+  The encryption key isn't in the database: the server is given it as a
+  setting, or keeps it in a separate file readable only by Office Sentry. The key never
+  leaves Office Sentry and can't be downloaded; only the public half of the
+  certificate can be.
+- **Email delivery.** If your MSP schedules monthly reports by email, the
+  report is sent as PDF and spreadsheet attachments, through your MSP's own
+  mail server, to the addresses they enter.
+
+### How long it is kept
+
+- **Detailed snapshots** (lists of users, mailboxes, policies and so on) are
+  kept for the last 30 days, plus one per month for the last 12 months, and
+  older ones are deleted automatically. Your MSP can change both with the
+  `OFFICESENTRY_KEEP_DAILY` and `OFFICESENTRY_KEEP_MONTHLY` settings. The most
+  recent collection of each kind is always kept, however old.
+- **Numbers** used for trends (counts, scores and percentages) are kept
+  indefinitely.
+- **Findings history** (each issue found, with the account or item it
+  concerns, and when it was first seen and fixed) and the **activity log**
+  (who in the MSP did what, including report downloads) are kept until your
+  MSP removes them.
+
+### Who at your MSP can see it
+
+Office Sentry hides every tenant from every user unless they are allowed to
+see it. Anyone looking for a tenant they aren't allowed to see gets "not
+found".
+
+| Office Sentry user | Can see |
+|---|---|
+| Admin | Every tenant, plus Office Sentry's own settings. |
+| Analyst | Only the tenants an admin has given them, or every tenant if an admin allows that. |
+| Client | Only the tenants an admin has given them, and only the reports and findings (not the collection logs). Your MSP may give you a client account. |
+
+Signed-in sessions expire after 8 hours without use. Report downloads are
+recorded with the user's name.
+
+## How to remove access
+
+You can take Office Sentry's access away at any time, without your MSP's
+help. You need a Global Administrator (or another admin who can manage
+enterprise apps and roles).
+
+1. **Remove the Global Reader role**, if you gave it: in the Microsoft Entra
+   admin centre, go to *Roles and admins* → *Global Reader*, select the
+   Office Sentry app and choose *Remove assignments*.
+2. **Delete the app from your tenant**: in the Microsoft Entra admin centre,
+   go to *Enterprise applications*, open the Office Sentry app (usually called
+   "Office Sentry (read-only)"; your MSP can confirm the name), choose
+   *Properties* and then *Delete*. This removes the consent you gave. From
+   then on Office Sentry can't sign in to your tenant.
+
+To see what you approved without removing it, open the same enterprise app
+and choose *Permissions*.
+
+Removing access stops new collections. It doesn't delete what Office Sentry
+has already collected; ask your MSP to delete your tenant's data.

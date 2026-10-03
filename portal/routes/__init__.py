@@ -1,1 +1,0 @@
-"""portal.routes — Blueprint registration."""

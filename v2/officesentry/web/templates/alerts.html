@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Alerts · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Alerts</h1><div class="sub">Post to Microsoft Teams, Slack or any webhook when a tenant gets new findings or a collection starts failing.</div></div>
+  {% if s['alerts.enabled'] == '1' %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
+<div class="grid-main">
+<form method="post" action="{{ url_for('alerts.save') }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Where to send</h2>
+  <label class="check"><input type="checkbox" name="enabled" value="1" {% if s['alerts.enabled'] == '1' %}checked{% endif %}> Send alerts</label>
+  <label>Format <select name="format">
+    {% for v, label in formats.items() %}<option value="{{ v }}" {% if s['alerts.format'] == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+    <span class="hint">Teams: create a "Post to a channel when a webhook request is received" workflow in the channel and paste its URL. Slack: an incoming webhook URL.</span></label>
+  <label>Webhook URL <input name="url" type="url" autocomplete="off" placeholder="{{ ('Saved: ' ~ url_hint ~ ' Leave blank to keep') if url_hint else 'https://…' }}">
+    <span class="hint">Must start with https://. It's stored encrypted and never shown again.</span></label>
+  {% if url_hint %}<label class="check"><input type="checkbox" name="clear_url" value="1"> Remove the saved URL</label>{% endif %}
+  <label>Signing secret (optional) <input type="password" name="secret" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if s['alerts.secret_enc'] else '' }}">
+    <span class="hint">For your own webhooks: each request gets an <span class="mono">X-OfficeSentry-Signature: sha256=…</span> header, the HMAC-SHA256 of the body with this secret.</span></label>
+  {% if s['alerts.secret_enc'] %}<label class="check"><input type="checkbox" name="clear_secret" value="1"> Remove the saved secret</label>{% endif %}
+  <h2>What to send</h2>
+  <label>New findings rated <select name="min_severity">
+    {% for v in severities %}<option value="{{ v }}" {% if s['alerts.min_severity'] == v %}selected{% endif %}>{{ v|capitalize }}{{ ' only' if v == 'critical' else ' or worse' }}</option>{% endfor %}
+  </select>
+    <span class="hint">All new findings from one collection go in one message per tenant. Accepted risks are left out.</span></label>
+  <label class="check"><input type="checkbox" name="on_failures" value="1" {% if s['alerts.on_failures'] == '1' %}checked{% endif %}> A collection fails after working last time</label>
+  <label class="check"><input type="checkbox" name="on_recovery" value="1" {% if s['alerts.on_recovery'] == '1' %}checked{% endif %}> A failing collection works again</label>
+  <p class="footnote">Failures alert once when they start, not every night they continue.</p>
+  <div class="form-actions"><button class="primary">Save</button></div>
+</form>
+<div class="stack">
+<form method="post" action="{{ url_for('alerts.send_test') }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Send a test</h2>
+  <p class="muted small">Save first, then check the webhook works.</p>
+  <div class="form-actions"><button {% if not url_hint %}disabled{% endif %}>Send test alert</button></div>
+</form>
+<section class="card">
+  <h2>{{ icon('mail') }} By email</h2>
+  <p class="muted small">The same new-finding alerts can go to people by email: for one tenant on its <em>Emailed reports</em> tab, or for every tenant under <a href="{{ url_for('email.overview') }}">Email reports</a>.{% if email_alerts %} {{ email_alerts }} email alert{{ 's' if email_alerts != 1 }} on.{% endif %}</p>
+</section>
+<section class="card flush">
+  <div class="card-head"><h2>Recent alerts</h2></div>
+  {% if recent %}
+  <table class="stack-sm">
+    <thead><tr><th>When</th><th>Tenant</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for a in recent %}
+    <tr><td class="nowrap"><time title="{{ a.ts|when }}">{{ a.ts|ago }}</time></td>
+      <td data-label="Tenant">{{ a.tenant_name or '–' }}</td>
+      <td data-label="Result">{% if a.action == 'alert_sent' %}<span class="pill ok">Sent</span>{% else %}<span class="pill warn">Failed</span>{% endif %} <span class="muted small">{{ a.detail }}</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty compact"><p>No alerts sent yet.</p></div>
+  {% endif %}
+</section>
+</div>
+</div>
+{% endblock %}

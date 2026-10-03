@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% from "_email.html" import people, when_local, busy_script with context %}
+{% block title %}Preview · Office Sentry{% endblock %}
+{% block content %}
+{% set back = url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') %}
+<div class="crumbs">
+  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span><a href="{{ back }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
+  {% else %}<a href="{{ back }}">Email reports</a>{% endif %}
+</div>
+<div class="page-head">
+  <div><h1>{{ email.subject if email else 'Alert preview' }}</h1>
+    <div class="sub">Preview{% if s %} · {{ s.describe }} ({{ s.tz }}){% endif %}</div></div>
+  <div class="actions">
+    {% if s %}
+    <form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<input type="hidden" name="from" value="preview"><button class="primary">{{ icon('send') }} Send now</button></form>
+    <a class="btn" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>
+    {% endif %}
+    <a class="btn ghost" href="{{ back }}">Back</a>
+  </div>
+</div>
+
+{% if not email %}
+<div class="card empty">
+  <h3>Nothing to show yet</h3>
+  <p>There are no open findings at this level right now, so there's nothing to build an example alert from. That's good news.</p>
+</div>
+{% else %}
+<div class="preview-layout">
+  <section class="card preview-meta">
+    <dl class="kv">
+      <dt>From</dt><dd>{{ sender or 'Not set up yet' }}</dd>
+      <dt>To</dt><dd>{{ email.to|join(', ') or '—' }}</dd>
+      {% if email.bcc %}<dt>Hidden copy</dt><dd>{{ email.bcc|join(', ') }}</dd>{% endif %}
+      {% if attachments %}<dt>Attached</dt><dd>{% for a in attachments %}<span class="file">{{ icon('doc') }} {{ a }}</span>{% endfor %}</dd>{% endif %}
+      {% if s and s.next %}<dt>Next send</dt><dd>{% if s.due_now %}Due now{% else %}{{ when_local(s.next) }} ({{ s.tz }}){% endif %}</dd>{% endif %}
+    </dl>
+    {% if alert %}<p class="footnote">An example built from findings that are open now. Real alerts only include what a scan finds new.</p>{% endif %}
+  </section>
+  <section class="card flush preview-frame">
+    <div class="toolbar">
+      <span class="muted small">How it looks in an inbox</span>
+      <div class="seg sm" role="radiogroup" aria-label="Width">
+        <label><input type="radio" name="width" value="" checked><span>Desktop</span></label>
+        <label><input type="radio" name="width" value="phone"><span>Phone</span></label>
+      </div>
+    </div>
+    <div class="frame-wrap"><iframe id="email-frame" src="{{ body_url }}" sandbox="allow-same-origin" title="Email preview"></iframe></div>
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{{ busy_script() }}
+<script nonce="{{ csp_nonce }}">
+// The email can't run scripts (sandbox and its own CSP); the page only measures it to show it in full.
+var frame = document.getElementById('email-frame');
+function fit() {
+  try { frame.style.height = '0px'; frame.style.height = frame.contentDocument.documentElement.scrollHeight + 'px'; } catch (e) {}
+}
+if (frame) { frame.addEventListener('load', fit); }
+document.querySelectorAll('input[name=width]').forEach(function (r) {
+  r.addEventListener('change', function () {
+    frame.classList.toggle('phone', r.value === 'phone' && r.checked);
+    setTimeout(fit, 250);
+  });
+});
+</script>
+{% endblock %}

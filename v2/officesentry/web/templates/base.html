@@ -17,14 +17,17 @@
   {% if current_user.role == 'client' %}
   {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('reports', 'tenants')) }}
   {% else %}
-  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'reports.schedules', 'reports.overview')) }}
+  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'reports.overview')) }}
+  {{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest')) }}
   {{ nav_link('prospects.index', 'Prospects', 'prospects', ('prospects',)) }}
   {% endif %}
   {% if current_user.role == 'admin' %}
   <div class="nav-label">Settings</div>
   {{ nav_link('admin.connections', 'App connection', 'connection') }}
   {{ nav_link('reports.prices', 'Licence prices', 'price') }}
-  {{ nav_link('reports.email_settings', 'Email', 'mail') }}
+  {{ nav_link('email.settings', 'Email delivery', 'mail') }}
+  {{ nav_link('alerts.settings', 'Alerts', 'alert') }}
+  {{ nav_link('branding.settings', 'Report branding', 'doc') }}
   {{ nav_link('admin.users', 'Users', 'users', ('admin.edit_user',)) }}
   {% endif %}
 </nav>
@@ -34,7 +37,7 @@
   <span class="name">{{ current_user.username }}</span>
   <span class="role">{{ current_user.role }}</span>
   <div class="links">
-    <a href="{{ url_for('auth.change_password') }}">Password</a>
+    <a href="{{ url_for('auth.account') }}">Account</a>
     <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="link">Sign out</button></form>
   </div>
 </div>
@@ -63,6 +66,8 @@
       {{ account() }}
     </details>
     <main>
+      {% if worker_down %}<div class="callout warn" role="status">{{ icon('alert') }}<span><strong>The background worker isn't running.</strong>
+        Tenants won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span></div>{% endif %}
       {{ flashes() }}
       {% block content %}{% endblock %}
     </main>

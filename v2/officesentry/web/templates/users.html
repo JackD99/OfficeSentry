@@ -6,12 +6,13 @@
 <div class="grid-main">
 <section class="card flush">
   <table class="stack-sm">
-    <thead><tr><th>User</th><th>Role</th><th>Tenants</th><th>Status</th><th>Last sign-in</th></tr></thead>
+    <thead><tr><th>User</th><th>Role</th><th>Tenants</th><th>Two-step</th><th>Status</th><th>Last sign-in</th></tr></thead>
     <tbody>
     {% for u in users %}
     <tr><td><a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a>{% if u.id == current_user.id %} <span class="faint small">(you)</span>{% endif %}</td>
       <td data-label="Role"><span class="pill {{ 'accent' if u.role == 'admin' else '' }}">{{ u.role|capitalize }}</span></td>
       <td data-label="Tenants">{% if u.role == 'admin' or u.all_tenants %}All{% else %}Granted only{% endif %}</td>
+      <td data-label="Two-step">{% if u.totp_enabled_at %}<span class="pill ok">On</span>{% else %}<span class="pill">Off</span>{% endif %}</td>
       <td data-label="Status">{% if u.disabled %}<span class="pill">Disabled</span>{% elif u.locked_until %}<span class="pill warn" title="Locked until {{ u.locked_until|when }}">Locked</span>{% else %}<span class="pill ok">Active</span>{% endif %}</td>
       <td data-label="Last sign-in" class="nowrap">{% if u.last_login_at %}<time title="{{ u.last_login_at|when }}">{{ u.last_login_at|ago }}</time>{% else %}<span class="muted">Never</span>{% endif %}</td></tr>
     {% endfor %}

@@ -5,8 +5,8 @@
 <p class="sub">Microsoft 365 security and licensing reports.</p>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>Username <input name="username" autocomplete="username" required autofocus></label>
-  <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+  <label>Username <input name="username" value="{{ username or '' }}" autocomplete="username" required {% if not username %}autofocus{% endif %}></label>
+  <label>Password <input type="password" name="password" autocomplete="current-password" required {% if username %}autofocus{% endif %}></label>
   <button class="primary">Sign in</button>
 </form>
 {% endblock %}
