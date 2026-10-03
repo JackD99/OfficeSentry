@@ -29,6 +29,8 @@ from .text import plural
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 EMAIL = re.compile(r"[A-Za-z0-9._%+'{}#-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
 PHONE = re.compile(r"\+\d[\d ()-]{6,}\d")
+# OneDrive addresses carry the owner's sign-in name: /personal/jane_contoso_com/Documents.
+PERSONAL = re.compile(r"(?<=/personal/)[^/?#\s\"]+", re.I)
 FAKE_DOMAIN = "sentrytest"
 # Lists this long are cut down: the shape matters, not 90 days of the same thing.
 LIST_LIMIT = {"/v1.0/security/secureScores": 5}
@@ -116,7 +118,11 @@ class Scrubber:
             if len(label) >= 4:
                 self.strings[label] = fake.split(".")[0]
         self.domain_strings = list(self.strings)
-        self.strings.update({k: v for k, v in names.items() if len(k) >= 3})
+        # A tenant named like its domain ("contoso") keeps the domain's placeholder, so host names
+        # and site IDs stay valid and match the requests made with them.
+        taken = {k.lower() for k in self.domain_strings}
+        self.strings.update({k: v for k, v in names.items() if len(k) >= 3 and k.lower() not in taken})
+        self.personal_sites: dict[str, str] = {}
 
     def guid(self, value: str) -> str:
         low = value.lower()
@@ -146,7 +152,14 @@ class Scrubber:
                 value = _word(real).sub(self.strings[real], value)
         return value
 
+    def personal_site(self, match: re.Match) -> str:
+        key = match.group(0).lower()
+        if key not in self.personal_sites:
+            self.personal_sites[key] = f"user{len(self.personal_sites) + 1}_{FAKE_DOMAIN}_example"
+        return self.personal_sites[key]
+
     def text(self, value: str) -> str:
+        value = PERSONAL.sub(self.personal_site, value)
         value = EMAIL.sub(self.email, value)
         value = GUID.sub(lambda m: self.guid(m.group(0)), value)
         if value.startswith("https://"):
@@ -298,7 +311,7 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     # URLs are checked for IDs and domains only: a person named "admin" isn't leaked by /admin/sharepoint.
     text = "\n".join(v for v in _strings(fixture) if not v.startswith("https://"))
     leaks = find_leaks(text, [*names, *personal])
-    leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips])
+    leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites])
     if leaks:
         hints = ", ".join(f"{v[0]}… ({len(v)} chars)" for v in leaks)  # never print the values themselves
         raise ValueError(f"scrubbing left {plural(len(leaks), 'identifying value')} in the fixture: {hints}")

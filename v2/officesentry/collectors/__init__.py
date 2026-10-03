@@ -14,6 +14,7 @@ from . import domains  # noqa: F401
 from . import devices  # noqa: F401
 from . import directory_sync  # noqa: F401
 from . import sharepoint  # noqa: F401  (shared files reuse the users and tenant profile snapshots)
+from . import sharepoint_storage  # noqa: F401
 from .base import REGISTRY, Collector, RunContext
 
 __all__ = ["REGISTRY", "Collector", "RunContext"]

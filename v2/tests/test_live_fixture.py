@@ -26,7 +26,7 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 3, 1, 30, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 3, 17, 15, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -43,8 +43,7 @@ def live(db):
             store.enqueue_run(db, tenant_id, key)
             statuses[key] = execute_run(db, store.claim_next_run(db), graph, exo)
     assert not missing, f"requests not in the recording: {missing}"
-    # The test tenant was consented before Sites.Read.All was added, so file sharing is partial.
-    assert {k for k, v in statuses.items() if v != "succeeded"} <= {"shared_files"}, statuses
+    assert {k for k, v in statuses.items() if v != "succeeded"} == set(), statuses
     return store.get_tenant(db, tenant_id)
 
 
@@ -114,11 +113,17 @@ def test_first_collection_is_a_baseline(db, live):
 @pytest.mark.parametrize("key", list(data_reports.REPORTS))
 def test_detail_reports_and_exports(db, live, key):
     report = data_reports.build(db, live, key, RECORDED)
-    if key == "shared-files":  # needs Sites.Read.All, which the test tenant hasn't consented to yet
-        assert "Sites.Read.All" in report.unavailable
-        return
     assert report.unavailable is None and report.sections
     assert data_reports.to_xlsx(report)[:2] == b"PK"
+
+
+def test_sharepoint_storage_on_real_data(db, live):
+    report = data_reports.build(db, live, "sharepoint-storage", RECORDED)
+    libraries = next(s for s in report.sections if s.title == "Libraries")
+    # Real libraries, read through SharePoint's storage figures; system lists like Events are left out.
+    assert libraries.rows and not any("Events" in str(r[0]) for r in libraries.rows)
+    assert {t.label for t in report.tiles} >= {"Storage used", "Older versions", "Recycle bins"}
+    assert "(estimated)" in report.tiles[0].foot
 
 
 def test_monthly_review_and_evidence_export(db, live):
