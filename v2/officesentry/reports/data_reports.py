@@ -26,6 +26,7 @@ from ..rules import (
     user_consent_level,
 )
 from ..snapshot import TenantSnapshot
+from .safe_xlsx import no_formulas
 
 
 @dataclass
@@ -46,6 +47,38 @@ class Section:
         return sum(1 for f in self.flags if f in ("critical", "high", "medium"))
 
 
+@dataclass(frozen=True)
+class Link:
+    """A cell that links somewhere (a file in SharePoint, say). Only https addresses become links."""
+    text: str
+    href: str
+
+    def __str__(self) -> str:
+        return self.text
+
+    @property
+    def safe_href(self) -> str | None:
+        return self.href if self.href.lower().startswith("https://") else None
+
+
+@dataclass
+class Tile:
+    """A headline figure above a report's tables. ``tone``: ok, warn or bad."""
+    label: str
+    value: object
+    foot: str = ""
+    tone: str | None = None
+
+
+@dataclass
+class Highlight:
+    """A key figure shown above the tables, so the page leads with the answer."""
+    label: str
+    value: object
+    foot: str = ""
+    tone: str | None = None  # bad | warn | ok, for the dot next to the label
+
+
 @dataclass
 class DataReport:
     key: str
@@ -56,6 +89,13 @@ class DataReport:
     sections: list[Section] = field(default_factory=list)
     unavailable: str | None = None
     sources: list[tuple[str, str | None]] = field(default_factory=list)  # (collector title, finished_at)
+    tiles: list[Tile] = field(default_factory=list)
+    notice: str = ""  # something to fix before the data is complete, shown above everything
+    chart: str = ""  # server-side SVG
+    chart_title: str = ""
+    footnote: str = ""
+    highlights: list[Highlight] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)  # what couldn't be checked, and why
 
 
 def _cell(value):
@@ -811,6 +851,13 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
 }
 
 
+# Identity and licence reports live in their own module; it needs Section and
+# DataReport from above, so it's imported here rather than at the top.
+from .identity_reports import REPORTS as _IDENTITY_REPORTS  # noqa: E402
+
+REPORTS.update(_IDENTITY_REPORTS)
+
+
 def build(conn, tenant, key: str, now: datetime | None = None) -> DataReport:
     title, description, collectors, builder = REPORTS[key]
     now = now or datetime.now(UTC)
@@ -837,6 +884,32 @@ def to_xlsx(report: DataReport) -> bytes:
     wb = Workbook()
     wb.remove(wb.active)
     used = set()
+    if report.tiles:
+        ws = wb.create_sheet("Summary")
+        used.add("Summary")
+        ws.append(["Measure", "Value", "Note"])
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        for t in report.tiles:
+            ws.append([t.label, t.value, t.foot])
+        if report.notice:
+            ws.append([])
+            ws.append(["Note", report.notice])
+        ws.column_dimensions["A"].width = 32
+        ws.column_dimensions["B"].width = 16
+        ws.column_dimensions["C"].width = 48
+    elif report.highlights or report.notes:
+        ws = wb.create_sheet("Summary")
+        used.add("Summary")
+        ws.append([report.title, report.tenant.get("name", "")])
+        ws["A1"].font = Font(bold=True)
+        for h in report.highlights:
+            ws.append([h.label, h.value, h.foot])
+        for note in report.notes:
+            ws.append(["Not checked", note])
+        ws.column_dimensions["A"].width = 32
+        ws.column_dimensions["B"].width = 24
+        ws.column_dimensions["C"].width = 60
     for section in report.sections or [Section("No data", ["Note"], rows=[[report.unavailable or ""]])]:
         name = section.title[:31]
         while name in used:
@@ -847,11 +920,16 @@ def to_xlsx(report: DataReport) -> bytes:
         for cell in ws[1]:
             cell.font = Font(bold=True)
         for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False):
-            ws.append(list(row) + ([flag or ""] if any(section.flags) else []))
+            cells = [str(v) if isinstance(v, Link) else v for v in row]
+            ws.append(cells + ([flag or ""] if any(section.flags) else []))
+            for col, v in enumerate(row, 1):
+                if isinstance(v, Link) and v.safe_href:
+                    ws.cell(ws.max_row, col).hyperlink = v.safe_href
         ws.freeze_panes = "A2"
         for i in range(1, ws.max_column + 1):
             width = max((len(str(c.value or "")) for c in ws[get_column_letter(i)]), default=10)
             ws.column_dimensions[get_column_letter(i)].width = min(max(width + 2, 10), 60)
+    no_formulas(wb)
     out = BytesIO()
     wb.save(out)
     return out.getvalue()

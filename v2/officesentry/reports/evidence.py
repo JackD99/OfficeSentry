@@ -14,6 +14,7 @@ from .. import coverage
 from ..rules import RuleResult
 from ..snapshot import TenantSnapshot
 from .monthly_review import build as build_review
+from .safe_xlsx import no_formulas
 
 IN_PLACE, PARTLY, NOT_IN_PLACE, NOT_ASSESSED = "In place", "Partly in place", "Not in place", "Not assessed"
 
@@ -44,7 +45,7 @@ CONTROLS = (
             ("stale_users", "licensed_disabled", "pending_guests")),
     Control("apps", "Is access by third-party applications controlled?",
             ("user_consent", "risky_app_permissions")),
-    Control("sharing", "Is external file sharing restricted?", ("sharepoint_sharing", "guest_invites")),
+    Control("sharing", "Is external file sharing restricted?", ("sharepoint_sharing", "anyone_links", "guest_invites")),
     Control("devices", "Are company devices managed, encrypted and kept on supported operating systems?",
             ("device_encryption", "device_compliance", "supported_windows")),
     Control("backups", "Are backups of Microsoft 365 data taken and kept separately?", (),
@@ -174,6 +175,7 @@ def to_xlsx(pack: EvidencePack) -> bytes:
     info.append(["Prepared (UTC)", pack.generated_at.strftime("%Y-%m-%d %H:%M")])
     info.append(["Oldest data used (UTC)", (pack.oldest_data or "")[:16].replace("T", " ")])
     info.append(["Secure Score", f"{pack.secure_score:g}%" if pack.secure_score is not None else "n/a"])
+    no_formulas(wb)
     out = BytesIO()
     wb.save(out)
     return out.getvalue()

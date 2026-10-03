@@ -5,7 +5,7 @@ Import order is run order for scheduled collections: tenant_profile first
 """
 
 from . import tenant_profile, users  # noqa: F401, I001  (registration side effects, order matters)
-from . import identity, secure_score  # noqa: F401
+from . import identity, per_user_mfa, secure_score  # noqa: F401
 from . import admin_activity  # noqa: F401
 from . import apps, policies  # noqa: F401
 from . import groups  # noqa: F401
@@ -13,6 +13,7 @@ from . import exchange, mail_rules  # noqa: F401, I001  (inbox rules reuse the m
 from . import domains  # noqa: F401
 from . import devices  # noqa: F401
 from . import directory_sync  # noqa: F401
+from . import sharepoint  # noqa: F401  (shared files reuse the users and tenant profile snapshots)
 from .base import REGISTRY, Collector, RunContext
 
 __all__ = ["REGISTRY", "Collector", "RunContext"]

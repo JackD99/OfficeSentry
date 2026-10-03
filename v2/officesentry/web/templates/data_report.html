@@ -21,6 +21,39 @@
 {% if report.unavailable %}
 <div class="card empty"><h3>Not available</h3><p>{{ report.unavailable }}</p></div>
 {% else %}
+{% if report.notice %}<div class="callout warn">{{ icon('alert') }}<div>{{ report.notice }}</div></div>{% endif %}
+{% if report.tiles %}
+<div class="tiles">
+  {% for t in report.tiles %}
+  <div class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}">
+    <div class="label">{{ t.label }}</div>
+    <div class="value">{{ t.value }}</div>
+    <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% if report.highlights %}
+<div class="tiles">
+  {% for h in report.highlights %}
+  <div class="tile">
+    <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
+    {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% if report.notes %}
+<div class="callout">{{ icon('alert') }}<div><strong>Not checked</strong>
+  {% for note in report.notes %}<p class="m0">{{ note }}</p>{% endfor %}</div></div>
+{% endif %}
+{% if report.chart %}
+<section class="card chart-card">
+  {% if report.chart_title %}<div class="card-head"><h2>{{ report.chart_title }}</h2></div>{% endif %}
+  {{ report.chart|safe }}
+</section>
+{% endif %}
 {% if report.sections|length > 1 %}
 <div class="jump">
   {% for section in report.sections %}<a href="#s{{ loop.index }}">{{ section.title }} <span class="faint">{{ section.rows|length }}</span></a>{% endfor %}
@@ -41,7 +74,7 @@
     {% for row in section.rows %}{% set flag = section.flags[loop.index0] %}
     <tr{% if flag %} class="flag-{{ flag }}"{% endif %}>
       <td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>
-      {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ section.columns[loop.index0] }}"{% endif %}>{{ v }}</td>{% endfor %}
+      {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ section.columns[loop.index0] }}"{% endif %}>{% if v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v }}{% endif %}</td>{% endfor %}
     </tr>
     {% endfor %}
     </tbody>
@@ -52,6 +85,7 @@
 {% endfor %}
 {% endif %}
 
+{% if report.footnote and not report.unavailable %}<p class="footnote">{{ report.footnote }}</p>{% endif %}
 <p class="footnote">Data from
 {% for title, finished in report.sources %}{{ title }} ({% if finished %}{{ ts(finished) }}{% else %}not collected yet{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
 {% endblock %}

@@ -1,0 +1,51 @@
+{#- Shared layout for client-facing reports (web page and PDF).
+
+    Child templates fill these blocks:
+      doc_title     report name, e.g. "Monthly Security & Licensing Review"
+      client        who it's for (the tenant or prospect name)
+      cover_meta    <div><dt>..</dt><dd>..</dd></div> pairs under the cover band
+      cover_status  optional verdict shown on the cover
+      contents      optional <li><a href="#id">Section</a></li> items: the PDF
+                    cover lists them with page numbers
+      toolbar       links and download buttons (web only)
+      body          the report itself
+    Set `compact_cover = true` before extending for one-page documents.
+    Needs: pdf, css_href, brand (injected), and report.css components. -#}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ self.doc_title() }}: {{ self.client() }}</title>
+  <link rel="stylesheet" href="{{ css_href }}">
+  {% if pdf %}<style>{{ brand.css|safe }}</style>
+  {% else %}<link rel="stylesheet" href="{{ url_for('branding.brand_css', v=brand.version) }}">{% endif %}
+</head>
+<body class="report{% if pdf %} pdf{% endif %}">
+{% if not pdf %}<nav class="toolbar">{% block toolbar %}{% endblock %}</nav>{% endif %}
+<article{% if compact_cover %} class="doc-compact"{% endif %}>
+<header class="cover{% if compact_cover %} compact{% endif %}">
+  <div class="doc-strings" aria-hidden="true"><span class="t">{% block doc_title %}{% endblock %}</span><span class="c">{% block client %}{% endblock %}</span></div>
+  <div class="runhead">{% if brand.logo %}<img src="{{ brand.logo }}" alt="{{ brand.display_name }}">{% else %}{{ brand.display_name }}{% endif %}</div>
+  <div class="cover-band">
+    <div class="cover-logo">{% if brand.logo %}<span class="chip"><img src="{{ brand.logo }}" alt="{{ brand.display_name }}"></span>{% else %}<span class="msp">{{ brand.display_name }}</span>{% endif %}</div>
+    <div class="cover-titles">
+      <div class="eyebrow">{{ self.doc_title() }}</div>
+      <h1>{{ self.client() }}</h1>
+      {% block cover_subtitle %}{% endblock %}
+    </div>
+  </div>
+  <dl class="cover-meta">{% block cover_meta %}{% endblock %}</dl>
+  <div class="cover-status">{% block cover_status %}{% endblock %}</div>
+  {% if self.contents()|trim %}<nav class="toc" aria-label="Contents"><div class="col-title">In this report</div><ol>{% block contents %}{% endblock %}</ol></nav>{% endif %}
+  <div class="cover-foot">
+    {% if brand.contact %}<div class="contact">{{ brand.display_name }} · {{ brand.contact }}</div>{% endif %}
+    Confidential. This report describes security settings for {{ self.client() }}; share it only with people who need it.
+  </div>
+</header>
+<div class="content">
+{% block body %}{% endblock %}
+</div>
+</article>
+</body>
+</html>

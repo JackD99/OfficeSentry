@@ -11,7 +11,7 @@ from flask_wtf.csrf import CSRFProtect
 from ..config import Config, load_config
 from ..crypto import Vault
 from ..db import connect, migrate
-from . import access, admin, alerts, auth, email, filters, prospects, reports, tenants
+from . import access, admin, alerts, auth, branding, email, filters, prospects, reports, tenants
 
 csrf = CSRFProtect()
 
@@ -95,4 +95,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(prospects.bp)
     app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)
+    app.register_blueprint(branding.bp)
     return app

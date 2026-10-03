@@ -137,10 +137,10 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     if recovered:
         log.warning("Marked %s orphaned run(s) as failed", recovered)
 
-    last_tick = float("-inf")  # tick at once, even when the machine booted under a minute ago
+    last_tick = None  # tick on the first pass; monotonic() can be under 60s on a freshly booted host
     last_prune_day = None
     while True:
-        if time.monotonic() - last_tick > 60:
+        if last_tick is None or time.monotonic() - last_tick > 60:
             schedule_tick(conn, cfg)
             last_tick = time.monotonic()
             try:
