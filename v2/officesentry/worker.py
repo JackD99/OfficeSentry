@@ -210,7 +210,7 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     log.info("Worker started. Collecting on '%s' (%s); next slot %s", cfg.collect_cron, cfg.timezone,
              schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat())
 
-    last_tick = None
+    last_tick = None  # tick on the first pass; monotonic() can be under 60s on a freshly booted host
     last_prune_day = None
     while not stop.is_set():
         if last_tick is None or time.monotonic() - last_tick >= 60:
