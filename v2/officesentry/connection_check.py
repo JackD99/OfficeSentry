@@ -28,7 +28,8 @@ class Problem:
 KNOWN = {
     "700027": ("The app doesn't have Office Sentry's certificate.",
                "Download the .cer from App connection and upload it to the app registration under "
-               "Certificates & secrets > Certificates. A client secret isn't enough."),
+               "Certificates & secrets > Certificates. A client secret isn't enough. If you've just uploaded it, "
+               "wait 5 to 10 minutes: a new certificate takes a while to reach all of Microsoft's servers."),
     "700016": ("This tenant doesn't have the app yet.",
                "Either admin consent hasn't been granted in this tenant (send its Global Administrator the "
                "consent link), or the client ID saved under App connection is wrong."),
@@ -39,6 +40,9 @@ KNOWN = {
               "Send the tenant's Global Administrator the consent link from Data collection."),
     "7000229": ("Admin consent hasn't been granted in this tenant.",
                 "Send the tenant's Global Administrator the consent link from Data collection."),
+    "500113": ("The app registration is missing Office Sentry's redirect URI.",
+               "In the app registration, open Authentication > Add a platform > Web, and add the redirect URI "
+               "shown on the App connection page."),
     "50011": ("The app registration is missing Office Sentry's redirect URI.",
               "In the app registration, open Authentication > Add a platform > Web, and add the redirect URI "
               "shown on the App connection page."),

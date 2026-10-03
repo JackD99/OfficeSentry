@@ -56,7 +56,7 @@
     {% for key, c in collectors.items() %}{% set r = latest.get(key) %}
     <tr>
       <td><span class="strong">{{ c.title }}</span><span class="sub">{{ c.description }}</span>
-        {% if r and r.error %}<span class="sub {{ 'warn-text' if r.status == 'partial' else 'bad-text' }}">{{ r.error }}</span>{% endif %}</td>
+        {% if r and r.error %}<span class="sub {{ 'warn-text' if r.status == 'partial' else 'bad-text' }}">{{ r.error|run_error }}</span>{% endif %}</td>
       <td data-label="Status">{% if r %}<a href="{{ url_for('tenants.run', run_id=r.id) }}">{{ status(r.status) }}</a>{% else %}{{ status(None) }}{% endif %}</td>
       <td data-label="Last collected" class="nowrap">{{ ts(r.finished_at if r else None) }}</td>
       <td class="num"><form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="collector" value="{{ key }}"><button class="sm ghost" title="{{ not_connected or 'Refresh ' ~ c.title }}"{% if not_connected %} disabled{% endif %}>{{ icon('refresh') }} Refresh</button></form></td>
