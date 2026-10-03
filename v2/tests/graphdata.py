@@ -72,6 +72,26 @@ SECURE_SCORES = [
     {"createdDateTime": "2026-09-30T00:00:00Z", "currentScore": 40.0, "maxScore": 100.0, "controlScores": []},
 ]
 
+# Secure Score with a month of history, for the trend report's control changes.
+SECURE_SCORES_HISTORY = [
+    {"createdDateTime": "2026-10-01T00:00:00Z", "currentScore": 42.0, "maxScore": 100.0,
+     "controlScores": [{"controlName": "AdminMFAV2", "controlCategory": "Identity", "score": 10},
+                       {"controlName": "BlockLegacyAuthentication", "controlCategory": "Identity", "score": 4}]},
+    SECURE_SCORES[1],
+    {"createdDateTime": "2026-08-31T00:00:00Z", "currentScore": 35.0, "maxScore": 100.0,
+     "controlScores": [{"controlName": "AdminMFAV2", "controlCategory": "Identity", "score": 5},
+                       {"controlName": "BlockLegacyAuthentication", "controlCategory": "Identity", "score": 8}]},
+]
+SECURE_SCORE_PROFILES = [
+    {"id": "AdminMFAV2", "title": "Ensure multifactor authentication is enabled for all users in administrative roles",
+     "maxScore": 10, "controlCategory": "Identity", "userImpact": "Low", "implementationCost": "Low"},
+    {"id": "BlockLegacyAuthentication", "title": "Enable Conditional Access policies to block legacy authentication",
+     "maxScore": 8, "controlCategory": "Identity", "userImpact": "Moderate", "implementationCost": "Moderate"},
+]
+
+# Per-user MFA states by user ID (beta /users/{id}/authentication/requirements).
+PER_USER_MFA = {"u1": "enforced"}
+
 # -- Phase 4: Exchange, inbox rules, apps, sharing ------------------------------
 
 MICROSOFT = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"

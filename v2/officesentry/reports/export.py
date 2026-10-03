@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 
 from .monthly_review import Report
+from .safe_xlsx import no_formulas
 
 
 def pdf_available() -> bool:
@@ -60,6 +61,7 @@ def to_xlsx(report: Report) -> bytes:
     sheet("Data freshness", ["Collector", "Last successful run (UTC)", "Status"], [
         (f.title, f.finished_at, f.status or "never run") for f in report.freshness])
 
+    no_formulas(wb)
     out = BytesIO()
     wb.save(out)
     return out.getvalue()

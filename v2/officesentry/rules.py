@@ -11,11 +11,12 @@ Rules never call Graph; they only read stored snapshots.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from . import coverage, dnscheck
+from . import adminactivity, coverage, devices, dnscheck, hybrid
 from .licences import is_stale, last_sign_in, licence_summary, load_prices
 from .mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from .snapshot import TenantSnapshot
@@ -194,7 +195,9 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
     reg = snap.objects("mfa_registration", "mfa_registration")
     if admins is None or reg is None:
         return _unavailable("Needs admin role and MFA registration data")
-    registered = {r["_id"]: r["isMfaRegistered"] for r in reg}
+    if not reg:
+        return _unavailable("Microsoft returned no MFA registration data yet")
+    registered = {r["_id"]: r.get("isMfaRegistered") for r in reg}
     findings, seen = [], set()
     for a in admins:
         pid = a["principalId"]
@@ -205,8 +208,13 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
             findings.append(Finding("critical", _label(a), f"{a['roleName']} with no MFA method registered", pid))
         elif pid not in registered:
             findings.append(Finding("low", _label(a), f"{a['roleName']}: MFA registration unknown", pid))
-    if findings:
-        return ("fail", f"{sum(f.severity == 'critical' for f in findings)} admin(s) without MFA", findings)
+    missing = sum(f.severity == "critical" for f in findings)
+    unknown = len(findings) - missing
+    if missing:
+        extra = f", and {unknown} whose registration isn't known" if unknown else ""
+        return ("fail", f"{missing} admin(s) without MFA{extra}", findings)
+    if unknown:  # can't call it a pass, and "0 admins without MFA" as a failure reads as nonsense
+        return _unavailable(f"MFA registration isn't known for {unknown} admin(s)")
     return ("pass", f"All {len(seen)} privileged user(s) have MFA registered", [])
 
 
@@ -264,17 +272,22 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     if reg is None:
         return _unavailable("MFA registration data hasn't been collected yet")
     users = {u["_id"]: u for u in (snap.objects("users", "user") or [])}
-    findings = []
+    findings, checked = [], 0
     for r in reg:
         user = users.get(r["_id"])
         if user is not None and not user.get("accountEnabled"):
             continue
-        if (r.get("userType") or "member").lower() != "member" or r["isMfaRegistered"]:
+        if str(r.get("userType") or "member").lower() != "member":
+            continue
+        checked += 1
+        if r.get("isMfaRegistered"):
             continue
         findings.append(Finding("high" if r.get("isAdmin") else "medium", _label(r), "No MFA method registered",
                                 r["_id"]))
+    if not checked:  # an empty registration report proves nothing
+        return _unavailable("Microsoft returned no MFA registration data for any enabled member yet")
     return ("fail", f"{len(findings)} user(s) without MFA", findings) if findings else \
-        ("pass", f"All {len(reg)} checked user(s) have MFA registered", [])
+        ("pass", f"All {checked} checked user(s) have MFA registered", [])
 
 
 @rule("stale_users", "No inactive accounts", "Accounts",
@@ -578,6 +591,14 @@ def _authorization_policy(snap: TenantSnapshot):
     return rows[0] if rows else None
 
 
+def user_consent_level(policy: dict) -> str:
+    """'any' (legacy: any app), 'limited' (verified publishers, low-risk permissions) or 'off'."""
+    assigned = [p for p in policy.get("permissionGrantPolicies") or [] if "ManagePermissionGrantsForSelf" in p]
+    if any(p.endswith("microsoft-user-default-legacy") for p in assigned):
+        return "any"
+    return "limited" if assigned else "off"
+
+
 @rule("user_consent", "Users can't consent to apps on their own", "Apps",
       "Set user consent to \"Allow user consent for apps from verified publishers, for selected permissions\" "
       "or turn it off and use the admin consent workflow. Consent phishing relies on this setting.")
@@ -585,11 +606,11 @@ def user_consent(snap: TenantSnapshot, now: datetime):
     policy = _authorization_policy(snap)
     if policy is None:
         return _unavailable("Consent settings haven't been collected yet")
-    assigned = [p for p in policy.get("permissionGrantPolicies") or [] if "ManagePermissionGrantsForSelf" in p]
-    if any(p.endswith("microsoft-user-default-legacy") for p in assigned):
+    level = user_consent_level(policy)
+    if level == "any":
         return ("fail", "Users can consent to any app", [Finding(
             "medium", "Tenant", "Any user can grant any app access to their mail and files")])
-    if assigned:
+    if level == "limited":
         return ("pass", "Users can consent only to verified publishers' low-risk permissions", [])
     return ("pass", "User consent is turned off", [])
 
@@ -617,6 +638,125 @@ def app_credentials(snap: TenantSnapshot, now: datetime):
                                     f"Last valid credential expires {latest[:10]}", a["_id"]))
     return ("fail", f"{len(findings)} app registration(s) with expiring or expired credentials", findings) \
         if findings else ("pass", "No app registration credentials expire in the next 30 days", [])
+
+
+# -- Tenant settings ----------------------------------------------------------------
+
+GUEST_ROLES = {
+    "a0b1b346-4d3e-4e8b-98f8-753987be4970": "member",
+    "10dae51f-b6af-4016-8d66-8c2a99b929b3": "limited",
+    "2af84b1e-32c8-42b7-82bc-daa82404023b": "restricted",
+}
+
+
+def _setting(snap: TenantSnapshot, key: str) -> tuple[dict | None, str]:
+    """(policy, "") when an authorization policy field can be checked, else (None, why not)."""
+    policy = _authorization_policy(snap)
+    if policy is None:
+        return None, "Tenant settings haven't been collected yet"
+    if key not in policy:
+        return None, "Collected before this setting was recorded; refresh Sharing and consent settings"
+    if policy[key] is None:
+        return None, "Microsoft didn't return this setting"
+    return policy, ""
+
+
+@rule("tenant_creation", "Users can't create new tenants", "Tenant settings",
+      "Set \"Restrict non-admin users from creating tenants\" to Yes (Entra admin center > Users > User "
+      "settings). A tenant a user creates sits outside the client's policies, with that user as its Global "
+      "Administrator.")
+def tenant_creation(snap: TenantSnapshot, now: datetime):
+    policy, reason = _setting(snap, "allowedToCreateTenants")
+    if policy is None:
+        return _unavailable(reason)
+    if policy["allowedToCreateTenants"]:
+        return ("fail", "Any user can create a new Entra ID tenant", [Finding(
+            "low", "Tenant", "Users can create tenants outside the client's control")])
+    return ("pass", "Only admins can create tenants", [])
+
+
+@rule("app_registration", "Users can't register apps", "Tenant settings",
+      "Set \"Users can register applications\" to No (Entra admin center > Users > User settings) and give "
+      "the Application Developer role to the people who need it.")
+def app_registration(snap: TenantSnapshot, now: datetime):
+    policy, reason = _setting(snap, "allowedToCreateApps")
+    if policy is None:
+        return _unavailable(reason)
+    if policy["allowedToCreateApps"]:
+        return ("fail", "Any user can register an app", [Finding(
+            "low", "Tenant", "Users can register apps that nobody reviews")])
+    return ("pass", "Only admins and app developers can register apps", [])
+
+
+@rule("guest_access_level", "Guests have limited directory access", "Tenant settings",
+      "Set guest user access to \"Guest users have limited access to properties and memberships of directory "
+      "objects\", or to the most restrictive option (Entra admin center > External Identities > External "
+      "collaboration settings).")
+def guest_access_level(snap: TenantSnapshot, now: datetime):
+    policy, reason = _setting(snap, "guestUserRoleId")
+    if policy is None:
+        return _unavailable(reason)
+    role = policy["guestUserRoleId"]
+    level = GUEST_ROLES.get(role) if isinstance(role, str) else None
+    if level == "member":
+        return ("fail", "Guests have the same directory access as members", [Finding(
+            "medium", "Tenant", "Guests can look up every user and group and their details")])
+    if level == "limited":
+        return ("pass", "Guests have limited access to directory objects (the default)", [])
+    if level == "restricted":
+        return ("pass", "Guests can see only their own directory objects (the most restrictive setting)", [])
+    return _unavailable(f"Unrecognised guest access setting {policy['guestUserRoleId']}")
+
+
+@rule("email_verified_join", "People can't join the tenant just by verifying an email address", "Tenant settings",
+      "Turn off email-verified sign-up with Microsoft Graph PowerShell (Update-MgPolicyAuthorizationPolicy "
+      "-AllowEmailVerifiedUsersToJoinOrganization:$false), so accounts are only created by admins or invitation.")
+def email_verified_join(snap: TenantSnapshot, now: datetime):
+    policy, reason = _setting(snap, "allowEmailVerifiedUsersToJoinOrganization")
+    if policy is None:
+        return _unavailable(reason)
+    if policy["allowEmailVerifiedUsersToJoinOrganization"]:
+        return ("fail", "People can join by verifying an email address", [Finding(
+            "low", "Tenant", "Anyone with a mailbox on one of the client's domains can create an account")])
+    return ("pass", "Nobody can join just by verifying an email address", [])
+
+
+def admin_consent_missing(policy: dict) -> str:
+    """Why a run that stored the authorization policy has no admin consent request settings."""
+    if "allowedToCreateSecurityGroups" not in policy:  # stored by the same version of the collector
+        return "Collected before admin consent requests were recorded; refresh Sharing and consent settings"
+    return "Microsoft didn't return the admin consent request settings (see the run's warnings)"
+
+
+@rule("admin_consent_workflow", "Users have a way to get apps approved", "Tenant settings",
+      "Turn on admin consent requests (Entra admin center > Enterprise apps > Consent and permissions > Admin "
+      "consent settings) and choose reviewers, so users blocked from consenting can ask instead of looking for "
+      "a workaround.")
+def admin_consent_workflow(snap: TenantSnapshot, now: datetime):
+    policy = _authorization_policy(snap)
+    if policy is None:
+        return _unavailable("Consent settings haven't been collected yet")
+    rows = snap.objects("tenant_policies", "admin_consent_policy")
+    if not rows:
+        return _unavailable(admin_consent_missing(policy))
+    workflow = rows[0]
+    if workflow.get("isEnabled"):
+        reviewers = len(workflow.get("reviewers") or [])
+        if not reviewers:
+            return ("fail", "Admin consent requests are on but have no reviewers", [Finding(
+                "low", "Tenant", "Users can send requests, but nobody can approve them")])
+        return ("pass", f"Users can ask an admin: requests are on, with {reviewers} reviewer(s)", [])
+    consent = user_consent_level(policy)
+    if consent == "any":
+        return ("pass", "Users can consent to most apps themselves, so admin consent requests are off "
+                        "(see the user consent check)", [])
+    if consent == "limited":
+        # Microsoft's default for new tenants: worth turning on, but not a standing failure.
+        return ("pass", "Users can consent to low-risk apps themselves; admin consent requests are off, so they "
+                        "can't ask for anything else", [])
+    return ("fail", "Users can't consent to apps and have no way to ask", [Finding(
+        "low", "Tenant", "User consent and admin consent requests are both off, so users are blocked from "
+                         "any app that needs consent, with no way to ask for it")])
 
 
 # -- Sharing and guests -------------------------------------------------------------
@@ -688,10 +828,58 @@ def _domain_rule(snap: TenantSnapshot, area: str):
     findings = []
     for row in rows:
         health = dnscheck.DomainHealth.from_dict(row)
-        for issue in dnscheck.issues(health):
+        for issue in dnscheck.issues(health, transport=True):
             if issue.area == area:
                 findings.append(Finding(issue.severity, health.domain, issue.detail, f"{health.domain}:{area}"))
     return findings, rows
+
+
+def _transport_rule(snap: TenantSnapshot, area: str):
+    """Findings and the mail domains checked for MTA-STS/TLS-RPT, or None and why not."""
+    result = _domain_rule(snap, area)
+    if result is None:
+        return None, "Domain checks haven't run yet, or the tenant has no custom domains"
+    findings, rows = result
+    mail = [h for h in map(dnscheck.DomainHealth.from_dict, rows) if h.sends_mail]
+    if not mail:
+        return None, "No domain receives mail"
+    checked = [h for h in mail if h.transport_checked]
+    if not checked:
+        return None, "Domains haven't been checked for MTA-STS yet; refresh Email domains on the tenant page"
+    return (findings, checked), ""
+
+
+@rule("mta_sts", "Mail domains require encrypted delivery (MTA-STS)", "Email",
+      "Publish an MTA-STS policy so other mail servers only deliver to the domain over a verified, encrypted "
+      "connection: a TXT record at _mta-sts.<domain> (\"v=STSv1; id=20260101\") and a policy file at "
+      "https://mta-sts.<domain>/.well-known/mta-sts.txt listing the domain's MX hosts (for Microsoft 365, "
+      "\"mx: *.mail.protection.outlook.com\"). Start with \"mode: testing\" and TLS-RPT reports, then switch to "
+      "\"mode: enforce\" and change the id.")
+def mta_sts(snap: TenantSnapshot, now: datetime):
+    result, reason = _transport_rule(snap, "MTA-STS")
+    if result is None:
+        return _unavailable(reason)
+    findings, mail = result
+    return ("fail", f"{len({f.subject for f in findings})} of {len(mail)} mail domain(s) don't fully enforce "
+                    "MTA-STS", findings) if findings \
+        else ("pass", f"MTA-STS is enforced on all {len(mail)} mail domain(s)", [])
+
+
+@rule("tls_rpt", "Encrypted delivery failures are reported (TLS-RPT)", "Email",
+      "Publish a TXT record at _smtp._tls.<domain> such as \"v=TLSRPTv1; rua=mailto:tls-reports@<domain>\" "
+      "(or a reporting service's address), so someone hears when other servers can't deliver mail encrypted, "
+      "before and after MTA-STS is enforced.")
+def tls_rpt(snap: TenantSnapshot, now: datetime):
+    result, reason = _transport_rule(snap, "TLS-RPT")
+    if result is None:
+        return _unavailable(reason)
+    findings, mail = result
+    scope = [h for h in mail if h.mta_sts or h.tls_rpt]
+    if not scope:
+        return _unavailable("TLS-RPT is checked on mail domains that use MTA-STS, and none do yet")
+    return ("fail", f"{len({f.subject for f in findings})} of {len(scope)} domain(s) without working TLS-RPT",
+            findings) if findings else ("pass", f"TLS-RPT reports are set up on all {len(scope)} domain(s) "
+                                                "that use MTA-STS or TLS-RPT", [])
 
 
 @rule("spf_record", "Every domain has a working SPF record", "Email",
@@ -734,11 +922,375 @@ def dkim_enabled(snap: TenantSnapshot, now: datetime):
         ("pass", f"DKIM is on for all {len(checked)} Microsoft 365 mail domain(s)", [])
 
 
+# -- Groups and Teams ------------------------------------------------------------------
+
+
+def m365_groups(snap: TenantSnapshot) -> list[dict] | None:
+    """Teams and Microsoft 365 groups (shared with the Groups and Teams report)."""
+    rows = snap.objects("groups", "group")
+    return None if rows is None else [g for g in rows if g.get("kind") == "microsoft365"]
+
+
+def group_type(g: dict) -> str:
+    return "Team" if g.get("isTeam") else "Microsoft 365 group"
+
+
+def group_owner_problem(g: dict) -> str | None:
+    """Why nobody looks after a team or group (no enabled user owner), or None."""
+    if not g.get("examined") or g.get("enabledOwnerCount"):
+        return None
+    owners = g.get("owners") or []
+    if not owners:
+        return "No owner"
+    people = [o.get("name") or "?" for o in owners if o.get("type") == "user"]
+    apps = [o.get("name") or "?" for o in owners if o.get("type") != "user"]
+    if not apps:
+        return ("Only owner is disabled" if len(people) == 1 else "All owners are disabled") + f" ({', '.join(people)})"
+    if not people:
+        return f"Owned only by an app ({', '.join(apps)})"
+    return f"No enabled owner ({', '.join([p + ': disabled' for p in people] + [a + ': app' for a in apps])})"
+
+
+def _group_object(snap: TenantSnapshot, kind: str, what: str):
+    rows = snap.objects("groups", kind)
+    if rows is None:
+        return None, "Group data hasn't been collected yet"
+    if not rows or not rows[0].get("available"):
+        return None, f"{what} couldn't be read"
+    return rows[0], ""
+
+
+@rule("ownerless_groups", "Every team and Microsoft 365 group has an owner", "Groups",
+      "Make an active person, ideally two, an owner of each listed team or group (Teams admin center or Microsoft "
+      "365 admin center > Teams & groups). Owners approve members and guests and renew the group; without one, "
+      "nobody looks after its files and conversations. The ownerless group policy (Microsoft 365 admin center > "
+      "Settings > Org settings > Microsoft 365 Groups) asks members to take over when the last owner leaves.")
+def ownerless_groups(snap: TenantSnapshot, now: datetime):
+    groups = m365_groups(snap)
+    if groups is None:
+        return _unavailable("Group data hasn't been collected yet")
+    if not groups:
+        return _unavailable("The tenant has no teams or Microsoft 365 groups")
+    checked = [g for g in groups if g.get("examined")]
+    if not checked:
+        return _unavailable("Owners of teams and groups couldn't be read")
+    findings = []
+    for g in checked:
+        if problem := group_owner_problem(g):
+            findings.append(Finding("medium" if g.get("isTeam") else "low", g.get("displayName") or g["_id"],
+                                    f"{group_type(g)}, {problem[0].lower()}{problem[1:]}", g["_id"]))
+    scope = f" ({len(checked)} of {len(groups)} checked)" if len(checked) < len(groups) else ""
+    return ("fail", f"{len(findings)} team(s) and group(s) without an owner{scope}", findings) if findings else \
+        ("pass", f"All {len(checked)} team(s) and group(s) have an owner{scope}", [])
+
+
+@rule("group_creation", "Only chosen people can create teams and groups", "Groups",
+      "Limit who can create teams and Microsoft 365 groups to a security group of people who will look after them "
+      "(the Group.Unified directory setting, changed with Microsoft Graph PowerShell; needs Entra ID P1). "
+      "Otherwise anyone can create a team, add guests to it and leave it behind.")
+def group_creation(snap: TenantSnapshot, now: datetime):
+    settings, reason = _group_object(snap, "group_settings", "Group settings")
+    if settings is None:
+        return _unavailable(reason)
+    if settings.get("enableGroupCreation"):
+        if snap.capabilities.get("entra_p1") is False:
+            return _unavailable("Anyone can create teams and groups; limiting who can needs Entra ID P1")
+        default = " (Microsoft's default)" if settings.get("source") == "default" else ""
+        return ("fail", "Anyone can create teams and groups", [Finding(
+            "low", "Tenant", f"Every user can create teams and Microsoft 365 groups{default}")])
+    allowed = settings.get("allowedGroupName") or settings.get("allowedGroupId")
+    return ("pass", f"Only admins and members of {allowed} can create teams and groups" if allowed
+            else "Only admins can create teams and groups", [])
+
+
+@rule("group_expiration", "Unused groups and teams expire", "Groups",
+      "Set a Microsoft 365 group expiration policy for all groups (Entra admin center > Groups > Expiration), for "
+      "example 365 days. Groups in use renew automatically, owners are asked to renew the rest, and an expired "
+      "group can be restored for 30 days. Needs Entra ID P1.")
+def group_expiration(snap: TenantSnapshot, now: datetime):
+    policy, reason = _group_object(snap, "expiration_policy", "The group expiration policy")
+    groups = m365_groups(snap)
+    if policy is None or groups is None:
+        return _unavailable(reason or "Group data hasn't been collected yet")
+    days = policy.get("groupLifetimeInDays")
+    managed = policy.get("managedGroupTypes")
+    if managed == "All":
+        return ("pass", f"Unused teams and groups expire after {days} days", [])
+    if managed == "Selected":
+        never = [g for g in groups if not g.get("expirationDateTime")]
+        if not never:
+            return ("pass", f"Expiration covers every team and group ({days} days)", [])
+        return ("fail", "Expiration covers selected groups only", [Finding(
+            "low", "Tenant", f"{len(never)} of {len(groups)} team(s) and group(s) never expire")])
+    if snap.capabilities.get("entra_p1") is False:
+        return _unavailable("Group expiration needs Entra ID P1")
+    if not groups:
+        return ("fail", "No expiration policy", [Finding(
+            "info", "Tenant", "No expiration policy; the tenant has no teams or Microsoft 365 groups yet")])
+    return ("fail", "No expiration policy", [Finding(
+        "low", "Tenant", f"No expiration policy: {len(groups)} team(s) and group(s) are kept until someone deletes "
+                         "them")])
+
+
+# -- Devices -------------------------------------------------------------------------
+
+
+def _managed_devices(snap: TenantSnapshot):
+    """Intune devices, or the reason they can't be checked."""
+    status = devices.objects(snap, "intune_status")
+    if status is None:
+        return None, "Device data hasn't been collected yet"
+    if not status or not status[0].get("available"):
+        return None, "The tenant has no Intune licence, or Intune isn't readable"
+    managed = devices.objects(snap, "managed_device") or []
+    if not managed:
+        return None, "No devices are enrolled in Intune"
+    return managed, ""
+
+
+def _device_label(d: dict) -> str:
+    name = d.get("deviceName") or d.get("displayName") or d.get("_id", "?")
+    user = d.get("userPrincipalName")
+    return f"{name} ({user})" if user else name
+
+
+@rule("device_compliance", "Managed devices meet compliance policies", "Devices",
+      "Open each non-compliant device in Intune (Devices > Monitor > Noncompliant devices) to see which "
+      "setting fails, fix it or retire the device, and block non-compliant devices with a Conditional "
+      "Access policy that requires a compliant device.")
+def device_compliance(snap: TenantSnapshot, now: datetime):
+    managed, reason = _managed_devices(snap)
+    if managed is None:
+        return _unavailable(reason)
+    findings = []
+    for d in managed:
+        if str(d.get("jailBroken")).lower() == "true":
+            findings.append(Finding("high", _device_label(d), "Jailbroken or rooted", d["_id"]))
+        elif d.get("complianceState") == "noncompliant":
+            findings.append(Finding("medium", _device_label(d), "Not compliant", d["_id"]))
+        elif d.get("complianceState") == "inGracePeriod":
+            findings.append(Finding("low", _device_label(d), "Not compliant, in grace period", d["_id"]))
+    return ("fail", f"{len(findings)} of {len(managed)} managed device(s) not compliant", findings) if findings \
+        else ("pass", f"All {len(managed)} managed device(s) are compliant", [])
+
+
+@rule("device_encryption", "Company computers are encrypted", "Devices",
+      "Turn on BitLocker (Windows) and FileVault (macOS) with an Intune disk encryption policy, with recovery "
+      "keys escrowed to Entra ID, so a lost or stolen laptop doesn't expose the client's data.")
+def device_encryption(snap: TenantSnapshot, now: datetime):
+    managed, reason = _managed_devices(snap)
+    if managed is None:
+        return _unavailable(reason)
+    computers = [d for d in managed if devices.is_computer(d)]
+    if not computers:
+        return _unavailable("No Windows or Mac computers are enrolled in Intune")
+    findings = [Finding("high", _device_label(d), f"{d.get('operatingSystem')} disk isn't encrypted", d["_id"])
+                for d in computers if d.get("isEncrypted") is False]
+    return ("fail", f"{len(findings)} of {len(computers)} computer(s) not encrypted", findings) if findings \
+        else ("pass", f"All {len(computers)} managed computer(s) are encrypted", [])
+
+
+@rule("supported_windows", "Windows computers still get security updates", "Devices",
+      "Upgrade computers on Windows 10 or an old Windows 11 release to the current Windows 11 release "
+      "(Intune: Windows feature updates policy). Replace hardware that can't run Windows 11, or buy "
+      "Extended Security Updates as a stopgap.")
+def supported_windows(snap: TenantSnapshot, now: datetime):
+    managed, _ = _managed_devices(snap)
+    if managed is not None:
+        windows, source = [d for d in managed if devices.is_windows(d)], "osVersion"
+    else:
+        entra = devices.objects(snap, "entra_device")
+        if entra is None:
+            return _unavailable("Device data hasn't been collected yet")
+        # Without Intune, use Entra's record of devices that signed in recently.
+        windows = [d for d in entra if devices.is_windows(d) and d.get("accountEnabled")
+                   and (devices.days_since(d.get("approximateLastSignInDateTime"), now) or 0) <= devices.STALE_DAYS]
+        source = "operatingSystemVersion"
+    if not windows:
+        return _unavailable("No active Windows computers found")
+    severity = {"ended": "high", "pro_ended": "medium", "ending": "low"}
+    findings = []
+    for d in windows:
+        support = devices.windows_support(d.get(source), now.date())
+        if support.status in severity:
+            findings.append(Finding(severity[support.status], _device_label(d), support.detail, d["_id"]))
+    unsupported = sum(f.severity != "low" for f in findings)
+    if not findings:
+        return ("pass", f"All {len(windows)} Windows computer(s) are on a supported release", [])
+    summary = f"{unsupported} of {len(windows)} Windows computer(s) past end of support" if unsupported \
+        else f"{len(findings)} Windows computer(s) reach end of support within {devices.SOON_DAYS} days"
+    return ("fail", summary, findings)
+
+
+@rule("intune_enrolled", "Joined computers are managed by Intune", "Devices",
+      "Enrol Entra-joined and hybrid-joined computers in Intune (automatic enrolment under Devices > "
+      "Enrollment > Windows) so compliance, encryption and updates can be enforced on them.")
+def intune_enrolled(snap: TenantSnapshot, now: datetime):
+    status = devices.objects(snap, "intune_status")
+    entra = devices.objects(snap, "entra_device")
+    if status is None or entra is None:
+        return _unavailable("Device data hasn't been collected yet")
+    if not status or not status[0].get("available"):
+        return _unavailable("The tenant has no Intune licence, or Intune isn't readable")
+    joined = [d for d in entra if d.get("trustType") in ("AzureAd", "ServerAd") and devices.is_computer(d)
+              and d.get("accountEnabled")
+              and (devices.days_since(d.get("approximateLastSignInDateTime"), now) or 0) <= devices.STALE_DAYS]
+    if not joined:
+        return _unavailable("No active Entra-joined or hybrid-joined computers")
+    findings = [Finding("low", d.get("displayName") or d["_id"],
+                        ("Hybrid joined" if d.get("trustType") == "ServerAd" else "Entra joined")
+                        + ", not managed by Intune", d["_id"])
+                for d in joined if not d.get("isManaged")]
+    return ("fail", f"{len(findings)} of {len(joined)} joined computer(s) not in Intune", findings) if findings \
+        else ("pass", f"All {len(joined)} joined computer(s) are managed", [])
+
+
+@rule("device_checkin", "Managed devices check in with Intune", "Devices",
+      "Find out whether each device is lost, replaced or broken. Retire devices that are gone; for "
+      "devices still in use, restart the Intune Management Extension or re-enrol.")
+def device_checkin(snap: TenantSnapshot, now: datetime):
+    managed, reason = _managed_devices(snap)
+    if managed is None:
+        return _unavailable(reason)
+    findings = []
+    for d in managed:
+        days = devices.days_since(d.get("lastSyncDateTime"), now)
+        if days is not None and days > devices.NO_SYNC_DAYS:
+            findings.append(Finding("low", _device_label(d), f"Last check-in {days} days ago", d["_id"]))
+    return ("fail", f"{len(findings)} device(s) haven't checked in for {devices.NO_SYNC_DAYS}+ days", findings) \
+        if findings else ("pass", f"All {len(managed)} managed device(s) checked in recently", [])
+
+
+@rule("stale_devices", "No old devices left in Entra ID", "Devices",
+      "Disable, then after 30 days delete, device records that haven't signed in for 90 days (Entra admin "
+      "center > Devices > All devices, filter by activity). Old records can still hold BitLocker keys and "
+      "count toward device limits.")
+def stale_devices(snap: TenantSnapshot, now: datetime):
+    entra = devices.objects(snap, "entra_device")
+    if entra is None:
+        return _unavailable("Device data hasn't been collected yet")
+    findings = []
+    for d in entra:
+        days = devices.days_since(d.get("approximateLastSignInDateTime"), now)
+        if d.get("accountEnabled") and days is not None and days > devices.STALE_DAYS:
+            findings.append(Finding("low", d.get("displayName") or d["_id"],
+                                    f"{d.get('operatingSystem') or 'Device'}, last seen {days} days ago", d["_id"]))
+    return ("fail", f"{len(findings)} of {len(entra)} device record(s) unused for {devices.STALE_DAYS}+ days",
+            findings) if findings else ("pass", f"No stale devices among {len(entra)} record(s)", [])
+
+
+# -- Hybrid identity -------------------------------------------------------------------
+
+
+def _sync_on(snap: TenantSnapshot):
+    """Directory sync status when sync is on, or the reason the sync checks can't run."""
+    status = hybrid.sync_status(snap)
+    if status is None:
+        return None, "Directory sync data hasn't been collected yet"
+    if not status.get("enabled"):
+        return None, "Cloud-only tenant: directory sync isn't turned on"
+    return status, ""
+
+
+@rule("directory_sync_running", "Directory sync is running", "Hybrid identity",
+      "Check the Entra Connect server: that it is up, the Microsoft Azure AD Sync service is running and "
+      "Synchronization Service Manager shows no errors. Until sync runs, accounts disabled or removed in Active "
+      "Directory keep working in Microsoft 365. If the client has moved to cloud-only, turn directory sync off.")
+def directory_sync_running(snap: TenantSnapshot, now: datetime):
+    status, reason = _sync_on(snap)
+    if status is None:
+        return _unavailable(reason)
+    hours = hybrid.hours_since(status.get("lastSyncDateTime"), now)
+    summary = "Turned on but has never synced" if hours is None else f"Last sync {hybrid.age(hours)}"
+    problem = hybrid.sync_problem(status, now)
+    if problem:
+        severity, detail = problem
+        return ("fail", summary, [Finding(severity, "Directory sync", detail)])
+    return ("pass", summary, [])
+
+
+@rule("password_hash_sync", "Password hash sync is on", "Hybrid identity",
+      "Turn on password hash synchronization in Entra Connect (Optional features), even when users sign in "
+      "through federation or pass-through authentication. Entra ID can then detect leaked passwords, and "
+      "sign-in can be switched to the cloud if the on-premises servers are down.")
+def password_hash_sync(snap: TenantSnapshot, now: datetime):
+    status, reason = _sync_on(snap)
+    if status is None:
+        return _unavailable(reason)
+    if not status.get("passwordSyncChecked"):
+        return _unavailable("The last password hash sync time couldn't be read")
+    problem = hybrid.password_sync_problem(status, now)
+    if problem:
+        severity, detail = problem
+        federated = hybrid.federated_domains(snap)
+        if federated:
+            detail += f". Sign-in for {', '.join(federated)} is federated and has no cloud fallback"
+        summary = "No password hash sync recorded" if status.get("lastPasswordSyncDateTime") is None \
+            else "Password hash sync has stopped"
+        return ("fail", summary, [Finding(severity, "Password hash sync", detail)])
+    hours = hybrid.hours_since(status["lastPasswordSyncDateTime"], now)
+    return ("pass", f"Last password sync {hybrid.age(hours)}", [])
+
+
+@rule("cloud_only_admins", "Admin accounts are cloud-only", "Hybrid identity",
+      "Give each admin a separate cloud-only account (for example on the .onmicrosoft.com domain) for their admin "
+      "roles, and remove the roles from accounts synced from Active Directory. Otherwise anyone who takes over "
+      "on-premises AD can reset those passwords and become an admin in Microsoft 365.")
+def cloud_only_admins(snap: TenantSnapshot, now: datetime):
+    admins = hybrid.synced_admins(snap)
+    if admins is None:
+        return _unavailable("Needs admin role and user data")
+    if not admins:
+        status = hybrid.sync_status(snap) or {}
+        if not status.get("enabled") and not any(u.get("onPremisesSyncEnabled") for u in snap.objects("users", "user")):
+            return ("pass", "Cloud-only tenant: no accounts are synced from on-premises AD", [])
+        return ("pass", f"All {len(hybrid.privileged_principals(snap))} privileged account(s) are cloud-only", [])
+    findings = []
+    for a in admins:
+        detail = f"{', '.join(a['roles'])}; synced from on-premises AD"
+        if not a["accountEnabled"]:
+            detail += " (disabled here, but AD can re-enable it)"
+        findings.append(Finding("high" if a["accountEnabled"] else "medium", a["label"], detail, a["principalId"]))
+    return ("fail", f"{len(findings)} admin account(s) synced from on-premises AD", findings)
+# -- Admin activity --------------------------------------------------------------------
+
+
+@rule("domain_federation_changed", "No unexpected changes to how domains sign in", "Identity",
+      "Confirm with the client that each change was planned (for example, setting up AD FS or another identity "
+      "provider). If it wasn't, an attacker with admin rights may have federated the domain to their own identity "
+      "provider so they can sign in as any user without a password or MFA: switch the domain back to managed "
+      "sign-in, remove unknown federation settings, reset admin credentials and review the audit log.")
+def domain_federation_changed(snap: TenantSnapshot, now: datetime):
+    window = (snap.objects("admin_activity", "audit_window") or [None])[0]
+    if window is None:
+        return _unavailable("Admin activity hasn't been collected yet")
+    if not window.get("available"):
+        return _unavailable("The tenant's directory audit log couldn't be read")
+    changes: dict[str, list[str]] = {}
+    for e in sorted(snap.objects("admin_activity", "admin_event") or [], key=lambda e: e.get("time") or ""):
+        if e.get("kind") == "federation" and e.get("result") == "success":
+            domain = ", ".join(e.get("targets") or []) or "Unnamed domain"
+            changes.setdefault(domain, []).append(
+                f"{e.get('activity')} by {e.get('actor')} on {(e.get('time') or '')[:10]}")
+    findings = [Finding("high", domain, "; ".join(what), domain) for domain, what in changes.items()]
+    days = adminactivity.covered_days(window)
+    return ("fail", f"{len(findings)} domain(s) had sign-in settings changed in the last {days} days", findings) \
+        if findings else ("pass", f"No domain federation changes in the last {days} days", [])
+
+
 def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResult]:
     now = now or datetime.now(UTC)
     results = []
     for r in RULES:
-        status, summary, findings = r.check(snap, now)
-        findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
+        try:
+            status, summary, findings = r.check(snap, now)
+            findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
+        except Exception as exc:  # one broken check mustn't blank the whole report
+            logging.getLogger(__name__).exception("Check %s failed", r.key)
+            status, summary, findings = "unavailable", f"This check couldn't run: {type(exc).__name__}", []
         results.append(RuleResult(r.key, r.title, r.category, status, summary, r.recommendation, findings))
     return results
+
+
+# Checks kept in their own modules register themselves into RULES on import.
+from . import sharepoint_rules  # noqa: E402, F401, I001
