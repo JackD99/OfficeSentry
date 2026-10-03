@@ -1,5 +1,6 @@
 """Cron schedule, freshness, retention, worker heartbeat and deployment commands."""
 
+import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -231,4 +232,5 @@ def test_backup_command(cfg, db, two_tenants, monkeypatch, tmp_path):
     assert 1 <= len(files) <= 2
     copy = connect(files[-1])
     assert copy.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
-    assert oct(files[-1].stat().st_mode & 0o777) == "0o600"
+    if os.name != "nt":  # Windows has no Unix file modes
+        assert oct(files[-1].stat().st_mode & 0o777) == "0o600"
