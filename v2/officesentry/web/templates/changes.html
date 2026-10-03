@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}What changed · Office Sentry{% endblock %}
+{% macro period_tabs(endpoint) -%}
+<nav class="subtabs m0" aria-label="Period">
+  {% for d in periods %}<a href="{{ url_for(endpoint, days=d, **kwargs) }}"{% if d == days %} class="active" aria-current="page"{% endif %}>Last {{ d }} days</a>{% endfor %}
+</nav>
+{%- endmacro %}
+{% macro delta(f) -%}
+{% if f is none or f.after is none %}<span class="faint">–</span>{% else %}{{ '%g'|format(f.after) }}{{ f.unit }}{% if f.delta %} <span class="delta {{ f.trend }} tiny">{{ '%+g'|format(f.delta) }}</span>{% endif %}{% endif %}
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>What changed</h1>
+    <div class="sub">Changes in every tenant over the last {{ days }} days, most important first.</div>
+  </div>
+  <div class="actions"><a class="btn" href="{{ url_for('across.index') }}">{{ icon('tenants') }} Compare reports</a></div>
+</div>
+
+<div class="report-picker">{{ period_tabs('across.changes') }}</div>
+
+{% if not summaries %}
+<div class="card empty"><h3>No tenants to show</h3><p>Tenants you look after appear here once they're added.</p></div>
+{% else %}
+<div class="tiles">
+  <div class="tile"><div class="label">Tenants with changes</div><div class="value">{{ totals.changed }}</div>
+    <div class="foot">of {{ summaries|length }}</div></div>
+  <div class="tile{% if totals.new_severe %} tone-bad{% endif %}"><div class="label">New critical or high findings</div>
+    <div class="value">{{ totals.new_severe }}</div><div class="foot">{{ totals.new }} new findings in all</div></div>
+  <div class="tile{% if totals.fixed %} tone-ok{% endif %}"><div class="label">Findings fixed</div><div class="value">{{ totals.fixed }}</div>
+    <div class="foot">across all tenants</div></div>
+  <div class="tile"><div class="label">Average Secure Score change</div>
+    <div class="value">{% if totals.score %}{{ '%+g'|format(totals.score) }} pts{% elif totals.score is not none %}No change{% else %}–{% endif %}</div>
+    <div class="foot">{% if totals.no_baseline %}{{ totals.no_baseline }} tenant{{ 's' if totals.no_baseline != 1 }} without data from {{ days }} days ago{% else %}&nbsp;{% endif %}</div></div>
+</div>
+
+<div class="card flush">
+  <div class="card-head toolbar">
+    <h2>Tenants <span class="count-badge">{{ summaries|length }}</span></h2>
+    <div class="toolbar-actions">
+      {% if summaries|length > 5 %}<input class="search" type="search" data-filter="changes-table" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
+      <a class="btn sm" href="{{ url_for('across.changes_download', ext='csv', days=days) }}">{{ icon('download') }} CSV</a>
+      <a class="btn sm" href="{{ url_for('across.changes_download', ext='xlsx', days=days) }}">{{ icon('download') }} XLSX</a>
+    </div>
+  </div>
+  <div class="scroll-x">
+  <table class="stack-sm sortable" id="changes-table">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Tenant</button></th>
+      <th class="num" aria-sort="none"><button type="button" class="sort">Changes</button></th>
+      <th class="num" aria-sort="none"><button type="button" class="sort">New findings</button></th>
+      <th class="num" aria-sort="none"><button type="button" class="sort">Fixed</button></th>
+      <th class="num" aria-sort="none"><button type="button" class="sort">Secure Score</button></th>
+      <th class="num" aria-sort="none"><button type="button" class="sort">Users with MFA</button></th>
+      <th>What changed</th>
+    </tr></thead>
+    <tbody>
+    {% for s in summaries %}{% set t = s.tenant %}
+    {% set score = s.figures.get('secure_score.pct') %}{% set mfa = s.figures.get('mfa.registered_pct') %}
+    <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
+      <td class="tenant-col" data-sort="{{ t.name|lower }}"><a class="strong" href="{{ url_for('across.tenant_changes', tenant_id=t.id, days=days) }}">{{ t.name }}</a>
+        {% if s.error %}<span class="sub muted">Couldn't be worked out ({{ s.error }})</span>
+        {% elif not s.has_baseline %}<span class="sub muted">No data from {{ days }} days ago yet</span>{% endif %}</td>
+      <td class="num" data-label="Changes" data-sort="{{ s.changes }}">{{ s.changes or '–' }}</td>
+      <td class="num" data-label="New findings" data-sort="{{ s.new_severe * 1000 + s.new_findings }}">{% if s.new_findings %}{{ s.new_findings }}{% if s.new_severe %} <span class="pill bad">{{ s.new_severe }} critical or high</span>{% endif %}{% else %}–{% endif %}</td>
+      <td class="num" data-label="Fixed" data-sort="{{ s.fixed }}">{% if s.fixed %}<span class="pill ok">{{ s.fixed }}</span>{% else %}–{% endif %}</td>
+      <td class="num" data-label="Secure Score" data-sort="{{ score.delta if score and score.delta is not none else '' }}">{{ delta(score) }}</td>
+      <td class="num" data-label="Users with MFA" data-sort="{{ mfa.delta if mfa and mfa.delta is not none else '' }}">{{ delta(mfa) }}</td>
+      <td class="wrap" data-label="What changed">{% if s.areas %}{{ s.areas[:4]|join(', ') }}{% if s.areas|length > 4 %} and {{ s.areas|length - 4 }} more{% endif %}{% else %}<span class="faint">Nothing</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+<p class="footnote">Changes compare each tenant's data from {{ days }} days ago with its latest collection. Arrows show the change in points. Open a tenant for every change, line by line.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

@@ -20,6 +20,17 @@ pass, and a first run against a real tenant.
   recommendations, licence waste in money, passing checks, checks that the
   tenant's licences can't support, and data freshness.
 - **Overview** (`/reports`): one row per tenant with severity counts and KPIs.
+- **All tenants** (`/across/<report>`): a sortable, filterable table with one row
+  per tenant for the monthly review, the insurance evidence pack and every
+  detail report, limited to the tenants you can see. New detail reports appear
+  automatically.
+- **What changed** (`/changes`, and each tenant's *Changes* tab): a standalone
+  month-over-month report for the last 7, 30 or 90 days. It covers key
+  figures then and now, new and fixed findings, admin, account, Conditional
+  Access, forwarding, app, device and group changes, and a row-by-row
+  comparison of every detail report.
+- **Downloads**: every page above has CSV and XLSX. Values from tenants can
+  never become spreadsheet formulas.
 - **Licence prices** (admin): enter monthly prices per SKU to cost waste.
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Analysts can accept a risk with a reason and an

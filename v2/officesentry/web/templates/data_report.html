@@ -14,7 +14,10 @@
     <p class="muted small m0">{{ report.description }}</p>
   </div>
   {% if not report.unavailable %}
-  <a class="btn" href="{{ url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key) }}">{{ icon('download') }} Download XLSX</a>
+  <div class="toolbar-actions">
+    {% if current_user.role != 'client' %}<a class="btn" href="{{ url_for('across.rollup', key=report.key) }}">{{ icon('tenants') }} All tenants</a>{% endif %}
+    <a class="btn" href="{{ url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key) }}">{{ icon('download') }} Download XLSX</a>
+  </div>
   {% endif %}
 </div>
 
@@ -63,7 +66,10 @@
 <section class="card flush" id="s{{ loop.index }}">
   <div class="card-head toolbar">
     <h2>{{ section.title }} <span class="count-badge">{{ section.rows|length }}</span></h2>
-    {% if section.flagged %}<span class="pill warn">{{ section.flagged }} to review</span>{% endif %}
+    <div class="toolbar-actions">
+      {% if section.flagged %}<span class="pill warn">{{ section.flagged }} to review</span>{% endif %}
+      {% if section.rows %}<a class="btn sm ghost" href="{{ url_for('across.data_report_csv', tenant_id=tenant.id, key=report.key, section=loop.index) }}" title="Download this table as CSV">{{ icon('download') }} CSV</a>{% endif %}
+    </div>
   </div>
   {% if section.intro %}<p class="intro">{{ section.intro }}</p>{% endif %}
   {% if section.rows %}

@@ -17,7 +17,9 @@
   {% if current_user.role == 'client' %}
   {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('reports', 'tenants')) }}
   {% else %}
-  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'reports.overview')) }}
+  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'reports.overview')) }}
+  {{ nav_link('across.index', 'All tenants', 'grid', ('across.rollup',)) }}
+  {{ nav_link('across.changes', 'What changed', 'clock') }}
   {{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest')) }}
   {{ nav_link('prospects.index', 'Prospects', 'prospects', ('prospects',)) }}
   {% endif %}

@@ -478,5 +478,29 @@ svg.chart .series { stroke: var(--accent); }
 svg.chart .hit:hover { fill: var(--accent); fill-opacity: .25; }
 svg.chart .end { fill: var(--accent); stroke: var(--surface); }
 svg.chart .value { fill: var(--text); }
+
+/* -- Cross-tenant rollups and change report -------------------------------- */
+.report-picker { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }
+.picker-form { display: flex; gap: 8px; align-items: center; margin: 0; }
+.picker-form label { margin: 0; color: var(--muted); }
+.picker-form select { width: auto; min-width: 220px; margin: 0; padding: 5px 9px; }
+.toolbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+th button.sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+th button.sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+th button.sort::after { content: "↕"; color: var(--faint); font-size: .7rem; }
+th[aria-sort="ascending"] button.sort::after { content: "↑"; color: var(--text); }
+th[aria-sort="descending"] button.sort::after { content: "↓"; color: var(--text); }
+th.num button.sort { justify-content: flex-end; }
+.change-list { list-style: none; margin: 0; padding: 4px 0; }
+.change-list li { display: flex; gap: 12px; align-items: baseline; padding: 9px 20px; border-bottom: 1px solid var(--border); }
+.change-list li:last-child { border-bottom: 0; }
+.change-list .desc { display: block; color: var(--muted); font-size: .8125rem; }
+.card-head.toolbar { margin-bottom: 0; }
+@media (max-width: 640px) {
+  .picker-form, .picker-form select { width: 100%; }
+  .change-list li { padding: 9px 14px; }
+}
+td.tenant-col { min-width: 190px; }
+@media (max-width: 640px) { td.tenant-col { min-width: 0; } }
 .connection-form { margin: 16px 0 0; }
 .connection-form > label { flex: 1 1 200px; }

@@ -27,6 +27,7 @@ from ..rules import (
 )
 from ..snapshot import TenantSnapshot
 from .safe_xlsx import no_formulas
+from .tables import Table
 
 
 @dataclass
@@ -37,6 +38,8 @@ class Section:
     flags: list[str | None] = field(default_factory=list)  # severity per row, for highlighting
     intro: str = ""
     empty: str = "Nothing to show."
+    # False for event logs (e.g. admin activity), which the change report shouldn't diff like state.
+    compare: bool = True
 
     def add(self, row: list, flag: str | None = None) -> None:
         self.rows.append([_cell(v) for v in row])
@@ -294,12 +297,13 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     events = sorted(events, key=lambda e: e.get("time") or "", reverse=True)
 
     review = Section("Changes to review", ["When (UTC)", "Change", "By", "Target", "Detail", "Why it matters"],
+                     compare=False,
                      intro=f"Changes in {covered} that are worth confirming with the client: domain sign-in "
                            "(federation) changes, new app secrets and certificates, admin roles granted, and "
                            "Conditional Access policies deleted or switched off. Failed attempts are left out.",
                      empty="No change in the window needs a second look.")
     every = Section("All admin changes", ["When (UTC)", "Area", "Change", "By", "Target", "Detail", "Result",
-                                          "IP address"],
+                                          "IP address"], compare=False,
                     intro=f"Every admin role, Conditional Access, policy, app, domain and account change "
                           f"in {covered}, newest first.",
                     empty="No admin changes in the window.")
@@ -318,7 +322,7 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         a["last"] = max(a["last"], e.get("time") or "")
     review.rows, review.flags = _by_flag(review)
 
-    who = Section("Who made changes", ["Who", "Type", "Changes", "Last change (UTC)"],
+    who = Section("Who made changes", ["Who", "Type", "Changes", "Last change (UTC)"], compare=False,
                   intro="Everyone (and every app) that made one of the changes above, most active first.",
                   empty="Nobody made admin changes in the window.")
     for name, a in sorted(actors.items(), key=lambda kv: (-kv[1]["count"], kv[0].lower())):
@@ -860,10 +864,12 @@ from .identity_reports import REPORTS as _IDENTITY_REPORTS  # noqa: E402
 REPORTS.update(_IDENTITY_REPORTS)
 
 
-def build(conn, tenant, key: str, now: datetime | None = None) -> DataReport:
+def build(conn, tenant, key: str, now: datetime | None = None, as_of: datetime | None = None,
+          snap: TenantSnapshot | None = None) -> DataReport:
+    """Build one detail report from the latest data, or from the data held at ``as_of``."""
     title, description, collectors, builder = REPORTS[key]
-    now = now or datetime.now(UTC)
-    snap = TenantSnapshot(conn, tenant)
+    now = as_of or now or datetime.now(UTC)
+    snap = snap or TenantSnapshot(conn, tenant, as_of=as_of)
     report = DataReport(key, title, description, dict(tenant), now)
     report.sources = [(REGISTRY[c].title, (snap.runs.get(c) or {"finished_at": None})["finished_at"])
                       for c in collectors]
@@ -874,6 +880,19 @@ def build(conn, tenant, key: str, now: datetime | None = None) -> DataReport:
         report.sections = []
         report.unavailable = f"This report couldn't be built: {type(exc).__name__}"
     return report
+
+
+def section_table(section: Section) -> Table:
+    flagged = any(section.flags)
+    rows = [[str(v) if isinstance(v, Link) else v for v in row] + ([flag or ""] if flagged else [])
+            for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False)]
+    return Table(section.title, section.columns + (["Flag"] if flagged else []), rows)
+
+
+def to_tables(report: DataReport) -> list[Table]:
+    if not report.sections:
+        return [Table("No data", ["Note"], [[report.unavailable or "Nothing to show."]])]
+    return [section_table(s) for s in report.sections]
 
 
 def to_xlsx(report: DataReport) -> bytes:
