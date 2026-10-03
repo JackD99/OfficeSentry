@@ -338,6 +338,8 @@ def test_live_test_command_runs_every_collector(cfg, db, monkeypatch, capsys):
     from officesentry import livetest
     from tests.seed import mock_tenant
 
+    for k in livetest.ENV:  # a real test tenant in the environment must not be used here
+        monkeypatch.delenv(k, raising=False)
     assert livetest.run(cfg) == 2  # variables missing
     for k in livetest.ENV:
         monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")

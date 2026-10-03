@@ -125,6 +125,14 @@ def test_report_marks_new_findings(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     report = build(db, store.get_tenant(db, alpha))
-    assert report.new_count == sum(report.counts.values())
+    # The first collection is the baseline: nothing is "new" yet.
+    assert report.first_report and report.new_count == 0 and sum(report.counts.values())
+    # Collected since 2020; one finding appeared this week.
+    db.execute("UPDATE runs SET finished_at = '2020-01-01T00:00:00Z'")
     db.execute("UPDATE findings SET first_seen = '2020-01-01T00:00:00Z'")
-    assert build(db, store.get_tenant(db, alpha)).new_count == 0
+    later = build(db, store.get_tenant(db, alpha))
+    assert not later.first_report and later.new_count == 0
+    one = db.execute("SELECT id FROM findings WHERE resolved_at IS NULL LIMIT 1").fetchone()["id"]
+    db.execute("UPDATE findings SET first_seen = ? WHERE id = ?",
+               (datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), one))
+    assert build(db, store.get_tenant(db, alpha)).new_count == 1

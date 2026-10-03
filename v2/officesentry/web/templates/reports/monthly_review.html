@@ -48,7 +48,8 @@
     {% set failing = report.failing %}
     {% if failing %}{{ failing|length }} of {{ report.results|length }} checks need attention:
       {% for sev in ['critical', 'high', 'medium', 'low'] if report.counts[sev] %}<span class="sev sev-{{ sev }}">{{ report.counts[sev] }} {{ sev }}</span>{% endfor %}
-    {% else %}All {{ report.passing|length }} checks that could run passed.{% endif %}
+    {% elif report.passing %}All {{ report.passing|length }} checks that could run passed.
+    {% else %}Nothing has been collected for this tenant yet, so no checks could run.{% endif %}
   </p>
   {% set top = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list %}
   {% if top %}
@@ -61,7 +62,9 @@
 
 <section class="keep">
   <h2>Since {{ report.period_start.strftime('%d %B') }}</h2>
-  {% if not report.changes and not report.resolved and not report.new_count %}
+  {% if report.first_report and not report.changes and not report.resolved and not report.new_count %}
+  <p class="muted">This is the first report for this tenant, so the findings below are the starting point. Changes are tracked from here on.</p>
+  {% elif not report.changes and not report.resolved and not report.new_count %}
   <p class="muted">No changes recorded in this period{% if not report.changes %} (change tracking starts once there are two collections at least 4 weeks apart){% endif %}.</p>
   {% else %}
   <ul class="changes">

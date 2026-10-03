@@ -239,8 +239,10 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
                   empty="No Conditional Access policies." + (" The tenant has no Entra ID P1."
                                                               if snap.capabilities.get("entra_p1") is False else ""))
     for p in sorted(policies, key=lambda p: (order.get(p.get("state"), 3), (p.get("displayName") or "").lower())):
-        row = coverage.describe(p, d)
-        pol.add([row.name, row.state, row.users, row.excluded, row.apps, row.conditions, row.grant])
+        row = coverage.describe(p, d, snap.capabilities)
+        state = f"{row.state}, but never applies (needs Entra ID P2)" if row.warning else row.state
+        pol.add([row.name, state, row.users, row.excluded, row.apps, row.conditions, row.grant],
+                "medium" if row.warning else None)
     report.sections.append(pol)
 
     covered = sum(c.mfa for c in cov)

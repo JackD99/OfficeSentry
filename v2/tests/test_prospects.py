@@ -1,10 +1,11 @@
 """Prospect assessments: public tenant discovery and DNS, page and access."""
 
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import responses
 
-from officesentry import prospect
+from officesentry import dnscheck, prospect
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 
@@ -62,3 +63,16 @@ def test_pages_and_access(client, db, two_tenants):
     pid = db.execute("SELECT id FROM prospect_assessments").fetchone()[0]
     client.post(f"/prospects/{pid}/delete")
     assert client.get(f"/prospects/{pid}").status_code == 404
+
+
+def test_enforced_dmarc_grades_a_even_without_dkim():
+    # contoso.com in October 2026: SPF -all, DMARC p=reject, mail on Microsoft 365 without its DKIM selectors.
+    dns = {("contoso.com", "MX"): ["contoso-com.mail.protection.outlook.com"],
+           ("contoso.com", "TXT"): ["v=spf1 include:spf.protection.outlook.com -all"],
+           ("_dmarc.contoso.com", "TXT"): ["v=DMARC1; p=reject; pct=100; rua=mailto:d@rua.example; fo=1"]}
+    health = dnscheck.check_domain("contoso.com", lambda n, t: dns.get((n, t), []))
+    a = prospect.Assessment("contoso.com", "Contoso", datetime.now(UTC), prospect.TenantInfo(), health,
+                            issues=dnscheck.issues(health))
+    assert health.dmarc_policy == "reject" and [i.area for i in a.issues] == ["DKIM"]
+    assert a.grade == "A"
+    assert "blocked" in a.headline and "get through" not in a.headline

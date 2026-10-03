@@ -81,7 +81,8 @@ def cmd_live_test(args, cfg):
 
     from .livetest import run
 
-    sys.exit(run(cfg, args.collector or None, Path(args.out) if args.out else None))
+    sys.exit(run(cfg, args.collector or None, Path(args.out) if args.out else None,
+                 Path(args.record) if args.record else None))
 
 
 def main(argv=None):
@@ -112,6 +113,7 @@ def main(argv=None):
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")
     live.add_argument("--out", help="also write XLSX exports to this folder")
+    live.add_argument("--record", help="save the responses, scrubbed of names, emails and IDs, as a test fixture")
     live.set_defaults(func=cmd_live_test)
 
     args = parser.parse_args(argv)

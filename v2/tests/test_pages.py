@@ -51,3 +51,17 @@ def test_no_platform_specific_date_formats():
         if path.name == "filters.py":
             continue
         assert not re.search(r"strftime\([^)]*%-", path.read_text(encoding="utf-8")), path
+
+
+def test_refresh_on_unconnected_tenant_explains_once(client, db, two_tenants):
+    alpha, _ = two_tenants  # has an app connection but no admin consent yet
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get(f"/tenants/{alpha}/collection").get_data(as_text=True)
+    assert "isn&#39;t connected yet" in page and "disabled" in page
+    resp = client.post(f"/tenants/{alpha}/collect", follow_redirects=True)
+    assert resp.get_data(as_text=True).count("isn&#39;t connected yet") >= 1
+    assert db.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+    db.execute("UPDATE tenants SET consented_at = '2026-10-01T00:00:00Z' WHERE id = ?", (alpha,))
+    client.post(f"/tenants/{alpha}/collect")
+    assert db.execute("SELECT COUNT(*) FROM runs").fetchone()[0] > 0

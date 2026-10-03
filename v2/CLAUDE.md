@@ -45,6 +45,12 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   (`reports/charts.py`) so the PDF matches the page.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
+- `tests/test_live_fixture.py` replays `tests/fixtures/live_tenant.json`, real
+  responses from a Business Premium test tenant with names, emails, domains and
+  IDs replaced. When a collector asks Microsoft for something new, re-record it
+  with `python -m officesentry live-test --record tests/fixtures/live_tenant.json`
+  (needs the `OFFICESENTRY_TEST_*` variables). Scrubbing happens in memory and
+  refuses to write the file if a name or domain survives; still skim the diff.
 
 ## Web UI conventions
 

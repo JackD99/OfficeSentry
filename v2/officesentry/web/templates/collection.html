@@ -3,7 +3,7 @@
 {% block title %}Data collection · {{ tenant.name }}{% endblock %}
 {% block content %}
 {% call tenant_header(tenant, 'collection') %}
-<form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button>{{ icon('refresh') }} Refresh all data</button></form>
+<form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button{% if not_connected %} disabled title="{{ not_connected }}"{% endif %}>{{ icon('refresh') }} Refresh all data</button></form>
 {% endcall %}
 
 <div class="grid-2">
@@ -14,6 +14,7 @@
       <dt>App</dt><dd>{% if connection %}{{ connection.name }}{% if connection.client_id %} <span class="muted mono small">{{ connection.client_id }}</span>{% else %} <span class="pill warn">no client ID yet</span>{% endif %}{% else %}<span class="muted">None assigned</span>{% endif %}</dd>
       <dt>Admin consent</dt><dd>{% if tenant.consented_at %}Granted {{ ts(tenant.consented_at) }}{% else %}<span class="pill warn">Not granted yet</span>{% endif %}</dd>
     </dl>
+    {% if not_connected %}<p class="footnote">{{ not_connected }}</p>{% endif %}
     {% if consent_link %}
     <details class="consent">
       <summary>{{ 'Re-grant consent (after new permissions)' if tenant.consented_at else 'Grant admin consent' }}</summary>
@@ -42,7 +43,7 @@
         {% if r and r.error %}<span class="sub {{ 'warn-text' if r.status == 'partial' else 'bad-text' }}">{{ r.error }}</span>{% endif %}</td>
       <td data-label="Status">{% if r %}<a href="{{ url_for('tenants.run', run_id=r.id) }}">{{ status(r.status) }}</a>{% else %}{{ status(None) }}{% endif %}</td>
       <td data-label="Last collected" class="nowrap">{{ ts(r.finished_at if r else None) }}</td>
-      <td class="num"><form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="collector" value="{{ key }}"><button class="sm ghost" title="Refresh {{ c.title }}">{{ icon('refresh') }} Refresh</button></form></td>
+      <td class="num"><form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="collector" value="{{ key }}"><button class="sm ghost" title="{{ not_connected or 'Refresh ' ~ c.title }}"{% if not_connected %} disabled{% endif %}>{{ icon('refresh') }} Refresh</button></form></td>
     </tr>
     {% endfor %}
     </tbody>

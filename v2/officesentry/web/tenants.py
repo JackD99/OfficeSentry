@@ -37,6 +37,19 @@ def _latest_runs(tenant_id: int) -> dict:
     return {r["collector"]: r for r in rows}
 
 
+def not_connected(tenant) -> str | None:
+    """Why collection can't run for this tenant yet, in plain words, or None when it can."""
+    connection = store.get_connection(g.db, tenant["connection_id"]) if tenant["connection_id"] else None
+    if not connection:
+        return "This tenant isn't connected yet: it has no app connection. Set one up under App connection first."
+    if not connection["client_id"]:
+        return ("This tenant isn't connected yet: its app connection has no application (client) ID. "
+                "Add it under App connection first.")
+    if not tenant["consented_at"]:
+        return "This tenant isn't connected yet: a tenant admin needs to grant consent first."
+    return None
+
+
 def data_health(tenant, latest: dict) -> tuple[str, str, str]:
     """(tone, label, detail) summarising a tenant's collection state for people."""
     from ..reports.monthly_review import STALE_AFTER
@@ -149,7 +162,7 @@ def collection(tenant_id: int):
     return render_template(
         "collection.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
         capabilities=store.tenant_capabilities(t), runs=runs, latest=latest,
-        collectors=REGISTRY, health=data_health(t, latest),
+        collectors=REGISTRY, health=data_health(t, latest), not_connected=not_connected(t),
     )
 
 
@@ -161,6 +174,9 @@ def collect(tenant_id: int):
     for key in keys:
         if key not in REGISTRY:
             abort(400)
+    if reason := not_connected(t):
+        flash(reason, "error")
+        return redirect(url_for("tenants.collection", tenant_id=t["id"]))
     for key in keys:
         store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
     audit(g.db, g.user["username"], "collect_requested", t["id"], ",".join(keys))
