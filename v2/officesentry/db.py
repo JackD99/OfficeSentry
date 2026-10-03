@@ -70,7 +70,7 @@ def migrate(conn: sqlite3.Connection) -> int:
         if version <= current:
             continue
         with transaction(conn, immediate=True):
-            for stmt in _split_statements(path.read_text()):
+            for stmt in _split_statements(path.read_text(encoding="utf-8")):
                 conn.execute(stmt)
             conn.execute(f"PRAGMA user_version = {int(version)}")
         current = version

@@ -298,11 +298,11 @@ def test_rotate_keys_new_replaces_both_keys(cfg, db, vault, connection_id, monke
     db.execute("UPDATE users SET totp_secret_enc = ? WHERE id = ?", (vault.encrypt("SECRETSECRET"), uid))
     db.execute("INSERT INTO settings (key, value) VALUES ('smtp_password_enc', ?)", (vault.encrypt("smtp"),))
     db.execute("INSERT INTO settings (key, value) VALUES ('graph_secret_enc', ?)", (vault.encrypt("graph"),))
-    before = json.loads(cfg.secrets_path.read_text())
+    before = json.loads(cfg.secrets_path.read_text(encoding="utf-8"))
 
     cli(["rotate-keys", "--new"])
 
-    after = json.loads(cfg.secrets_path.read_text())
+    after = json.loads(cfg.secrets_path.read_text(encoding="utf-8"))
     assert after["secret_key"] != before["secret_key"]
     assert after["encryption_keys"] != before["encryption_keys"] and len(after["encryption_keys"]) == 1
     new = Vault(after["encryption_keys"])

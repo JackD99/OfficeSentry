@@ -23,7 +23,7 @@ def test_migrations_are_idempotent(tmp_path):
 def test_failed_migration_rolls_back(tmp_path, monkeypatch):
     bad = tmp_path / "migrations"
     bad.mkdir()
-    (bad / "0001_bad.sql").write_text("CREATE TABLE a (id INTEGER);\nCREATE TABLE a (id INTEGER);\n")
+    (bad / "0001_bad.sql").write_text("CREATE TABLE a (id INTEGER);\nCREATE TABLE a (id INTEGER);\n", encoding="utf-8")
     monkeypatch.setattr(dbmod, "MIGRATIONS_DIR", bad)
     conn = dbmod.connect(tmp_path / "x.db")
     with pytest.raises(sqlite3.OperationalError):

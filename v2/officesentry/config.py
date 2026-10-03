@@ -84,12 +84,12 @@ def write_private(path: Path, text: str, exclusive: bool = False) -> None:
     """Write a file created as 0600 from the start. Non-exclusive writes replace it atomically."""
     if exclusive:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w") as fh:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
         return
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(text)
         fh.flush()
         os.fsync(fh.fileno())
@@ -109,7 +109,7 @@ def _load_or_create_secrets(data_dir: Path) -> dict:
         write_private(path, json.dumps(new_secrets()), exclusive=True)
     except FileExistsError:
         tighten(path)
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 # -- First-run setup token ------------------------------------------------------
@@ -123,7 +123,7 @@ def setup_token(data_dir: Path) -> str:
         write_private(path, secrets.token_urlsafe(24), exclusive=True)
     except FileExistsError:
         tighten(path)
-    return path.read_text().strip()
+    return path.read_text(encoding="utf-8").strip()
 
 
 def clear_setup_token(data_dir: Path) -> None:
