@@ -14,23 +14,19 @@ Roles:
 from __future__ import annotations
 
 from functools import wraps
+from urllib.parse import urlsplit
 
-from flask import abort, g, redirect, request, session, url_for
+from flask import abort, g, redirect, request, url_for
+
+from . import sessions
 
 ROLES = ("admin", "analyst", "client")
 
 
 def load_user() -> None:
-    g.user = None
-    user_id = session.get("uid")
-    if not user_id:
-        return
-    user = g.db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    # A deleted or disabled user, or a password change, ends existing sessions.
-    if user is None or user["disabled"] or user["session_version"] != session.get("sv"):
-        session.clear()
-        return
-    g.user = user
+    # Sessions live server-side (see sessions.py): a deleted or disabled user, a
+    # password, role or two-step change, sign-out and idle time all end them.
+    g.session_row, g.user = sessions.current()
 
 
 def login_required(view):
@@ -90,7 +86,18 @@ def tenant_or_404(tenant_id: int):
 
 
 def safe_next(target: str | None) -> str:
-    """Only allow same-site relative redirects after login."""
-    if not target or not target.startswith("/") or target.startswith("//") or "\\" in target:
-        return url_for("tenants.dashboard")
+    """Only allow same-site, path-only redirects after login.
+
+    Browsers drop tabs and newlines from URLs and treat a backslash as a slash,
+    so "/\t/evil.example" or "/\\evil.example" would leave the site; any control
+    character, backslash, scheme or host is refused.
+    """
+    fallback = url_for("tenants.dashboard")
+    if not target or len(target) > 2000 or not target.startswith("/") or target.startswith("//"):
+        return fallback
+    if "\\" in target or any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in target):
+        return fallback
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc:
+        return fallback
     return target

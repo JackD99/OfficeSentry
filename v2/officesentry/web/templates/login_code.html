@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Enter your code · Office Sentry{% endblock %}
+{% block auth %}
+<h1>Enter your code</h1>
+<p class="sub">Open your authenticator app and enter the 6-digit code for Office Sentry.</p>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Code <input class="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="11" required autofocus></label>
+  <button class="primary">Continue</button>
+</form>
+<details class="help">
+  <summary>Lost your phone?</summary>
+  <p class="small muted">Enter one of the recovery codes you saved when you set up two-step sign-in, such as <code>abcde-fghjk</code>. Each code works once. No codes? Ask an Office Sentry admin to reset two-step sign-in for you.</p>
+</details>
+<p class="footnote center">Signing in as <span class="strong">{{ username }}</span> · <a href="{{ url_for('auth.login') }}">Not you?</a></p>
+{% endblock %}

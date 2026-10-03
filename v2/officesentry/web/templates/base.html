@@ -34,7 +34,7 @@
   <span class="name">{{ current_user.username }}</span>
   <span class="role">{{ current_user.role }}</span>
   <div class="links">
-    <a href="{{ url_for('auth.change_password') }}">Password</a>
+    <a href="{{ url_for('auth.account') }}">Account</a>
     <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="link">Sign out</button></form>
   </div>
 </div>

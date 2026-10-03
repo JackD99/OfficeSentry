@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import ts %}
+{% block title %}Your account · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Your account</h1>
+  <div class="sub">Signed in as {{ current_user.username }} ({{ current_user.role }}).</div></div></div>
+
+{% if not current_user.totp_enabled_at %}
+<div class="callout warn"><div><strong>Two-step sign-in is off.</strong> Anyone with your password can sign in. <a href="{{ url_for('auth.two_step_setup') }}">Set it up</a>; it takes about a minute.</div></div>
+{% elif codes_left <= 2 %}
+<div class="callout warn"><div><strong>{{ codes_left }} recovery code{{ '' if codes_left == 1 else 's' }} left.</strong> Make new ones below so you can still get in if you lose your phone.</div></div>
+{% endif %}
+
+<div class="grid-2">
+<section class="card">
+  <div class="card-head"><h2>Two-step sign-in</h2>
+    {% if current_user.totp_enabled_at %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
+  {% if current_user.totp_enabled_at %}
+  <p class="muted">You enter a code from your authenticator app after your password. Turned on {{ ts(current_user.totp_enabled_at) }}.</p>
+  <dl class="kv"><dt>Recovery codes</dt><dd>{{ codes_left }} unused</dd></dl>
+  <details class="help">
+    <summary>Make new recovery codes</summary>
+    <form method="post" action="{{ url_for('auth.new_recovery_codes') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Your password <input type="password" name="password" autocomplete="current-password" required></label>
+      <p class="small muted">Your old codes stop working.</p>
+      <button>Make new codes</button>
+    </form>
+  </details>
+  {% if not two_step_required %}
+  <details class="help">
+    <summary>Turn off two-step sign-in</summary>
+    <form method="post" action="{{ url_for('auth.two_step_off') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Your password <input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="danger">Turn off</button>
+    </form>
+  </details>
+  {% else %}
+  <p class="footnote">Required for {{ current_user.role }} accounts. Got a new phone? Ask an admin to reset it, then set it up again.</p>
+  {% endif %}
+  {% else %}
+  <p class="muted">Add a code from your phone to your password, so a stolen password isn't enough to get in.</p>
+  <a class="btn primary" href="{{ url_for('auth.two_step_setup') }}">Set up two-step sign-in</a>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Change password</h2>
+  <form method="post" action="{{ url_for('auth.change_password') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Current password <input type="password" name="current" autocomplete="current-password" required></label>
+    <label>New password <input type="password" name="password" minlength="{{ min_password }}" autocomplete="new-password" required>
+      <span class="hint">At least {{ min_password }} characters. A short sentence works well.</span></label>
+    <label>Confirm new password <input type="password" name="confirm" minlength="{{ min_password }}" autocomplete="new-password" required></label>
+    <div class="form-actions"><button class="primary">Change password</button></div>
+    <p class="footnote">This signs you out everywhere else.</p>
+  </form>
+</section>
+</div>
+
+<section class="card flush">
+  <div class="card-head"><h2>Where you're signed in</h2>
+    {% if sessions|length > 1 %}
+    <form method="post" action="{{ url_for('auth.end_other_sessions') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="sm">Sign out everywhere else</button></form>
+    {% endif %}</div>
+  <table class="stack-sm">
+    <thead><tr><th>Browser</th><th>IP address</th><th>Signed in</th><th>Last active</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+    <tr><td>{{ s.device }}{% if s.current %} <span class="pill accent">This browser</span>{% endif %}</td>
+      <td data-label="IP address" class="mono">{{ s.ip or '–' }}</td>
+      <td data-label="Signed in" class="nowrap">{{ ts(s.created_at) }}</td>
+      <td data-label="Last active" class="nowrap">{{ ts(s.last_seen_at) }}</td>
+      <td class="num">{% if not s.current %}<form method="post" action="{{ url_for('auth.end_session', session_id=s.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="sm ghost">Sign out</button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
