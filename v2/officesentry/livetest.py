@@ -22,6 +22,7 @@ from .graph import GRAPH_ROOT, GraphClient, GraphError
 from .msauth import TokenError, secret_token_provider
 from .rules import evaluate
 from .snapshot import TenantSnapshot
+from .text import plural
 from .worker import execute_run
 
 ENV = ("OFFICESENTRY_TEST_TENANT_ID", "OFFICESENTRY_TEST_CLIENT_ID", "OFFICESENTRY_TEST_CLIENT_SECRET")
@@ -87,7 +88,7 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
     if record:
         fixture = recording.scrub(log, tenant_ref, client_id)
         record.write_text(json.dumps(fixture, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-        print(f"Recorded {len(fixture['entries'])} scrubbed response(s) to {record}")
+        print(f"Recorded {plural(len(fixture['entries']), 'scrubbed response')} to {record}")
 
     tenant = store.get_tenant(conn, tenant_id)
     print("\nChecks:")
@@ -103,5 +104,5 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
         for key in data_reports.REPORTS:
             (out_dir / f"{key}.xlsx").write_bytes(data_reports.to_xlsx(data_reports.build(conn, tenant, key)))
         print(f"\nWrote XLSX exports to {out_dir}")
-    print(f"\nTenant id {tenant_id} in {cfg.db_path}; {failures} collector(s) failed.")
+    print(f"\nTenant id {tenant_id} in {cfg.db_path}; {plural(failures, 'collector')} failed.")
     return 1 if failures else 0

@@ -35,6 +35,7 @@ from .db import utcnow
 from .mailer import Email, MailError
 from .reports import data_reports, evidence, export, monthly_review
 from .rules import RULES
+from .text import plural
 
 log = logging.getLogger(__name__)
 
@@ -355,9 +356,9 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
         value = f"{review.currency} {k.value:,.2f}" if k.unit == "currency" else f"{k.value:g}{k.unit}"
         change = f" ({k.delta:+g} in 4 weeks)" if k.delta else ""
         lines.append(f"  {k.label}: {value}{change}")
-    lines += ["", f"Needs attention: {len(failing)} check(s)"]
+    lines += ["", f"Needs attention: {plural(len(failing), 'check')}"]
     for r in failing[:6]:
-        lines.append(f"  [{(r.severity or 'info').upper()}] {r.title}: {r.summary}")
+        lines.append(f"  [{(r.severity or 'info').upper()}] {r.summary.rstrip('.')}. {r.action}.")
     if review.new_count or review.resolved:
         lines.append(f"New: {review.new_count} · Fixed: {len(review.resolved)}")
     if files:

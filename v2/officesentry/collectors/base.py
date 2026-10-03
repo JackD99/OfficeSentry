@@ -15,6 +15,7 @@ from .. import store
 from ..db import transaction
 from ..exchange import ExchangeClient
 from ..graph import GraphClient
+from ..text import plural
 
 REGISTRY: dict[str, type[Collector]] = {}
 
@@ -58,7 +59,7 @@ class RunContext:
     def objects(self, kind: str, items: list[tuple[str, dict]]) -> None:
         with transaction(self.conn):
             store.add_objects(self.conn, self.run_id, kind, items)
-        self.log(f"Stored {len(items)} {kind} object(s)")
+        self.log(f"Stored {plural(len(items), kind + ' object')}")
 
     def metric(self, key: str, value: float) -> None:
         store.add_metric(self.conn, self.run_id, self.tenant["id"], key, value)

@@ -161,7 +161,7 @@ def test_synced_admins_fail(db, two_tenants, hybrid):
     alpha, _ = two_tenants
     seed_tenant(db, alpha, users=hd.USERS)
     result = _results(db, alpha)["cloud_only_admins"]
-    assert result.status == "fail" and result.summary == "2 admin account(s) synced from on-premises AD"
+    assert result.status == "fail" and result.summary == "2 admin accounts synced from on-premises AD"
     assert [(f.severity, f.subject, f.detail) for f in result.findings] == [
         ("high", "ann@x.com", "Global Administrator; synced from on-premises AD"),
         ("high", "eve@x.com", "Global Administrator (eligible); synced from on-premises AD"),
@@ -181,7 +181,7 @@ def test_cloud_only_admins_pass(db, two_tenants, hybrid):
     users = [{**u, "onPremisesSyncEnabled": None} if u["id"] in ("u1", "u5") else u for u in hd.USERS]
     seed_tenant(db, alpha, users=users)
     result = _results(db, alpha)["cloud_only_admins"]
-    assert (result.status, result.summary) == ("pass", "All 4 privileged account(s) are cloud-only")
+    assert (result.status, result.summary) == ("pass", "All 4 privileged accounts are cloud-only")
 
 
 def test_cloud_only_tenant_passes_admin_check(db, two_tenants):

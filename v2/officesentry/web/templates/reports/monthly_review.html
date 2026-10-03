@@ -103,8 +103,7 @@
   <h2>Fix first <span class="count">{{ urgent|length }}</span></h2>
   {% for r in urgent %}
   <div class="check s-{{ r.severity }}" id="check-{{ r.key }}">
-    <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.title }}</h3><span class="category">{{ r.category }}</span></div>
-    <p class="check-summary">{{ r.summary }}{{ '.' if not r.summary.endswith('.') }}</p>
+    <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.summary|trim('.') }}</h3><span class="category">{{ r.category }}</span></div>
     <p class="recommendation"><strong>What to do:</strong> {{ r.recommendation }}</p>
     {% if r.findings %}
     <div class="table-wrap"><table class="findings">
@@ -127,9 +126,8 @@
   <div class="tidy">
   {% for r in other %}
   <div class="tidy-item">
-    <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.title }}</h3><span class="category">{{ r.category }}</span></div>
-    <p class="tidy-found">{{ r.summary }}.
-      {% if r.findings %}<span class="muted">Affects {% for f in r.findings[:4] %}{{ f.subject }}{% if f.new %}<span class="new">New</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if r.findings|length > 4 %} and {{ r.findings|length - 4 }} more{% endif %}.</span>{% endif %}</p>
+    <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.summary|trim('.') }}</h3><span class="category">{{ r.category }}</span></div>
+    {% if r.findings %}<p class="tidy-found"><span class="muted">Affects {% for f in r.findings[:4] %}{{ f.subject }}{% if f.new %}<span class="new">New</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if r.findings|length > 4 %} and {{ r.findings|length - 4 }} more{% endif %}.</span></p>{% endif %}
     <p class="tidy-rec">{{ r.recommendation }}</p>
   </div>
   {% endfor %}

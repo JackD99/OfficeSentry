@@ -65,8 +65,8 @@
       <li>
         <span class="sevtext {{ r.severity }} sevcol">{{ r.severity }}</span>
         <div class="grow">
-          <div class="title">{{ r.title }}</div>
-          <div class="desc">{{ r.summary }}</div>
+          <div class="title">{{ r.summary|trim('.') }}</div>
+          <div class="desc">{{ r.action }}.</div>
         </div>
         <span class="pill" title="Accounts or items affected">{{ r.findings|length }}</span>
       </li>

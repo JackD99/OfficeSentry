@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .text import plural
+
 STATE_NAMES = {"enabled": "On", "disabled": "Off", "enabledForReportingButNotEnforced": "Report-only"}
 CLIENT_APPS = {"browser": "Browser", "mobileAppsAndDesktopClients": "Modern apps",
                "exchangeActiveSync": "ActiveSync", "other": "Other legacy"}
@@ -151,7 +153,7 @@ def describe(policy: dict, d: Directory, capabilities: dict | None = None) -> Po
     inc_apps = apps.get("includeApplications") or []
     app_text = "All apps" if "All" in inc_apps else (
         "Admin portals" if "MicrosoftAdminPortals" in inc_apps else
-        (f"{len(inc_apps)} app(s)" if inc_apps else
+        (plural(len(inc_apps), "app") if inc_apps else
          ("User actions" if apps.get("includeUserActions") else "No apps")))
     if apps.get("excludeApplications"):
         app_text += f", {len(apps['excludeApplications'])} excluded"

@@ -19,6 +19,7 @@ import re
 from ..graph import GraphError, PermissionMissing
 from ..mailflow import is_external, tenant_domains
 from ..snapshot import TenantSnapshot
+from ..text import plural
 from .base import Collector, RunContext, register
 
 # Microsoft's usage reports. v1.0 only returns CSV; beta returns JSON.
@@ -290,7 +291,7 @@ class SharedFiles(Collector):
             ctx.warn(f"Scanned the first {MAX_DRIVES} of {len(drives)} libraries")
             ctx.truncated = True
         if skipped_drives:
-            ctx.warn(f"{skipped_drives} library(s) couldn't be read")
+            ctx.warn(f"{plural(skipped_drives, 'library')} couldn't be read")
         ctx.objects("shared_item", stored)
         ctx.objects("scan_status", [("status", {
             "available": True, "drives": len(drives), "items": scanned, "lookups": lookups,

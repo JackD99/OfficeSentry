@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+from ..text import plural
+
 CAPABILITY_LABELS = {
     "entra_p1": "Entra ID P1",
     "entra_p2": "Entra ID P2",
@@ -96,4 +98,4 @@ def run_error(text: str | None) -> str:
 
 def register(app) -> None:
     app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money,
-                                 fromjson=fromjson, run_error=run_error)
+                                 fromjson=fromjson, run_error=run_error, plural=plural)
