@@ -261,8 +261,7 @@ def test_detail_reports_build(db, two_tenants):
         ("ann@x.com", "ann@gmail.com", "Yes"), ("ann@x.com", "ann.home@gmail.com", "Yes"),
         ("info@x.com", "boss@x.com", "No")]
     assert mail["Forwarding"].flagged == 2
-    assert {r[3] for r in mail["Delegated access"].rows} == {"Full access", "Send as", "Send on behalf"}
-    assert mail["Shared mailboxes"].rows == [["info@x.com", "Yes", "No", 1]]
+    assert [r[2] for r in mail["What stops forwarding"].rows] == ["Blocked (Microsoft's default)", "Allowed"]
     apps = {s.title: s for s in build(db, tenant, "apps").sections}
     assert apps["Third-party apps with access"].rows[0][0] == "Mail Sync Pro"
     ca = {s.title: s for s in build(db, tenant, "conditional-access").sections}

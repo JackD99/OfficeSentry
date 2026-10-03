@@ -44,11 +44,14 @@ Office Sentry is built so that it can't change anything in your tenant.
   so Office Sentry refuses to run any command that isn't on its list. Every
   command on the list starts with `Get-` (Exchange's word for "show me"):
 
-  `Get-AcceptedDomain`, `Get-HostedOutboundSpamFilterPolicy`, `Get-Mailbox`,
-  `Get-MailboxPermission`, `Get-OrganizationConfig`, `Get-Recipient`,
-  `Get-RecipientPermission`, `Get-RemoteDomain`, `Get-TransportConfig`.
+  `Get-AcceptedDomain`, `Get-CASMailbox`, `Get-HostedOutboundSpamFilterPolicy`,
+  `Get-Mailbox`, `Get-MailboxPermission`, `Get-MailboxStatistics`,
+  `Get-OrganizationConfig`, `Get-Recipient`, `Get-RecipientPermission`,
+  `Get-RemoteDomain`, `Get-TransportConfig`.
 
-  None of these return the contents of any email.
+  None of these return the contents of any email. `Get-MailboxStatistics`
+  returns a mailbox's size and number of items, and `Get-CASMailbox` returns
+  which ways of connecting (such as POP, IMAP and SMTP AUTH) a mailbox allows.
 
 The only thing Office Sentry ever creates is its own app registration, once,
 in your **MSP's** tenant when they set it up. It never creates or changes
@@ -71,7 +74,7 @@ built from the checks, so they use all of the information below.
 |---|---|---|---|
 | `Organization.Read.All` | Your organisation's name, domains and subscriptions (which licences you've bought and how many are in use). | To know which licences you have, so it only runs checks your licences support, and to work out unused licences. | Licence figures; email domain checks (to know your domains). |
 | `User.Read.All` | Every user and guest account: name, email address, whether it's enabled, which licences it holds, when its password was last changed. | Account and licence checks. | Licence checks; inactive accounts; guests; shared mailboxes. |
-| `AuditLog.Read.All` | Sign-in and audit records. Office Sentry reads the date each account last signed in, and Microsoft's MFA registration summary. | To find accounts nobody uses and accounts without MFA. Last sign-in dates need Entra ID P1. | Inactive accounts; MFA registration. |
+| `AuditLog.Read.All` | Sign-in and audit records. Office Sentry reads the date each account last signed in, Microsoft's MFA registration summary, and the last 30 days of sign-ins made with old protocols such as SMTP AUTH, IMAP and POP. | To find accounts nobody uses, accounts without MFA, and sign-ins that can't use MFA. Sign-in records need Entra ID P1. | Inactive accounts; MFA registration; Legacy sign-ins. |
 | `UserAuthenticationMethod.Read.All` | Which kinds of sign-in method each user has registered, such as the Authenticator app or a phone number. Not the codes or secrets. | MFA registration, for tenants without Entra ID P1. | MFA registration. |
 | `Directory.Read.All` | Directory information: groups and their members, devices, and which apps users have agreed to. | Which accounts a sign-in policy covers, device records, and app consents. | Conditional Access coverage; Devices; Apps and consents. |
 | `RoleManagement.Read.Directory` | Who holds each admin role, including roles that can be activated on demand (PIM). | Admin account checks. | Admins checks; Conditional Access coverage. |
@@ -80,10 +83,10 @@ built from the checks, so they use all of the information below.
 | `SecurityEvents.Read.All` | Your Microsoft Secure Score and its history. | The Secure Score trend in reports. | Secure Score. |
 | `DeviceManagementManagedDevices.Read.All` | Devices managed by Intune: name, operating system, whether they're compliant, encrypted and checking in, and their main user. | Device checks. Needs an Intune licence. | Devices. |
 | `SharePointTenantSettings.Read.All` | SharePoint's organisation-wide sharing settings (for example whether "anyone" links are allowed). Not sites or files. | The external sharing check. | Guests and sharing. |
-| `MailboxSettings.Read` | Mailbox settings, including inbox rules. **Not** emails. | Inbox rules that forward or hide mail are a common sign of a hacked mailbox. | Mailbox access and forwarding. |
+| `MailboxSettings.Read` | Mailbox settings, including inbox rules. **Not** emails. | Inbox rules that forward or hide mail are a common sign of a hacked mailbox. | Mail forwarding; Inbox rules. |
 | `Reports.Read.All` | Microsoft 365 usage reports. | Requested now so you don't have to approve again later. No current report uses it. | None yet. |
 | `IdentityRiskyUser.Read.All` | Accounts Microsoft has flagged as risky (needs Entra ID P2). | Requested now so you don't have to approve again later. No current report uses it. | None yet. |
-| `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes and organisation mail settings. Works only with the Global Reader role (below). | Mailbox access and forwarding; email checks. |
+| `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes, mailbox sizes, which protocols each mailbox allows, and organisation mail settings. Works only with the Global Reader role (below). | Mail forwarding; Mailbox permissions; Shared mailboxes; Mailbox size; Legacy sign-ins; email checks. |
 
 A few things Office Sentry checks come from **public DNS**, not from your
 tenant: the SPF, DKIM and DMARC records of your email domains. Anyone on the
