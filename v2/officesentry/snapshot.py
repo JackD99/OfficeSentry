@@ -37,13 +37,18 @@ class TenantSnapshot:
         return store.tenant_capabilities(self.tenant)
 
     @cached_property
-    def own_app_id(self) -> str | None:
-        """Office Sentry's own client ID in this tenant, so checks don't flag it."""
-        if not self.tenant["connection_id"]:
-            return None
-        row = self.conn.execute("SELECT client_id FROM app_connections WHERE id = ?",
-                                (self.tenant["connection_id"],)).fetchone()
-        return row["client_id"] if row else None
+    def own_app_ids(self) -> set[str]:
+        """Client IDs of Office Sentry's own apps, so checks don't flag them.
+
+        Every configured app connection counts (a tenant may not be linked to
+        one yet), plus the app ``live-test`` signed in with.
+        """
+        rows = self.conn.execute("SELECT client_id FROM app_connections WHERE client_id IS NOT NULL").fetchall()
+        ids = {r["client_id"].lower() for r in rows}
+        live = self.conn.execute("SELECT value FROM settings WHERE key = 'live_test_client_id'").fetchone()
+        if live:
+            ids.add(live["value"].lower())
+        return ids
 
     def has(self, collector: str) -> bool:
         return collector in self.runs

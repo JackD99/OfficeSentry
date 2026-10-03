@@ -16,6 +16,18 @@ MAILBOX_FIELDS = (
     "GrantSendOnBehalfTo", "HiddenFromAddressListsEnabled", "AuditEnabled", "WhenMailboxCreated",
 )
 SELF = "NT AUTHORITY\\SELF"
+# Built-in Exchange objects whose permissions aren't people's access: the Discovery Search
+# mailbox, the role group that owns it, and the per-plan "ExchangeOnline*" objects
+# that grant Send As to NULL SID.
+SYSTEM_MAILBOX_TYPES = {"DiscoveryMailbox", "ArbitrationMailbox", "AuditLogMailbox", "MonitoringMailbox",
+                        "AuxAuditLogMailbox", "SupervisoryReviewPolicyMailbox"}
+SYSTEM_TRUSTEES = {"NULL SID", "Discovery Management", "NT AUTHORITY\\SYSTEM", "NT AUTHORITY\\NETWORK SERVICE"}
+
+
+def is_system_entry(identity: str | None, trustee: str | None) -> bool:
+    trustee = trustee or ""
+    return (trustee in SYSTEM_TRUSTEES or trustee.startswith("S-1-5-")
+            or (identity or "").startswith(("ExchangeOnline", "DiscoverySearchMailbox")))
 
 
 def _pick(row: dict, fields) -> dict:
@@ -57,7 +69,8 @@ class Mailboxes(Collector):
 
         ctx.objects("mailbox_permission", self._full_access(ctx, [r for _, r in rows]))
         send_as = [p for p in exo.invoke("Get-RecipientPermission", {"ResultSize": "Unlimited"})
-                   if p.get("Trustee") != SELF and not p.get("IsInherited")]
+                   if p.get("Trustee") != SELF and not p.get("IsInherited")
+                   and not is_system_entry(p.get("Identity"), p.get("Trustee"))]
         ctx.objects("send_as", [(f"{p.get('Identity')}|{p.get('Trustee')}", {
             "Identity": p.get("Identity"), "Trustee": p.get("Trustee"),
             "AccessRights": p.get("AccessRights") or []}) for p in send_as])
@@ -101,6 +114,8 @@ class Mailboxes(Collector):
             mailboxes = mailboxes[:PER_MAILBOX_LIMIT]
         rows, failed = [], 0
         for m in mailboxes:
+            if m.get("RecipientTypeDetails") in SYSTEM_MAILBOX_TYPES:
+                continue
             ident = m.get("Guid") or m.get("PrimarySmtpAddress")
             try:
                 perms = ctx.exchange.invoke("Get-MailboxPermission", {"Identity": ident})
@@ -111,7 +126,7 @@ class Mailboxes(Collector):
                 continue
             for p in perms:
                 user = p.get("User") or ""
-                if user == SELF or p.get("IsInherited") or p.get("Deny") or user.startswith("S-1-5-"):
+                if user == SELF or p.get("IsInherited") or p.get("Deny") or is_system_entry(None, user):
                     continue
                 rows.append((f"{_mailbox_id(m)}|{user}", {
                     "mailboxId": _mailbox_id(m), "mailbox": m.get("PrimarySmtpAddress"),

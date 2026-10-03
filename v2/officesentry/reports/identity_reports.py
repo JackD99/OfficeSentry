@@ -367,7 +367,7 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         if not p["privileged"]:
             others.add([p["label"], kind, role_text, how])
             continue
-        if p["type"] == "servicePrincipal" and snap.own_app_id and p.get("appId") == snap.own_app_id:
+        if p["type"] == "servicePrincipal" and (p.get("appId") or "").lower() in snap.own_app_ids:
             continue  # Office Sentry's own read-only app
         problems: list[tuple[str, str]] = []
         registered = reg.registered(p["id"]) if p["type"] == "user" else None

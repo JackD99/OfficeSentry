@@ -105,18 +105,24 @@ def _all_users_all_apps(policy: dict) -> bool:
     return "All" in (users.get("includeUsers") or []) and "All" in (apps.get("includeApplications") or [])
 
 
-def _grants(policy: dict) -> set[str]:
-    grant = policy.get("grantControls") or {}
-    controls = set(grant.get("builtInControls") or [])
-    if grant.get("authenticationStrength"):
-        controls.add("mfa")
-    return controls
+_grants = coverage.grants
 
 
 def mfa_for_all_policies(policies: list[dict]) -> list[dict]:
-    return [p for p in policies if _enabled(p) and _all_users_all_apps(p) and "mfa" in _grants(p)
-            and set((p.get("conditions") or {}).get("clientAppTypes") or ["all"]) & {"all", "browser",
-                                                                                    "mobileAppsAndDesktopClients"}]
+    """Enabled policies requiring MFA for all users on every sign-in (not only risky or located ones)."""
+    return [p for p in policies if _enabled(p) and _all_users_all_apps(p) and coverage.requires_mfa_everywhere(p)]
+
+
+def _no_p1(snap: TenantSnapshot) -> bool:
+    return snap.capabilities.get("entra_p1") is False
+
+
+# Advice for tenants without Entra ID P1, which can't use Conditional Access.
+SECURITY_DEFAULTS_ADVICE = (
+    "This tenant has no Entra ID P1, so Conditional Access isn't available. Turn on Security Defaults instead "
+    "(Entra admin centre > Overview > Properties > Manage security defaults): they require MFA for everyone "
+    "and block legacy authentication. Or add Entra ID P1 (included in Microsoft 365 Business Premium) to use "
+    "Conditional Access.")
 
 
 def _ca_data(snap: TenantSnapshot):
@@ -140,6 +146,10 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
         return _unavailable("Conditional Access data hasn't been collected yet")
     if defaults:
         return ("pass", "Security Defaults are on, which require MFA registration and enforce it", [])
+    if _no_p1(snap):
+        return ("fail", "MFA is not enforced", [Finding(
+            "high", "Tenant", "Security Defaults are off, and without Entra ID P1 there's no Conditional Access")],
+            SECURITY_DEFAULTS_ADVICE)
     covering = mfa_for_all_policies(policies)
     if not covering:
         report_only = [p for p in policies if p.get("state") == "enabledForReportingButNotEnforced"
@@ -149,14 +159,17 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
             detail += f" {len(report_only)} MFA policy(s) are in report-only mode."
         return ("fail", "MFA is not enforced", [Finding("high", "Tenant", detail)])
     names = _names(snap)
-    findings = []
+    # One finding per excluded account or group, naming every policy it's excluded from.
+    excluded: dict[str, tuple[str, str, list[str]]] = {}
     for p in covering:
-        excluded = (p.get("conditions") or {}).get("users") or {}
-        for uid in excluded.get("excludeUsers") or []:
-            findings.append(Finding("medium", names.get(uid, uid), f"Excluded from \"{p.get('displayName')}\"", uid))
-        for gid in excluded.get("excludeGroups") or []:
-            findings.append(Finding("medium", names.get(gid, f"Group {gid}"),
-                                    f"Group excluded from \"{p.get('displayName')}\"", gid))
+        spec = (p.get("conditions") or {}).get("users") or {}
+        for uid in spec.get("excludeUsers") or []:
+            excluded.setdefault(uid, (names.get(uid, uid), "Excluded from", []))[2].append(p.get("displayName", "?"))
+        for gid in spec.get("excludeGroups") or []:
+            excluded.setdefault(gid, (names.get(gid, f"Group {gid}"), "Group excluded from", []))[2].append(
+                p.get("displayName", "?"))
+    findings = [Finding("medium", label, f"{what} " + ", ".join(f"\"{n}\"" for n in pols), oid)
+                for oid, (label, what, pols) in excluded.items()]
     policy_names = ", ".join(p.get("displayName", "?") for p in covering)
     if findings:
         return ("fail", f"Enforced by {policy_names}, with {len(findings)} exclusion(s) to review", findings)
@@ -172,9 +185,12 @@ def legacy_auth_blocked(snap: TenantSnapshot, now: datetime):
         return _unavailable("Conditional Access data hasn't been collected yet")
     if defaults:
         return ("pass", "Security Defaults block legacy authentication", [])
+    if _no_p1(snap):
+        return ("fail", "Legacy authentication is allowed", [Finding(
+            "high", "Tenant", "Security Defaults are off, and without Entra ID P1 there's no Conditional Access")],
+            SECURITY_DEFAULTS_ADVICE)
     for p in policies:
-        apps = set((p.get("conditions") or {}).get("clientAppTypes") or [])
-        if _enabled(p) and _all_users_all_apps(p) and "block" in _grants(p) and {"exchangeActiveSync", "other"} <= apps:
+        if _enabled(p) and _all_users_all_apps(p) and coverage.blocks_legacy(p):
             return ("pass", f"Blocked by \"{p.get('displayName')}\"", [])
     return ("fail", "Legacy authentication is allowed",
             [Finding("high", "Tenant", "No enabled policy blocks legacy authentication for all users")])
@@ -196,7 +212,7 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
     if admins is None or reg is None:
         return _unavailable("Needs admin role and MFA registration data")
     if not reg:
-        return _unavailable("Microsoft returned no MFA registration data yet")
+        return _unavailable("Microsoft returned no MFA registration data for this tenant")
     registered = {r["_id"]: r.get("isMfaRegistered") for r in reg}
     findings, seen = [], set()
     for a in admins:
@@ -256,10 +272,10 @@ def service_principal_admins(snap: TenantSnapshot, now: datetime):
     admins = _privileged_users(snap)
     if admins is None:
         return _unavailable("Admin role data hasn't been collected yet")
-    own = snap.own_app_id
+    own = snap.own_app_ids
     findings = [Finding("medium", a.get("displayName") or a["principalId"], f"App holding {a['roleName']}",
                         a["principalId"]) for a in admins if a.get("principalType") == "servicePrincipal"
-                and not (own and a.get("appId") == own and a.get("roleName") == "Global Reader")]
+                and not ((a.get("appId") or "").lower() in own and a.get("roleName") == "Global Reader")]
     return ("fail", f"{len(findings)} app(s) with privileged roles", findings) if findings else \
         ("pass", "No apps hold privileged roles", [])
 
@@ -271,6 +287,8 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     reg = snap.objects("mfa_registration", "mfa_registration")
     if reg is None:
         return _unavailable("MFA registration data hasn't been collected yet")
+    if not reg:
+        return _unavailable("Microsoft returned no MFA registration data for this tenant")
     users = {u["_id"]: u for u in (snap.objects("users", "user") or [])}
     findings, checked = [], 0
     for r in reg:
@@ -291,8 +309,9 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
 
 
 @rule("stale_users", "No inactive accounts", "Accounts",
-      "Disable accounts that haven't signed in for 90 days (after checking with the client), then remove "
-      "their licences. Inactive accounts are a common foothold for attackers.")
+      "Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used "
+      "(after checking with the client), then remove their licences. Inactive accounts are a common foothold "
+      "for attackers.")
 def stale_users(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")
     if users is None:
@@ -304,11 +323,12 @@ def stale_users(snap: TenantSnapshot, now: datetime):
         if not u.get("accountEnabled") or not is_stale(u, now):
             continue
         last = last_sign_in(u)
-        when = f"last signed in {last.date().isoformat()}" if last else "never signed in"
+        when = f"last signed in {last.date().isoformat()}" if last else \
+            f"never signed in, created {(u.get('createdDateTime') or '?')[:10]}"
         kind = "Guest" if u.get("userType") == "Guest" else ("Licensed member" if u.get("licensed") else "Member")
         severity = "medium" if u.get("licensed") else "low"
         findings.append(Finding(severity, _label(u), f"{kind}, {when}", u["_id"]))
-    return ("fail", f"{len(findings)} account(s) inactive for 90+ days", findings) if findings else \
+    return ("fail", f"{len(findings)} account(s) inactive for 90+ days or never used", findings) if findings else \
         ("pass", "No enabled account has been inactive for 90 days", [])
 
 
@@ -359,6 +379,7 @@ def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
         return _unavailable("Needs Conditional Access and admin role data")
     if defaults:
         return ("pass", "Security Defaults require MFA for admins", [])
+    no_p1 = _no_p1(snap)
     d = coverage.directory(snap)
     policies = snap.objects("conditional_access", "ca_policy") or []
     findings, seen = [], set()
@@ -371,6 +392,8 @@ def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
         if not c.mfa:
             why = f"excluded from {', '.join(c.excluded_from)}" if c.excluded_from else "no MFA policy applies"
             findings.append(Finding("high", c.label, f"{a['roleName']}: {why}", pid))
+    if findings and no_p1:
+        return ("fail", f"{len(findings)} admin(s) not covered by MFA", findings, SECURITY_DEFAULTS_ADVICE)
     return ("fail", f"{len(findings)} admin(s) not covered by MFA", findings) if findings else \
         ("pass", f"All {len(seen)} active admin(s) are covered", [])
 
@@ -523,12 +546,12 @@ def app_risks(snap: TenantSnapshot) -> list[dict] | None:
     sps = snap.objects("app_consents", "service_principal")
     if sps is None:
         return None
-    own = snap.own_app_id
+    own = snap.own_app_ids
     perms = snap.objects("app_consents", "app_permission") or []
     grants = snap.objects("app_consents", "delegated_grant") or []
     out = []
     for sp in sps:
-        if sp.get("microsoft") or sp.get("type") != "Application" or (own and sp.get("appId") == own):
+        if sp.get("microsoft") or sp.get("type") != "Application" or (sp.get("appId") or "").lower() in own:
             continue
         app_perms = sorted({p["permission"] for p in perms if p.get("clientId") == sp["_id"] and p.get("permission")})
         tenant_scopes, user_scopes, users = set(), set(), set()
@@ -1283,12 +1306,14 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
     results = []
     for r in RULES:
         try:
-            status, summary, findings = r.check(snap, now)
+            # A check returns (status, summary, findings) and may add advice that replaces the default.
+            status, summary, findings, *advice = r.check(snap, now)
             findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
         except Exception as exc:  # one broken check mustn't blank the whole report
             logging.getLogger(__name__).exception("Check %s failed", r.key)
-            status, summary, findings = "unavailable", f"This check couldn't run: {type(exc).__name__}", []
-        results.append(RuleResult(r.key, r.title, r.category, status, summary, r.recommendation, findings))
+            status, summary, findings, advice = "unavailable", f"This check couldn't run: {type(exc).__name__}", [], []
+        results.append(RuleResult(r.key, r.title, r.category, status, summary,
+                                  advice[0] if advice else r.recommendation, findings))
     return results
 
 
