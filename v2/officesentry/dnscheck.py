@@ -323,7 +323,7 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
             they = "it has" if len(h.spf_missing_includes) == 1 else "they have"
             out.append(Issue("medium", "SPF", f"SPF includes {', '.join(h.spf_missing_includes)}, but {they} no "
                                               "SPF record, so SPF fails for all mail"))
-        if any(t.lstrip("+-~?").lower().split(":")[0] == "ptr" for t in h.spf.split()[1:]):
+        if any(t.lstrip("+-~?").lower().split(":")[0] == "ptr" for t in (h.spf or "").split()[1:]):
             out.append(Issue("low", "SPF", "SPF uses the ptr mechanism, which is slow and ignored by some receivers"))
 
     if not h.dmarc:

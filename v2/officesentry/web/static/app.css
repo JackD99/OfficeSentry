@@ -478,3 +478,5 @@ svg.chart .series { stroke: var(--accent); }
 svg.chart .hit:hover { fill: var(--accent); fill-opacity: .25; }
 svg.chart .end { fill: var(--accent); stroke: var(--surface); }
 svg.chart .value { fill: var(--text); }
+.connection-form { margin: 16px 0 0; }
+.connection-form > label { flex: 1 1 200px; }

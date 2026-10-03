@@ -66,15 +66,47 @@ def all_apps(policy: dict) -> bool:
     return "All" in (((policy.get("conditions") or {}).get("applications") or {}).get("includeApplications") or [])
 
 
+# Conditions that need Entra ID P2. On a tenant without P2 a policy using them never fires.
+P2_CONDITIONS = {"userRiskLevels": "user risk", "signInRiskLevels": "sign-in risk",
+                 "servicePrincipalRiskLevels": "app risk", "insiderRiskLevels": "insider risk"}
+
+
+def narrowing_conditions(policy: dict) -> list[str]:
+    """Conditions that limit when a policy fires (risk, location, platform, device filter).
+
+    A policy with any of them only applies to some sign-ins, so it doesn't
+    enforce anything for everyone even if it targets all users and apps.
+    Device filters can include or exclude, so any filter counts.
+    """
+    cond = policy.get("conditions") or {}
+    out = [label for key, label in P2_CONDITIONS.items() if cond.get(key)]
+    # Excluded locations or platforms (e.g. trusted networks) still leave the policy enforced elsewhere.
+    if set((cond.get("locations") or {}).get("includeLocations") or ["All"]) != {"All"}:
+        out.append("location")
+    if set((cond.get("platforms") or {}).get("includePlatforms") or ["all"]) != {"all"}:
+        out.append("platform")
+    if (cond.get("devices") or {}).get("deviceFilter"):
+        out.append("device filter")
+    if cond.get("authenticationFlows"):
+        out.append("authentication flow")
+    return out
+
+
+def needs_p2(policy: dict) -> list[str]:
+    cond = policy.get("conditions") or {}
+    return [label for key, label in P2_CONDITIONS.items() if cond.get(key)]
+
+
 def requires_mfa_everywhere(policy: dict) -> bool:
     client_apps = set((policy.get("conditions") or {}).get("clientAppTypes") or ["all"])
-    return all_apps(policy) and "mfa" in grants(policy) and bool(
+    return all_apps(policy) and "mfa" in grants(policy) and not narrowing_conditions(policy) and bool(
         client_apps & {"all", "browser", "mobileAppsAndDesktopClients"})
 
 
 def blocks_legacy(policy: dict) -> bool:
     client_apps = set((policy.get("conditions") or {}).get("clientAppTypes") or [])
-    return all_apps(policy) and "block" in grants(policy) and {"exchangeActiveSync", "other"} <= client_apps
+    return all_apps(policy) and "block" in grants(policy) and not narrowing_conditions(policy) and \
+        {"exchangeActiveSync", "other"} <= client_apps
 
 
 def _labels(ids, d: Directory, kind: str = "") -> list[str]:
@@ -101,9 +133,10 @@ class PolicyRow:
     apps: str
     conditions: str
     grant: str
+    warning: str = ""
 
 
-def describe(policy: dict, d: Directory) -> PolicyRow:
+def describe(policy: dict, d: Directory, capabilities: dict | None = None) -> PolicyRow:
     cond = policy.get("conditions") or {}
     u = cond.get("users") or {}
     include = _labels(u.get("includeUsers"), d) + _labels(u.get("includeGroups"), d, "group") + \
@@ -136,14 +169,22 @@ def describe(policy: dict, d: Directory) -> PolicyRow:
         parts.append("Locations")
     grant = policy.get("grantControls") or {}
     controls = sorted(grants(policy))
+    strength = (grant.get("authenticationStrength") or {}).get("displayName")
+    mfa_text = strength if strength and strength != "Multifactor authentication" else "MFA"
     grant_text = (" and " if grant.get("operator") == "AND" else " or ").join(
-        {"mfa": "MFA", "block": "Block", "compliantDevice": "Compliant device",
+        {"mfa": mfa_text, "block": "Block", "compliantDevice": "Compliant device",
          "domainJoinedDevice": "Hybrid joined", "approvedApplication": "Approved app",
          "compliantApplication": "App protection", "passwordChange": "Password change"}.get(c, c)
         for c in controls) or ("Session controls" if policy.get("sessionControls") else "None")
+    warning = ""
+    p2 = needs_p2(policy)
+    if p2 and (capabilities or {}).get("entra_p2") is False and policy.get("state") != "disabled":
+        warning = (f"Uses {' and '.join(p2)}, which needs Entra ID P2. "
+                   "This tenant doesn't have it, so the policy never applies.")
     return PolicyRow(policy.get("id", "?"), policy.get("displayName") or "?",
                      STATE_NAMES.get(policy.get("state"), policy.get("state") or "?"),
-                     ", ".join(include) or "Nobody", ", ".join(exclude), app_text, "; ".join(parts), grant_text)
+                     ", ".join(include) or "Nobody", ", ".join(exclude), app_text, "; ".join(parts), grant_text,
+                     warning)
 
 
 @dataclass
@@ -162,6 +203,10 @@ class UserCoverage:
         return bool(self.mfa_policies)
 
 
+def policy_name(p: dict) -> str:
+    return p.get("displayName") or p.get("id") or p.get("_id") or "Unnamed policy"
+
+
 def directory(snap) -> Directory | None:
     policies = snap.objects("conditional_access", "ca_policy")
     if policies is None:
@@ -172,7 +217,8 @@ def directory(snap) -> Directory | None:
     for rid, r in definitions.items():
         role_names[r.get("templateId") or rid] = r.get("displayName")
     for a in snap.objects("admin_roles", "role_assignment") or []:
-        if a.get("assignment") != "active" or a.get("directoryScopeId") not in (None, "/"):
+        if a.get("assignment") != "active" or a.get("directoryScopeId") not in (None, "/") \
+                or not a.get("principalId"):
             continue
         template = (definitions.get(a.get("roleDefinitionId")) or {}).get("templateId") or a.get("roleDefinitionId")
         user_roles.setdefault(a["principalId"], set()).add(template)
@@ -188,7 +234,7 @@ def coverage_for(uid: str, label: str, user_type: str, policies: list[dict], d: 
         if p.get("state") != "enabled":
             continue
         spec = (p.get("conditions") or {}).get("users") or {}
-        name = p.get("displayName") or p.get("id")
+        name = policy_name(p)
         if not applies(p, uid, user_type, d):
             if _matches(uid, user_type, spec, "include", d, unknown=False):
                 cov.excluded_from.append(name)

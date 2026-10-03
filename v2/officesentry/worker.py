@@ -19,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from . import alerts, findings, schedule, store
 from .collectors import REGISTRY, RunContext
 from .config import Config
+from .connection_check import explain
 from .crypto import Vault
 from .db import connect, migrate, utcnow
 from .exchange import ExchangeClient, ExchangeError
@@ -73,7 +74,9 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
         collector_cls().collect(ctx)
     except (NotConnected, PermissionMissing, LicenseRequired, GraphError, ExchangeError) as exc:
         store.log_event(conn, run_id, "error", str(exc))
-        store.finish_run(conn, run_id, "failed", str(exc))
+        # Sign-in failures get the plain explanation; the raw message stays in the run log.
+        problem = explain(getattr(exc, "message", ""), getattr(exc, "code", ""))
+        store.finish_run(conn, run_id, "failed", f"Sign-in failed: {problem}" if problem else str(exc))
         return "failed"
     except Exception as exc:  # a collector bug must not kill the worker
         store.log_event(conn, run_id, "error", traceback.format_exc())
@@ -85,6 +88,9 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
     status = "partial" if ctx.warnings else "succeeded"
     store.log_event(conn, run_id, "info", f"Finished: {status}")
     store.finish_run(conn, run_id, status, "; ".join(ctx.warnings) or None)
+    # Data came back, so consent exists even if it was granted outside Office Sentry's consent link.
+    conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
+                 (utcnow(), run["tenant_id"]))
     try:
         stats = findings.sync(conn, store.get_tenant(conn, run["tenant_id"]))
         if any(stats.values()):

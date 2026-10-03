@@ -101,14 +101,25 @@ def is_computer(device: dict) -> bool:
     return (device.get("operatingSystem") or "").lower().startswith(("windows", "macos", "mac os"))
 
 
-def parse_ts(value: str | None) -> datetime | None:
-    if not value or value.startswith("0001-"):
+def parse_ts(value) -> datetime | None:
+    """An ISO timestamp from Graph as an aware datetime; None for missing, "0001-01-01" or unreadable values."""
+    if not isinstance(value, str) or not value or value.startswith("0001-"):
         return None
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
+def parse_day(value) -> date | None:
+    """The date of an ISO date or timestamp; None for missing, "0001-01-01" or unreadable values."""
+    if not isinstance(value, str) or value.startswith("0001-"):
+        return None
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError:
+        return None
 
 
 def days_since(value: str | None, now: datetime) -> int | None:

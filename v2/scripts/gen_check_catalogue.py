@@ -101,10 +101,20 @@ def licence_notes(fn: Callable) -> list[str]:
     for helper, tree in _walk(fn, set()):
         if helper.__module__ != fn.__module__:
             continue
+        verdicts = {id(c) for node in ast.walk(tree) if _is_verdict(node) for c in ast.walk(node)}
         for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and LICENCE_RE.search(node.value):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in verdicts \
+                    and LICENCE_RE.search(node.value):
                 notes.add(node.value.strip())
     return sorted(notes)
+
+
+def _is_verdict(node: ast.AST) -> bool:
+    """A finding or a ``("pass" | "fail", ...)`` result: its text is a result, not a "not checked" reason."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        return node.func.id == "Finding"
+    return isinstance(node, ast.Tuple) and bool(node.elts) and isinstance(node.elts[0], ast.Constant) \
+        and node.elts[0].value in ("pass", "fail")
 
 
 def _cell(text: object) -> str:

@@ -77,8 +77,12 @@ class Assessment:
 
     @property
     def grade(self) -> str:
-        """A, C or F: simple enough to put on a sales slide. Only spoofing (SPF, DMARC, DKIM) counts."""
-        severities = {i.severity for i in self.issues if i.area not in dnscheck.TRANSPORT_AREAS}
+        """A, C or F for whether others can spoof the domain: simple enough to put on a sales slide.
+
+        Only SPF and DMARC decide it. DMARC p=reject or p=quarantine stops spoofing on its
+        own (SPF alignment is enough), so missing DKIM is listed but doesn't lower the grade.
+        """
+        severities = {i.severity for i in self.issues if i.area in ("SPF", "DMARC")}
         if "high" in severities:
             return "F"
         if "medium" in severities:
@@ -91,6 +95,8 @@ class Assessment:
             return "Criminals can send email that appears to come from this domain, and it will be delivered."
         if self.grade == "C":
             return "Email authentication is in place but not enforced, so spoofed mail can still get through."
+        if any(i.severity in ("high", "medium") for i in self.issues):
+            return "Spoofed email is blocked, but some email settings still need attention."
         return "Email authentication is set up and enforced."
 
     @property
