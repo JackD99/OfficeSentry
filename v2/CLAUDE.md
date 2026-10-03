@@ -12,6 +12,9 @@ overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
   `Get-*` cmdlets there. New permissions must be
   read-only and go in `entra.GRAPH_PERMISSIONS` (adding one forces every
   tenant to re-consent, so batch them).
+- **The one non-GET Graph call is `mailer._send_graph`** (`sendMail` from the
+  MSP's own mailbox, via a separate single-tenant app with `Mail.Send`). Never
+  add mail permissions to the multi-tenant read-only app.
 - **Every route needs `@login_required` or `@roles_required`.** Anything
   tenant-scoped loads the tenant with `access.tenant_or_404()`.
   `tests/test_access.py::test_every_page_requires_login` enforces the first.
@@ -90,7 +93,19 @@ To add timed work (emails, digests), register a job in its own module with
 `@schedule.periodic("name")`; it gets a `TickContext` every minute and uses
 `schedule.due_slot(cron, tz, ctx.now, last_slot=..., not_before=...)` to
 decide whether to act. Add the module to `worker.JOB_MODULES`. See
-`mailer._send_due_reports` and `schedule.refresh_for_report`.
+`delivery._email_job` and `schedule.refresh_for_report`.
+
+## Email delivery
+
+`delivery.tick()` (the `email_delivery` periodic job) sends scheduled emails
+and retries failed alert emails. A report schedule's send time is a cron slot
+(`delivery.schedule_cron`), and stale collectors are refreshed first. Alert emails are not a separate engine: `alerts.after_sync()`
+(the Teams/Slack/webhook alert event after each collection) calls
+`delivery.after_sync()`, so both go out on the same findings. Schedules store their own timezone and the last period they finished
+("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
+show up in the schedule form automatically. Email templates live in
+`web/templates/emails/` and use inline styles and tables only (email clients
+ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 
 ## Schema changes
 

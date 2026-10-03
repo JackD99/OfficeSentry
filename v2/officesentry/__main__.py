@@ -15,6 +15,7 @@ from . import store
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
+from .mailer import ENCRYPTED_KEYS as ENCRYPTED_SETTINGS
 
 
 def cmd_web(args, cfg):
@@ -91,10 +92,12 @@ def reencrypt_all(conn, vault) -> int:
             for row in rows.fetchall():
                 conn.execute(f"UPDATE {table} SET {column} = ? WHERE {key} = ?", (vault.rotate(row[1]), row[0]))
                 count += 1
-        smtp = conn.execute("SELECT value FROM settings WHERE key = 'smtp_password_enc'").fetchone()
-        if smtp and smtp["value"]:
-            conn.execute("UPDATE settings SET value = ? WHERE key = 'smtp_password_enc'",
-                         (vault.rotate(smtp["value"]),))
+        # Mail passwords and secrets are encrypted with the same keys.
+        secrets = conn.execute(
+            f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(ENCRYPTED_SETTINGS))})"
+            " AND value <> ''", ENCRYPTED_SETTINGS).fetchall()
+        for row in secrets:
+            conn.execute("UPDATE settings SET value = ? WHERE key = ?", (vault.rotate(row["value"]), row["key"]))
             count += 1
     return count
 

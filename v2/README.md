@@ -27,8 +27,20 @@ pass, and a first run against a real tenant.
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, and Conditional Access policies added,
   switched or edited, compared with the snapshot from 4+ weeks earlier.
-- **Emailed reports** (`/tenants/<id>/schedules`, SMTP under Admin → Email):
-  monthly on a chosen day and hour, with PDF and XLSX attached.
+- **Emailed reports** (a tenant's *Emailed reports* tab, and *Email reports*
+  for everything at once):
+  - Send any mix of reports (the monthly review, the evidence pack, any detail
+    report) weekly, monthly or quarterly, at a time in the schedule's own timezone.
+  - Recipients are contacts: the client's people get the email, your team gets a
+    hidden copy. Optional note at the top of the email.
+  - A cross-tenant **digest** for your team, worst tenants first.
+  - **Alert emails** when a scan finds something new and critical (or high), for
+    one tenant or all of them. They come from the same alert event as the
+    Teams/Slack alerts below. A tenant's first scan never emails.
+  - Preview (desktop and phone width), Send now, pause, and a delivery history
+    with failures, automatic retries (5 min, 30 min, 2 h) and a Retry button.
+  - Sent over SMTP or Microsoft 365 (Graph `sendMail` from a mailbox in your own
+    tenant, through a separate send-only app), under Settings → Email delivery.
 - **Alerts** (Admin → Alerts): a Microsoft Teams (Workflows), Slack or generic
   JSON webhook message when a tenant gets new findings at or above a chosen
   severity (one message per tenant per collection), when a collection fails
@@ -251,8 +263,9 @@ officesentry/
   reports/       report builders (data only), SVG charts, XLSX/PDF export
   findings.py    findings lifecycle (new, resolved, reopened, accepted)
   changes.py     snapshot diffs for "since last month"
-  mailer.py      SMTP delivery and the monthly schedule
-  schedule.py    cron slots in a timezone, freshness (max age)
+  mailer.py      sends a finished email over SMTP or Graph sendMail
+  delivery.py    schedules, digests, alert emails, retries and email rendering
+  schedule.py    cron slots in a timezone, freshness (max age), periodic jobs
   worker.py      queue runner, schedule, retention, heartbeat
   web/           Flask app: access.py is the single authorization gate
 ```

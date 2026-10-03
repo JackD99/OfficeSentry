@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 CAPABILITY_LABELS = {
@@ -76,5 +77,13 @@ def money(value, currency: str = "GBP", decimals: int = 0) -> str:
     return f"{CURRENCY_SYMBOLS.get(currency, currency + ' ')}{value:,.{decimals}f}"
 
 
+def fromjson(value, default=None):
+    try:
+        return json.loads(value) if value else (default if default is not None else [])
+    except ValueError:
+        return default if default is not None else []
+
+
 def register(app) -> None:
-    app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money)
+    app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money,
+                                 fromjson=fromjson)

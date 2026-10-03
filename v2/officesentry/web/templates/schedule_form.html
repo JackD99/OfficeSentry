@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% from "_email.html" import contact_checks, busy_script with context %}
+{% set digest = s.kind == 'digest' %}
+{% set editing = s.id %}
+{% set heading = ('Edit ' if editing else 'New ') ~ ('digest' if digest else 'scheduled email') %}
+{% block title %}{{ heading }} · Office Sentry{% endblock %}
+{% block content %}
+<div class="crumbs">
+  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span>
+  <a href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
+  {% else %}<a href="{{ url_for('email.overview') }}">Email reports</a>{% endif %}
+</div>
+<div class="page-head">
+  <div><h1>{{ heading }}</h1>
+    <div class="sub">{% if digest %}One email to your team summarising every tenant.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
+</div>
+
+<form method="post" class="schedule-form narrow-lg" id="schedule-form">
+  {{ csrf() }}
+  <section class="card">
+    <h2><span class="step-no">1</span> What to send</h2>
+    {% if digest %}
+    <p class="muted small">Which tenants need attention, what's new and what's been fixed, with each tenant's Secure Score. Worst tenants first.</p>
+    <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every tenant's numbers</label>
+    {% else %}
+    <fieldset class="choices">
+      <legend class="sr-only">Reports</legend>
+      {% for o in catalog %}
+      <label class="choice"><input type="checkbox" name="reports" value="{{ o.key }}" {% if o.key in s.reports %}checked{% endif %}>
+        <span class="grow"><span class="choice-title">{{ o.title }}
+          {% if o.pdf and pdf_available %}<span class="fmt">PDF</span>{% endif %}{% if o.xlsx and (not o.pdf or not pdf_available) %}<span class="fmt">XLSX</span>{% endif %}</span>
+          <span class="hint">{{ o.description }}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    {% if pdf_available %}<label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Also attach spreadsheet (XLSX) versions of the review and evidence pack</label>{% endif %}
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2><span class="step-no">2</span> When</h2>
+    <div class="seg" role="radiogroup" aria-label="How often">
+      {% for key, label in frequencies.items() %}
+      <label><input type="radio" name="frequency" value="{{ key }}" {% if s.frequency == key %}checked{% endif %}><span>{{ label }}</span></label>
+      {% endfor %}
+    </div>
+    <div class="form-row">
+      <label data-show="weekly">Day
+        <select name="day_of_week">{% for d in days %}<option value="{{ loop.index0 }}" {% if s.day_of_week == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
+      <label data-show="monthly quarterly">Day of the month
+        <select name="day_of_month">{% for d in range(1, 29) %}<option value="{{ d }}" {% if s.day_of_month == d %}selected{% endif %}>{{ ordinal(d) }}</option>{% endfor %}</select>
+        <span class="hint" data-show="quarterly">In January, April, July and October.</span></label>
+      <label>Time
+        <select name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if s.hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></label>
+      <label class="grow-2">Timezone
+        <select name="timezone">
+          <option value="" {% if not s.timezone %}selected{% endif %}>{{ default_tz }} (server default)</option>
+          {% for z in zones %}{% if z != default_tz or s.timezone == z %}<option value="{{ z }}" {% if s.timezone == z %}selected{% endif %}>{{ z.replace('_', ' ') }}</option>{% endif %}{% endfor %}
+        </select></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step-no">3</span> Who gets it</h2>
+    {% if not digest %}
+    <div class="label-sm">{{ tenant.name }} contacts <span class="muted">· see the email addressed to them</span></div>
+    {{ contact_checks(contacts, chosen, 'No contacts for ' ~ tenant.name ~ ' yet. Add one below.') }}
+    {% endif %}
+    <details class="add-person" {% if not digest and not contacts %}open{% endif %}>
+      <summary class="small">{{ icon('plus') }} Add {{ 'a team member' if digest else 'a ' ~ tenant.name ~ ' contact' }}</summary>
+      <div class="form-row tight">
+        <label>Name <input name="new_name" placeholder="Sam Taylor" autocomplete="off"></label>
+        <label>Email <input name="new_email" type="email" placeholder="{{ 'you@msp.com' if digest else 'sam@client.com' }}" autocomplete="off"></label>
+      </div>
+    </details>
+    <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
+    {{ contact_checks(team, chosen, 'No team members yet.' if not digest else 'No team members yet. Add one above.') }}
+    {% if not team and not digest and current_user.role == 'admin' %}<p class="footnote m0"><a href="{{ url_for('email.overview') }}#team">Add your team</a> to copy them in on client emails.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2><span class="step-no">4</span> Message <span class="muted small">(optional)</span></h2>
+    <label class="sr-only" for="message">Message</label>
+    <textarea name="message" id="message" rows="3" maxlength="1000" placeholder="{{ 'A note for your team' if digest else 'Hi team, here is your report for this month. Give us a call if you have any questions.' }}">{{ s.message }}</textarea>
+    <p class="footnote m0">Shown at the top of the email.</p>
+  </section>
+
+  <div class="sticky-actions form-actions">
+    <button class="primary">{{ 'Save changes' if editing else ('Create digest' if digest else 'Schedule email') }}</button>
+    <a class="btn ghost" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') }}">Cancel</a>
+    <span class="muted small summary" id="summary" aria-live="polite"></span>
+  </div>
+</form>
+
+{% if editing %}
+<section class="card narrow-lg manage">
+  <h2>Pause or remove</h2>
+  <div class="form-actions">
+    <form method="post" action="{{ url_for('email.toggle_schedule', schedule_id=s.id) }}">{{ csrf() }}<button>{{ 'Resume' if not s.enabled else 'Pause' }}</button></form>
+    <form method="post" action="{{ url_for('email.delete_schedule', schedule_id=s.id) }}" data-confirm="Delete this scheduled email? Its delivery history is kept.">{{ csrf() }}<button class="danger">Delete</button></form>
+  </div>
+  {% if not s.enabled %}<p class="footnote">Paused: nothing is sent until you resume it.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{{ busy_script() }}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var form = document.getElementById('schedule-form');
+  var days = {{ days|list|tojson }};
+  function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+  function update() {
+    var f = form.querySelector('input[name=frequency]:checked').value;
+    form.querySelectorAll('[data-show]').forEach(function (el) {
+      el.hidden = el.dataset.show.split(' ').indexOf(f) < 0;
+    });
+    var hour = ('0' + form.hour.value).slice(-2) + ':00';
+    var text = f === 'weekly' ? 'Every ' + days[form.day_of_week.value] :
+      (f === 'monthly' ? 'Monthly on the ' : 'Quarterly on the ') + ordinal(+form.day_of_month.value);
+    var people = form.querySelectorAll('input[name=contacts]:checked').length + (form.new_email.value ? 1 : 0);
+    document.getElementById('summary').textContent = text + ' at ' + hour + ' to ' + people + (people === 1 ? ' person' : ' people') + '.';
+  }
+  form.addEventListener('change', update);
+  form.addEventListener('input', update);
+  update();
+})();
+</script>
+{% endblock %}

@@ -166,7 +166,7 @@ def _heartbeat_thread(db_path, stop: threading.Event) -> threading.Thread:
 
 
 # Modules that register ``schedule.periodic`` jobs. Add yours here.
-JOB_MODULES = ("officesentry.mailer",)
+JOB_MODULES = ("officesentry.delivery",)
 
 
 def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> None:
@@ -193,11 +193,10 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     vault = Vault(cfg.encryption_keys)
     graph_factory = graph_factory or default_graph_factory(vault)
     exchange_factory = exchange_factory or default_exchange_factory(vault)
-    alerting = alerts.Alerting(cfg.base_url, vault)
-
     from .web import create_app
 
-    app = create_app(cfg)  # for rendering emailed reports
+    app = create_app(cfg)  # for rendering emailed reports and alert emails
+    alerting = alerts.Alerting(cfg.base_url, vault, app)
     recovered = store.recover_orphaned_runs(conn)
     if recovered:
         log.warning("Marked %s orphaned run(s) as failed", recovered)

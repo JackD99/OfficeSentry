@@ -13,7 +13,7 @@ from .. import worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
-from . import access, admin, alerts, auth, branding, filters, prospects, reports, tenants
+from . import access, admin, alerts, auth, branding, email, filters, prospects, reports, tenants
 
 csrf = CSRFProtect()
 
@@ -69,13 +69,15 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.after_request
     def _security_headers(resp):
         nonce = getattr(g, "csp_nonce", "")
-        resp.headers["Content-Security-Policy"] = (
+        # A rendered email preview sets its own, stricter policy and may be framed by the portal.
+        override = g.get("csp_override")
+        resp.headers["Content-Security-Policy"] = override or (
             f"default-src 'self'; script-src 'self' 'nonce-{nonce}'; style-src 'self'; "
             "img-src 'self' data:; object-src 'none'; base-uri 'none'; "
             "frame-ancestors 'none'; form-action 'self'"
         )
         resp.headers["X-Content-Type-Options"] = "nosniff"
-        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["X-Frame-Options"] = "SAMEORIGIN" if override else "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if cfg.secure_cookies:
@@ -109,6 +111,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(admin.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(prospects.bp)
+    app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)
     app.register_blueprint(branding.bp)
     return app

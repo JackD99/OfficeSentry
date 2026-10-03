@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from officesentry import mailer, schedule, store, worker
+from officesentry import delivery, schedule, store, worker
 from officesentry.__main__ import main
 from officesentry.config import load_config
 from officesentry.db import connect
@@ -84,41 +84,50 @@ def test_schedule_skips_collectors_that_are_already_fresh(db, cfg, two_tenants):
 # -- Emailed reports refresh stale data first --------------------------------
 
 
-def test_report_waits_for_a_refresh_of_stale_data(app, db, two_tenants, vault, monkeypatch):
+def _monthly_report(db, tenant_id):
+    sid = db.execute("INSERT INTO email_schedules (kind, tenant_id, reports, frequency, day_of_month, hour, timezone,"
+                     " created_at) VALUES ('report', ?, '[\"review\"]', 'monthly', 1, 8, 'UTC',"
+                     " '2026-01-01T00:00:00Z')", (tenant_id,)).lastrowid
+    delivery.set_recipients(db, "schedule", sid, [delivery.add_contact(db, tenant_id, "", "a@x.com")])
+    return sid
+
+
+@pytest.fixture
+def sent(monkeypatch):
+    calls = []
+    monkeypatch.setattr(delivery, "send_schedule", lambda app, conn, vault, s, **k: calls.append(s["tenant_id"]))
+    return calls
+
+
+def test_report_waits_for_a_refresh_of_stale_data(app, db, cfg, two_tenants, vault, sent):
     alpha, _ = two_tenants
-    sent = []
-    monkeypatch.setattr(mailer, "deliver", lambda *a, **k: sent.append(a[3]["id"]))
-    db.execute("INSERT INTO report_schedules (tenant_id, recipients, day_of_month, hour, created_at)"
-               " VALUES (?, 'a@x.com', 1, 8, '2026-01-01T00:00:00Z')", (alpha,))
+    _monthly_report(db, alpha)
     for key in schedule.nightly_collectors():
         finished_run(db, alpha, key, "2026-09-29T02:00:00Z")  # days old
     now = datetime(2026, 10, 1, 8, 1, tzinfo=UTC)
 
-    assert mailer.run_due(app, db, vault, "UTC", now, max_age_hours=12) == 0
+    assert delivery.tick(app, db, vault, cfg, now) == 0
     queued = db.execute("SELECT COUNT(*) FROM runs WHERE status = 'queued'").fetchone()[0]
     assert queued == len(schedule.nightly_collectors())
-    assert mailer.run_due(app, db, vault, "UTC", now + timedelta(minutes=1), max_age_hours=12) == 0
+    assert delivery.tick(app, db, vault, cfg, now + timedelta(minutes=1)) == 0
     assert sent == []
 
     # One refresh fails, the rest succeed: the report goes out anyway.
     db.execute("UPDATE runs SET status = 'succeeded', finished_at = '2026-10-01T08:05:00Z' WHERE status = 'queued'")
     db.execute("UPDATE runs SET status = 'failed' WHERE id = (SELECT MAX(id) FROM runs)")
-    assert mailer.run_due(app, db, vault, "UTC", now + timedelta(minutes=6), max_age_hours=12) == 1
+    assert delivery.tick(app, db, vault, cfg, now + timedelta(minutes=6)) == 1
     assert sent == [alpha]
     # The failed collector isn't retried for this report.
     assert db.execute("SELECT COUNT(*) FROM runs WHERE status = 'queued'").fetchone()[0] == 0
 
 
-def test_report_stops_waiting_after_a_while(app, db, two_tenants, vault, monkeypatch):
+def test_report_stops_waiting_after_a_while(app, db, cfg, two_tenants, vault, sent):
     alpha, _ = two_tenants
-    monkeypatch.setattr(mailer, "deliver", lambda *a, **k: None)
-    db.execute("INSERT INTO report_schedules (tenant_id, recipients, day_of_month, hour, created_at)"
-               " VALUES (?, 'a@x.com', 1, 8, '2026-01-01T00:00:00Z')", (alpha,))
+    _monthly_report(db, alpha)
     slot = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
-    assert mailer.run_due(app, db, vault, "UTC", slot, max_age_hours=12) == 0
+    assert delivery.tick(app, db, vault, cfg, slot) == 0
     # The worker is stuck on something else; the refresh runs never start.
-    assert mailer.run_due(app, db, vault, "UTC", slot + schedule.REFRESH_WAIT + timedelta(minutes=1),
-                          max_age_hours=12) == 1
+    assert delivery.tick(app, db, vault, cfg, slot + schedule.REFRESH_WAIT + timedelta(minutes=1)) == 1
 
 
 # -- Retention ---------------------------------------------------------------
@@ -266,4 +275,6 @@ def test_periodic_jobs_run_each_tick_and_are_isolated(app, db, cfg, vault, monke
 
 
 def test_report_emails_are_a_periodic_job():
-    assert "report_emails" in schedule.PERIODIC
+    for module in worker.JOB_MODULES:
+        __import__(module)
+    assert "email_delivery" in schedule.PERIODIC

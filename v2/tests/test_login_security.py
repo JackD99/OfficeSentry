@@ -297,6 +297,7 @@ def test_rotate_keys_new_replaces_both_keys(cfg, db, vault, connection_id, monke
     uid = make_user(db, "admin")
     db.execute("UPDATE users SET totp_secret_enc = ? WHERE id = ?", (vault.encrypt("SECRETSECRET"), uid))
     db.execute("INSERT INTO settings (key, value) VALUES ('smtp_password_enc', ?)", (vault.encrypt("smtp"),))
+    db.execute("INSERT INTO settings (key, value) VALUES ('graph_secret_enc', ?)", (vault.encrypt("graph"),))
     before = json.loads(cfg.secrets_path.read_text())
 
     cli(["rotate-keys", "--new"])
@@ -307,4 +308,5 @@ def test_rotate_keys_new_replaces_both_keys(cfg, db, vault, connection_id, monke
     new = Vault(after["encryption_keys"])
     assert new.decrypt(db.execute("SELECT totp_secret_enc FROM users").fetchone()[0]) == "SECRETSECRET"
     assert new.decrypt(db.execute("SELECT value FROM settings WHERE key = 'smtp_password_enc'").fetchone()[0]) == "smtp"
+    assert new.decrypt(db.execute("SELECT value FROM settings WHERE key = 'graph_secret_enc'").fetchone()[0]) == "graph"
     assert "PRIVATE KEY" in new.decrypt(db.execute("SELECT key_enc FROM app_connections").fetchone()[0])
