@@ -17,6 +17,7 @@ from tests import graphdata as gd
 from tests import groupdata as grp
 from tests import hybriddata as hd
 from tests import tenantsettingsdata as tsd
+from tests.sharepoint_data import mock_sharepoint
 from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
@@ -71,7 +72,8 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
         mock_exchange(rsps, exchange)
 
 
-def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, **phase4):
+def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
+                **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
     rsps.get(f"{V1}/users", json={"value": users})
@@ -104,6 +106,7 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
     rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
     mock_phase4(rsps, **phase4)
+    mock_sharepoint(rsps, **(sharepoint_kw or {}))
 
 
 def exchange_factory(tenant, connection):

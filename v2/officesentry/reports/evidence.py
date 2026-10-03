@@ -44,7 +44,7 @@ CONTROLS = (
             ("stale_users", "licensed_disabled", "pending_guests")),
     Control("apps", "Is access by third-party applications controlled?",
             ("user_consent", "risky_app_permissions")),
-    Control("sharing", "Is external file sharing restricted?", ("sharepoint_sharing", "guest_invites")),
+    Control("sharing", "Is external file sharing restricted?", ("sharepoint_sharing", "anyone_links", "guest_invites")),
     Control("devices", "Are company devices managed, encrypted and kept on supported operating systems?",
             ("device_encryption", "device_compliance", "supported_windows")),
     Control("backups", "Are backups of Microsoft 365 data taken and kept separately?", (),

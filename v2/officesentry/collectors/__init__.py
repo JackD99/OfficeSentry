@@ -13,6 +13,7 @@ from . import exchange, mail_rules  # noqa: F401, I001  (inbox rules reuse the m
 from . import domains  # noqa: F401
 from . import devices  # noqa: F401
 from . import directory_sync  # noqa: F401
+from . import sharepoint  # noqa: F401  (shared files reuse the users and tenant profile snapshots)
 from .base import REGISTRY, Collector, RunContext
 
 __all__ = ["REGISTRY", "Collector", "RunContext"]
