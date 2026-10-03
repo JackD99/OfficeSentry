@@ -1,22 +1,20 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, report_nav with context %}
 {% block title %}{{ report.title }} · {{ tenant.name }}{% endblock %}
+{% set SEV_RANK = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4} %}
 {% block content %}
 {{ tenant_header(tenant, 'data') }}
-<nav class="subtabs" aria-label="Detail reports">
-  {% for key, r in reports.items() %}
-  <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=key) }}"{% if key == report.key %} class="active" aria-current="page"{% endif %}>{{ r[0] }}</a>
-  {% endfor %}
-</nav>
-<div class="toolbar">
+{{ report_nav(tenant, groups, group, report.key) }}
+<div class="toolbar report-title">
   <div>
     <h2 class="section-title">{{ report.title }}</h2>
     <p class="muted small m0">{{ report.description }}</p>
   </div>
   {% if not report.unavailable %}
   <div class="toolbar-actions">
-    {% if current_user.role != 'client' %}<a class="btn" href="{{ url_for('across.rollup', key=report.key) }}">{{ icon('tenants') }} All tenants</a>{% endif %}
-    <a class="btn" href="{{ url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key) }}">{{ icon('download') }} Download XLSX</a>
+    {% if current_user.role != 'client' %}<a class="btn sm" href="{{ url_for('across.rollup', key=report.key) }}" title="Compare this report across every tenant">{{ icon('tenants') }} All tenants</a>{% endif %}
+    {{ downloads([('PDF', url_for('reports.data_report_pdf', tenant_id=tenant.id, key=report.key), 'The whole report as a PDF'),
+                  ('XLSX', url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key), 'Every table, one sheet each')]) }}
   </div>
   {% endif %}
 </div>
@@ -67,6 +65,7 @@
   <div class="card-head toolbar">
     <h2>{{ section.title }} <span class="count-badge">{{ section.rows|length }}</span></h2>
     <div class="toolbar-actions">
+      {% if section.rows|length > 8 %}<input class="search sm" type="search" data-filter="t{{ loop.index }}" placeholder="Filter rows…" aria-label="Filter {{ section.title }}">{% endif %}
       {% if section.flagged %}<span class="pill warn">{{ section.flagged }} to review</span>{% endif %}
       {% if section.rows %}<a class="btn sm ghost" href="{{ url_for('across.data_report_csv', tenant_id=tenant.id, key=report.key, section=loop.index) }}" title="Download this table as CSV">{{ icon('download') }} CSV</a>{% endif %}
     </div>
@@ -74,12 +73,14 @@
   {% if section.intro %}<p class="intro">{{ section.intro }}</p>{% endif %}
   {% if section.rows %}
   <div class="scroll-x">
-  <table class="stack-sm">
-    <thead><tr><th class="flagcol"><span class="sr-only">Flag</span></th>{% for c in section.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  {% set sortable = section.rows|length > 1 %}
+  <table class="stack-sm{{ ' sortable' if sortable }}" id="t{{ loop.index }}">
+    <thead><tr><th class="flagcol" aria-sort="none">{% if sortable and section.flagged %}<button type="button" class="sort" title="Sort by flag"><span class="sr-only">Flag</span></button>{% else %}<span class="sr-only">Flag</span>{% endif %}</th>
+      {% for c in section.columns %}<th aria-sort="none">{% if sortable %}<button type="button" class="sort">{{ c }}</button>{% else %}{{ c }}{% endif %}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in section.rows %}{% set flag = section.flags[loop.index0] %}
-    <tr{% if flag %} class="flag-{{ flag }}"{% endif %}>
-      <td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>
+    <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ row|join(' ')|lower }}">
+      <td class="flagcol" data-sort="{{ SEV_RANK.get(flag, '') }}">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>
       {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ section.columns[loop.index0] }}"{% endif %}>{% if v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v }}{% endif %}</td>{% endfor %}
     </tr>
     {% endfor %}
@@ -94,4 +95,7 @@
 {% if report.footnote and not report.unavailable %}<p class="footnote">{{ report.footnote }}</p>{% endif %}
 <p class="footnote">Data from
 {% for title, finished in report.sources %}{{ title }} ({% if finished %}{{ ts(finished) }}{% else %}not collected yet{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

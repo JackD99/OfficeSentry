@@ -59,7 +59,8 @@ pass, and a first run against a real tenant.
   and optional HMAC signing secret are stored encrypted; only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
-- **Detail reports** (`/tenants/<id>/data/<report>`, each also as XLSX):
+- **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
+  grouped by area (identity, email, files, devices, tenant):
   - *Mail forwarding*: every forward (admin-set or inbox rule), and the
     outbound spam policies and remote domains that allow or block it.
   - *Inbox rules*: rules that forward outside, delete or hide mail, every
@@ -264,10 +265,12 @@ python -m officesentry worker                                 # second terminal
 ```
 
 On Windows, use `.venv\Scripts\activate` and `set OFFICESENTRY_INSECURE_COOKIES=1`.
-Everything except PDF export works natively. PDFs need the Pango libraries,
-which WeasyPrint can't install on Windows by itself, so Docker (Docker
-Desktop) is the recommended way to run Office Sentry on Windows. Without
-Pango, the PDF buttons are simply hidden and HTML and XLSX still work.
+Everything works natively. One-click PDF files come from WeasyPrint, which
+needs the Pango libraries (Docker includes them; WeasyPrint can't install them
+on Windows by itself). Without Pango, every PDF button opens the same report
+as a print-ready page instead and the browser's print window comes up: choose
+**Save as PDF** as the printer to get the same layout. Scheduled emails can
+only attach PDFs when WeasyPrint works.
 
 Tests mock Microsoft Graph at the HTTP layer (`responses`), not the client
 class, so URL and paging bugs are caught.

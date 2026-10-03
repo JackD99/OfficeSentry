@@ -7,25 +7,36 @@
       cover_status  optional verdict shown on the cover
       contents      optional <li><a href="#id">Section</a></li> items: the PDF
                     cover lists them with page numbers
+      footer_note   page footer after "Confidential" (default: Prepared for <client>)
       toolbar       links and download buttons (web only)
       body          the report itself
-    Set `compact_cover = true` before extending for one-page documents.
-    Needs: pdf, css_href, brand (injected), and report.css components. -#}
+    Set `compact_cover = true` before extending for one-page documents and
+    `document = true` for table reports (detail, all tenants, changes), with
+    `wide = true` for landscape pages.
+    Needs: pdf, css_href, brand (injected), and report.css components.
+    print_view (web/printing.py) is the browser-made PDF: the page as it
+    prints, opening the print window, for servers without WeasyPrint. -#}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ self.doc_title() }}: {{ self.client() }}</title>
+  <title>{% if print_view %}{{ print_name }}{% else %}{{ self.doc_title() }}: {{ self.client() }}{% endif %}</title>
   <link rel="stylesheet" href="{{ css_href }}">
   {% if pdf %}<style>{{ brand.css|safe }}</style>
   {% else %}<link rel="stylesheet" href="{{ url_for('branding.brand_css', v=brand.version) }}">{% endif %}
 </head>
-<body class="report{% if pdf %} pdf{% endif %}">
-{% if not pdf %}<nav class="toolbar">{% block toolbar %}{% endblock %}</nav>{% endif %}
-<article{% if compact_cover %} class="doc-compact"{% endif %}>
+<body class="report{% if pdf or print_view %} pdf{% endif %}{% if print_view %} print-view{% endif %}">
+{% if print_view %}<nav class="toolbar print-bar">
+  <p class="hint"><strong>Save as PDF:</strong> in the print window, choose <strong>Save as PDF</strong> as the printer.</p>
+  <span class="spacer"></span>
+  <button type="button" class="button" data-back>Back</button>
+  <button type="button" class="button primary" data-print>Print or save as PDF</button>
+</nav>
+{% elif not pdf %}<nav class="toolbar">{% block toolbar %}{% endblock %}</nav>{% endif %}
+<article class="{{ 'doc-compact' if compact_cover }}{{ ' document' if document }}{{ ' wide' if wide }}">
 <header class="cover{% if compact_cover %} compact{% endif %}">
-  <div class="doc-strings" aria-hidden="true"><span class="t">{% block doc_title %}{% endblock %}</span><span class="c">{% block client %}{% endblock %}</span></div>
+  <div class="doc-strings" aria-hidden="true"><span class="t">{% block doc_title %}{% endblock %}</span><span class="c">{% block client %}{% endblock %}</span><span class="f">{% block footer_note %}Prepared for {{ self.client() }}{% endblock %}</span></div>
   <div class="runhead">{% if brand.logo %}<img src="{{ brand.logo }}" alt="{{ brand.display_name }}">{% else %}{{ brand.display_name }}{% endif %}</div>
   <div class="cover-band">
     <div class="cover-logo">{% if brand.logo %}<span class="chip"><img src="{{ brand.logo }}" alt="{{ brand.display_name }}"></span>{% else %}<span class="msp">{{ brand.display_name }}</span>{% endif %}</div>
@@ -47,5 +58,6 @@
 {% block body %}{% endblock %}
 </div>
 </article>
+{% if print_view %}<script src="{{ url_for('static', filename='print.js') }}" nonce="{{ csp_nonce }}"></script>{% endif %}
 </body>
 </html>

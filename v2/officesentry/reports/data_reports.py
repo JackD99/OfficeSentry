@@ -861,6 +861,41 @@ REPORTS.clear()
 REPORTS.update(_items[:_at] + list(_MAIL_REPORTS.items()) + _items[_at:])
 
 
+# Detail reports grouped for menus, in menu order. Reports registered elsewhere (SharePoint) are
+# listed by key; a report missing from every group still shows, under "More reports".
+GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("identity", "Identity and access",
+     ("mfa", "admins", "conditional-access", "inactive", "guests", "legacy-auth", "hybrid")),
+    ("email", "Email", ("mailboxes", "inbox-rules", "mailbox-permissions", "shared-mailboxes", "mailbox-size",
+                        "domains")),
+    ("files", "Files and Teams", ("sharepoint", "onedrive", "shared-files", "groups")),
+    ("devices", "Devices and apps", ("devices", "apps")),
+    ("tenant", "Tenant and licences", ("secure-score", "licences", "tenant-settings", "admin-activity")),
+)
+
+
+@dataclass
+class ReportGroup:
+    key: str
+    title: str
+    reports: list[tuple[str, str, str]]  # (report key, title, description)
+
+
+def grouped() -> list[ReportGroup]:
+    """Every detail report, once, under its menu group. Read at call time so new reports appear."""
+    seen: set[str] = set()
+    groups = []
+    for key, title, keys in GROUPS:
+        items = [(k, REPORTS[k][0], REPORTS[k][1]) for k in keys if k in REPORTS and k not in seen]
+        seen.update(k for k, _, _ in items)
+        if items:
+            groups.append(ReportGroup(key, title, items))
+    rest = [(k, v[0], v[1]) for k, v in REPORTS.items() if k not in seen]
+    if rest:
+        groups.append(ReportGroup("more", "More reports", rest))
+    return groups
+
+
 def build(conn, tenant, key: str, now: datetime | None = None, as_of: datetime | None = None,
           snap: TenantSnapshot | None = None) -> DataReport:
     """Build one detail report from the latest data, or from the data held at ``as_of``."""

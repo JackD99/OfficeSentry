@@ -1,16 +1,14 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads with context %}
 {% block title %}Insurance evidence · {{ pack.tenant.name }}{% endblock %}
 {% set TONE = {'In place': 'ok', 'Partly in place': 'warn', 'Not in place': 'bad', 'Not assessed': ''} %}
 {% block content %}
 {{ tenant_header(pack.tenant, 'evidence') }}
 <div class="toolbar">
   <p class="muted small m0 intro-line">Answers to the questions cyber insurers and security questionnaires ask, based on settings read from Microsoft 365 rather than self-assessment.</p>
-  <div class="row-actions">
-    {% if pdf_available %}<a class="btn" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}">{{ icon('download') }} PDF</a>{% endif %}
-    <a class="btn" href="{{ url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id) }}">{{ icon('download') }} XLSX</a>
-    <a class="btn" href="{{ url_for('across.evidence_csv', tenant_id=pack.tenant.id) }}">{{ icon('download') }} CSV</a>
-  </div>
+  {{ downloads([('PDF', url_for('reports.evidence_pdf', tenant_id=pack.tenant.id), ''),
+                ('XLSX', url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id), ''),
+                ('CSV', url_for('across.evidence_csv', tenant_id=pack.tenant.id), '')]) }}
 </div>
 <div class="tiles">
   {% for status, n in pack.counts.items() %}

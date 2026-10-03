@@ -47,7 +47,8 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   tenant's licence is missing, rather than passing or failing.
 - Detail reports are builders in `reports/data_reports.py` returning
   `Section`s of rows; register them in `REPORTS` and they get a page, a tab
-  and an XLSX export.
+  and XLSX, CSV and PDF exports. Add the key to a menu group in
+  `data_reports.GROUPS`; one left out shows under "More reports".
 - Detail reports can also live in their own module (see `reports/sharepoint.py`)
   and register in `reports/__init__.py`. A builder can set `tiles` (headline
   figures), `chart`, `notice` (something the admin must fix first) and use
@@ -73,6 +74,12 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   Styles are `report.css`; brand colours arrive as CSS variables (`--brand`,
   `--brand-ink`, ...), from `/brand.css` on the web and inline in PDFs, since
   the CSP blocks inline styles in the browser. Render the PDF and look at it.
+- PDF routes return `web/printing.pdf_response(template, filename, ...)`: a
+  WeasyPrint PDF, or without WeasyPrint (Windows without Docker) the same
+  template as a print-ready page that opens the browser's print window. Table
+  reports (detail, All tenants, What changed) use `reports/detail.html`,
+  `rollup.html`, `changes.html` and `tenant_changes.html` with
+  `document = true` (and `wide = true` for landscape).
 - `tests/test_live_fixture.py` replays `tests/fixtures/live_tenant.json`, real
   responses from a Business Premium test tenant with names, emails, domains and
   IDs replaced. When a collector asks Microsoft for something new, re-record it
@@ -84,6 +91,8 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 
 - Styles live in `web/static/app.css` (tokens at the top, light and dark).
   Reports that also become PDFs use `report.css` instead.
+- Downloads on a page sit in one `downloads([(label, href, title)])` control
+  from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
   `_macros.html` (import it `with context`). Add new tenant pages as a tab there.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw

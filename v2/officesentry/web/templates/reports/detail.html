@@ -1,0 +1,53 @@
+{#- A detail report (data_reports.DataReport) as a PDF. The web page is data_report.html. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+{% set wide = (report.sections|map(attribute='columns')|map('length')|list + [0])|max >= 6 %}
+{% set collected = report.sources|map(attribute=1)|select|list %}
+
+{% block doc_title %}{{ report.title }}{% endblock %}
+{% block client %}{{ report.tenant.name }}{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', report.generated_at|day) }}
+  {{ ui.meta('Data collected', (collected|max)|when if collected else 'Not collected yet') }}
+  {{ ui.meta('Microsoft 365 tenant', report.tenant.tenant_ref) }}
+{% endblock %}
+
+{% block body %}
+<p class="lede">{{ report.description }}</p>
+{% if report.unavailable %}
+<div class="callout"><strong>Not available.</strong> {{ report.unavailable }}</div>
+{% else %}
+{% if report.notice %}<div class="callout warn">{{ report.notice }}</div>{% endif %}
+{% if report.tiles %}
+{% call ui.figures(report.tiles|length) %}{% for t in report.tiles %}{{ ui.figure(t.label, t.value, t.foot, t.tone) }}{% endfor %}{% endcall %}
+{% endif %}
+{% if report.highlights %}
+{% call ui.figures(report.highlights|length) %}{% for h in report.highlights %}{{ ui.figure(h.label, h.value, h.foot, h.tone) }}{% endfor %}{% endcall %}
+{% endif %}
+{% if report.notes %}
+<div class="callout"><strong>Not checked.</strong> {{ report.notes|join(' ') }}</div>
+{% endif %}
+{% if report.chart %}
+<section class="keep">
+  {% if report.chart_title %}<h2>{{ report.chart_title }}</h2>{% endif %}
+  <div class="chart-card">{{ report.chart|safe }}</div>
+</section>
+{% endif %}
+{% for section in report.sections %}
+<section class="doc-section" id="s{{ loop.index }}">
+  <h2>{{ section.title }} <span class="count">{{ section.rows|length }}</span>{% if section.flagged %} <span class="pill warn">{{ section.flagged }} to review</span>{% endif %}</h2>
+  {% if section.intro %}<p class="section-intro">{{ section.intro }}</p>{% endif %}
+  {% if section.rows %}{{ ui.data_table(section) }}{% else %}<p class="empty-note">{{ section.empty }}</p>{% endif %}
+</section>
+{% endfor %}
+{% endif %}
+
+<footer class="about keep">
+  {% if report.footnote and not report.unavailable %}<p>{{ report.footnote }}</p>{% endif %}
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Collected from Microsoft 365 with read-only access; nothing was changed.
+  Data from {% for title, finished in report.sources %}{{ title }} ({{ finished|when if finished else 'not collected yet' }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+</footer>
+{% endblock %}

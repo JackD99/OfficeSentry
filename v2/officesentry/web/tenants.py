@@ -83,10 +83,9 @@ def dashboard():
     tenants = visible_tenants(g.db, g.user)
     rows = [rollup_row(g.db, t) for t in tenants]
     if g.user["role"] == "client":
-        from ..reports.data_reports import REPORTS
-        from ..reports.export import pdf_available
+        from ..reports.data_reports import grouped
 
-        return render_template("client_home.html", rows=rows, data_reports=REPORTS, pdf_available=pdf_available())
+        return render_template("client_home.html", rows=rows, report_groups=grouped())
     for row in rows:
         row["health"] = data_health(row["tenant"], _latest_runs(row["tenant"]["id"]))
     rows.sort(key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["counts"]["medium"],
@@ -136,7 +135,7 @@ def _consent_link(t, connection):
 @bp.get("/tenants/<int:tenant_id>")
 @login_required
 def tenant(tenant_id: int):
-    from ..reports.data_reports import REPORTS
+    from ..reports.data_reports import grouped
     from ..reports.monthly_review import build
 
     t = tenant_or_404(tenant_id)
@@ -150,7 +149,7 @@ def tenant(tenant_id: int):
     return render_template(
         "tenant.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
         redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"), report=report, attention=attention,
-        health=data_health(t, latest), data_reports=REPORTS,
+        health=data_health(t, latest), report_groups=grouped(),
     )
 
 

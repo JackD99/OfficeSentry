@@ -102,15 +102,21 @@
 </div>
 
 <section class="card">
-  <div class="card-head"><h2>Reports</h2><span class="meta">Everything here can be shared with the client.</span></div>
-  <div class="report-links">
+  <div class="card-head"><h2>Reports</h2>
+    <input class="search sm" type="search" data-report-search="report-directory" placeholder="Find a report…" aria-label="Find a report"></div>
+  <div class="report-links featured">
     <a class="report-link primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">
       <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Security and licensing summary with recommendations. PDF and XLSX.</span></a>
     <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">
       <span class="title">Insurance evidence {{ icon('arrow') }}</span><span class="desc">Answers to the controls cyber insurers ask about.</span></a>
-    {% for key, r in data_reports.items() %}
-    <a class="report-link" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=key) }}">
-      <span class="title">{{ r[0] }} {{ icon('arrow') }}</span><span class="desc">{{ r[1] }}</span></a>
+  </div>
+  <p class="muted small m0 no-match" hidden>No report matches that. Try a word like mailbox, admin or licence.</p>
+  <div class="report-directory" id="report-directory">
+    {% for gr in report_groups %}
+    <div class="report-group">
+      <h3>{{ gr.title }}</h3>
+      <ul>{% for key, title, desc in gr.reports %}<li data-name="{{ (title ~ ' ' ~ desc ~ ' ' ~ gr.title)|lower }}"><a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=key) }}" title="{{ desc }}">{{ title }}</a></li>{% endfor %}</ul>
+    </div>
     {% endfor %}
   </div>
 </section>
@@ -122,4 +128,7 @@
   {% if health[2] %}<span>{{ health[2] }}</span>{% endif %}
   <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection details</a>
 </p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

@@ -47,3 +47,31 @@
 {% macro sev(level) -%}<span class="sev sev-{{ level }}">{{ level }}</span>{%- endmacro %}
 
 {% macro meta(label, value) -%}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{%- endmacro %}
+
+{# A headline figure for document-style reports (detail, rollup, changes). tone: ok | warn | bad #}
+{% macro figure(label, value, foot='', tone=none) -%}
+<div class="kpi{% if tone %} tone-{{ tone }}{% endif %}">
+  <div class="label">{{ label }}</div>
+  <div class="value{% if value is string and value|length > 9 %} wordy{% endif %}">{{ value }}</div>
+  {% if foot %}<div class="note">{{ foot }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Row of `count` figures (call block); up to five per row. #}
+{% macro figures(count) -%}
+<div class="kpis cols-{{ [count, 5]|min }}">{{ caller() }}</div>
+{%- endmacro %}
+
+{# A table of rows from data_reports.Section: Link cells become links, flags a severity column. #}
+{% macro data_table(section) -%}
+{% set flagged = section.flags|select|list %}
+<div class="table-wrap"><table class="data">
+  <thead><tr>{% if flagged %}<th class="flag">Flag</th>{% endif %}{% for c in section.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in section.rows %}{% set flag = section.flags[loop.index0] if section.flags|length > loop.index0 else none %}
+  <tr>{% if flagged %}<td class="flag">{% if flag %}{{ sev(flag) }}{% endif %}</td>{% endif %}
+    {% for v in row %}<td>{% if v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}">{{ v.text }}</a>{% else %}{{ v }}{% endif %}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{%- endmacro %}

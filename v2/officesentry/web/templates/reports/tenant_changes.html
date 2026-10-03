@@ -1,0 +1,90 @@
+{#- One tenant's changes (month_changes.TenantChanges) as a PDF. The web page is tenant_changes.html. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+{% set KIND = {'added': ('added', 'New'), 'removed': ('resolved', 'Gone'), 'changed': ('changed', 'Changed')} %}
+
+{% block doc_title %}What changed in the last {{ days }} days{% endblock %}
+{% block client %}{{ report.tenant.name }}{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Period', report.since|day ~ ' to ' ~ report.until|day) }}
+  {{ ui.meta('Compared with data from', report.baseline|day if report.baseline else 'No earlier data') }}
+  {{ ui.meta('Microsoft 365 tenant', report.tenant.tenant_ref) }}
+{% endblock %}
+
+{% block body %}
+{% if not report.has_baseline %}
+<div class="callout"><strong>No data from {{ days }} days ago yet.</strong> Collection started more recently, so there's nothing to compare against. New and fixed findings still show below.</div>
+{% endif %}
+{% for note in report.notes %}<div class="callout warn">{{ note }}</div>{% endfor %}
+{% set score = (report.figures|selectattr('key', 'equalto', 'secure_score.pct')|list or [none])[0] %}
+{% call ui.figures(4) %}
+  {{ ui.figure('Changes', report.total, report.key_changes|length ~ ' key, ' ~ report.report_changes ~ ' in detail reports') }}
+  {{ ui.figure('New findings', report.new_findings|length, 'new or come back', 'warn' if report.new_findings else none) }}
+  {{ ui.figure('Fixed findings', report.fixed_findings|length, 'no longer found', 'ok' if report.fixed_findings else none) }}
+  {{ ui.figure('Secure Score', ('%g'|format(score.after) ~ '%') if score and score.after is not none else '–',
+               ('%+g'|format(score.delta) ~ ' pts since ' ~ report.since|day) if score and score.delta else '') }}
+{% endcall %}
+
+{% if report.figures %}
+<section class="doc-section keep">
+  <h2>Key figures</h2>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Measure</th><th class="num">{{ report.since|day }}</th><th class="num">Now</th><th class="num">Change</th></tr></thead>
+    <tbody>{% for f in report.figures %}
+    <tr><td>{{ f.label }}</td>
+      <td class="num">{% if f.before is not none %}{{ '%g'|format(f.before) }}{{ f.unit }}{% else %}–{% endif %}</td>
+      <td class="num">{{ '%g'|format(f.after) }}{{ f.unit }}</td>
+      <td class="num">{% if f.delta %}<span class="{{ f.trend }}">{{ '%+g'|format(f.delta) }}</span>{% else %}–{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+<section class="doc-section">
+  <h2>Findings <span class="count">{{ report.new_findings|length + report.fixed_findings|length }}</span></h2>
+  {% if report.new_findings or report.fixed_findings %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th class="flag">Change</th><th class="flag">Severity</th><th>Check</th><th>Account or object</th></tr></thead>
+    <tbody>
+    {% for f in report.new_findings %}<tr><td class="flag"><span class="chg chg-added">New</span></td><td class="flag">{{ ui.sev(f.severity) }}</td><td>{{ titles.get(f.rule_key, f.rule_key) }}</td><td>{{ f.subject }}</td></tr>{% endfor %}
+    {% for f in report.fixed_findings %}<tr><td class="flag"><span class="chg chg-resolved">Fixed</span></td><td class="flag">{{ ui.sev(f.severity) }}</td><td>{{ titles.get(f.rule_key, f.rule_key) }}</td><td>{{ f.subject }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty-note">No findings appeared or were fixed in this period.</p>{% endif %}
+</section>
+
+<section class="doc-section">
+  <h2>Key changes <span class="count">{{ report.key_changes|length }}</span></h2>
+  <p class="section-intro">Admin roles, Conditional Access, accounts, mail forwarding, app permissions, devices and groups.</p>
+  {% if report.key_changes %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th class="flag">Change</th><th>Area</th><th>Subject</th><th>Detail</th></tr></thead>
+    <tbody>{% for c in report.key_changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
+    <tr><td class="flag"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td><td>{{ c.area }}</td><td>{{ c.subject }}</td><td>{{ c.detail }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="empty-note">{% if report.has_baseline %}No key changes in this period.{% else %}Nothing to compare yet.{% endif %}</p>{% endif %}
+</section>
+
+{% for r in report.reports if r.count %}
+<section class="doc-section">
+  <h2>{{ r.title }} <span class="count">{{ r.count }}</span></h2>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th class="flag">Change</th><th>Table</th><th>Row</th><th>What changed</th></tr></thead>
+    <tbody>{% for s in r.sections %}{% for c in s.changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
+    <tr><td class="flag"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td><td>{{ s.title }}</td><td>{{ c.subject }}</td><td>{{ c.detail }}</td></tr>
+    {% endfor %}{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endfor %}
+
+{% set skipped = report.reports|selectattr('note')|list %}
+<footer class="about keep">
+  {% if unchanged %}<p>No changes in: {{ unchanged|map(attribute='title')|join(', ') }}.</p>{% endif %}
+  {% if skipped %}<p>Not compared: {% for r in skipped %}{{ r.title }} ({{ r.note|trim('.') }}){% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Collected from Microsoft 365 with read-only access; nothing was changed.</p>
+</footer>
+{% endblock %}

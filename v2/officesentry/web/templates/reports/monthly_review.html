@@ -10,7 +10,7 @@
 {% block toolbar %}
   <a class="back" href="{{ url_for('tenants.tenant', tenant_id=report.tenant.id) }}">&larr; {{ report.tenant.name }}</a>
   <span class="spacer"></span>
-  {% if pdf_available %}<a class="button primary" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>PDF</a>{% endif %}
+  <a class="button primary" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>PDF</a>
   <a class="button" href="{{ url_for('reports.tenant_report_xlsx', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>XLSX</a>
   <a class="button" href="{{ url_for('across.review_csv', tenant_id=report.tenant.id) }}" title="Every finding, one row per affected account"><span class="wide">Findings </span>CSV</a>
 {% endblock %}
