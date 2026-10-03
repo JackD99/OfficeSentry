@@ -502,3 +502,5 @@ th.num button.sort { justify-content: flex-end; }
 }
 td.tenant-col { min-width: 190px; }
 @media (max-width: 640px) { td.tenant-col { min-width: 0; } }
+.connection-form { margin: 16px 0 0; }
+.connection-form > label { flex: 1 1 200px; }

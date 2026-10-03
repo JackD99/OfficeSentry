@@ -60,8 +60,12 @@ def monthly(report) -> ExecSummary:
     name = report.tenant["name"]
     failing = report.failing
     by_sev = {s: [r for r in failing if r.severity == s] for s in SEVERITIES}
+    ran = len(report.results) - len(report.unavailable)
 
-    if by_sev["critical"]:
+    if not ran:
+        verdict = Verdict("medium", "Not checked yet",
+                          f"Nothing has been collected for {name} yet, so no security checks could run.")
+    elif by_sev["critical"]:
         verdict = Verdict("critical", "Action needed",
                           f"{name}'s Microsoft 365 has a critical security gap that should be fixed now.")
     elif by_sev["high"]:
@@ -75,7 +79,6 @@ def monthly(report) -> ExecSummary:
                           f"{name}'s Microsoft 365 passed every security check we could run.")
 
     paragraphs = []
-    ran = len(report.results) - len(report.unavailable)
     if failing:
         parts = [f"{len(by_sev[s])} {s}" for s in SEVERITIES if by_sev[s]]
         need = "needs" if len(failing) == 1 else "need"
@@ -84,8 +87,8 @@ def monthly(report) -> ExecSummary:
         if top.severity in ("critical", "high"):
             text += f" The most urgent: {_sentence(top.summary[0].lower() + top.summary[1:])}"
         paragraphs.append(text)
-    else:
-        paragraphs.append(f"We ran {ran} security checks and all of them passed.")
+    elif ran:
+        paragraphs.append(f"We ran {plural(ran, 'security check')} and {'it' if ran == 1 else 'all of them'} passed.")
 
     kpis = {k.key: k for k in report.kpis}
     progress = []

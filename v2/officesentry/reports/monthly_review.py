@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from ..changes import Change, all_changes
 from ..collectors import REGISTRY
+from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
 from ..rules import SEVERITY_RANK, Finding, RuleResult, evaluate
@@ -20,6 +21,9 @@ from .charts import line_chart
 TITLE = "Monthly Security & Licensing Review"
 STALE_AFTER = timedelta(hours=36)  # data older than this is flagged in the report
 PERIOD = timedelta(days=28)
+# Findings first seen this soon after a tenant's first collection are its baseline, not "new".
+BASELINE = timedelta(days=1)
+ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 
 @dataclass
@@ -72,6 +76,7 @@ class Report:
     resolved: list = field(default_factory=list)  # findings rows resolved in the period
     accepted: list[tuple[RuleResult, Finding, object]] = field(default_factory=list)
     new_count: int = 0
+    first_report: bool = False  # history starts inside this period, so there's nothing to compare with
 
     @property
     def failing(self) -> list[RuleResult]:
@@ -106,8 +111,9 @@ def _secure_score_points(snap: TenantSnapshot) -> list[tuple[date, float]]:
     for ts, value in snap.history("secure_score.pct"):
         points[date.fromisoformat(ts[:10])] = value
     for row in snap.objects("secure_score", "secure_score_daily") or []:
-        if row.get("maxScore"):
-            points.setdefault(date.fromisoformat(row["date"]), round(100 * row["currentScore"] / row["maxScore"], 1))
+        day, current, most = parse_day(row.get("date")), row.get("currentScore"), row.get("maxScore")
+        if day and most and current is not None:
+            points.setdefault(day, round(100 * current / most, 1))
     return sorted(points.items())
 
 
@@ -116,13 +122,23 @@ def setting(conn, key: str, default: str) -> str:
     return row["value"] if row else default
 
 
+def _baseline_end(conn, tenant_id: int, now: datetime) -> str:
+    """End of the tenant's first collection window; findings seen before it aren't new."""
+    row = conn.execute("SELECT MIN(finished_at) AS first FROM runs WHERE tenant_id = ?"
+                       " AND status IN ('succeeded', 'partial')", (tenant_id,)).fetchone()
+    first = datetime.fromisoformat(row["first"].replace("Z", "+00:00")) if row and row["first"] else now
+    return (first + BASELINE).strftime(ISO)
+
+
 def build(conn, tenant, now: datetime | None = None) -> Report:
     now = now or datetime.now(UTC)
     snap = TenantSnapshot(conn, tenant)
     results = evaluate(snap, now)
     by_key = {r.key: r for r in results}
     period_start = now - PERIOD
-    since = period_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    since = period_start.strftime(ISO)
+    baseline_end = _baseline_end(conn, tenant["id"], now)
+    first_report = baseline_end > since
 
     # Apply lifecycle: mark new findings, move accepted risks out of the totals.
     lifecycle = lifecycle_map(conn, tenant["id"], now)
@@ -134,7 +150,11 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
             if life and life.accepted:
                 accepted.append((r, f, life))
                 continue
-            f.new = life is None or life.is_new_since(since)
+            if life is None:  # not synced into findings yet: new unless still in the baseline window
+                f.new = now.strftime(ISO) > baseline_end
+            else:
+                f.new = life.is_new_since(since) and (
+                    life.first_seen > baseline_end or (life.reopened_at or "") >= since)
             active.append(f)
         if r.status == "fail" and not active:
             r.status = "accepted"
@@ -150,7 +170,7 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
         _kpi(snap, "mfa.registered_pct", "Users with MFA", now, unit="%"),
         _kpi(snap, "admins.privileged_principals", "Privileged accounts", now, better="down"),
         _kpi(snap, "users.licensed", "Licensed users", now, better="none"),
-        Kpi("stale", "Inactive 90+ days",
+        Kpi("stale", "Inactive accounts",
             None if stale.status == "unavailable" else len(stale.findings), better="down",
             note="Needs Entra ID P1" if stale.status == "unavailable" else ""),
         Kpi("waste", "Licence waste / month", licences.monthly_waste if licences.lines else None,
@@ -180,6 +200,7 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
         secure_score_chart=line_chart(points, label="Secure Score over time"), freshness=freshness, counts=counts,
         period_start=period_start, changes=all_changes(conn, tenant["id"], since),
         resolved=list(resolved_since(conn, tenant["id"], since)), accepted=accepted, new_count=new_count,
+        first_report=first_report,
     )
 
 
@@ -192,6 +213,7 @@ def rollup_row(conn, tenant, now: datetime | None = None) -> dict:
         "counts": report.counts,
         "failing": len(report.failing),
         "new": report.new_count,
+        "first_report": report.first_report,
         "resolved": len(report.resolved),
         "unavailable": len(report.unavailable),
         "stale_data": any(f.stale for f in report.freshness),

@@ -73,6 +73,12 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   Styles are `report.css`; brand colours arrive as CSS variables (`--brand`,
   `--brand-ink`, ...), from `/brand.css` on the web and inline in PDFs, since
   the CSP blocks inline styles in the browser. Render the PDF and look at it.
+- `tests/test_live_fixture.py` replays `tests/fixtures/live_tenant.json`, real
+  responses from a Business Premium test tenant with names, emails, domains and
+  IDs replaced. When a collector asks Microsoft for something new, re-record it
+  with `python -m officesentry live-test --record tests/fixtures/live_tenant.json`
+  (needs the `OFFICESENTRY_TEST_*` variables). Scrubbing happens in memory and
+  refuses to write the file if a name or domain survives; still skim the diff.
 
 ## Web UI conventions
 

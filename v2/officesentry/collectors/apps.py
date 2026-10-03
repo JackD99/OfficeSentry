@@ -5,8 +5,9 @@ from __future__ import annotations
 from ..graph import GraphError
 from .base import Collector, RunContext, register
 
-# Tenants that own Microsoft's first-party apps.
-MICROSOFT_TENANTS = {"f8cdef31-a31e-4b4a-93e4-5f571e91255a", "72f988bf-86f1-41af-91ab-2d7cd011db47"}
+# Tenants that own Microsoft's first-party apps. cdc5aeea... owns e.g. Microsoft Graph Command Line Tools.
+MICROSOFT_TENANTS = {"f8cdef31-a31e-4b4a-93e4-5f571e91255a", "72f988bf-86f1-41af-91ab-2d7cd011db47",
+                     "cdc5aeea-15c5-4db6-b079-fcadd2505dc2"}
 APP_LIMIT = 1000
 
 

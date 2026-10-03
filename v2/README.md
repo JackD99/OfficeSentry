@@ -233,9 +233,15 @@ Then:
 1. **App connections → Generate certificate.**
 2. Create the app: `docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>`
    (device sign-in as an admin of *your* tenant), or create it by hand as the
-   App connections page describes and paste its client ID.
+   App connections page describes and paste its client ID. By hand, make the
+   app multi-tenant, upload the certificate (a client secret won't work) and
+   add the redirect URI `https://<your portal>/consent/callback` as a Web
+   platform. Enter your Directory (tenant) ID with the client ID to check the
+   certificate straight away.
 3. **Add tenant**, then have a Global Administrator of that tenant open the
-   consent link on the tenant page. A first collection is queued on return.
+   consent link on the tenant's Data collection tab. A first collection is
+   queued on return. **Test connection** on the same tab says in plain words
+   what's wrong if Office Sentry can't sign in.
 
 ## Development
 

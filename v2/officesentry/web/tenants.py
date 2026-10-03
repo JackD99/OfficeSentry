@@ -37,6 +37,19 @@ def _latest_runs(tenant_id: int) -> dict:
     return {r["collector"]: r for r in rows}
 
 
+def not_connected(tenant) -> str | None:
+    """Why collection can't run for this tenant yet, in plain words, or None when it can."""
+    connection = store.get_connection(g.db, tenant["connection_id"]) if tenant["connection_id"] else None
+    if not connection:
+        return "This tenant isn't connected yet: choose its app connection under Connection."
+    if not connection["client_id"]:
+        return ("This tenant isn't connected yet: its app connection has no application (client) ID. "
+                "Add it under App connection first.")
+    if not tenant["consented_at"]:
+        return "This tenant isn't connected yet: a tenant admin needs to grant consent first."
+    return None
+
+
 def data_health(tenant, latest: dict) -> tuple[str, str, str]:
     """(tone, label, detail) summarising a tenant's collection state for people."""
     from ..reports.monthly_review import STALE_AFTER
@@ -46,6 +59,9 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
     if not latest:
         return "info", "Not collected", "No data collected yet."
     failed = [k for k, r in latest.items() if r["status"] == "failed"]
+    sign_in = [latest[k]["error"] for k in failed if (latest[k]["error"] or "").startswith("Sign-in failed: ")]
+    if sign_in and len(sign_in) == len(failed):
+        return "bad", "Can't sign in", sign_in[0].removeprefix("Sign-in failed: ")
     if failed:
         names = ", ".join(REGISTRY[k].title for k in failed if k in REGISTRY)
         return "bad", f"{len(failed)} failed", names
@@ -149,7 +165,8 @@ def collection(tenant_id: int):
     return render_template(
         "collection.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
         capabilities=store.tenant_capabilities(t), runs=runs, latest=latest,
-        collectors=REGISTRY, health=data_health(t, latest),
+        collectors=REGISTRY, health=data_health(t, latest), not_connected=not_connected(t),
+        connections=store.list_connections(g.db),
     )
 
 
@@ -161,10 +178,48 @@ def collect(tenant_id: int):
     for key in keys:
         if key not in REGISTRY:
             abort(400)
+    if reason := not_connected(t):
+        flash(reason, "error")
+        return redirect(url_for("tenants.collection", tenant_id=t["id"]))
     for key in keys:
         store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
     audit(g.db, g.user["username"], "collect_requested", t["id"], ",".join(keys))
     flash(f"Queued {len(keys)} collection(s). The worker picks them up shortly.", "success")
+    return redirect(url_for("tenants.collection", tenant_id=t["id"]))
+
+
+@bp.post("/tenants/<int:tenant_id>/connection")
+@roles_required("admin")
+def set_connection(tenant_id: int):
+    t = tenant_or_404(tenant_id)
+    conn_id = request.form.get("connection_id", type=int)
+    if conn_id is not None and store.get_connection(g.db, conn_id) is None:
+        abort(400)
+    g.db.execute("UPDATE tenants SET connection_id = ? WHERE id = ?", (conn_id, t["id"]))
+    audit(g.db, g.user["username"], "tenant_connection_set", t["id"], str(conn_id))
+    flash("App connection saved. Use Test connection to check it works.", "success")
+    return redirect(url_for("tenants.collection", tenant_id=t["id"]))
+
+
+@bp.post("/tenants/<int:tenant_id>/test-connection")
+@roles_required("admin", "analyst")
+def test_connection(tenant_id: int):
+    from ..connection_check import check
+
+    t = tenant_or_404(tenant_id)
+    connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
+    if not connection or not connection["client_id"]:
+        flash(not_connected(t), "error")
+        return redirect(url_for("tenants.collection", tenant_id=t["id"]))
+    vault = current_app.extensions["officesentry.vault"]
+    result = check(t["tenant_ref"], connection["client_id"], vault.decrypt(connection["key_enc"]),
+                   connection["thumbprint"])
+    audit(g.db, g.user["username"], "connection_tested", t["id"], "ok" if result.ok else result.title)
+    if result.ok:
+        g.db.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), t["id"]))
+        flash(f"{result.title} Office Sentry can sign in and read this tenant.", "success")
+    else:
+        flash(f"{result.title} {result.fix}", "error")
     return redirect(url_for("tenants.collection", tenant_id=t["id"]))
 
 
@@ -177,7 +232,11 @@ def consent_callback():
         abort(400)
     t = tenant_or_404(int(data["t"]))
     if request.args.get("error"):
-        flash("Consent was not granted: " + request.args.get("error_description", request.args["error"])[:300],
+        from ..connection_check import explain
+
+        description = request.args.get("error_description", request.args["error"])
+        problem = explain(description)
+        flash(f"Consent was not granted. {problem}" if problem else "Consent was not granted: " + description[:300],
               "error")
         return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
     if request.args.get("admin_consent", "").lower() != "true":
