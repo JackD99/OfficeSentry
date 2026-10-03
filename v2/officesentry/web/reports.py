@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
@@ -14,12 +13,12 @@ from ..reports import data_reports, evidence, export
 from ..reports.monthly_review import build, setting
 from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404
+from .printing import pdf_response
 
 RULE_TITLES = {r.key: r.title for r in RULES}
 
 bp = Blueprint("reports", __name__)
 
-STATIC_DIR = Path(__file__).parent / "static"
 CURRENCIES = ("GBP", "USD", "EUR", "AUD", "CAD", "NZD")
 
 
@@ -40,22 +39,15 @@ def tenant_report(tenant_id: int):
     t = tenant_or_404(tenant_id)
     report = build(g.db, t)
     return render_template("reports/monthly_review.html", report=report, pdf=False,
-                           css_href=url_for("static", filename="report.css"),
-                           pdf_available=export.pdf_available())
+                           css_href=url_for("static", filename="report.css"))
 
 
 @bp.get("/tenants/<int:tenant_id>/report.pdf")
 @login_required
 def tenant_report_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    if not export.pdf_available():
-        abort(404)
-    report = build(g.db, t)
-    html = render_template("reports/monthly_review.html", report=report, pdf=True,
-                           css_href=(STATIC_DIR / "report.css").as_uri(), pdf_available=True)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf")
-    return Response(export.to_pdf(html, STATIC_DIR.as_uri() + "/"), mimetype="application/pdf",
-                    headers={"Content-Disposition": f"attachment; filename={_filename(t, 'pdf')}"})
+    return pdf_response("reports/monthly_review.html", _filename(t, "pdf")[:-4], report=build(g.db, t))
 
 
 @bp.get("/tenants/<int:tenant_id>/report.xlsx")
@@ -78,20 +70,15 @@ def _evidence_name(tenant, ext: str) -> str:
 @login_required
 def evidence_pack(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    return render_template("evidence_page.html", pack=evidence.build(g.db, t), pdf_available=export.pdf_available())
+    return render_template("evidence_page.html", pack=evidence.build(g.db, t))
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.pdf")
 @login_required
 def evidence_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    if not export.pdf_available():
-        abort(404)
-    html = render_template("reports/evidence.html", pack=evidence.build(g.db, t), pdf=True,
-                           css_href=(STATIC_DIR / "report.css").as_uri(), pdf_available=True)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.pdf")
-    return Response(export.to_pdf(html, STATIC_DIR.as_uri() + "/"), mimetype="application/pdf",
-                    headers={"Content-Disposition": f"attachment; filename={_evidence_name(t, 'pdf')}"})
+    return pdf_response("reports/evidence.html", _evidence_name(t, "pdf")[:-4], pack=evidence.build(g.db, t))
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.xlsx")
@@ -106,14 +93,38 @@ def evidence_xlsx(tenant_id: int):
     )
 
 
+@bp.get("/tenants/<int:tenant_id>/data")
+@login_required
+def data_index(tenant_id: int):
+    """The Detail reports tab, and the report picker on phones: ``?key=`` or the first report."""
+    t = tenant_or_404(tenant_id)
+    key = request.args.get("key", "")
+    if key not in data_reports.REPORTS:
+        key = data_reports.grouped()[0].reports[0][0]
+    return redirect(url_for("reports.data_report", tenant_id=t["id"], key=key))
+
+
 @bp.get("/tenants/<int:tenant_id>/data/<key>")
 @login_required
 def data_report(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if key not in data_reports.REPORTS:
         abort(404)
+    groups = data_reports.grouped()
+    active = next(gr for gr in groups if any(k == key for k, _, _ in gr.reports))
     return render_template("data_report.html", tenant=t, report=data_reports.build(g.db, t, key),
-                           reports=data_reports.REPORTS)
+                           groups=groups, group=active)
+
+
+@bp.get("/tenants/<int:tenant_id>/data/<key>.pdf")
+@login_required
+def data_report_pdf(tenant_id: int, key: str):
+    t = tenant_or_404(tenant_id)
+    if key not in data_reports.REPORTS:
+        abort(404)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.pdf")
+    slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
+    return pdf_response("reports/detail.html", f"{key}-{slug}", report=data_reports.build(g.db, t, key))
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.xlsx")

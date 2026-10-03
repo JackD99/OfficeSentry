@@ -39,7 +39,8 @@ DEVICE_KEYS = {"displayName", "model", "deviceTag", "phoneAppVersion", "phoneNum
 
 # IDs that Office Sentry's own code looks for (role templates, guest access levels, Microsoft
 # apps) are Microsoft's constants, not the tenant's data, so they're kept as they are.
-KNOWN_IDS = {g.lower() for f in Path(__file__).parent.rglob("*.py") for g in GUID.findall(f.read_text())}
+KNOWN_IDS = {g.lower() for f in Path(__file__).parent.rglob("*.py")
+             for g in GUID.findall(f.read_text(encoding="utf-8"))}
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z")
 # Fields that hold someone's IP address (audit logs, sign-ins). Version numbers look like IPs,
 # so only values under these keys are replaced, with documentation addresses.

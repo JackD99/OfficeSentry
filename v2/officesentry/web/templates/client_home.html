@@ -24,8 +24,8 @@
       <span class="title">Insurance evidence {{ icon('arrow') }}</span><span class="desc">Answers to the security questions on cyber insurance forms.</span></a>
     <a class="report-link" href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">
       <span class="title">Findings {{ icon('arrow') }}</span><span class="desc">Every account and setting the checks flagged.</span></a>
-    <a class="report-link" href="{{ url_for('reports.data_report', tenant_id=t.id, key='mailboxes') }}">
-      <span class="title">Detail reports {{ icon('arrow') }}</span><span class="desc">{% for key, r in data_reports.items() %}{{ r[0] }}{{ ', ' if not loop.last }}{% endfor %}.</span></a>
+    <a class="report-link" href="{{ url_for('reports.data_index', tenant_id=t.id) }}">
+      <span class="title">Detail reports {{ icon('arrow') }}</span><span class="desc">{{ report_groups|map(attribute='title')|join(', ') }}.</span></a>
   </div>
   {% if row.stale_data %}<p class="footnote warn-text">Some of this data is more than a day old.</p>{% endif %}
 </section>

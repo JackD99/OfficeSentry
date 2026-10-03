@@ -20,7 +20,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def load(name: str = "live_tenant.json") -> dict:
-    return json.loads((FIXTURES / name).read_text())
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
 def _cmdlet_key(url: str, cmdlet: dict) -> str:

@@ -229,6 +229,34 @@ body.report .about h2 { border: 0; font-size: .95rem; margin: 0 0 6px; padding: 
 .about td { padding: 3px 0; border: 0; }
 .about td:first-child { width: 45%; }
 
+/* -- Document reports (detail, all tenants, what changed) -------------------- */
+.lede { color: var(--text-2); font-size: 1.02em; margin: 18px 0 16px; }
+.kpis.cols-1 { grid-template-columns: minmax(0, 1fr) 2fr; }
+.kpis.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.kpis.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.kpis.cols-5 { grid-template-columns: repeat(5, 1fr); }
+.kpis + .kpis, .kpis + .callout { margin-top: 12px; }
+.kpi.tone-bad .value { color: var(--critical); } .kpi.tone-warn .value { color: var(--high); } .kpi.tone-ok .value { color: var(--ok); }
+.kpi .value.wordy { font-size: 1.05rem; line-height: 1.35; padding: 6px 0 2px; color: var(--text-2); }
+.callout.warn { background: var(--high-soft); }
+table.data td { overflow-wrap: anywhere; }
+table.data th { white-space: normal; }
+table.data td:first-child { min-width: 28mm; overflow-wrap: normal; }
+table.data td.flag:first-child { min-width: 0; }
+table.data th.flag, table.data td.flag { width: 1%; white-space: nowrap; }
+.empty-note { color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 10px 14px; margin: 0; }
+h2 .pill { font-size: .62rem; vertical-align: 3px; margin-left: 6px; letter-spacing: 0; }
+td .sub { display: block; color: var(--muted); font-size: .86em; }
+.sevbar { display: inline-flex; gap: 3px; white-space: nowrap; }
+.sevbar .n { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 999px; text-align: center; font-size: .72rem; font-weight: 700; line-height: 1.6; }
+.sevbar .n.critical { background: var(--critical-soft); color: var(--critical); } .sevbar .n.high { background: var(--high-soft); color: var(--high); }
+.sevbar .n.medium { background: var(--medium-soft); color: var(--medium); } .sevbar .n.low { background: var(--low-soft); color: var(--low); }
+.sevbar .n.zero { background: transparent; color: var(--faint); font-weight: 500; }
+.pill { display: inline-block; white-space: nowrap; font-size: .72rem; font-weight: 600; padding: 0 8px; border-radius: 999px; background: var(--low-soft); color: var(--low); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.warn { background: var(--medium-soft); color: var(--medium); }
+.pill.bad { background: var(--critical-soft); color: var(--critical); }
+.better { color: var(--ok); font-weight: 600; } .worse { color: var(--critical); font-weight: 600; }
+
 @media (max-width: 720px) {
   .content { padding: 4px 18px 28px; }
   .cover-band, .cover-meta, .cover-status { padding-left: 18px; padding-right: 18px; }
@@ -247,7 +275,7 @@ body.report .about h2 { border: 0; font-size: .95rem; margin: 0 0 6px; padding: 
   table.findings td { display: block; border: 0; padding: 2px 12px; width: auto; }
   .cover h1 { font-size: 1.55rem; }
   article { border-radius: 0; border-left: 0; border-right: 0; }
-  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .kpis, .kpis[class*=cols-] { grid-template-columns: repeat(2, 1fr); }
   ul.passing { columns: 1; }
   .control-cols { grid-template-columns: 1fr; }
   .table-wrap { overflow-x: auto; }
@@ -259,11 +287,15 @@ body.report .about h2 { border: 0; font-size: .95rem; margin: 0 0 6px; padding: 
   size: A4; margin: 22mm 16mm 18mm;
   @top-left { content: element(runhead); vertical-align: bottom; padding-bottom: 4mm; }
   @top-right { content: string(doctitle) "  ·  " string(client); font: 500 7.5pt "Inter", sans-serif; color: #8a93a3; vertical-align: bottom; padding-bottom: 4mm; }
-  @bottom-left { content: "Confidential  ·  Prepared for " string(client); font: 7.5pt "Inter", sans-serif; color: #8a93a3; }
+  @bottom-left { content: "Confidential  ·  " string(footer); font: 7.5pt "Inter", sans-serif; color: #8a93a3; }
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 7.5pt "Inter", sans-serif; color: #8a93a3; }
 }
 @page cover { margin: 0; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
 @page compact { margin: 13mm 16mm 13mm; @top-left { content: none; } @top-right { content: none; } }
+/* Document reports: the compact header on page one, running headers after it; landscape for wide tables. */
+@page doc:first { margin-top: 13mm; @top-left { content: none; } @top-right { content: none; } }
+@page wide { size: A4 landscape; margin: 18mm 14mm 15mm; }
+@page wide:first { margin-top: 12mm; @top-left { content: none; } @top-right { content: none; } }
 @media print {
   body.report { background: #fff; }
   .toolbar { display: none; }
@@ -275,6 +307,7 @@ body.pdf .content { padding: 0; }
 body.pdf .doc-strings { display: block; height: 0; overflow: hidden; }
 body.pdf .doc-strings .t { string-set: doctitle content(); }
 body.pdf .doc-strings .c { string-set: client content(); }
+body.pdf .doc-strings .f { string-set: footer content(); }
 body.pdf .runhead { display: block; position: running(runhead); font-size: 8pt; font-weight: 700; color: #354052; }
 body.pdf .runhead img { max-height: 7mm; max-width: 45mm; }
 /* Full-page cover */
@@ -327,3 +360,38 @@ body.pdf .actions li::before { left: 3.5mm; top: 2.6mm; width: 5.5mm; height: 5.
 body.pdf .check, body.pdf .kpi, body.pdf .keep, body.pdf .control, body.pdf .actions li, body.pdf .tidy-item, body.pdf tr, body.pdf .verdict, body.pdf .grade, body.pdf .callout, body.pdf .chart-card { break-inside: avoid; }
 body.pdf .table-wrap { overflow: visible; }
 body.pdf thead { display: table-header-group; }
+body.pdf article.document, body.pdf article.document .cover.compact { page: doc; }
+body.pdf article.document.wide, body.pdf article.document.wide .cover.compact { page: wide; }
+body.pdf .lede { margin: 0 0 4mm; }
+body.pdf .kpis + .kpis, body.pdf .kpis + .callout { margin-top: 3mm; }
+body.pdf .doc-section { margin-top: 2mm; }
+body.pdf .doc-section .section-intro { break-after: avoid; }
+body.pdf .empty-note { break-before: avoid; }
+body.pdf .chart-card svg.chart { height: 62mm; }
+body.pdf .cover.compact .cover-logo .msp { white-space: nowrap; }
+body.pdf table.data { font-size: 8.5pt; }
+body.pdf .wide table.data { font-size: 8pt; }
+body.pdf table.data th, body.pdf table.data td { padding: 1.3mm 2mm; }
+body.pdf .kpi .value.wordy { font-size: 10.5pt; }
+
+/* -- Browser-made PDF (no WeasyPrint): the same page, printed by the browser --- */
+body.print-view { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body.print-view .runhead, body.print-view .doc-strings { display: none; }
+.print-bar .hint { margin: 0; color: var(--text-2); font-size: .9rem; }
+.print-bar button { font: inherit; font-size: .9rem; cursor: pointer; }
+@media screen {
+  body.print-view { background: var(--bg); padding-bottom: 40px; }
+  body.print-view .print-bar { max-width: 210mm; }
+  body.print-view article { max-width: 210mm; margin: 0 auto; border: 1px solid var(--border); box-shadow: 0 8px 24px rgb(16 24 40 / 8%); }
+  body.print-view article.wide { max-width: 297mm; }
+  body.print-view .cover.compact { padding: 14mm 14mm 0; }
+  body.print-view .content { padding: 0 14mm 14mm; }
+  body.print-view .cover:not(.compact) { height: auto; min-height: 297mm; }
+  body.print-view .table-wrap { overflow-x: auto; }
+}
+@media screen and (max-width: 720px) {
+  body.print-view .print-bar { flex-wrap: wrap; }
+  body.print-view .print-bar .hint { flex-basis: 100%; }
+  body.print-view .cover.compact { padding: 4mm 4mm 0; }
+  body.print-view .content { padding: 0 4mm 6mm; }
+}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, downloads %}
 {% block title %}What changed · Office Sentry{% endblock %}
 {% macro period_tabs(endpoint) -%}
 <nav class="subtabs m0" aria-label="Period">
@@ -39,9 +39,10 @@
   <div class="card-head toolbar">
     <h2>Tenants <span class="count-badge">{{ summaries|length }}</span></h2>
     <div class="toolbar-actions">
-      {% if summaries|length > 5 %}<input class="search" type="search" data-filter="changes-table" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
-      <a class="btn sm" href="{{ url_for('across.changes_download', ext='csv', days=days) }}">{{ icon('download') }} CSV</a>
-      <a class="btn sm" href="{{ url_for('across.changes_download', ext='xlsx', days=days) }}">{{ icon('download') }} XLSX</a>
+      {% if summaries|length > 5 %}<input class="search sm" type="search" data-filter="changes-table" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
+      {{ downloads([('PDF', url_for('across.changes_pdf', days=days), ''),
+                    ('XLSX', url_for('across.changes_download', ext='xlsx', days=days), ''),
+                    ('CSV', url_for('across.changes_download', ext='csv', days=days), '')]) }}
     </div>
   </div>
   <div class="scroll-x">
