@@ -113,7 +113,9 @@ def schedule_tick(conn, cfg: Config, now: datetime | None = None) -> int:
     slot = schedule.iso(slot_dt)
     queued = 0
     tenants = conn.execute(
-        "SELECT id FROM tenants WHERE enabled = 1 AND connection_id IS NOT NULL ORDER BY id"
+        # Nothing is scheduled before consent: every run would fail to sign in.
+        "SELECT id FROM tenants WHERE enabled = 1 AND connection_id IS NOT NULL AND consented_at IS NOT NULL"
+        " ORDER BY id"
     ).fetchall()
     for tenant in tenants:
         for key in schedule.nightly_collectors():

@@ -84,6 +84,16 @@ def fromjson(value, default=None):
         return default if default is not None else []
 
 
+def run_error(text: str | None) -> str:
+    """A failed run's error in plain words; raw Microsoft sign-in errors (from older runs) are translated."""
+    from ..connection_check import explain
+
+    if not text or text.startswith("Sign-in failed:"):
+        return text or ""
+    problem = explain(text)
+    return f"Sign-in failed: {problem}" if problem else text
+
+
 def register(app) -> None:
     app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money,
-                                 fromjson=fromjson)
+                                 fromjson=fromjson, run_error=run_error)

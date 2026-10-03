@@ -54,7 +54,8 @@ def test_no_platform_specific_date_formats():
 
 
 def test_refresh_on_unconnected_tenant_explains_once(client, db, two_tenants):
-    alpha, _ = two_tenants  # has an app connection but no admin consent yet
+    alpha, _ = two_tenants
+    db.execute("UPDATE tenants SET consented_at = NULL")  # an app connection but no admin consent yet
     make_user(db, "admin")
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/collection").get_data(as_text=True)
