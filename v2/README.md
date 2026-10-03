@@ -118,6 +118,17 @@ pass, and a first run against a real tenant.
     Directory, when directory sync and password hash sync last ran, which
     domains are federated, admin accounts synced from AD, and synced versus
     cloud-only account counts. Cloud-only tenants are labelled as such.
+  - *SharePoint storage*: for a client whose SharePoint is filling up. How
+    full the tenant is (its quota estimated from licences: 1 TB + 10 GB per
+    licence + extra storage) and when it will be full at the current rate;
+    where the space goes (current files, older versions, recycle bins,
+    Preservation Hold libraries, other); every site and library by size;
+    the largest folders and files, the files with the most version history,
+    the largest files untouched for two years and the largest recycle bin
+    items, each with what to do about it; and OneDrives over 80% of their own
+    quota with their largest files. Sizes come from SharePoint's own storage
+    figures (`SMTotalSize`), which include every version. Needs
+    `Sites.Read.All`.
 - **Insurance evidence** (`/tenants/<id>/evidence`, PDF, XLSX): the controls
   cyber-insurance questionnaires ask about (MFA, admin accounts, legacy auth,
   email authentication, forwarding, logging, leavers, apps, sharing, devices), each
@@ -144,7 +155,7 @@ registering apps, guest directory access, joining by email verification,
 admin consent requests, SharePoint anonymous links, guest
 invitations, stale guest invitations, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
-checking in, stale device records.
+checking in, stale device records, SharePoint storage nearly full.
 For tenants synced from on-premises AD: directory sync running, password
 hash sync on, and admin accounts that are cloud-only.
 checking in, stale device records, domain federation changes.

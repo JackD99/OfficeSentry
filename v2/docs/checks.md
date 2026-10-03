@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-47 checks, 20 data sources (collectors) and 23 detail reports.
+48 checks, 21 data sources (collectors) and 24 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -111,6 +111,12 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **No files are shared with anyone links**<br>`anyone_links` | `shared_files`, `sharepoint_usage` | The tenant has no SharePoint licence | Remove anyone links that are no longer needed, and set the rest to view-only with an expiry date. The Shared files report lists each one. |
 | **Files can't be shared with anonymous links**<br>`sharepoint_sharing` | `tenant_policies` |  | Change SharePoint external sharing to "New and existing guests" so every external person signs in. If the client relies on Anyone links, set them to expire and to view-only. |
 
+### Storage
+
+| Check | Reads data from | Licence note | Recommendation |
+|---|---|---|---|
+| **SharePoint storage isn't nearly full**<br>`sharepoint_storage_space` | `sharepoint_storage`, `tenant_profile` |  | Free up space before the tenant runs out, when people can no longer save files. The SharePoint storage report shows where the space goes and what to clear first; otherwise buy Office 365 Extra File Storage. |
+
 ### Tenant settings
 
 | Check | Reads data from | Licence note | Recommendation |
@@ -143,6 +149,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `per_user_mfa` | Per-user MFA | The per-user MFA setting on each member, for tenants without Entra ID P1. | `Policy.Read.All` |
 | `secure_score` | Secure Score | Current Secure Score, per-control scores and up to 90 days of daily history. | `SecurityEvents.Read.All` |
 | `shared_files` | Shared files | Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, or people outside it. Needs the Sites.Read.All permission. | `Sites.Read.All` |
+| `sharepoint_storage` | SharePoint storage | What fills each site's storage: libraries, folders, large and old files, version history and recycle bins. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
 | `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions and licence capabilities. | `Organization.Read.All` |
@@ -176,6 +183,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `shared-files` | Shared files | Every file and folder shared with anyone, people outside, or the whole organisation. | `shared_files`, `sharepoint_usage` |
 | `shared-mailboxes` | Shared mailboxes | Shared, room and equipment mailboxes that can be signed in to, and who uses them. | `mailbox_usage`, `mailboxes`, `users` |
 | `sharepoint` | SharePoint sites | Storage and growth, inactive sites, and which sites are shared outside. | `sharepoint_usage` |
+| `sharepoint-storage` | SharePoint storage | What fills the tenant's SharePoint storage and what to clean up: sites, folders, large and old files, version history and recycle bins. | `sharepoint_storage`, `sharepoint_usage`, `tenant_profile` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
 
 ## Permissions
@@ -197,6 +205,6 @@ Every application permission the app requests (all read-only) and the collectors
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
-| `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files` |
+| `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage` |
 | `User.Read.All` | Microsoft Graph | Users, licences, password age | `users` |
 | `UserAuthenticationMethod.Read.All` | Microsoft Graph | Registered MFA methods | `mfa_registration` |
