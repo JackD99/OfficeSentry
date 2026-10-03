@@ -84,7 +84,7 @@
 {% set skipped = report.reports|selectattr('note')|list %}
 <footer class="about keep">
   {% if unchanged %}<p>No changes in: {{ unchanged|map(attribute='title')|join(', ') }}.</p>{% endif %}
-  {% if skipped %}<p>Not compared: {% for r in skipped %}{{ r.title }} ({{ r.note|trim('.') }}){% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+  {% for note, reports in skipped|groupby('note') %}<p>Not compared ({{ note|trim('.')|lower }}): {{ reports|map(attribute='title')|join(', ') }}.</p>{% endfor %}
   <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Collected from Microsoft 365 with read-only access; nothing was changed.</p>
 </footer>
 {% endblock %}

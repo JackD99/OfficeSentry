@@ -541,3 +541,20 @@ td.tenant-col { min-width: 190px; }
 input.search.sm { padding: 5px 10px; font-size: .8125rem; width: 220px; }
 .card-head .search.sm { align-self: center; }
 @media (max-width: 640px) { .card-head .search.sm, .toolbar-actions .search.sm { width: 100%; max-width: none; } }
+
+/* -- Self-review fixes ---------------------------------------------------------------- */
+/* Headline numbers that open their report */
+a.tile.link { display: block; color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s; }
+a.tile.link:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(16, 24, 40, .08); }
+a.tile.link .label { display: flex; justify-content: space-between; gap: 6px; }
+a.tile.link .go { width: 14px; height: 14px; color: var(--faint); opacity: 0; transition: opacity .15s, transform .15s; }
+a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(2px); }
+/* An empty table is one line, not a whole card */
+.card.empty-section { display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; padding: 12px 20px; }
+.card.empty-section h2 { margin: 0; font-size: .9375rem; color: var(--text-2); }
+.card.empty-section p { margin: 0; color: var(--muted); font-size: .875rem; }
+/* Tab bars that scroll on phones fade at the edge so the hidden tabs are obvious */
+@media (max-width: 640px) {
+  .tabs { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); padding-right: 32px; }
+  table.compact-sm th, table.compact-sm td { padding: 7px 8px; font-size: .8125rem; }
+}
