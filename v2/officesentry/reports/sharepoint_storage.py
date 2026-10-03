@@ -13,22 +13,20 @@ from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from .data_reports import DataReport, Link, Section, Tile, _date
-from .sharepoint import GROWTH_DAYS, _growth, size, storage_chart, storage_points
+from .sharepoint import GROWTH_DAYS, _growth, size, storage_points
 
 SHOW_FOLDERS = 50
 SHOW_FILES = 100
 SHOW_RECYCLED = 100
 
 HOW = {
-    "current": "Archive or delete files nobody needs: start with Largest files and Largest files untouched "
-               "below.",
-    "versions": "Every save keeps a copy. Set a version limit (SharePoint admin centre, Settings, Version history "
-                "limits, or a library's Versioning settings) and trim the versions already kept.",
-    "recycle": "Deleted files count until they leave the recycle bin, 93 days after deletion. Empty the recycle "
-               "bin and second-stage recycle bin of the largest sites.",
-    "hold": "Copies kept by a Microsoft Purview retention policy or hold. Nobody can delete these by hand; review "
-            "which policies apply to these sites.",
-    "other": "Lists, pages, site assets and figures SharePoint hasn't updated yet.",
+    "current": "Archive or delete files nobody needs. See Largest files and Largest files untouched.",
+    "versions": "Set a version limit (SharePoint admin centre, Settings, Version history limits) and trim old "
+                "versions.",
+    "recycle": "Empty the recycle bin and second-stage recycle bin of the largest sites. Otherwise items stay 93 "
+               "days.",
+    "hold": "Kept by a Microsoft Purview retention policy or hold. Review the policies that cover these sites.",
+    "other": "Lists, pages, site assets, and figures SharePoint hasn't updated yet.",
 }
 
 
@@ -124,8 +122,8 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile("Recycle bins", size(recycle), "Freed when emptied", "warn" if used and recycle / used >= 0.1 else None),
         Tile(f"Untouched for {years} years", size(stale_bytes), f"{stale_files:,} file(s)"),
     ]
-    report.chart = storage_chart(points, "SharePoint storage over time")
-    report.chart_title = "SharePoint storage over time"
+    # No storage chart here: the SharePoint sites report has it, and the breakdown below matters more
+    # on the first page of the client's PDF.
     if not status.get("complete"):
         report.notes.append("Some sites or libraries were too large to read in full, so their figures are partial. "
                             "The last SharePoint storage run on the tenant page says which.")

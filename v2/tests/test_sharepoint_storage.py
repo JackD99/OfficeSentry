@@ -148,6 +148,7 @@ def test_page_export_and_isolation(client, db, two_tenants):
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/data/sharepoint-storage").get_data(as_text=True)
     assert "Where the space goes" in page and "Largest folders" in page and 'class="tiles"' in page
+    assert f"/tenants/{alpha}/data/sharepoint-storage.pdf" in page
     assert client.get(f"/tenants/{bravo}/data/sharepoint-storage").status_code == 200  # empty state renders
     wb = load_workbook(io.BytesIO(client.get(f"/tenants/{alpha}/data/sharepoint-storage.xlsx").data))
     assert wb.sheetnames[:3] == ["Summary", "Where the space goes", "Sites by storage"]
