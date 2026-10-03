@@ -25,6 +25,7 @@ import re
 import socket
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlsplit
 
 import requests
@@ -53,9 +54,11 @@ class AlertError(Exception):
 
 @dataclass
 class Alerting:
-    """What the worker needs to send alerts: links back to the portal and the vault for the URL."""
+    """What the worker needs to send alerts: links back to the portal, the vault for the URL, and the
+    web app for rendering alert emails (None skips email)."""
     base_url: str
     vault: Vault
+    app: Any = None
 
 
 @dataclass
@@ -248,10 +251,22 @@ def opened_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[I
 
 
 def after_sync(conn, alerting: Alerting | None, tenant, stats: dict, run_id: int | None = None) -> bool | None:
-    """Alert on findings opened by one ``findings.sync``. Returns whether a message was sent, None if not needed."""
+    """Alert on findings opened by one ``findings.sync``: the webhook, then any alert emails
+    (``delivery.after_sync``). Returns whether a webhook message was sent, None if not needed."""
+    if alerting is None or tenant is None:
+        return None
+    sent = _webhook_after_sync(conn, alerting, tenant, stats, run_id)
+    if alerting.app is not None and stats.get("opened"):
+        try:
+            from . import delivery  # imports this module
+            delivery.after_sync(alerting.app, conn, alerting.vault, tenant, stats["opened"], run_id)
+        except Exception:
+            log.exception("Sending alert emails failed")
+    return sent
+
+
+def _webhook_after_sync(conn, alerting: Alerting, tenant, stats: dict, run_id: int | None) -> bool | None:
     try:
-        if alerting is None or tenant is None:
-            return None
         s = settings(conn)
         if s["alerts.enabled"] != "1" or not s["alerts.url_enc"]:
             return None

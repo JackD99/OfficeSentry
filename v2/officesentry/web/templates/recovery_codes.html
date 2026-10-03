@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Your recovery codes · Office Sentry{% endblock %}
+{% macro codes_body() %}
+<div class="callout warn"><div><strong>Save these now.</strong> They're shown only once. If you lose your phone, each code lets you sign in one time.</div></div>
+<ul class="codes" id="recovery-codes">
+  {% for c in codes %}<li>{{ c }}</li>{% endfor %}
+</ul>
+<div class="form-actions">
+  <button type="button" id="copy-codes">Copy</button>
+  <button type="button" id="download-codes">Download</button>
+</div>
+<a class="btn primary wide" href="{{ continue_url }}">I've saved them, continue</a>
+{% if not first_time %}<p class="footnote">Your old recovery codes no longer work.</p>{% endif %}
+{% endmacro %}
+{% block auth %}
+<h1>{{ 'Two-step sign-in is on' if first_time else 'New recovery codes' }}</h1>
+<p class="sub">Keep these somewhere safe, such as your password manager.</p>
+{{ codes_body() }}
+{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ 'Two-step sign-in is on' if first_time else 'New recovery codes' }}</h1>
+  <div class="sub">Keep these somewhere safe, such as your password manager.</div></div></div>
+<div class="card narrow">{{ codes_body() }}</div>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var text = Array.prototype.map.call(document.querySelectorAll('#recovery-codes li'), function (li) { return li.textContent; }).join('\n');
+  var copy = document.getElementById('copy-codes');
+  copy.addEventListener('click', function () {
+    navigator.clipboard.writeText(text).then(function () { copy.textContent = 'Copied'; });
+  });
+  document.getElementById('download-codes').addEventListener('click', function () {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['Office Sentry recovery codes\nEach code works once.\n\n' + text + '\n'], {type: 'text/plain'}));
+    a.download = 'office-sentry-recovery-codes.txt';
+    a.click();
+  });
+})();
+</script>
+{% endblock %}

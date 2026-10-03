@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import logging
+import os
 import sys
 
 from werkzeug.security import generate_password_hash
 
 from . import store
-from .config import load_config
+from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
+from .mailer import ENCRYPTED_KEYS as ENCRYPTED_SETTINGS
 
 
 def cmd_web(args, cfg):
@@ -40,7 +43,17 @@ def cmd_create_admin(args, cfg):
         (args.username, generate_password_hash(password), utcnow()),
     )
     audit(conn, "cli", "user_created", detail=f"{args.username} (admin)")
+    clear_setup_token(cfg.data_dir)
     print(f"Created admin {args.username}")
+
+
+def cmd_setup_link(args, cfg):
+    """Print the one-time link for creating the first admin in the browser."""
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+        sys.exit("An admin already exists, so first-run setup is closed. Sign in instead.")
+    print(f"{cfg.base_url}/setup?token={setup_token(cfg.data_dir)}")
 
 
 def cmd_create_app(args, cfg):
@@ -62,17 +75,104 @@ def cmd_create_app(args, cfg):
     print("Next: add tenants in the portal and send each tenant admin its consent link.")
 
 
+# Every encrypted value at rest, as (table, key column, encrypted column).
+ENCRYPTED_COLUMNS = (
+    ("app_connections", "id", "key_enc"),
+    ("users", "id", "totp_secret_enc"),
+    ("users", "id", "totp_pending_enc"),
+)
+
+
+def reencrypt_all(conn, vault) -> int:
+    """Re-encrypt every stored secret with the vault's first key. Returns how many values changed."""
+    count = 0
+    with transaction(conn, immediate=True):
+        for table, key, column in ENCRYPTED_COLUMNS:
+            rows = conn.execute(f"SELECT {key}, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")
+            for row in rows.fetchall():
+                conn.execute(f"UPDATE {table} SET {column} = ? WHERE {key} = ?", (vault.rotate(row[1]), row[0]))
+                count += 1
+        # Mail passwords and secrets are encrypted with the same keys.
+        secrets = conn.execute(
+            f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(ENCRYPTED_SETTINGS))})"
+            " AND value <> ''", ENCRYPTED_SETTINGS).fetchall()
+        for row in secrets:
+            conn.execute("UPDATE settings SET value = ? WHERE key = ?", (vault.rotate(row["value"]), row["key"]))
+            count += 1
+    return count
+
+
 def cmd_rotate_keys(args, cfg):
-    """Re-encrypt stored private keys with the first key in OFFICESENTRY_ENCRYPTION_KEYS."""
+    """Re-encrypt stored secrets with the newest encryption key.
+
+    With --new and keys kept in secrets.json: make a new session key and a new
+    encryption key, re-encrypt everything, then drop the old encryption key.
+    Everyone has to sign in again.
+    """
     conn = connect(cfg.db_path)
     migrate(conn)
-    vault = Vault(cfg.encryption_keys)
-    with transaction(conn, immediate=True):
-        rows = conn.execute("SELECT id, key_enc FROM app_connections").fetchall()
-        for row in rows:
-            conn.execute("UPDATE app_connections SET key_enc = ? WHERE id = ?",
-                         (vault.rotate(row["key_enc"]), row["id"]))
-    print(f"Re-encrypted {len(rows)} key(s). Old keys can now be removed from the configuration.")
+    keys = list(cfg.encryption_keys)
+    if args.new:
+        from_env = bool(os.environ.get("OFFICESENTRY_SECRET_KEY") or os.environ.get("OFFICESENTRY_ENCRYPTION_KEYS"))
+        if from_env:
+            sys.exit("Your keys come from environment variables, so change them there: put a new key first in "
+                     "OFFICESENTRY_ENCRYPTION_KEYS (keep the old one after it), run rotate-keys, then remove the "
+                     "old key. Set a new OFFICESENTRY_SECRET_KEY to sign everyone out.")
+        fresh = new_secrets()
+        keys = fresh["encryption_keys"] + keys
+    count = reencrypt_all(conn, Vault(keys))
+    if args.new:
+        # Only now the data is readable with the new key alone is the old one dropped.
+        write_private(cfg.secrets_path, json.dumps({"secret_key": fresh["secret_key"],
+                                                    "encryption_keys": fresh["encryption_keys"]}))
+        conn.execute("DELETE FROM sessions")
+        audit(conn, "cli", "keys_rotated", detail=f"{count} value(s) re-encrypted")
+        print(f"New keys written to {cfg.secrets_path} and {count} value(s) re-encrypted. "
+              "Restart the web and worker processes; everyone will need to sign in again.")
+        return
+    audit(conn, "cli", "keys_reencrypted", detail=f"{count} value(s)")
+    print(f"Re-encrypted {count} value(s). Old keys can now be removed from the configuration.")
+
+
+def cmd_healthcheck(args, cfg):
+    """Exit 0 if the web portal answers, or the worker has checked in recently (for Docker)."""
+    if args.service == "web":
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/health", timeout=5) as resp:  # noqa: S310
+                sys.exit(0 if resp.status == 200 else 1)
+        except OSError as exc:
+            sys.exit(f"web: {exc}")
+    from .worker import is_alive, last_seen
+
+    conn = connect(cfg.db_path)
+    if not is_alive(conn):
+        sys.exit(f"worker: last seen {last_seen(conn) or 'never'}")
+
+
+def cmd_backup(args, cfg):
+    """Write a consistent copy of the database, safe while the portal is running."""
+    import os
+    import sqlite3
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    folder = Path(args.dir) if args.dir else cfg.data_dir / "backups"
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    dest = folder / f"officesentry-{datetime.now(UTC):%Y%m%d-%H%M%S}.db"
+    src = connect(cfg.db_path)
+    out = sqlite3.connect(dest)
+    with out:
+        src.backup(out)
+    out.close()
+    os.chmod(dest, 0o600)
+    old = sorted(folder.glob("officesentry-*.db"))[:-args.keep] if args.keep else []
+    for path in old:
+        path.unlink()
+    print(f"Saved {dest}" + (f" (removed {len(old)} older backup(s))" if old else ""))
+    print("Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
+          " without it the stored certificates can't be decrypted.")
 
 
 def cmd_live_test(args, cfg):
@@ -93,7 +193,7 @@ def main(argv=None):
     web.add_argument("--port", type=int, default=8000)
     web.set_defaults(func=cmd_web)
 
-    worker = sub.add_parser("worker", help="run collector jobs and the nightly schedule")
+    worker = sub.add_parser("worker", help="run collections, the schedule, emailed reports and retention")
     worker.add_argument("--once", action="store_true", help="drain the queue and exit")
     worker.set_defaults(func=cmd_worker)
 
@@ -107,7 +207,22 @@ def main(argv=None):
     app.set_defaults(func=cmd_create_app)
 
     rotate = sub.add_parser("rotate-keys", help="re-encrypt credentials with the newest key")
+    rotate.add_argument("--new", action="store_true",
+                        help="replace the keys in secrets.json with new ones (signs everyone out)")
     rotate.set_defaults(func=cmd_rotate_keys)
+
+    link = sub.add_parser("setup-link", help="print the one-time link for creating the first admin")
+    link.set_defaults(func=cmd_setup_link)
+
+    health = sub.add_parser("healthcheck", help="exit 0 if the web portal or worker is healthy (for Docker)")
+    health.add_argument("service", choices=["web", "worker"])
+    health.add_argument("--port", type=int, default=8000)
+    health.set_defaults(func=cmd_healthcheck)
+
+    backup = sub.add_parser("backup", help="save a consistent copy of the database")
+    backup.add_argument("--dir", help="folder for backups (default: <data dir>/backups)")
+    backup.add_argument("--keep", type=int, default=7, help="how many backups to keep (0 = all)")
+    backup.set_defaults(func=cmd_backup)
 
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")

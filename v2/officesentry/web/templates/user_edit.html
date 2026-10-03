@@ -26,6 +26,25 @@
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
   <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>
+<section class="card narrow-lg">
+  <h2>Sign-in security</h2>
+  <dl class="kv">
+    <dt>Two-step sign-in</dt>
+    <dd>{% if user.totp_enabled_at %}<span class="pill ok">On</span>{% elif two_step_required %}<span class="pill warn">Not set up</span> <span class="muted small">They'll be asked to set it up at their next sign-in.</span>{% else %}<span class="pill">Off</span>{% endif %}</dd>
+    <dt>Signed in on</dt>
+    <dd>{{ sessions|length }} browser{{ '' if sessions|length == 1 else 's' }}</dd>
+    {% if locked %}<dt>Status</dt><dd><span class="pill warn">Locked</span> <span class="muted small">Too many wrong passwords or codes. Unlocks by itself {{ user.locked_until|ago }}.</span></dd>{% endif %}
+  </dl>
+  <div class="form-actions wrap">
+    {% if locked %}<form method="post" action="{{ url_for('admin.unlock_user', user_id=user.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Unlock now</button></form>{% endif %}
+    {% if sessions %}<form method="post" action="{{ url_for('admin.sign_out_user', user_id=user.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Sign out everywhere{{ ' else' if user.id == current_user.id else '' }}</button></form>{% endif %}
+    {% if user.totp_enabled_at %}<form method="post" action="{{ url_for('admin.reset_two_step', user_id=user.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Reset two-step sign-in for {{ user.username }}? They'll be signed out and set it up again with their new phone.">Reset two-step sign-in</button></form>{% endif %}
+  </div>
+  <p class="footnote">Lost phone? Reset two-step sign-in. They'll set it up again with the new phone when they next sign in.</p>
+</section>
 {% if user.id != current_user.id %}
 <section class="card narrow-lg danger-zone">
   <h2>Delete user</h2>

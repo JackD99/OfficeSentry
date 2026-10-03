@@ -1,0 +1,6 @@
+# Used by the "https" profile in docker-compose.yml. Caddy gets and renews the
+# certificate for OFFICESENTRY_DOMAIN automatically.
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy web:8000
+}

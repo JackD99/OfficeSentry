@@ -1,14 +1,28 @@
 {% extends "base.html" %}
 {% block title %}First-run setup · Office Sentry{% endblock %}
 {% block auth %}
+{% if need_token %}
+<h1>Welcome to Office Sentry</h1>
+<p class="sub">To create the first admin, open the setup link the portal printed when it started.</p>
+<ol class="steps">
+  <li>Find the line starting <code>No admin account yet</code> in the portal's log. With Docker, run <code>docker compose logs web</code>.</li>
+  <li>Open the link on that line, or paste the code after <code>token=</code> below.</li>
+</ol>
+<p class="small muted">Or run <code>python -m officesentry setup-link</code> on the server.</p>
+<form method="get">
+  <label>Setup code <input name="token" autocomplete="off" required></label>
+  <button class="primary">Continue</button>
+</form>
+{% else %}
 <h1>Create the first admin</h1>
-<p class="sub">This page is only available until the first account exists.</p>
+<p class="sub">{% if two_step %}Next, you'll add your phone for two-step sign-in.{% else %}This account can manage everything in Office Sentry.{% endif %}</p>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>Username <input name="username" autocomplete="username" required autofocus></label>
+  <label>Username <input name="username" maxlength="64" autocomplete="username" required autofocus></label>
   <label>Password <input type="password" name="password" minlength="{{ min_password }}" autocomplete="new-password" required>
-    <span class="hint">At least {{ min_password }} characters.</span></label>
+    <span class="hint">At least {{ min_password }} characters. A short sentence works well.</span></label>
   <label>Confirm password <input type="password" name="confirm" minlength="{{ min_password }}" autocomplete="new-password" required></label>
   <button class="primary">Create admin</button>
 </form>
+{% endif %}
 {% endblock %}

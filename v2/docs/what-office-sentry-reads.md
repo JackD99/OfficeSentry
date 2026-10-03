@@ -152,10 +152,10 @@ depend on your MSP. Ask them where their server is and who can access it.
 ### How long it is kept
 
 - **Detailed snapshots** (lists of users, mailboxes, policies and so on) are
-  kept for a set number of days, then deleted automatically. The default is
-  730 days (two years); your MSP can change it with the
-  `OFFICESENTRY_RETENTION_DAYS` setting. The most recent collection of each
-  kind is always kept, however old.
+  kept for the last 30 days, plus one per month for the last 12 months, and
+  older ones are deleted automatically. Your MSP can change both with the
+  `OFFICESENTRY_KEEP_DAILY` and `OFFICESENTRY_KEEP_MONTHLY` settings. The most
+  recent collection of each kind is always kept, however old.
 - **Numbers** used for trends (counts, scores and percentages) are kept
   indefinitely.
 - **Findings history** (each issue found, with the account or item it

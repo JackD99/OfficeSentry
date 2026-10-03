@@ -1,0 +1,8 @@
+{% extends "emails/_layout.html" %}
+{% block preheader %}Email from Office Sentry is working.{% endblock %}
+{% block kicker %}Test{% endblock %}
+{% block body %}
+<h1 style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#111827;">Email is working</h1>
+<p style="margin:0 0 12px;color:#374151;">This test was sent through {{ transport }}. Scheduled reports, digests and alerts will arrive looking like this.</p>
+{% endblock %}
+{% block footer %}Sent from Office Sentry's email settings.{% endblock %}

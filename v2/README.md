@@ -27,8 +27,20 @@ pass, and a first run against a real tenant.
 - **Since last month**: new and fixed findings, admin role changes, new,
   disabled and deleted accounts, and Conditional Access policies added,
   switched or edited, compared with the snapshot from 4+ weeks earlier.
-- **Emailed reports** (`/tenants/<id>/schedules`, SMTP under Admin → Email):
-  monthly on a chosen day and hour, with PDF and XLSX attached.
+- **Emailed reports** (a tenant's *Emailed reports* tab, and *Email reports*
+  for everything at once):
+  - Send any mix of reports (the monthly review, the evidence pack, any detail
+    report) weekly, monthly or quarterly, at a time in the schedule's own timezone.
+  - Recipients are contacts: the client's people get the email, your team gets a
+    hidden copy. Optional note at the top of the email.
+  - A cross-tenant **digest** for your team, worst tenants first.
+  - **Alert emails** when a scan finds something new and critical (or high), for
+    one tenant or all of them. They come from the same alert event as the
+    Teams/Slack alerts below. A tenant's first scan never emails.
+  - Preview (desktop and phone width), Send now, pause, and a delivery history
+    with failures, automatic retries (5 min, 30 min, 2 h) and a Retry button.
+  - Sent over SMTP or Microsoft 365 (Graph `sendMail` from a mailbox in your own
+    tenant, through a separate send-only app), under Settings → Email delivery.
 - **Alerts** (Admin → Alerts): a Microsoft Teams (Workflows), Slack or generic
   JSON webhook message when a tenant gets new findings at or above a chosen
   severity (one message per tenant per collection), when a collection fails
@@ -157,19 +169,55 @@ this command; the product signs in with a certificate.
 - **Deny-by-default access.** Users see only tenants granted to them (admins
   and "all tenants" analysts excepted). Hidden tenants return 404.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
-  can show history and changes. Metrics are kept forever; full snapshots for
-  `OFFICESENTRY_RETENTION_DAYS`.
-- **One worker process, no Redis/Celery.** It recovers runs left behind by a
-  crash and queues each nightly slot once.
+  can show history and changes. Metrics and findings are kept forever; full
+  snapshots for the last 30 days plus one per month for 12 months.
+- **One worker process, no Redis/Celery.** It collects on a cron schedule in
+  your timezone, skips data that is already fresh, refreshes stale data before
+  an emailed report, prunes old snapshots, and recovers runs left behind by a
+  crash.
+
+## Sign-in security
+
+- **Two-step sign-in** (a 6-digit code from an authenticator app) is required
+  for admins and analysts and optional for client users. Change it with
+  `OFFICESENTRY_REQUIRE_MFA` (`staff`, `all` or `off`). Each user gets ten
+  one-time recovery codes. An admin can reset someone's two-step sign-in from
+  their user page if they lose their phone.
+- **Lockout:** five wrong passwords or codes lock the account for 15 minutes.
+  Admins can unlock it straight away from the user page.
+- **Sessions are stored on the server.** Signing out ends the session, so a
+  copied cookie stops working. People can see where they're signed in and
+  sign out other browsers on their **Account** page. Sessions end after 2 hours
+  without activity or 8 hours in total, and when a password, role, access or
+  two-step setting changes.
+- **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
+  prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
+  real client IP and scheme are used.
+- **Keys:** the session key and the encryption key are separate and kept in
+  `secrets.json` (mode 0600, tightened if it was looser) unless set as
+  environment variables. `python -m officesentry rotate-keys --new` replaces
+  both and re-encrypts every stored secret.
 
 ## Quick start (Docker)
 
 ```bash
 cp .env.example .env          # set OFFICESENTRY_BASE_URL at least
-docker compose up -d --build
+docker compose --profile https up -d --build
 ```
 
-Open the portal, create the first admin, then:
+[DEPLOY.md](DEPLOY.md) has the full steps: HTTPS, schedule and retention
+settings, backups and updating.
+
+Create the first admin:
+
+1. Run `docker compose logs web` and find the line starting **No admin account
+   yet**. Open the link on it. (Lost it? `docker compose exec web python -m
+   officesentry setup-link` prints it again.) The link only works until the
+   first admin exists, so nobody else can claim a fresh install.
+2. Choose a username and password, then scan the QR code with an authenticator
+   app (Microsoft Authenticator works) and save the recovery codes.
+
+Then:
 
 1. **App connections → Generate certificate.**
 2. Create the app: `docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>`
@@ -215,7 +263,9 @@ officesentry/
   reports/       report builders (data only), SVG charts, XLSX/PDF export
   findings.py    findings lifecycle (new, resolved, reopened, accepted)
   changes.py     snapshot diffs for "since last month"
-  mailer.py      SMTP delivery and the monthly schedule
-  worker.py      queue runner, nightly scheduler, orphan recovery
+  mailer.py      sends a finished email over SMTP or Graph sendMail
+  delivery.py    schedules, digests, alert emails, retries and email rendering
+  schedule.py    cron slots in a timezone, freshness (max age), periodic jobs
+  worker.py      queue runner, schedule, retention, heartbeat
   web/           Flask app: access.py is the single authorization gate
 ```
