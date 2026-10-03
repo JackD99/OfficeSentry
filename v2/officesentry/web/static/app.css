@@ -376,3 +376,5 @@ ul.ticks li { margin: 3px 0; }
 .gap-list li.sub { list-style: circle; margin-left: 14px; color: var(--muted); }
 .tile .label .dot { margin-right: 4px; vertical-align: 1px; }
 @media (max-width: 640px) { details.control > summary { flex-direction: column; gap: 6px; } .control-body { padding-left: 20px; } }
+.connection-form { margin: 16px 0 0; }
+.connection-form > label { flex: 1 1 200px; }

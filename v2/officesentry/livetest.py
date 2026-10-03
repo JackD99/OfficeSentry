@@ -37,7 +37,7 @@ def _wrap(provider, error_cls):
 
 
 def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
-        record: Path | None = None) -> int:
+        record: Path | None = None, connection_id: int | None = None) -> int:
     missing = [k for k in ENV if not os.environ.get(k)]
     if missing:
         print("Missing environment variables: " + ", ".join(missing))
@@ -45,8 +45,16 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
     tenant_ref, client_id, secret = (os.environ[k] for k in ENV)
     conn = connect(cfg.db_path)
     migrate(conn)
-    row = conn.execute("SELECT id FROM tenants WHERE tenant_ref = ?", (tenant_ref,)).fetchone()
-    tenant_id = row["id"] if row else store.create_tenant(conn, "Live test", tenant_ref, None)
+    connections = store.list_connections(conn)
+    if connection_id is not None and connection_id not in {c["id"] for c in connections}:
+        print(f"No app connection with id {connection_id}")
+        return 2
+    if connection_id is None and len(connections) == 1:
+        connection_id = connections[0]["id"]  # so the portal can keep refreshing it with the certificate
+    row = conn.execute("SELECT id, connection_id FROM tenants WHERE tenant_ref = ?", (tenant_ref,)).fetchone()
+    tenant_id = row["id"] if row else store.create_tenant(conn, "Live test", tenant_ref, connection_id)
+    if row and connection_id is not None and row["connection_id"] is None:
+        conn.execute("UPDATE tenants SET connection_id = ? WHERE id = ?", (connection_id, tenant_id))
     # The test app is Office Sentry's own, so checks shouldn't flag it. Its client ID isn't secret.
     conn.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)"
                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (client_id,))

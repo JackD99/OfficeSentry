@@ -149,12 +149,27 @@ def set_client_id(conn_id: int):
     if store.get_connection(g.db, conn_id) is None:
         abort(404)
     client_id = request.form.get("client_id", "").strip().lower()
+    home = request.form.get("home_tenant", "").strip().lower()
     if not GUID_RE.match(client_id):
         flash("The client ID is the app registration's Application (client) ID, a GUID.", "error")
+    elif home and not GUID_RE.match(home):
+        flash("The tenant ID is the Directory (tenant) ID on the app's overview page, a GUID.", "error")
     else:
         g.db.execute("UPDATE app_connections SET client_id = ? WHERE id = ?", (client_id, conn_id))
         audit(g.db, g.user["username"], "connection_client_id_set", detail=client_id)
-        flash("Client ID saved.", "success")
+        if not home:
+            flash("Client ID saved.", "success")
+        else:
+            # Sign in to the tenant the app was created in, to prove the certificate is on the app.
+            from ..connection_check import check
+
+            connection = store.get_connection(g.db, conn_id)
+            result = check(home, client_id, current_app.extensions["officesentry.vault"].decrypt(
+                connection["key_enc"]), connection["thumbprint"])
+            if result.ok:
+                flash(f"Client ID saved and checked: {result.title} The certificate works.", "success")
+            else:
+                flash(f"Client ID saved, but the check failed. {result.title} {result.fix}", "error")
     return redirect(url_for("admin.connections"))
 
 

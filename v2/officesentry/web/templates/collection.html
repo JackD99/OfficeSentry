@@ -15,6 +15,22 @@
       <dt>Admin consent</dt><dd>{% if tenant.consented_at %}Granted {{ ts(tenant.consented_at) }}{% else %}<span class="pill warn">Not granted yet</span>{% endif %}</dd>
     </dl>
     {% if not_connected %}<p class="footnote">{{ not_connected }}</p>{% endif %}
+    {% set can_test = connection and connection.client_id and current_user.role in ('admin', 'analyst') %}
+    {% if current_user.role == 'admin' and connections %}
+    <form method="post" action="{{ url_for('tenants.set_connection', tenant_id=tenant.id) }}" class="form-row connection-form">
+      {{ csrf() }}
+      <label>App connection
+        <select name="connection_id">
+          {% if not connection %}<option value="">Choose…</option>{% endif %}
+          {% for c in connections %}<option value="{{ c.id }}"{% if connection and c.id == connection.id %} selected{% endif %}>{{ c.name }}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
+        </select>
+      </label>
+      <button>Save</button>
+      {% if can_test %}<button formaction="{{ url_for('tenants.test_connection', tenant_id=tenant.id) }}">Test connection</button>{% endif %}
+    </form>
+    {% elif can_test %}
+    <form method="post" action="{{ url_for('tenants.test_connection', tenant_id=tenant.id) }}" class="connection-form">{{ csrf() }}<button>Test connection</button></form>
+    {% endif %}
     {% if consent_link %}
     <details class="consent">
       <summary>{{ 'Re-grant consent (after new permissions)' if tenant.consented_at else 'Grant admin consent' }}</summary>
