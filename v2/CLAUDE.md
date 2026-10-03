@@ -70,6 +70,12 @@ reads an older run must cope with its objects being gone (see
 `changes._baseline_run`). A side thread records the heartbeat that the
 portal banner and `healthcheck worker` read. Don't add Celery or Redis.
 
+To add timed work (emails, digests), register a job in its own module with
+`@schedule.periodic("name")`; it gets a `TickContext` every minute and uses
+`schedule.due_slot(cron, tz, ctx.now, last_slot=..., not_before=...)` to
+decide whether to act. Add the module to `worker.JOB_MODULES`. See
+`mailer._send_due_reports` and `schedule.refresh_for_report`.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.

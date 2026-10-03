@@ -7,6 +7,7 @@ records a heartbeat so the portal and ``healthcheck`` can tell it is running.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import signal
 import sqlite3
@@ -163,17 +164,19 @@ def _heartbeat_thread(db_path, stop: threading.Event) -> threading.Thread:
 # -- Main loop ---------------------------------------------------------------
 
 
-def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> None:
-    """The once-a-minute jobs: queue scheduled collections and send due report emails."""
-    from . import mailer
+# Modules that register ``schedule.periodic`` jobs. Add yours here.
+JOB_MODULES = ("officesentry.mailer",)
 
+
+def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> None:
+    """The once-a-minute work: queue scheduled collections, then run the periodic jobs."""
+    for module in JOB_MODULES:
+        importlib.import_module(module)
+    now = now or datetime.now(UTC)
     queued = schedule_tick(conn, cfg, now)
     if queued:
         log.info("Queued %s scheduled run(s)", queued)
-    try:
-        mailer.run_due(app, conn, vault, cfg.timezone, now, max_age_hours=cfg.max_age_hours)
-    except Exception:  # never let email problems stop collections
-        log.exception("Sending scheduled reports failed")
+    schedule.run_periodic(schedule.TickContext(app=app, conn=conn, vault=vault, cfg=cfg, now=now))
 
 
 def prune(conn, cfg: Config) -> int:

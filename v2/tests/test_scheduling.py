@@ -234,3 +234,36 @@ def test_backup_command(cfg, db, two_tenants, monkeypatch, tmp_path):
     assert copy.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
     if os.name != "nt":  # Windows has no Unix file modes
         assert oct(files[-1].stat().st_mode & 0o777) == "0o600"
+
+
+def test_due_slot():
+    now = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
+    slot = schedule.due_slot("0 8 * * *", "UTC", now)
+    assert slot == datetime(2026, 10, 5, 8, 0, tzinfo=UTC)
+    assert schedule.due_slot("0 8 * * *", "UTC", now, last_slot=schedule.iso(slot)) is None
+    assert schedule.due_slot("0 8 * * *", "UTC", now, not_before="2026-10-05T08:30:00Z") is None
+    # Days of downtime catch up once, with the latest slot.
+    assert schedule.due_slot("0 8 * * *", "UTC", now, last_slot="2026-10-01T08:00:00Z") == slot
+
+
+def test_periodic_jobs_run_each_tick_and_are_isolated(app, db, cfg, vault, monkeypatch):
+    seen = []
+    monkeypatch.setattr(schedule, "PERIODIC", {})
+
+    @schedule.periodic("broken")
+    def broken(ctx):
+        raise RuntimeError("boom")
+
+    @schedule.periodic("probe")
+    def probe(ctx):
+        seen.append((ctx.cfg.timezone, ctx.now))
+
+    with pytest.raises(ValueError):
+        schedule.periodic("probe")(probe)
+    now = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
+    worker.housekeeping(app, db, vault, cfg, now)
+    assert seen == [(cfg.timezone, now)]
+
+
+def test_report_emails_are_a_periodic_job():
+    assert "report_emails" in schedule.PERIODIC

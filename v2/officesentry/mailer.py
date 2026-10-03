@@ -144,12 +144,12 @@ def due_schedules(conn, tz: str, now: datetime | None = None) -> list:
     retry_cutoff = now.timestamp() - 3600
     due = []
     for s in conn.execute("SELECT * FROM report_schedules WHERE enabled = 1"):
-        slot = schedule.previous_fire(schedule_cron(s), tz, now)
+        slot = schedule.due_slot(schedule_cron(s), tz, now, not_before=s["created_at"])
+        if slot is None:
+            continue  # a new schedule starts at its next send time, not a past one
         period = slot.astimezone(ZoneInfo(tz)).strftime("%Y-%m")
         if s["last_period"] is not None and s["last_period"] >= period:
             continue
-        if schedule.iso(slot) < s["created_at"]:
-            continue  # a new schedule starts at its next send time, not a past one
         last_fail = conn.execute(
             "SELECT sent_at FROM report_deliveries WHERE schedule_id = ? AND status = 'failed'"
             " ORDER BY id DESC LIMIT 1", (s["id"],)).fetchone()
@@ -175,3 +175,8 @@ def run_due(app, conn, vault, tz: str, now: datetime | None = None, max_age_hour
             conn.execute("UPDATE report_schedules SET last_period = ? WHERE id = ?", (period, sched["id"]))
             sent += 1
     return sent
+
+
+@schedule.periodic("report_emails")
+def _send_due_reports(ctx) -> None:
+    run_due(ctx.app, ctx.conn, ctx.vault, ctx.cfg.timezone, ctx.now, max_age_hours=ctx.cfg.max_age_hours)

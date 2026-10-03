@@ -8,6 +8,9 @@ emailed report first refreshes any collector older than that.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -15,6 +18,8 @@ from croniter import croniter
 
 from . import store
 from .collectors import REGISTRY
+
+log = logging.getLogger(__name__)
 
 DEFAULT_COLLECT_CRON = "0 2 * * *"
 # An emailed report waits this long for its refresh runs, then goes out anyway.
@@ -52,6 +57,62 @@ def next_fire(expr: str, tz: str, now: datetime) -> datetime:
     """The first time ``expr`` fires after ``now``, in UTC."""
     local = now.astimezone(ZoneInfo(tz)).replace(microsecond=0)
     return croniter(expr, local).get_next(datetime).astimezone(UTC)
+
+
+def due_slot(expr: str, tz: str, now: datetime, last_slot: str | None = None,
+             not_before: str | None = None) -> datetime | None:
+    """The latest slot of ``expr`` if it still needs doing, else None.
+
+    ``last_slot`` is the ``iso()`` of the slot the caller last completed, and
+    ``not_before`` (e.g. the job's created_at) stops a new job running for a
+    slot that passed before it existed. Only the latest missed slot is
+    returned, so a worker that was down catches up once, not once per slot.
+    """
+    slot = previous_fire(expr, tz, now)
+    stamp = iso(slot)
+    if (last_slot and last_slot >= stamp) or (not_before and stamp < not_before):
+        return None
+    return slot
+
+
+# -- Periodic jobs -------------------------------------------------------------
+
+
+@dataclass
+class TickContext:
+    """What a periodic job gets each minute. ``app`` renders templates (emails)."""
+    app: object
+    conn: object
+    vault: object
+    cfg: object
+    now: datetime
+
+
+PERIODIC: dict[str, Callable[[TickContext], object]] = {}
+
+
+def periodic(name: str):
+    """Register ``fn(ctx: TickContext)`` to run on every worker tick (once a minute).
+
+    The job decides for itself whether anything is due, typically with
+    ``due_slot()`` and its own record of the last slot done. An exception is
+    logged and doesn't stop collections or other jobs. Register at import time
+    in a module ``worker.JOB_MODULES`` imports.
+    """
+    def decorator(fn):
+        if name in PERIODIC:
+            raise ValueError(f"duplicate periodic job {name!r}")
+        PERIODIC[name] = fn
+        return fn
+    return decorator
+
+
+def run_periodic(ctx: TickContext) -> None:
+    for name, fn in PERIODIC.items():
+        try:
+            fn(ctx)
+        except Exception:
+            log.exception("Periodic job %s failed", name)
 
 
 def nightly_collectors() -> list[str]:
