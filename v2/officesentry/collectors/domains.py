@@ -1,4 +1,8 @@
-"""Email domain health (SPF, DMARC, DKIM, MX) for each of the tenant's verified domains, from public DNS."""
+"""Email domain health (SPF, DMARC, DKIM, MX, MTA-STS, TLS-RPT) for each of the tenant's verified domains.
+
+From public DNS, plus each mail domain's MTA-STS policy file over HTTPS when
+its DNS says there is one. Nothing is sent to the tenant.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +26,7 @@ def tenant_domain_names(orgs: list[dict]) -> list[str]:
 class DomainHealth(Collector):
     key = "domain_health"
     title = "Email domains"
-    description = "SPF, DMARC and DKIM for each verified domain, checked in public DNS."
+    description = "SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS."
     permissions = ()
 
     def collect(self, ctx: RunContext) -> None:

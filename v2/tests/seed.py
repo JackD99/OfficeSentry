@@ -11,10 +11,16 @@ from officesentry.collectors import REGISTRY
 from officesentry.exchange import EXCHANGE_ROOT, ExchangeClient
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
+from tests import adminactivitydata as ad
+from tests import devicedata as dd
 from tests import graphdata as gd
+from tests import groupdata as grp
+from tests import hybriddata as hd
+from tests import tenantsettingsdata as tsd
 from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
+BETA = f"{GRAPH_ROOT}/beta"
 
 
 def exchange_callback(data):
@@ -82,6 +88,21 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(re.compile(re.escape(V1) + r"/groups/[^/?]+(\?.*)?$"), json={"displayName": "Break glass"})
     rsps.get(re.compile(re.escape(V1) + r"/groups/[^/]+/transitiveMembers"),
              json={"value": [{"@odata.type": "#microsoft.graph.user", "id": "u4"}]})
+    rsps.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
+    rsps.get(f"{V1}/deviceManagement/managedDevices", json={"value": dd.MANAGED_DEVICES})
+    rsps.get(f"{V1}/groups", json={"value": grp.GROUPS})
+
+    def people(request):  # /v1.0/groups/<id>/owners or /members
+        gid, kind = request.path_url.split("?")[0].split("/")[3:5]
+        return 200, {}, json.dumps({"value": getattr(grp, kind.upper()).get(gid, [])})
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/groups/[^/]+/(owners|members)"),
+                      callback=people, content_type="application/json")
+    rsps.get(f"{V1}/groupSettings", json={"value": grp.GROUP_SETTINGS})
+    rsps.get(f"{V1}/groupLifecyclePolicies", json={"value": grp.LIFECYCLE_POLICIES})
+    rsps.get(f"{BETA}/organization", json={"value": [gd.ORGANIZATION]})
+    rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
+    rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
+    rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
     mock_phase4(rsps, **phase4)
 
 

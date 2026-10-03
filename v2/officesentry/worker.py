@@ -11,7 +11,7 @@ import traceback
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import findings, store
+from . import alerts, findings, store
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .crypto import Vault
@@ -48,7 +48,7 @@ def default_exchange_factory(vault: Vault):
     return factory
 
 
-def execute_run(conn, run, graph_factory, exchange_factory=None) -> str:
+def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alerts.Alerting | None = None) -> str:
     """Execute one claimed run. Returns the final status."""
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
@@ -85,6 +85,7 @@ def execute_run(conn, run, graph_factory, exchange_factory=None) -> str:
         if any(stats.values()):
             store.log_event(conn, run_id, "info", "Findings: {new} new, {reopened} reopened, {resolved} resolved"
                             .format(**stats))
+        alerts.after_sync(conn, alerting, tenant, stats, run_id)
     except Exception:  # a rule bug must not mark a good collection as failed
         store.log_event(conn, run_id, "error", "Updating findings failed:\n" + traceback.format_exc())
     return status
@@ -127,6 +128,7 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     vault = Vault(cfg.encryption_keys)
     graph_factory = graph_factory or default_graph_factory(vault)
     exchange_factory = exchange_factory or default_exchange_factory(vault)
+    alerting = alerts.Alerting(cfg.base_url, vault)
 
     from . import delivery
     from .web import create_app
@@ -156,7 +158,8 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
         run = store.claim_next_run(conn)
         if run is not None:
             log.info("Run %s: %s for tenant %s", run["id"], run["collector"], run["tenant_id"])
-            execute_run(conn, run, graph_factory, exchange_factory)
+            status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
+            alerts.after_run(conn, alerting, run["id"], status)
             continue
         if once:
             return

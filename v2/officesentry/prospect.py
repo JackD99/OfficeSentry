@@ -73,12 +73,12 @@ class Assessment:
     health: dnscheck.DomainHealth
     id: int | None = None
     created_by: str = ""
-    issues: list[dnscheck.Issue] = field(default_factory=list)
+    issues: list[dnscheck.Issue] = field(default_factory=list)  # includes MTA-STS and TLS-RPT
 
     @property
     def grade(self) -> str:
-        """A, C or F: simple enough to put on a sales slide."""
-        severities = {i.severity for i in self.issues}
+        """A, C or F: simple enough to put on a sales slide. Only spoofing (SPF, DMARC, DKIM) counts."""
+        severities = {i.severity for i in self.issues if i.area not in dnscheck.TRANSPORT_AREAS}
         if "high" in severities:
             return "F"
         if "medium" in severities:
@@ -93,11 +93,16 @@ class Assessment:
             return "Email authentication is in place but not enforced, so spoofed mail can still get through."
         return "Email authentication is set up and enforced."
 
+    @property
+    def delivery(self) -> dict[str, str]:
+        """MTA-STS and TLS-RPT in one word each (Enforced, Testing, Missing...)."""
+        return dnscheck.transport_summary(self.health)
+
 
 def run(domain: str, company: str = "", resolve=None, session=None) -> Assessment:
     health = dnscheck.check_domain(domain, resolve or dnscheck.lookup)
     a = Assessment(domain, company or domain, datetime.now(UTC), tenant_lookup(domain, session), health)
-    a.issues = dnscheck.issues(health)
+    a.issues = dnscheck.issues(health, transport=True)
     return a
 
 
@@ -117,5 +122,5 @@ def load(row) -> Assessment:
     a = Assessment(row["domain"], row["company"] or row["domain"],
                    datetime.fromisoformat(data["checked_at"].replace("Z", "+00:00")),
                    TenantInfo(**data["tenant"]), health, row["id"], row["created_by"])
-    a.issues = dnscheck.issues(health)
+    a.issues = dnscheck.issues(health, transport=True)
     return a
