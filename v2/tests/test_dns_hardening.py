@@ -354,7 +354,7 @@ def test_checks_on_the_seeded_tenant(db, two_tenants):
     r = {x.key: x for x in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)))}
     assert r["mta_sts"].status == "fail"
     assert [(f.subject, f.severity, f.object_id) for f in r["mta_sts"].findings] == [("x.com", "low", "x.com:MTA-STS")]
-    assert r["mta_sts"].summary == "1 of 1 mail domain(s) don't fully enforce MTA-STS"
+    assert r["mta_sts"].summary == "1 of 1 mail domain doesn't fully enforce MTA-STS"
     assert (r["tls_rpt"].status, r["tls_rpt"].summary) == (
         "unavailable", "TLS-RPT is checked on mail domains that use MTA-STS, and none do yet")
     keys = list(r)
@@ -367,9 +367,9 @@ def test_enforced_mta_sts_passes(db, two_tenants):
         seed_tenant(db, alpha, dns=seeded_dns(X_STS))
     tenant = store.get_tenant(db, alpha)
     r = {x.key: x for x in evaluate(TenantSnapshot(db, tenant))}
-    assert (r["mta_sts"].status, r["mta_sts"].summary) == ("pass", "MTA-STS is enforced on all 1 mail domain(s)")
+    assert (r["mta_sts"].status, r["mta_sts"].summary) == ("pass", "MTA-STS is enforced on the 1 mail domain")
     assert (r["tls_rpt"].status, r["tls_rpt"].summary) == (
-        "pass", "TLS-RPT reports are set up on all 1 domain(s) that use MTA-STS or TLS-RPT")
+        "pass", "TLS-RPT reports are set up on the 1 domain that uses MTA-STS or TLS-RPT")
     report = build(db, tenant, "domains")
     overview, records = report.sections
     assert overview.columns[5:7] == ["MTA-STS", "TLS-RPT"] and records.columns[4:6] == ["MTA-STS policy",

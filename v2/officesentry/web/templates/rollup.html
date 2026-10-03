@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, sev_counts, downloads %}
+{% from "_macros.html" import icon, sev_counts, sev_legend, downloads %}
 {% block title %}{{ rollup.title }} · All tenants · Office Sentry{% endblock %}
 {% macro cell(row, c) -%}
 {% set v = row.values.get(c.key) %}
@@ -63,6 +63,7 @@
     <div>
       <h2>{{ rollup.title }} <span class="count-badge">{{ rollup.rows|length }}</span></h2>
       <p class="muted small m0">{{ rollup.description }}</p>
+      {% if rollup.columns|selectattr('kind', 'equalto', 'sev')|first %}{{ sev_legend('Coloured counts') }}{% endif %}
     </div>
     <div class="toolbar-actions">
       {% if rollup.rows|length > 5 %}<input class="search sm" type="search" data-filter="rollup-table" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}

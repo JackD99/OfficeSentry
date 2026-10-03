@@ -11,6 +11,7 @@ from .. import store
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
+from ..text import plural
 from . import sessions
 from .access import ROLES, roles_required
 from .auth import password_problem
@@ -137,7 +138,7 @@ def reset_two_step(user_id: int):
 def sign_out_user(user_id: int):
     user = _user_or_404(user_id)
     ended = sessions.revoke_user(user_id, except_current=user_id == g.user["id"])
-    audit(g.db, g.user["username"], "user_signed_out", detail=f"{user['username']}: {ended} session(s)")
+    audit(g.db, g.user["username"], "user_signed_out", detail=f"{user['username']}: {plural(ended, 'session')}")
     flash(f"Signed {user['username']} out of {ended} browser{'s' if ended != 1 else ''}.", "success")
     return redirect(url_for("admin.edit_user", user_id=user_id))
 

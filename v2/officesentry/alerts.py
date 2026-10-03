@@ -35,6 +35,7 @@ from .crypto import Vault
 from .db import audit
 from .rules import RULES, SEVERITIES, SEVERITY_RANK
 from .store import log_event
+from .text import plural
 
 log = logging.getLogger(__name__)
 
@@ -204,7 +205,8 @@ def _deliver(conn, alerting: Alerting, s: dict, message: Message, run_id: int | 
         log.exception("Sending an alert failed")
         outcome, ok = ("alert_failed", f"{what}: {type(exc).__name__}"), False
     else:
-        outcome, ok = ("alert_sent", what + (f", {len(message.items)} finding(s)" if message.items else "")), True
+        found = f", {plural(len(message.items), 'finding')}" if message.items else ""
+        outcome, ok = ("alert_sent", what + found), True
     try:
         audit(conn, None, outcome[0], tenant_id, outcome[1][:500])
         if run_id is not None:
@@ -402,7 +404,7 @@ def slack_payload(message: Message) -> dict:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)[:2900]}})
     blocks.append({"type": "actions", "elements": [
         {"type": "button", "text": {"type": "plain_text", "text": "Open in Office Sentry"}, "url": message.link}]})
-    fallback = _slack_text(message.title) + (f": {len(message.items)} finding(s)" if message.items else "")
+    fallback = _slack_text(message.title) + (f": {plural(len(message.items), 'finding')}" if message.items else "")
     return {"text": fallback, "blocks": blocks}
 
 

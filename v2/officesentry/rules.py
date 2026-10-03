@@ -12,6 +12,7 @@ Rules never call Graph; they only read stored snapshots.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -20,6 +21,7 @@ from . import adminactivity, coverage, devices, dnscheck, hybrid
 from .licences import is_stale, last_sign_in, licence_summary, load_prices
 from .mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from .snapshot import TenantSnapshot
+from .text import every, plural, verb
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITIES)}
@@ -58,6 +60,13 @@ class RuleResult:
             return None
         return min((f.severity for f in self.findings), key=SEVERITY_RANK.__getitem__)
 
+    @property
+    def action(self) -> str:
+        """The recommendation cut to one short instruction ("Turn on DKIM for each domain in the Defender
+        portal"), to sit under the problem in lists. The full recommendation goes in the report."""
+        first = re.split(r"(?<=[.!?])\s+(?=[A-Z])", self.recommendation.strip(), maxsplit=1)[0].rstrip(".")
+        return re.split(r" \(|, so | so that | so |: | such as ", first, maxsplit=1)[0].rstrip(",;")
+
 
 @dataclass
 class Rule:
@@ -80,6 +89,16 @@ def rule(key: str, title: str, category: str, recommendation: str):
 
 def _unavailable(reason: str) -> tuple:
     return ("unavailable", reason, [])
+
+
+def _subjects(findings: list[Finding]) -> int:
+    """How many different things (domains, say) the findings are about."""
+    return len({f.subject for f in findings})
+
+
+def _all_are(n: int, noun: str) -> str:
+    """"All 4 admins are", or "The 1 admin is"."""
+    return f"{every(n, noun, start=True)} {verb(n, 'is', 'are')}"
 
 
 def _label(row: dict) -> str:
@@ -164,7 +183,8 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
                        and "mfa" in _grants(p)]
         detail = "No enabled policy requires MFA for all users and apps, and Security Defaults are off."
         if report_only:
-            detail += f" {len(report_only)} MFA policy(s) are in report-only mode."
+            n = len(report_only)
+            detail += f" {plural(n, 'MFA policy')} {verb(n, 'is', 'are')} in report-only mode."
         return ("fail", "MFA is not enforced", [Finding("high", "Tenant", detail)])
     names = _names(snap)
     # One finding per excluded account or group, naming every policy it's excluded from.
@@ -180,7 +200,7 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
                 for oid, (label, what, pols) in excluded.items()]
     policy_names = ", ".join(coverage.policy_name(p) for p in covering)
     if findings:
-        return ("fail", f"Enforced by {policy_names}, with {len(findings)} exclusion(s) to review", findings)
+        return ("fail", f"Enforced by {policy_names}, with {plural(len(findings), 'exclusion')} to review", findings)
     return ("pass", f"Enforced by {policy_names}", [])
 
 
@@ -237,10 +257,11 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
     unknown = len(findings) - missing
     if missing:
         extra = f", and {unknown} whose registration isn't known" if unknown else ""
-        return ("fail", f"{missing} admin(s) without MFA{extra}", findings)
+        return ("fail", f"{plural(missing, 'admin')} without MFA{extra}", findings)
     if unknown:  # can't call it a pass, and "0 admins without MFA" as a failure reads as nonsense
-        return _unavailable(f"MFA registration isn't known for {unknown} admin(s)")
-    return ("pass", f"All {len(seen)} privileged user(s) have MFA registered", [])
+        return _unavailable(f"MFA registration isn't known for {plural(unknown, 'admin')}")
+    return ("pass", f"{every(len(seen), 'privileged user', start=True)} {verb(len(seen), 'has', 'have')} MFA "
+                    "registered", [])
 
 
 @rule("global_admin_count", "Between 2 and 4 Global Administrators", "Admins",
@@ -256,7 +277,7 @@ def global_admin_count(snap: TenantSnapshot, now: datetime):
         return ("fail", f"{n} Global Administrators", [Finding("medium", _label(a), "Global Administrator", pid)
                                                         for pid, a in gas.items()])
     if n < 2:
-        return ("fail", f"{n} Global Administrator(s)", [Finding(
+        return ("fail", f"{plural(n, 'Global Administrator')}", [Finding(
             "low", "Tenant", "Only one Global Administrator; there is no break-glass account to recover access")])
     return ("pass", f"{n} Global Administrators", [])
 
@@ -270,7 +291,7 @@ def guest_admins(snap: TenantSnapshot, now: datetime):
         return _unavailable("Admin role data hasn't been collected yet")
     findings = [Finding("high", _label(a), f"Guest holding {a['roleName']}", a["principalId"])
                 for a in admins if a.get("userType") == "Guest"]
-    return ("fail", f"{len(findings)} guest admin assignment(s)", findings) if findings else \
+    return ("fail", f"{plural(len(findings), 'guest admin assignment')}", findings) if findings else \
         ("pass", "No guest holds a privileged role", [])
 
 
@@ -285,7 +306,7 @@ def service_principal_admins(snap: TenantSnapshot, now: datetime):
     findings = [Finding("medium", a.get("displayName") or a["principalId"], f"App holding {a['roleName']}",
                         a["principalId"]) for a in admins if a.get("principalType") == "servicePrincipal"
                 and not ((a.get("appId") or "").lower() in own and a.get("roleName") == "Global Reader")]
-    return ("fail", f"{len(findings)} app(s) with privileged roles", findings) if findings else \
+    return ("fail", f"{plural(len(findings), 'app')} with privileged roles", findings) if findings else \
         ("pass", "No apps hold privileged roles", [])
 
 
@@ -311,8 +332,8 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
                                 r["_id"]))
     if not checked:  # an empty registration report proves nothing
         return _unavailable("Microsoft returned no MFA registration data for any enabled member yet")
-    return ("fail", f"{len(findings)} user(s) without MFA", findings) if findings else \
-        ("pass", f"All {checked} checked user(s) have MFA registered", [])
+    return ("fail", f"{plural(len(findings), 'user')} without MFA", findings) if findings else \
+        ("pass", f"{every(checked, 'checked user', start=True)} {verb(checked, 'has', 'have')} MFA registered", [])
 
 
 @rule("stale_users", "No inactive accounts", "Accounts",
@@ -335,7 +356,8 @@ def stale_users(snap: TenantSnapshot, now: datetime):
         kind = "Guest" if u.get("userType") == "Guest" else ("Licensed member" if u.get("licensed") else "Member")
         severity = "medium" if u.get("licensed") else "low"
         findings.append(Finding(severity, _label(u), f"{kind}, {when}", u["_id"]))
-    return ("fail", f"{len(findings)} account(s) inactive for 90+ days or never used", findings) if findings else \
+    return ("fail", f"{plural(len(findings), 'account')} inactive for 90+ days or never used", findings) \
+        if findings else \
         ("pass", "No enabled account has been inactive for 90 days", [])
 
 
@@ -346,9 +368,10 @@ def licensed_disabled(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")
     if users is None:
         return _unavailable("User data hasn't been collected yet")
-    findings = [Finding("medium", _label(u), f"Disabled, holding {len(u.get('skuIds') or [])} licence(s)", u["_id"])
+    findings = [Finding("medium", _label(u), f"Disabled, holding {plural(len(u.get('skuIds') or []), 'licence')}",
+                        u["_id"])
                 for u in users if not u.get("accountEnabled") and u.get("licensed")]
-    return ("fail", f"{len(findings)} disabled account(s) still licensed", findings) if findings else \
+    return ("fail", f"{plural(len(findings), 'disabled account')} still licensed", findings) if findings else \
         ("pass", "No disabled account holds a licence", [])
 
 
@@ -369,7 +392,7 @@ def unassigned_licences(snap: TenantSnapshot, now: datetime):
                 if line.monthly_price is not None else "")
         findings.append(Finding("low", line.name, f"{line.unassigned} of {line.purchased} unassigned{cost}",
                                 line.sku_id))
-    return ("fail", f"{sum(1 for _ in findings)} subscription(s) with spare licences", findings) if findings else \
+    return ("fail", f"{plural(len(findings), 'subscription')} with spare licences", findings) if findings else \
         ("pass", "Every paid licence is assigned", [])
 
 
@@ -400,9 +423,9 @@ def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
             why = f"excluded from {', '.join(c.excluded_from)}" if c.excluded_from else "no MFA policy applies"
             findings.append(Finding("high", c.label, f"{a['roleName']}: {why}", pid))
     if findings and no_p1:
-        return ("fail", f"{len(findings)} admin(s) not covered by MFA", findings, SECURITY_DEFAULTS_ADVICE)
-    return ("fail", f"{len(findings)} admin(s) not covered by MFA", findings) if findings else \
-        ("pass", f"All {len(seen)} active admin(s) are covered", [])
+        return ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings, SECURITY_DEFAULTS_ADVICE)
+    return ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings) if findings else \
+        ("pass", _all_are(len(seen), "active admin") + " covered", [])
 
 
 # -- Email -----------------------------------------------------------------------
@@ -441,7 +464,7 @@ def external_forwarding(snap: TenantSnapshot, now: datetime):
                                     f"Inbox rule \"{r.get('displayName')}\" forwards to {', '.join(risk.external)}"
                                     f"{state}", f"rule:{r['_id']}"))
     scope = "" if mailboxes is not None else " (inbox rules only; Exchange data not collected)"
-    return ("fail", f"{len(findings)} external forward(s){scope}", findings) if findings else \
+    return ("fail", f"{plural(len(findings), 'external forward')}{scope}", findings) if findings else \
         ("pass", f"Nothing forwards outside the organisation{scope}", [])
 
 
@@ -462,8 +485,8 @@ def suspicious_inbox_rules(snap: TenantSnapshot, now: datetime):
         if risk.severity and reasons:
             findings.append(Finding(risk.severity, r.get("mailbox") or "?",
                                     f"\"{r.get('displayName')}\": {'; '.join(reasons)}", f"rule:{r['_id']}"))
-    return ("fail", f"{len(findings)} suspicious inbox rule(s)", findings) if findings else \
-        ("pass", f"None of {len(rules)} inbox rule(s) hide mail", [])
+    return ("fail", f"{plural(len(findings), 'suspicious inbox rule')}", findings) if findings else \
+        ("pass", f"No inbox rule hides mail ({plural(len(rules), 'rule')} checked)", [])
 
 
 @rule("auto_forward_policy", "Automatic forwarding to outside addresses is off", "Email",
@@ -610,10 +633,11 @@ def risky_app_permissions(snap: TenantSnapshot, now: datetime):
         elif set(a["risky"]) & set(a["tenant_scopes"]):
             how = "consented for all users"
         else:
-            how = f"consented by {a['users']} user(s)"
+            how = f"consented by {plural(a['users'], 'user')}"
         findings.append(Finding(a["severity"], a["name"], f"{', '.join(a['risky'])} ({how}; {who})", a["id"]))
-    return ("fail", f"{len(findings)} app(s) with access to mail, files or the directory", findings) if findings \
-        else ("pass", f"No third-party app holds high-risk access ({len(apps)} app(s) reviewed)", [])
+    return ("fail", f"{plural(len(findings), 'app')} with access to mail, files or the directory", findings) \
+        if findings \
+        else ("pass", f"No third-party app holds high-risk access ({plural(len(apps), 'app')} reviewed)", [])
 
 
 def _authorization_policy(snap: TenantSnapshot):
@@ -662,11 +686,12 @@ def app_credentials(snap: TenantSnapshot, now: datetime):
         latest_ts = devices.parse_ts(latest).timestamp()
         if latest_ts < now.timestamp():
             findings.append(Finding("low", a.get("displayName") or a["_id"],
-                                    f"All {len(ends)} credential(s) expired, last on {latest[:10]}", a["_id"]))
+                                    f"{every(len(ends), 'credential', start=True)} expired, last on {latest[:10]}",
+                                    a["_id"]))
         elif latest_ts < soon:
             findings.append(Finding("medium", a.get("displayName") or a["_id"],
                                     f"Last valid credential expires {latest[:10]}", a["_id"]))
-    return ("fail", f"{len(findings)} app registration(s) with expiring or expired credentials", findings) \
+    return ("fail", f"{plural(len(findings), 'app registration')} with expiring or expired credentials", findings) \
         if findings else ("pass", "No app registration credentials expire in the next 30 days", [])
 
 
@@ -775,7 +800,7 @@ def admin_consent_workflow(snap: TenantSnapshot, now: datetime):
         if not reviewers:
             return ("fail", "Admin consent requests are on but have no reviewers", [Finding(
                 "low", "Tenant", "Users can send requests, but nobody can approve them")])
-        return ("pass", f"Users can ask an admin: requests are on, with {reviewers} reviewer(s)", [])
+        return ("pass", f"Users can ask an admin: requests are on, with {plural(reviewers, 'reviewer')}", [])
     consent = user_consent_level(policy)
     if consent == "any":
         return ("pass", "Users can consent to most apps themselves, so admin consent requests are off "
@@ -844,7 +869,7 @@ def pending_guests(snap: TenantSnapshot, now: datetime):
             continue
         if devices.parse_ts(created).timestamp() < cutoff:
             findings.append(Finding("low", _label(u), f"Invited {created[:10]}, never accepted", u["_id"]))
-    return ("fail", f"{len(findings)} guest invitation(s) unaccepted for 30+ days", findings) if findings else \
+    return ("fail", f"{plural(len(findings), 'guest invitation')} unaccepted for 30+ days", findings) if findings else \
         ("pass", "No stale guest invitations", [])
 
 
@@ -891,9 +916,9 @@ def mta_sts(snap: TenantSnapshot, now: datetime):
     if result is None:
         return _unavailable(reason)
     findings, mail = result
-    return ("fail", f"{len({f.subject for f in findings})} of {len(mail)} mail domain(s) don't fully enforce "
-                    "MTA-STS", findings) if findings \
-        else ("pass", f"MTA-STS is enforced on all {len(mail)} mail domain(s)", [])
+    return ("fail", f"{_subjects(findings)} of {plural(len(mail), 'mail domain')} "
+                    + verb(_subjects(findings), "doesn't", "don't") + " fully enforce MTA-STS", findings) if findings \
+        else ("pass", f"MTA-STS is enforced on {every(len(mail), 'mail domain')}", [])
 
 
 @rule("tls_rpt", "Encrypted delivery failures are reported (TLS-RPT)", "Email",
@@ -908,9 +933,9 @@ def tls_rpt(snap: TenantSnapshot, now: datetime):
     scope = [h for h in mail if h.mta_sts or h.tls_rpt]
     if not scope:
         return _unavailable("TLS-RPT is checked on mail domains that use MTA-STS, and none do yet")
-    return ("fail", f"{len({f.subject for f in findings})} of {len(scope)} domain(s) without working TLS-RPT",
-            findings) if findings else ("pass", f"TLS-RPT reports are set up on all {len(scope)} domain(s) "
-                                                "that use MTA-STS or TLS-RPT", [])
+    return ("fail", f"{_subjects(findings)} of {plural(len(scope), 'domain')} without working TLS-RPT",
+            findings) if findings else ("pass", f"TLS-RPT reports are set up on {every(len(scope), 'domain')} "
+                                                f"that {verb(len(scope), 'uses', 'use')} MTA-STS or TLS-RPT", [])
 
 
 @rule("spf_record", "Every domain has a working SPF record", "Email",
@@ -922,8 +947,8 @@ def spf_record(snap: TenantSnapshot, now: datetime):
     if result is None:
         return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
     findings, rows = result
-    return ("fail", f"{len({f.subject for f in findings})} domain(s) with SPF problems", findings) if findings \
-        else ("pass", f"SPF is correct on all {len(rows)} domain(s)", [])
+    return ("fail", f"{plural(_subjects(findings), 'domain')} with SPF problems", findings) if findings \
+        else ("pass", f"SPF is correct on {every(len(rows), 'domain')}", [])
 
 
 @rule("dmarc_policy", "Every domain enforces DMARC", "Email",
@@ -934,8 +959,8 @@ def dmarc_policy(snap: TenantSnapshot, now: datetime):
     if result is None:
         return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
     findings, rows = result
-    return ("fail", f"{len({f.subject for f in findings})} domain(s) without DMARC enforcement", findings) \
-        if findings else ("pass", f"DMARC is enforced on all {len(rows)} domain(s)", [])
+    return ("fail", f"{plural(_subjects(findings), 'domain')} without DMARC enforcement", findings) \
+        if findings else ("pass", f"DMARC is enforced on {every(len(rows), 'domain')}", [])
 
 
 @rule("dkim_enabled", "DKIM signing is on for every mail domain", "Email",
@@ -949,8 +974,8 @@ def dkim_enabled(snap: TenantSnapshot, now: datetime):
     checked = [r for r in rows if dnscheck.DomainHealth.from_dict(r).microsoft_365]
     if not checked:
         return _unavailable("No domain receives mail through Microsoft 365")
-    return ("fail", f"{len(findings)} mail domain(s) without DKIM", findings) if findings else \
-        ("pass", f"DKIM is on for all {len(checked)} Microsoft 365 mail domain(s)", [])
+    return ("fail", f"{plural(len(findings), 'mail domain')} without DKIM", findings) if findings else \
+        ("pass", f"DKIM is on for {every(len(checked), 'Microsoft 365 mail domain')}", [])
 
 
 # -- Groups and Teams ------------------------------------------------------------------
@@ -1011,8 +1036,9 @@ def ownerless_groups(snap: TenantSnapshot, now: datetime):
             findings.append(Finding("medium" if g.get("isTeam") else "low", g.get("displayName") or g["_id"],
                                     f"{group_type(g)}, {problem[0].lower()}{problem[1:]}", g["_id"]))
     scope = f" ({len(checked)} of {len(groups)} checked)" if len(checked) < len(groups) else ""
-    return ("fail", f"{len(findings)} team(s) and group(s) without an owner{scope}", findings) if findings else \
-        ("pass", f"All {len(checked)} team(s) and group(s) have an owner{scope}", [])
+    return ("fail", f"{plural(len(findings), 'team or group')} without an owner{scope}", findings) if findings else \
+        ("pass", f"{every(len(checked), 'team or group', start=True)} {verb(len(checked), 'has', 'have')} an "
+                 f"owner{scope}", [])
 
 
 @rule("group_creation", "Only chosen people can create teams and groups", "Groups",
@@ -1052,15 +1078,17 @@ def group_expiration(snap: TenantSnapshot, now: datetime):
         if not never:
             return ("pass", f"Expiration covers every team and group ({days} days)", [])
         return ("fail", "Expiration covers selected groups only", [Finding(
-            "low", "Tenant", f"{len(never)} of {len(groups)} team(s) and group(s) never expire")])
+            "low", "Tenant", f"{len(never)} of {plural(len(groups), 'team or group')} "
+                            + verb(len(never), "never expires", "never expire"))])
     if snap.capabilities.get("entra_p1") is False:
         return _unavailable("Group expiration needs Entra ID P1")
     if not groups:
         return ("fail", "No expiration policy", [Finding(
             "info", "Tenant", "No expiration policy; the tenant has no teams or Microsoft 365 groups yet")])
     return ("fail", "No expiration policy", [Finding(
-        "low", "Tenant", f"No expiration policy: {len(groups)} team(s) and group(s) are kept until someone deletes "
-                         "them")])
+        "low", "Tenant", f"No expiration policy: {plural(len(groups), 'team or group')} "
+                         f"{verb(len(groups), 'is', 'are')} kept until someone deletes "
+                         f"{verb(len(groups), 'it', 'them')}")])
 
 
 # -- Devices -------------------------------------------------------------------------
@@ -1101,8 +1129,9 @@ def device_compliance(snap: TenantSnapshot, now: datetime):
             findings.append(Finding("medium", _device_label(d), "Not compliant", d["_id"]))
         elif d.get("complianceState") == "inGracePeriod":
             findings.append(Finding("low", _device_label(d), "Not compliant, in grace period", d["_id"]))
-    return ("fail", f"{len(findings)} of {len(managed)} managed device(s) not compliant", findings) if findings \
-        else ("pass", f"All {len(managed)} managed device(s) are compliant", [])
+    return ("fail", f"{len(findings)} of {plural(len(managed), 'managed device')} not compliant", findings) \
+        if findings \
+        else ("pass", _all_are(len(managed), "managed device") + " compliant", [])
 
 
 @rule("device_encryption", "Company computers are encrypted", "Devices",
@@ -1117,8 +1146,8 @@ def device_encryption(snap: TenantSnapshot, now: datetime):
         return _unavailable("No Windows or Mac computers are enrolled in Intune")
     findings = [Finding("high", _device_label(d), f"{d.get('operatingSystem')} disk isn't encrypted", d["_id"])
                 for d in computers if d.get("isEncrypted") is False]
-    return ("fail", f"{len(findings)} of {len(computers)} computer(s) not encrypted", findings) if findings \
-        else ("pass", f"All {len(computers)} managed computer(s) are encrypted", [])
+    return ("fail", f"{len(findings)} of {plural(len(computers), 'computer')} not encrypted", findings) if findings \
+        else ("pass", _all_are(len(computers), "managed computer") + " encrypted", [])
 
 
 @rule("supported_windows", "Windows computers still get security updates", "Devices",
@@ -1147,9 +1176,10 @@ def supported_windows(snap: TenantSnapshot, now: datetime):
             findings.append(Finding(severity[support.status], _device_label(d), support.detail, d["_id"]))
     unsupported = sum(f.severity != "low" for f in findings)
     if not findings:
-        return ("pass", f"All {len(windows)} Windows computer(s) are on a supported release", [])
-    summary = f"{unsupported} of {len(windows)} Windows computer(s) past end of support" if unsupported \
-        else f"{len(findings)} Windows computer(s) reach end of support within {devices.SOON_DAYS} days"
+        return ("pass", _all_are(len(windows), "Windows computer") + " on a supported release", [])
+    summary = f"{unsupported} of {plural(len(windows), 'Windows computer')} past end of support" if unsupported \
+        else (f"{plural(len(findings), 'Windows computer')} {verb(len(findings), 'reaches', 'reach')} end of "
+              f"support within {devices.SOON_DAYS} days")
     return ("fail", summary, findings)
 
 
@@ -1172,8 +1202,9 @@ def intune_enrolled(snap: TenantSnapshot, now: datetime):
                         ("Hybrid joined" if d.get("trustType") == "ServerAd" else "Entra joined")
                         + ", not managed by Intune", d["_id"])
                 for d in joined if not d.get("isManaged")]
-    return ("fail", f"{len(findings)} of {len(joined)} joined computer(s) not in Intune", findings) if findings \
-        else ("pass", f"All {len(joined)} joined computer(s) are managed", [])
+    return ("fail", f"{len(findings)} of {plural(len(joined), 'joined computer')} not in Intune", findings) \
+        if findings \
+        else ("pass", _all_are(len(joined), "joined computer") + " managed", [])
 
 
 @rule("device_checkin", "Managed devices check in with Intune", "Devices",
@@ -1188,8 +1219,9 @@ def device_checkin(snap: TenantSnapshot, now: datetime):
         days = devices.days_since(d.get("lastSyncDateTime"), now)
         if days is not None and days > devices.NO_SYNC_DAYS:
             findings.append(Finding("low", _device_label(d), f"Last check-in {days} days ago", d["_id"]))
-    return ("fail", f"{len(findings)} device(s) haven't checked in for {devices.NO_SYNC_DAYS}+ days", findings) \
-        if findings else ("pass", f"All {len(managed)} managed device(s) checked in recently", [])
+    return ("fail", f"{plural(len(findings), 'device')} " + verb(len(findings), "hasn't", "haven't") + " checked in "
+                    f"for {devices.NO_SYNC_DAYS}+ days", findings) \
+        if findings else ("pass", f"{every(len(managed), 'managed device', start=True)} checked in recently", [])
 
 
 @rule("stale_devices", "No old devices left in Entra ID", "Devices",
@@ -1206,8 +1238,8 @@ def stale_devices(snap: TenantSnapshot, now: datetime):
         if d.get("accountEnabled") and days is not None and days > devices.STALE_DAYS:
             findings.append(Finding("low", d.get("displayName") or d["_id"],
                                     f"{d.get('operatingSystem') or 'Device'}, last seen {days} days ago", d["_id"]))
-    return ("fail", f"{len(findings)} of {len(entra)} device record(s) unused for {devices.STALE_DAYS}+ days",
-            findings) if findings else ("pass", f"No stale devices among {len(entra)} record(s)", [])
+    return ("fail", f"{len(findings)} of {plural(len(entra), 'device record')} unused for {devices.STALE_DAYS}+ days",
+            findings) if findings else ("pass", f"No stale devices among {plural(len(entra), 'record')}", [])
 
 
 # -- Hybrid identity -------------------------------------------------------------------
@@ -1275,14 +1307,14 @@ def cloud_only_admins(snap: TenantSnapshot, now: datetime):
         status = hybrid.sync_status(snap) or {}
         if not status.get("enabled") and not any(u.get("onPremisesSyncEnabled") for u in snap.objects("users", "user")):
             return ("pass", "Cloud-only tenant: no accounts are synced from on-premises AD", [])
-        return ("pass", f"All {len(hybrid.privileged_principals(snap))} privileged account(s) are cloud-only", [])
+        return ("pass", _all_are(len(hybrid.privileged_principals(snap)), "privileged account") + " cloud-only", [])
     findings = []
     for a in admins:
         detail = f"{', '.join(a['roles'])}; synced from on-premises AD"
         if not a["accountEnabled"]:
             detail += " (disabled here, but AD can re-enable it)"
         findings.append(Finding("high" if a["accountEnabled"] else "medium", a["label"], detail, a["principalId"]))
-    return ("fail", f"{len(findings)} admin account(s) synced from on-premises AD", findings)
+    return ("fail", f"{plural(len(findings), 'admin account')} synced from on-premises AD", findings)
 # -- Admin activity --------------------------------------------------------------------
 
 
@@ -1305,7 +1337,8 @@ def domain_federation_changed(snap: TenantSnapshot, now: datetime):
                 f"{e.get('activity')} by {e.get('actor')} on {(e.get('time') or '')[:10]}")
     findings = [Finding("high", domain, "; ".join(what), domain) for domain, what in changes.items()]
     days = adminactivity.covered_days(window)
-    return ("fail", f"{len(findings)} domain(s) had sign-in settings changed in the last {days} days", findings) \
+    return ("fail", f"{plural(len(findings), 'domain')} had sign-in settings changed in the last {days} days",
+            findings) \
         if findings else ("pass", f"No domain federation changes in the last {days} days", [])
 
 

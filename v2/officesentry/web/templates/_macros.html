@@ -44,7 +44,12 @@
 {%- endmacro %}
 
 {% macro sev_counts(counts, levels=('critical', 'high', 'medium', 'low')) -%}
-<span class="sevbar">{% for s in levels %}<span class="sev sev-{{ s }}{{ ' zero' if not counts[s] }}" title="{{ counts[s] }} {{ s }}">{{ counts[s] }}</span>{% endfor %}</span>
+<span class="sevbar" aria-label="{% for s in levels %}{{ counts[s] }} {{ s }}{{ ', ' if not loop.last }}{% endfor %}">{% for s in levels %}<span class="sev sev-{{ s }}{{ ' zero' if not counts[s] }}" title="{{ counts[s] }} {{ s }}">{{ counts[s] }}</span>{% endfor %}</span>
+{%- endmacro %}
+
+{# Key for the sev_counts bubbles, shown once above a table of them. #}
+{% macro sev_legend(lead='Open findings') -%}
+<p class="sev-legend">{{ lead }}:{% for s in ('critical', 'high', 'medium', 'low') %} <span><i class="sw sev-{{ s }}"></i>{{ s|capitalize }}</span>{% endfor %}</p>
 {%- endmacro %}
 
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. #}

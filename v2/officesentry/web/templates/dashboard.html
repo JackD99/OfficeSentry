@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, sev_counts %}
+{% from "_macros.html" import icon, sev_counts, sev_legend %}
 {% block title %}Tenants · Office Sentry{% endblock %}
 {% macro kpi(row, key, unit='') -%}
 {% set k = row.kpis[key] %}
@@ -43,7 +43,7 @@
 
 <div class="card flush">
   <div class="card-head toolbar">
-    <h2>All tenants</h2>
+    <div><h2>All tenants</h2>{{ sev_legend() }}</div>
     {% if rows|length > 5 %}<input class="search" type="search" id="tenant-filter" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
   </div>
   <div class="scroll-x">
