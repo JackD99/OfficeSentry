@@ -60,7 +60,7 @@
   {% if failing %}
   {% set items = [] %}
   {% for key, label in ui.SEVERITIES %}{% set n = failing|selectattr('severity', 'equalto', key)|list|length %}{% if n %}{% set _ = items.append((label, n, key)) %}{% endif %}{% endfor %}
-  {{ ui.breakdown(failing|length ~ ' of ' ~ report.results|length ~ ' checks need attention', items) }}
+  {{ ui.breakdown(failing|length ~ ' of ' ~ (report.results|length - report.unavailable|length) ~ ' checks need attention', items) }}
   {% endif %}
 </section>
 
