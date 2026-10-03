@@ -72,11 +72,15 @@
 
   <section class="card">
     <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2></div>
+    {% if report.first_report and not report.new_count and not report.resolved %}
+    <p class="muted small">Collection for this tenant started in this period, so its first findings are the starting point rather than new. New and fixed findings are tracked from here on.</p>
+    {% else %}
     <div class="mini-stats">
       <div><span class="value">{{ report.new_count }}</span><span class="label">new findings</span></div>
       <div><span class="value">{{ report.resolved|length }}</span><span class="label">fixed</span></div>
       <div><span class="value">{{ report.changes|length }}</span><span class="label">changes spotted</span></div>
     </div>
+    {% endif %}
     {% if report.changes %}
     <ul class="list compact">
       {% for c in report.changes[:5] %}

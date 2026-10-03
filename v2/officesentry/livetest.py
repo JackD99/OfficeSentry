@@ -9,13 +9,14 @@ worked, what failed and the check results. Nothing is written to the tenant.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
-from . import store
+from . import dnscheck, recording, store
 from .collectors import REGISTRY
 from .config import Config
-from .db import connect, migrate
+from .db import connect, migrate, utcnow
 from .exchange import EXCHANGE_ROOT, ExchangeClient, ExchangeError
 from .graph import GRAPH_ROOT, GraphClient, GraphError
 from .msauth import TokenError, secret_token_provider
@@ -35,7 +36,8 @@ def _wrap(provider, error_cls):
     return token
 
 
-def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None) -> int:
+def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
+        record: Path | None = None, connection_id: int | None = None) -> int:
     missing = [k for k in ENV if not os.environ.get(k)]
     if missing:
         print("Missing environment variables: " + ", ".join(missing))
@@ -43,12 +45,29 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None)
     tenant_ref, client_id, secret = (os.environ[k] for k in ENV)
     conn = connect(cfg.db_path)
     migrate(conn)
-    row = conn.execute("SELECT id FROM tenants WHERE tenant_ref = ?", (tenant_ref,)).fetchone()
-    tenant_id = row["id"] if row else store.create_tenant(conn, "Live test", tenant_ref, None)
+    connections = store.list_connections(conn)
+    if connection_id is not None and connection_id not in {c["id"] for c in connections}:
+        print(f"No app connection with id {connection_id}")
+        return 2
+    if connection_id is None and len(connections) == 1:
+        connection_id = connections[0]["id"]  # so the portal can keep refreshing it with the certificate
+    row = conn.execute("SELECT id, connection_id FROM tenants WHERE tenant_ref = ?", (tenant_ref,)).fetchone()
+    tenant_id = row["id"] if row else store.create_tenant(conn, "Live test", tenant_ref, connection_id)
+    if row and connection_id is not None and row["connection_id"] is None:
+        conn.execute("UPDATE tenants SET connection_id = ? WHERE id = ?", (connection_id, tenant_id))
+    # The test app is Office Sentry's own, so checks shouldn't flag it. Its client ID isn't secret.
+    conn.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)"
+                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (client_id,))
 
-    graph = GraphClient(_wrap(secret_token_provider(tenant_ref, client_id, secret, GRAPH_ROOT), GraphError))
+    log: list = []
+    session = recording.RecordingSession(log) if record else None
+    graph = GraphClient(_wrap(secret_token_provider(tenant_ref, client_id, secret, GRAPH_ROOT), GraphError),
+                        session=session)
     exo = ExchangeClient(tenant_ref, _wrap(secret_token_provider(tenant_ref, client_id, secret, EXCHANGE_ROOT),
-                                           ExchangeError))
+                                           ExchangeError), session=session)
+    real_lookup = dnscheck.lookup
+    if record:
+        dnscheck.lookup = recording.recording_lookup(log, real_lookup)
     keys = [k for k in REGISTRY if not only or k in only]
     failures = 0
     for key in keys:
@@ -59,6 +78,16 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None)
         count = conn.execute("SELECT COUNT(*) FROM objects WHERE run_id = ?", (run_row["id"],)).fetchone()[0]
         print(f"{REGISTRY[key].title:32} {status:10} {count:6} objects  {finished['error'] or ''}")
         failures += status == "failed"
+    dnscheck.lookup = real_lookup
+    if failures < len(keys):
+        # Data came back, so admin consent exists; without this the portal says "Awaiting consent".
+        conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
+                     (utcnow(), tenant_id))
+
+    if record:
+        fixture = recording.scrub(log, tenant_ref, client_id)
+        record.write_text(json.dumps(fixture, indent=1, sort_keys=True) + "\n")
+        print(f"Recorded {len(fixture['entries'])} scrubbed response(s) to {record}")
 
     tenant = store.get_tenant(conn, tenant_id)
     print("\nChecks:")

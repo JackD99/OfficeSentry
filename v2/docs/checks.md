@@ -18,7 +18,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
-| **No inactive accounts**<br>`stale_users` | `users` | Sign-in activity needs Entra ID P1 | Disable accounts that haven't signed in for 90 days (after checking with the client), then remove their licences. Inactive accounts are a common foothold for attackers. |
+| **No inactive accounts**<br>`stale_users` | `users` | Sign-in activity needs Entra ID P1 | Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used (after checking with the client), then remove their licences. Inactive accounts are a common foothold for attackers. |
 
 ### Admins
 

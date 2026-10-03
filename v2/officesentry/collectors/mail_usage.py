@@ -18,9 +18,9 @@ from ..exchange import ExchangeAccessDenied, ExchangeError
 from ..graph import LicenseRequired, PermissionMissing
 from ..mailflow import size_bytes
 from .base import Collector, RunContext, register
+from .exchange import SYSTEM_MAILBOX_TYPES
 
 PER_MAILBOX_LIMIT = 2000
-SKIP_TYPES = {"DiscoveryMailbox"}
 
 # Sign-in log clientAppUsed values for clients that use basic (legacy) authentication.
 LEGACY_CLIENTS = (
@@ -46,7 +46,7 @@ class MailboxUsage(Collector):
             return
         run = store.latest_run(ctx.conn, ctx.tenant["id"], "mailboxes")
         boxes = [m for m in (store.run_objects(ctx.conn, run["id"], "mailbox") if run else [])
-                 if m.get("RecipientTypeDetails") not in SKIP_TYPES]
+                 if m.get("RecipientTypeDetails") not in SYSTEM_MAILBOX_TYPES]
         if not run:
             ctx.warn("Mailboxes haven't been collected yet, so there's nothing to size")
         if len(boxes) > PER_MAILBOX_LIMIT:

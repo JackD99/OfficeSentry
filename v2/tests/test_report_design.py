@@ -104,7 +104,7 @@ def test_monthly_summary_reads_plainly(db, two_tenants):
 def test_monthly_summary_when_all_pass():
     class R:
         tenant = {"name": "Tidy Co"}
-        failing, results, unavailable, kpis, resolved, changes = [], [], [], [], [], []
+        failing, results, unavailable, kpis, resolved, changes = [], ["mfa_enforced"], [], [], [], []
         new_count, period_start, currency = 0, None, "GBP"
 
         class licences:
@@ -112,7 +112,12 @@ def test_monthly_summary_when_all_pass():
 
     es = summary.monthly(R())
     assert es.verdict.tone == "ok" and "passed every security check" in es.verdict.headline
+    assert es.paragraphs[0] == "We ran 1 security check and it passed."
     assert es.actions == []
+
+    R.results = []  # nothing collected yet: never "all 0 checks passed"
+    es = summary.monthly(R())
+    assert es.verdict.label == "Not checked yet" and not any("passed" in p for p in es.paragraphs)
 
 
 def test_evidence_summary(db, two_tenants):

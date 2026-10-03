@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from . import store
@@ -48,7 +49,8 @@ def admin_changes(conn, tenant_id: int, before: str) -> list[Change]:
 
     def keyed(rows):
         return {(o.get("principalId"), o.get("roleName")): o for o in rows.values()
-                if o.get("privileged") and o.get("assignment") == "active"}
+                if o.get("privileged") and o.get("assignment") == "active" and o.get("principalId")
+                and o.get("roleName")}
 
     old, new = keyed(pair[0]), keyed(pair[1])
     out = [Change("Admins", "added", _who(o), f"Now holds {o['roleName']}") for k, o in new.items() if k not in old]
@@ -126,7 +128,8 @@ def app_changes(conn, tenant_id: int, before: str) -> list[Change]:
     names = {o["_id"]: o.get("displayName") for o in store.run_objects(conn, latest["id"], "service_principal")}
 
     def keyed(rows):
-        return {(o.get("clientId"), o.get("permission")) for o in rows.values()}
+        return {(o.get("clientId"), o.get("permission")) for o in rows.values()
+                if o.get("clientId") and o.get("permission")}
 
     added: dict[str, list[str]] = {}
     for client, perm in sorted(keyed(pair[1]) - keyed(pair[0])):
@@ -196,7 +199,11 @@ def group_changes(conn, tenant_id: int, before: str) -> list[Change]:
 
 
 def all_changes(conn, tenant_id: int, before: str) -> list[Change]:
-    return admin_changes(conn, tenant_id, before) + ca_changes(conn, tenant_id, before) + \
-        user_changes(conn, tenant_id, before) + forwarding_changes(conn, tenant_id, before) + \
-        app_changes(conn, tenant_id, before) + device_changes(conn, tenant_id, before) + \
-        group_changes(conn, tenant_id, before)
+    out: list[Change] = []
+    for feed in (admin_changes, ca_changes, user_changes, forwarding_changes, app_changes, device_changes,
+                 group_changes):
+        try:
+            out += feed(conn, tenant_id, before)
+        except Exception:  # one unreadable feed mustn't take the monthly review down
+            logging.getLogger(__name__).exception("Change feed %s failed", feed.__name__)
+    return out

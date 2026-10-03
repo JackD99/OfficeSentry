@@ -117,3 +117,17 @@ def test_licence_summary_counts_waste():
     assert bp.monthly_waste == 100.0
     assert summary.monthly_waste == 100.0
     assert next(line for line in summary.lines if line.part_number == "FLOW_FREE").wasted_units == 0
+
+
+def test_without_p1_advice_is_security_defaults(db, two_tenants):
+    no_p1 = [dict(s, servicePlans=[p for p in s["servicePlans"] if not p["servicePlanName"].startswith("AAD_PREMIUM")])
+             for s in SKUS]
+    seed_tenant(db, two_tenants[0], skus=no_p1)
+    res = results(db, two_tenants[0])
+    for key in ("mfa_enforced", "legacy_auth_blocked"):
+        assert res[key].status == "fail"
+        assert "Security Defaults" in res[key].recommendation and "no Entra ID P1" in res[key].recommendation
+
+
+def test_stale_users_label_covers_never_used_accounts(seeded):
+    assert "never used" in seeded["stale_users"].summary
