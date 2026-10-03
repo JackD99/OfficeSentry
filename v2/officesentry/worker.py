@@ -137,7 +137,7 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     if recovered:
         log.warning("Marked %s orphaned run(s) as failed", recovered)
 
-    last_tick = 0.0
+    last_tick = float("-inf")  # tick at once, even when the machine booted under a minute ago
     last_prune_day = None
     while True:
         if time.monotonic() - last_tick > 60:
