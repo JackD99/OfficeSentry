@@ -18,6 +18,10 @@ overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
 - **Credentials never touch disk as files** and are never sent to the browser.
 - **Mock Graph with `responses`, never by replacing `GraphClient`.**
+- **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump
+  `users.session_version` or delete their `sessions` rows; never trust anything
+  in the cookie except the session token. New encrypted columns go in
+  `ENCRYPTED_COLUMNS` in `__main__.py` so `rotate-keys` re-encrypts them.
 
 ## Adding a collector
 
@@ -76,4 +80,7 @@ Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 
 ## Commands
 
-`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,create-app,rotate-keys}`
+`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,setup-link,create-app,rotate-keys}`
+
+Tests sign in with a password only (`require_mfa="off"` in `conftest.py`);
+`tests/test_login_security.py` covers two-step sign-in.

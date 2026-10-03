@@ -11,6 +11,7 @@ from .. import store
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
+from . import sessions
 from .access import ROLES, roles_required
 from .auth import password_problem
 
@@ -102,7 +103,53 @@ def edit_user(user_id: int):
         return redirect(url_for("admin.edit_user", user_id=user_id))
     granted = {r["tenant_id"] for r in g.db.execute(
         "SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
-    return render_template("user_edit.html", user=user, tenants=tenants, granted=granted, roles=ROLES)
+    return render_template(
+        "user_edit.html", user=user, tenants=tenants, granted=granted, roles=ROLES,
+        sessions=sessions.list_for(user_id), locked=_is_locked(user),
+        two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"]),
+    )
+
+
+def _is_locked(user) -> bool:
+    return bool(user["locked_until"]) and user["locked_until"] > utcnow()
+
+
+@bp.post("/users/<int:user_id>/reset-two-step")
+@roles_required("admin")
+def reset_two_step(user_id: int):
+    """For a lost phone: remove their authenticator and sign them out. They set it up again at next sign-in."""
+    user = _user_or_404(user_id)
+    with transaction(g.db):
+        g.db.execute("UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
+                     " totp_last_step = NULL, session_version = session_version + 1 WHERE id = ?", (user_id,))
+        g.db.execute("DELETE FROM user_recovery_codes WHERE user_id = ?", (user_id,))
+        g.db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        audit(g.db, g.user["username"], "user_two_step_reset", detail=user["username"])
+    if user_id == g.user["id"]:
+        return redirect(url_for("auth.login"))
+    flash(f"Two-step sign-in reset for {user['username']}. They'll set it up again next time they sign in.",
+          "success")
+    return redirect(url_for("admin.edit_user", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/sign-out")
+@roles_required("admin")
+def sign_out_user(user_id: int):
+    user = _user_or_404(user_id)
+    ended = sessions.revoke_user(user_id, except_current=user_id == g.user["id"])
+    audit(g.db, g.user["username"], "user_signed_out", detail=f"{user['username']}: {ended} session(s)")
+    flash(f"Signed {user['username']} out of {ended} browser{'s' if ended != 1 else ''}.", "success")
+    return redirect(url_for("admin.edit_user", user_id=user_id))
+
+
+@bp.post("/users/<int:user_id>/unlock")
+@roles_required("admin")
+def unlock_user(user_id: int):
+    user = _user_or_404(user_id)
+    g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", (user_id,))
+    audit(g.db, g.user["username"], "user_unlocked", detail=user["username"])
+    flash(f"{user['username']} can sign in again.", "success")
+    return redirect(url_for("admin.edit_user", user_id=user_id))
 
 
 @bp.post("/users/<int:user_id>/delete")

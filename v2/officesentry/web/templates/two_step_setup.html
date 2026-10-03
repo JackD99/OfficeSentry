@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Set up two-step sign-in · Office Sentry{% endblock %}
+{% macro setup_form() %}
+<ol class="steps">
+  <li>Open an authenticator app on your phone, such as Microsoft Authenticator.</li>
+  <li>Add an account and scan this QR code.</li>
+  <li>Enter the 6-digit code the app shows.</li>
+</ol>
+<div class="qr" aria-label="QR code for your authenticator app">{{ qr|safe }}</div>
+<details class="help">
+  <summary>Can't scan it? Type this key instead</summary>
+  <p class="secret" aria-label="Setup key">{{ secret }}</p>
+  <p class="small muted">Choose "time-based" if the app asks.</p>
+</details>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Code from the app <input class="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*" required {% if not signed_in %}autofocus{% endif %}></label>
+  <div class="form-actions">
+    <button class="primary">Turn on two-step sign-in</button>
+    {% if signed_in %}<a class="btn ghost" href="{{ url_for('auth.account') }}">Cancel</a>{% endif %}
+  </div>
+</form>
+{% endmacro %}
+{% block auth %}
+<h1>Protect your account</h1>
+<p class="sub">Office Sentry asks for a code from your phone as well as your password, so a stolen password isn't enough to get in. This takes about a minute.</p>
+{{ setup_form() }}
+<p class="footnote center">Setting up for <span class="strong">{{ username }}</span> · <a href="{{ url_for('auth.login') }}">Cancel</a></p>
+{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('auth.account') }}">Your account</a><span>/</span><span>Two-step sign-in</span></div>
+<div class="page-head"><div><h1>Set up two-step sign-in</h1>
+  <div class="sub">You'll enter a code from your phone each time you sign in.</div></div></div>
+<div class="card narrow">{{ setup_form() }}</div>
+{% endblock %}

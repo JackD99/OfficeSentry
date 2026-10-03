@@ -3,6 +3,7 @@ import re
 import pytest
 
 from officesentry import store
+from officesentry.config import setup_token
 from tests.conftest import PASSWORD, login, make_user
 
 PUBLIC = {"static", "health", "auth.login", "auth.setup"}
@@ -19,8 +20,9 @@ def test_every_page_requires_login(app, client, db, two_tenants):
         assert resp.status_code == 302 and "/login" in resp.headers["Location"], (rule.endpoint, resp.status_code)
 
 
-def test_setup_creates_first_admin_once(client, db):
+def test_setup_creates_first_admin_once(client, db, cfg):
     assert client.get("/login").headers["Location"].endswith("/setup")
+    client.get(f"/setup?token={setup_token(cfg.data_dir)}")
     resp = client.post("/setup", data={"username": "owner", "password": PASSWORD, "confirm": PASSWORD})
     assert resp.status_code == 302
     assert db.execute("SELECT role FROM users").fetchone()["role"] == "admin"

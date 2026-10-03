@@ -227,6 +227,20 @@ form.accept { margin-top: 10px; min-width: 240px; }
 .auth-card h1 { font-size: 1.25rem; margin-bottom: 4px; }
 .auth-card .sub { color: var(--muted); margin-bottom: 20px; }
 .auth-card button.primary { width: 100%; padding: 9px; }
+/* -- Sign-in security ------------------------------------------------------- */
+.steps { margin: 0 0 16px; padding-left: 20px; color: var(--text-2); }
+.steps li { margin-bottom: 4px; }
+.qr { width: fit-content; margin: 0 auto 12px; background: #fff; border-radius: var(--radius-sm); overflow: hidden; }
+.qr svg { display: block; }
+.secret { font: .9rem/1.5 var(--mono); letter-spacing: .04em; background: var(--sunken); padding: 8px 10px; border-radius: var(--radius-sm); text-align: center; user-select: all; word-break: break-all; margin: 0 0 6px; }
+input.code { font: 1.2rem var(--mono); letter-spacing: .25em; text-align: center; }
+details.help { margin: 0 0 16px; }
+details.help > summary { font-size: .875rem; }
+.codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; list-style: none; padding: 14px; margin: 0 0 16px; background: var(--sunken); border-radius: var(--radius-sm); font: .95rem var(--mono); text-align: center; }
+.form-actions.wrap { flex-wrap: wrap; }
+.btn.wide { display: flex; justify-content: center; width: 100%; margin-top: 16px; padding: 9px; }
+.center { text-align: center; }
+.auth-card .form-actions .btn.primary { width: auto; }
 .client-tenant .tiles { margin-bottom: 14px; }
 .footnote { color: var(--muted); font-size: .8125rem; margin-top: 8px; }
 
