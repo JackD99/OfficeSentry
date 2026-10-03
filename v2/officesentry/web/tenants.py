@@ -149,7 +149,8 @@ def tenant(tenant_id: int):
     attention = sorted(report.failing, key=lambda r: (sev_rank.get(r.severity, 5), -len(r.findings)))
     return render_template(
         "tenant.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
-        report=report, attention=attention, health=data_health(t, latest), data_reports=REPORTS,
+        redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"), report=report, attention=attention,
+        health=data_health(t, latest), data_reports=REPORTS,
     )
 
 
@@ -252,7 +253,8 @@ def consent_callback():
             g.db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (returned, t["id"]))
         g.db.execute("UPDATE tenants SET consented_at = ? WHERE id = ?", (utcnow(), t["id"]))
         audit(g.db, g.user["username"], "consent_granted", t["id"], returned)
-    store.enqueue_run(g.db, t["id"], "tenant_profile", requested_by=g.user["username"])
+    for key in REGISTRY:  # tenant_profile is first, so licence-dependent collectors see its result
+        store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
     flash("Consent recorded. A first collection has been queued.", "success")
     return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
 

@@ -112,7 +112,9 @@ def schedule_tick(conn, cfg: Config, now: datetime | None = None) -> int:
     slot = current_slot(now, cfg.timezone, cfg.nightly_hour).strftime("%Y-%m-%dT%H:%M:%SZ")
     queued = 0
     tenants = conn.execute(
-        "SELECT id FROM tenants WHERE enabled = 1 AND connection_id IS NOT NULL ORDER BY id"
+        # Nothing is scheduled before consent: every run would fail to sign in.
+        "SELECT id FROM tenants WHERE enabled = 1 AND connection_id IS NOT NULL AND consented_at IS NOT NULL"
+        " ORDER BY id"
     ).fetchall()
     for tenant in tenants:
         for key, cls in REGISTRY.items():

@@ -169,6 +169,12 @@ def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
     assert order[:2] == ["tenant_profile", "users"]  # capabilities first, then users
 
 
+def test_tenants_without_consent_are_not_scheduled(db, cfg, two_tenants):
+    db.execute("UPDATE tenants SET consented_at = NULL WHERE id = ?", (two_tenants[1],))
+    schedule_tick(db, cfg, datetime(2026, 10, 2, 3, 0, tzinfo=UTC))
+    assert {r["tenant_id"] for r in db.execute("SELECT tenant_id FROM runs")} == {two_tenants[0]}
+
+
 def test_disabled_tenants_are_not_scheduled(db, cfg, two_tenants):
     db.execute("UPDATE tenants SET enabled = 0")
     assert schedule_tick(db, cfg, datetime(2026, 10, 2, 3, 0, tzinfo=UTC)) == 0
