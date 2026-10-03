@@ -69,4 +69,5 @@ def connection_id(db, vault):
 def two_tenants(db, connection_id):
     a = store.create_tenant(db, "Alpha Ltd", "alpha.onmicrosoft.com", connection_id)
     b = store.create_tenant(db, "Bravo Inc", "bravo.onmicrosoft.com", connection_id)
+    db.execute("UPDATE tenants SET consented_at = '2026-01-01T00:00:00Z'")  # connected and consented
     return a, b

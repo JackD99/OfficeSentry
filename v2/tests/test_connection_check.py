@@ -33,6 +33,7 @@ def _token_error(*args):
 
 def test_test_connection_explains_and_records_consent(client, db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
+    db.execute("UPDATE tenants SET consented_at = NULL")
     make_user(db, "admin")
     login(client, "admin")
     monkeypatch.setattr(connection_check, "certificate_token_provider", _token_error)
@@ -89,6 +90,7 @@ def test_failed_sign_in_shows_the_fix_not_awaiting_consent(db, two_tenants):
 
 def test_successful_collection_records_consent(db, two_tenants):
     alpha, _ = two_tenants
+    db.execute("UPDATE tenants SET consented_at = NULL")
     assert store.get_tenant(db, alpha)["consented_at"] is None
     seed_tenant(db, alpha)
     assert store.get_tenant(db, alpha)["consented_at"] is not None
@@ -138,3 +140,12 @@ def test_live_test_links_the_only_connection(cfg, db, connection_id, monkeypatch
         assert livetest.run(cfg, ["tenant_profile"]) == 0
     tenant = db.execute("SELECT * FROM tenants WHERE tenant_ref = 'tid'").fetchone()
     assert tenant["connection_id"] == connection_id and tenant["consented_at"]
+
+
+def test_old_raw_sign_in_errors_are_translated_on_display():
+    from officesentry.web.filters import run_error
+
+    raw = "AADSTS500113: No reply address is registered for the application. Trace ID: x"
+    assert run_error(raw).startswith("Sign-in failed: The app registration is missing Office Sentry's redirect URI.")
+    assert run_error("Exchange said no") == "Exchange said no"
+    assert "5 to 10 minutes" in str(explain("AADSTS700027: Client assertion contains an invalid signature"))
