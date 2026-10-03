@@ -71,6 +71,15 @@ class Tile:
 
 
 @dataclass
+class Highlight:
+    """A key figure shown above the tables, so the page leads with the answer."""
+    label: str
+    value: object
+    foot: str = ""
+    tone: str | None = None  # bad | warn | ok, for the dot next to the label
+
+
+@dataclass
 class DataReport:
     key: str
     title: str
@@ -85,6 +94,8 @@ class DataReport:
     chart: str = ""  # server-side SVG
     chart_title: str = ""
     footnote: str = ""
+    highlights: list[Highlight] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)  # what couldn't be checked, and why
 
 
 def _cell(value):
@@ -840,6 +851,13 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
 }
 
 
+# Identity and licence reports live in their own module; it needs Section and
+# DataReport from above, so it's imported here rather than at the top.
+from .identity_reports import REPORTS as _IDENTITY_REPORTS  # noqa: E402
+
+REPORTS.update(_IDENTITY_REPORTS)
+
+
 def build(conn, tenant, key: str, now: datetime | None = None) -> DataReport:
     title, description, collectors, builder = REPORTS[key]
     now = now or datetime.now(UTC)
@@ -880,6 +898,18 @@ def to_xlsx(report: DataReport) -> bytes:
         ws.column_dimensions["A"].width = 32
         ws.column_dimensions["B"].width = 16
         ws.column_dimensions["C"].width = 48
+    elif report.highlights or report.notes:
+        ws = wb.create_sheet("Summary")
+        used.add("Summary")
+        ws.append([report.title, report.tenant.get("name", "")])
+        ws["A1"].font = Font(bold=True)
+        for h in report.highlights:
+            ws.append([h.label, h.value, h.foot])
+        for note in report.notes:
+            ws.append(["Not checked", note])
+        ws.column_dimensions["A"].width = 32
+        ws.column_dimensions["B"].width = 24
+        ws.column_dimensions["C"].width = 60
     for section in report.sections or [Section("No data", ["Note"], rows=[[report.unavailable or ""]])]:
         name = section.title[:31]
         while name in used:

@@ -73,7 +73,7 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 
 
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
-                **phase4):
+                secure_scores=None, per_user=None, **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
     rsps.get(f"{V1}/users", json={"value": users})
@@ -85,7 +85,16 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
              json={"value": [gd.CA_MFA_ALL, gd.CA_REPORT_ONLY] if ca is None else ca})
     rsps.get(f"{V1}/reports/authenticationMethods/userRegistrationDetails",
              json={"value": gd.REGISTRATION_DETAILS if registration is None else registration})
-    rsps.get(f"{V1}/security/secureScores", json={"value": gd.SECURE_SCORES})
+    scores = gd.SECURE_SCORES if secure_scores is None else secure_scores
+    rsps.get(f"{V1}/security/secureScores", json={"value": scores})
+    rsps.get(f"{V1}/security/secureScoreControlProfiles", json={"value": gd.SECURE_SCORE_PROFILES})
+    states = gd.PER_USER_MFA if per_user is None else per_user
+
+    def requirements(request):
+        return 200, {}, json.dumps({"perUserMfaState": states.get(request.path_url.split("/")[3], "disabled")})
+    rsps.add_callback(responses.GET, re.compile(re.escape(f"{GRAPH_ROOT}/beta") + r"/users/[^/]+/authentication/"
+                                                r"requirements"), callback=requirements,
+                      content_type="application/json")
     rsps.get(re.compile(re.escape(V1) + r"/users/[^/]+/authentication/methods"), json={"value": []})
     rsps.get(re.compile(re.escape(V1) + r"/groups/[^/?]+(\?.*)?$"), json={"displayName": "Break glass"})
     rsps.get(re.compile(re.escape(V1) + r"/groups/[^/]+/transitiveMembers"),

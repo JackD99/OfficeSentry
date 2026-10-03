@@ -385,9 +385,13 @@ svg.brand-preview { display: block; width: 100%; height: auto; margin: 4px 0 12p
 .tile.tone-bad .value { color: var(--bad); }
 .tile.tone-warn .value { color: var(--warn); }
 .tile.tone-ok .value { color: var(--ok); }
+.tile .value.wordy { font-size: 1.05rem; line-height: 1.35; padding: 6px 0 4px; color: var(--text-2); }
+
+/* -- Charts on detail report pages (report.css styles the PDF versions) ------ */
+.chart-card { padding: 12px 16px; }
 svg.chart { width: 100%; height: auto; display: block; max-height: 220px; }
 svg.chart .grid { stroke: var(--border); }
-svg.chart .axis { fill: var(--muted); }
+svg.chart .axis { fill: var(--muted); font-size: 11px; }
 svg.chart .series { stroke: var(--accent); }
 svg.chart .hit:hover { fill: var(--accent); fill-opacity: .25; }
 svg.chart .end { fill: var(--accent); stroke: var(--surface); }

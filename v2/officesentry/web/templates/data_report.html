@@ -33,9 +33,24 @@
   {% endfor %}
 </div>
 {% endif %}
+{% if report.highlights %}
+<div class="tiles">
+  {% for h in report.highlights %}
+  <div class="tile">
+    <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
+    {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% if report.notes %}
+<div class="callout">{{ icon('alert') }}<div><strong>Not checked</strong>
+  {% for note in report.notes %}<p class="m0">{{ note }}</p>{% endfor %}</div></div>
+{% endif %}
 {% if report.chart %}
-<section class="card">
-  <div class="card-head"><h2>{{ report.chart_title }}</h2></div>
+<section class="card chart-card">
+  {% if report.chart_title %}<div class="card-head"><h2>{{ report.chart_title }}</h2></div>{% endif %}
   {{ report.chart|safe }}
 </section>
 {% endif %}

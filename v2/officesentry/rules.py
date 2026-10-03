@@ -195,7 +195,9 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
     reg = snap.objects("mfa_registration", "mfa_registration")
     if admins is None or reg is None:
         return _unavailable("Needs admin role and MFA registration data")
-    registered = {r["_id"]: r["isMfaRegistered"] for r in reg}
+    if not reg:
+        return _unavailable("Microsoft returned no MFA registration data yet")
+    registered = {r["_id"]: r.get("isMfaRegistered") for r in reg}
     findings, seen = [], set()
     for a in admins:
         pid = a["principalId"]
@@ -206,8 +208,13 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
             findings.append(Finding("critical", _label(a), f"{a['roleName']} with no MFA method registered", pid))
         elif pid not in registered:
             findings.append(Finding("low", _label(a), f"{a['roleName']}: MFA registration unknown", pid))
-    if findings:
-        return ("fail", f"{sum(f.severity == 'critical' for f in findings)} admin(s) without MFA", findings)
+    missing = sum(f.severity == "critical" for f in findings)
+    unknown = len(findings) - missing
+    if missing:
+        extra = f", and {unknown} whose registration isn't known" if unknown else ""
+        return ("fail", f"{missing} admin(s) without MFA{extra}", findings)
+    if unknown:  # can't call it a pass, and "0 admins without MFA" as a failure reads as nonsense
+        return _unavailable(f"MFA registration isn't known for {unknown} admin(s)")
     return ("pass", f"All {len(seen)} privileged user(s) have MFA registered", [])
 
 
@@ -265,17 +272,22 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     if reg is None:
         return _unavailable("MFA registration data hasn't been collected yet")
     users = {u["_id"]: u for u in (snap.objects("users", "user") or [])}
-    findings = []
+    findings, checked = [], 0
     for r in reg:
         user = users.get(r["_id"])
         if user is not None and not user.get("accountEnabled"):
             continue
-        if (r.get("userType") or "member").lower() != "member" or r["isMfaRegistered"]:
+        if str(r.get("userType") or "member").lower() != "member":
+            continue
+        checked += 1
+        if r.get("isMfaRegistered"):
             continue
         findings.append(Finding("high" if r.get("isAdmin") else "medium", _label(r), "No MFA method registered",
                                 r["_id"]))
+    if not checked:  # an empty registration report proves nothing
+        return _unavailable("Microsoft returned no MFA registration data for any enabled member yet")
     return ("fail", f"{len(findings)} user(s) without MFA", findings) if findings else \
-        ("pass", f"All {len(reg)} checked user(s) have MFA registered", [])
+        ("pass", f"All {checked} checked user(s) have MFA registered", [])
 
 
 @rule("stale_users", "No inactive accounts", "Accounts",
