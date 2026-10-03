@@ -7,6 +7,7 @@ is listed as "Not assessed" rather than guessed.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -97,7 +98,11 @@ def _extra_evidence(key: str, snap: TenantSnapshot) -> list[str]:
         pct = snap.metric("mfa.registered_pct")
         if pct is not None:
             out.append(f"{pct:g}% of checked users have registered an MFA method.")
-        cov = coverage.user_coverage(snap)
+        try:
+            cov = coverage.user_coverage(snap)
+        except Exception:  # damaged policy or user data: leave this extra line out rather than the whole pack
+            logging.getLogger(__name__).exception("Conditional Access coverage failed")
+            cov = None
         defaults = snap.objects("conditional_access", "security_defaults")
         if cov and not (defaults and defaults[0].get("isEnabled")):
             out.append(f"{sum(c.mfa for c in cov)} of {len(cov)} enabled accounts are covered by an enforced "

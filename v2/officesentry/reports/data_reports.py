@@ -248,7 +248,7 @@ def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     registrations = snap.objects("app_consents", "application") or []
     for a in sorted(registrations, key=lambda a: (a.get("displayName") or "").lower()):
         creds = a.get("credentials") or []
-        ends = sorted(c["endDateTime"] for c in creds if c.get("endDateTime"))
+        ends = sorted(c["endDateTime"] for c in creds if devices.parse_ts(c.get("endDateTime")))
         future = [e for e in ends if _ts(e) >= now.timestamp()]
         if not creds:
             status, flag = "No credentials", None
@@ -266,7 +266,7 @@ def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
 
 
 def _ts(iso: str) -> float:
-    return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    return devices.parse_ts(iso).timestamp()
 
 
 # -- Admin activity ----------------------------------------------------------------------

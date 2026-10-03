@@ -17,16 +17,10 @@ from officesentry.graph import GRAPH_ROOT
 from officesentry.recording import request_key
 
 FIXTURES = Path(__file__).parent / "fixtures"
-# Collectors ask for "the last 30 days" with a timestamp in the query; match on the shape, not the time.
-TIMESTAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z")
 
 
 def load(name: str = "live_tenant.json") -> dict:
     return json.loads((FIXTURES / name).read_text())
-
-
-def _graph_key(url: str) -> str:
-    return TIMESTAMP.sub("<time>", json.dumps(request_key(url)))
 
 
 def _cmdlet_key(url: str, cmdlet: dict) -> str:
@@ -39,7 +33,7 @@ def mock(rsps, fixture: dict) -> list[str]:
     exchange: dict[str, list] = {}
     for e in fixture["entries"]:
         if e["api"] == "graph":
-            graph.setdefault(_graph_key(e["url"]), []).append(e)
+            graph.setdefault(json.dumps(request_key(e["url"])), []).append(e)
         elif e["api"] == "exchange":
             exchange.setdefault(_cmdlet_key(e["url"], e["cmdlet"]), []).append(e)
     missing: list[str] = []
@@ -53,7 +47,7 @@ def mock(rsps, fixture: dict) -> list[str]:
         return e["status"], {}, json.dumps(e["body"]) if e["body"] is not None else ""
 
     def graph_cb(request):
-        return serve(graph, _graph_key(request.url), request.url)
+        return serve(graph, json.dumps(request_key(request.url)), request.url)
 
     def exchange_cb(request):
         cmdlet = json.loads(request.body)["CmdletInput"]

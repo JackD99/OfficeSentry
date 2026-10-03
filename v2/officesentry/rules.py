@@ -33,6 +33,14 @@ class Finding:
     object_id: str = ""
     new: bool = False  # set by reports: first seen (or reopened) in the period
 
+    def __post_init__(self):
+        # A name read from a damaged stored object may not be text; fall back to the ID so the
+        # finding still sorts, shows and syncs.
+        if not isinstance(self.object_id, str):
+            self.object_id = ""
+        if not isinstance(self.subject, str):
+            self.subject = self.object_id or "Unknown"
+
 
 @dataclass
 class RuleResult:
@@ -170,7 +178,7 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
                 p.get("displayName", "?"))
     findings = [Finding("medium", label, f"{what} " + ", ".join(f"\"{n}\"" for n in pols), oid)
                 for oid, (label, what, pols) in excluded.items()]
-    policy_names = ", ".join(p.get("displayName", "?") for p in covering)
+    policy_names = ", ".join(coverage.policy_name(p) for p in covering)
     if findings:
         return ("fail", f"Enforced by {policy_names}, with {len(findings)} exclusion(s) to review", findings)
     return ("pass", f"Enforced by {policy_names}", [])
@@ -200,7 +208,8 @@ def _privileged_users(snap: TenantSnapshot) -> list[dict] | None:
     rows = snap.objects("admin_roles", "role_assignment")
     if rows is None:
         return None
-    return [r for r in rows if r.get("privileged") and r.get("assignment") == "active"]
+    return [dict(r, roleName=r.get("roleName") or "Unknown role") for r in rows
+            if r.get("privileged") and r.get("assignment") == "active" and r.get("principalId")]
 
 
 @rule("admin_mfa", "Every admin has MFA registered", "Admins",
@@ -212,7 +221,7 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
     if admins is None or reg is None:
         return _unavailable("Needs admin role and MFA registration data")
     if not reg:
-        return _unavailable("Microsoft returned no MFA registration data for this tenant")
+        return _unavailable("Microsoft returned no MFA registration data yet")
     registered = {r["_id"]: r.get("isMfaRegistered") for r in reg}
     findings, seen = [], set()
     for a in admins:
@@ -287,8 +296,6 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     reg = snap.objects("mfa_registration", "mfa_registration")
     if reg is None:
         return _unavailable("MFA registration data hasn't been collected yet")
-    if not reg:
-        return _unavailable("Microsoft returned no MFA registration data for this tenant")
     users = {u["_id"]: u for u in (snap.objects("users", "user") or [])}
     findings, checked = [], 0
     for r in reg:
@@ -648,11 +655,11 @@ def app_credentials(snap: TenantSnapshot, now: datetime):
     soon = now.timestamp() + 30 * 86400
     findings = []
     for a in apps:
-        ends = [c["endDateTime"] for c in a.get("credentials") or [] if c.get("endDateTime")]
+        ends = [c["endDateTime"] for c in a.get("credentials") or [] if devices.parse_ts(c.get("endDateTime"))]
         if not ends:
             continue
         latest = max(ends)
-        latest_ts = datetime.fromisoformat(latest.replace("Z", "+00:00")).timestamp()
+        latest_ts = devices.parse_ts(latest).timestamp()
         if latest_ts < now.timestamp():
             findings.append(Finding("low", a.get("displayName") or a["_id"],
                                     f"All {len(ends)} credential(s) expired, last on {latest[:10]}", a["_id"]))
@@ -832,9 +839,10 @@ def pending_guests(snap: TenantSnapshot, now: datetime):
     findings = []
     for u in users:
         created = u.get("createdDateTime")
-        if u.get("userType") != "Guest" or u.get("externalUserState") != "PendingAcceptance" or not created:
+        if u.get("userType") != "Guest" or u.get("externalUserState") != "PendingAcceptance" \
+                or not devices.parse_ts(created):
             continue
-        if datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp() < cutoff:
+        if devices.parse_ts(created).timestamp() < cutoff:
             findings.append(Finding("low", _label(u), f"Invited {created[:10]}, never accepted", u["_id"]))
     return ("fail", f"{len(findings)} guest invitation(s) unaccepted for 30+ days", findings) if findings else \
         ("pass", "No stale guest invitations", [])
@@ -1305,8 +1313,8 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
     now = now or datetime.now(UTC)
     results = []
     for r in RULES:
+        # A check returns (status, summary, findings) and may add advice that replaces the default.
         try:
-            # A check returns (status, summary, findings) and may add advice that replaces the default.
             status, summary, findings, *advice = r.check(snap, now)
             findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
         except Exception as exc:  # one broken check mustn't blank the whole report
