@@ -12,7 +12,8 @@
     <div class="sub">Run {{ run.id }} · queued {{ ts(run.created_at) }}{% if run.finished_at %} · finished {{ ts(run.finished_at) }}{% endif %}{% if run.requested_by %} · by {{ run.requested_by }}{% endif %}{% if run.truncated %} · <strong>truncated</strong>{% endif %}</div>
   </div>
 </div>
-{% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' else 'bad' }}">{{ run.error }}</div>{% endif %}
+{% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' else 'bad' }}">{{ run.error|run_error }}
+  {% if run.error|run_error != run.error %}<details class="small"><summary>Microsoft's message</summary><code>{{ run.error }}</code></details>{% endif %}</div>{% endif %}
 
 <div class="grid-2">
   <section class="card">
