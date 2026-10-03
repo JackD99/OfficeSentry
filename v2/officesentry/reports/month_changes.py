@@ -10,8 +10,8 @@ It has four parts:
   built twice, from the data held at the start of the period and from the
   latest data, and its tables are compared row by row. New reports are
   compared automatically. A table opts out with ``Section(compare=False)``
-  (event logs), and columns that only move with time (``Last ...``) are
-  ignored.
+  (event logs, time series), and columns that only move with time
+  (``Last ...``, ``... (UTC)``, ``30-day change``) are ignored.
 
 Nothing here calls Microsoft.
 """
@@ -143,7 +143,7 @@ def _text(value) -> str:
 
 def _volatile(column: str) -> bool:
     """Columns that change with the passing of time rather than with the tenant."""
-    return column.startswith("Last ") or column.endswith("(UTC)")
+    return column.startswith("Last ") or column.endswith("(UTC)") or "change" in column.lower()
 
 
 def _keyed(section: data_reports.Section, width: int):
@@ -269,6 +269,12 @@ def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None) -
         "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
         " AND (first_seen >= ? OR reopened_at >= ?)", (tenant["id"], since_iso, since_iso)).fetchall()
     fixed = list(resolved_since(conn, tenant["id"], since_iso))
+    if baseline is None:
+        # Collection started inside the period: everything it found is a first look, not a change.
+        new_findings = []
+        if any(new_snap.runs.values()):
+            notes.append("Collection for this tenant started during this period, so its findings are on the "
+                         "Findings tab rather than counted as new here.")
     order = lambda r: (SEV_RANK.get(r["severity"], 9), r["rule_key"], r["subject"])  # noqa: E731
 
     try:
@@ -287,7 +293,9 @@ def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None) -
             reports.append(ReportChanges(key, data_reports.REPORTS[key][0],
                                          note=f"Couldn't be compared ({type(exc).__name__})."))
 
-    return TenantChanges(tenant, since, now, _figures(conn, tenant["id"], since_iso),
+    figures = _figures(conn, tenant["id"], since_iso)
+    figures.sort(key=lambda f: not f.delta)  # what moved first
+    return TenantChanges(tenant, since, now, figures,
                          sorted(new_findings, key=order), sorted(fixed, key=order), key_changes, reports,
                          baseline, notes)
 

@@ -51,16 +51,19 @@
 {% else %}
 <div class="tiles">
   <div class="tile"><div class="label">Tenants</div><div class="value">{{ rollup.rows|length }}</div>
-    <div class="foot">{{ rollup.description }}</div></div>
+    <div class="foot">that you look after</div></div>
   <div class="tile{% if rollup.with_attention %} tone-warn{% endif %}"><div class="label">Need attention</div><div class="value">{{ rollup.with_attention }}</div>
     <div class="foot">{% if rollup.key == 'review' %}with critical or high findings{% elif rollup.key == 'evidence' %}with controls partly or not in place{% else %}with rows flagged for review{% endif %}</div></div>
   <div class="tile"><div class="label">No data for this report</div><div class="value">{{ rollup.without_data }}</div>
-    <div class="foot">{% if rollup.without_data %}hover a tenant's note for the reason{% else %}every tenant has data{% endif %}</div></div>
+    <div class="foot">{% if rollup.without_data %}the reason is under each tenant's name{% else %}every tenant has data{% endif %}</div></div>
 </div>
 
 <div class="card flush">
   <div class="card-head toolbar">
-    <h2>{{ rollup.title }} <span class="count-badge">{{ rollup.rows|length }}</span></h2>
+    <div>
+      <h2>{{ rollup.title }} <span class="count-badge">{{ rollup.rows|length }}</span></h2>
+      <p class="muted small m0">{{ rollup.description }}</p>
+    </div>
     <div class="toolbar-actions">
       {% if rollup.rows|length > 5 %}<input class="search" type="search" data-filter="rollup-table" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
       <a class="btn sm" href="{{ url_for('across.rollup_download', key=rollup.key, ext='csv') }}">{{ icon('download') }} CSV</a>
@@ -76,7 +79,7 @@
     <tbody>
     {% for row in rollup.rows %}{% set t = row.tenant %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
-      <td data-sort="{{ t.name|lower }}"><a class="strong" href="{{ tenant_href(t)|trim }}">{{ t.name }}</a>
+      <td class="tenant-col" data-sort="{{ t.name|lower }}"><a class="strong" href="{{ tenant_href(t)|trim }}">{{ t.name }}</a>
         {% if row.note %}<span class="sub muted">{{ row.note }}</span>{% endif %}</td>
       {% if row.note %}
       <td colspan="{{ rollup.columns|length }}" class="muted" data-label="Status">Not available</td>

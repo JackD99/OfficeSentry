@@ -32,7 +32,7 @@
   {% set score = (report.figures|selectattr('key', 'equalto', 'secure_score.pct')|list or [none])[0] %}
   <div class="tile"><div class="label">Secure Score</div>
     <div class="value">{% if score and score.after is not none %}{{ '%g'|format(score.after) }}%{% else %}–{% endif %}</div>
-    <div class="foot">{% if score and score.delta is not none %}<span class="delta {{ score.trend }}">{{ '%+g'|format(score.delta) }} pts</span> since {{ report.since|day }}{% else %}&nbsp;{% endif %}</div></div>
+    <div class="foot">{% if score and score.delta %}<span class="delta {{ score.trend }}">{{ '%+g'|format(score.delta) }} pts</span> since {{ report.since|day }}{% elif score and score.delta is not none %}No change since {{ report.since|day }}{% else %}&nbsp;{% endif %}</div></div>
 </div>
 
 <div class="grid-2">

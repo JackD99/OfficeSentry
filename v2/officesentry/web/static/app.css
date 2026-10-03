@@ -500,3 +500,5 @@ th.num button.sort { justify-content: flex-end; }
   .picker-form, .picker-form select { width: 100%; }
   .change-list li { padding: 9px 14px; }
 }
+td.tenant-col { min-width: 190px; }
+@media (max-width: 640px) { td.tenant-col { min-width: 0; } }

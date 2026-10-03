@@ -763,7 +763,7 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     for _, row in sorted(open_rows, key=lambda r: r[0]):
         available.add(row)
 
-    months = Section("Month by month", ["Month", "Secure Score", "Change"],
+    months = Section("Month by month", ["Month", "Secure Score", "Change"], compare=False,
                      intro="The last score of each month. Microsoft keeps 90 days; Office Sentry keeps every day "
                            "it has collected.")
     by_month: dict[tuple[int, int], float] = {}

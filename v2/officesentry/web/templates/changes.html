@@ -31,7 +31,7 @@
   <div class="tile{% if totals.fixed %} tone-ok{% endif %}"><div class="label">Findings fixed</div><div class="value">{{ totals.fixed }}</div>
     <div class="foot">across all tenants</div></div>
   <div class="tile"><div class="label">Average Secure Score change</div>
-    <div class="value">{% if totals.score is not none %}{{ '%+g'|format(totals.score) }} pts{% else %}–{% endif %}</div>
+    <div class="value">{% if totals.score %}{{ '%+g'|format(totals.score) }} pts{% elif totals.score is not none %}No change{% else %}–{% endif %}</div>
     <div class="foot">{% if totals.no_baseline %}{{ totals.no_baseline }} tenant{{ 's' if totals.no_baseline != 1 }} without data from {{ days }} days ago{% else %}&nbsp;{% endif %}</div></div>
 </div>
 
@@ -59,7 +59,7 @@
     {% for s in summaries %}{% set t = s.tenant %}
     {% set score = s.figures.get('secure_score.pct') %}{% set mfa = s.figures.get('mfa.registered_pct') %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
-      <td data-sort="{{ t.name|lower }}"><a class="strong" href="{{ url_for('across.tenant_changes', tenant_id=t.id, days=days) }}">{{ t.name }}</a>
+      <td class="tenant-col" data-sort="{{ t.name|lower }}"><a class="strong" href="{{ url_for('across.tenant_changes', tenant_id=t.id, days=days) }}">{{ t.name }}</a>
         {% if s.error %}<span class="sub muted">Couldn't be worked out ({{ s.error }})</span>
         {% elif not s.has_baseline %}<span class="sub muted">No data from {{ days }} days ago yet</span>{% endif %}</td>
       <td class="num" data-label="Changes" data-sort="{{ s.changes }}">{{ s.changes or '–' }}</td>
