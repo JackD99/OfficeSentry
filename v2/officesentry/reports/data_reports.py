@@ -927,11 +927,16 @@ def to_tables(report: DataReport) -> list[Table]:
     return [section_table(s) for s in report.sections]
 
 
+# Flag cell colours in XLSX (background, text), matching the severity colours on the page.
+FLAG_FILLS = {"critical": ("FDECEA", "B42318"), "high": ("FDF0E6", "B54708"), "medium": ("FDF6E1", "8A5A00"),
+              "low": ("F0F2F5", "475467")}
+
+
 def to_xlsx(report: DataReport) -> bytes:
     from io import BytesIO
 
     from openpyxl import Workbook
-    from openpyxl.styles import Font
+    from openpyxl.styles import Font, PatternFill
     from openpyxl.utils import get_column_letter
 
     wb = Workbook()
@@ -975,6 +980,9 @@ def to_xlsx(report: DataReport) -> bytes:
         for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False):
             cells = [str(v) if isinstance(v, Link) else v for v in row]
             ws.append(cells + ([flag or ""] if any(section.flags) else []))
+            if flag in FLAG_FILLS:  # the same colours as the page, so flagged rows stand out in Excel too
+                ws.cell(ws.max_row, ws.max_column).fill = PatternFill("solid", fgColor=FLAG_FILLS[flag][0])
+                ws.cell(ws.max_row, ws.max_column).font = Font(bold=True, color=FLAG_FILLS[flag][1])
             for col, v in enumerate(row, 1):
                 if isinstance(v, Link) and v.safe_href:
                     ws.cell(ws.max_row, col).hyperlink = v.safe_href

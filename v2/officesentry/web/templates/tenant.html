@@ -34,10 +34,13 @@
 </section>
 {% endif %}
 
+{# Each headline number opens the report behind it. #}
+{% set KPI_REPORT = {'secure_score.pct': 'secure-score', 'mfa.registered_pct': 'mfa', 'admins.privileged_principals': 'admins',
+                     'users.licensed': 'licences', 'stale': 'inactive', 'waste': 'licences'} %}
 <div class="tiles">
-  {% for k in report.kpis %}
-  <div class="tile">
-    <div class="label">{{ k.label }}</div>
+  {% for k in report.kpis %}{% set target = KPI_REPORT.get(k.key) %}
+  <{{ 'a' if target else 'div' }} class="tile{{ ' link' if target }}"{% if target %} href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=target) }}"{% endif %}>
+    <div class="label">{{ k.label }}{% if target %}{{ icon('arrow', 'go') }}{% endif %}</div>
     <div class="value">{{ kpi_value(k) }}</div>
     <div class="foot">
       {% if k.delta %}<span class="delta {{ k.trend }}">{{ '%+g'|format(k.delta) }}{{ k.unit if k.unit != 'currency' }}</span> in 4 weeks
@@ -46,7 +49,7 @@
       {% elif k.value is none %}Not collected yet
       {% else %}&nbsp;{% endif %}
     </div>
-  </div>
+  </{{ 'a' if target else 'div' }}>
   {% endfor %}
 </div>
 
