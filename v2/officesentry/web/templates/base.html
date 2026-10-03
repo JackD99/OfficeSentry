@@ -65,6 +65,8 @@
       {{ account() }}
     </details>
     <main>
+      {% if worker_down %}<div class="callout warn" role="status">{{ icon('alert') }}<span><strong>The background worker isn't running.</strong>
+        Tenants won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span></div>{% endif %}
       {{ flashes() }}
       {% block content %}{% endblock %}
     </main>

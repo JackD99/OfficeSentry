@@ -1,21 +1,26 @@
-"""Background worker: runs queued collector runs and the nightly schedule.
+"""Background worker: runs queued collector runs, the collection schedule,
+emailed reports and snapshot retention.
 
-One process, no broker. Run it with ``python -m officesentry worker``.
+One process, no broker. Run it with ``python -m officesentry worker``. It
+records a heartbeat so the portal and ``healthcheck`` can tell it is running.
 """
 
 from __future__ import annotations
 
+import importlib
 import logging
+import signal
+import sqlite3
+import threading
 import time
 import traceback
 from datetime import UTC, datetime, timedelta
-from zoneinfo import ZoneInfo
 
-from . import alerts, findings, store
+from . import alerts, findings, schedule, store
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .crypto import Vault
-from .db import connect, migrate
+from .db import connect, migrate, utcnow
 from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError, LicenseRequired, PermissionMissing
 
@@ -91,35 +96,95 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
     return status
 
 
-def current_slot(now: datetime, tz: str, hour: int) -> datetime:
-    """The most recent nightly slot at or before ``now`` (returned in UTC)."""
-    local = now.astimezone(ZoneInfo(tz))
-    slot = local.replace(hour=hour, minute=0, second=0, microsecond=0)
-    if slot > local:
-        slot -= timedelta(days=1)
-    return slot.astimezone(UTC)
-
-
 def schedule_tick(conn, cfg: Config, now: datetime | None = None) -> int:
-    """Queue the nightly runs for the current slot that are not queued yet."""
+    """Queue the collection runs for the latest cron slot that are not queued yet.
+
+    A collector that already succeeded within ``cfg.max_age_hours`` before the
+    slot (say, a manual run that evening) is skipped for that slot.
+    """
     now = now or datetime.now(UTC)
-    slot = current_slot(now, cfg.timezone, cfg.nightly_hour).strftime("%Y-%m-%dT%H:%M:%SZ")
+    slot_dt = schedule.previous_fire(cfg.collect_cron, cfg.timezone, now)
+    slot = schedule.iso(slot_dt)
     queued = 0
     tenants = conn.execute(
         "SELECT id FROM tenants WHERE enabled = 1 AND connection_id IS NOT NULL ORDER BY id"
     ).fetchall()
     for tenant in tenants:
-        for key, cls in REGISTRY.items():
-            if not cls.nightly:
-                continue
+        for key in schedule.nightly_collectors():
             done = conn.execute(
                 "SELECT 1 FROM runs WHERE tenant_id = ? AND collector = ? AND scheduled_for = ?",
                 (tenant["id"], key, slot),
             ).fetchone()
-            if not done:
-                store.enqueue_run(conn, tenant["id"], key, trigger="schedule", scheduled_for=slot)
-                queued += 1
+            if done or schedule.is_fresh(conn, tenant["id"], key, slot_dt, cfg.max_age_hours):
+                continue
+            store.enqueue_run(conn, tenant["id"], key, trigger="schedule", scheduled_for=slot)
+            queued += 1
     return queued
+
+
+# -- Heartbeat ---------------------------------------------------------------
+
+HEARTBEAT_KEY = "worker_seen_at"
+HEARTBEAT_EVERY = 30  # seconds
+HEARTBEAT_STALE = timedelta(minutes=5)
+
+
+def beat(conn) -> None:
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
+                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (HEARTBEAT_KEY, utcnow()))
+
+
+def last_seen(conn) -> datetime | None:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (HEARTBEAT_KEY,)).fetchone()
+    return datetime.fromisoformat(row["value"].replace("Z", "+00:00")) if row else None
+
+
+def is_alive(conn, now: datetime | None = None) -> bool:
+    seen = last_seen(conn)
+    return seen is not None and (now or datetime.now(UTC)) - seen < HEARTBEAT_STALE
+
+
+def _heartbeat_thread(db_path, stop: threading.Event) -> threading.Thread:
+    """Report liveness from a side thread, so a long collection doesn't look like a dead worker."""
+    def loop():
+        conn = connect(db_path)
+        try:
+            while not stop.is_set():
+                try:
+                    beat(conn)
+                except sqlite3.Error:
+                    log.warning("Could not record worker heartbeat", exc_info=True)
+                stop.wait(HEARTBEAT_EVERY)
+        finally:
+            conn.close()
+    thread = threading.Thread(target=loop, name="heartbeat", daemon=True)
+    thread.start()
+    return thread
+
+
+# -- Main loop ---------------------------------------------------------------
+
+
+# Modules that register ``schedule.periodic`` jobs. Add yours here.
+JOB_MODULES = ("officesentry.mailer",)
+
+
+def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> None:
+    """The once-a-minute work: queue scheduled collections, then run the periodic jobs."""
+    for module in JOB_MODULES:
+        importlib.import_module(module)
+    now = now or datetime.now(UTC)
+    queued = schedule_tick(conn, cfg, now)
+    if queued:
+        log.info("Queued %s scheduled run(s)", queued)
+    schedule.run_periodic(schedule.TickContext(app=app, conn=conn, vault=vault, cfg=cfg, now=now))
+
+
+def prune(conn, cfg: Config) -> int:
+    removed = store.prune_snapshots(conn, cfg.keep_daily, cfg.keep_monthly, cfg.timezone)
+    if removed:
+        log.info("Retention: removed the stored objects of %s older run(s)", removed)
+    return removed
 
 
 def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None) -> None:
@@ -130,7 +195,6 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     exchange_factory = exchange_factory or default_exchange_factory(vault)
     alerting = alerts.Alerting(cfg.base_url, vault)
 
-    from . import mailer
     from .web import create_app
 
     app = create_app(cfg)  # for rendering emailed reports
@@ -138,21 +202,27 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     if recovered:
         log.warning("Marked %s orphaned run(s) as failed", recovered)
 
+    stop = threading.Event()
+    if not once:
+        # Finish the current run on "docker stop" rather than leave it half done.
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(sig, lambda *_: stop.set())
+        _heartbeat_thread(cfg.db_path, stop)
+    log.info("Worker started. Collecting on '%s' (%s); next slot %s", cfg.collect_cron, cfg.timezone,
+             schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat())
+
     last_tick = None  # tick on the first pass; monotonic() can be under 60s on a freshly booted host
     last_prune_day = None
-    while True:
-        if last_tick is None or time.monotonic() - last_tick > 60:
-            schedule_tick(conn, cfg)
+    while not stop.is_set():
+        if last_tick is None or time.monotonic() - last_tick >= 60:
             last_tick = time.monotonic()
-            try:
-                mailer.run_due(app, conn, vault, cfg.timezone)
-            except Exception:  # never let email problems stop collections
-                log.exception("Sending scheduled reports failed")
+            housekeeping(app, conn, vault, cfg)
             today = datetime.now(UTC).date()
             if today != last_prune_day:
-                removed = store.prune_snapshots(conn, cfg.retention_days)
-                if removed:
-                    log.info("Pruned %s snapshot object(s)", removed)
+                try:
+                    prune(conn, cfg)
+                except sqlite3.Error:
+                    log.exception("Pruning old snapshots failed")
                 last_prune_day = today
 
         run = store.claim_next_run(conn)
@@ -162,6 +232,7 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
             alerts.after_run(conn, alerting, run["id"], status)
             continue
         if once:
-            return
-        time.sleep(2)
-
+            break
+        stop.wait(2)
+    stop.set()
+    log.info("Worker stopped")

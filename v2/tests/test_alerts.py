@@ -281,6 +281,8 @@ def test_run_worker_alerts_when_a_collection_starts_failing(cfg, db, vault, two_
     alpha, _ = two_tenants
     configure(db, vault, fmt="generic")
     add_run(db, alpha, "succeeded", collector="users")
+    # An old run, so the schedule doesn't skip "users" as already fresh.
+    db.execute("UPDATE runs SET finished_at = '2020-01-01T00:00:00Z'")
 
     def broken(tenant, connection):
         raise NotConnected("tenant has no app connection with a client ID")

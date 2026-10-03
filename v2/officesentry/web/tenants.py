@@ -213,5 +213,6 @@ def run(run_id: int):
     kind = request.args.get("kind")
     sample = store.run_objects(g.db, run_id, kind=kind, limit=200) if kind else []
     columns = sorted({k for row in sample for k in row if not k.startswith("_")})[:12]
+    pruned = not kinds and r["object_count"] > 0 and r["status"] not in ("queued", "running")
     return render_template("run.html", run=r, tenant=t, events=events, kinds=kinds, metrics=metrics,
-                           kind=kind, sample=sample, columns=columns, collectors=REGISTRY)
+                           kind=kind, sample=sample, columns=columns, collectors=REGISTRY, pruned=pruned)

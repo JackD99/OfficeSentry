@@ -9,6 +9,7 @@ from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from .. import worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
@@ -85,7 +86,11 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.context_processor
     def _inject():
-        return {"current_user": g.get("user"), "csp_nonce": g.get("csp_nonce", "")}
+        user = g.get("user")
+        # Admins are told when the background worker isn't running: without it
+        # nothing is collected and no scheduled email goes out.
+        worker_down = bool(user and user["role"] == "admin" and "db" in g and not worker.is_alive(g.db))
+        return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down}
 
     @app.errorhandler(403)
     def _forbidden(_e):
