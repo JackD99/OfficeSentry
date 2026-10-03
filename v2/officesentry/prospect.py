@@ -73,7 +73,7 @@ class Assessment:
     health: dnscheck.DomainHealth
     id: int | None = None
     created_by: str = ""
-    issues: list[dnscheck.Issue] = field(default_factory=list)
+    issues: list[dnscheck.Issue] = field(default_factory=list)  # includes MTA-STS and TLS-RPT
 
     @property
     def grade(self) -> str:
@@ -99,11 +99,16 @@ class Assessment:
             return "Spoofed email is blocked, but some email settings still need attention."
         return "Email authentication is set up and enforced."
 
+    @property
+    def delivery(self) -> dict[str, str]:
+        """MTA-STS and TLS-RPT in one word each (Enforced, Testing, Missing...)."""
+        return dnscheck.transport_summary(self.health)
+
 
 def run(domain: str, company: str = "", resolve=None, session=None) -> Assessment:
     health = dnscheck.check_domain(domain, resolve or dnscheck.lookup)
     a = Assessment(domain, company or domain, datetime.now(UTC), tenant_lookup(domain, session), health)
-    a.issues = dnscheck.issues(health)
+    a.issues = dnscheck.issues(health, transport=True)
     return a
 
 
@@ -123,5 +128,5 @@ def load(row) -> Assessment:
     a = Assessment(row["domain"], row["company"] or row["domain"],
                    datetime.fromisoformat(data["checked_at"].replace("Z", "+00:00")),
                    TenantInfo(**data["tenant"]), health, row["id"], row["created_by"])
-    a.issues = dnscheck.issues(health)
+    a.issues = dnscheck.issues(health, transport=True)
     return a

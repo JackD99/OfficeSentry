@@ -3,7 +3,7 @@
 ``live-test --record FILE`` passes a ``RecordingSession`` to the Graph and
 Exchange clients and wraps ``dnscheck.lookup``. Everything is kept in memory
 and scrubbed before anything is written: names, email addresses, phone numbers,
-tenant domains and IDs are replaced with consistent placeholders, so the
+IP addresses, tenant domains and IDs are replaced with consistent placeholders, so the
 fixture keeps real response shapes and relationships (the same user ID in
 users, roles and policies) without real data. ``tests/replay.py`` serves the
 file back through ``responses`` so CI runs every collector against it.
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
 import requests
@@ -34,9 +35,21 @@ LIST_LIMIT = {"/v1.0/security/secureScores": 5}
 DEVICE_KEYS = {"displayName", "model", "deviceTag", "phoneAppVersion", "phoneNumber", "emailAddress"}
 
 
+# IDs that Office Sentry's own code looks for (role templates, guest access levels, Microsoft
+# apps) are Microsoft's constants, not the tenant's data, so they're kept as they are.
+KNOWN_IDS = {g.lower() for f in Path(__file__).parent.rglob("*.py") for g in GUID.findall(f.read_text())}
+TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z")
+# Fields that hold someone's IP address (audit logs, sign-ins). Version numbers look like IPs,
+# so only values under these keys are replaced, with documentation addresses.
+IP_KEYS = {"ipaddress", "clientip", "clientipaddress"}
+IP = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:]+")
+
+
 def request_key(url: str) -> tuple[str, list[tuple[str, str]]]:
+    """Path and sorted query, with times blanked so "since 30 days ago" filters replay on any day."""
     parts = urlsplit(url)
-    return parts.path, sorted(parse_qsl(parts.query, keep_blank_values=True))
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    return parts.path, sorted((k, TIMESTAMP.sub("<time>", v)) for k, v in query)
 
 
 class RecordingSession(requests.Session):
@@ -105,7 +118,7 @@ class Scrubber:
 
     def guid(self, value: str) -> str:
         low = value.lower()
-        if low in MICROSOFT_TENANTS or low.startswith("00000"):
+        if low in MICROSOFT_TENANTS or low in KNOWN_IDS or low.startswith("00000"):
             return value  # Microsoft's own tenants and well-known IDs aren't anyone's data
         if low not in self.guids:
             n = len(self.guids) + 1
@@ -243,9 +256,22 @@ def _collect_names(log: list) -> tuple[list[str], dict[str, str], set[str]]:
     return domains, names, personal
 
 
+def _collect_ips(log: list) -> dict[str, str]:
+    """Real IP address -> a documentation address (203.0.113.0/24, 2001:db8::/32)."""
+    ips: dict[str, str] = {}
+    for e in log:
+        for obj in _objects(e.get("body")):
+            for k, v in obj.items():
+                if k.lower() in IP_KEYS and isinstance(v, str) and IP.fullmatch(v) and v not in ips:
+                    n = len(ips) + 1
+                    ips[v] = f"2001:db8::{n:x}" if ":" in v else f"203.0.113.{n % 254 or 254}"
+    return ips
+
+
 def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     domains, names, personal = _collect_names(log)
-    s = Scrubber(tenant_id, domains, names)
+    ips = _collect_ips(log)
+    s = Scrubber(tenant_id, domains, {**names, **ips})
     entries = []
     for e in log:
         if e["api"] == "dns":
@@ -270,7 +296,7 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     # URLs are checked for IDs and domains only: a person named "admin" isn't leaked by /admin/sharepoint.
     text = "\n".join(v for v in _strings(fixture) if not v.startswith("https://"))
     leaks = find_leaks(text, [*names, *personal])
-    leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails])
+    leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips])
     if leaks:
         hints = ", ".join(f"{v[0]}… ({len(v)} chars)" for v in leaks)  # never print the values themselves
         raise ValueError(f"scrubbing left {len(leaks)} identifying value(s) in the fixture: {hints}")

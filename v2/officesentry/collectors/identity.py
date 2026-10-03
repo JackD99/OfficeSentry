@@ -205,17 +205,16 @@ class MfaRegistration(Collector):
                 }) for d in details]
             except LicenseRequired:
                 ctx.log("Registration report needs Entra ID P1; checking users' methods one by one")
-        if rows is not None and (not rows or store.latest_run(ctx.conn, ctx.tenant["id"], "users")):
-            # A newly licensed tenant gets an empty or partial report for a while.
-            reported = {rid for rid, _ in rows}
-            members = self._members(ctx)
-            missing = sum(1 for u in members if u["_id"] not in reported)
-            if missing:
-                ctx.log(f"Registration report is missing {missing} of {len(members)} enabled member(s); "
-                        "checking users' methods one by one")
-                rows = None
         if rows is None:
             rows = self._per_user(ctx)
+        else:
+            # A newly licensed tenant's report can be empty or miss people for a day or two. Check
+            # anyone it leaves out one by one, so they're never counted as registered or skipped.
+            missing = self._per_user(ctx, skip={uid for uid, _ in rows}, fetch_users=not rows)
+            if missing:
+                ctx.log(f"Registration report left out {len(missing)} enabled member(s); checked their methods "
+                        "one by one")
+                rows += missing
 
         ctx.objects("mfa_registration", rows)
         data = [r for _, r in rows]
@@ -225,21 +224,18 @@ class MfaRegistration(Collector):
         if data:
             ctx.metric("mfa.registered_pct", round(100 * sum(r["isMfaRegistered"] for r in data) / len(data), 1))
 
-    def _members(self, ctx: RunContext) -> list[dict]:
-        """Enabled member accounts, from the latest Users run or straight from Graph."""
-        if getattr(self, "_member_cache", None) is None:
-            users_run = store.latest_run(ctx.conn, ctx.tenant["id"], "users")
-            if users_run:
-                users = store.run_objects(ctx.conn, users_run["id"], "user")
-            else:
-                users = [dict(u, _id=u["id"]) for u in ctx.paged(ctx.graph.get_all("/users", params={
-                    "$select": "id,userPrincipalName,displayName,userType,accountEnabled", "$top": "999"}))]
-            self._member_cache = [u for u in users if u.get("accountEnabled")
-                                  and (u.get("userType") or "Member") == "Member"]
-        return self._member_cache
-
-    def _per_user(self, ctx: RunContext) -> list[tuple[str, dict]]:
-        members = self._members(ctx)
+    def _per_user(self, ctx: RunContext, skip: set[str] = frozenset(),
+                  fetch_users: bool = True) -> list[tuple[str, dict]]:
+        users_run = store.latest_run(ctx.conn, ctx.tenant["id"], "users")
+        if users_run:
+            users = store.run_objects(ctx.conn, users_run["id"], "user")
+        elif not fetch_users:
+            return []
+        else:
+            users = [dict(u, _id=u["id"]) for u in ctx.paged(ctx.graph.get_all("/users", params={
+                "$select": "id,userPrincipalName,displayName,userType,accountEnabled", "$top": "999"}))]
+        members = [u for u in users if u.get("accountEnabled") and (u.get("userType") or "Member") == "Member"
+                   and u["_id"] not in skip]
         if len(members) > PER_USER_MFA_LIMIT:
             ctx.warn(f"Checked the first {PER_USER_MFA_LIMIT} of {len(members)} enabled members")
             members = members[:PER_USER_MFA_LIMIT]
