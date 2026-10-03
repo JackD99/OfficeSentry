@@ -86,7 +86,7 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
 
     if record:
         fixture = recording.scrub(log, tenant_ref, client_id)
-        record.write_text(json.dumps(fixture, indent=1, sort_keys=True) + "\n")
+        record.write_text(json.dumps(fixture, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         print(f"Recorded {len(fixture['entries'])} scrubbed response(s) to {record}")
 
     tenant = store.get_tenant(conn, tenant_id)
