@@ -61,6 +61,12 @@
 </div>
 {% endif %}
 {% for section in report.sections %}
+{% if not section.rows %}
+<section class="card flush empty-section" id="s{{ loop.index }}">
+  <h2>{{ section.title }} <span class="count-badge">0</span></h2>
+  <p>{{ section.empty }}{% if section.intro %} <span class="faint">{{ section.intro }}</span>{% endif %}</p>
+</section>
+{% else %}
 <section class="card flush" id="s{{ loop.index }}">
   <div class="card-head toolbar">
     <h2>{{ section.title }} <span class="count-badge">{{ section.rows|length }}</span></h2>
@@ -75,7 +81,7 @@
   <div class="scroll-x">
   {% set sortable = section.rows|length > 1 %}
   <table class="stack-sm{{ ' sortable' if sortable }}" id="t{{ loop.index }}">
-    <thead><tr><th class="flagcol" aria-sort="none">{% if sortable and section.flagged %}<button type="button" class="sort" title="Sort by flag"><span class="sr-only">Flag</span></button>{% else %}<span class="sr-only">Flag</span>{% endif %}</th>
+    <thead><tr><th class="flagcol" aria-sort="none">{% if sortable and section.flagged %}<button type="button" class="sort" title="Sort by flag">Flag</button>{% else %}<span class="sr-only">Flag</span>{% endif %}</th>
       {% for c in section.columns %}<th aria-sort="none">{% if sortable %}<button type="button" class="sort">{{ c }}</button>{% else %}{{ c }}{% endif %}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in section.rows %}{% set flag = section.flags[loop.index0] %}
@@ -87,8 +93,9 @@
     </tbody>
   </table>
   </div>
-  {% else %}<div class="empty compact"><p>{{ section.empty }}</p></div>{% endif %}
+  {% endif %}
 </section>
+{% endif %}
 {% endfor %}
 {% endif %}
 
