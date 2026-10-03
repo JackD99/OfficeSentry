@@ -1,0 +1,57 @@
+{#- What changed across every tenant (month_changes.Summary list) as a PDF. The web page is changes.html. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+{% set wide = true %}
+{% macro delta(f) -%}
+{% if f is none or f.after is none %}<span class="muted">–</span>{% else %}{{ '%g'|format(f.after) }}{{ f.unit }}{% if f.delta %} <span class="{{ f.trend }} small">{{ '%+g'|format(f.delta) }}</span>{% endif %}{% endif %}
+{%- endmacro %}
+
+{% block doc_title %}What changed{% endblock %}
+{% block client %}All tenants{% endblock %}
+{% block footer_note %}{{ brand.display_name }} internal: every tenant{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', generated_at|day) }}
+  {{ ui.meta('Period', 'Last ' ~ days ~ ' days') }}
+  {{ ui.meta('Tenants', summaries|length) }}
+{% endblock %}
+
+{% block body %}
+<p class="lede">Changes in every tenant over the last {{ days }} days, most important first.</p>
+{% call ui.figures(4) %}
+  {{ ui.figure('Tenants with changes', totals.changed, 'of ' ~ summaries|length) }}
+  {{ ui.figure('New critical or high findings', totals.new_severe, totals.new ~ ' new findings in all', 'bad' if totals.new_severe else none) }}
+  {{ ui.figure('Findings fixed', totals.fixed, 'across all tenants', 'ok' if totals.fixed else none) }}
+  {{ ui.figure('Average Secure Score change', ('%+g'|format(totals.score) ~ ' pts') if totals.score else ('No change' if totals.score is not none else '–'),
+               (totals.no_baseline ~ ' without data from ' ~ days ~ ' days ago') if totals.no_baseline else '') }}
+{% endcall %}
+
+<section class="doc-section">
+  <h2>Tenants <span class="count">{{ summaries|length }}</span></h2>
+  {% if summaries %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Tenant</th><th class="num">Changes</th><th class="num">New findings</th><th class="num">Fixed</th>
+      <th class="num">Secure Score</th><th class="num">Users with MFA</th><th>What changed</th></tr></thead>
+    <tbody>
+    {% for s in summaries %}{% set score = s.figures.get('secure_score.pct') %}{% set mfa = s.figures.get('mfa.registered_pct') %}
+    <tr><td><strong>{{ s.tenant.name }}</strong>
+        {% if s.error %}<span class="sub">Couldn't be worked out ({{ s.error }})</span>{% elif not s.has_baseline %}<span class="sub">No data from {{ days }} days ago yet</span>{% endif %}</td>
+      <td class="num">{{ s.changes or '–' }}</td>
+      <td class="num">{% if s.new_findings %}{{ s.new_findings }}{% if s.new_severe %} <span class="pill bad">{{ s.new_severe }} critical or high</span>{% endif %}{% else %}–{% endif %}</td>
+      <td class="num">{% if s.fixed %}<span class="pill ok">{{ s.fixed }}</span>{% else %}–{% endif %}</td>
+      <td class="num">{{ delta(score) }}</td>
+      <td class="num">{{ delta(mfa) }}</td>
+      <td>{% if s.areas %}{{ s.areas|join(', ') }}{% else %}<span class="muted">Nothing</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty-note">No tenants to show.</p>{% endif %}
+</section>
+
+<footer class="about keep">
+  <p>Changes compare each tenant's data from {{ days }} days ago with its latest collection. Figures in green or red show the change in points.
+  Prepared by {{ brand.display_name }}. Collected from Microsoft 365 with read-only access; nothing was changed.</p>
+</footer>
+{% endblock %}

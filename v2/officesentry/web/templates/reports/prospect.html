@@ -7,7 +7,7 @@
 {% block toolbar %}
   <a class="back" href="{{ url_for('prospects.index') }}">&larr; Prospects</a>
   <span class="spacer"></span>
-  {% if pdf_available %}<a class="button primary" href="{{ url_for('prospects.pdf', prospect_id=a.id) }}"><span class="wide">Download </span>PDF</a>{% endif %}
+  <a class="button primary" href="{{ url_for('prospects.pdf', prospect_id=a.id) }}"><span class="wide">Download </span>PDF</a>
 {% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Domain', a.domain) }}

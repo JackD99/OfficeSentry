@@ -65,7 +65,7 @@
   {% if staff %}{% set _ = tabs.append(('overview', 'Overview', url_for('tenants.tenant', tenant_id=tenant.id))) %}{% endif %}
   {% set _ = tabs.append(('findings', 'Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('changes', 'Changes', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('data', 'Detail reports', url_for('reports.data_report', tenant_id=tenant.id, key='mailboxes'))) %}
+  {% set _ = tabs.append(('data', 'Detail reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('schedules', 'Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) %}
   {% if staff %}{% set _ = tabs.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
@@ -73,4 +73,32 @@
   <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}{% if counts and counts.get(key) %}<span class="count">{{ counts[key] }}</span>{% endif %}</a>
   {% endfor %}
 </nav>
+{%- endmacro %}
+
+
+{# One "Download" control for a page's formats. links: [(label, href, title)] #}
+{% macro downloads(links) -%}
+<div class="downloads" role="group" aria-label="Download">
+  <span class="downloads-label">{{ icon('download') }}<span>Download</span></span>
+  {% for label, href, title in links %}<a href="{{ href }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>{% endfor %}
+</div>
+{%- endmacro %}
+
+{# Detail report menu: report groups, then the reports in the open group. Phones get one grouped list. #}
+{% macro report_nav(tenant, groups, group, current) -%}
+<nav class="report-nav" aria-label="Detail reports">
+  <div class="report-groups-bar">
+    {% for gr in groups %}<a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=gr.reports[0][0]) }}"{% if gr.key == group.key %} class="active" aria-current="true"{% endif %}>{{ gr.title }}<span class="n">{{ gr.reports|length }}</span></a>{% endfor %}
+  </div>
+  <div class="subtabs m0">
+    {% for key, title, desc in group.reports %}<a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=key) }}" title="{{ desc }}"{% if key == current %} class="active" aria-current="page"{% endif %}>{{ title }}</a>{% endfor %}
+  </div>
+</nav>
+<form method="get" action="{{ url_for('reports.data_index', tenant_id=tenant.id) }}" class="picker-form report-nav-sm" data-autosubmit>
+  <label for="report-key" class="sr-only">Detail report</label>
+  <select id="report-key" name="key">
+    {% for gr in groups %}<optgroup label="{{ gr.title }}">{% for key, title, desc in gr.reports %}<option value="{{ key }}"{% if key == current %} selected{% endif %}>{{ title }}</option>{% endfor %}</optgroup>{% endfor %}
+  </select>
+  <noscript><button class="btn sm">Show</button></noscript>
+</form>
 {%- endmacro %}

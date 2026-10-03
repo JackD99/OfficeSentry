@@ -8,7 +8,7 @@
 {% block toolbar %}
   <a class="back" href="{{ url_for('tenants.tenant', tenant_id=pack.tenant.id) }}">&larr; {{ pack.tenant.name }}</a>
   <span class="spacer"></span>
-  {% if pdf_available %}<a class="button primary" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}"><span class="wide">Download </span>PDF</a>{% endif %}
+  <a class="button primary" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}"><span class="wide">Download </span>PDF</a>
   <a class="button" href="{{ url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id) }}"><span class="wide">Download </span>XLSX</a>
 {% endblock %}
 {% block cover_meta %}

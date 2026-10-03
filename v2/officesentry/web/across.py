@@ -1,10 +1,13 @@
 """Cross-tenant rollups, the month-over-month change report, and CSV downloads.
 
 Every download here is built from the same data as its page, through
-``reports.tables``, so CSV and XLSX always match what people see.
+``reports.tables``, so CSV and XLSX always match what people see. PDFs render
+that same data through ``templates/reports/`` (see ``printing.pdf_response``).
 """
 
 from __future__ import annotations
+
+from datetime import UTC, datetime
 
 from flask import Blueprint, Response, abort, g, redirect, render_template, request, url_for
 
@@ -13,6 +16,7 @@ from ..reports import data_reports, evidence, month_changes, rollups, tables
 from ..reports.monthly_review import build as build_review
 from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .printing import pdf_response
 
 bp = Blueprint("across", __name__)
 
@@ -51,8 +55,7 @@ def _rollup_or_404(key: str):
 @roles_required("admin", "analyst")
 def rollup(key: str):
     data = _rollup_or_404(key)
-    available = rollups.available()
-    return render_template("rollup.html", rollup=data, main=available[:2], detail=available[2:])
+    return render_template("rollup.html", rollup=data, main=rollups.available()[:2], groups=data_reports.grouped())
 
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
@@ -66,13 +69,18 @@ def rollup_download(key: str, ext: str):
     return _download(body, f"all-tenants-{tables.slug(data.title)}", ext)
 
 
+@bp.get("/across/<key>.pdf")
+@roles_required("admin", "analyst")
+def rollup_pdf(key: str):
+    data = _rollup_or_404(key)
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}.pdf")
+    return pdf_response("reports/rollup.html", f"all-tenants-{tables.slug(data.title)}", rollup=data)
+
+
 # -- Month-over-month changes ----------------------------------------------------------
 
 
-@bp.get("/changes")
-@roles_required("admin", "analyst")
-def changes():
-    days = _days()
+def _across_changes(days: int):
     summaries = month_changes.across(g.db, visible_tenants(g.db, g.user), days)
     scored = [s.figures["secure_score.pct"].delta for s in summaries
               if "secure_score.pct" in s.figures and s.figures["secure_score.pct"].delta is not None]
@@ -84,8 +92,26 @@ def changes():
         "score": round(sum(scored) / len(scored), 1) if scored else None,
         "no_baseline": sum(1 for s in summaries if not s.has_baseline),
     }
+    return summaries, totals
+
+
+@bp.get("/changes")
+@roles_required("admin", "analyst")
+def changes():
+    days = _days()
+    summaries, totals = _across_changes(days)
     return render_template("changes.html", summaries=summaries, totals=totals, days=days,
                            periods=month_changes.PERIODS)
+
+
+@bp.get("/changes.pdf")
+@roles_required("admin", "analyst")
+def changes_pdf():
+    days = _days()
+    summaries, totals = _across_changes(days)
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.pdf")
+    return pdf_response("reports/changes.html", f"all-tenants-changes-{days}-days", summaries=summaries,
+                        totals=totals, days=days, generated_at=datetime.now(UTC))
 
 
 @bp.get("/changes.csv", defaults={"ext": "csv"})
@@ -99,15 +125,28 @@ def changes_download(ext: str):
     return _download(body, f"all-tenants-changes-{days}-days", ext)
 
 
+def _tenant_changes(t, days: int) -> dict:
+    report = month_changes.build(g.db, t, days)
+    unchanged = [r for r in report.reports if not r.count and not r.note]
+    return {"report": report, "days": days, "unchanged": unchanged, "titles": RULE_TITLES}
+
+
 @bp.get("/tenants/<int:tenant_id>/changes")
 @login_required
 def tenant_changes(tenant_id: int):
     t = tenant_or_404(tenant_id)
+    return render_template("tenant_changes.html", tenant=t, periods=month_changes.PERIODS,
+                           **_tenant_changes(t, _days()))
+
+
+@bp.get("/tenants/<int:tenant_id>/changes.pdf")
+@login_required
+def tenant_changes_pdf(tenant_id: int):
+    t = tenant_or_404(tenant_id)
     days = _days()
-    report = month_changes.build(g.db, t, days)
-    unchanged = [r for r in report.reports if not r.count and not r.note]
-    return render_template("tenant_changes.html", tenant=t, report=report, days=days, unchanged=unchanged,
-                           periods=month_changes.PERIODS, titles=RULE_TITLES)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"changes-{days}d.pdf")
+    return pdf_response("reports/tenant_changes.html", f"changes-{days}-days-{tables.slug(t['name'])}",
+                        **_tenant_changes(t, days))
 
 
 @bp.get("/tenants/<int:tenant_id>/changes.csv", defaults={"ext": "csv"})

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, tenant_header with context %}
+{% from "_macros.html" import icon, tenant_header, downloads with context %}
 {% block title %}Changes · {{ tenant.name }}{% endblock %}
 {% set KIND = {'added': ('added', 'New'), 'removed': ('resolved', 'Gone'), 'changed': ('changed', 'Changed')} %}
 {% block content %}
@@ -9,8 +9,9 @@
     {% for d in periods %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, days=d) }}"{% if d == days %} class="active" aria-current="page"{% endif %}>Last {{ d }} days</a>{% endfor %}
   </nav>
   <div class="toolbar-actions">
-    <a class="btn sm" href="{{ url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='csv', days=days) }}">{{ icon('download') }} CSV</a>
-    <a class="btn sm" href="{{ url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='xlsx', days=days) }}">{{ icon('download') }} XLSX</a>
+    {{ downloads([('PDF', url_for('across.tenant_changes_pdf', tenant_id=tenant.id, days=days), ''),
+                  ('XLSX', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='xlsx', days=days), ''),
+                  ('CSV', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='csv', days=days), 'Every change in one table')]) }}
   </div>
 </div>
 

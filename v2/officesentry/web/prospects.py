@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 from .. import prospect
 from ..db import audit
-from ..reports import export
 from .access import roles_required
+from .printing import pdf_response
 
 bp = Blueprint("prospects", __name__)
-STATIC_DIR = Path(__file__).parent / "static"
 
 
 @bp.route("/prospects", methods=["GET", "POST"])
@@ -43,19 +40,14 @@ def _assessment(prospect_id: int):
 @roles_required("admin", "analyst")
 def view(prospect_id: int):
     return render_template("reports/prospect.html", a=_assessment(prospect_id), pdf=False,
-                           css_href=url_for("static", filename="report.css"), pdf_available=export.pdf_available())
+                           css_href=url_for("static", filename="report.css"))
 
 
 @bp.get("/prospects/<int:prospect_id>.pdf")
 @roles_required("admin", "analyst")
 def pdf(prospect_id: int):
-    if not export.pdf_available():
-        abort(404)
     a = _assessment(prospect_id)
-    html = render_template("reports/prospect.html", a=a, pdf=True, css_href=(STATIC_DIR / "report.css").as_uri(),
-                           pdf_available=True)
-    return Response(export.to_pdf(html, STATIC_DIR.as_uri() + "/"), mimetype="application/pdf",
-                    headers={"Content-Disposition": f"attachment; filename=email-security-{a.domain}.pdf"})
+    return pdf_response("reports/prospect.html", f"email-security-{a.domain}", a=a)
 
 
 @bp.post("/prospects/<int:prospect_id>/delete")
