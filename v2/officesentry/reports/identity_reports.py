@@ -13,7 +13,16 @@ import re
 from datetime import date, datetime, timedelta
 
 from .. import coverage
-from ..licences import STALE_DAYS, is_stale, last_sign_in, licence_summary, load_prices, sku_name
+from ..licences import (
+    FREE_SKUS,
+    FREE_UNIT_THRESHOLD,
+    STALE_DAYS,
+    is_stale,
+    last_sign_in,
+    licence_summary,
+    load_prices,
+    sku_name,
+)
 from ..snapshot import TenantSnapshot
 from .charts import line_chart
 from .data_reports import DataReport, Highlight, Section
@@ -54,6 +63,14 @@ def _day(value) -> str:
 
 def _label(row: dict) -> str:
     return row.get("userPrincipalName") or row.get("displayName") or row.get("principalId") or row.get("_id", "?")
+
+
+def _some(names: list[str], limit: int = 3) -> str:
+    """'A, B, C and 4 more': long policy lists stay readable. The CA coverage report has them in full."""
+    names = list(names)
+    if len(names) <= limit + 1:
+        return ", ".join(names)
+    return f"{', '.join(names[:limit])} and {len(names) - limit} more"
 
 
 def _users(snap: TenantSnapshot) -> dict[str, dict] | None:
@@ -168,6 +185,11 @@ class Enforcement:
         else:
             self.known = True
 
+    def coverage(self, uid: str, label: str, user_type: str) -> coverage.UserCoverage | None:
+        if not self.known or self.directory is None or not self.policies:
+            return None
+        return coverage.coverage_for(uid, label, user_type, self.policies, self.directory)
+
     def for_user(self, uid: str, label: str, user_type: str) -> tuple[list[str], list[str]]:
         """(what requires MFA, enforced policies the account is excluded from)."""
         sources, excluded = [], []
@@ -235,7 +257,7 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     for row, flag in enf.describe_rows():
         how.add(row, flag)
 
-    gaps = Section("Accounts with a gap", ["Account", "Admin roles", "Gap", "MFA set up", "Methods", "Required by",
+    gaps = Section("Accounts with a gap", ["Account", "Admin roles", "Gap", "MFA set up", "Required by",
                                            "Excluded from", "What it means"],
                    intro="Enabled members who either haven't set up MFA or aren't required to use it. Admins first.",
                    empty="Every enabled member has MFA set up and is required to use it.")
@@ -254,9 +276,9 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         uid, label, user_type = u["_id"], _label(u), u.get("userType") or "Member"
         sources, excluded = enf.for_user(uid, label, user_type) if enf.known else ([], [])
         required = (bool(sources) if enf.known else None)
-        required_text = ", ".join(sources) or ("Nothing" if enf.known else "Not checked")
+        required_text = _some(sources) or ("Nothing" if enf.known else "Not checked")
         if user_type == "Guest":
-            guests.add([label, required_text, excluded], "low" if required is False else None)
+            guests.add([label, required_text, _some(excluded)], "low" if required is False else None)
             continue
         members += 1
         registered = reg.registered(uid)
@@ -281,7 +303,8 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             title, meaning = "Not required", "Isn't asked for MFA, so a stolen password may be enough."
         set_up = "Unknown" if registered is None else registered
         gap_rows.append(((0 if admin else 1, ["critical", "high", "medium", None].index(severity), label.lower()),
-                         [label, roles.get(uid), title, set_up, _methods(reg.get(uid)), required_text, excluded,
+                         [label, roles.get(uid), title, set_up, required_text,
+                          _some(excluded) if kind in ("none", "not_required") else "",
                           meaning], severity))
     for _, row, severity in sorted(gap_rows, key=lambda r: r[0]):
         gaps.add(row, severity)
@@ -358,7 +381,7 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                     problems.append(("critical", "No MFA set up"))
                 if enf.known:
                     sources, _ = enf.for_user(p["id"], p["label"], p["userType"])
-                    required_text = ", ".join(sources) or "Nothing"
+                    required_text = _some(sources) or "Nothing"
                     if not sources:
                         problems.append(("high", "MFA isn't required"))
                 else:
@@ -412,20 +435,27 @@ def _break_glass(roles: dict[str, dict], users: dict[str, dict], reg: Registrati
                             "FIDO2 key or passkey kept somewhere safe.",
                       empty="No break-glass account found: no Global Administrator is excluded from Conditional "
                             "Access or named like one. Without one, a broken policy can lock every admin out.")
-    for p in sorted(roles.values(), key=lambda p: p["label"].lower()):
-        if p["type"] != "user" or not p["global_admin"] or p["enabled"] is False:
-            continue
-        excluded = enf.for_user(p["id"], p["label"], p["userType"])[1] if enf.known else []
+    candidates = {pid: p for pid, p in roles.items()
+                  if p["type"] == "user" and p["global_admin"] and p["enabled"] is not False}
+    for uid, u in users.items():  # named like one but without the role: worth saying
+        if uid not in candidates and u.get("accountEnabled") and u.get("userType") != "Guest" and \
+                BREAK_GLASS_NAME.search(f"{_label(u)} {u.get('displayName') or ''}"):
+            candidates[uid] = {"id": uid, "label": _label(u), "userType": "Member", "global_admin": False}
+    for p in sorted(candidates.values(), key=lambda p: p["label"].lower()):
+        cov = enf.coverage(p["id"], p["label"], p["userType"])
+        excluded = cov.excluded_from if cov else []
         why = []
         if BREAK_GLASS_NAME.search(f"{p['label']} {(users.get(p['id']) or {}).get('displayName') or ''}"):
             why.append("Named like one")
-        if excluded:
+        if excluded and not cov.policies:  # an admin excluded from one policy but covered by another isn't one
             why.append("Excluded from Conditional Access")
         if not why:
             continue
         user = users.get(p["id"]) or {}
         row = reg.get(p["id"])
         problems = []
+        if not p["global_admin"]:
+            problems.append(("high", "Doesn't hold Global Administrator, so it can't recover the tenant"))
         if user.get("onPremisesSyncEnabled"):
             problems.append(("high", "Synced from on-premises: make it cloud-only"))
         if reg.registered(p["id"]) is False:
@@ -435,12 +465,13 @@ def _break_glass(roles: dict[str, dict], users: dict[str, dict], reg: Registrati
         on_ms_domain = p["label"].lower().endswith(".onmicrosoft.com")
         if not on_ms_domain:
             problems.append(("low", "Use the .onmicrosoft.com domain so it works if a custom domain breaks"))
-        if enf.known and not enf.security_defaults and enf.policies and not excluded:
-            problems.append(("medium", "Not excluded from Conditional Access: a broken policy could lock it out"))
+        if cov and cov.policies:
+            problems.append(("medium", f"Conditional Access applies ({', '.join(cov.policies)}): a broken policy "
+                                       "could lock it out"))
         severity = min((s for s, _ in problems), key=["critical", "high", "medium", "low"].index, default=None)
         section.add([p["label"], why, not user.get("onPremisesSyncEnabled") if user else "Unknown", on_ms_domain,
-                     excluded, _methods(row) or ("None" if row is not None else "Unknown"), _sign_in(user or None),
-                     "; ".join(t for _, t in problems) or "Nothing"], severity)
+                     _some(excluded), _methods(row) or ("None" if row is not None else "Unknown"),
+                     _sign_in(user or None), "; ".join(t for _, t in problems) or "Nothing"], severity)
     return section
 
 
@@ -565,7 +596,9 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         return
     activity = any(u.get("signInActivityAvailable") for u in users)
     roles = _admin_role_names(_roles(snap))
-    skus = {s["skuId"]: s.get("skuPartNumber") for s in snap.objects("tenant_profile", "subscribed_sku") or []}
+    skus = {s["skuId"]: s.get("skuPartNumber") for s in snap.objects("tenant_profile", "subscribed_sku") or []
+            if s.get("skuPartNumber") not in FREE_SKUS and (s.get("prepaidUnits") or {}).get("enabled", 0)
+            < FREE_UNIT_THRESHOLD}
     if not activity:
         report.notes.append(f"Sign-in dates need {P1}, so inactive members and guests aren't checked. "
                             "Unaccepted invitations and disabled accounts still holding licences or roles are listed.")
@@ -588,7 +621,7 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     counts = {"members": 0, "licensed": 0, "guests": 0}
     for u in users:
         uid, label = u["_id"], _label(u)
-        licences = [sku_name(skus.get(s)) if skus.get(s) else s for s in u.get("skuIds") or []]
+        licences = [sku_name(skus[s]) for s in u.get("skuIds") or [] if s in skus]  # paid ones only
         guest = u.get("userType") == "Guest"
         if not u.get("accountEnabled"):
             if licences or uid in roles:
@@ -634,6 +667,17 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Highlight("Disabled but still assigned", len(disabled.rows), "Licences or admin roles",
                   "warn" if disabled.rows else None),
     ]
+
+
+def _level(value: str | None) -> str:
+    """Microsoft mixes 'low' and 'Low', and says 'Unknown' for most device controls."""
+    return "" if not value or value.lower() == "unknown" else value.capitalize()
+
+
+def _num(value: float) -> int | float:
+    """9.0 -> 9, 2.5 -> 2.5: whole numbers without a trailing .0, still numbers in the XLSX."""
+    value = round(float(value), 2)
+    return int(value) if value.is_integer() else value
 
 
 # -- Secure Score trend --------------------------------------------------------------------------
@@ -688,7 +732,7 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                 continue  # control added or retired by Microsoft, not a change in the tenant
             delta = round(after - before, 2)
             if delta:
-                rows.append((delta, [title(name), category.get(name), before, after, f"{delta:+g}"],
+                rows.append((delta, [title(name), category.get(name), _num(before), _num(after), f"{delta:+g}"],
                              "medium" if delta < 0 else None))
     for _, row, flag in sorted(rows, key=lambda r: r[0]):
         changes.add(row, flag)
@@ -713,9 +757,9 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
             continue
         else:
             gap = None
-        open_rows.append((-(gap or 0), [title(c["controlName"]), c.get("controlCategory"), score,
-                                        "" if most is None else most, "Unknown" if gap is None else gap,
-                                        profile.get("userImpact"), profile.get("implementationCost")]))
+        open_rows.append((-(gap or 0), [title(c["controlName"]), c.get("controlCategory"), _num(score),
+                                        "" if most is None else _num(most), "Unknown" if gap is None else _num(gap),
+                                        _level(profile.get("userImpact")), _level(profile.get("implementationCost"))]))
     for _, row in sorted(open_rows, key=lambda r: r[0]):
         available.add(row)
 
@@ -729,7 +773,8 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     for i, ((y, m), v) in reversed(list(enumerate(ordered))):
         prev = ordered[i - 1][1] if i else None
         label = f"{date(y, m, 1):%B %Y}" + (" (so far)" if (y, m) == (now.year, now.month) else "")
-        months.add([label, f"{v:g}%", "" if prev is None else f"{round(v - prev, 1):+g}"])
+        change = "" if prev is None else (f"{round(v - prev, 1):+g}" if round(v - prev, 1) else "No change")
+        months.add([label, f"{v:g}%", change])
     report.sections = [changes, available, months]
 
     def trend(label: str, delta: float | None, since: date | None) -> Highlight:

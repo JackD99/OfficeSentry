@@ -26,7 +26,7 @@
   {% for h in report.highlights %}
   <div class="tile">
     <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
-    <div class="value">{{ h.value }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
     {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
   </div>
   {% endfor %}

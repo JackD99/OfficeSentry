@@ -68,7 +68,7 @@ def test_mfa_coverage_cross_checks_registration_against_policies(db, p1_tenant):
     # Carl is required by the all-users policy but hasn't set MFA up.
     assert gaps["carl@x.com"][2] == "Required, not set up"
     # The break-glass account is excluded from the only MFA policy and has no method: no MFA at all, and an admin.
-    assert gaps["bg@x.com"][2] == "No MFA" and gaps["bg@x.com"][6] == "Require MFA for all users"
+    assert gaps["bg@x.com"][2] == "No MFA" and gaps["bg@x.com"][5] == "Require MFA for all users"
     assert s["Accounts with a gap"].flags[0] == "critical"  # admins first
     assert [r[0] for r in s["Protected accounts"].rows] == ["ann@x.com"]
     assert ["Report-only MFA policies (not enforced)", "MFA for admins (report only)"] in s["How MFA is required"].rows
@@ -83,7 +83,7 @@ def test_mfa_coverage_without_p1_uses_per_user_mfa(db, free_tenant):
     assert ["Conditional Access", "Not available: needs Entra ID P1"] in s["How MFA is required"].rows
     assert ["Per-user MFA", "1 of 2 member(s)"] in s["How MFA is required"].rows
     gaps = {r[0]: r for r in s["Accounts with a gap"].rows}
-    assert gaps["ann@x.com"][5] == "Per-user MFA (enforced)" and gaps["ann@x.com"][2] == "Required, not set up"
+    assert gaps["ann@x.com"][4] == "Per-user MFA (enforced)" and gaps["ann@x.com"][2] == "Required, not set up"
     assert gaps["carl@x.com"][2] == "No MFA"
 
 
@@ -303,3 +303,20 @@ def test_money_cells_are_numbers_in_xlsx(client, db, p1_tenant):
     row = [c.value for c in wb["Waste by subscription"][2]]
     assert row[6] == 10 and row[7] == 50
     assert "£50.00" in client.get(f"/tenants/{p1_tenant['id']}/data/licences").get_data(as_text=True)
+
+
+def test_break_glass_needs_more_than_one_exclusion(db, two_tenants):
+    """An admin excluded from the all-users policy but covered by an admin policy isn't a break-glass account;
+    an account named like one but without Global Administrator is called out."""
+    alpha, _ = two_tenants
+    everyone = dict(gd.CA_MFA_ALL, conditions={"users": {"includeUsers": ["All"], "excludeUsers": ["u1", "u4"]},
+                                               "applications": {"includeApplications": ["All"]},
+                                               "clientAppTypes": ["all"]})
+    admins_policy = dict(gd.CA_MFA_ALL, id="ca9", displayName="Admins MFA",
+                         conditions={"users": {"includeUsers": ["u1"]},
+                                     "applications": {"includeApplications": ["All"]}, "clientAppTypes": ["all"]})
+    emergency = dict(CARL, id="u8", displayName="Emergency access", userPrincipalName="emergency@x.com")
+    seed_tenant(db, alpha, users=USERS + [BREAKGLASS, emergency], ca=[everyone, admins_policy])
+    glass = sections(build(db, store.get_tenant(db, alpha), "admins", NOW))["Break-glass accounts"]
+    assert [r[0] for r in glass.rows] == ["bg@x.com", "emergency@x.com"]  # not ann@x.com
+    assert "Doesn't hold Global Administrator" in glass.rows[1][7]
