@@ -11,6 +11,7 @@ from officesentry import store
 from officesentry.db import utcnow
 from officesentry.graph import GRAPH_ROOT
 from officesentry.reports.data_reports import REPORTS, build
+from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -87,15 +88,40 @@ def test_mfa_coverage_without_p1_uses_per_user_mfa(db, free_tenant):
     assert gaps["carl@x.com"][2] == "No MFA"
 
 
-def test_mfa_coverage_marks_empty_registration_as_not_checked(db, two_tenants):
-    """A newly P1 tenant can get an empty registration report: that's unknown, never a pass."""
+def test_empty_registration_report_falls_back_to_per_user_methods(db, two_tenants):
+    """A newly P1 tenant can get an empty registration report: members are then checked one by one."""
     alpha, _ = two_tenants
     seed_tenant(db, alpha, users=USERS + [CARL], registration=[])
+    tenant = store.get_tenant(db, alpha)
+    rows = store.run_objects(db, store.latest_run(db, alpha, "mfa_registration")["id"], "mfa_registration")
+    assert {r["_id"]: r["source"] for r in rows} == {"u1": "per_user_methods", "u6": "per_user_methods"}
+    report = build(db, tenant, "mfa", NOW)
+    assert not report.notes
+    assert {r[0]: r[2] for r in sections(report)["Accounts with a gap"].rows} == {
+        "ann@x.com": "Required, not set up", "carl@x.com": "Required, not set up"}
+
+
+def test_mfa_checks_unavailable_without_registration_data(db, two_tenants):
+    """No registration rows for anyone: the checks say so instead of passing, or failing with "0 admins"."""
+    from officesentry.rules import evaluate
+
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=[USERS[2]], registration=[])  # only a guest: nobody to check one by one
+    results = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)), NOW)}
+    assert results["users_mfa_registered"].status == "unavailable"
+    assert results["admin_mfa"].status == "unavailable"
     report = build(db, store.get_tenant(db, alpha), "mfa", NOW)
     assert any("no MFA registration data" in n for n in report.notes)
-    f = figures(report)
-    assert f["Fully protected"] == "Not checked" and f["No MFA at all"] == "Not checked"
-    assert {r[2] for r in sections(report)["Accounts with a gap"].rows} == {"Unknown"}
+
+
+def test_admin_mfa_unknown_registration_is_not_a_failure(db, two_tenants):
+    from officesentry.rules import evaluate
+
+    alpha, _ = two_tenants
+    registered = [dict(r, isMfaRegistered=True) for r in gd.REGISTRATION_DETAILS if r["id"] == "u1"]
+    seed_tenant(db, alpha, registration=registered)  # bg@x.com and the guest admin aren't in the data
+    r = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)), NOW)}["admin_mfa"]
+    assert r.status == "unavailable" and "isn't known for 2 admin(s)" in r.summary
 
 
 def test_mfa_coverage_with_security_defaults(db, two_tenants):
