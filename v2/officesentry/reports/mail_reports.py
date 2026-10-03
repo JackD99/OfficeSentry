@@ -37,8 +37,11 @@ def _size(value: int | None) -> str:
     return ""
 
 
+PLURALS = {"person": "people", "mailbox": "mailboxes"}
+
+
 def _plural(n: int, word: str) -> str:
-    return f"{n} {word}{'' if n == 1 else 's'}"
+    return f"{n} {word if n == 1 else PLURALS.get(word, word + 's')}"
 
 
 # -- Inbox rules -------------------------------------------------------------------
@@ -208,7 +211,7 @@ def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport)
     risky = sum(1 for f in people.flags if f in ("high", "medium"))
     report.highlights = [
         Highlight("People with access", len(by_person), "To a mailbox other than their own"),
-        Highlight("Shared mailboxes", len(by_box), "That someone else can open or send from"),
+        Highlight("Mailboxes others use", len(by_box), "Opened or sent from by someone else"),
         Highlight("Access to review", risky, "Blocked, guest or outside accounts", "bad" if risky else "ok"),
     ]
     report.sections = [people, mailboxes, every]
@@ -293,7 +296,7 @@ def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         pct = used(s)
         flag = "high" if pct is not None and pct >= 0.98 else ("medium" if pct is not None and pct >= 0.9 else None)
         section.add([s.get("mailbox"), _type(s.get("mailboxType")), _size(s.get("totalBytes")),
-                     _size(s.get("sendQuotaBytes")) or "No limit", f"{pct:.0%}" if pct is not None else "",
+                     _size(s.get("sendQuotaBytes")) or "No limit", _percent(pct),
                      s.get("itemCount"), _size(s.get("deletedBytes")), s.get("archive"), s.get("litigationHold")],
                     flag)
     report.highlights = [
@@ -302,6 +305,12 @@ def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         Highlight("Largest", _size(max((s.get("totalBytes") or 0 for s in sizes), default=0)) or "0 bytes"),
     ]
     report.sections = [section]
+
+
+def _percent(value: float | None) -> str:
+    if value is None:
+        return ""
+    return "Under 1%" if 0 < value < 0.005 else f"{value:.0%}"
 
 
 # -- Legacy sign-ins and SMTP AUTH ----------------------------------------------------------------
@@ -357,7 +366,7 @@ def legacy_auth(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
                 "available") else "Unknown", c.get("PopEnabled"), c.get("ImapEnabled")],
                 "low" if smtp_on and upn not in smtp_users else None)
         org = ("on" if org_off is False else "off") if org_off is not None else "unknown"
-        protocols.intro = (f"SMTP AUTH is {org} for the organisation, and {allowed} of {len(cas)} mailbox(es) "
+        protocols.intro = (f"SMTP AUTH is {org} for the organisation, and {allowed} of {_plural(len(cas), 'mailbox')} "
                            "allow it. Turn it off for mailboxes that haven't used it recently.")
         sections.append(protocols)
     report.sections = sections
