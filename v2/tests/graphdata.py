@@ -171,6 +171,14 @@ EXCHANGE = {
     "Get-RemoteDomain": [{"Name": "Default", "DomainName": "*", "AutoForwardEnabled": True}],
     "Get-Recipient": [],
 }
+LEGACY_SIGNINS = [
+    {"createdDateTime": "2026-09-30T10:00:00Z", "userPrincipalName": "info@x.com", "userId": "u7",
+     "clientAppUsed": "Authenticated SMTP", "appDisplayName": "Office 365 Exchange Online", "ipAddress": "203.0.113.5",
+     "location": {"countryOrRegion": "GB"}, "status": {"errorCode": 0}},
+    {"createdDateTime": "2026-09-29T03:00:00Z", "userPrincipalName": "ann@x.com", "userId": "u1",
+     "clientAppUsed": "IMAP4", "ipAddress": "198.51.100.9", "location": {"countryOrRegion": "RU"},
+     "status": {"errorCode": 50126, "failureReason": "Invalid username or password."}},
+]
 INFO_USER = {"id": "u7", "displayName": "Info", "userPrincipalName": "info@x.com", "userType": "Member",
              "accountEnabled": True, "assignedLicenses": [], "signInActivity": {}}
 

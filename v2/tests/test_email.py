@@ -246,7 +246,7 @@ def test_create_schedule_from_form(client, db, two_tenants):
     emails = {c["email"] for c in delivery.recipients(db, "schedule", s["id"])}
     assert emails == {"me@msp.com", "sam@client.com"}
     page = client.get(f"/tenants/{alpha}/schedules").get_data(as_text=True)
-    assert "Monthly Security" in page and "Mailbox access" in page and "Sam" in page
+    assert "Monthly Security" in page and "Mail forwarding" in page and "Sam" in page
 
 
 def test_schedule_form_requires_reports_and_people(client, db, two_tenants):

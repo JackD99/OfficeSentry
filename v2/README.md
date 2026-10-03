@@ -60,9 +60,19 @@ pass, and a first run against a real tenant.
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as XLSX):
-  - *Mailbox access and forwarding*: every forward (admin-set or inbox rule),
-    inbox rules that hide mail, full access / send as / send on behalf, and
-    shared mailboxes that can sign in.
+  - *Mail forwarding*: every forward (admin-set or inbox rule), and the
+    outbound spam policies and remote domains that allow or block it.
+  - *Inbox rules*: rules that forward outside, delete or hide mail, every
+    rule that sends mail elsewhere, and every rule in every mailbox.
+  - *Mailbox permissions*: full access, send as and send on behalf, by person
+    and by mailbox, with blocked, guest and outside accounts flagged.
+  - *Shared mailboxes*: shared, room and equipment mailboxes whose account can
+    be signed in to, their last sign-in, who has access, and their size.
+  - *Mailbox size*: each mailbox's size against its send quota
+    (`Get-MailboxStatistics`), with mailboxes over 90% flagged.
+  - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
+    the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
+    still allow SMTP AUTH, POP and IMAP.
   - *Admin activity*: security-relevant changes from the Entra ID directory
     audit log over the last 30 days (7 without Entra ID P1, which is all the
     tenant keeps): admin roles granted or removed (including PIM), Conditional

@@ -14,6 +14,13 @@ MAILBOX_FIELDS = (
     "ExternalDirectoryObjectId", "Guid", "UserPrincipalName", "PrimarySmtpAddress", "DisplayName",
     "RecipientTypeDetails", "ForwardingSmtpAddress", "ForwardingAddress", "DeliverToMailboxAndForward",
     "GrantSendOnBehalfTo", "HiddenFromAddressListsEnabled", "AuditEnabled", "WhenMailboxCreated",
+    "Name", "Alias", "ArchiveStatus", "LitigationHoldEnabled",
+    "IssueWarningQuota", "ProhibitSendQuota", "ProhibitSendReceiveQuota",
+)
+# Per-mailbox client access: which old protocols and SMTP AUTH each mailbox allows.
+CAS_FIELDS = (
+    "ExternalDirectoryObjectId", "Guid", "PrimarySmtpAddress", "SmtpClientAuthenticationDisabled",
+    "PopEnabled", "ImapEnabled", "ActiveSyncEnabled", "EwsEnabled", "MAPIEnabled", "OWAEnabled",
 )
 SELF = "NT AUTHORITY\\SELF"
 # Built-in Exchange objects whose permissions aren't people's access: the Discovery Search
@@ -75,6 +82,8 @@ class Mailboxes(Collector):
             "Identity": p.get("Identity"), "Trustee": p.get("Trustee"),
             "AccessRights": p.get("AccessRights") or []}) for p in send_as])
 
+        self._client_access(ctx)
+
         org = (exo.invoke("Get-OrganizationConfig") or [{}])[0]
         transport = (exo.invoke("Get-TransportConfig") or [{}])[0]
         ctx.objects("mail_settings", [("org", {
@@ -91,6 +100,18 @@ class Mailboxes(Collector):
         ctx.metric("mailboxes.shared", sum(r["RecipientTypeDetails"] == "SharedMailbox" for r in data))
         ctx.metric("mailboxes.forwarding", sum(bool(r["ForwardingSmtpAddress"] or r["ForwardingAddress"])
                                                for r in data))
+
+    @staticmethod
+    def _client_access(ctx: RunContext) -> None:
+        try:
+            cas = ctx.exchange.invoke("Get-CASMailbox", {"ResultSize": "Unlimited"})
+        except ExchangeAccessDenied:
+            raise
+        except ExchangeError as exc:
+            ctx.warn(f"Could not read mailbox protocol settings: {exc.message}")
+            return
+        ctx.objects("cas_mailbox", [(_mailbox_id(c), _pick(c, CAS_FIELDS)) for c in cas
+                                    if c.get("ExternalDirectoryObjectId")])  # system mailboxes have none
 
     @staticmethod
     def _recipient(ctx: RunContext, identity: str) -> dict | None:

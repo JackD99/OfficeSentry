@@ -140,51 +140,42 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             external = is_external(target, domains)
             fwd.add([m.get("PrimarySmtpAddress"), target, "Admin (mailbox setting)", external,
                      m.get("DeliverToMailboxAndForward")], "high" if external else None)
-    suspicious = Section("Inbox rules worth checking", ["Mailbox", "Rule", "Enabled", "Why it stands out"],
-                         intro="Rules that forward outside, delete, or bury mail. These are the classic signs of a "
-                               "compromised mailbox.", empty="No inbox rule looks suspicious.")
-    every = Section("All inbox rules", ["Mailbox", "Rule", "Enabled", "Conditions", "Actions"],
-                    empty="No inbox rules found.")
     for r in sorted(rules or [], key=lambda r: ((r.get("mailbox") or "").lower(), r.get("sequence") or 0)):
         risk = inbox_rule_risk(r, domains)
         for target in risk.forwards_to:
             external = target in risk.external
             fwd.add([r.get("mailbox"), target, f"Inbox rule \"{r.get('displayName')}\"", external, True],
                     ("high" if r.get("isEnabled", True) else "low") if external else None)
-        if risk.severity:
-            suspicious.add([r.get("mailbox"), r.get("displayName"), r.get("isEnabled", True),
-                            "; ".join(risk.reasons)], risk.severity)
-        every.add([r.get("mailbox"), r.get("displayName"), r.get("isEnabled", True),
-                   _describe_conditions(r.get("conditions") or {}), _describe_actions(r)], risk.severity)
+    outside = sum(1 for row in fwd.rows if row[3] == "Yes")
+    report.highlights = [
+        Highlight("Forwarding outside", outside, "Admin-set or by inbox rule", "bad" if outside else "ok"),
+        Highlight("Forwarding inside", len(fwd.rows) - outside, "To colleagues in the organisation"),
+    ]
 
-    sections = [fwd, suspicious]
-    if boxes is not None:
-        access = Section("Delegated access", ["Mailbox", "Mailbox type", "Who", "Access"],
-                         intro="People who can open or send as someone else's mailbox.",
-                         empty="Nobody has access to another mailbox.")
-        types = {m.get("PrimarySmtpAddress"): _type(m.get("RecipientTypeDetails")) for m in boxes}
-        for p in sorted(snap.objects("mailboxes", "mailbox_permission") or [], key=lambda p: p.get("mailbox") or ""):
-            access.add([p.get("mailbox"), _type(p.get("mailboxType")), p.get("User"), "Full access"])
-        for p in snap.objects("mailboxes", "send_as") or []:
-            access.add([p.get("Identity"), "", p.get("Trustee"), "Send as"])
-        for m in boxes:
-            for who in m.get("GrantSendOnBehalfTo") or []:
-                access.add([m.get("PrimarySmtpAddress"), types.get(m.get("PrimarySmtpAddress")), who, "Send on behalf"])
-
-        users = {u["_id"]: u for u in snap.objects("users", "user") or []}
-        perms = snap.objects("mailboxes", "mailbox_permission") or []
-        shared = Section("Shared mailboxes", ["Mailbox", "Sign-in allowed", "Licensed", "People with full access"],
-                         intro="A shared mailbox's account doesn't need to sign in. If it can, it usually has no MFA.",
-                         empty="No shared mailboxes.")
-        for m in sorted(boxes, key=lambda m: m.get("PrimarySmtpAddress") or ""):
-            if m.get("RecipientTypeDetails") != "SharedMailbox":
-                continue
-            user = users.get(m.get("ExternalDirectoryObjectId")) or {}
-            enabled = user.get("accountEnabled")
-            shared.add([m.get("PrimarySmtpAddress"), enabled if user else "Unknown", user.get("licensed"),
-                        sum(1 for p in perms if p.get("mailboxId") == m["_id"])], "medium" if enabled else None)
-        sections += [access, shared]
-    report.sections = sections + [every]
+    sections = [fwd]
+    policies = snap.objects("mailboxes", "outbound_spam_policy")
+    remote = snap.objects("mailboxes", "remote_domain")
+    if policies is not None or remote is not None:
+        modes = {"On": "Allowed", "Off": "Blocked", "Automatic": "Blocked (Microsoft's default)"}
+        controls = Section("What stops forwarding", ["Setting", "Applies to", "Automatic forwarding outside"],
+                           intro="Organisation settings that allow or block automatic forwarding to outside "
+                                 "addresses. The strictest one wins.", empty="No settings found.")
+        allowed = False
+        for p in sorted(policies or [], key=lambda p: (not p.get("IsDefault"), str(p.get("Name") or ""))):
+            on = p.get("AutoForwardingMode") == "On"
+            allowed |= on
+            controls.add([f"Outbound spam policy: {p.get('Name')}", "Everyone" if p.get("IsDefault") else
+                          "Mailboxes it's assigned to", modes.get(p.get("AutoForwardingMode"),
+                                                                  p.get("AutoForwardingMode"))],
+                         "medium" if on else None)
+        for d in sorted(remote or [], key=lambda d: str(d.get("DomainName") or "")):
+            target = "Any outside domain" if d.get("DomainName") == "*" else d.get("DomainName")
+            controls.add([f"Remote domain: {d.get('Name')}", target,
+                          "Allowed" if d.get("AutoForwardEnabled") else "Blocked"])
+        report.highlights.append(Highlight("Automatic forwarding", "Allowed" if allowed else "Blocked",
+                                           "By the outbound spam policy", "warn" if allowed else "ok"))
+        sections.append(controls)
+    report.sections = sections
 
 
 def _type(value: str | None) -> str:
@@ -828,9 +819,9 @@ def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
 Builder = Callable[[TenantSnapshot, datetime, DataReport], None]
 
 REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
-    "mailboxes": ("Mailbox access and forwarding",
-                  "Forwarding, suspicious inbox rules, delegated access and shared mailboxes.",
-                  ("mailboxes", "inbox_rules", "users"), mailboxes),
+    "mailboxes": ("Mail forwarding",
+                  "Every mailbox that sends mail on automatically, and the settings that allow it.",
+                  ("mailboxes", "inbox_rules"), mailboxes),
     "admin-activity": ("Admin activity",
                        "Admin roles, Conditional Access, app credentials, consents, domains and account changes "
                        "from the directory audit log, and who made them.",
@@ -860,8 +851,14 @@ REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
 # Identity and licence reports live in their own module; it needs Section and
 # DataReport from above, so it's imported here rather than at the top.
 from .identity_reports import REPORTS as _IDENTITY_REPORTS  # noqa: E402
+from .mail_reports import REPORTS as _MAIL_REPORTS  # noqa: E402
 
 REPORTS.update(_IDENTITY_REPORTS)
+# The Exchange reports sit next to Mail forwarding in the report tabs.
+_items = list(REPORTS.items())
+_at = [k for k, _ in _items].index("mailboxes") + 1
+REPORTS.clear()
+REPORTS.update(_items[:_at] + list(_MAIL_REPORTS.items()) + _items[_at:])
 
 
 def build(conn, tenant, key: str, now: datetime | None = None, as_of: datetime | None = None,

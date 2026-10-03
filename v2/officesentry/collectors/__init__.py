@@ -9,7 +9,7 @@ from . import identity, per_user_mfa, secure_score  # noqa: F401
 from . import admin_activity  # noqa: F401
 from . import apps, policies  # noqa: F401
 from . import groups  # noqa: F401
-from . import exchange, mail_rules  # noqa: F401, I001  (inbox rules reuse the mailbox snapshot)
+from . import exchange, mail_rules, mail_usage  # noqa: F401, I001  (these reuse the mailbox snapshot)
 from . import domains  # noqa: F401
 from . import devices  # noqa: F401
 from . import directory_sync  # noqa: F401

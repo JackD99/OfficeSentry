@@ -100,3 +100,13 @@ def inbox_rule_risk(rule: dict, domains: set[str]) -> RuleRisk:
         severity = severity or "medium"
     risk.severity = severity if rule.get("isEnabled", True) else (severity and "low")
     return risk
+
+
+def size_bytes(value) -> int | None:
+    """Exchange sizes: '49.5 GB (53,150,220,288 bytes)' -> 53150220288; 'Unlimited' or unknown -> None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    match = re.search(r"\(([\d,]+) bytes\)", value or "") if isinstance(value, str) else None
+    return int(match.group(1).replace(",", "")) if match else None

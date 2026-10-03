@@ -30,6 +30,8 @@ RETRY_STATUSES = {429, 500, 502, 503, 504}
 READ_ONLY_CMDLETS = frozenset({
     "Get-Mailbox",
     "Get-MailboxPermission",
+    "Get-MailboxStatistics",
+    "Get-CASMailbox",
     "Get-Recipient",
     "Get-RecipientPermission",
     "Get-OrganizationConfig",

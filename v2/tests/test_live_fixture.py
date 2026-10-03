@@ -100,9 +100,9 @@ def test_p2_conditions_and_authentication_strength_are_described(db, live):
 
 
 def test_delegated_access_leaves_out_exchange_system_entries(db, live):
-    report = data_reports.build(db, live, "mailboxes", RECORDED)
-    access = next(s for s in report.sections if s.title == "Delegated access")
-    text = str(access.rows)
+    report = data_reports.build(db, live, "mailbox-permissions", RECORDED)
+    access = next(s for s in report.sections if s.title == "Every permission")
+    text = str([s.rows for s in report.sections])
     assert access.rows and "NULL SID" not in text and "Discovery" not in text and "ExchangeOnline" not in text
 
 
