@@ -44,6 +44,9 @@ class RollupRow:
         if column.kind == "sev":
             counts = value or {}
             return sum(counts.get(s, 0) * 1000 ** (len(SEVERITIES) - i) for i, s in enumerate(SEVERITIES))
+        if column.kind == "text":
+            number = _number(value) if value not in (None, "") else None
+            return number if number is not None else value
         return value
 
 
@@ -187,31 +190,58 @@ def is_settings(section: data_reports.Section) -> bool:
     return section.columns[:2] == ["Setting", "Value"]
 
 
+def _headlines(report: data_reports.DataReport) -> list:
+    """A report's own headline figures (tiles or highlights), if its builder sets any."""
+    return list(report.tiles) or list(report.highlights)
+
+
+def _number(value):
+    """Headline values are often text ("12", "40%", "£120"); keep the number for sorting and exports."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    text = str(value).replace(",", "").strip()
+    for ch in "£$€%":
+        text = text.replace(ch, "")
+    try:
+        return float(text) if "." in text else int(text)
+    except ValueError:
+        return None
+
+
 def data_rollup(conn, tenants, key: str, now: datetime) -> Rollup:
+    """Columns are the report's headline figures when it has them, else a row count per table."""
     title, description, _collectors, _builder = data_reports.REPORTS[key]
     built = [(t, data_reports.build(conn, t, key, now)) for t in tenants]
-    # Columns: one per table, in the order the reports list them, across every tenant.
-    titles: list[str] = []
+    use_headlines = any(_headlines(r) for _t, r in built if not r.unavailable)
+    labels: list[str] = []
     for _t, report in built:
-        for s in report.sections:
-            if not is_settings(s) and s.title not in titles:
-                titles.append(s.title)
+        items = [h.label for h in _headlines(report)] if use_headlines else \
+            [s.title for s in report.sections if not is_settings(s)]
+        labels += [x for x in items if x not in labels]
     columns = [Column("_flagged", "To review", hint="Rows flagged critical, high or medium")]
-    columns += [Column(f"s:{name}", name) for name in titles]
+    columns += [Column(f"c:{name}", name, "text" if use_headlines else "num") for name in labels]
     rows = []
     for t, report in built:
         row = RollupRow(dict(t))
         if report.unavailable:
             row.note = report.unavailable
+            rows.append(row)
+            continue
+        row.values["_flagged"] = sum(s.flagged for s in report.sections)
+        row.attention = row.values["_flagged"]
+        if use_headlines:
+            for h in _headlines(report):
+                row.values[f"c:{h.label}"] = h.value
+                if h.tone:
+                    row.tones[f"c:{h.label}"] = h.tone
         else:
-            row.values["_flagged"] = sum(s.flagged for s in report.sections)
-            row.attention = row.values["_flagged"]
             for s in report.sections:
                 if not is_settings(s):
-                    row.values[f"s:{s.title}"] = len(s.rows)
+                    row.values[f"c:{s.title}"] = len(s.rows)
         rows.append(row)
-    return Rollup(key, title, description, columns, rows, now, tenant_link="data",
-                  footnote="Numbers count the rows in each of the report's tables. Open a tenant for the detail.")
+    footnote = ("Figures are the report's headline numbers for each tenant." if use_headlines else
+                "Numbers count the rows in each of the report's tables.") + " Open a tenant for the detail."
+    return Rollup(key, title, description, columns, rows, now, tenant_link="data", footnote=footnote)
 
 
 # -- Registry --------------------------------------------------------------------------

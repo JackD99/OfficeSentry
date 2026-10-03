@@ -12,6 +12,7 @@
   <span class="spacer"></span>
   {% if pdf_available %}<a class="button primary" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>PDF</a>{% endif %}
   <a class="button" href="{{ url_for('reports.tenant_report_xlsx', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>XLSX</a>
+  <a class="button" href="{{ url_for('across.review_csv', tenant_id=report.tenant.id) }}" title="Every finding, one row per affected account"><span class="wide">Findings </span>CSV</a>
 {% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}

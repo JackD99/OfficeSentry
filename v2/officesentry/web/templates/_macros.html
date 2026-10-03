@@ -23,6 +23,7 @@
   'send': '<path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4 18-7z"/>',
   'bell': '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4l2-2z"/><path d="M10 20a2 2 0 004 0"/>',
   'eye': '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  'grid': '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
   'clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   'edit': '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/>',
 } %}
@@ -63,6 +64,7 @@
   {% set tabs = [] %}
   {% if staff %}{% set _ = tabs.append(('overview', 'Overview', url_for('tenants.tenant', tenant_id=tenant.id))) %}{% endif %}
   {% set _ = tabs.append(('findings', 'Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) %}
+  {% set _ = tabs.append(('changes', 'Changes', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('data', 'Detail reports', url_for('reports.data_report', tenant_id=tenant.id, key='mailboxes'))) %}
   {% set _ = tabs.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('schedules', 'Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) %}

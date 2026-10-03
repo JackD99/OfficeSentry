@@ -320,6 +320,14 @@ def to_tables(tc: TenantChanges) -> list[Table]:
     return tables
 
 
+def all_changes_table(tc: TenantChanges) -> Table:
+    """Key changes and report changes in one flat table, for CSV."""
+    rows = [[c.area, "", c.kind.capitalize(), c.subject, c.detail] for c in tc.key_changes]
+    rows += [[r.title, s.title, c.kind.capitalize(), c.subject, c.detail]
+             for r in tc.reports for s in r.sections for c in s.changes]
+    return Table("Changes", ["Area or report", "Table", "Change", "Subject", "Detail"], rows)
+
+
 # -- Across tenants ------------------------------------------------------------------
 
 

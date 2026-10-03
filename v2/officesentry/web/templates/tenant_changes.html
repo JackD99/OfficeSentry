@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header with context %}
+{% block title %}Changes · {{ tenant.name }}{% endblock %}
+{% set KIND = {'added': ('added', 'New'), 'removed': ('resolved', 'Gone'), 'changed': ('changed', 'Changed')} %}
+{% block content %}
+{{ tenant_header(tenant, 'changes') }}
+<div class="toolbar">
+  <nav class="subtabs m0" aria-label="Period">
+    {% for d in periods %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, days=d) }}"{% if d == days %} class="active" aria-current="page"{% endif %}>Last {{ d }} days</a>{% endfor %}
+  </nav>
+  <div class="toolbar-actions">
+    <a class="btn sm" href="{{ url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='csv', days=days) }}">{{ icon('download') }} CSV</a>
+    <a class="btn sm" href="{{ url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='xlsx', days=days) }}">{{ icon('download') }} XLSX</a>
+  </div>
+</div>
+
+<p class="muted small">From {{ report.since|day }} to {{ report.until|day }}.{% if report.baseline %} Compared with data collected {{ report.baseline|day }}.{% endif %}</p>
+
+{% if not report.has_baseline %}
+<div class="callout">{{ icon('clock') }}<div><strong>No data from {{ days }} days ago yet</strong>
+  <p class="m0">Office Sentry started collecting this tenant more recently, so there's nothing to compare against. New and fixed findings still show below. Try a shorter period, or check back once collection has run for longer.</p></div></div>
+{% endif %}
+{% for note in report.notes %}<div class="callout warn">{{ icon('alert') }}<div>{{ note }}</div></div>{% endfor %}
+
+<div class="tiles">
+  <div class="tile"><div class="label">Changes</div><div class="value">{{ report.total }}</div>
+    <div class="foot">{{ report.key_changes|length }} key, {{ report.report_changes }} in detail reports</div></div>
+  <div class="tile{% if report.new_findings %} tone-warn{% endif %}"><div class="label">New findings</div><div class="value">{{ report.new_findings|length }}</div>
+    <div class="foot">new or come back</div></div>
+  <div class="tile{% if report.fixed_findings %} tone-ok{% endif %}"><div class="label">Fixed findings</div><div class="value">{{ report.fixed_findings|length }}</div>
+    <div class="foot">no longer found</div></div>
+  {% set score = (report.figures|selectattr('key', 'equalto', 'secure_score.pct')|list or [none])[0] %}
+  <div class="tile"><div class="label">Secure Score</div>
+    <div class="value">{% if score and score.after is not none %}{{ '%g'|format(score.after) }}%{% else %}–{% endif %}</div>
+    <div class="foot">{% if score and score.delta is not none %}<span class="delta {{ score.trend }}">{{ '%+g'|format(score.delta) }} pts</span> since {{ report.since|day }}{% else %}&nbsp;{% endif %}</div></div>
+</div>
+
+<div class="grid-2">
+  <section class="card flush">
+    <div class="card-head"><h2>Key figures</h2></div>
+    {% if report.figures %}
+    <table class="stack-sm">
+      <thead><tr><th>Measure</th><th class="num">{{ report.since|day }}</th><th class="num">Now</th></tr></thead>
+      <tbody>
+      {% for f in report.figures %}
+      <tr><td>{{ f.label }}</td>
+        <td class="num" data-label="{{ report.since|day }}">{% if f.before is not none %}{{ '%g'|format(f.before) }}{{ f.unit }}{% else %}<span class="faint">–</span>{% endif %}</td>
+        <td class="num" data-label="Now">{{ '%g'|format(f.after) }}{{ f.unit }}{% if f.delta %} <span class="delta {{ f.trend }} tiny">{{ '%+g'|format(f.delta) }}</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty compact"><p>No figures collected yet.</p></div>{% endif %}
+  </section>
+
+  <section class="card flush">
+    <div class="card-head"><h2>Findings</h2></div>
+    {% if report.new_findings or report.fixed_findings %}
+    <ul class="change-list">
+      {% for f in report.new_findings[:12] %}<li><span class="chg chg-added">New</span><div><span class="sevtext {{ f.severity }}">{{ f.severity }}</span> {{ titles.get(f.rule_key, f.rule_key) }}<span class="desc">{{ f.subject }}</span></div></li>{% endfor %}
+      {% if report.new_findings|length > 12 %}<li class="muted small">…and {{ report.new_findings|length - 12 }} more new. The download lists them all.</li>{% endif %}
+      {% for f in report.fixed_findings[:12] %}<li><span class="chg chg-resolved">Fixed</span><div>{{ titles.get(f.rule_key, f.rule_key) }}<span class="desc">{{ f.subject }}</span></div></li>{% endfor %}
+      {% if report.fixed_findings|length > 12 %}<li class="muted small">…and {{ report.fixed_findings|length - 12 }} more fixed.</li>{% endif %}
+    </ul>
+    {% else %}<div class="empty compact"><p>No findings appeared or were fixed in this period.</p></div>{% endif %}
+  </section>
+</div>
+
+<section class="card flush">
+  <div class="card-head"><h2>Key changes <span class="count-badge">{{ report.key_changes|length }}</span></h2></div>
+  <p class="intro">Admin roles, Conditional Access, accounts, mail forwarding, app permissions, devices and groups.</p>
+  {% if report.key_changes %}
+  <ul class="change-list">
+    {% for c in report.key_changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
+    <li><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span><div><span class="strong">{{ c.area }}</span> {{ c.subject }}<span class="desc">{{ c.detail }}</span></div></li>
+    {% endfor %}
+  </ul>
+  {% else %}<div class="empty compact"><p>{% if report.has_baseline %}No key changes in this period.{% else %}Nothing to compare yet.{% endif %}</p></div>{% endif %}
+</section>
+
+{% for r in report.reports if r.count %}
+<section class="card flush">
+  <div class="card-head toolbar">
+    <h2>{{ r.title }} <span class="count-badge">{{ r.count }}</span></h2>
+    <a class="small" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=r.key) }}">Open report {{ icon('arrow') }}</a>
+  </div>
+  {% for s in r.sections %}
+  <div class="scroll-x">
+  <table class="stack-sm">
+    <thead><tr><th class="flagcol">{{ s.title }}</th><th>{{ s.columns[0] }}</th><th>What changed</th></tr></thead>
+    <tbody>
+    {% for c in s.changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
+    <tr><td class="flagcol"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td>
+      <td class="wrap">{{ c.subject }}</td><td class="wrap" data-label="What changed">{{ c.detail }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+
+{% set skipped = report.reports|selectattr('note')|list %}
+{% if unchanged %}<p class="footnote">No changes in: {{ unchanged|map(attribute='title')|join(', ') }}.</p>{% endif %}
+{% if skipped %}<p class="footnote">Not compared: {% for r in skipped %}{{ r.title }} ({{ r.note|trim('.') }}){% if not loop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+{% endblock %}

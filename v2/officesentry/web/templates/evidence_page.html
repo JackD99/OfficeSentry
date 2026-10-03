@@ -9,6 +9,7 @@
   <div class="row-actions">
     {% if pdf_available %}<a class="btn" href="{{ url_for('reports.evidence_pdf', tenant_id=pack.tenant.id) }}">{{ icon('download') }} PDF</a>{% endif %}
     <a class="btn" href="{{ url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id) }}">{{ icon('download') }} XLSX</a>
+    <a class="btn" href="{{ url_for('across.evidence_csv', tenant_id=pack.tenant.id) }}">{{ icon('download') }} CSV</a>
   </div>
 </div>
 <div class="tiles">
