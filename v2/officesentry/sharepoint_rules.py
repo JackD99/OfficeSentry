@@ -6,6 +6,7 @@ from datetime import datetime
 
 from .rules import Finding, _unavailable, rule
 from .snapshot import TenantSnapshot
+from .storage import tenant_storage
 
 
 def _where(item: dict) -> str:
@@ -39,3 +40,27 @@ def anyone_links(snap: TenantSnapshot, now: datetime):
     return ("fail", f"{total} anyone link(s) across {len(sites)} site(s)", findings) if findings else \
         ("pass", "No site has anyone links", [])
 
+
+
+@rule("sharepoint_storage_space", "SharePoint storage isn't nearly full", "Storage",
+      "Free up space before the tenant runs out, when people can no longer save files. The SharePoint storage "
+      "report shows where the space goes and what to clear first; otherwise buy Office 365 Extra File Storage.")
+def sharepoint_storage_space(snap: TenantSnapshot, now: datetime):
+    used, quota = tenant_storage(snap)
+    if used is None:
+        return _unavailable("SharePoint storage hasn't been collected yet")
+    if quota is None:
+        return _unavailable("The tenant has no licence that includes SharePoint")
+    pct = 100 * used / quota.total
+    share = "under 1%" if 0 < pct < 1 else f"{pct:.0f}%"
+    summary = f"{share} of about {quota.total / 1024 ** 4:.2f} TB used ({quota.explained})"
+    if pct < 85:
+        return ("pass", summary, [])
+    sites = sorted(snap.objects("sharepoint_storage", "site_storage") or [], key=lambda s: -(s.get("used") or 0))
+    findings = [Finding("high" if pct >= 95 else "medium", "Tenant SharePoint storage", summary, "tenant")]
+    findings += [Finding("low", s.get("url") or s.get("site") or "?",
+                         f"{(s.get('used') or 0) / 1024 ** 3:,.1f} GB, of which "
+                         f"{(s.get('recycleBin') or 0) / 1024 ** 3:,.1f} GB in the recycle bin and "
+                         f"{(s.get('versions') or 0) / 1024 ** 3:,.1f} GB older versions", s["_id"])
+                 for s in sites[:5]]
+    return ("fail", summary, findings)

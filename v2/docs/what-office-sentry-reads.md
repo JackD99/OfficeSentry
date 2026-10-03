@@ -83,6 +83,7 @@ built from the checks, so they use all of the information below.
 | `SecurityEvents.Read.All` | Your Microsoft Secure Score and its history. | The Secure Score trend in reports. | Secure Score. |
 | `DeviceManagementManagedDevices.Read.All` | Devices managed by Intune: name, operating system, whether they're compliant, encrypted and checking in, and their main user. | Device checks. Needs an Intune licence. | Devices. |
 | `SharePointTenantSettings.Read.All` | SharePoint's organisation-wide sharing settings (for example whether "anyone" links are allowed). Not sites or files. | The external sharing check. | Guests and sharing. |
+| `Sites.Read.All` | The list of SharePoint sites, libraries and OneDrives, and for each file and folder its name, location, size (including older versions), version number, when it was last changed and by whom, and who it's shared with. Recycle bin item names and sizes. **Not** what's inside the files. | To show which files are shared outside the organisation, and what fills SharePoint storage so it can be cleaned up. | Shared files; OneDrive; SharePoint storage. |
 | `MailboxSettings.Read` | Mailbox settings, including inbox rules. **Not** emails. | Inbox rules that forward or hide mail are a common sign of a hacked mailbox. | Mail forwarding; Inbox rules. |
 | `Reports.Read.All` | Microsoft 365 usage reports. | Requested now so you don't have to approve again later. No current report uses it. | None yet. |
 | `IdentityRiskyUser.Read.All` | Accounts Microsoft has flagged as risky (needs Entra ID P2). | Requested now so you don't have to approve again later. No current report uses it. | None yet. |
@@ -120,7 +121,8 @@ Office Sentry has no permission to read, and never reads:
 
 - **Email contents**: messages, attachments, calendars or contacts. It doesn't
   have `Mail.Read` or any similar permission.
-- **Files**: nothing in OneDrive, SharePoint sites or Teams files.
+- **File contents**: it lists files in OneDrive, SharePoint and Teams (names,
+  sizes, dates and sharing) but never opens or downloads them.
 - **Teams**: no chats or channel messages.
 - **Passwords or MFA secrets**: Microsoft never gives these to any program.
   Office Sentry sees only *which kinds* of sign-in method someone has

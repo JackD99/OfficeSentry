@@ -10,6 +10,8 @@ import responses
 from officesentry.graph import GRAPH_ROOT
 
 V1 = f"{GRAPH_ROOT}/v1.0"
+GB = 1024 ** 3
+MB = 1024 ** 2
 BETA = f"{GRAPH_ROOT}/beta"
 
 
@@ -72,7 +74,8 @@ DRIVES = {
     "site-fin": [{"id": "drv-fin", "name": "Documents", "webUrl": FINANCE + "/Shared Documents",
                   "driveType": "documentLibrary"}],
     "site-ann": [{"id": "drv-ann", "name": "OneDrive", "webUrl": SITES[1]["webUrl"] + "/Documents",
-                  "driveType": "business", "owner": {"user": {"email": "ann@x.com", "displayName": "Ann"}}}],
+                  "driveType": "business", "owner": {"user": {"email": "ann@x.com", "displayName": "Ann"}},
+                  "quota": {"used": 950 * GB, "deleted": 10 * GB, "total": 1024 * GB, "state": "nearing"}}],
 }
 USER_DRIVES = {"u1": DRIVES["site-ann"][0]}
 
@@ -110,7 +113,56 @@ PERMISSIONS = {
 }
 
 
-def mock_sharepoint(rsps, *, sites=None, files=True):
+# -- Storage ------------------------------------------------------------------------
+
+SITE_QUOTA = {"site-fin": {"used": 5 * GB, "deleted": 1 * GB, "total": 27487790694400, "state": "normal"}}
+LISTS = {
+    "site-fin": [
+        {"id": "lst-docs", "name": "Shared Documents", "displayName": "Documents",
+         "webUrl": FINANCE + "/Shared%20Documents", "list": {"template": "documentLibrary", "hidden": False}},
+        {"id": "lst-hold", "name": "PreservationHoldLibrary", "displayName": "Preservation Hold Library",
+         "webUrl": FINANCE + "/PreservationHoldLibrary", "list": {"template": "documentLibrary", "hidden": False},
+         "system": {}},
+        {"id": "lst-events", "name": "Events", "displayName": "Events", "webUrl": FINANCE + "/Lists/Events",
+         "list": {"template": "events", "hidden": False}},
+    ],
+}
+
+
+def _li(ref, *, total, current=None, version="1.0", folder=False, files=0, modified=None, by="ann@x.com"):
+    fields = {"FileLeafRef": ref.rsplit("/", 1)[-1], "FileRef": ref, "FSObjType": "1" if folder else "0",
+              "SMTotalSize": str(total), "SMTotalFileStreamSize": str(0 if folder else
+                                                                        (total if current is None else current)),
+              "SMTotalFileCount": str(files), "_UIVersionString": version}
+    return {"id": str(zlib.crc32(ref.encode())), "webUrl": "https://x.sharepoint.com" + ref.replace(" ", "%20"),
+            "lastModifiedDateTime": modified or days_ago(10) + "T09:00:00Z",
+            "lastModifiedBy": {"user": {"email": by, "displayName": by.split("@")[0].title()}}, "fields": fields}
+
+
+DOCS = "/sites/finance/Shared Documents"
+LIST_ITEMS = {
+    "lst-docs": [
+        _li(DOCS + "/Clients", total=3 * GB, folder=True, files=2),
+        _li(DOCS + "/Clients/Mail export.pst", total=2 * GB),
+        _li(DOCS + "/Clients/Plan.xlsx", total=1 * GB, current=100 * MB, version="320.0", by="bob@x.com"),
+        _li(DOCS + "/Old", total=500 * MB, folder=True, files=1),
+        _li(DOCS + "/Old/Archive.zip", total=500 * MB, modified=days_ago(1200) + "T09:00:00Z"),
+    ],
+    "lst-hold": [_li("/sites/finance/PreservationHoldLibrary/Plan_v1.xlsx", total=300 * MB)],
+    "list-ann": [_li("/personal/ann_x_com/Documents/Videos/raw.mp4", total=50 * GB, current=40 * GB,
+                     version="3.0")],
+}
+DRIVE_LISTS = {"drv-ann": {"id": "list-ann", "name": "Documents", "displayName": "Documents",
+                           "webUrl": "https://x-my.sharepoint.com/personal/ann_x_com/Documents"}}
+RECYCLE_BIN = {"site-fin": [
+    {"id": "r1", "name": "Q1 scans.zip", "size": 800 * MB, "deletedDateTime": "2026-09-20T10:00:00Z",
+     "deletedFromLocation": "sites/finance/Shared Documents/Scans"},
+    {"id": "r2", "name": "notes.txt", "size": 2048, "deletedDateTime": "2026-09-21T10:00:00Z",
+     "deletedFromLocation": "sites/finance/Shared Documents"},
+]}
+
+
+def mock_sharepoint(rsps, *, sites=None, files=True, site_quota=None):
     rsps.get(f"{BETA}/reports/getSharePointSiteUsageDetail(period='D30')",
              json={"value": SITE_USAGE if sites is None else sites})
     rsps.get(f"{BETA}/reports/getOneDriveUsageAccountDetail(period='D30')", json={"value": ONEDRIVE_USAGE})
@@ -140,3 +192,19 @@ def mock_sharepoint(rsps, *, sites=None, files=True):
                       callback=by_id(DELTA, 3), content_type="application/json")
     rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/drives/[^/]+/items/[^/]+/permissions"),
                       callback=by_id(PERMISSIONS, 5), content_type="application/json")
+
+    quotas = SITE_QUOTA if site_quota is None else site_quota
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/sites/[^/]+/drive(\?.*)?$"),
+                      callback=by_id({k: {"id": "d", "quota": v} for k, v in quotas.items()}, 3),
+                      content_type="application/json")
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/sites/[^/]+/lists(\?.*)?$"),
+                      callback=by_id(LISTS, 3), content_type="application/json")
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/sites/[^/]+/lists/[^/]+/items"),
+                      callback=by_id(LIST_ITEMS, 5), content_type="application/json")
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/drives/[^/]+/list(\?.*)?$"),
+                      callback=by_id(DRIVE_LISTS, 3), content_type="application/json")
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/drives/[^/]+/list/items"),
+                      callback=by_id({"drv-ann": LIST_ITEMS["list-ann"]}, 3), content_type="application/json")
+    rsps.add_callback(responses.GET, re.compile(re.escape(BETA) + r"/sites/[^/]+/recycleBin/items"),
+                      callback=by_id({**{s["id"]: [] for s in SITES}, **RECYCLE_BIN}, 3),
+                      content_type="application/json")

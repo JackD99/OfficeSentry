@@ -868,7 +868,7 @@ GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
      ("mfa", "admins", "conditional-access", "inactive", "guests", "legacy-auth", "hybrid")),
     ("email", "Email", ("mailboxes", "inbox-rules", "mailbox-permissions", "shared-mailboxes", "mailbox-size",
                         "domains")),
-    ("files", "Files and Teams", ("sharepoint", "onedrive", "shared-files", "groups")),
+    ("files", "Files and Teams", ("sharepoint", "sharepoint-storage", "onedrive", "shared-files", "groups")),
     ("devices", "Devices and apps", ("devices", "apps")),
     ("tenant", "Tenant and licences", ("secure-score", "licences", "tenant-settings", "admin-activity")),
 )
