@@ -120,7 +120,7 @@ def test_locked_down_tenant_passes(db, two_tenants, monkeypatch):
     for key in KEYS:
         assert r[key].status == "pass", (key, r[key].summary)
     assert "most restrictive" in r["guest_access_level"].summary
-    assert r["admin_consent_workflow"].summary == "Users can ask an admin: requests are on, with 2 reviewer(s)"
+    assert r["admin_consent_workflow"].summary == "Users can ask an admin: requests are on, with 2 reviewers"
 
 
 def test_guest_access_levels():

@@ -23,6 +23,8 @@ from email.utils import formataddr, parseaddr
 
 import requests
 
+from .text import nouns
+
 EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
 MAX_RECIPIENTS = 20
 GUID_RE = re.compile(r"^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
@@ -146,7 +148,8 @@ def _send_smtp(s: dict, vault, email: Email) -> None:
     except smtplib.SMTPAuthenticationError as exc:
         raise MailError("The mail server rejected the username or password") from exc
     except smtplib.SMTPRecipientsRefused as exc:
-        raise MailError(f"The mail server refused the recipient(s): {', '.join(exc.recipients)}") from exc
+        refused = ", ".join(exc.recipients)
+        raise MailError(f"The mail server refused the {nouns(len(exc.recipients), 'recipient')}: {refused}") from exc
     except (smtplib.SMTPException, OSError) as exc:
         raise MailError(f"Couldn't send through {s['smtp_host']}: {exc}") from exc
 

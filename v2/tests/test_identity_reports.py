@@ -82,7 +82,7 @@ def test_mfa_coverage_without_p1_uses_per_user_mfa(db, free_tenant):
     report = build(db, free_tenant, "mfa", NOW)
     s = sections(report)
     assert ["Conditional Access", "Not available: needs Entra ID P1"] in s["How MFA is required"].rows
-    assert ["Per-user MFA", "1 of 2 member(s)"] in s["How MFA is required"].rows
+    assert ["Per-user MFA", "1 of 2 members"] in s["How MFA is required"].rows
     gaps = {r[0]: r for r in s["Accounts with a gap"].rows}
     assert gaps["ann@x.com"][4] == "Per-user MFA (enforced)" and gaps["ann@x.com"][2] == "Required, not set up"
     assert gaps["carl@x.com"][2] == "No MFA"
@@ -121,7 +121,7 @@ def test_admin_mfa_unknown_registration_is_not_a_failure(db, two_tenants):
     registered = [dict(r, isMfaRegistered=True) for r in gd.REGISTRATION_DETAILS if r["id"] == "u1"]
     seed_tenant(db, alpha, registration=registered)  # bg@x.com and the guest admin aren't in the data
     r = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)), NOW)}["admin_mfa"]
-    assert r.status == "unavailable" and "isn't known for 2 admin(s)" in r.summary
+    assert r.status == "unavailable" and "isn't known for 2 admins" in r.summary
 
 
 def test_mfa_coverage_with_security_defaults(db, two_tenants):

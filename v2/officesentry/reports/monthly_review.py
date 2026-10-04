@@ -16,6 +16,7 @@ from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
 from ..rules import SEVERITY_RANK, Finding, RuleResult, evaluate
 from ..snapshot import TenantSnapshot
+from ..text import plural
 from .charts import line_chart
 
 TITLE = "Monthly Security & Licensing Review"
@@ -175,7 +176,7 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
             note="Needs Entra ID P1" if stale.status == "unavailable" else ""),
         Kpi("waste", "Licence waste / month", licences.monthly_waste if licences.lines else None,
             unit="currency", better="down",
-            note=f"{licences.unpriced_waste_units} unpriced licence(s) not counted"
+            note=f"{plural(licences.unpriced_waste_units, 'unpriced licence')} not counted"
             if licences.unpriced_waste_units else ""),
     ]
 

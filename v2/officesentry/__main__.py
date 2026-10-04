@@ -16,6 +16,7 @@ from .config import clear_setup_token, load_config, new_secrets, setup_token, wr
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
 from .mailer import ENCRYPTED_KEYS as ENCRYPTED_SETTINGS
+from .text import plural
 
 
 def cmd_web(args, cfg):
@@ -126,12 +127,12 @@ def cmd_rotate_keys(args, cfg):
         write_private(cfg.secrets_path, json.dumps({"secret_key": fresh["secret_key"],
                                                     "encryption_keys": fresh["encryption_keys"]}))
         conn.execute("DELETE FROM sessions")
-        audit(conn, "cli", "keys_rotated", detail=f"{count} value(s) re-encrypted")
-        print(f"New keys written to {cfg.secrets_path} and {count} value(s) re-encrypted. "
+        audit(conn, "cli", "keys_rotated", detail=f"{plural(count, 'value')} re-encrypted")
+        print(f"New keys written to {cfg.secrets_path} and {plural(count, 'value')} re-encrypted. "
               "Restart the web and worker processes; everyone will need to sign in again.")
         return
-    audit(conn, "cli", "keys_reencrypted", detail=f"{count} value(s)")
-    print(f"Re-encrypted {count} value(s). Old keys can now be removed from the configuration.")
+    audit(conn, "cli", "keys_reencrypted", detail=plural(count, "value"))
+    print(f"Re-encrypted {plural(count, 'value')}. Old keys can now be removed from the configuration.")
 
 
 def cmd_healthcheck(args, cfg):
@@ -170,7 +171,7 @@ def cmd_backup(args, cfg):
     old = sorted(folder.glob("officesentry-*.db"))[:-args.keep] if args.keep else []
     for path in old:
         path.unlink()
-    print(f"Saved {dest}" + (f" (removed {len(old)} older backup(s))" if old else ""))
+    print(f"Saved {dest}" + (f" (removed {plural(len(old), 'older backup')})" if old else ""))
     print("Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
           " without it the stored certificates can't be decrypted.")
 
