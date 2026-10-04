@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .. import devices, signins
+from .. import authmethods, devices, signins
 from ..licences import FREE_SKUS, is_stale, last_sign_in, load_prices, sku_name
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from ..rules import SENSITIVE_DELEGATED
@@ -366,6 +366,7 @@ def mfa_part(p: Person) -> Part:
             if default and default.lower() != "none":
                 result.facts.append(("Default method", METHOD_NAMES.get(default.lower(), default)))
             result.facts.append(("Phishing-resistant method", _yes(_phishing_resistant(row))))
+            _sign_in_strength(p, row, result)
     result.facts.append(("MFA required by", ", ".join(sources) or ("Nothing" if enf.known else "Not checked")))
     if excluded:
         result.facts.append(("Excluded from", ", ".join(excluded)))
@@ -406,6 +407,28 @@ def mfa_part(p: Person) -> Part:
     if excluded and p.enabled:
         p.flag("medium" if p.admin else "low", f"Excluded from {', '.join(excluded)}.", "mfa")
     return result
+
+
+def _sign_in_strength(p: Person, row: dict, result: Part) -> None:
+    """How strong the account's methods are (Passwords and sign-in methods report), as facts and flags."""
+    s = authmethods.strength(row)
+    result.facts.append(("Strongest method", s.strongest))
+    first = authmethods.preferred(row)
+    if first:
+        result.facts.append(("Asked for first", first))
+    for key, label in (("isPasswordlessCapable", "Can sign in without a password"),
+                       ("isSsprRegistered", "Can reset their own password")):
+        if row.get(key) is not None:
+            result.facts.append((label, _yes(row.get(key))))
+    if not p.enabled:
+        return
+    privileged = bool(p.roles and p.roles["privileged"])
+    if privileged and s.methods and not s.phishing_resistant:
+        p.flag("medium", "Admin without a phishing-resistant method: register a passkey or security key. A fake "
+                         "sign-in page can relay codes and push approvals.", "mfa")
+    if s.phone_only:
+        p.flag("medium" if privileged else "low", "A text or call is the only second factor: set up the "
+                                                  "Authenticator app.", "mfa")
 
 
 # -- Admin roles --------------------------------------------------------------------------------

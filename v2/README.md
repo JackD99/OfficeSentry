@@ -107,6 +107,19 @@ pass, and a first run against a real tenant.
   - *Conditional Access coverage*: every policy in plain words, and for each
     account which enforced policy requires MFA, whether legacy sign-in is
     blocked, and which policies exclude it (group membership expanded).
+  - *Passwords and sign-in methods*: how each member signs in and how strong
+    that is (phishing-resistant: passkey, security key, Windows Hello or
+    certificate; Authenticator app or token; phone only; none), admins
+    without a phishing-resistant method, people whose only second factor is a
+    text or call, who can sign in without a password or reset their own, and
+    the method each person is asked for first. The tenant's authentication
+    methods policy (which methods are on and for whom, SMS, voice and email
+    one-time passcodes, the registration campaign, system-preferred MFA)
+    against what's recommended, and the authentication strengths Conditional
+    Access requires. Password hygiene: password age, passwords set to never
+    expire, accounts that never signed in with a password set long ago, and
+    each domain's password expiry policy. Who hasn't set up MFA at all stays
+    in *MFA coverage*.
   - *Tenant settings*: what users and guests can do without an admin
     (create tenants, register apps, join by verifying an email address,
     sign up for trials, guest directory access) against the recommended
@@ -179,7 +192,9 @@ pass, and a first run against a real tenant.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
-count, guest admins, apps with admin roles, users without MFA, inactive
+count, guest admins, apps with admin roles, users without MFA, admins
+without a phishing-resistant sign-in method, people whose only second factor
+is a text or call, inactive
 accounts, licences on disabled accounts, unassigned paid licences, external
 forwarding, inbox rules that hide mail, automatic forwarding policy, shared
 mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,

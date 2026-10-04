@@ -4,6 +4,13 @@ Graph requests match on path and query, Exchange calls on cmdlet and
 parameters, DNS on name and record type. A request the recording doesn't
 have gets a 404, so a collector that starts asking for something new fails
 loudly instead of silently reading nothing.
+
+Until the fixture is re-recorded, a test can name the exceptions: ``stand_ins``
+answers a new Graph request with a body of the documented shape, and
+``new_fields`` lets a request whose ``$select`` asks for more fields than were
+recorded get the recorded response (the new fields are simply absent, as for a
+tenant that doesn't set them). Anything else unrecorded is still a 404 and is
+reported.
 """
 
 import json
@@ -27,8 +34,31 @@ def _cmdlet_key(url: str, cmdlet: dict) -> str:
     return json.dumps([request_key(url), cmdlet.get("CmdletName"), cmdlet.get("Parameters") or {}], sort_keys=True)
 
 
-def mock(rsps, fixture: dict) -> list[str]:
-    """Register the recording on ``rsps``. Returns a list that collects unmatched requests."""
+def _select(query) -> tuple[set[str], list[tuple[str, str]]]:
+    fields = {f for k, v in query if k == "$select" for f in v.split(",")}
+    return fields, [(k, v) for k, v in query if k != "$select"]
+
+
+def _recorded_subset(graph: dict[str, list], url: str) -> list | None:
+    """Recorded entries for the same path and parameters whose $select is a subset of the one asked for."""
+    path, query = request_key(url)
+    fields, rest = _select(query)
+    for key, entries in graph.items():
+        recorded_path, recorded_query = json.loads(key)
+        recorded_fields, recorded_rest = _select([tuple(q) for q in recorded_query])
+        if recorded_path == path and recorded_rest == rest and recorded_fields and recorded_fields <= fields:
+            return entries
+    return None
+
+
+def mock(rsps, fixture: dict, stand_ins: dict[str, dict] | None = None,
+         new_fields: frozenset[str] = frozenset()) -> list[str]:
+    """Register the recording on ``rsps``. Returns a list that collects unmatched requests.
+
+    ``stand_ins`` maps Graph paths (``/v1.0/...``) to bodies for requests the recording doesn't have;
+    ``new_fields`` names Graph paths whose ``$select`` may ask for fields the recording didn't.
+    """
+    stand_ins = stand_ins or {}
     graph: dict[str, list] = {}
     exchange: dict[str, list] = {}
     for e in fixture["entries"]:
@@ -47,7 +77,15 @@ def mock(rsps, fixture: dict) -> list[str]:
         return e["status"], {}, json.dumps(e["body"]) if e["body"] is not None else ""
 
     def graph_cb(request):
-        return serve(graph, json.dumps(request_key(request.url)), request.url)
+        path = request_key(request.url)[0]
+        key = json.dumps(request_key(request.url))
+        if key not in graph and path in new_fields:
+            entries = _recorded_subset(graph, request.url)
+            if entries:
+                graph[key] = entries
+        if key not in graph and path in stand_ins:
+            return 200, {}, json.dumps(stand_ins[path])
+        return serve(graph, key, request.url)
 
     def exchange_cb(request):
         cmdlet = json.loads(request.body)["CmdletInput"]

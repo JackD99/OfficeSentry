@@ -92,7 +92,7 @@ def _status(results: list[RuleResult]) -> str:
     return PARTLY
 
 
-def _extra_evidence(key: str, snap: TenantSnapshot) -> list[str]:
+def _extra_evidence(key: str, snap: TenantSnapshot, now: datetime | None = None) -> list[str]:
     if key == "mfa_all":
         out = []
         pct = snap.metric("mfa.registered_pct")
@@ -108,6 +108,18 @@ def _extra_evidence(key: str, snap: TenantSnapshot) -> list[str]:
             out.append(f"{sum(c.mfa for c in cov)} of {len(cov)} enabled accounts are covered by an enforced "
                        "Conditional Access policy requiring MFA.")
         return out
+    if key == "mfa_admins":
+        # Phishing-resistant MFA goes beyond the question, so it's evidence, not part of the answer.
+        from ..auth_rules import admin_phishing_resistant
+        try:
+            status, summary, *_ = admin_phishing_resistant(snap, now)
+        except Exception:  # damaged data: leave the line out rather than the whole pack
+            logging.getLogger(__name__).exception("Phishing-resistant admin check failed")
+            return []
+        if status == "pass":
+            return [_sentence(summary)]
+        if status == "fail":
+            return [f"Phishing-resistant MFA (passkeys, security keys, Windows Hello): {summary}."]
     return []
 
 
@@ -138,7 +150,7 @@ def build(conn, tenant, now: datetime | None = None) -> EvidencePack:
                     gaps.append(f"  …and {len(r.findings) - 5} more")
             if r.key in accepted_keys and r.status != "accepted":
                 evidence.append(f"{r.title}: some exceptions accepted as documented risks.")
-        controls.append(ControlResult(c, status, evidence + _extra_evidence(c.key, snap), gaps))
+        controls.append(ControlResult(c, status, evidence + _extra_evidence(c.key, snap, review.generated_at), gaps))
 
     finished = [r["finished_at"] for r in snap.runs.values() if r["finished_at"]]
     return EvidencePack(dict(tenant), review.generated_at, controls, snap.metric("secure_score.pct"),

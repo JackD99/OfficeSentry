@@ -1,4 +1,6 @@
-"""Directory sync: whether accounts come from on-premises AD, when sync last ran, and how each domain signs in.
+"""Directory sync: whether accounts come from on-premises AD, when sync last ran, and the domains.
+
+For each domain: how it signs in, and its password expiry policy.
 
 Reads the organization's sync timestamps and the domain list only. The Entra
 Connect feature settings (/directory/onPremisesSynchronization) need a
@@ -14,7 +16,8 @@ from ..hybrid import hours_since
 from .base import Collector, RunContext, register
 
 ORG_FIELDS = "id,onPremisesSyncEnabled,onPremisesLastSyncDateTime"
-DOMAIN_FIELDS = "id,authenticationType,isVerified,isDefault,supportedServices"
+DOMAIN_FIELDS = ("id,authenticationType,isVerified,isDefault,supportedServices,passwordValidityPeriodInDays,"
+                 "passwordNotificationWindowInDays")
 
 
 @register
@@ -22,7 +25,7 @@ class DirectorySync(Collector):
     key = "directory_sync"
     title = "Directory sync"
     description = ("Whether accounts are synced from on-premises Active Directory, when directory and password "
-                   "hash sync last ran, and how each domain signs in.")
+                   "hash sync last ran, and how each domain signs in and how often its passwords expire.")
     permissions = ("Organization.Read.All", "Directory.Read.All")
 
     def collect(self, ctx: RunContext) -> None:

@@ -202,6 +202,14 @@ class MfaRegistration(Collector):
                     "isPasswordlessCapable": bool(d.get("isPasswordlessCapable")),
                     "methodsRegistered": d.get("methodsRegistered") or [],
                     "defaultMfaMethod": d.get("defaultMfaMethod"),
+                    # How people sign in and reset passwords, for Passwords and sign-in methods.
+                    "isSsprRegistered": d.get("isSsprRegistered"),
+                    "isSsprCapable": d.get("isSsprCapable"),
+                    "isSystemPreferredAuthenticationMethodEnabled": d.get(
+                        "isSystemPreferredAuthenticationMethodEnabled"),
+                    "systemPreferredAuthenticationMethods": d.get("systemPreferredAuthenticationMethods") or [],
+                    "userPreferredMethodForSecondaryAuthentication": d.get(
+                        "userPreferredMethodForSecondaryAuthentication"),
                     "source": "registration_report",
                 }) for d in details]
             except LicenseRequired:

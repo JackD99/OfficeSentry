@@ -58,12 +58,55 @@ CA_REPORT_ONLY = {
 REGISTRATION_DETAILS = [
     {"id": "u1", "userPrincipalName": "ann@x.com", "userDisplayName": "Ann", "userType": "member",
      "isAdmin": True, "isMfaRegistered": True, "isMfaCapable": True,
-     "methodsRegistered": ["microsoftAuthenticatorPush"]},
+     "methodsRegistered": ["microsoftAuthenticatorPush"], "isSsprRegistered": True, "isSsprCapable": True,
+     "isPasswordlessCapable": False, "isSystemPreferredAuthenticationMethodEnabled": True,
+     "systemPreferredAuthenticationMethods": ["Push"], "userPreferredMethodForSecondaryAuthentication": "push"},
     {"id": "u4", "userPrincipalName": "bg@x.com", "userDisplayName": "Breakglass", "userType": "member",
-     "isAdmin": True, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": []},
+     "isAdmin": True, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": [],
+     "isSsprRegistered": False, "isPasswordlessCapable": False},
     {"id": "u6", "userPrincipalName": "carl@x.com", "userDisplayName": "Carl", "userType": "member",
-     "isAdmin": False, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": []},
+     "isAdmin": False, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": [],
+     "isSsprRegistered": False, "isPasswordlessCapable": False},
 ]
+
+# /policies/authenticationMethodsPolicy: passkeys for one group, SMS on for everyone else, voice off.
+AUTH_METHODS_POLICY = {
+    "id": "authenticationMethodsPolicy", "displayName": "Authentication Methods Policy",
+    "policyVersion": "1.5", "policyMigrationState": "migrationComplete",
+    "lastModifiedDateTime": "2026-06-01T09:00:00Z",
+    "registrationEnforcement": {"authenticationMethodsRegistrationCampaign": {
+        "snoozeDurationInDays": 1, "enforceRegistrationAfterAllowedSnoozes": True, "state": "default",
+        "excludeTargets": [], "includeTargets": [{"id": "all_users", "targetType": "group",
+                                                  "targetedAuthenticationMethod": "microsoftAuthenticator"}]}},
+    "systemCredentialPreferences": {"state": "disabled", "excludeTargets": [],
+                                    "includeTargets": [{"id": "all_users", "targetType": "group"}]},
+    "reportSuspiciousActivitySettings": {"state": "default", "voiceReportingCode": 0,
+                                         "includeTarget": {"targetType": "group", "id": "all_users"}},
+    "authenticationMethodConfigurations": [
+        {"@odata.type": "#microsoft.graph.fido2AuthenticationMethodConfiguration", "id": "Fido2", "state": "enabled",
+         "isSelfServiceRegistrationAllowed": True, "isAttestationEnforced": False,
+         "includeTargets": [{"targetType": "group", "id": "grp-admins", "isRegistrationRequired": False}],
+         "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethodConfiguration",
+         "id": "MicrosoftAuthenticator", "state": "enabled", "isSoftwareOathEnabled": False,
+         "featureSettings": {"displayAppInformationRequiredState": {"state": "default"},
+                             "displayLocationInformationRequiredState": {"state": "disabled"}},
+         "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False,
+                             "authenticationMode": "any"}], "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.smsAuthenticationMethodConfiguration", "id": "Sms", "state": "enabled",
+         "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False,
+                             "isUsableForSignIn": False}],
+         "excludeTargets": [{"targetType": "group", "id": "grp-admins"}]},
+        {"@odata.type": "#microsoft.graph.voiceAuthenticationMethodConfiguration", "id": "Voice", "state": "disabled",
+         "isOfficePhoneAllowed": False, "includeTargets": [], "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.emailAuthenticationMethodConfiguration", "id": "Email", "state": "enabled",
+         "allowExternalIdToUseEmailOtp": "default",
+         "includeTargets": [{"targetType": "group", "id": "all_users"}], "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.temporaryAccessPassAuthenticationMethodConfiguration",
+         "id": "TemporaryAccessPass", "state": "disabled", "defaultLifetimeInMinutes": 60, "isUsableOnce": False,
+         "includeTargets": [], "excludeTargets": []},
+    ],
+}
 
 SECURE_SCORES = [
     {"createdDateTime": "2026-10-01T00:00:00Z", "currentScore": 42.0, "maxScore": 100.0,

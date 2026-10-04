@@ -63652,16 +63652,6 @@
    "url": "https://graph.microsoft.com/v1.0/auditLogs/signIns?%24filter=createdDateTime+ge+2026-09-03T21%3A59%3A36Z+and+%28clientAppUsed+eq+%27Authenticated+SMTP%27+or+clientAppUsed+eq+%27AutoDiscover%27+or+clientAppUsed+eq+%27Exchange+ActiveSync%27+or+clientAppUsed+eq+%27Exchange+Online+PowerShell%27+or+clientAppUsed+eq+%27Exchange+Web+Services%27+or+clientAppUsed+eq+%27IMAP4%27+or+clientAppUsed+eq+%27MAPI+Over+HTTP%27+or+clientAppUsed+eq+%27Offline+Address+Book%27+or+clientAppUsed+eq+%27Other+clients%27+or+clientAppUsed+eq+%27Outlook+Anywhere+%28RPC+over+HTTP%29%27+or+clientAppUsed+eq+%27Outlook+Service%27+or+clientAppUsed+eq+%27POP3%27+or+clientAppUsed+eq+%27Reporting+Web+Services%27%29&%24top=1000"
   },
   {
-   "api": "graph",
-   "body": {
-    "@odata.context": "https://graph.microsoft.com/beta/$metadata#auditLogs/signIns",
-    "value": []
-   },
-   "note": "Added by hand, empty, for the sign_ins collector; replaced when the fixture is next re-recorded.",
-   "status": 200,
-   "url": "https://graph.microsoft.com/beta/auditLogs/signIns?%24filter=createdDateTime+ge+2026-09-03T21%3A59%3A36Z&%24top=1000"
-  },
-  {
    "answer": [
     "sentrytest2-example.mail.protection.outlook.com"
    ],

@@ -75,7 +75,8 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 
 
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
-                secure_scores=None, per_user=None, usage_kw=None, signins=None, **phase4):
+                secure_scores=None, per_user=None, usage_kw=None, signins=None, auth_methods_policy=None,
+                **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
     rsps.get(f"{V1}/users", json={"value": users})
@@ -87,6 +88,8 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
              json={"value": [gd.CA_MFA_ALL, gd.CA_REPORT_ONLY] if ca is None else ca})
     rsps.get(f"{V1}/reports/authenticationMethods/userRegistrationDetails",
              json={"value": gd.REGISTRATION_DETAILS if registration is None else registration})
+    rsps.get(f"{V1}/policies/authenticationMethodsPolicy",
+             json=gd.AUTH_METHODS_POLICY if auth_methods_policy is None else auth_methods_policy)
     scores = gd.SECURE_SCORES if secure_scores is None else secure_scores
     rsps.get(f"{V1}/security/secureScores", json={"value": scores})
     rsps.get(f"{V1}/security/secureScoreControlProfiles", json={"value": gd.SECURE_SCORE_PROFILES})
