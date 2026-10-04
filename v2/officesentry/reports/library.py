@@ -32,8 +32,12 @@ USES: tuple[Use, ...] = (
         ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests")),
     Use("insurance", "Insurance renewal",
         "The controls cyber insurers ask about, and the reports that prove each one.",
-        ("evidence", "mfa", "admins", "conditional-access", "legacy-auth", "domains", "mailboxes", "devices",
-         "admin-activity")),
+        ("evidence", "mfa", "auth-methods", "admins", "conditional-access", "legacy-auth", "domains", "mailboxes",
+         "devices", "admin-activity")),
+    Use("phishing-resistant", "Phishing-resistant MFA rollout",
+        "Moving admins, then everyone, to passkeys: who signs in with what, what the methods policy allows, and "
+        "which Conditional Access policies require it.",
+        ("auth-methods", "mfa", "admins", "conditional-access", "legacy-auth")),
     Use("sharing", "External sharing",
         "Who outside the organisation can reach what: guests, shared files and sites, and mailbox access.",
         ("guests", "shared-files", "sharepoint", "onedrive", "groups", "tenant-settings", "mailbox-permissions")),
@@ -49,6 +53,9 @@ USES: tuple[Use, ...] = (
 # Words people search for that a report's own title and description don't contain.
 KEYWORDS: dict[str, str] = {
     "mfa": "multi-factor two-factor 2fa authenticator authentication methods registration",
+    "auth-methods": "passkeys fido2 security keys windows hello phishing-resistant passwordless sms text message "
+                    "voice call authenticator sspr self-service password reset expiry expiration never expires "
+                    "password age authentication strengths methods policy registration campaign nudge",
     "admins": "administrators global admin privileged roles pim break-glass",
     "conditional-access": "ca policies policy require mfa block",
     "inactive": "stale dormant leavers unused accounts sign-in last login",

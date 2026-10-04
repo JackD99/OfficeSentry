@@ -944,7 +944,7 @@ REPORTS.update(_items[:_at] + list(_MAIL_REPORTS.items()) + _items[_at:])
 # listed by key; a report missing from every group still shows, under "More reports".
 GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("identity", "Identity and access",
-     ("mfa", "admins", "conditional-access", "inactive", "guests", "legacy-auth", "hybrid")),
+     ("mfa", "auth-methods", "admins", "conditional-access", "inactive", "guests", "legacy-auth", "hybrid")),
     ("email", "Email", ("mailboxes", "inbox-rules", "mailbox-permissions", "shared-mailboxes", "mailbox-size",
                         "domains")),
     ("files", "Files and Teams", ("sharepoint", "sharepoint-storage", "onedrive", "shared-files", "groups")),

@@ -1,6 +1,6 @@
 """Report builders. Detail reports from other modules register into ``data_reports.REPORTS`` here."""
 
-from . import data_reports, sharepoint, sharepoint_storage, usage_reports
+from . import auth_methods, data_reports, sharepoint, sharepoint_storage, usage_reports
 
 # SharePoint storage sits next to SharePoint sites in the report tabs.
 for _key, _value in sharepoint.REPORTS.items():
@@ -13,3 +13,9 @@ _items = list(data_reports.REPORTS.items())
 _at = [k for k, _ in _items].index("licences") + 1
 data_reports.REPORTS.clear()
 data_reports.REPORTS.update(_items[:_at] + list(usage_reports.REPORTS.items()) + _items[_at:])
+
+# Passwords and sign-in methods sits next to MFA coverage.
+_items = list(data_reports.REPORTS.items())
+_at = [k for k, _ in _items].index("mfa") + 1
+data_reports.REPORTS.clear()
+data_reports.REPORTS.update(_items[:_at] + list(auth_methods.REPORTS.items()) + _items[_at:])

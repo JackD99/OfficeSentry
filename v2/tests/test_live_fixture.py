@@ -28,6 +28,63 @@ FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
 RECORDED = datetime(2026, 10, 3, 17, 15, tzinfo=UTC)
 
+# Requests added since the recording, answered with Microsoft's documented response shape (here, a new
+# tenant's default policy). Delete an entry when the fixture is re-recorded; the test below says when.
+STAND_INS = {
+    "/v1.0/policies/authenticationMethodsPolicy": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#policies/authenticationMethodsPolicy",
+        "id": "authenticationMethodsPolicy", "displayName": "Authentication Methods Policy",
+        "description": "The tenant-wide policy that controls which authentication methods are allowed in the "
+                       "tenant, authentication method registration requirements, and self-service password reset "
+                       "settings",
+        "lastModifiedDateTime": "2026-03-22T18:43:07Z", "policyVersion": "1.5", "reconfirmationInDays": 0,
+        "policyMigrationState": "migrationComplete",
+        "registrationEnforcement": {"authenticationMethodsRegistrationCampaign": {
+            "snoozeDurationInDays": 1, "enforceRegistrationAfterAllowedSnoozes": True, "state": "default",
+            "excludeTargets": [], "includeTargets": [{"id": "all_users", "targetType": "group",
+                                                      "targetedAuthenticationMethod": "microsoftAuthenticator"}]}},
+        "reportSuspiciousActivitySettings": {"state": "default", "voiceReportingCode": 0,
+                                             "includeTarget": {"targetType": "group", "id": "all_users"}},
+        "systemCredentialPreferences": {"state": "default", "excludeTargets": [],
+                                        "includeTargets": [{"id": "all_users", "targetType": "group"}]},
+        "authenticationMethodConfigurations": [
+            {"@odata.type": "#microsoft.graph.fido2AuthenticationMethodConfiguration", "id": "Fido2",
+             "state": "enabled", "isSelfServiceRegistrationAllowed": True, "isAttestationEnforced": False,
+             "keyRestrictions": {"isEnforced": False, "enforcementType": "block", "aaGuids": []},
+             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False}],
+             "excludeTargets": []},
+            {"@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethodConfiguration",
+             "id": "MicrosoftAuthenticator", "state": "enabled", "isSoftwareOathEnabled": False,
+             "featureSettings": {
+                 "displayAppInformationRequiredState": {
+                     "state": "default", "includeTarget": {"targetType": "group", "id": "all_users"},
+                     "excludeTarget": {"targetType": "group", "id": "00000000-0000-0000-0000-000000000000"}},
+                 "displayLocationInformationRequiredState": {
+                     "state": "default", "includeTarget": {"targetType": "group", "id": "all_users"},
+                     "excludeTarget": {"targetType": "group", "id": "00000000-0000-0000-0000-000000000000"}}},
+             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False,
+                                 "authenticationMode": "any"}], "excludeTargets": []},
+            {"@odata.type": "#microsoft.graph.smsAuthenticationMethodConfiguration", "id": "Sms", "state": "disabled",
+             "includeTargets": [], "excludeTargets": []},
+            {"@odata.type": "#microsoft.graph.voiceAuthenticationMethodConfiguration", "id": "Voice",
+             "state": "disabled", "isOfficePhoneAllowed": False, "includeTargets": [], "excludeTargets": []},
+            {"@odata.type": "#microsoft.graph.emailAuthenticationMethodConfiguration", "id": "Email",
+             "state": "enabled", "allowExternalIdToUseEmailOtp": "default", "excludeTargets": [],
+             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False}]},
+            {"@odata.type": "#microsoft.graph.softwareOathAuthenticationMethodConfiguration", "id": "SoftwareOath",
+             "state": "disabled", "includeTargets": [], "excludeTargets": []},
+            {"@odata.type": "#microsoft.graph.temporaryAccessPassAuthenticationMethodConfiguration",
+             "id": "TemporaryAccessPass", "state": "disabled", "defaultLifetimeInMinutes": 60,
+             "defaultLength": 8, "minimumLifetimeInMinutes": 60, "maximumLifetimeInMinutes": 480,
+             "isUsableOnce": False, "includeTargets": [], "excludeTargets": []},
+            {"@odata.type": "#microsoft.graph.x509CertificateAuthenticationMethodConfiguration",
+             "id": "X509Certificate", "state": "disabled", "includeTargets": [], "excludeTargets": []},
+        ],
+    },
+}
+# Requests whose $select asks for fields added since the recording; the recorded response is served.
+NEW_FIELDS = frozenset({"/v1.0/domains"})
+
 
 @pytest.fixture
 def live(db):
@@ -37,7 +94,7 @@ def live(db):
     exo = lambda t, c: ExchangeClient(t["tenant_ref"], lambda: "t", sleep=lambda s: None)  # noqa: E731
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
             patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)):
-        missing = replay.mock(rsps, FIXTURE)
+        missing = replay.mock(rsps, FIXTURE, STAND_INS, NEW_FIELDS)
         statuses = {}
         for key in REGISTRY:
             store.enqueue_run(db, tenant_id, key)
@@ -45,6 +102,16 @@ def live(db):
     assert not missing, f"requests not in the recording: {missing}"
     assert {k for k, v in statuses.items() if v != "succeeded"} == set(), statuses
     return store.get_tenant(db, tenant_id)
+
+
+def test_stand_ins_are_only_for_requests_not_recorded():
+    """Once the fixture is re-recorded with these requests, delete them from STAND_INS and NEW_FIELDS."""
+    recorded = [replay.request_key(e["url"]) for e in FIXTURE["entries"] if e["api"] == "graph"]
+    paths = {path for path, _ in recorded}
+    assert not set(STAND_INS) & paths
+    for path in NEW_FIELDS:
+        selects = [dict(q).get("$select", "") for p, q in recorded if p == path]
+        assert selects and all("passwordValidityPeriodInDays" not in s for s in selects), path
 
 
 def _results(db, tenant):
@@ -157,3 +224,18 @@ def test_usage_reports_on_real_data(db, live):
     assert move[1] == "Microsoft 365 Business Standard" and move[3] == "Convert to a shared mailbox"
     usage = data_reports.build(db, live, "usage", RECORDED)
     assert not usage.unavailable and usage.sections[0].rows[0][:2] == ["Email", 1]
+
+
+def test_sign_in_methods_on_real_data(db, live):
+    # The registration report was empty, so methods were read one person at a time.
+    report = data_reports.build(db, live, "auth-methods", RECORDED)
+    sections = {s.title: s for s in report.sections}
+    assert any("one person at a time" in n for n in report.notes)
+    strongest = {row[0]: row[1] for row in sections["Strongest method"].rows}
+    assert strongest["Phishing-resistant"] == 1 and strongest["None"] == 3
+    strengths = {row[0][:5]: row[3] for row in sections["Authentication strengths in Conditional Access"].rows}
+    assert strengths["CA001"] == "Yes" and strengths["CA002"] == "No"
+    results = _results(db, live)
+    admins = results["admin_phishing_resistant"]
+    assert admins.status == "fail" and len(admins.findings) == 1
+    assert results["phone_only_mfa"].status == "pass"

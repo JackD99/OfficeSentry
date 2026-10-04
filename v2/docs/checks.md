@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-48 checks, 22 data sources (collectors) and 26 detail reports.
+50 checks, 23 data sources (collectors) and 27 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -25,6 +25,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
 | **Every admin has MFA registered**<br>`admin_mfa` | `admin_roles`, `mfa_registration` |  | Have each listed admin register a strong method (Authenticator or a FIDO2 key), or remove the role. Break-glass accounts should use FIDO2 keys kept offline. |
+| **Admins use phishing-resistant sign-in methods**<br>`admin_phishing_resistant` | `admin_roles`, `mfa_registration`, `users` |  | Have each listed admin register a passkey (in Microsoft Authenticator or on a security key) or Windows Hello for Business, then require the Phishing-resistant MFA authentication strength for admin roles in Conditional Access. Codes and push approvals can be relayed by a fake sign-in page; these can't. |
 | **Every admin is covered by an MFA policy**<br>`admins_ca_mfa` | `admin_roles`, `conditional_access`, `users` |  | Make sure each admin is included in an enabled Conditional Access policy that requires MFA for all apps, and isn't excluded from it directly or through a group. Use a separate policy for break-glass accounts. |
 | **Between 2 and 4 Global Administrators**<br>`global_admin_count` | `admin_roles` |  | Keep two to four Global Administrators: enough for a break-glass account, few enough to protect. Move day-to-day work to narrower roles such as User or Exchange Administrator. |
 | **No guests hold admin roles**<br>`guest_admins` | `admin_roles` |  | Remove admin roles from guest accounts. If an external partner needs access, use GDAP or a member account in this tenant protected by MFA. |
@@ -95,6 +96,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **No unexpected changes to how domains sign in**<br>`domain_federation_changed` | `admin_activity` |  | Confirm with the client that each change was planned (for example, setting up AD FS or another identity provider). If it wasn't, an attacker with admin rights may have federated the domain to their own identity provider so they can sign in as any user without a password or MFA: switch the domain back to managed sign-in, remove unknown federation settings, reset admin credentials and review the audit log. |
 | **Legacy authentication is blocked**<br>`legacy_auth_blocked` | `conditional_access` |  | Block legacy authentication (Exchange ActiveSync and other clients) with a Conditional Access policy for all users. Legacy protocols can't do MFA and are the most common password-spray target. |
 | **MFA is enforced for all users**<br>`mfa_enforced` | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |  | Create a Conditional Access policy requiring MFA for all users and all cloud apps, or turn on Security Defaults if the tenant has no Entra ID P1. Keep exclusions to break-glass accounts. |
+| **Nobody relies on a text or call as their only second factor**<br>`phone_only_mfa` | `admin_roles`, `mfa_registration`, `users` |  | Ask these people to set up the Microsoft Authenticator app (the registration campaign in the authentication methods policy prompts them at sign-in), then turn off text message and voice call sign-in, or keep them only as a backup. Texts and calls can be intercepted or moved to an attacker's SIM. |
 | **Every active user has MFA registered**<br>`users_mfa_registered` | `mfa_registration`, `users` |  | Ask these users to register the Microsoft Authenticator app. Until they do, anyone with their password can register MFA in their place. |
 
 ### Licences
@@ -136,9 +138,10 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `admin_activity` | Admin activity | Admin role, Conditional Access, app credential, consent, domain and account changes from the directory audit log (30 days with Entra ID P1, otherwise 7). | `AuditLog.Read.All` |
 | `admin_roles` | Admin roles | Who holds each directory role, active and PIM-eligible. | `RoleManagement.Read.Directory` |
 | `app_consents` | Apps and consents | Third-party apps, the permissions granted to them, and app secrets or certificates expiring. | `Application.Read.All`, `Directory.Read.All` |
+| `auth_methods_policy` | Sign-in methods policy | Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA. | `Policy.Read.All`, `Directory.Read.All` |
 | `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
 | `devices` | Devices | Devices registered or joined to Entra ID, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All` |
-| `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in. | `Organization.Read.All`, `Directory.Read.All` |
+| `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in and how often its passwords expire. | `Organization.Read.All`, `Directory.Read.All` |
 | `domain_health` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS. | none |
 | `groups` | Groups and Teams | Every group, the owners, members and guests of each team and Microsoft 365 group, who can create them and whether unused ones expire. | `Directory.Read.All` |
 | `inbox_rules` | Inbox rules | Every mailbox's inbox rules, to spot forwarding and rules that hide mail. | `MailboxSettings.Read` |
@@ -165,6 +168,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `admin-activity` | Admin activity | Admin roles, Conditional Access, app credentials, consents, domains and account changes from the directory audit log, and who made them. | `admin_activity` |
 | `admins` | Admins and roles | Every admin role holder with MFA, PIM and sign-in status, and a break-glass check. | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |
 | `apps` | Apps and consents | Third-party apps with access to the tenant, and app credential expiry. | `app_consents` |
+| `auth-methods` | Passwords and sign-in methods | How people sign in and how strong that is: methods by strength, admins without phishing-resistant MFA, the methods policy, and password age and expiry. | `admin_roles`, `auth_methods_policy`, `conditional_access`, `directory_sync`, `mfa_registration`, `users` |
 | `conditional-access` | Conditional Access coverage | Every policy in plain words, and which accounts each one actually covers. | `admin_roles`, `conditional_access`, `users` |
 | `devices` | Devices | Intune compliance, encryption and Windows support, and every Entra ID device record. | `devices` |
 | `domains` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from public DNS. | `domain_health` |
@@ -198,12 +202,12 @@ Every application permission the app requests (all read-only) and the collectors
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `legacy_signins`, `mfa_registration`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
-| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `devices`, `directory_sync`, `groups` |
+| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `devices`, `directory_sync`, `groups` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `mailbox_usage`, `mailboxes` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | not used by a collector yet |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
-| `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `conditional_access`, `per_user_mfa`, `tenant_policies` |
+| `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `auth_methods_policy`, `conditional_access`, `per_user_mfa`, `tenant_policies` |
 | `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage` |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
