@@ -19,7 +19,10 @@ pass, and a first run against a real tenant.
   4-week change, Secure Score trend, failing checks with affected accounts and
   recommendations, licence waste in money, passing checks, checks that the
   tenant's licences can't support, and data freshness.
-- **Overview** (`/reports`): one row per tenant with severity counts and KPIs.
+- **Reports** (`/reports`): every report in one searchable page, by area and by
+  job ("Offboarding check", "Insurance renewal", "Storage cleanup"...), opened
+  for one tenant or across all of them. The search also finds tenants and
+  settings, and lists your saved views.
 - **All tenants** (`/across/<report>`): a sortable, filterable table with one row
   per tenant for the monthly review, the insurance evidence pack and every
   detail report, limited to the tenants you can see. New detail reports appear
@@ -60,7 +63,11 @@ pass, and a first run against a real tenant.
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
-  grouped by area (identity, email, files, devices, tenant):
+  grouped by area (identity, email, files, devices, tenant). Every table can be
+  filtered by the values in it (or by age, for dates), sorted, and have columns
+  hidden; headers stay visible while scrolling, and the view can be saved by
+  name and reused on any tenant. Downloads contain the rows and columns shown.
+  Every headline number opens the rows behind it, here and on All tenants:
   - *Mail forwarding*: every forward (admin-set or inbox rule), and the
     outbound spam policies and remote domains that allow or block it.
   - *Inbox rules*: rules that forward outside, delete or hide mail, every

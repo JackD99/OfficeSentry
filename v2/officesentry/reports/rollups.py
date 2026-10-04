@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from . import data_reports, evidence
+from . import data_reports, evidence, views
 from .monthly_review import rollup_row, setting
 from .tables import Table
 
@@ -37,6 +37,9 @@ class RollupRow:
     deltas: dict = field(default_factory=dict)
     tones: dict = field(default_factory=dict)  # status column -> ok | warn | bad | info
     note: str = ""  # why the tenant has no data for this report
+    # column key -> (target, suffix): the tenant's page behind a figure. target is a detail report key,
+    # "findings" or "changes"; suffix is the view query and anchor that pick out the rows.
+    links: dict = field(default_factory=dict)
     attention: int = 0  # what the default sort uses: higher first
 
     def sort_value(self, column: Column):
@@ -126,6 +129,7 @@ def review_rollup(conn, tenants, now: datetime) -> Rollup:
             row.values[key] = kpi.value
             if kpi.delta is not None:
                 row.deltas[key] = kpi.delta
+        row.links = dict(REVIEW_LINKS)
         row.attention = sum(data["counts"].get(s, 0) for s in ("critical", "high"))
         if not any(data["counts"].values()) and all(k.value is None for k in data["kpis"].values()):
             row.note = "No data collected yet."
@@ -135,6 +139,15 @@ def review_rollup(conn, tenants, now: datetime) -> Rollup:
                   currency=setting(conn, "currency", "GBP"), tenant_link="review",
                   footnote="Changes are over the last 4 weeks. Licence waste counts licences that are unassigned "
                            "or held by disabled or inactive users, priced under Licence prices.")
+
+
+# Where each monthly review figure leads for one tenant.
+REVIEW_LINKS = {
+    "open": ("findings", ""), "new": ("changes", ""), "resolved": ("changes", ""),
+    "secure_score.pct": ("secure-score", ""), "mfa.registered_pct": ("mfa", ""),
+    "admins.privileged_principals": ("admins", "#t-privileged-role-holders"), "users.licensed": ("licences", ""),
+    "stale": ("inactive", "#t-inactive-members"), "waste": ("licences", "#t-waste-by-subscription"),
+}
 
 
 # -- Insurance evidence -------------------------------------------------------------
@@ -229,15 +242,22 @@ def data_rollup(conn, tenants, key: str, now: datetime) -> Rollup:
             continue
         row.values["_flagged"] = sum(s.flagged for s in report.sections)
         row.attention = row.values["_flagged"]
+        if row.values["_flagged"]:
+            row.links["_flagged"] = (key, views.flagged_link(report))
         if use_headlines:
-            for h in _headlines(report):
+            targets = views.headline_links(report)
+            for h, href in zip(report.tiles or report.highlights,
+                               targets["tiles"] if report.tiles else targets["highlights"], strict=True):
                 row.values[f"c:{h.label}"] = h.value
                 if h.tone:
                     row.tones[f"c:{h.label}"] = h.tone
+                if href:
+                    row.links[f"c:{h.label}"] = (key, href)
         else:
-            for s in report.sections:
+            for s, table in zip(report.sections, views.table_slugs(report), strict=True):
                 if not is_settings(s):
                     row.values[f"c:{s.title}"] = len(s.rows)
+                    row.links[f"c:{s.title}"] = (key, f"#{views.anchor(table)}")
         rows.append(row)
     footnote = ("Figures are the report's headline numbers for each tenant." if use_headlines else
                 "Numbers count the rows in each of the report's tables.") + " Open a tenant for the detail."

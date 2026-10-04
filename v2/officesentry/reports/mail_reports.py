@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, tenant_domains
 from ..snapshot import TenantSnapshot
-from .data_reports import DataReport, Highlight, Section, _describe_actions, _describe_conditions, _type
+from .data_reports import DataReport, Highlight, Rows, Section, _describe_actions, _describe_conditions, _type
 
 NOT_COLLECTED = "Mailbox data hasn't been collected yet. Refresh Mailboxes on the tenant page."
 RESOURCE_TYPES = {"SharedMailbox": "Shared", "RoomMailbox": "Room", "EquipmentMailbox": "Equipment"}
@@ -90,8 +90,10 @@ def inbox_rules(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     report.highlights = [
         Highlight("Rules to check", len(flagged), f"{high} high risk" if high else "None high risk",
                   "bad" if high else ("warn" if flagged else "ok")),
-        Highlight("Forward outside", sum(1 for _, k in risks if k.external), "Rules sending mail out"),
-        Highlight("Inbox rules", len(rules), f"Across {int(checked)} mailboxes" if checked else ""),
+        Highlight("Forward outside", sum(1 for _, k in risks if k.external), "Rules sending mail out",
+                  rows=Rows("Rules that send mail elsewhere", {"Outside the organisation": "Yes"})),
+        Highlight("Inbox rules", len(rules), f"Across {int(checked)} mailboxes" if checked else "",
+                  rows=Rows("All inbox rules")),
     ]
     report.sections = [check, sends, every]
 
@@ -210,9 +212,10 @@ def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport)
         every.add([box_label, _type((box or {}).get("RecipientTypeDetails")), person, right, status], flag)
     risky = sum(1 for f in people.flags if f in ("high", "medium"))
     report.highlights = [
-        Highlight("People with access", len(by_person), "To a mailbox other than their own"),
-        Highlight("Mailboxes others use", len(by_box), "Opened or sent from by someone else"),
-        Highlight("Access to review", risky, "Blocked, guest or outside accounts", "bad" if risky else "ok"),
+        Highlight("People with access", len(by_person), "To a mailbox other than their own", rows=Rows("By person")),
+        Highlight("Mailboxes others use", len(by_box), "Opened or sent from by someone else", rows=Rows("By mailbox")),
+        Highlight("Access to review", risky, "Blocked, guest or outside accounts", "bad" if risky else "ok",
+                  Rows("By person", flagged=True)),
     ]
     report.sections = [people, mailboxes, every]
 
@@ -260,9 +263,12 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
                      "an open one usually has no MFA and nobody watching it. Block sign-in in the Microsoft 365 "
                      "admin centre (Users > Active users > the mailbox > Block sign-in). People keep their access.")
     report.highlights = [
-        Highlight("Can be signed in to", f"{open_} of {len(rows)}", "Should be none", "bad" if open_ else "ok"),
-        Highlight("Shared mailboxes", sum(m["RecipientTypeDetails"] == "SharedMailbox" for m in rows)),
-        Highlight("Rooms and equipment", sum(m["RecipientTypeDetails"] != "SharedMailbox" for m in rows)),
+        Highlight("Can be signed in to", f"{open_} of {len(rows)}", "Should be none", "bad" if open_ else "ok",
+                  Rows(section.title, {"Sign-in allowed": "Yes"})),
+        Highlight("Shared mailboxes", sum(m["RecipientTypeDetails"] == "SharedMailbox" for m in rows),
+                  rows=Rows(section.title, {"Type": "Shared"})),
+        Highlight("Rooms and equipment", sum(m["RecipientTypeDetails"] != "SharedMailbox" for m in rows),
+                  rows=Rows(section.title, {"Type": ["Room", "Equipment"]})),
     ]
     report.sections = [section]
 
@@ -300,9 +306,12 @@ def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                      s.get("itemCount"), _size(s.get("deletedBytes")), s.get("archive"), s.get("litigationHold")],
                     flag)
     report.highlights = [
-        Highlight("Total size", _size(total) or "0 bytes", f"Across {_plural(len(sizes), 'mailbox')}"),
-        Highlight("Over 90% of quota", near, "Sending stops at 100%", "bad" if near else "ok"),
-        Highlight("Largest", _size(max((s.get("totalBytes") or 0 for s in sizes), default=0)) or "0 bytes"),
+        Highlight("Total size", _size(total) or "0 bytes", f"Across {_plural(len(sizes), 'mailbox')}",
+                  rows=Rows(section.title)),
+        Highlight("Over 90% of quota", near, "Sending stops at 100%", "bad" if near else "ok",
+                  Rows(section.title, flagged=True)),
+        Highlight("Largest", _size(max((s.get("totalBytes") or 0 for s in sizes), default=0)) or "0 bytes",
+                  rows=Rows(section.title)),
     ]
     report.sections = [section]
 
@@ -374,14 +383,19 @@ def legacy_auth(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         succeeded = {s.get("user") for s in signins or [] if s.get("succeeded")}
         attempts = sum(s.get("failed") or 0 for s in signins or [])
         report.highlights.append(Highlight("Signed in with an old protocol", len(succeeded), "Accounts, last 30 days",
-                                           "bad" if succeeded else "ok"))
-        report.highlights.append(Highlight("Blocked attempts", attempts, "Usually password guessing"))
+                                           "bad" if succeeded else "ok", LEGACY_ROWS))
+        report.highlights.append(Highlight("Blocked attempts", attempts, "Usually password guessing",
+                                           rows=LEGACY_ROWS))
     elif status is not None:
         report.notes.append("Legacy sign-ins need Entra ID P1, which this tenant doesn't have.")
     if cas is not None:
         report.highlights.append(Highlight("SMTP AUTH allowed", f"{allowed} of {len(cas)}", "Mailboxes",
-                                           "warn" if allowed else "ok"))
+                                           "warn" if allowed else "ok", Rows(
+                                               "What each mailbox allows",
+                                               {"SMTP AUTH": ["On", "On (organisation default)"]})))
 
+
+LEGACY_ROWS = Rows("Legacy sign-ins in the last 30 days")
 
 REPORTS = {
     "inbox-rules": ("Inbox rules", "Rules that forward, delete or hide mail, and every rule in every mailbox.",

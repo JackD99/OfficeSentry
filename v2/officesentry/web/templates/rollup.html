@@ -18,6 +18,11 @@
 {% elif rollup.tenant_link == 'data' %}{{ url_for('reports.data_report', tenant_id=t.id, key=rollup.key) }}
 {% else %}{{ url_for('tenants.tenant', tenant_id=t.id) }}{% endif %}
 {%- endmacro %}
+{% macro figure_href(t, link) -%}
+{% if link[0] == 'findings' %}{{ url_for('reports.tenant_findings', tenant_id=t.id) }}
+{%- elif link[0] == 'changes' %}{{ url_for('across.tenant_changes', tenant_id=t.id) }}
+{%- else %}{{ url_for('reports.data_report', tenant_id=t.id, key=link[0]) }}{{ link[1] }}{% endif %}
+{%- endmacro %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -71,7 +76,7 @@
                     ('CSV', url_for('across.rollup_download', key=rollup.key, ext='csv'), '')]) }}
     </div>
   </div>
-  <div class="scroll-x">
+  <div class="table-scroll{{ ' tall' if rollup.rows|length > 12 }}">
   <table class="stack-sm sortable" id="rollup-table">
     <thead><tr>
       <th aria-sort="none"><button type="button" class="sort">Tenant</button></th>
@@ -86,7 +91,8 @@
       <td colspan="{{ rollup.columns|length }}" class="muted" data-label="Status">Not available</td>
       {% else %}
       {% for c in rollup.columns %}{% set sv = row.sort_value(c) %}
-      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}" data-label="{{ c.label }}" data-sort="{{ '' if sv is none else sv }}">{{ cell(row, c) }}</td>
+      {% set link = row.links.get(c.key) %}
+      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}" data-label="{{ c.label }}" data-sort="{{ '' if sv is none else sv }}">{% if link and row.values.get(c.key) not in (none, '') %}<a class="figure-link" href="{{ figure_href(t, link) }}" title="Open {{ t.name }}: {{ c.label }}">{{ cell(row, c) }}</a>{% else %}{{ cell(row, c) }}{% endif %}</td>
       {% endfor %}
       {% endif %}
     </tr>
@@ -95,7 +101,7 @@
   </table>
   </div>
 </div>
-{% if rollup.footnote %}<p class="footnote">{{ rollup.footnote }} Select a column heading to sort.</p>{% endif %}
+{% if rollup.footnote %}<p class="footnote">{{ rollup.footnote }} Select a column heading to sort, or a figure to open the rows behind it.</p>{% endif %}
 {% endif %}
 {% endblock %}
 {% block scripts %}
