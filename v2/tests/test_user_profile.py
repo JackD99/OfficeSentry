@@ -30,7 +30,7 @@ def test_profile_brings_the_account_together(db, two_tenants):
     profile = user_profile.build(db, _tenant(db, alpha), "u1")
     assert profile.name == "Ann" and profile.upn == "ann@x.com"
     parts = {p.key: p for p in profile.parts}
-    assert list(parts) == ["licences", "mfa", "roles", "groups", "mailbox", "devices", "onedrive", "apps",
+    assert list(parts) == ["licences", "usage", "mfa", "roles", "groups", "mailbox", "devices", "onedrive", "apps",
                            "activity"]
     assert parts["licences"].tables[0].rows[0][0] == "Microsoft 365 Business Premium"
     groups = {row[0]: row[2] for row in parts["groups"].tables[0].rows}
@@ -127,3 +127,13 @@ def test_directory_counts(db, two_tenants):
     assert {t.label: t.value for t in tiles}["Accounts"] == 4
     bob = next(r for r in rows if r.id == "u2")
     assert bob.mfa == "–" and not bob.enabled
+
+
+def test_usage_shows_on_the_account_page(db, two_tenants):
+    alpha, _ = two_tenants
+    _seed(db, alpha)
+    profile = user_profile.build(db, _tenant(db, alpha), "u1")
+    usage = {p.key: p for p in profile.parts}["usage"]
+    assert not usage.unavailable
+    labels = [label for label, _ in usage.facts]
+    assert "Email" in labels and "Teams" in labels
