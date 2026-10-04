@@ -75,6 +75,21 @@ def test_missing_pages_explain_and_offer_a_way_on(client, db, two_tenants):
     assert 'href="/login"' in client.get("/no-such-page").get_data(as_text=True)
 
 
+def test_findings_can_be_searched_and_downloaded(client, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
+    assert 'data-filter="findings-table"' in page and 'id="findings-table"' in page
+    assert f'href="/tenants/{alpha}/report.csv"' in page
+    # Each check's heading carries its rows' words, so a search for a person keeps the heading.
+    heading = page.split('<tr class="group" data-name="')[1].split('"')[0]
+    row = page.split('<tr data-name="')[1].split('"')[0]
+    assert row.split(" ")[-1] in heading
+    assert client.get(f"/tenants/{alpha}/report.csv").status_code == 200
+
+
 def test_users_tab_counts_read_naturally(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
