@@ -40,6 +40,7 @@ from tests import (  # noqa: E402  # noqa: E402
     graphdata,
     groupdata,
     hybriddata,
+    licencedata,
     sharepoint_data,
     tenantsettingsdata,
     usagedata,
@@ -47,7 +48,7 @@ from tests import (  # noqa: E402  # noqa: E402
 from tests import test_collectors as fixture_users  # noqa: E402
 
 FIXTURES = (graphdata, devicedata, groupdata, hybriddata, tenantsettingsdata, adminactivitydata, sharepoint_data,
-            usagedata, fixture_users)
+            usagedata, licencedata, fixture_users)
 
 FIRST = ["Olivia", "James", "Amelia", "Oliver", "Isla", "George", "Ava", "Harry", "Mia", "Noah", "Sophie", "Jack",
          "Grace", "Leo", "Freya", "Arthur", "Emily", "Oscar", "Lily", "Charlie", "Ella", "Henry", "Ruby", "Thomas",
@@ -101,7 +102,7 @@ def _local(full_name: str) -> str:
 def renamer(t: dict):
     """A function that rewrites fixture text for tenant ``t``: people, addresses and domains."""
     domain = f"{t['base']}.{t['tld']}"
-    subs = [(re.compile(rf"\b{old}(?=@x\.)"), _local(new)) for old, new in t["people"].items()]
+    subs = [(re.compile(rf"\b{old}(?=@x\.|\.home@)"), _local(new)) for old, new in t["people"].items()]
     other = f"{t['base']}-uk.{t['tld']}"  # the fixtures' second domain
     subs += [(re.compile(rf"\b{uid}(?=@x\.)"), _local(t["people"][who])) for uid, who in FIXTURE_IDS.items()]
     subs += [(re.compile(rf"\b{gid}(?=@x\.)"), slug) for gid, slug in GROUP_MAILS.items()]
@@ -116,7 +117,8 @@ def renamer(t: dict):
     subs += [(re.compile(rf"\b{re.escape(real)}\b"), fake) for real, fake in OUTSIDE_DOMAINS.items()]
     subs += [(re.compile(rf"\b{old.capitalize()}\b"), new) for old, new in t["people"].items()]
     subs += [(re.compile(rf"\b{old.upper()}\b"), new.split()[-1].upper()) for old, new in t["people"].items()]
-    subs += [(re.compile(r"^Breakglass$"), "Emergency access"), (re.compile(r"^Guest$"), "Sam Carter (guest)")]
+    subs += [(re.compile(r"^Breakglass$"), "Emergency access"), (re.compile(r"^Guest$"), "Sam Carter (guest)"),
+             (re.compile(r"^OLD$"), "VISIOCLIENT")]  # the fixtures' lapsed subscription gets a real product name
 
     def rename(value):
         if isinstance(value, str):
@@ -152,6 +154,17 @@ class Renamed:
             setattr(module, name, value)
 
 
+def _methods(i: int) -> list[str]:
+    """A realistic mix: mostly the Authenticator app, some Windows Hello or passkeys, a few on text messages."""
+    if i % 5 == 0:
+        return ["windowsHelloForBusiness", "microsoftAuthenticatorPush"]
+    if i % 11 == 4:
+        return ["passKeyDeviceBound", "microsoftAuthenticatorPush"]
+    if i % 7 == 2:
+        return ["mobilePhone"]
+    return ["microsoftAuthenticatorPush", "softwareOneTimePasscode"]
+
+
 def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_recently: bool):
     """Extra member accounts (beyond the fixture's few), their MFA registration and Microsoft 365 use."""
     users, registration, active, apps = [], [], [], []
@@ -175,7 +188,7 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
         registered = rng.random() < mfa_share and not inactive
         registration.append({"id": uid, "userPrincipalName": upn, "userDisplayName": name, "userType": "member",
                              "isAdmin": False, "isMfaRegistered": registered, "isMfaCapable": registered,
-                             "methodsRegistered": ["microsoftAuthenticatorPush"] if registered else []})
+                             "methodsRegistered": _methods(i) if registered else []})
         product = "MICROSOFT 365 BUSINESS PREMIUM" if sku == "sku-bp" else "MICROSOFT 365 BUSINESS BASIC"
         quiet = None if inactive else rng.choice([0, 1, 2, 4])
         mail_only = not inactive and i % 7 == 3  # Business Premium used for email alone: right-sizing finds them

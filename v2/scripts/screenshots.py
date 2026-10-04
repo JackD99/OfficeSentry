@@ -38,6 +38,7 @@ import shutil
 import subprocess  # noqa: S404 (runs pdftoppm on files this script wrote)
 import sys
 import tempfile
+import textwrap
 import threading
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -50,13 +51,15 @@ sys.path.insert(0, str(V2 / "scripts"))
 
 from werkzeug.security import generate_password_hash  # noqa: E402
 
+from officesentry import store  # noqa: E402
 from officesentry.db import utcnow  # noqa: E402
 
 ADMIN = "demo"
-CLIENT = "alpha.client"
+CLIENT = "client"
 
 
 SHOWCASE = "Fabrikam Dental Group"  # the tenant most pages show: SharePoint nearly full, plenty to fix
+ONBOARDING = "Kingsley Optometry"  # added without consent: "{o}" in a shot's path
 
 
 def seed(db, vault) -> list[int]:
@@ -69,35 +72,64 @@ def seed(db, vault) -> list[int]:
     ids = [first] + [i for i in ids if i != first]
     add_email(db, first)
     add_prospect(db)
+    # A client part-way through onboarding (consent not given yet), for the Client tenants page and checklist.
+    connection = db.execute("SELECT id FROM app_connections ORDER BY id LIMIT 1").fetchone()[0]
+    ids.append(store.create_tenant(db, ONBOARDING, "kingsleyoptometry.onmicrosoft.com", connection))
     return ids
 
 
 def add_email(db, tenant_id: int) -> None:
-    """Contacts, a monthly report schedule that has sent once, and an alert email, for the email pages."""
+    """SMTP settings, contacts, a monthly report schedule that has sent, an alert email and a delivery history.
+
+    The SMTP server is made up; nothing is sent, since no worker runs.
+    """
     import json
+    import re
     from datetime import UTC, datetime, timedelta
 
     from officesentry import delivery
 
+    def iso(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    contact = (db.execute("SELECT value FROM settings WHERE key = 'brand_contact'").fetchone() or [""])[0]
+    msp_domain = (re.search(r"@([\w.-]+)", contact) or [None, "msp.example"])[1]
     domain = db.execute("SELECT object_id FROM objects o JOIN runs r ON r.id = o.run_id WHERE r.tenant_id = ?"
                         " AND o.kind = 'accepted_domain' ORDER BY r.id DESC LIMIT 1", (tenant_id,)).fetchone()
     domain = domain[0] if domain else "client.example"
+    for key, value in (("mail_transport", "smtp"), ("smtp_host", f"smtp.{msp_domain}"), ("smtp_port", "587"),
+                       ("smtp_security", "starttls"), ("smtp_from", f"reports@{msp_domain}")):
+        db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
     people = [delivery.add_contact(db, tenant_id, name, f"{local}@{domain}")
               for name, local in (("Practice manager", "practice.manager"), ("Finance director", "finance"))]
-    team = delivery.add_contact(db, None, "Service desk", "servicedesk@msp.example")
+    team = delivery.add_contact(db, None, "Service desk", f"servicedesk@{msp_domain}")
     now = datetime.now(UTC)
+    reports = ["review", "evidence", "data:sharepoint-storage", "data:licence-rightsizing"]
     sid = db.execute(
         "INSERT INTO email_schedules (kind, tenant_id, reports, include_xlsx, message, frequency, day_of_month, hour,"
         " timezone, last_period, last_status, last_sent_at, created_by, created_at)"
         " VALUES ('report', ?, ?, 1, ?, 'monthly', 1, 8, 'Europe/London', ?, 'sent', ?, ?, ?)",
-        (tenant_id, json.dumps(["review", "evidence", "data:sharepoint-storage", "data:licence-rightsizing"]),
-         "Your monthly review is attached. Give us a call if anything needs a hand.",
-         now.strftime("%Y-%m"), (now - timedelta(days=3)).strftime("%Y-%m-%dT08:00:00Z"), ADMIN,
-         utcnow())).lastrowid
+        (tenant_id, json.dumps(reports), "Your monthly review is attached. Give us a call if anything needs a hand.",
+         now.strftime("%Y-%m"), iso(now - timedelta(days=3)), ADMIN, iso(now - timedelta(days=70)))).lastrowid
     delivery.set_recipients(db, "schedule", sid, people + [team])
     alert = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_by, created_at)"
-                       " VALUES (?, 'high', ?, ?)", (tenant_id, ADMIN, utcnow())).lastrowid
+                       " VALUES (?, 'high', ?, ?)", (tenant_id, ADMIN, iso(now - timedelta(days=70)))).lastrowid
     delivery.set_recipients(db, "alert", alert, [team])
+    to = ", ".join(f"{local}@{domain}" for local in ("practice.manager", "finance"))
+    files = json.dumps(["monthly-review.pdf", "monthly-review.xlsx", "insurance-evidence.pdf",
+                        "sharepoint-storage.xlsx", "licence-right-sizing.xlsx"])
+    name = db.execute("SELECT name FROM tenants WHERE id = ?", (tenant_id,)).fetchone()[0]
+    for kind, days, subject, recipients, bcc, attachments, schedule, alert_id in (
+            ("report", 3, f"{name}: Monthly Security & Licensing Review, September 2026", to,
+             f"servicedesk@{msp_domain}", files, sid, None),
+            ("alert", 9, f"{name}: 2 new high findings", f"servicedesk@{msp_domain}", "", "[]", None, alert),
+            ("report", 33, f"{name}: Monthly Security & Licensing Review, August 2026", to,
+             f"servicedesk@{msp_domain}", files, sid, None)):
+        db.execute("INSERT INTO email_deliveries (kind, schedule_id, alert_id, tenant_id, period, subject, recipients,"
+                   " bcc, attachments, transport, trigger, status, created_at)"
+                   " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'smtp', 'schedule', 'sent', ?)",
+                   (kind, schedule, alert_id, tenant_id, None, subject, recipients, bcc, attachments,
+                    iso(now - timedelta(days=days, hours=-8))))
 
 
 def add_prospect(db) -> None:
@@ -125,7 +157,7 @@ def add_prospect(db) -> None:
 @dataclass
 class Shot:
     name: str
-    path: str                    # "{t}" is the showcase tenant's id
+    path: str                    # "{t}" is the showcase tenant's id, "{o}" the one being onboarded
     height: int = 900            # viewport height: the picture is what fits in it
     width: int = 1440
     scroll_to: str | None = None  # CSS selector (or text=...) to bring to the top first
@@ -136,7 +168,7 @@ class Shot:
 
 
 SHOTS = [
-    Shot("dashboard", "/", height=600),
+    Shot("dashboard", "/", height=640),
     Shot("tenant-overview", "/tenants/{t}", height=1000),
     Shot("review", "/tenants/{t}/report", height=1100),
     Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="h2:has-text('What we recommend next')"),
@@ -149,6 +181,9 @@ SHOTS = [
     Shot("licence-rightsizing", "/tenants/{t}/data/licence-rightsizing", height=1000),
     Shot("conditional-access", "/tenants/{t}/data/conditional-access", height=950),
     Shot("devices", "/tenants/{t}/data/devices", height=950),
+    Shot("sign-ins", "/tenants/{t}/data/sign-ins", height=950),
+    Shot("auth-methods", "/tenants/{t}/data/auth-methods", height=950),
+    Shot("subscriptions", "/tenants/{t}/data/subscriptions", height=950),
     Shot("reports-library", "/reports", height=1000),
     Shot("person", "/tenants/{t}/users/u1", height=1100),
     Shot("all-tenants", "/across/review", height=760),
@@ -157,10 +192,13 @@ SHOTS = [
     Shot("emailed-reports", "/tenants/{t}/schedules", height=900),
     Shot("email-schedule-form", "/tenants/{t}/schedules/new", height=1000),
     Shot("prospect", "/prospects/1", height=950),
-    Shot("client-view", "/", height=950, user=CLIENT),
+    Shot("client-tenants", "/admin/tenants", height=700),
+    Shot("manage-tenant", "/tenants/{t}/manage", height=1000),
+    Shot("onboarding", "/tenants/{o}", height=900),
+    Shot("client-view", "/", height=420, user=CLIENT),
     Shot("phone-review", "/tenants/{t}/report", width=390, height=844, phone=True),
     Shot("phone-overview", "/tenants/{t}", width=390, height=844, phone=True),
-    Shot("dark-overview", "/tenants/{t}", height=900, dark=True),
+    Shot("dark-sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=900, dark=True),
 ]
 
 # PDFs whose first page becomes a picture: name -> path.
@@ -190,6 +228,12 @@ EXAMPLES = {
     "conditional-access-coverage.pdf": (
         "/tenants/{t}/data/conditional-access.pdf",
         "Every Conditional Access policy in plain words, and who it covers."),
+    "sign-in-activity.pdf": (
+        "/tenants/{t}/data/sign-ins.pdf", "Failed and successful sign-ins: password guessing, unusual countries."),
+    "passwords-and-sign-in-methods.pdf": (
+        "/tenants/{t}/data/auth-methods.pdf", "How people sign in, how strong that is, and admins without passkeys."),
+    "licences-and-subscriptions.pdf": (
+        "/tenants/{t}/data/subscriptions.pdf", "Every subscription, what is assigned and what is paid for but unused."),
     "account-page.pdf": ("/tenants/{t}/users/u1.pdf", "Everything about one person's account on one page."),
     "what-changed-all-tenants.pdf": ("/changes.pdf", "Month-over-month changes across every client."),
     "all-tenants-monthly-review.pdf": (
@@ -308,7 +352,7 @@ def optimise(png: bytes, path: Path, max_width: int | None = None) -> None:
         path, optimize=True)
 
 
-def capture(server: Server, passwords: dict, tenant: int, shots: list[Shot], out: Path) -> list[str]:
+def capture(server: Server, passwords: dict, ids: list[int], shots: list[Shot], out: Path) -> list[str]:
     from playwright.sync_api import sync_playwright
 
     saved = []
@@ -329,7 +373,7 @@ def capture(server: Server, passwords: dict, tenant: int, shots: list[Shot], out
                 server.beat()
                 page = contexts[key].new_page()
                 page.set_viewport_size({"width": shot.width, "height": shot.height})
-                response = page.goto(server.url + shot.path.format(t=tenant))
+                response = page.goto(server.url + shot.path.format(t=ids[0], o=ids[-1]))
                 page.wait_for_load_state("networkidle")
                 if response is None or response.status != 200:
                     print(f"  {shot.name}: {shot.path} returned {response.status if response else 'nothing'}")
@@ -401,14 +445,17 @@ def pdf_first_page(pdf: bytes, png_path: Path, dpi: int = 90) -> bool:
 
 def write_examples(files: dict[str, bytes], out: Path, msp: str, tenants: list[str]) -> None:
     out.mkdir(parents=True, exist_ok=True)
+    for old in [*out.glob("*.pdf"), *out.glob("*.xlsx")]:
+        if old.name not in files:  # an example that is no longer made
+            old.unlink()
     for name, body in files.items():
         (out / name).write_bytes(body)
-    lines = ["# Example reports", "",
-             "Real exports from Office Sentry, made from **fictional demo data**. "
-             f"{msp} is a made-up MSP and its clients ({', '.join(tenants)}) are made-up companies; every person,",
-             "address and `.example` domain is invented. Nothing here comes from a real Microsoft 365 tenant.",
-             f"The single-client reports are for {tenants[0]}.", "",
-             "Regenerate them with `python scripts/screenshots.py` (from `v2/`) after report changes.", "",
+    about = (f"Real exports from Office Sentry, made from **fictional demo data**. {msp} is a made-up MSP and its "
+             f"clients ({', '.join(tenants)}) are made-up companies; every person, address and `.example` domain "
+             f"is invented. Nothing here comes from a real Microsoft 365 tenant. The single-client reports are for "
+             f"{tenants[0]}.")
+    lines = ["# Example reports", "", textwrap.fill(about, 100), "",
+             "Regenerate them from `v2/` with `python scripts/screenshots.py` after report changes.", "",
              "| File | What it is |", "|---|---|"]
     lines += [f"| [{name}]({name}) | {EXAMPLES[name][1]} |" for name in EXAMPLES if name in files]
     (out / "README.md").write_text("\n".join(lines) + "\n")
@@ -443,7 +490,7 @@ def main() -> None:
             args.out.mkdir(parents=True, exist_ok=True)
             shots = [s for s in SHOTS if only is None or s.name in only]
             print(f"Capturing {len(shots)} pages to {args.out}")
-            saved = capture(server, passwords, ids[0], shots, args.out)
+            saved = capture(server, passwords, ids, shots, args.out)
             pdfs = {n: p.format(t=ids[0]) for n, p in PDF_SHOTS.items() if only is None or n in only}
             examples = {} if args.no_examples or only else {n: p.format(t=ids[0]) for n, (p, _) in EXAMPLES.items()}
             files = download(server, passwords, {**pdfs, **examples})
