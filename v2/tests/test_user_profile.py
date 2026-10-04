@@ -108,6 +108,8 @@ def test_pages_render_and_are_tenant_scoped(client, db, two_tenants):
     sheets = load_workbook(BytesIO(xlsx.data)).sheetnames
     assert "Needs attention" in sheets and "Account" in sheets
     assert client.get(f"/tenants/{alpha}/users/u1.pdf").status_code == 200
+    # Detail reports link account names to their page.
+    assert f'href="/tenants/{alpha}/users/u1"' in client.get(f"/tenants/{alpha}/data/mfa").get_data(as_text=True)
     # Findings that name an account link to its page.
     assert f"/tenants/{alpha}/users/" in client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
 
