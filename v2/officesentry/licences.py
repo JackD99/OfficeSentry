@@ -158,3 +158,90 @@ def licence_summary(skus: list[dict], users: list[dict] | None, prices: dict[str
                 line.on_stale_users += 1
     summary.lines = sorted(by_id.values(), key=lambda line: (line.free, -(line.monthly_waste or 0), line.name))
     return summary
+
+
+def is_free(sku: dict) -> bool:
+    """A free, viral or trial allocation (Power Automate Free, say) rather than something paid for."""
+    return sku.get("skuPartNumber") in FREE_SKUS or ((sku.get("prepaidUnits") or {}).get("enabled") or 0) \
+        >= FREE_UNIT_THRESHOLD
+
+
+# -- How licences are assigned ----------------------------------------------------------------
+
+# Group-based licensing errors (licenseAssignmentState.error): what each means and what to do.
+ASSIGNMENT_ERRORS = {
+    "CountViolation": ("Not enough licences: every one bought is already assigned",
+                       "Buy more, or remove the licence from someone who doesn't need it"),
+    "MutuallyExclusiveViolation": ("Conflicts with another licence the person has, and the two can't be combined",
+                                   "Remove one of the two licences, or take the person out of one of the groups"),
+    "DependencyViolation": ("Needs another licence the person doesn't have (an add-on without its base licence)",
+                            "Assign the licence it depends on first, or remove the add-on"),
+    "ProhibitedInUsageLocationViolation": ("Isn't sold for use in the person's usage location (country)",
+                                           "Correct the person's usage location, or use a licence sold there"),
+    "UniquenessViolation": ("Clashes with another account, usually an email address used twice",
+                            "Remove the duplicate email address, then reprocess the group's licences"),
+    "Other": ("Microsoft couldn't assign it",
+              "Reprocess the group's licences in the Entra admin center; if it fails again, check the account"),
+}
+ERROR_STATES = ("Error", "ActiveWithError")
+
+
+def assignment_error(code: str | None) -> tuple[str, str]:
+    """(what it means, what to do) for a licence assignment error code."""
+    return ASSIGNMENT_ERRORS.get(code or "Other", ASSIGNMENT_ERRORS["Other"])
+
+
+@dataclass
+class AssignmentError:
+    group: str | None  # group object ID; None when assigned directly
+    code: str
+    active: bool  # ActiveWithError: the licence works, but not all of it
+    since: str | None = None
+
+
+@dataclass
+class Assignment:
+    """One licence (SKU) for one account: where it comes from and whether it worked."""
+    sku_id: str
+    direct: bool = False
+    groups: list[str] = field(default_factory=list)  # group object IDs
+    errors: list[AssignmentError] = field(default_factory=list)
+    active: bool = False  # the person can use it
+
+    @property
+    def path(self) -> str:
+        if self.direct and self.groups:
+            return "Directly and by group"
+        return "By group" if self.groups else "Directly"
+
+
+def assignments(user: dict) -> dict[str, Assignment] | None:
+    """Every licence an account holds, or should hold through a group, by SKU ID.
+
+    None when how licences are assigned wasn't collected (a Users snapshot from before it was):
+    then only the SKUs in ``skuIds`` are known, not where they come from.
+    """
+    states = user.get("licenceStates")
+    if not isinstance(states, list):
+        return None
+    out: dict[str, Assignment] = {}
+    for s in states:
+        if not isinstance(s, dict) or not isinstance(s.get("skuId"), str):
+            continue
+        a = out.setdefault(s["skuId"], Assignment(s["skuId"]))
+        group = s.get("group") if isinstance(s.get("group"), str) and s.get("group") else None
+        if group is None:
+            a.direct = True
+        elif group not in a.groups:
+            a.groups.append(group)
+        state = s.get("state")
+        if state in ERROR_STATES:
+            a.errors.append(AssignmentError(group, s.get("error") if isinstance(s.get("error"), str) else "Other",
+                                            state == "ActiveWithError",
+                                            s.get("updated") if isinstance(s.get("updated"), str) else None))
+        if state in ("Active", "ActiveWithError"):
+            a.active = True
+    for sid in user.get("skuIds") or []:  # assigned, so it works whatever the states say
+        if isinstance(sid, str):
+            out.setdefault(sid, Assignment(sid, direct=True)).active = True
+    return out

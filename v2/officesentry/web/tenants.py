@@ -97,6 +97,7 @@ def dashboard():
         "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in rows),
         "severe": sum(r["counts"]["critical"] + r["counts"]["high"] for r in rows),
         "avg_score": sum(scores) / len(scores) if scores else None,
+        "scored": len(scores),
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
     }
     return render_template("dashboard.html", rows=rows, summary=summary, currency=setting(g.db, "currency", "GBP"))

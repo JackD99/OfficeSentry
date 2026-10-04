@@ -880,7 +880,63 @@
   {
    "api": "graph",
    "body": {
-    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,displayName,userPrincipalName,mail,userType,accountEnabled,createdDateTime,assignedLicenses,lastPasswordChangeDateTime,onPremisesSyncEnabled,passwordPolicies,externalUserState,signInActivity)",
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directory/subscriptions",
+    "value": [
+     {
+      "commerceSubscriptionId": "5e000891-0000-4000-8000-000000000891",
+      "createdDateTime": "2026-03-22T19:10:03Z",
+      "id": "5e000003-0000-4000-8000-000000000003",
+      "isTrial": false,
+      "nextLifecycleDateTime": "2027-03-22T19:10:03Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null,
+      "serviceStatus": [],
+      "skuId": "5e000002-0000-4000-8000-000000000002",
+      "skuPartNumber": "Microsoft_365_ Business_ Premium_(no Teams)",
+      "status": "Enabled",
+      "totalLicenses": 1
+     },
+     {
+      "commerceSubscriptionId": "5e000892-0000-4000-8000-000000000892",
+      "createdDateTime": "2024-03-05T22:07:44Z",
+      "id": "5e000042-0000-4000-8000-000000000042",
+      "isTrial": false,
+      "nextLifecycleDateTime": null,
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null,
+      "serviceStatus": [],
+      "skuId": "5e000041-0000-4000-8000-000000000041",
+      "skuPartNumber": "FLOW_FREE",
+      "status": "Enabled",
+      "totalLicenses": 10000
+     },
+     {
+      "commerceSubscriptionId": "5e000893-0000-4000-8000-000000000893",
+      "createdDateTime": "2026-03-22T19:05:12Z",
+      "id": "5e000046-0000-4000-8000-000000000046",
+      "isTrial": true,
+      "nextLifecycleDateTime": "2026-12-20T19:05:12Z",
+      "ownerId": null,
+      "ownerTenantId": null,
+      "ownerType": null,
+      "serviceStatus": [],
+      "skuId": "5e000045-0000-4000-8000-000000000045",
+      "skuPartNumber": "O365_BUSINESS_PREMIUM",
+      "status": "Suspended",
+      "totalLicenses": 1
+     }
+    ]
+   },
+   "note": "Edited by hand for the licences and subscriptions report: added the tenant's subscriptions, one for each recorded subscribedSku. Derived from the recording; replaced when the fixture is next re-recorded.",
+   "status": 200,
+   "url": "https://graph.microsoft.com/v1.0/directory/subscriptions"
+  },
+  {
+   "api": "graph",
+   "body": {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(id,displayName,userPrincipalName,mail,userType,accountEnabled,createdDateTime,assignedLicenses,lastPasswordChangeDateTime,onPremisesSyncEnabled,passwordPolicies,externalUserState,licenseAssignmentStates,usageLocation,signInActivity)",
     "value": [
      {
       "accountEnabled": true,
@@ -895,6 +951,16 @@
       "externalUserState": null,
       "id": "5e00004f-0000-4000-8000-00000000004f",
       "lastPasswordChangeDateTime": "2024-03-05T22:28:44Z",
+      "licenseAssignmentStates": [
+       {
+        "assignedByGroup": null,
+        "disabledPlans": [],
+        "error": "None",
+        "lastUpdatedDateTime": "2024-03-05T22:07:44Z",
+        "skuId": "5e000041-0000-4000-8000-000000000041",
+        "state": "Active"
+       }
+      ],
       "mail": "user1@sentrytest1.onmicrosoft.com",
       "onPremisesSyncEnabled": null,
       "passwordPolicies": null,
@@ -906,6 +972,7 @@
        "lastSuccessfulSignInDateTime": "2026-05-27T14:01:25Z",
        "lastSuccessfulSignInRequestId": "5e000052-0000-4000-8000-000000000052"
       },
+      "usageLocation": "GB",
       "userPrincipalName": "user1@sentrytest1.onmicrosoft.com",
       "userType": "Member"
      },
@@ -917,9 +984,11 @@
       "externalUserState": null,
       "id": "5e000053-0000-4000-8000-000000000053",
       "lastPasswordChangeDateTime": "2026-03-28T22:22:14Z",
+      "licenseAssignmentStates": [],
       "mail": "user2@sentrytest2.example",
       "onPremisesSyncEnabled": null,
       "passwordPolicies": null,
+      "usageLocation": null,
       "userPrincipalName": "user2@sentrytest2.example",
       "userType": "Member"
      },
@@ -931,9 +1000,11 @@
       "externalUserState": null,
       "id": "5e000054-0000-4000-8000-000000000054",
       "lastPasswordChangeDateTime": "2026-04-01T23:18:01Z",
+      "licenseAssignmentStates": [],
       "mail": "user3@sentrytest2.example",
       "onPremisesSyncEnabled": null,
       "passwordPolicies": null,
+      "usageLocation": null,
       "userPrincipalName": "user3@sentrytest2.example",
       "userType": "Member"
      },
@@ -954,6 +1025,24 @@
       "externalUserState": null,
       "id": "5e000055-0000-4000-8000-000000000055",
       "lastPasswordChangeDateTime": "2026-03-22T19:19:28Z",
+      "licenseAssignmentStates": [
+       {
+        "assignedByGroup": null,
+        "disabledPlans": [],
+        "error": "None",
+        "lastUpdatedDateTime": "2026-03-22T19:13:04Z",
+        "skuId": "5e000002-0000-4000-8000-000000000002",
+        "state": "Active"
+       },
+       {
+        "assignedByGroup": null,
+        "disabledPlans": [],
+        "error": "None",
+        "lastUpdatedDateTime": "2026-03-22T19:13:04Z",
+        "skuId": "5e000041-0000-4000-8000-000000000041",
+        "state": "Active"
+       }
+      ],
       "mail": "user4@sentrytest2.example",
       "onPremisesSyncEnabled": true,
       "passwordPolicies": "DisablePasswordExpiration",
@@ -965,6 +1054,7 @@
        "lastSuccessfulSignInDateTime": "2026-10-03T12:26:14Z",
        "lastSuccessfulSignInRequestId": "5e000058-0000-4000-8000-000000000058"
       },
+      "usageLocation": "GB",
       "userPrincipalName": "user4@sentrytest2.example",
       "userType": "Member"
      },
@@ -976,9 +1066,11 @@
       "externalUserState": null,
       "id": "5e000059-0000-4000-8000-000000000059",
       "lastPasswordChangeDateTime": "2026-07-25T19:29:21Z",
+      "licenseAssignmentStates": [],
       "mail": null,
       "onPremisesSyncEnabled": true,
       "passwordPolicies": "DisablePasswordExpiration",
+      "usageLocation": null,
       "userPrincipalName": "user5@sentrytest1.onmicrosoft.com",
       "userType": "Member"
      },
@@ -990,16 +1082,19 @@
       "externalUserState": null,
       "id": "5e00005a-0000-4000-8000-00000000005a",
       "lastPasswordChangeDateTime": "2026-03-26T21:36:29Z",
+      "licenseAssignmentStates": [],
       "mail": "user7@sentrytest1.onmicrosoft.com",
       "onPremisesSyncEnabled": true,
       "passwordPolicies": "DisablePasswordExpiration",
+      "usageLocation": null,
       "userPrincipalName": "user6@sentrytest2.example",
       "userType": "Member"
      }
     ]
    },
+   "note": "Edited by hand for the licences and subscriptions report: added licenseAssignmentStates and usageLocation. Derived from the recording; replaced when the fixture is next re-recorded.",
    "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/users?%24select=id%2CdisplayName%2CuserPrincipalName%2Cmail%2CuserType%2CaccountEnabled%2CcreatedDateTime%2CassignedLicenses%2ClastPasswordChangeDateTime%2ConPremisesSyncEnabled%2CpasswordPolicies%2CexternalUserState%2CsignInActivity&%24top=999"
+   "url": "https://graph.microsoft.com/v1.0/users?%24select=id%2CdisplayName%2CuserPrincipalName%2Cmail%2CuserType%2CaccountEnabled%2CcreatedDateTime%2CassignedLicenses%2ClastPasswordChangeDateTime%2ConPremisesSyncEnabled%2CpasswordPolicies%2CexternalUserState%2ClicenseAssignmentStates%2CusageLocation%2CsignInActivity&%24top=999"
   },
   {
    "api": "graph",
@@ -57322,9 +57417,10 @@
   {
    "api": "graph",
    "body": {
-    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,description,groupTypes,mailEnabled,securityEnabled,visibility,resourceProvisioningOptions,createdDateTime,mail,membershipRule,onPremisesSyncEnabled,expirationDateTime)",
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName,description,groupTypes,mailEnabled,securityEnabled,visibility,resourceProvisioningOptions,createdDateTime,mail,membershipRule,onPremisesSyncEnabled,expirationDateTime,assignedLicenses)",
     "value": [
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Users permitted RDP to servers",
       "displayName": "GRP-RDP-Servers",
@@ -57340,6 +57436,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Server admins - can RDP/manage servers",
       "displayName": "GRP-Tier1-Admins",
@@ -57355,6 +57452,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Users permitted VPN access",
       "displayName": "GRP-VPN-Users",
@@ -57370,6 +57468,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2024-03-05T22:11:01Z",
       "description": null,
       "displayName": "sentrytest2",
@@ -57389,6 +57488,7 @@
       "visibility": "Public"
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Computers with Sysmon deployed",
       "displayName": "GRP-Sysmon-Targets",
@@ -57404,6 +57504,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "IT team full access to \\\\files-01\\it (Name6-t1 etc)",
       "displayName": "GRP-Share-IT-RW",
@@ -57419,6 +57520,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2024-03-05T22:36:50Z",
       "description": "This is the default group for everyone in the network",
       "displayName": "All Company",
@@ -57436,6 +57538,7 @@
       "visibility": "Public"
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2025-01-25T02:56:35Z",
       "description": "Group that stores content and metadata for Answers in Viva Engage in network 65198383105. Deleting this this group will disrupt Answers in Viva Engage.",
       "displayName": "Group for Answers in Viva Engage \u2013 DO NOT DELETE 65198383105",
@@ -57453,6 +57556,7 @@
       "visibility": "Public"
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2025-01-30T21:36:09Z",
       "description": "Intranet",
       "displayName": "Intranet",
@@ -57470,6 +57574,7 @@
       "visibility": "Public"
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2024-05-04T14:58:26Z",
       "description": null,
       "displayName": "All Users",
@@ -57487,6 +57592,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Local admins on files-01 (Name6-t1)",
       "displayName": "GRP-FileServer-Admins",
@@ -57502,6 +57608,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Read-write access to \\\\files-01\\shared",
       "displayName": "GRP-Share-Shared-RW",
@@ -57517,6 +57624,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Read-only access to backup verification share",
       "displayName": "GRP-Share-Backups-RO",
@@ -57532,6 +57640,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T19:13:04Z",
       "description": null,
       "displayName": "VPN_Users",
@@ -57547,6 +57656,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "DC/domain admins - highest privilege tier",
       "displayName": "GRP-Tier0-Admins",
@@ -57562,6 +57672,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Read-only access to \\\\files-01\\media",
       "displayName": "GRP-Share-Media-RO",
@@ -57577,6 +57688,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Accounts that can read LAPS passwords",
       "displayName": "GRP-LAPS-Readers",
@@ -57592,6 +57704,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2025-07-19T14:26:51Z",
       "description": "This is the default group for everyone in the network",
       "displayName": "All Company",
@@ -57609,6 +57722,7 @@
       "visibility": "Public"
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Users with personal home drive access (maps H:)",
       "displayName": "GRP-Share-HomeDrive-RW",
@@ -57624,6 +57738,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Computers with Wazuh agent deployed",
       "displayName": "GRP-Wazuh-Agents",
@@ -57639,6 +57754,7 @@
       "visibility": null
      },
      {
+      "assignedLicenses": [],
       "createdDateTime": "2026-03-22T18:43:07Z",
       "description": "Read-only access to \\\\files-01\\shared",
       "displayName": "GRP-Share-Shared-RO",
@@ -57655,8 +57771,9 @@
      }
     ]
    },
+   "note": "Edited by hand for the licences and subscriptions report: added assignedLicenses. Derived from the recording; replaced when the fixture is next re-recorded.",
    "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/groups?%24select=id%2CdisplayName%2Cdescription%2CgroupTypes%2CmailEnabled%2CsecurityEnabled%2Cvisibility%2CresourceProvisioningOptions%2CcreatedDateTime%2Cmail%2CmembershipRule%2ConPremisesSyncEnabled%2CexpirationDateTime&%24top=999"
+   "url": "https://graph.microsoft.com/v1.0/groups?%24select=id%2CdisplayName%2Cdescription%2CgroupTypes%2CmailEnabled%2CsecurityEnabled%2Cvisibility%2CresourceProvisioningOptions%2CcreatedDateTime%2Cmail%2CmembershipRule%2ConPremisesSyncEnabled%2CexpirationDateTime%2CassignedLicenses&%24top=999"
   },
   {
    "api": "graph",

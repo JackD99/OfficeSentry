@@ -69,6 +69,7 @@
 <section class="card flush">
   <div class="card-head toolbar"><h2>Recent runs</h2><span class="meta">Last {{ runs|length }}</span></div>
   {% if runs %}
+  <div class="table-scroll{{ ' tall' if runs|length > 12 }}">
   <table class="stack-sm">
     <thead><tr><th>Source</th><th>Status</th><th>Started by</th><th>When</th><th class="num">Items</th></tr></thead>
     <tbody>
@@ -81,6 +82,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}<div class="empty"><p>No runs yet.</p></div>{% endif %}
 </section>
 {% endblock %}

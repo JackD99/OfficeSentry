@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf, tenant_header with context %}
+{% from "_macros.html" import csrf, tenant_header, downloads with context %}
 {% block title %}Findings · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'findings') }}
@@ -10,20 +10,26 @@
     <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id, view=v) }}"{% if v == view %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>
-  <span class="muted small">{{ rows|length }} {{ 'item' if rows|length == 1 else 'items' }}</span>
+  <div class="toolbar-actions">
+    {% if rows|length > 8 %}<input class="search sm" type="search" data-filter="findings-table" placeholder="Search findings…" aria-label="Search findings, for example a person or a check">{% endif %}
+    <span class="muted small">{{ rows|length }} {{ 'item' if rows|length == 1 else 'items' }}</span>
+    {% if view == 'open' and rows %}{{ downloads([('CSV', url_for('across.review_csv', tenant_id=tenant.id), 'Every open finding with its check and recommendation')]) }}{% endif %}
+  </div>
 </div>
 {% if view == 'open' %}<p class="muted small intro-line">Each row is an account or setting a check flagged. Findings close on their own once the next collection no longer sees the problem.{% if staff %} If something is intentional, accept the risk so it moves out of the totals.{% endif %}</p>{% endif %}
 
 {% if rows %}
 <div class="card flush">
-<table class="stack-sm findings-table">
+<table class="stack-sm findings-table" id="findings-table">
   <thead><tr><th>Account or item</th><th>Severity</th><th>Detail</th><th>First seen</th>
     <th>{% if view == 'resolved' %}Resolved{% elif view == 'accepted' %}Accepted{% else %}{% if staff %}Action{% endif %}{% endif %}</th></tr></thead>
   <tbody>
   {% for rule_key, items in groups %}
-  <tr class="group"><td colspan="5">{{ titles.get(rule_key, rule_key) }} <span class="faint">· {{ items|length }}</span></td></tr>
+  {% set title = titles.get(rule_key, rule_key) %}
+  {# A search keeps a check's heading while any of its rows match. #}
+  <tr class="group" data-name="{{ (title ~ ' ' ~ items|map(attribute='subject')|join(' ') ~ ' ' ~ items|map(attribute='detail')|join(' ') ~ ' ' ~ items|map(attribute='severity')|join(' '))|lower }}"><td colspan="5">{{ title }} <span class="faint">· {{ items|length }}</span></td></tr>
   {% for f in items %}
-  <tr>
+  <tr data-name="{{ (title ~ ' ' ~ f.subject ~ ' ' ~ f.detail ~ ' ' ~ f.severity)|lower }}">
     {% set person = people.get(f.object_id) or people.get(f.subject|lower) %}
     <td class="wrap">{% if person %}<a class="strong" href="{{ url_for('people.person', tenant_id=tenant.id, user_id=person) }}">{{ f.subject }}</a>{% else %}<span class="strong">{{ f.subject }}</span>{% endif %}</td>
     <td data-label="Severity"><span class="sevtext {{ f.severity }}">{{ f.severity }}</span></td>
@@ -59,4 +65,7 @@
   {% else %}<h3>Nothing resolved yet</h3><p>Findings move here when a later collection no longer sees the problem.</p>{% endif %}
 </div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
 {% endblock %}

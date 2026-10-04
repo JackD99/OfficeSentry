@@ -1,6 +1,11 @@
 {% extends "emails/_layout.html" %}
-{% from "emails/_parts.html" import sev, button, heading, tiles %}
-{% block preheader %}{% if failing %}{{ failing|length }} check{{ 's' if failing|length != 1 }} need attention{% else %}Nothing needs attention{% endif %}{% if review.new_count %}, {{ review.new_count }} new{% endif %}{% if review.resolved %}, {{ review.resolved|length }} fixed{% endif %}.{% endblock %}
+{% from "emails/_parts.html" import sev, button, heading, tiles with context %}
+{#- failing is the first few failing checks; more is how many others there are. -#}
+{%- set total = failing|length + more -%}
+{%- set es = summary.monthly(review) -%}
+{%- set TONE = {'critical': ('#fef2f2', '#b91c1c'), 'high': ('#fff7ed', '#c2410c'), 'medium': ('#fffbeb', '#a16207'), 'ok': ('#ecfdf3', '#15803d')} -%}
+{%- set tone = TONE.get(es.verdict.tone, TONE['medium']) -%}
+{% block preheader %}{{ es.verdict.headline }}{% if review.new_count %} {{ review.new_count }} new{% endif %}{% if review.resolved %}, {{ review.resolved|length }} fixed{% endif %}.{% endblock %}
 {% block kicker %}{{ frequency|capitalize }} security report{% endblock %}
 {% block body %}
 <h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#111827;">{{ tenant.name }}</h1>
@@ -10,27 +15,26 @@
 <div style="margin:0 0 20px;padding:12px 14px;background:#f1f5f9;border-radius:6px;color:#374151;white-space:pre-line;">{{ message }}</div>
 {% endif %}
 
-{#- The answer first: does anything need doing? -#}
+{#- The answer first: how it's going, and does anything need doing? -#}
 {% set c = review.counts %}
-{% if failing %}
-<div style="padding:14px 16px;border-radius:8px;background:{{ '#fef2f2' if c.critical or c.high else '#fff7ed' }};color:#111827;">
-  <strong>{{ failing|length }} check{{ 's' if failing|length != 1 }} need{{ 's' if failing|length == 1 }} attention</strong>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+<td bgcolor="{{ tone[0] }}" style="padding:14px 16px;border-radius:8px;background:{{ tone[0] }};border-left:4px solid {{ tone[1] }};color:#111827;">
+  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:{{ tone[1] }};">{{ es.verdict.label }}</div>
+  <div style="font-weight:600;font-size:15px;line-height:1.4;margin-top:2px;">{{ es.verdict.headline }}</div>
+  {% if total %}
   {%- set parts = [] %}{% for s in ('critical', 'high', 'medium', 'low') %}{% if c[s] %}{% set _ = parts.append(c[s] ~ ' ' ~ s) %}{% endif %}{% endfor %}
-  {% if parts %}<span style="color:#6b7280;"> · {{ parts|join(', ') }} finding{{ 's' if review.counts.values()|sum != 1 }}</span>{% endif %}
+  <div style="font-size:13px;color:#374151;margin-top:4px;">{{ total|plural('check') }} need{{ 's' if total == 1 }} attention{% if parts %} ({{ parts|join(', ') }} finding{{ 's' if c.values()|sum != 1 }}){% endif %}.</div>
+  {% endif %}
   {%- set changes = [] %}{% if review.new_count %}{% set _ = changes.append(review.new_count ~ ' new') %}{% endif %}{% if review.resolved %}{% set _ = changes.append(review.resolved|length ~ ' fixed') %}{% endif %}
   {% if changes %}<div style="font-size:13px;color:#374151;margin-top:2px;">{{ changes|join(' and ')|capitalize }} in the last 4 weeks.</div>{% endif %}
-</div>
-{% else %}
-<div style="padding:14px 16px;border-radius:8px;background:#ecfdf3;color:#15803d;"><strong>Nothing needs attention.</strong>
-  {% if review.resolved %}<span style="color:#374151;">{{ review.resolved|length }} issue{{ 's' if review.resolved|length != 1 }} fixed in the last 4 weeks.</span>{% endif %}</div>
-{% endif %}
+</td></tr></table>
 
 {% if kpis %}
 {{ heading('Key figures') }}
 {% set items = [] %}
 {% for k in kpis %}
-  {% set value = (review.currency ~ ' ' ~ '{:,.0f}'.format(k.value)) if k.unit == 'currency' else ('{:g}'.format(k.value) ~ k.unit) %}
-  {% if k.delta %}{% set change = ('{:+g}'.format(k.delta) ~ (k.unit if k.unit != 'currency' else '') ~ ' in 4 weeks') %}{% else %}{% set change = k.note %}{% endif %}
+  {% set value = k.value|money(review.currency, 2) if k.unit == 'currency' else ('{:g}'.format(k.value) ~ k.unit) %}
+  {% if k.delta %}{% set change = ('{:+g}'.format(k.delta) ~ (' pts' if k.unit == '%' else '') ~ ' in 4 weeks') if k.unit != 'currency' else ((k.delta|abs)|money(review.currency, 2) ~ (' more' if k.delta > 0 else ' less') ~ ' than 4 weeks ago') %}{% else %}{% set change = k.note %}{% endif %}
   {% set colour = '#15803d' if k.trend == 'better' and k.better != 'none' else ('#b91c1c' if k.trend == 'worse' and k.better != 'none' else '#6b7280') %}
   {% set _ = items.append((k.label, value, change, colour)) %}
 {% endfor %}

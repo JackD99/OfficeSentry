@@ -33,9 +33,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from . import alerts, mailer, schedule, store
 from .db import utcnow
 from .mailer import Email, MailError
-from .reports import data_reports, evidence, export, monthly_review
+from .reports import branding, data_reports, evidence, export, monthly_review, workbook
 from .rules import RULES
-from .text import plural
+from .text import day, plural
 
 log = logging.getLogger(__name__)
 
@@ -301,23 +301,39 @@ def _pdf(app, template: str, **context) -> bytes:
     return export.to_pdf(html, static.as_uri() + "/")
 
 
-def _msp_name(conn) -> str:
-    return mailer.mail_settings(conn).get("msp_name") or "Office Sentry"
+LOGO_CID = "brand-logo"
+
+
+def email_brand(conn) -> tuple[dict, list[tuple[str, str, bytes]]]:
+    """The MSP's name, colour, contact line and logo for an email template, and the logo to attach inline.
+
+    The logo is sent as an inline attachment (``cid:``): Outlook and Gmail don't show data: images.
+    """
+    brand = branding.load(conn)
+    ctx = {"msp_name": mailer.mail_settings(conn).get("msp_name") or brand.display_name,
+           "accent": brand.accent, "on_accent": brand.on_accent, "contact": brand.contact, "logo": None}
+    image = branding.logo_image(brand)
+    size = branding.fit(branding.image_size(image[1]), 32, 200) if image else None
+    if not size:
+        return ctx, []
+    ctx["logo"] = {"src": f"cid:{LOGO_CID}", "width": size[0], "height": size[1]}
+    return ctx, [(LOGO_CID, image[0], image[1])]
 
 
 def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None) -> list[tuple[str, str, bytes]]:
     files, built = [], {}
+    brand = branding.load(conn)
     for key, filename in attachment_plan(tenant, keys, include_xlsx):
         if key == "review":
             report = built.setdefault(key, review or monthly_review.build(conn, tenant, now))
             data = _pdf(app, "reports/monthly_review.html", report=report) if filename.endswith(".pdf") \
-                else export.to_xlsx(report)
+                else export.to_xlsx(report, brand=brand)
         elif key == "evidence":
             pack = built.setdefault(key, evidence.build(conn, tenant, now))
             data = _pdf(app, "reports/evidence.html", pack=pack) if filename.endswith(".pdf") \
-                else evidence.to_xlsx(pack)
+                else evidence.to_xlsx(pack, brand=brand)
         else:
-            data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now))
+            data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now), brand=brand)
         files.append((filename, "application/pdf" if filename.endswith(".pdf") else XLSX, data))
     return files
 
@@ -341,10 +357,11 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
     subject = f"{tenant['name']} security report · {label}"
-    msp = _msp_name(conn)
+    look, inline = email_brand(conn)
+    msp = look["msp_name"]
     html = render(app, "emails/report.html", subject=subject, tenant=tenant, review=review, label=label,
                    failing=failing[:6], more=max(0, len(failing) - 6), files=files, stale=stale,
-                   message=schedule["message"], msp_name=msp, frequency=schedule["frequency"],
+                   message=schedule["message"], frequency=schedule["frequency"], **look,
                    kpis=[k for k in review.kpis if k.value is not None])
 
     lines = [f"{tenant['name']}: security report for {label}", ""]
@@ -369,7 +386,7 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     attachments = _attachments(app, conn, tenant, keys, bool(schedule["include_xlsx"]), now, review) \
         if attach else []
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments), [name for _, name in files])
+                       attachments=attachments, inline=inline), [name for _, name in files])
 
 
 def digest_data(conn, frequency: str, now: datetime) -> dict:
@@ -411,30 +428,27 @@ def digest_data(conn, frequency: str, now: datetime) -> dict:
     }
 
 
-def digest_xlsx(data: dict) -> bytes:
-    from io import BytesIO
-
-    from openpyxl import Workbook
-    from openpyxl.styles import Font
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Tenants"
-    header = ["Tenant", "Critical", "High", "Medium", "Low", "New critical/high", "Fixed", "Secure Score %",
-              "Secure Score change", "Users with MFA %", f"Licence waste / month ({data['currency']})",
+def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
+    book = workbook.Book(brand.accent if brand else "")
+    header = ["Tenant", "Critical", "High", "Medium", "Low", "New critical/high", "Fixed", "Secure Score",
+              "Secure Score change", "Users with MFA", f"Licence waste / month ({data['currency']})",
               "Data up to date"]
-    ws.append(header)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
+    rows = []
     for r in data["rows"]:
         score, mfa, waste = (r["kpis"][k] for k in ("secure_score.pct", "mfa.registered_pct", "waste"))
-        ws.append([r["tenant"]["name"], r["counts"]["critical"], r["counts"]["high"], r["counts"]["medium"],
-                   r["counts"]["low"], r["new_severe"], r["fixed"], score.value, score.delta, mfa.value,
-                   waste.value, "No" if r["stale_data"] else "Yes"])
-    ws.column_dimensions["A"].width = 32
-    buf = BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+        rows.append([r["tenant"]["name"], r["counts"]["critical"], r["counts"]["high"], r["counts"]["medium"],
+                     r["counts"]["low"], r["new_severe"], r["fixed"],
+                     None if score.value is None else f"{score.value:g}%", score.delta,
+                     None if mfa.value is None else f"{mfa.value:g}%", waste.value,
+                     "No" if r["stale_data"] else "Yes"])
+    book.table("Tenants", header, rows, description="Every tenant, worst first")
+    cover = workbook.Cover(
+        "Tenant digest", "All tenants", now or datetime.now(UTC), brand.display_name if brand else "",
+        accent=brand.accent if brand else "", intro=f"Since {day(data['since'])}.",
+        facts=[("Tenants", data["tenants"], ""), ("Need attention", data["urgent"], "critical or high findings"),
+               ("New critical or high findings", data["new_severe"], ""), ("Fixed", data["fixed"], ""),
+               ("Average Secure Score", None if data["avg_score"] is None else f"{data['avg_score']:g}%", "")])
+    return book.save(cover)
 
 
 def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = None,
@@ -443,10 +457,10 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
     label = period_label(schedule["frequency"], local)
     data = digest_data(conn, schedule["frequency"], now)
-    msp = _msp_name(conn)
+    look, inline = email_brand(conn)
     subject = f"Tenant digest · {label}"
     filename = f"tenant-digest-{local.strftime('%Y-%m-%d')}.xlsx"
-    html = render(app, "emails/digest.html", subject=subject, d=data, label=label, msp_name=msp,
+    html = render(app, "emails/digest.html", subject=subject, d=data, label=label, **look,
                    message=schedule["message"], titles=RULE_TITLES, frequency=schedule["frequency"],
                    files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [])
     lines = [f"Tenant digest for {label}", "",
@@ -459,10 +473,11 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
         if r["counts"]["critical"] or r["counts"]["high"]:
             lines.append(f"  {r['tenant']['name']}: {r['counts']['critical']} critical, {r['counts']['high']} high")
     to, bcc = split_recipients(contacts)
-    attachments = [(filename, XLSX, digest_xlsx(data))] if attach and schedule["include_xlsx"] else []
+    attachments = [(filename, XLSX, digest_xlsx(data, branding.load(conn), now))] \
+        if attach and schedule["include_xlsx"] else []
     names = [filename] if schedule["include_xlsx"] else []
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments), names)
+                       attachments=attachments, inline=inline), names)
 
 
 def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[alerts.Item]:
@@ -479,13 +494,14 @@ def build_alert_email(app, conn, alert, tenant, items: list[alerts.Item], contac
     n = len(items)
     level = "critical" if alert["min_severity"] == "critical" else "critical or high"
     subject = f"{n} new {level} finding{'s' if n != 1 else ''} in {tenant['name']}"
+    look, inline = email_brand(conn)
     html = render(app, "emails/alert.html", subject=subject, tenant=tenant, items=items,
-                  msp_name=_msp_name(conn), level=level, preview=preview)
+                  level=level, preview=preview, **look)
     lines = [subject, ""]
     for i in items:
         lines.append(f"[{i.severity.upper()}] {i.title}: {i.subject}" + (f" ({i.detail})" if i.detail else ""))
     to, bcc = split_recipients(contacts)
-    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html), [])
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html, inline=inline), [])
 
 
 # -- Sending and history ------------------------------------------------------------------

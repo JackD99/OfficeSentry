@@ -5,6 +5,12 @@
 {% set editing = s.id %}
 {% set heading = ('Edit ' if editing else 'New ') ~ ('digest' if digest else 'scheduled email') %}
 {% block title %}{{ heading }} · Office Sentry{% endblock %}
+{% macro choice(o) -%}
+<label class="choice"><input type="checkbox" name="reports" value="{{ o.key }}" {% if o.key in s.reports %}checked{% endif %}>
+  <span class="grow"><span class="choice-title">{{ o.title }}
+    {% if o.pdf and pdf_available %}<span class="fmt">PDF</span>{% endif %}{% if o.xlsx and (not o.pdf or not pdf_available) %}<span class="fmt">XLSX</span>{% endif %}</span>
+    <span class="hint">{{ o.description }}</span></span></label>
+{%- endmacro %}
 {% block content %}
 <div class="crumbs">
   {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span>
@@ -24,15 +30,22 @@
     <p class="muted small">Which tenants need attention, what's new and what's been fixed, with each tenant's Secure Score. Worst tenants first.</p>
     <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every tenant's numbers</label>
     {% else %}
+    {% set options = {} %}{% for o in catalog %}{% set _ = options.update({o.key: o}) %}{% endfor %}
     <fieldset class="choices">
-      <legend class="sr-only">Reports</legend>
-      {% for o in catalog %}
-      <label class="choice"><input type="checkbox" name="reports" value="{{ o.key }}" {% if o.key in s.reports %}checked{% endif %}>
-        <span class="grow"><span class="choice-title">{{ o.title }}
-          {% if o.pdf and pdf_available %}<span class="fmt">PDF</span>{% endif %}{% if o.xlsx and (not o.pdf or not pdf_available) %}<span class="fmt">XLSX</span>{% endif %}</span>
-          <span class="hint">{{ o.description }}</span></span></label>
-      {% endfor %}
+      <legend class="sr-only">Summary reports</legend>
+      {% for o in catalog if not o.key.startswith('data:') %}{{ choice(o) }}{% endfor %}
     </fieldset>
+    <div class="label-sm">Detail reports <span class="muted">· one spreadsheet each</span></div>
+    {% for gr in report_groups %}
+    {% set n = namespace(chosen=0) %}{% for key, title, desc in gr.reports %}{% if ('data:' ~ key) in s.reports %}{% set n.chosen = n.chosen + 1 %}{% endif %}{% endfor %}
+    <details class="report-choices"{% if n.chosen %} open{% endif %}>
+      <summary><span class="strong">{{ gr.title }}</span> <span class="muted small" data-chosen>{{ gr.reports|length }} reports{% if n.chosen %} · {{ n.chosen }} chosen{% endif %}</span></summary>
+      <fieldset class="choices">
+        <legend class="sr-only">{{ gr.title }}</legend>
+        {% for key, title, desc in gr.reports if ('data:' ~ key) in options %}{{ choice(options['data:' ~ key]) }}{% endfor %}
+      </fieldset>
+    </details>
+    {% endfor %}
     {% if pdf_available %}<label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Also attach spreadsheet (XLSX) versions of the review and evidence pack</label>{% endif %}
     {% endif %}
   </section>
@@ -67,7 +80,7 @@
     {{ contact_checks(contacts, chosen, 'No contacts for ' ~ tenant.name ~ ' yet. Add one below.') }}
     {% endif %}
     <details class="add-person" {% if not digest and not contacts %}open{% endif %}>
-      <summary class="small">{{ icon('plus') }} Add {{ 'a team member' if digest else 'a ' ~ tenant.name ~ ' contact' }}</summary>
+      <summary class="small">{{ icon('plus') }} Add {{ 'a team member' if digest else 'a contact at ' ~ tenant.name }}</summary>
       <div class="form-row tight">
         <label>Name <input name="new_name" placeholder="Sam Taylor" autocomplete="off"></label>
         <label>Email <input name="new_email" type="email" placeholder="{{ 'you@msp.com' if digest else 'sam@client.com' }}" autocomplete="off"></label>
@@ -120,6 +133,10 @@
       (f === 'monthly' ? 'Monthly on the ' : 'Quarterly on the ') + ordinal(+form.day_of_month.value);
     var people = form.querySelectorAll('input[name=contacts]:checked').length + (form.new_email.value ? 1 : 0);
     document.getElementById('summary').textContent = text + ' at ' + hour + ' to ' + people + (people === 1 ? ' person' : ' people') + '.';
+    form.querySelectorAll('details.report-choices').forEach(function (d) {
+      var all = d.querySelectorAll('input[name=reports]').length, on = d.querySelectorAll('input[name=reports]:checked').length;
+      d.querySelector('[data-chosen]').textContent = all + ' reports' + (on ? ' · ' + on + ' chosen' : '');
+    });
   }
   form.addEventListener('change', update);
   form.addEventListener('input', update);

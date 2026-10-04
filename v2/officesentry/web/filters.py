@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 
-from ..text import plural
+from ..reports.cells import breakable, pdf_cell
+from ..text import plural, subject_label
 
 CAPABILITY_LABELS = {
     "entra_p1": "Entra ID P1",
@@ -96,6 +98,24 @@ def run_error(text: str | None) -> str:
     return f"Sign-in failed: {problem}" if problem else text
 
 
+FIGURE = re.compile(r"^[-+]?[£$€]?\d[\d,.]*(%| of \d[\d,]*| [KMGT]?B)?$")
+
+
+def figure_columns(rollup) -> set[str]:
+    """Text columns of an All tenants table whose every value is a figure ("12", "1 of 3", "3.0 GB"),
+    so they line up on the right like the number columns."""
+    keys = set()
+    for c in rollup.columns:
+        if c.kind != "text":
+            continue
+        values = [r.values.get(c.key) for r in rollup.rows if not r.note]
+        values = [v for v in values if v not in (None, "")]
+        if values and all(isinstance(v, int | float) or FIGURE.match(str(v).strip()) for v in values):
+            keys.add(c.key)
+    return keys
+
+
 def register(app) -> None:
     app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money,
-                                 fromjson=fromjson, run_error=run_error, plural=plural)
+                                 fromjson=fromjson, run_error=run_error, plural=plural, figure_columns=figure_columns,
+                                 pdf_cell=pdf_cell, breakable=breakable, subject_label=subject_label)

@@ -69,6 +69,7 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
                  for s in SKUS]
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": no_intune})
+    responses.get(f"{V1}/directory/subscriptions", json={"value": []})
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
     assert _run(db, alpha, "tenant_profile", factory)[1] == "succeeded"
     assert _run(db, alpha, "devices", factory)[1] == "succeeded"
@@ -205,4 +206,5 @@ def test_devices_page_and_xlsx(client, db, two_tenants):
     resp = client.get(f"/tenants/{alpha}/data/devices.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
-    assert wb.sheetnames == ["Operating systems", "Needs attention", "Managed devices", "Entra ID device records"]
+    assert wb.sheetnames == ["Summary", "Operating systems", "Needs attention", "Managed devices",
+                             "Entra ID device records"]

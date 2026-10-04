@@ -31,7 +31,7 @@ def test_profile_brings_the_account_together(db, two_tenants):
     assert profile.name == "Ann" and profile.upn == "ann@x.com"
     parts = {p.key: p for p in profile.parts}
     assert list(parts) == ["licences", "usage", "mfa", "roles", "groups", "mailbox", "devices", "onedrive", "apps",
-                           "activity"]
+                           "signins", "activity"]
     assert parts["licences"].tables[0].rows[0][0] == "Microsoft 365 Business Premium"
     groups = {row[0]: row[2] for row in parts["groups"].tables[0].rows}
     assert groups["Sales"] == "Owner"  # an owner of the team

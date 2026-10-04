@@ -58,12 +58,55 @@ CA_REPORT_ONLY = {
 REGISTRATION_DETAILS = [
     {"id": "u1", "userPrincipalName": "ann@x.com", "userDisplayName": "Ann", "userType": "member",
      "isAdmin": True, "isMfaRegistered": True, "isMfaCapable": True,
-     "methodsRegistered": ["microsoftAuthenticatorPush"]},
+     "methodsRegistered": ["microsoftAuthenticatorPush"], "isSsprRegistered": True, "isSsprCapable": True,
+     "isPasswordlessCapable": False, "isSystemPreferredAuthenticationMethodEnabled": True,
+     "systemPreferredAuthenticationMethods": ["Push"], "userPreferredMethodForSecondaryAuthentication": "push"},
     {"id": "u4", "userPrincipalName": "bg@x.com", "userDisplayName": "Breakglass", "userType": "member",
-     "isAdmin": True, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": []},
+     "isAdmin": True, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": [],
+     "isSsprRegistered": False, "isPasswordlessCapable": False},
     {"id": "u6", "userPrincipalName": "carl@x.com", "userDisplayName": "Carl", "userType": "member",
-     "isAdmin": False, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": []},
+     "isAdmin": False, "isMfaRegistered": False, "isMfaCapable": False, "methodsRegistered": [],
+     "isSsprRegistered": False, "isPasswordlessCapable": False},
 ]
+
+# /policies/authenticationMethodsPolicy: passkeys for one group, SMS on for everyone else, voice off.
+AUTH_METHODS_POLICY = {
+    "id": "authenticationMethodsPolicy", "displayName": "Authentication Methods Policy",
+    "policyVersion": "1.5", "policyMigrationState": "migrationComplete",
+    "lastModifiedDateTime": "2026-06-01T09:00:00Z",
+    "registrationEnforcement": {"authenticationMethodsRegistrationCampaign": {
+        "snoozeDurationInDays": 1, "enforceRegistrationAfterAllowedSnoozes": True, "state": "default",
+        "excludeTargets": [], "includeTargets": [{"id": "all_users", "targetType": "group",
+                                                  "targetedAuthenticationMethod": "microsoftAuthenticator"}]}},
+    "systemCredentialPreferences": {"state": "disabled", "excludeTargets": [],
+                                    "includeTargets": [{"id": "all_users", "targetType": "group"}]},
+    "reportSuspiciousActivitySettings": {"state": "default", "voiceReportingCode": 0,
+                                         "includeTarget": {"targetType": "group", "id": "all_users"}},
+    "authenticationMethodConfigurations": [
+        {"@odata.type": "#microsoft.graph.fido2AuthenticationMethodConfiguration", "id": "Fido2", "state": "enabled",
+         "isSelfServiceRegistrationAllowed": True, "isAttestationEnforced": False,
+         "includeTargets": [{"targetType": "group", "id": "grp-admins", "isRegistrationRequired": False}],
+         "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethodConfiguration",
+         "id": "MicrosoftAuthenticator", "state": "enabled", "isSoftwareOathEnabled": False,
+         "featureSettings": {"displayAppInformationRequiredState": {"state": "default"},
+                             "displayLocationInformationRequiredState": {"state": "disabled"}},
+         "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False,
+                             "authenticationMode": "any"}], "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.smsAuthenticationMethodConfiguration", "id": "Sms", "state": "enabled",
+         "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False,
+                             "isUsableForSignIn": False}],
+         "excludeTargets": [{"targetType": "group", "id": "grp-admins"}]},
+        {"@odata.type": "#microsoft.graph.voiceAuthenticationMethodConfiguration", "id": "Voice", "state": "disabled",
+         "isOfficePhoneAllowed": False, "includeTargets": [], "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.emailAuthenticationMethodConfiguration", "id": "Email", "state": "enabled",
+         "allowExternalIdToUseEmailOtp": "default",
+         "includeTargets": [{"targetType": "group", "id": "all_users"}], "excludeTargets": []},
+        {"@odata.type": "#microsoft.graph.temporaryAccessPassAuthenticationMethodConfiguration",
+         "id": "TemporaryAccessPass", "state": "disabled", "defaultLifetimeInMinutes": 60, "isUsableOnce": False,
+         "includeTargets": [], "excludeTargets": []},
+    ],
+}
 
 SECURE_SCORES = [
     {"createdDateTime": "2026-10-01T00:00:00Z", "currentScore": 42.0, "maxScore": 100.0,
@@ -181,6 +224,48 @@ LEGACY_SIGNINS = [
 ]
 INFO_USER = {"id": "u7", "displayName": "Info", "userPrincipalName": "info@x.com", "userType": "Member",
              "accountEnabled": True, "assignedLicenses": [], "signInActivity": {}}
+
+
+def _signin(n, when, upn, uid, code=0, *, app="Office 365 Exchange Online", ip="192.0.2.10", country="GB",
+            city="London", mfa=True, reason=None, risk="hidden", state="none"):
+    """One interactive sign-in from /beta/auditLogs/signIns."""
+    return {"id": f"si-{n}", "createdDateTime": when, "userPrincipalName": upn, "userId": uid,
+            "userDisplayName": upn.split("@")[0].title(), "appDisplayName": app, "clientAppUsed": "Browser",
+            "ipAddress": ip, "isInteractive": True,
+            "authenticationRequirement": "multiFactorAuthentication" if mfa else "singleFactorAuthentication",
+            "location": {"city": city, "countryOrRegion": country},
+            "deviceDetail": {"operatingSystem": "Windows10", "browser": "Edge 128.0.0"},
+            "status": {"errorCode": code, "failureReason": reason or ("Other." if code == 0 else f"Error {code}"),
+                       "additionalDetails": "MFA requirement satisfied by claim in the token" if mfa else None},
+            "riskLevelDuringSignIn": risk, "riskState": state, "riskDetail": "none", "riskEventTypes_v2": []}
+
+
+# A week of interactive sign-ins: Ann signs in from the office with MFA (once from France, flagged
+# medium risk where the tenant has P2), Bob's disabled account is being guessed from one address,
+# another address sprays five accounts, and the shared info@ mailbox signs in with only a password.
+SIGNINS = (
+    [_signin(i, f"2026-10-0{1 + i % 2}T{8 + i % 9:02d}:15:00Z", "ann@x.com", "u1",
+             app="Microsoft Teams" if i % 3 else "Office 365 Exchange Online") for i in range(25)]
+    + [_signin(30, "2026-10-01T07:00:00Z", "ann@x.com", "u1", mfa=False, app="Azure Portal"),
+       _signin(31, "2026-10-01T07:01:00Z", "ann@x.com", "u1", 50074),
+       _signin(32, "2026-10-01T07:02:00Z", "ann@x.com", "u1", 50140),
+       _signin(33, "2026-09-30T21:40:00Z", "ann@x.com", "u1", ip="198.51.100.40", country="FR", city="Paris",
+               app="Office 365 SharePoint Online", risk="medium", state="atRisk")]
+    + [_signin(40 + i, f"2026-09-29T02:{10 + i:02d}:00Z", "bob@x.com", "u2", 50126, ip="198.51.100.7",
+               country="RU", city="Moscow", reason="Invalid username or password or Invalid on-premise "
+               "username or password.") for i in range(6)]
+    + [_signin(47, "2026-09-29T02:20:00Z", "bob@x.com", "u2", 50053, ip="198.51.100.7", country="RU", city="Moscow"),
+       _signin(48, "2026-09-30T09:00:00Z", "bob@x.com", "u2", 50057, reason="User account is disabled.")]
+    + [_signin(50 + i, f"2026-09-28T23:{i:02d}:00Z", upn, uid, code, ip="203.0.113.66", country="BR",
+               city="Sao Paulo")
+       for i, (upn, uid, code) in enumerate([("ann@x.com", "u1", 50126), ("bob@x.com", "u2", 50126),
+                                             ("info@x.com", "u7", 50126), ("g#EXT#@x.com", "u3", 50126),
+                                             ("nobody@x.com", None, 50034)])]
+    + [_signin(60, "2026-10-02T11:00:00Z", "info@x.com", "u7", mfa=False),
+       _signin(61, "2026-10-02T12:00:00Z", "info@x.com", "u7", mfa=False),
+       _signin(62, "2026-10-01T16:00:00Z", "g#EXT#@x.com", "u3", 53003, ip="192.0.2.99", country="US",
+               city="Seattle", app="Microsoft Teams", reason="Access has been blocked by Conditional Access policies.")]
+)
 
 ORGANIZATION = {"id": "org", "displayName": "Org", "verifiedDomains": [
     {"name": "x.com", "isDefault": True}, {"name": "parked.com"}, {"name": "x.onmicrosoft.com"}]}

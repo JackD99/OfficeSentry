@@ -85,8 +85,8 @@
 {% for tv in tables %}
 {% if not tv.total %}
 <section class="card flush empty-section" id="t-{{ tv.slug }}">
-  <h2>{{ tv.section.title }} <span class="count-badge">0</span></h2>
-  <p>{{ tv.section.empty }}{% if tv.section.intro %} <span class="faint">{{ tv.section.intro }}</span>{% endif %}</p>
+  <h2{% if tv.section.intro %} title="{{ tv.section.intro }}"{% endif %}>{{ tv.section.title }} <span class="count-badge">0</span></h2>
+  <p>{{ tv.section.empty }}</p>
 </section>
 {% else %}
 {{ report_table(tv, url_for('across.data_report_csv', tenant_id=tenant.id, key=report.key, section=loop.index) ~ ('&' ~ view_query if view_query)) }}

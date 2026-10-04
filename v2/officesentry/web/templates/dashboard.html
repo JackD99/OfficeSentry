@@ -30,7 +30,7 @@
 {% else %}
 <div class="tiles">
   <div class="tile"><div class="label">Tenants</div><div class="value">{{ rows|length }}</div>
-    <div class="foot">{{ summary.up_to_date }} with up-to-date data</div></div>
+    <div class="foot">{{ summary.up_to_date }} up to date{% if summary.data_issues %}, <span class="warn-text">{{ summary.data_issues }} with data problems</span>{% endif %}</div></div>
   <div class="tile"><div class="label">Need urgent attention</div><div class="value">{{ summary.urgent }}</div>
     <div class="foot">with critical or high findings</div></div>
   <div class="tile"><div class="label">Critical and high findings</div>
@@ -38,7 +38,7 @@
     <div class="foot">across all tenants</div></div>
   <div class="tile"><div class="label">Average Secure Score</div>
     <div class="value">{{ '%.0f%%'|format(summary.avg_score) if summary.avg_score is not none else '–' }}</div>
-    <div class="foot">{{ summary.data_issues }} tenant{{ 's' if summary.data_issues != 1 }} with data problems</div></div>
+    <div class="foot">{% if summary.scored %}across {{ summary.scored|plural('tenant') }} with a score{% else %}no scores collected yet{% endif %}</div></div>
 </div>
 
 <div class="card flush">
@@ -50,7 +50,7 @@
   <table class="stack-sm" id="tenant-table">
     <thead><tr>
       <th>Tenant</th><th title="Critical, high, medium and low">Open findings</th>
-      <th class="num">Secure Score</th><th class="num">Users with MFA</th><th class="num">Licence waste / mo</th><th>Data</th>
+      <th class="num">Secure Score</th><th class="num">Users with MFA</th><th class="num">Licence waste / mo</th><th>Data</th><th>Monthly review</th>
     </tr></thead>
     <tbody>
     {% for row in rows %}{% set t = row.tenant %}
@@ -61,6 +61,10 @@
       <td class="num" data-label="Users with MFA">{{ kpi(row, 'mfa.registered_pct', '%') }}</td>
       <td class="num" data-label="Licence waste / mo">{{ kpi(row, 'waste', 'money') }}</td>
       <td data-label="Data"><span class="pill {{ row.health[0] }}" {% if row.health[2] %}title="{{ row.health[2] }}"{% endif %}>{{ row.health[1] }}</span></td>
+      <td data-label="Monthly review">{% if t.consented_at %}<span class="row-actions">
+        <a class="btn sm ghost" href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}" title="Open {{ t.name }}'s monthly review">Open</a>
+        <a class="btn sm ghost" href="{{ url_for('reports.tenant_report_pdf', tenant_id=t.id) }}" title="Download {{ t.name }}'s monthly review as a PDF">{{ icon('download') }} PDF</a></span>
+        {% else %}<span class="faint">–</span>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>

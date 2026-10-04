@@ -49,6 +49,7 @@
     {% endfor %}
     </tbody>
   </table></div>
+  {% if rollup.columns|selectattr('kind', 'equalto', 'sev')|list %}<p class="legend-note">Findings are counted by severity, left to right: <span class="sevbar"><span class="n critical">Critical</span> <span class="n high">High</span> <span class="n medium">Medium</span> <span class="n low">Low</span></span></p>{% endif %}
   {% else %}<p class="empty-note">No tenants to show.</p>{% endif %}
 </section>
 

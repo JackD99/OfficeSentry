@@ -112,6 +112,44 @@ class Brand:
         )
 
 
+def logo_image(brand: Brand) -> tuple[str, bytes] | None:
+    """The logo as (mimetype, bytes), for attaching to an email."""
+    if not brand.logo.startswith("data:image/") or ";base64," not in brand.logo:
+        return None
+    head, data = brand.logo.split(";base64,", 1)
+    try:
+        return head[5:], base64.b64decode(data)
+    except ValueError:
+        return None
+
+
+def image_size(data: bytes) -> tuple[int, int] | None:
+    """(width, height) of a PNG or JPEG, or None. Email clients need both on the <img>."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24:
+        return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if data.startswith(b"\xff\xd8"):
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                return None
+            marker, length = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
+            if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+            i += 2 + length
+    return None
+
+
+def fit(size: tuple[int, int] | None, height: int, max_width: int) -> tuple[int, int] | None:
+    """The size to show an image at: ``height`` tall, narrower if it would be wider than ``max_width``."""
+    if not size or not all(size):
+        return None
+    w, h = size
+    width = round(w * height / h)
+    if width > max_width:
+        width, height = max_width, max(1, round(h * max_width / w))
+    return width, height
+
+
 def load(conn) -> Brand:
     rows = {r["key"]: r["value"] for r in conn.execute(
         f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(KEYS))})", KEYS)}

@@ -21,7 +21,7 @@ from . import adminactivity, coverage, devices, dnscheck, hybrid
 from .licences import is_stale, last_sign_in, licence_summary, load_prices
 from .mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from .snapshot import TenantSnapshot
-from .text import every, plural, verb
+from .text import day, every, plural, verb
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITIES)}
@@ -351,8 +351,8 @@ def stale_users(snap: TenantSnapshot, now: datetime):
         if not u.get("accountEnabled") or not is_stale(u, now):
             continue
         last = last_sign_in(u)
-        when = f"last signed in {last.date().isoformat()}" if last else \
-            f"never signed in, created {(u.get('createdDateTime') or '?')[:10]}"
+        when = f"last signed in {day(last.date().isoformat())}" if last else \
+            f"never signed in, created {day(u.get('createdDateTime'))}"
         kind = "Guest" if u.get("userType") == "Guest" else ("Licensed member" if u.get("licensed") else "Member")
         severity = "medium" if u.get("licensed") else "low"
         findings.append(Finding(severity, _label(u), f"{kind}, {when}", u["_id"]))
@@ -686,11 +686,11 @@ def app_credentials(snap: TenantSnapshot, now: datetime):
         latest_ts = devices.parse_ts(latest).timestamp()
         if latest_ts < now.timestamp():
             findings.append(Finding("low", a.get("displayName") or a["_id"],
-                                    f"{every(len(ends), 'credential', start=True)} expired, last on {latest[:10]}",
+                                    f"{every(len(ends), 'credential', start=True)} expired, last on {day(latest)}",
                                     a["_id"]))
         elif latest_ts < soon:
             findings.append(Finding("medium", a.get("displayName") or a["_id"],
-                                    f"Last valid credential expires {latest[:10]}", a["_id"]))
+                                    f"Last valid credential expires {day(latest)}", a["_id"]))
     return ("fail", f"{plural(len(findings), 'app registration')} with expiring or expired credentials", findings) \
         if findings else ("pass", "No app registration credentials expire in the next 30 days", [])
 
@@ -868,7 +868,7 @@ def pending_guests(snap: TenantSnapshot, now: datetime):
                 or not devices.parse_ts(created):
             continue
         if devices.parse_ts(created).timestamp() < cutoff:
-            findings.append(Finding("low", _label(u), f"Invited {created[:10]}, never accepted", u["_id"]))
+            findings.append(Finding("low", _label(u), f"Invited {day(created)}, never accepted", u["_id"]))
     return ("fail", f"{plural(len(findings), 'guest invitation')} unaccepted for 30+ days", findings) if findings else \
         ("pass", "No stale guest invitations", [])
 
@@ -1334,7 +1334,7 @@ def domain_federation_changed(snap: TenantSnapshot, now: datetime):
         if e.get("kind") == "federation" and e.get("result") == "success":
             domain = ", ".join(e.get("targets") or []) or "Unnamed domain"
             changes.setdefault(domain, []).append(
-                f"{e.get('activity')} by {e.get('actor')} on {(e.get('time') or '')[:10]}")
+                f"{e.get('activity')} by {e.get('actor')} on {day(e.get('time'))}")
     findings = [Finding("high", domain, "; ".join(what), domain) for domain, what in changes.items()]
     days = adminactivity.covered_days(window)
     return ("fail", f"{plural(len(findings), 'domain')} had sign-in settings changed in the last {days} days",
@@ -1360,3 +1360,8 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
 
 # Checks kept in their own modules register themselves into RULES on import.
 from . import sharepoint_rules  # noqa: E402, F401, I001
+from . import auth_rules  # noqa: E402, F401, I001
+from . import licence_rules  # noqa: E402, F401, I001
+
+# Checks over sign-in activity.
+from . import signin_rules  # noqa: E402, F401, I001

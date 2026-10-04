@@ -44,9 +44,18 @@
 </ol>
 {%- endmacro %}
 
+{# A change tag: New (added), Gone (removed, neutral: disappearing isn't good news by itself),
+   Changed, or Fixed (a finding that went away). Same words as the web pages. #}
+{% set CHANGE_TAGS = {'added': ('added', 'New'), 'removed': ('removed', 'Gone'), 'changed': ('changed', 'Changed'),
+                      'resolved': ('resolved', 'Fixed'), 'fixed': ('resolved', 'Fixed')} %}
+{% macro change_tag(kind) -%}
+{%- set t = CHANGE_TAGS.get(kind, ('changed', kind|capitalize)) -%}
+<span class="chg chg-{{ t[0] }}">{{ t[1] }}</span>
+{%- endmacro %}
+
 {% macro sev(level) -%}<span class="sev sev-{{ level }}">{{ level }}</span>{%- endmacro %}
 
-{% macro meta(label, value) -%}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{%- endmacro %}
+{% macro meta(label, value) -%}<div><dt>{{ label }}</dt><dd>{{ value|string|breakable }}</dd></div>{%- endmacro %}
 
 {# A headline figure for document-style reports (detail, rollup, changes). tone: ok | warn | bad #}
 {% macro figure(label, value, foot='', tone=none) -%}
@@ -57,21 +66,34 @@
 </div>
 {%- endmacro %}
 
-{# Row of `count` figures (call block); up to five per row. #}
+{# Row of `count` figures (call block): up to five per row, and balanced rows beyond that (six as 3 + 3). #}
 {% macro figures(count) -%}
-<div class="kpis cols-{{ [count, 5]|min }}">{{ caller() }}</div>
+{%- set cols = count if count <= 5 else [((count + 1) // 2), 5]|min -%}
+<div class="kpis cols-{{ cols }}">{{ caller() }}</div>
 {%- endmacro %}
 
-{# A table of rows from data_reports.Section: Link cells become links, flags a severity column. #}
+{# A table of rows from data_reports.Section: Link cells become links, flags a severity column.
+   Cells go through pdf_cell: dates in words ("20 Aug 2026 (45 days ago)") and long addresses
+   able to wrap at their dots and slashes. Numbers line up on the right. #}
 {% macro data_table(section) -%}
 {% set flagged = section.flags|select|list %}
-<div class="table-wrap"><table class="data">
-  <thead><tr>{% if flagged %}<th class="flag">Flag</th>{% endif %}{% for c in section.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+{% set numeric = [] %}{% for c in section.columns %}{% set vals = section.rows|map(attribute=loop.index0)|reject('none')|list %}{% if vals and vals|select('number')|list|length == vals|length %}{% set _ = numeric.append(loop.index0) %}{% endif %}{% endfor %}
+<div class="table-wrap{{ " keep" if section.rows|length <= 8 }}"><table class="data">
+  <thead><tr>{% if flagged %}<th class="flag">Flag</th>{% endif %}{% for c in section.columns %}<th{% if loop.index0 in numeric %} class="num"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
   <tbody>
   {% for row in section.rows %}{% set flag = section.flags[loop.index0] if section.flags|length > loop.index0 else none %}
   <tr>{% if flagged %}<td class="flag">{% if flag %}{{ sev(flag) }}{% endif %}</td>{% endif %}
-    {% for v in row %}<td>{% if v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}">{{ v.text }}</a>{% else %}{{ v }}{% endif %}</td>{% endfor %}</tr>
+    {% for v in row %}<td{% if loop.index0 in numeric %} class="num"{% elif v is string and v|length <= 16 %} class="nw"{% endif %}>{% if v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}">{{ v.text|breakable }}</a>{% elif v is none or v == '' %}<span class="muted">–</span>{% else %}{{ v|pdf_cell }}{% endif %}</td>{% endfor %}</tr>
   {% endfor %}
   </tbody>
 </table></div>
+{%- endmacro %}
+
+{# When the data was collected, in one sentence. sources: (title, finished_at or none) pairs.
+   Source names only appear for what hasn't been collected. #}
+{% macro collected(sources) -%}
+{% set done = sources|map(attribute='1')|select|list %}
+{% set missing = sources|rejectattr('1')|map(attribute='0')|list %}
+{%- if done %}{% set first, last = done|min, done|max %}Data collected {% if first[:10] == last[:10] %}{{ last|when }}{% else %}between {{ first|day }} and {{ last|day }}{% endif %}.{% endif %}
+{%- if missing %} Not collected yet: {{ missing|join(', ') }}.{% endif %}
 {%- endmacro %}

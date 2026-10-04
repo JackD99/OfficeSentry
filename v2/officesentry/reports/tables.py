@@ -11,9 +11,7 @@ from __future__ import annotations
 import csv
 import re
 from dataclasses import dataclass, field
-from io import BytesIO, StringIO
-
-from .safe_xlsx import no_formulas
+from io import StringIO
 
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n")
 
@@ -60,40 +58,14 @@ def sheet_name(title: str, used: set[str]) -> str:
     return name
 
 
-def to_xlsx(tables: list[Table]) -> bytes:
-    from openpyxl import Workbook
-    from openpyxl.styles import Font
-    from openpyxl.utils import get_column_letter
+def to_xlsx(tables: list[Table], cover=None, accent: str = "") -> bytes:
+    """One styled sheet per table (see ``workbook``), after a summary sheet when ``cover`` is given."""
+    from .workbook import Book
 
-    wb = Workbook()
-    wb.remove(wb.active)
-    used: set[str] = set()
+    book = Book(accent or (cover.accent if cover else ""))
     for table in tables or [Table("No data", ["Note"], [["Nothing to export."]])]:
-        ws = wb.create_sheet(sheet_name(table.title, used))
-        ws.append(list(table.columns))
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for row in table.rows:
-            ws.append([_xlsx_cell(v) for v in row])
-        ws.freeze_panes = "A2"
-        for i in range(1, ws.max_column + 1):
-            letter = get_column_letter(i)
-            width = max((len(str(c.value or "")) for c in ws[letter]), default=10)
-            ws.column_dimensions[letter].width = min(max(width + 2, 10), 60)
-    no_formulas(wb)
-    out = BytesIO()
-    wb.save(out)
-    return out.getvalue()
-
-
-def _xlsx_cell(value):
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "Yes" if value else "No"
-    if isinstance(value, (list, tuple, set)):
-        return ", ".join(str(v) for v in value)
-    return value
+        book.table(table.title, table.columns, table.rows)
+    return book.save(cover)
 
 
 def slug(text: str) -> str:

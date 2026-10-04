@@ -47,6 +47,12 @@
 {% set s = RUN_STATUS.get(value, ('', 'Never run')) %}<span class="pill {{ s[0] }}">{{ s[1] }}</span>
 {%- endmacro %}
 
+{# One label per kind of change, the same on the overview, the Changes tab and its PDF. #}
+{% set CHANGE_KIND = {'added': ('added', 'New'), 'removed': ('removed', 'Gone'), 'changed': ('changed', 'Changed')} %}
+{% macro change_tag(kind) -%}
+{% set k = CHANGE_KIND.get(kind, ('changed', kind)) %}<span class="chg chg-{{ k[0] }}">{{ k[1] }}</span>
+{%- endmacro %}
+
 {% macro sev_counts(counts, levels=('critical', 'high', 'medium', 'low')) -%}
 <span class="sevbar" aria-label="{% for s in levels %}{{ counts[s] }} {{ s }}{{ ', ' if not loop.last }}{% endfor %}">{% for s in levels %}<span class="sev sev-{{ s }}{{ ' zero' if not counts[s] }}" title="{{ counts[s] }} {{ s }}">{{ counts[s] }}</span>{% endfor %}</span>
 {%- endmacro %}

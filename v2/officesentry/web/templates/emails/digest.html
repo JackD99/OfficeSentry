@@ -1,5 +1,5 @@
 {% extends "emails/_layout.html" %}
-{% from "emails/_parts.html" import sev, button, heading, tiles %}
+{% from "emails/_parts.html" import sev, button, heading, tiles with context %}
 {% block preheader %}{{ d.urgent }} of {{ d.tenants }} tenants need attention · {{ d.new_severe }} new critical or high, {{ d.fixed }} fixed.{% endblock %}
 {% block kicker %}{{ frequency|capitalize }} digest{% endblock %}
 {% block body %}
