@@ -13,7 +13,7 @@ from .. import worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
-from . import access, across, admin, alerts, auth, branding, email, filters, prospects, reports, tenants
+from . import access, across, admin, alerts, auth, branding, email, filters, people, prospects, reports, tenants
 
 csrf = CSRFProtect()
 
@@ -115,4 +115,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(alerts.bp)
     app.register_blueprint(branding.bp)
     app.register_blueprint(across.bp)
+    app.register_blueprint(people.bp)
     return app
