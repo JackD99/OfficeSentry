@@ -49,8 +49,8 @@
   <div class="table-wrap"><table class="data">
     <thead><tr><th class="flag">Change</th><th class="flag">Severity</th><th>Check</th><th>Account or object</th></tr></thead>
     <tbody>
-    {% for f in report.new_findings %}<tr><td class="flag"><span class="chg chg-added">New</span></td><td class="flag">{{ ui.sev(f.severity) }}</td><td>{{ titles.get(f.rule_key, f.rule_key) }}</td><td>{{ f.subject }}</td></tr>{% endfor %}
-    {% for f in report.fixed_findings %}<tr><td class="flag"><span class="chg chg-resolved">Fixed</span></td><td class="flag">{{ ui.sev(f.severity) }}</td><td>{{ titles.get(f.rule_key, f.rule_key) }}</td><td>{{ f.subject }}</td></tr>{% endfor %}
+    {% for f in report.new_findings %}<tr><td class="flag"><span class="chg chg-added">New</span></td><td class="flag">{{ ui.sev(f.severity) }}</td><td>{{ titles.get(f.rule_key, f.rule_key) }}</td><td>{{ f.subject|subject_label|breakable }}</td></tr>{% endfor %}
+    {% for f in report.fixed_findings %}<tr><td class="flag"><span class="chg chg-resolved">Fixed</span></td><td class="flag">{{ ui.sev(f.severity) }}</td><td>{{ titles.get(f.rule_key, f.rule_key) }}</td><td>{{ f.subject|subject_label|breakable }}</td></tr>{% endfor %}
     </tbody>
   </table></div>
   {% else %}<p class="empty-note">No findings appeared or were fixed in this period.</p>{% endif %}
@@ -63,7 +63,7 @@
   <div class="table-wrap"><table class="data">
     <thead><tr><th class="flag">Change</th><th>Area</th><th>Subject</th><th>Detail</th></tr></thead>
     <tbody>{% for c in report.key_changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
-    <tr><td class="flag"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td><td>{{ c.area }}</td><td>{{ c.subject }}</td><td>{{ c.detail }}</td></tr>
+    <tr><td class="flag"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td><td>{{ c.area }}</td><td{% if c.subject|length <= 16 %} class="nw"{% endif %}>{{ c.subject|subject_label|breakable }}</td><td>{{ c.detail|breakable }}</td></tr>
     {% endfor %}</tbody>
   </table></div>
   {% else %}<p class="empty-note">{% if report.has_baseline %}No key changes in this period.{% else %}Nothing to compare yet.{% endif %}</p>{% endif %}
@@ -75,7 +75,7 @@
   <div class="table-wrap"><table class="data">
     <thead><tr><th class="flag">Change</th><th>Table</th><th>Row</th><th>What changed</th></tr></thead>
     <tbody>{% for s in r.sections %}{% for c in s.changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
-    <tr><td class="flag"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td><td>{{ s.title }}</td><td>{{ c.subject }}</td><td>{{ c.detail }}</td></tr>
+    <tr><td class="flag"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td><td{% if s.title|length <= 16 %} class="nw"{% endif %}>{{ s.title }}</td><td{% if c.subject|length <= 16 %} class="nw"{% endif %}>{{ c.subject|subject_label|breakable }}</td><td>{{ c.detail|breakable }}</td></tr>
     {% endfor %}{% endfor %}</tbody>
   </table></div>
 </section>

@@ -87,6 +87,11 @@ def monthly(report) -> ExecSummary:
         if top.severity in ("critical", "high"):
             text += f" The most urgent: {_sentence(top.summary[0].lower() + top.summary[1:])}"
         paragraphs.append(text)
+        passing = report.passing
+        if passing:
+            named = _join([f"“{r.title}”" for r in passing[:3]])
+            paragraphs.append(f"On the positive side, {plural(len(passing), 'check')} passed"
+                              f"{', including ' + named if len(passing) > 1 else ': ' + named}.")
     elif ran:
         paragraphs.append(f"We ran {plural(ran, 'security check')} and {'it' if ran == 1 else 'all of them'} passed.")
 

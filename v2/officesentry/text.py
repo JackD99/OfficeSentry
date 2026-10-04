@@ -35,6 +35,28 @@ def verb(n: int, one: str, many: str) -> str:
     return one if n == 1 else many
 
 
+# Finding subjects for settings that apply to the whole tenant rather than one account.
+WHOLE_ORGANISATION = ("Tenant", "Organisation")
+
+
+def subject_label(subject: str) -> str:
+    """A finding's subject as a client reads it: "Whole organisation" rather than "Tenant"."""
+    return "Whole organisation" if subject in WHOLE_ORGANISATION else subject
+
+
+def day(iso: str | None) -> str:
+    """"1 Oct 2026" for an ISO date or timestamp, for text people read; "?" when there's none."""
+    if not iso or len(iso) < 10 or not iso[:4].isdigit():
+        return iso or "?"
+    from datetime import date
+
+    try:
+        d = date.fromisoformat(iso[:10])
+    except ValueError:
+        return iso
+    return f"{d.day} {d:%b %Y}"
+
+
 def every(n: int, noun: str, many: str | None = None, start: bool = False) -> str:
     """"all 4 domains", or "the 1 domain" when there's only one. ``start`` capitalises it to open a sentence."""
     text = f"the 1 {noun}" if n == 1 else f"all {n} {nouns(n, noun, many)}"

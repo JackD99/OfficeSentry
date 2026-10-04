@@ -260,7 +260,7 @@ def data_rollup(conn, tenants, key: str, now: datetime) -> Rollup:
                     row.links[f"c:{s.title}"] = (key, f"#{views.anchor(table)}")
         rows.append(row)
     footnote = ("Figures are the report's headline numbers for each tenant." if use_headlines else
-                "Numbers count the rows in each of the report's tables.") + " Open a tenant for the detail."
+                "Numbers count the rows in each of the report's tables.") + " Each tenant's own report has the detail."
     return Rollup(key, title, description, columns, rows, now, tenant_link="data", footnote=footnote)
 
 
