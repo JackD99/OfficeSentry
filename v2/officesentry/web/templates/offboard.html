@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf, downloads, tenant_header with context %}
+{% block title %}Offboard · {{ tenant.name }}{% endblock %}
+{% block content %}
+{% set r = health.result or {} %}
+{% set app = r.app_name or 'the Office Sentry app (usually "Office Sentry (read-only)")' %}
+{{ tenant_header(tenant, 'manage', title='Offboard ' ~ tenant.name) }}
+
+<p class="intro-line">Offboarding removes {{ tenant.name }} from Office Sentry for good. Work through the steps, then delete. If the client might come back, <strong>archive</strong> it instead: that hides it and keeps its data.</p>
+
+<ol class="setup-steps card offboard-steps">
+  <li>
+    <div class="step-title">Download a final copy</div>
+    <div class="step-body">Keep the last reports for your records, or send them to the client. Once deleted, they can't be made again.
+      <div class="step-action">
+        {{ downloads([('Monthly review PDF', url_for('reports.tenant_report_pdf', tenant_id=tenant.id), ''),
+                      ('Monthly review XLSX', url_for('reports.tenant_report_xlsx', tenant_id=tenant.id), ''),
+                      ('Insurance evidence PDF', url_for('reports.evidence_pdf', tenant_id=tenant.id), ''),
+                      ('Insurance evidence XLSX', url_for('reports.evidence_xlsx', tenant_id=tenant.id), '')]) }}
+      </div>
+      <p class="small muted m0">Detail reports download from their own pages under <a href="{{ url_for('reports.data_index', tenant_id=tenant.id) }}">Detail reports</a>.</p>
+    </div>
+  </li>
+  <li>
+    <div class="step-title">Remove Office Sentry from {{ tenant.name }}'s Microsoft 365</div>
+    <div class="step-body">Office Sentry can't do this itself: it only ever reads the tenant. A Global Administrator of {{ tenant.name }} (you, or the client) does it in the Microsoft Entra admin centre:
+      <ol>
+        <li><em>Roles and admins</em> → <em>Global Reader</em> → select {{ app }} → <em>Remove assignments</em>{% if r.roles_checked and not r.global_reader %} (it didn't hold the role at the last check){% endif %}.</li>
+        <li><em>Enterprise applications</em> → {{ app }} → <em>Properties</em> → <em>Delete</em>. This withdraws the consent; Office Sentry can't sign in to the tenant again.</li>
+      </ol>
+      <details class="by-hand"><summary>Text to send the client</summary>
+        <textarea class="copy-text" rows="9" readonly aria-label="Instructions for the client">To remove Office Sentry's read-only access to your Microsoft 365, a Global Administrator signs in to the Microsoft Entra admin centre (https://entra.microsoft.com) and:
+
+1. Goes to Roles and admins > Global Reader, selects {{ r.app_name or 'the Office Sentry app' }} and chooses Remove assignments.
+2. Goes to Enterprise applications, opens {{ r.app_name or 'the Office Sentry app' }}, chooses Properties, then Delete.
+
+This stops all access straight away. We are deleting everything Office Sentry collected from your tenant.</textarea>
+        <p class="small muted m0">The same steps are in <em>What Office Sentry reads</em> (docs/what-office-sentry-reads.md, "How to remove access"), the document you sent when onboarding.</p>
+      </details>
+    </div>
+  </li>
+  <li>
+    <div class="step-title">Check what will be deleted</div>
+    <div class="step-body">
+      <ul class="ticks offboard-counts">
+        <li>{{ stored.runs|plural('collection run') }} with {{ stored.objects|plural('stored item') }} of collected data, and {{ stored.metrics|plural('trend figure') }}</li>
+        <li>{{ stored.findings|plural('finding') }} ({{ stored.open_findings }} open), including accepted risks</li>
+        <li>{{ stored.schedules|plural('emailed report') }}, {{ stored.alerts|plural('alert email') }}, {{ stored.contacts|plural('client contact') }} and {{ stored.deliveries|plural('line') }} of email history</li>
+        <li>Access for {{ stored.access|plural('Office Sentry user') }}{% if other_users %}: {% for u in other_users %}{{ u.username }} ({{ u.role }}){{ ', ' if not loop.last }}{% endfor %} lose access to this tenant only{% endif %}</li>
+      </ul>
+      <p class="small muted m0">Activity log entries stay, so you can see who offboarded the client and when.</p>
+    </div>
+  </li>
+</ol>
+
+<section class="card danger-zone narrow-lg">
+  <h2>Delete permanently</h2>
+  <form method="post" action="{{ url_for('tenant_admin.delete', tenant_id=tenant.id) }}" id="delete-form">
+    {{ csrf() }}
+    {% if client_users %}
+    <fieldset>
+      <legend>Client accounts with no other tenant</legend>
+      <p class="small muted">They won't be able to see anything once {{ tenant.name }} is gone.</p>
+      <div class="check-list">
+      {% for u in client_users %}<label class="check"><input type="checkbox" name="delete_users" value="{{ u.id }}"> Also delete <strong>{{ u.username }}</strong>{% if u.last_login_at %} <span class="muted small">(last signed in {{ u.last_login_at|ago }})</span>{% endif %}</label>{% endfor %}
+      </div>
+    </fieldset>
+    {% endif %}
+    <label>Type <strong>{{ tenant.name }}</strong> to confirm
+      <input name="confirm_name" id="confirm-name" autocomplete="off" required data-expected="{{ tenant.name }}"></label>
+    <div class="form-actions"><button class="danger" id="delete-button">Delete {{ tenant.name }} permanently</button>
+      <a class="btn ghost" href="{{ url_for('tenant_admin.manage', tenant_id=tenant.id) }}">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var input = document.getElementById('confirm-name'), button = document.getElementById('delete-button');
+  function update() { button.disabled = input.value.trim() !== input.dataset.expected.trim(); }
+  input.addEventListener('input', update);
+  update();
+})();
+</script>
+{% endblock %}

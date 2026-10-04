@@ -1,10 +1,11 @@
 """Collector registry. Importing this package registers every collector.
 
 Import order is run order for scheduled collections: tenant_profile first
-(licence capabilities), then users (other collectors reuse that snapshot).
+(licence capabilities), then the connection check (permissions and Global
+Reader), then users (other collectors reuse that snapshot).
 """
 
-from . import tenant_profile, users  # noqa: F401, I001  (registration side effects, order matters)
+from . import tenant_profile, connection, users  # noqa: F401, I001  (registration side effects, order matters)
 from . import identity, per_user_mfa, secure_score  # noqa: F401
 from . import auth_methods  # noqa: F401
 from . import admin_activity  # noqa: F401

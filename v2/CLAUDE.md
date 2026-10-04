@@ -166,13 +166,35 @@ show up in the schedule form automatically. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 
+## Client tenant lifecycle
+
+- `tenants.enabled = 0` is **paused** (no scheduled or manual collection, no
+  report or alert emails, out of the digest; data stays); `archived_at` is
+  **archived** (paused and hidden). `access.visible_tenants()` leaves archived
+  tenants out and `tenant_or_404()` only lets admins open them, so lists,
+  rollups and client pages need nothing extra; anything that selects tenants
+  directly (worker, digest, schedules) must filter on both.
+  `store.claim_next_run` never claims a paused tenant's run. Change state only
+  through `lifecycle.py` (pause, resume, archive, restore, `delete_tenant`).
+- A new table with a `tenant_id` gets `REFERENCES tenants(id) ON DELETE
+  CASCADE`. `lifecycle.delete_tenant` deletes with foreign keys on and refuses
+  (rolls back) if any table with a `tenant_id` still has rows for the tenant;
+  only `audit_log` is kept on purpose (`lifecycle.KEPT`).
+- Connection health (`tenant_health.assess`) is built from stored state only:
+  the `connection` collector reads the app's own service principal, granted
+  app roles and directory roles (GET only). Pages never call Graph for it;
+  "Check connection now" queues that collector. Its fixes are plain English
+  and say where in the Microsoft admin centres to click.
+- Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
+  and analyst, every change is admin-only and audited.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 
 ## Commands
 
-`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,setup-link,create-app,rotate-keys,backup,healthcheck}`.
+`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,setup-link,create-app,rotate-keys,backup,healthcheck,delete-tenant}`.
 Docker: `docker compose up -d --build` (see DEPLOY.md).
 
 Tests sign in with a password only (`require_mfa="off"` in `conftest.py`);

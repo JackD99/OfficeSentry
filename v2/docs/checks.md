@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-53 checks, 24 data sources (collectors) and 29 detail reports.
+53 checks, 25 data sources (collectors) and 29 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -143,6 +143,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `app_consents` | Apps and consents | Third-party apps, the permissions granted to them, and app secrets or certificates expiring. | `Application.Read.All`, `Directory.Read.All` |
 | `auth_methods_policy` | Sign-in methods policy | Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA. | `Policy.Read.All`, `Directory.Read.All` |
 | `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
+| `connection` | Connection and permissions | Whether the app's permissions are granted in this tenant and it holds the Global Reader role. | `Application.Read.All`, `RoleManagement.Read.Directory` |
 | `devices` | Devices | Devices registered or joined to Entra ID, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All` |
 | `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in and how often its passwords expire. | `Organization.Read.All`, `Directory.Read.All` |
 | `domain_health` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS. | none |
@@ -205,7 +206,7 @@ Every application permission the app requests (all read-only) and the collectors
 
 | Permission | API | Purpose | Used by |
 |---|---|---|---|
-| `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents` |
+| `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `devices`, `directory_sync`, `groups`, `tenant_profile` |
@@ -215,7 +216,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
 | `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `auth_methods_policy`, `conditional_access`, `per_user_mfa`, `tenant_policies` |
 | `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage` |
-| `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles` |
+| `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles`, `connection` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
 | `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage` |

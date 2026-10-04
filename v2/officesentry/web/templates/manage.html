@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
+{% from "_tenant_health.html" import check_list, checklist, check_button, status_pill with context %}
+{% block title %}Manage · {{ tenant.name }}{% endblock %}
+{% block content %}
+{% set admin = current_user.role == 'admin' %}
+{% set r = health.result or {} %}
+{% call tenant_header(tenant, 'manage') %}
+{% if can_check %}{{ check_button(tenant, 'manage', 'Check connection now', '') }}{% endif %}
+{% endcall %}
+
+{% if tenant.archived_at %}
+<div class="callout">{{ icon('alert') }}<span class="grow"><strong>Archived {{ ts(tenant.archived_at) }}.</strong>
+  It's hidden from tenant lists, dashboards, rollups and its client users, and nothing is collected or emailed. Its data is kept.</span>
+  {% if admin %}<form method="post" action="{{ url_for('tenant_admin.restore', tenant_id=tenant.id) }}">{{ csrf() }}<button class="sm">Restore</button></form>{% endif %}</div>
+{% elif not tenant.enabled %}
+<div class="callout">{{ icon('clock') }}<span class="grow"><strong>Paused{% if tenant.paused_at %} {{ ts(tenant.paused_at) }}{% endif %}.</strong>
+  Nothing is collected and no reports or alerts are emailed. Its data and reports are still here.</span>
+  {% if admin %}<form method="post" action="{{ url_for('tenant_admin.resume', tenant_id=tenant.id) }}">{{ csrf() }}<button class="sm primary">Resume</button></form>{% endif %}</div>
+{% endif %}
+
+{% if not health.onboarded and not tenant.archived_at %}
+{{ checklist(health, tenant, consent_link, redirect_uri, can_check, 'manage') }}
+{% endif %}
+
+<div class="grid-main manage-grid">
+  <section class="card flush">
+    <div class="card-head toolbar">
+      <div><h2>Connection health</h2>
+        <span class="meta">{% if r.checked_at %}Permissions and roles checked {{ ts(r.checked_at) }}{% else %}Checked with every collection{% endif %}</span></div>
+      {{ status_pill(health) }}
+    </div>
+    {{ check_list(health, tenant, consent_link, can_check) }}
+    {% if check_problem and not tenant.archived_at and tenant.enabled %}<p class="footnote pad">{{ check_problem }}</p>{% endif %}
+  </section>
+
+  <div>
+    <section class="card">
+      <h2>Settings</h2>
+      {% if admin %}
+      <form method="post" action="{{ url_for('tenant_admin.edit', tenant_id=tenant.id) }}" class="manage-form">
+        {{ csrf() }}
+        <label>Client name <input name="name" value="{{ tenant.name }}" maxlength="200" required></label>
+        <label>Tenant ID or domain <input name="tenant_ref" value="{{ tenant.tenant_ref }}" class="mono" required autocomplete="off">
+          <span class="hint">Can't change once data has been collected, except from a domain to its tenant ID.</span></label>
+        <label>App connection
+          <select name="connection_id">
+            {% if not connection %}<option value="">Choose…</option>{% endif %}
+            {% for c in connections %}<option value="{{ c.id }}"{% if connection and c.id == connection.id %} selected{% endif %}>{{ c.name }}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
+          </select>
+          {% if connections|length > 1 %}<span class="hint">Moving to an app with a different client ID needs admin consent again.</span>{% endif %}</label>
+        <label>Notes <span class="faint">(only staff see these)</span>
+          <textarea name="notes" rows="3" maxlength="{{ notes_max }}" placeholder="Contacts, contract, anything the team should know">{{ tenant.notes }}</textarea></label>
+        <div class="form-actions"><button class="primary">Save</button>
+          {% if connection and connection.client_id %}<button class="ghost" formaction="{{ url_for('tenants.test_connection', tenant_id=tenant.id) }}" title="Signs in from the portal right now and reads the organisation name. Doesn't check permissions or roles.">Test sign-in</button>{% endif %}</div>
+      </form>
+      {% else %}
+      <dl class="kv">
+        <dt>Tenant ID</dt><dd class="mono">{{ tenant.tenant_ref }}</dd>
+        <dt>App</dt><dd>{{ connection.name if connection else 'None assigned' }}</dd>
+        <dt>Added</dt><dd>{{ ts(tenant.created_at) }}</dd>
+        {% if tenant.notes %}<dt>Notes</dt><dd class="pre-line">{{ tenant.notes }}</dd>{% endif %}
+      </dl>
+      {% endif %}
+      <dl class="kv manage-facts">
+        <dt>Admin consent</dt><dd>{% if tenant.consented_at %}Recorded {{ ts(tenant.consented_at) }}{% else %}Not recorded{% endif %}</dd>
+        {% if connection and connection.client_id %}<dt>Client ID</dt><dd class="mono small">{{ connection.client_id }}</dd>{% endif %}
+        {% if r.app_name %}<dt>App in tenant</dt><dd>{{ r.app_name }}</dd>{% endif %}
+        <dt>Last collected</dt><dd>{{ ts(health.last_success) }}</dd>
+      </dl>
+      {% if consent_link %}
+      <details class="consent">
+        <summary>{{ 'Re-grant consent (after new permissions)' if tenant.consented_at else 'Consent link' }}</summary>
+        <p class="small muted">A Global Administrator of this tenant opens the link. It is read-only, valid for one hour and returns here.</p>
+        <a class="btn sm" href="{{ consent_link }}" rel="noopener">Open consent page</a>
+      </details>
+      {% endif %}
+    </section>
+
+    {% if admin %}
+    <section class="card">
+      <h2>Collection</h2>
+      {% if tenant.archived_at %}
+      <p class="small muted">Archived tenants aren't collected. Restore it, then resume it.</p>
+      <form method="post" action="{{ url_for('tenant_admin.restore', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button>Restore</button></form>
+      {% elif tenant.enabled %}
+      <p class="small muted">Pause stops collection, emailed reports and alert emails, for example while a client's contract is on hold. Its data and reports stay, and you can resume at any time.</p>
+      <form method="post" action="{{ url_for('tenant_admin.pause', tenant_id=tenant.id) }}" class="inline" data-confirm="Pause {{ tenant.name }}? Nothing is collected or emailed until you resume it.">{{ csrf() }}<button>{{ icon('clock') }} Pause collection</button></form>
+      {% else %}
+      <p class="small muted">Paused. Resume to collect again at the next nightly run.</p>
+      <form method="post" action="{{ url_for('tenant_admin.resume', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button class="primary">Resume collection</button></form>
+      {% endif %}
+    </section>
+
+    <section class="card danger-zone">
+      <h2>Archive or offboard</h2>
+      {% if not tenant.archived_at %}
+      <p class="small muted">Archive a client you've stopped working with but may come back: it's hidden from lists, dashboards and its client users, and can be restored with its data.</p>
+      <form method="post" action="{{ url_for('tenant_admin.archive', tenant_id=tenant.id) }}" class="inline" data-confirm="Archive {{ tenant.name }}? It's hidden from lists and its client users until restored. Nothing is deleted.">{{ csrf() }}<button>Archive</button></form>
+      {% endif %}
+      <p class="small muted manage-gap">Offboarding deletes the tenant and everything Office Sentry stored for it, after a final export.</p>
+      <a class="btn danger" href="{{ url_for('tenant_admin.offboard', tenant_id=tenant.id) }}">Offboard…</a>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+});
+</script>
+{% endblock %}

@@ -34,6 +34,7 @@ class RunContext:
     tenant: dict
     graph: GraphClient
     capabilities: dict = field(default_factory=dict)
+    client_id: str | None = None  # the app (client) ID Office Sentry signs in to this tenant as
     warnings: list[str] = field(default_factory=list)
     truncated: bool = False
     exchange_factory: Callable[[], ExchangeClient] | None = None
