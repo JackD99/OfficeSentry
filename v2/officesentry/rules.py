@@ -1361,6 +1361,7 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
 # Checks kept in their own modules register themselves into RULES on import.
 from . import sharepoint_rules  # noqa: E402, F401, I001
 from . import auth_rules  # noqa: E402, F401, I001
+from . import licence_rules  # noqa: E402, F401, I001
 
 # Checks over sign-in activity.
 from . import signin_rules  # noqa: E402, F401, I001

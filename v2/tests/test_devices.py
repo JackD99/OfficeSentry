@@ -69,6 +69,7 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
                  for s in SKUS]
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": no_intune})
+    responses.get(f"{V1}/directory/subscriptions", json={"value": []})
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
     assert _run(db, alpha, "tenant_profile", factory)[1] == "succeeded"
     assert _run(db, alpha, "devices", factory)[1] == "succeeded"

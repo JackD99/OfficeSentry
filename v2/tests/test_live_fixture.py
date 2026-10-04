@@ -242,3 +242,16 @@ def test_sign_in_methods_on_real_data(db, live):
     admins = results["admin_phishing_resistant"]
     assert admins.status == "fail" and len(admins.findings) == 1
     assert results["phone_only_mfa"].status == "pass"
+
+
+def test_subscriptions_on_real_data(db, live):
+    # Business Premium (no Teams), Power Automate Free and a lapsed Business Standard trial. The subscriptions
+    # behind them and the users' licence assignment states were added by hand (see those entries' "note").
+    report = data_reports.build(db, live, "subscriptions", RECORDED)
+    renewals = next(s for s in report.sections if s.title == "Renewals and expiry")
+    assert (str(renewals.rows[0][0]), renewals.rows[0][1]) == ("Microsoft 365 Business Standard", "Suspended")
+    who = next(s for s in report.sections if s.title == "Who has which licence")
+    assert who.rows and {r[2] for r in who.rows} == {"Directly"}
+    results = _results(db, live)
+    assert results["licence_assignment_errors"].status == "pass"
+    assert results["subscriptions_lapsing"].status == "pass"  # the lapsed trial has nobody on it

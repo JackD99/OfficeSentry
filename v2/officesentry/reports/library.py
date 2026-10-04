@@ -53,6 +53,14 @@ USES: tuple[Use, ...] = (
         "mail rules and forwarding, new app consents and what admins changed.",
         ("sign-ins", "inbox-rules", "mailboxes", "mailbox-permissions", "legacy-auth", "apps", "admin-activity",
          "mfa")),
+    Use("renewal", "Licence renewal",
+        "Before a renewal or true-up: what's bought, used and spare, what it costs, and which subscriptions and "
+        "trials end soon.",
+        ("subscriptions", "licences", "licence-rightsizing", "usage")),
+    Use("billing", "Billing check",
+        "Check the client's bill against the tenant: products, quantities, prices, trials and suspended "
+        "subscriptions, and licence assignment errors.",
+        ("subscriptions", "licences")),
 )
 
 # Words people search for that a report's own title and description don't contain.
@@ -83,6 +91,8 @@ KEYWORDS: dict[str, str] = {
     "devices": "intune compliance bitlocker encryption windows",
     "apps": "enterprise applications oauth consent secrets certificates expiry",
     "licences": "licenses waste cost money unused subscriptions",
+    "subscriptions": "licenses skus products renewal expiry expiring trial suspended grace period billing invoice "
+                     "true-up group-based licensing assignment errors usage location csp partner center",
     "licence-rightsizing": "licenses downgrade cheaper plan savings cost copilot business basic standard e1 e3",
     "usage": "adoption activity active users teams onedrive outlook office apps copilot",
     "secure-score": "score trend controls",

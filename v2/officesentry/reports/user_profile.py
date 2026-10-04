@@ -20,7 +20,16 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from .. import authmethods, devices, signins
-from ..licences import FREE_SKUS, is_stale, last_sign_in, load_prices, sku_name
+from ..licences import (
+    FREE_SKUS,
+    Assignment,
+    assignment_error,
+    assignments,
+    is_stale,
+    last_sign_in,
+    load_prices,
+    sku_name,
+)
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from ..rules import SENSITIVE_DELEGATED
 from ..snapshot import TenantSnapshot
@@ -230,17 +239,59 @@ def _licences(p: Person) -> tuple[list[tuple[str, str, float | None]], dict]:
     return out, skus
 
 
+def _assigned(a: Assignment | None, groups: dict) -> str:
+    """'Directly', 'By group: Sales' or 'Directly and by group: Sales'."""
+    if a is None:
+        return ""
+    return a.path + (f": {', '.join(groups.get(g) or g for g in a.groups)}" if a.groups else "")
+
+
 @part(10)
 def licences_part(p: Person) -> Part:
     held, skus = _licences(p)
     currency = _currency(p.snap)
     result = Part("licences", "Licences")
-    if not held:
+    paths = assignments(p.user)  # None when how licences are assigned wasn't collected
+    failed = {sid: a for sid, a in (paths or {}).items() if a.errors and not a.active}
+    if "usageLocation" in p.user and (held or failed):
+        result.facts = [("Usage location", p.user.get("usageLocation") or "Not set")]
+        if not p.user.get("usageLocation"):
+            p.flag("low", "No usage location is set, so licences can only come from groups (which use the "
+                          "organisation's country). Set one before assigning a licence directly.", "licences")
+    if not held and not failed:
         result.summary, result.empty = "None", "Holds no licences."
         return result
-    table = Section("Licences", ["Licence", "Cost / month"])
-    for _, name, price in held:
-        table.add([name, "Not priced" if price is None else Money(price, currency)])
+    groups = {g["_id"]: g.get("displayName") for g in p.snap.objects("groups", "group") or []} if paths else {}
+    problems = any(a.errors for a in (paths or {}).values())
+    table = Section("Licences", ["Licence"] + (["Assigned"] if paths is not None else []) + ["Cost / month"]
+                    + (["Problem"] if problems else []))
+    names = {sid: name for sid, name, _ in held}
+    for sid in failed:
+        part_number = (skus.get(sid) or {}).get("skuPartNumber")
+        names.setdefault(sid, sku_name(part_number) if part_number else "Unknown licence")
+    prices = {sid: price for sid, _, price in held}
+    for sid, name in names.items():
+        a = (paths or {}).get(sid)
+        problem = "; ".join(assignment_error(e.code)[0] + (f" ({groups.get(e.group) or 'a group'})" if e.group else "")
+                            for e in (a.errors if a else []))
+        price = prices.get(sid)
+        cost = "Not assigned" if sid in failed else ("Not priced" if price is None else Money(price, currency))
+        table.add([name] + ([_assigned(a, groups)] if paths is not None else []) + [cost]
+                  + ([problem] if problems else []), "medium" if sid in failed else ("low" if problem else None))
+        for e in a.errors if a else []:
+            meaning, todo = assignment_error(e.code)
+            source = f" from {groups.get(e.group) or 'a group'}" if e.group else ""
+            p.flag("low" if e.active else "medium",
+                   f"{name}{source} {'only partly works' if e.active else 'was not assigned'}. {meaning}. {todo}.",
+                   "licences")
+        if sid not in failed and (skus.get(sid) or {}).get("capabilityStatus") in ("Suspended", "LockedOut"):
+            p.flag("medium", f"{name} comes from a suspended subscription, so it doesn't work. Reactivate the "
+                             "subscription or remove the licence.", "licences")
+        if a and a.direct and a.groups:
+            p.flag("low", f"{name} is assigned directly and by {', '.join(groups.get(g) or g for g in a.groups)}, "
+                          "so taking them out of the group won't remove it.", "licences")
+    if failed:
+        result.tone = "warn"
     priced = [price for _, _, price in held if price is not None]
     total = sum(priced)
     result.tables = [table]

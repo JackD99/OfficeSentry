@@ -16,6 +16,7 @@ from tests import devicedata as dd
 from tests import graphdata as gd
 from tests import groupdata as grp
 from tests import hybriddata as hd
+from tests import licencedata as ld
 from tests import tenantsettingsdata as tsd
 from tests.sharepoint_data import mock_sharepoint
 from tests.test_collectors import SKUS, USERS
@@ -76,9 +77,11 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
                 secure_scores=None, per_user=None, usage_kw=None, signins=None, auth_methods_policy=None,
-                **phase4):
+                subscriptions=None, groups=None, **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
+    rsps.get(f"{V1}/directory/subscriptions",
+             json={"value": ld.SUBSCRIPTIONS if subscriptions is None else subscriptions})
     rsps.get(f"{V1}/users", json={"value": users})
     rsps.get(f"{V1}/roleManagement/directory/roleDefinitions", json={"value": gd.ROLE_DEFINITIONS})
     rsps.get(f"{V1}/roleManagement/directory/roleAssignments", json={"value": gd.ROLE_ASSIGNMENTS})
@@ -106,7 +109,7 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
              json={"value": [{"@odata.type": "#microsoft.graph.user", "id": "u4"}]})
     rsps.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
     rsps.get(f"{V1}/deviceManagement/managedDevices", json={"value": dd.MANAGED_DEVICES})
-    rsps.get(f"{V1}/groups", json={"value": grp.GROUPS})
+    rsps.get(f"{V1}/groups", json={"value": grp.GROUPS if groups is None else groups})
 
     def people(request):  # /v1.0/groups/<id>/owners or /members
         gid, kind = request.path_url.split("?")[0].split("/")[3:5]

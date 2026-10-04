@@ -89,6 +89,8 @@ def test_collects_groups_owners_members_and_settings(db, two_tenants, factory):
     assert phoenix["owners"] == [{"name": "Bob", "upn": "bob@x.com", "type": "user", "enabled": False}]
     assert groups["g5"]["owners"][0]["type"] == "servicePrincipal" and groups["g5"]["enabledOwnerCount"] == 0
     assert (groups["s1"]["kind"], groups["s1"]["dynamic"], groups["s1"]["examined"]) == ("security", True, False)
+    assert "assignedLicenses" in urls[0] and groups["s1"]["licenceSkuIds"] == ["sku-bp"]  # group-based licensing
+    assert groups["g1"]["licenceSkuIds"] == []
     assert groups["s2"]["synced"] and groups["m1"]["kind"] == "mail_security" and groups["d1"]["kind"] == "distribution"
 
     settings = {k: v for k, v in _one(db, run_id, "group_settings").items() if not k.startswith("_")}
