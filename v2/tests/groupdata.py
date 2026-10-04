@@ -35,7 +35,7 @@ GROUPS = [
     _group("g4", "Board", team=True),
     _group("g5", "Provisioned", visibility="Private"),
     _group("s1", "All Staff", unified=False, mail=False, security=True, groupTypes=["DynamicMembership"],
-           membershipRule='(user.userType -eq "Member")'),
+           membershipRule='(user.userType -eq "Member")', assignedLicenses=[{"skuId": "sku-bp", "disabledPlans": []}]),
     _group("s2", "VPN Users", unified=False, mail=False, security=True, onPremisesSyncEnabled=True),
     _group("s3", "Group creators", unified=False, mail=False, security=True),
     _group("m1", "Finance alerts", unified=False, security=True),

@@ -19,8 +19,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .. import devices
-from ..licences import FREE_SKUS, is_stale, last_sign_in, load_prices, sku_name
+from .. import authmethods, devices, signins
+from ..licences import (
+    FREE_SKUS,
+    Assignment,
+    assignment_error,
+    assignments,
+    is_stale,
+    last_sign_in,
+    load_prices,
+    sku_name,
+)
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from ..rules import SENSITIVE_DELEGATED
 from ..snapshot import TenantSnapshot
@@ -230,17 +239,59 @@ def _licences(p: Person) -> tuple[list[tuple[str, str, float | None]], dict]:
     return out, skus
 
 
+def _assigned(a: Assignment | None, groups: dict) -> str:
+    """'Directly', 'By group: Sales' or 'Directly and by group: Sales'."""
+    if a is None:
+        return ""
+    return a.path + (f": {', '.join(groups.get(g) or g for g in a.groups)}" if a.groups else "")
+
+
 @part(10)
 def licences_part(p: Person) -> Part:
     held, skus = _licences(p)
     currency = _currency(p.snap)
     result = Part("licences", "Licences")
-    if not held:
+    paths = assignments(p.user)  # None when how licences are assigned wasn't collected
+    failed = {sid: a for sid, a in (paths or {}).items() if a.errors and not a.active}
+    if "usageLocation" in p.user and (held or failed):
+        result.facts = [("Usage location", p.user.get("usageLocation") or "Not set")]
+        if not p.user.get("usageLocation"):
+            p.flag("low", "No usage location is set, so licences can only come from groups (which use the "
+                          "organisation's country). Set one before assigning a licence directly.", "licences")
+    if not held and not failed:
         result.summary, result.empty = "None", "Holds no licences."
         return result
-    table = Section("Licences", ["Licence", "Cost / month"])
-    for _, name, price in held:
-        table.add([name, "Not priced" if price is None else Money(price, currency)])
+    groups = {g["_id"]: g.get("displayName") for g in p.snap.objects("groups", "group") or []} if paths else {}
+    problems = any(a.errors for a in (paths or {}).values())
+    table = Section("Licences", ["Licence"] + (["Assigned"] if paths is not None else []) + ["Cost / month"]
+                    + (["Problem"] if problems else []))
+    names = {sid: name for sid, name, _ in held}
+    for sid in failed:
+        part_number = (skus.get(sid) or {}).get("skuPartNumber")
+        names.setdefault(sid, sku_name(part_number) if part_number else "Unknown licence")
+    prices = {sid: price for sid, _, price in held}
+    for sid, name in names.items():
+        a = (paths or {}).get(sid)
+        problem = "; ".join(assignment_error(e.code)[0] + (f" ({groups.get(e.group) or 'a group'})" if e.group else "")
+                            for e in (a.errors if a else []))
+        price = prices.get(sid)
+        cost = "Not assigned" if sid in failed else ("Not priced" if price is None else Money(price, currency))
+        table.add([name] + ([_assigned(a, groups)] if paths is not None else []) + [cost]
+                  + ([problem] if problems else []), "medium" if sid in failed else ("low" if problem else None))
+        for e in a.errors if a else []:
+            meaning, todo = assignment_error(e.code)
+            source = f" from {groups.get(e.group) or 'a group'}" if e.group else ""
+            p.flag("low" if e.active else "medium",
+                   f"{name}{source} {'only partly works' if e.active else 'was not assigned'}. {meaning}. {todo}.",
+                   "licences")
+        if sid not in failed and (skus.get(sid) or {}).get("capabilityStatus") in ("Suspended", "LockedOut"):
+            p.flag("medium", f"{name} comes from a suspended subscription, so it doesn't work. Reactivate the "
+                             "subscription or remove the licence.", "licences")
+        if a and a.direct and a.groups:
+            p.flag("low", f"{name} is assigned directly and by {', '.join(groups.get(g) or g for g in a.groups)}, "
+                          "so taking them out of the group won't remove it.", "licences")
+    if failed:
+        result.tone = "warn"
     priced = [price for _, _, price in held if price is not None]
     total = sum(priced)
     result.tables = [table]
@@ -366,6 +417,7 @@ def mfa_part(p: Person) -> Part:
             if default and default.lower() != "none":
                 result.facts.append(("Default method", METHOD_NAMES.get(default.lower(), default)))
             result.facts.append(("Phishing-resistant method", _yes(_phishing_resistant(row))))
+            _sign_in_strength(p, row, result)
     result.facts.append(("MFA required by", ", ".join(sources) or ("Nothing" if enf.known else "Not checked")))
     if excluded:
         result.facts.append(("Excluded from", ", ".join(excluded)))
@@ -406,6 +458,28 @@ def mfa_part(p: Person) -> Part:
     if excluded and p.enabled:
         p.flag("medium" if p.admin else "low", f"Excluded from {', '.join(excluded)}.", "mfa")
     return result
+
+
+def _sign_in_strength(p: Person, row: dict, result: Part) -> None:
+    """How strong the account's methods are (Passwords and sign-in methods report), as facts and flags."""
+    s = authmethods.strength(row)
+    result.facts.append(("Strongest method", s.strongest))
+    first = authmethods.preferred(row)
+    if first:
+        result.facts.append(("Asked for first", first))
+    for key, label in (("isPasswordlessCapable", "Can sign in without a password"),
+                       ("isSsprRegistered", "Can reset their own password")):
+        if row.get(key) is not None:
+            result.facts.append((label, _yes(row.get(key))))
+    if not p.enabled:
+        return
+    privileged = bool(p.roles and p.roles["privileged"])
+    if privileged and s.methods and not s.phishing_resistant:
+        p.flag("medium", "Admin without a phishing-resistant method: register a passkey or security key. A fake "
+                         "sign-in page can relay codes and push approvals.", "mfa")
+    if s.phone_only:
+        p.flag("medium" if privileged else "low", "A text or call is the only second factor: set up the "
+                                                  "Authenticator app.", "mfa")
 
 
 # -- Admin roles --------------------------------------------------------------------------------
@@ -813,7 +887,121 @@ def activity_part(p: Person) -> Part:
         result.tables.append(table)
     elif window and window.get("available"):
         result.facts.append(("Admin changes (30 days)", "None by or to this account"))
-    result.note = "Office Sentry doesn't keep the full sign-in log; legacy sign-ins and the last sign-in dates show."
+    result.note = ("Office Sentry doesn't keep the full sign-in log; the last week is summarised under Recent "
+                   "sign-ins, and legacy sign-ins and the last sign-in dates show here.")
+    return result
+
+
+def _int(value) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _utc(value) -> str:
+    return value[:16].replace("T", " ") if isinstance(value, str) else ""
+
+
+@part(85)
+def sign_ins_part(p: Person) -> Part | None:
+    """The last week of the sign-in log for this account, from the summaries the sign_ins collector keeps."""
+    status = signins.status(p.snap)
+    if status is None:
+        return None
+    days = status.get("days") if isinstance(status.get("days"), int) else signins.WINDOW_DAYS
+    result = Part("signins", "Recent sign-ins")
+    if not status.get("available"):
+        result.unavailable = ("Not checked: Office Sentry can't read this tenant's sign-in log"
+                              if status.get("reason") == "permission" else f"Not checked: the sign-in log needs {P1}")
+        return result
+    mine = lambda r: r.get("userId") == p.id or p.named(r.get("user"))  # noqa: E731
+    row = signins.for_account(p.snap, p.id, p.keys) or {}
+    risky = [r for r in p.snap.objects("sign_ins", "risky_sign_in") or [] if mine(r)]
+    if not row and not risky:
+        result.summary, result.empty = "None", f"No interactive sign-ins in the last {days} days."
+        return result
+
+    def n(key: str) -> int:
+        return _int(row.get(key))
+
+    unusual = signins.unusual_countries(p.snap)
+    locations = [r for r in p.snap.objects("sign_ins", "sign_in_location") or [] if mine(r)]
+    countries = [c for c in row.get("countries") or [] if isinstance(c, str)]
+    ok, failed, single, mfa = n("succeeded"), n("failed"), n("singleFactor"), n("mfa")
+    split = ", ".join(x for x in (f"{mfa} with MFA" if mfa else "",
+                                  f"{single} with only a password" if single else "") if x)
+    result.facts.append(("Successful", f"{ok} ({split})" if split else str(ok)))
+    how = [f"{n('credentialFailures')} wrong password" if n("credentialFailures") else "",
+           _plural(n("lockouts"), "lockout") if n("lockouts") else "",
+           f"from {_plural(n('failureIpCount'), 'address', 'addresses')}" if n("failureIpCount") else ""]
+    how = [h for h in how if h]
+    result.facts.append(("Failed", (f"{failed} ({', '.join(how)})" if how else str(failed)) if failed else "None"))
+    if n("interrupted"):
+        result.facts.append(("MFA and other prompts", n("interrupted")))
+    if row.get("lastFailure"):
+        result.facts.append(("Last failure", f"{_when(row.get('lastFailure'), p.now)}: "
+                             f"{signins.meaning(row.get('lastFailureCode'), row.get('lastFailureReason'))}"))
+    if countries:
+        result.facts.append(("Countries", ", ".join(c + (" (unusual for this tenant)" if c in unusual else "")
+                                                    for c in countries)))
+    for key, label in (("apps", "Apps"), ("operatingSystems", "Devices"), ("failureIps", "Addresses that failed")):
+        values = [v for v in row.get(key) or [] if isinstance(v, str)]
+        if values:
+            result.facts.append((label, ", ".join(values)))
+
+    odd = []
+    places = Section("Where this account signed in", ["Country", "Successful", "Failed", "Cities", "IP addresses",
+                                                      "Last success (UTC)"])
+    for loc in sorted(locations, key=lambda r: -_int(r.get("succeeded"))):
+        unusual_here = loc.get("country") in unusual and _int(loc.get("succeeded")) > 0
+        if unusual_here:
+            odd.append(loc["country"])
+        places.add([signins.country(loc.get("country")), _int(loc.get("succeeded")), _int(loc.get("failed")),
+                    loc.get("cities") or [], loc.get("ips") or [], _utc(loc.get("lastSuccess"))],
+                   "medium" if unusual_here else None)
+    if places.rows:
+        result.tables.append(places)
+    codes = row.get("failureCodes") if isinstance(row.get("failureCodes"), dict) else {}
+    if codes:
+        reasons = Section("Why sign-ins failed", ["Error code", "What it means", "Sign-ins"])
+        for code, count in sorted(codes.items(), key=lambda c: -_int(c[1])):
+            reasons.add([str(code), signins.meaning(code), _int(count)])
+        result.tables.append(reasons)
+    worst = None
+    if risky:
+        table = Section("Risky sign-ins", ["When (UTC)", "Risk level", "Risk state", "Result", "Country",
+                                           "IP address"])
+        for r in sorted(risky, key=lambda r: r.get("time") or "", reverse=True):
+            severity = signins.risk_severity(r.get("level"), r.get("state")) if r.get("succeeded") else None
+            if severity and (worst is None or (severity == "high" and worst[0] != "high")):
+                worst = (severity, r)
+            table.add([_utc(r.get("time")), (r.get("level") or "Unknown").capitalize(),
+                       signins.RISK_STATES.get(r.get("state"), r.get("state")),
+                       "Signed in" if r.get("succeeded") else signins.meaning(r.get("errorCode")),
+                       signins.country(r.get("country")), r.get("ip")], severity or "low")
+        result.tables.append(table)
+
+    if worst:
+        severity, r = worst
+        p.flag(severity, f"Signed in on {_day(r.get('time'))} from {signins.country(r.get('country'))} although "
+                         f"Entra ID rated the sign-in {r.get('level') or 'risky'} risk. Check with the person; if "
+                         "they don't recognise it, reset the password and sign them out everywhere.", "signins")
+    if failed >= signins.REPEATED_FAILURES:
+        p.flag("high" if n("lockouts") else "medium",
+               f"{_plural(failed, 'failed sign-in')} in the last {days} days"
+               + (f", {n('credentialFailures')} with a wrong password" if n("credentialFailures") else "")
+               + (", and locked out" if n("lockouts") else "")
+               + ". If the person didn't make them, someone is guessing the password: make sure MFA is enforced.",
+               "signins")
+    if odd:
+        p.flag("medium", f"Signed in from {', '.join(odd)}, which this tenant rarely signs in from. Check the "
+                         "person was there.", "signins")
+    if single and (p.admin or not mfa):
+        p.flag("medium" if p.admin else "low",
+               f"Signed in {_plural(single, 'time')} with only a password in the last {days} days"
+               + ("" if mfa else ", never with MFA") + ".", "signins")
+    result.summary = f"{_plural(n('signIns'), 'sign-in')}, {failed} failed"
+    result.tone = "bad" if worst else ("warn" if failed >= signins.REPEATED_FAILURES or odd else None)
+    result.note = (f"Interactive sign-ins in the last {days} days from the Entra ID sign-in log. MFA and other "
+                   "prompts aren't counted as failures.")
     return result
 
 
@@ -1017,7 +1205,7 @@ def build(conn, tenant, user_id: str, now: datetime | None = None) -> Profile | 
         profile.tiles.append(Highlight(label, value, foot, x.tone))
     sources = ("users", "mfa_registration", "conditional_access", "admin_roles", "groups", "mailboxes",
                "inbox_rules", "mailbox_usage", "devices", "sharepoint_usage", "shared_files", "app_consents",
-               "legacy_signins", "admin_activity")
+               "legacy_signins", "sign_ins", "admin_activity")
     from ..collectors import REGISTRY
     profile.sources = [(REGISTRY[c].title, (snap.runs.get(c) or {"finished_at": None})["finished_at"])
                        for c in sources if c in REGISTRY]
@@ -1104,7 +1292,7 @@ def directory(conn, tenant, now: datetime | None = None) -> tuple[list[Directory
     rows.sort(key=lambda r: (-r.findings, not r.roles, r.name.lower()))
     members = sum(not r.guest for r in rows)
     tiles = [
-        Highlight("Accounts", len(rows), f"{members} members, {len(rows) - members} guests"),
+        Highlight("Accounts", len(rows), f"{_plural(members, 'member')}, {_plural(len(rows) - members, 'guest')}"),
         Highlight("Sign-in blocked", sum(not r.enabled for r in rows), "Can't sign in"),
         Highlight("No MFA at all", no_mfa if enf.known and not reg.note else "Not checked",
                   "Enabled members", "bad" if no_mfa else None),

@@ -9,7 +9,7 @@ from flask import Blueprint, Response, abort, flash, g, redirect, render_templat
 from .. import findings, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
-from ..reports import data_reports, evidence, export, library, views
+from ..reports import branding, data_reports, evidence, export, library, views
 from ..reports.monthly_review import build, setting
 from ..rules import RULES
 from ..snapshot import TenantSnapshot
@@ -103,7 +103,7 @@ def tenant_report_xlsx(tenant_id: int):
     t = tenant_or_404(tenant_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "xlsx")
     return Response(
-        export.to_xlsx(build(g.db, t)),
+        export.to_xlsx(build(g.db, t), brand=branding.load(g.db)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={_filename(t, 'xlsx')}"},
     )
@@ -134,7 +134,7 @@ def evidence_xlsx(tenant_id: int):
     t = tenant_or_404(tenant_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.xlsx")
     return Response(
-        evidence.to_xlsx(evidence.build(g.db, t)),
+        evidence.to_xlsx(evidence.build(g.db, t), brand=branding.load(g.db)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={_evidence_name(t, 'xlsx')}"},
     )
@@ -193,7 +193,7 @@ def data_report_xlsx(tenant_id: int, key: str):
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     return Response(
-        data_reports.to_xlsx(_viewed(data_reports.build(g.db, t, key))),
+        data_reports.to_xlsx(_viewed(data_reports.build(g.db, t, key)), brand=branding.load(g.db)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={key}-{slug}.xlsx"},
     )

@@ -32,8 +32,12 @@ USES: tuple[Use, ...] = (
         ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests")),
     Use("insurance", "Insurance renewal",
         "The controls cyber insurers ask about, and the reports that prove each one.",
-        ("evidence", "mfa", "admins", "conditional-access", "legacy-auth", "domains", "mailboxes", "devices",
-         "admin-activity")),
+        ("evidence", "mfa", "auth-methods", "admins", "conditional-access", "legacy-auth", "domains", "mailboxes",
+         "devices", "admin-activity", "sign-ins")),
+    Use("phishing-resistant", "Phishing-resistant MFA rollout",
+        "Moving admins, then everyone, to passkeys: who signs in with what, what the methods policy allows, and "
+        "which Conditional Access policies require it.",
+        ("auth-methods", "mfa", "admins", "conditional-access", "legacy-auth")),
     Use("sharing", "External sharing",
         "Who outside the organisation can reach what: guests, shared files and sites, and mailbox access.",
         ("guests", "shared-files", "sharepoint", "onedrive", "groups", "tenant-settings", "mailbox-permissions")),
@@ -44,16 +48,34 @@ USES: tuple[Use, ...] = (
         "Paid licences nobody uses, people who could have a cheaper one, accounts that could be shared mailboxes, "
         "and people who've stopped signing in.",
         ("licences", "licence-rightsizing", "usage", "inactive", "shared-mailboxes")),
+    Use("compromise", "Investigate a compromised account",
+        "Someone may have someone else's password: where and how they signed in, failed and risky sign-ins, "
+        "mail rules and forwarding, new app consents and what admins changed.",
+        ("sign-ins", "inbox-rules", "mailboxes", "mailbox-permissions", "legacy-auth", "apps", "admin-activity",
+         "mfa")),
+    Use("renewal", "Licence renewal",
+        "Before a renewal or true-up: what's bought, used and spare, what it costs, and which subscriptions and "
+        "trials end soon.",
+        ("subscriptions", "licences", "licence-rightsizing", "usage")),
+    Use("billing", "Billing check",
+        "Check the client's bill against the tenant: products, quantities, prices, trials and suspended "
+        "subscriptions, and licence assignment errors.",
+        ("subscriptions", "licences")),
 )
 
 # Words people search for that a report's own title and description don't contain.
 KEYWORDS: dict[str, str] = {
     "mfa": "multi-factor two-factor 2fa authenticator authentication methods registration",
+    "auth-methods": "passkeys fido2 security keys windows hello phishing-resistant passwordless sms text message "
+                    "voice call authenticator sspr self-service password reset expiry expiration never expires "
+                    "password age authentication strengths methods policy registration campaign nudge",
     "admins": "administrators global admin privileged roles pim break-glass",
     "conditional-access": "ca policies policy require mfa block",
     "inactive": "stale dormant leavers unused accounts sign-in last login",
     "guests": "external users b2b invitations",
     "legacy-auth": "basic auth smtp imap pop old protocols",
+    "sign-ins": "sign-in logs login logins failed failures password spray brute force lockout locked "
+                "countries locations risky risk compromised breach hacked single-factor audit",
     "hybrid": "ad connect entra connect sync on-premises password hash",
     "mailboxes": "forwarding redirect external smtp",
     "inbox-rules": "forward delete move rules mailbox compromise",
@@ -69,6 +91,8 @@ KEYWORDS: dict[str, str] = {
     "devices": "intune compliance bitlocker encryption windows",
     "apps": "enterprise applications oauth consent secrets certificates expiry",
     "licences": "licenses waste cost money unused subscriptions",
+    "subscriptions": "licenses skus products renewal expiry expiring trial suspended grace period billing invoice "
+                     "true-up group-based licensing assignment errors usage location csp partner center",
     "licence-rightsizing": "licenses downgrade cheaper plan savings cost copilot business basic standard e1 e3",
     "usage": "adoption activity active users teams onedrive outlook office apps copilot",
     "secure-score": "score trend controls",

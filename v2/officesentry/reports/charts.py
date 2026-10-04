@@ -48,7 +48,7 @@ def line_chart(points: list[tuple[date, float]], *, label: str, unit: str = "%",
     for d in (points[0][0], points[-1][0]):
         anchor = "start" if d == points[0][0] else "end"
         parts.append(f'<text class="axis" x="{px(d.toordinal()):.1f}" y="{height - 6}" text-anchor="{anchor}" {AXIS}>'
-                     f'{d.strftime("%d %b %Y")}</text>')
+                     f'{d.day} {d:%b %Y}</text>')
     path = " ".join(f'{"M" if i == 0 else "L"}{px(x):.1f},{py(v):.1f}'
                     for i, (x, v) in enumerate(zip(xs, values, strict=True)))
     base = py(0)

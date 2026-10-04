@@ -56,6 +56,15 @@ class Email:
     html: str | None = None
     bcc: list[str] = field(default_factory=list)
     attachments: list[tuple[str, str, bytes]] = field(default_factory=list)  # (filename, mimetype, data)
+    # Images shown in the HTML (the MSP's logo): (content id, mimetype, data), referenced as src="cid:<id>".
+    inline: list[tuple[str, str, bytes]] = field(default_factory=list)
+
+    def html_for_browser(self) -> str:
+        """The HTML with inline images as data: URIs, for previewing in a browser (which can't resolve cid:)."""
+        html = self.html or ""
+        for cid, mimetype, data in self.inline:
+            html = html.replace(f"cid:{cid}", f"data:{mimetype};base64,{base64.b64encode(data).decode()}")
+        return html
 
 
 def parse_recipients(raw: str) -> list[str] | None:
@@ -119,6 +128,12 @@ def to_mime(email: Email, sender: str) -> EmailMessage:
     msg.set_content(email.text)
     if email.html:
         msg.add_alternative(email.html, subtype="html")
+        if email.inline:
+            html_part = msg.get_body(("html",))
+            for cid, mimetype, data in email.inline:
+                maintype, subtype = mimetype.split("/", 1)
+                html_part.add_related(data, maintype=maintype, subtype=subtype, cid=f"<{cid}>",
+                                      disposition="inline", filename=f"{cid}.{subtype}")
     for filename, mimetype, data in email.attachments:
         maintype, subtype = mimetype.split("/", 1)
         msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
@@ -178,7 +193,7 @@ def _graph_token(s: dict, vault) -> str:
 
 
 def graph_payload(email: Email) -> dict:
-    size = sum(len(data) for _, _, data in email.attachments)
+    size = sum(len(data) for _, _, data in email.attachments + email.inline)
     if size > GRAPH_MAX_ATTACHMENT_BYTES:
         raise MailError(f"The attachments are {size / 1_000_000:.1f} MB, more than Microsoft 365 accepts in one "
                         "message (about 3 MB). Turn off spreadsheets, send fewer reports, or use an SMTP server.")
@@ -195,6 +210,11 @@ def graph_payload(email: Email) -> dict:
             {"@odata.type": "#microsoft.graph.fileAttachment", "name": name, "contentType": mimetype,
              "contentBytes": base64.b64encode(data).decode()}
             for name, mimetype, data in email.attachments
+        ] + [
+            {"@odata.type": "#microsoft.graph.fileAttachment", "name": f"{cid}.{mimetype.split('/')[-1]}",
+             "contentType": mimetype, "contentBytes": base64.b64encode(data).decode(), "isInline": True,
+             "contentId": cid}
+            for cid, mimetype, data in (email.inline if email.html else [])
         ],
     }
     return {"message": message, "saveToSentItems": True}

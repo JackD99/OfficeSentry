@@ -283,4 +283,4 @@ def test_hybrid_page_and_xlsx(client, db, two_tenants, hybrid):
     resp = client.get(f"/tenants/{alpha}/data/hybrid.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
-    assert wb.sheetnames == ["Sync status", "Domains", "Synced admin accounts", "Accounts by source"]
+    assert wb.sheetnames == ["Summary", "Sync status", "Domains", "Synced admin accounts", "Accounts by source"]

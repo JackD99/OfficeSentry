@@ -66,7 +66,8 @@ def create_user():
 @roles_required("admin")
 def edit_user(user_id: int):
     user = _user_or_404(user_id)
-    tenants = g.db.execute("SELECT id, name FROM tenants ORDER BY name COLLATE NOCASE").fetchall()
+    # Archived tenants are listed too, so saving the form keeps grants for when they're restored.
+    tenants = g.db.execute("SELECT id, name, archived_at FROM tenants ORDER BY name COLLATE NOCASE").fetchall()
     if request.method == "POST":
         role = request.form.get("role", user["role"])
         if role not in ROLES:

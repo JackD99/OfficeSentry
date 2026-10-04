@@ -82,6 +82,16 @@ pass, and a first run against a real tenant.
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.
+  - *Sign-in activity*: the last 7 days of interactive sign-ins from the
+    Entra ID sign-in log (Entra ID P1), summarised rather than stored: accounts
+    with repeated failures (wrong passwords, lockouts), addresses failing
+    against several accounts (password spraying), successful sign-ins from
+    countries the tenant rarely uses, successful sign-ins that needed only a
+    password, failure reasons in plain English (MFA and other prompts counted
+    apart from failures), and sign-ins by country, app and account. With
+    Entra ID P2, risky sign-ins too. Reads at most 50,000 sign-ins per run
+    (the most recent) and says so if it stops. Each account's page shows its
+    own summary.
   - *Admin activity*: security-relevant changes from the Entra ID directory
     audit log over the last 30 days (7 without Entra ID P1, which is all the
     tenant keeps): admin roles granted or removed (including PIM), Conditional
@@ -97,6 +107,19 @@ pass, and a first run against a real tenant.
   - *Conditional Access coverage*: every policy in plain words, and for each
     account which enforced policy requires MFA, whether legacy sign-in is
     blocked, and which policies exclude it (group membership expanded).
+  - *Passwords and sign-in methods*: how each member signs in and how strong
+    that is (phishing-resistant: passkey, security key, Windows Hello or
+    certificate; Authenticator app or token; phone only; none), admins
+    without a phishing-resistant method, people whose only second factor is a
+    text or call, who can sign in without a password or reset their own, and
+    the method each person is asked for first. The tenant's authentication
+    methods policy (which methods are on and for whom, SMS, voice and email
+    one-time passcodes, the registration campaign, system-preferred MFA)
+    against what's recommended, and the authentication strengths Conditional
+    Access requires. Password hygiene: password age, passwords set to never
+    expire, accounts that never signed in with a password set long ago, and
+    each domain's password expiry policy. Who hasn't set up MFA at all stays
+    in *MFA coverage*.
   - *Tenant settings*: what users and guests can do without an admin
     (create tenants, register apps, join by verifying an email address,
     sign up for trials, guest directory access) against the recommended
@@ -138,6 +161,17 @@ pass, and a first run against a real tenant.
     quota with their largest files. Sizes come from SharePoint's own storage
     figures (`SMTotalSize`), which include every version. Needs
     `Sites.Read.All`.
+  - *Licences and subscriptions*: for renewals and fixing licence problems.
+    Every product with licences purchased, in a grace period, suspended,
+    assigned and available, and its monthly cost at your prices; every
+    subscription behind them (`/directory/subscriptions`) with its status and
+    the date it next renews, lapses or is deleted, with trials and
+    subscriptions in their grace period, suspended or locked listed first and
+    bucketed into 30, 60 and 90 days; who holds which licence, directly or by
+    group (filter by licence); group licensing errors (not enough licences,
+    conflicting or missing base licences, usage location) in plain words with
+    what to do; licensed accounts without a usage location; licences assigned
+    both directly and by a group; and the groups that hand licences out.
   - *Microsoft 365 usage*: who used email, Teams, OneDrive, SharePoint and
     the Office apps in the last 30 days (share of licensed people per
     service, and a trend from Office Sentry's own history), when each person
@@ -169,7 +203,9 @@ pass, and a first run against a real tenant.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
-count, guest admins, apps with admin roles, users without MFA, inactive
+count, guest admins, apps with admin roles, users without MFA, admins
+without a phishing-resistant sign-in method, people whose only second factor
+is a text or call, inactive
 accounts, licences on disabled accounts, unassigned paid licences, external
 forwarding, inbox rules that hide mail, automatic forwarding policy, shared
 mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,
@@ -181,10 +217,14 @@ registering apps, guest directory access, joining by email verification,
 admin consent requests, SharePoint anonymous links, guest
 invitations, stale guest invitations, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
-checking in, stale device records, SharePoint storage nearly full.
+checking in, stale device records, SharePoint storage nearly full, licence
+assignment errors, and subscriptions about to lapse (trials in use ending
+within 30 days, subscriptions in their grace period, suspended ones still
+assigned).
 For tenants synced from on-premises AD: directory sync running, password
 hash sync on, and admin accounts that are cloud-only.
-checking in, stale device records, domain federation changes.
+checking in, stale device records, domain federation changes, risky sign-ins
+that succeeded (Entra ID P2).
 
 ### Exchange data
 
@@ -210,8 +250,8 @@ this command; the product signs in with a certificate.
   asked to approve access. Every permission, what is and isn't read, where the
   data is kept and how to remove access.
 - [Onboarding a client](docs/onboarding-a-client.md): for technicians. Adding
-  a tenant, consent, Global Reader, the first collection, and the errors on the
-  Data collection tab.
+  a tenant, consent, Global Reader, the first collection, connection health,
+  the errors on the Data collection tab, pausing, archiving and offboarding.
 - [Check catalogue](docs/checks.md): every check, data source, detail report
   and permission, generated from the code by `scripts/gen_check_catalogue.py`.
 
@@ -285,10 +325,34 @@ Then:
    add the redirect URI `https://<your portal>/consent/callback` as a Web
    platform. Enter your Directory (tenant) ID with the client ID to check the
    certificate straight away.
-3. **Add tenant**, then have a Global Administrator of that tenant open the
-   consent link on the tenant's Data collection tab. A first collection is
-   queued on return. **Test connection** on the same tab says in plain words
-   what's wrong if Office Sentry can't sign in.
+3. **Add tenant**. The tenant's page shows a setup checklist that ticks itself
+   off: grant admin consent (a Global Administrator of the tenant opens the
+   link; a full collection is queued on return), assign Global Reader, first
+   full collection, all permissions granted. The tenant's **Manage** tab says
+   in plain words what's wrong and how to fix it if Office Sentry can't sign
+   in or is missing a permission or role.
+
+## Managing client tenants
+
+- **Client tenants** (*Settings*, or *Connection health* on the Tenants page)
+  lists every tenant with its status (*Onboarding*, *Healthy*, *Needs
+  attention*, *Paused*, *Archived*), consent, missing permissions, Global
+  Reader, last good collection and failing data sources, worst first.
+- A tenant's **Manage** tab (admins and analysts) shows its connection health:
+  consent, sign-in, which of the app's permissions the tenant actually granted,
+  whether the app holds Global Reader (or more than it needs), licences, last
+  collection and failing data sources, each with the fix. It's read by the
+  `connection` collector with every collection (GET only, from permissions the
+  app already has); *Check connection now* queues it straight away.
+- Admins can rename a tenant, change its tenant ID (until data has been
+  collected) or app connection, keep notes, **pause** it (no collection,
+  emailed reports or alert emails; data stays) and **archive** it (also hidden
+  from lists, dashboards, rollups, digests and its client users; restorable).
+- **Offboard** walks through a final export, the client's side (remove Global
+  Reader, delete the enterprise app) and what will be deleted, then deletes the
+  tenant and everything stored for it after you type its name, optionally with
+  client accounts that had no other tenant. `python -m officesentry
+  delete-tenant <id>` does the same from the server.
 
 ## Development
 
@@ -334,5 +398,7 @@ officesentry/
   delivery.py    schedules, digests, alert emails, retries and email rendering
   schedule.py    cron slots in a timezone, freshness (max age), periodic jobs
   worker.py      queue runner, schedule, retention, heartbeat
+  tenant_health.py  connection health and the onboarding checklist, from stored state
+  lifecycle.py   first collection, pause, archive and deleting a tenant
   web/           Flask app: access.py is the single authorization gate
 ```

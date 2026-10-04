@@ -10,6 +10,7 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 from .. import alerts, delivery, mailer, store
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
+from ..reports.data_reports import grouped as report_groups
 from ..text import plural
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .filters import _strftime as datefmt
@@ -189,6 +190,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
                                ([values["timezone"]] if values["timezone"] else [])))
     return render_template(
         "schedule_form.html", tenant=tenant, s=values, chosen=chosen, catalog=delivery.catalog(),
+        report_groups=report_groups(),
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [], team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES, days=delivery.DAYS, zones=zones, default_tz=cfg.timezone,
         ordinal=delivery.ordinal, pdf_available=delivery.export.pdf_available(),
@@ -356,7 +358,7 @@ def _email_body(html: str):
 @login_required
 def preview_schedule_body(schedule_id: int):
     _require_staff()
-    return _email_body(_build_preview(_schedule_or_404(schedule_id)).email.html)
+    return _email_body(_build_preview(_schedule_or_404(schedule_id)).email.html_for_browser())
 
 
 def _alert_example(a):
@@ -399,7 +401,7 @@ def preview_alert_body(alert_id: int):
     built = _alert_example(_alert_or_404(alert_id))
     if built is None:
         abort(404)
-    return _email_body(built.email.html)
+    return _email_body(built.email.html_for_browser())
 
 
 # -- Contacts --------------------------------------------------------------------------------
@@ -578,9 +580,10 @@ def settings():
                 flash("Enter a valid address to send the test to.", "error")
                 return redirect(url_for("email.settings"))
             transport = mailer.TRANSPORTS[mailer.transport(current)]
+            look, inline = delivery.email_brand(g.db)
             html = delivery.render(current_app, "emails/test.html", subject="Office Sentry test email",
-                                    msp_name=current.get("msp_name") or "Office Sentry", transport=transport)
-            email = Email(to=to, subject="Office Sentry test email", html=html,
+                                   transport=transport, **look)
+            email = Email(to=to, subject="Office Sentry test email", html=html, inline=inline,
                           text=f"Email from Office Sentry is working. Sent through {transport}.")
             try:
                 used = mailer.send(g.db, vault, email)

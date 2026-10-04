@@ -3,6 +3,7 @@
 import json
 import re
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 import responses
 
@@ -16,6 +17,7 @@ from tests import devicedata as dd
 from tests import graphdata as gd
 from tests import groupdata as grp
 from tests import hybriddata as hd
+from tests import licencedata as ld
 from tests import tenantsettingsdata as tsd
 from tests.sharepoint_data import mock_sharepoint
 from tests.test_collectors import SKUS, USERS
@@ -42,19 +44,55 @@ def mock_exchange(rsps, data=None):
                       content_type="application/json")
 
 
-def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_policy=None):
-    rsps.get(f"{V1}/policies/authorizationPolicy", json=gd.AUTHORIZATION_POLICY if auth_policy is None else auth_policy)
-    rsps.get(f"{V1}/admin/sharepoint/settings", json=gd.SHAREPOINT_SETTINGS if sharepoint is None else sharepoint)
-    rsps.get(f"{V1}/servicePrincipals", json={"value": gd.SERVICE_PRINCIPALS})
-    rsps.get(f"{V1}/oauth2PermissionGrants", json={"value": gd.DELEGATED_GRANTS})
-    rsps.get(f"{V1}/applications", json={"value": gd.APPLICATIONS})
+def _filter(request, field: str) -> str | None:
+    """The value in a ``$filter=<field> eq '<value>'`` query, if there is one."""
+    found = re.search(field + r" eq '([^']*)'", parse_qs(urlsplit(request.url).query).get("$filter", [""])[0])
+    return found.group(1) if found else None
+
+
+def mock_our_app(rsps, *, found=True, missing=(), roles=None):
+    """Office Sentry's own app in the tenant, for the connection collector: by default every permission is
+    granted and it holds Global Reader. ``roles`` replaces its directory role assignments."""
+    our_roles = gd.OUR_ROLE_ASSIGNMENTS if roles is None else roles
+
+    def principals(request):  # /servicePrincipals, or one app by appId
+        app_id = _filter(request, "appId")
+        if app_id is None:
+            return 200, {}, json.dumps({"value": gd.SERVICE_PRINCIPALS})
+        every = gd.SERVICE_PRINCIPALS + ([gd.OUR_SP] if found else [])
+        return 200, {}, json.dumps({"value": [sp for sp in every if sp["appId"] == app_id]})
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/servicePrincipals(\?.*)?$"), callback=principals,
+                      content_type="application/json")
 
     def assignments(request):
         sid = request.path_url.split("/")[3]
-        return 200, {}, json.dumps({"value": gd.APP_ROLE_ASSIGNMENTS.get(sid, [])})
+        ours = {gd.OUR_SP["id"]: gd.our_assignments(missing)}
+        return 200, {}, json.dumps({"value": {**gd.APP_ROLE_ASSIGNMENTS, **ours}.get(sid, [])})
     rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/servicePrincipals/[^/?]+/appRoleAssignments"),
                       callback=assignments, content_type="application/json")
-    rsps.get(re.compile(re.escape(V1) + r"/servicePrincipals/[^/?]+(\?.*)?$"), json=gd.GRAPH_APP_ROLES)
+
+    def resource(request):  # a resource app's roles, e.g. Microsoft Graph's permissions
+        sid = request.path_url.split("?")[0].split("/")[3]
+        return 200, {}, json.dumps(gd.RESOURCE_APP_ROLES.get(sid, gd.GRAPH_APP_ROLES))
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/servicePrincipals/[^/?]+(\?.*)?$"),
+                      callback=resource, content_type="application/json")
+
+    def role_assignments(request):  # every directory role assignment, or one principal's
+        principal = _filter(request, "principalId")
+        if principal is None:
+            return 200, {}, json.dumps({"value": gd.ROLE_ASSIGNMENTS})
+        return 200, {}, json.dumps({"value": [a for a in gd.ROLE_ASSIGNMENTS + our_roles
+                                              if a["principalId"] == principal]})
+    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/roleManagement/directory/roleAssignments(\?.*)?$"),
+                      callback=role_assignments, content_type="application/json")
+
+
+def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_policy=None, our_app=None):
+    rsps.get(f"{V1}/policies/authorizationPolicy", json=gd.AUTHORIZATION_POLICY if auth_policy is None else auth_policy)
+    rsps.get(f"{V1}/admin/sharepoint/settings", json=gd.SHAREPOINT_SETTINGS if sharepoint is None else sharepoint)
+    rsps.get(f"{V1}/oauth2PermissionGrants", json={"value": gd.DELEGATED_GRANTS})
+    rsps.get(f"{V1}/applications", json={"value": gd.APPLICATIONS})
+    mock_our_app(rsps, **(our_app or {}))
 
     rules = gd.INBOX_RULES if inbox_rules is None else inbox_rules
 
@@ -75,18 +113,22 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 
 
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
-                secure_scores=None, per_user=None, usage_kw=None, **phase4):
+                secure_scores=None, per_user=None, usage_kw=None, signins=None, auth_methods_policy=None,
+                subscriptions=None, groups=None, **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
+    rsps.get(f"{V1}/directory/subscriptions",
+             json={"value": ld.SUBSCRIPTIONS if subscriptions is None else subscriptions})
     rsps.get(f"{V1}/users", json={"value": users})
     rsps.get(f"{V1}/roleManagement/directory/roleDefinitions", json={"value": gd.ROLE_DEFINITIONS})
-    rsps.get(f"{V1}/roleManagement/directory/roleAssignments", json={"value": gd.ROLE_ASSIGNMENTS})
     rsps.get(f"{V1}/roleManagement/directory/roleEligibilitySchedules", json={"value": gd.ROLE_ELIGIBILITY})
     rsps.get(f"{V1}/policies/identitySecurityDefaultsEnforcementPolicy", json={"isEnabled": defaults})
     rsps.get(f"{V1}/identity/conditionalAccess/policies",
              json={"value": [gd.CA_MFA_ALL, gd.CA_REPORT_ONLY] if ca is None else ca})
     rsps.get(f"{V1}/reports/authenticationMethods/userRegistrationDetails",
              json={"value": gd.REGISTRATION_DETAILS if registration is None else registration})
+    rsps.get(f"{V1}/policies/authenticationMethodsPolicy",
+             json=gd.AUTH_METHODS_POLICY if auth_methods_policy is None else auth_methods_policy)
     scores = gd.SECURE_SCORES if secure_scores is None else secure_scores
     rsps.get(f"{V1}/security/secureScores", json={"value": scores})
     rsps.get(f"{V1}/security/secureScoreControlProfiles", json={"value": gd.SECURE_SCORE_PROFILES})
@@ -103,7 +145,7 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
              json={"value": [{"@odata.type": "#microsoft.graph.user", "id": "u4"}]})
     rsps.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
     rsps.get(f"{V1}/deviceManagement/managedDevices", json={"value": dd.MANAGED_DEVICES})
-    rsps.get(f"{V1}/groups", json={"value": grp.GROUPS})
+    rsps.get(f"{V1}/groups", json={"value": grp.GROUPS if groups is None else groups})
 
     def people(request):  # /v1.0/groups/<id>/owners or /members
         gid, kind = request.path_url.split("?")[0].split("/")[3:5]
@@ -116,6 +158,7 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
     rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
+    rsps.get(f"{BETA}/auditLogs/signIns", json={"value": gd.SIGNINS if signins is None else signins})
     mock_phase4(rsps, **phase4)
     mock_sharepoint(rsps, **(sharepoint_kw or {}))
     mock_usage(rsps, **(usage_kw or {}))

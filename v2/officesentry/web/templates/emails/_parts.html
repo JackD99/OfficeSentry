@@ -1,30 +1,36 @@
-{#- Inline-styled building blocks shared by the email templates. -#}
+{#- Inline-styled building blocks shared by the email templates. Import "with context"
+    so the button picks up the MSP's colour (accent, on_accent). -#}
 {%- set FONT = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" -%}
 {%- set SEV = {'critical': '#b91c1c', 'high': '#c2410c', 'medium': '#a16207', 'low': '#475569', 'info': '#475569'} -%}
 {%- macro sev(level) -%}
 <span style="display:inline-block;padding:1px 8px;border-radius:999px;background:{{ SEV.get(level, '#475569') }};color:#ffffff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">{{ level }}</span>
 {%- endmacro -%}
+{#- A button Outlook draws too: the colour is on the table cell, not only the link. -#}
 {%- macro button(href, label) -%}
-<a href="{{ href }}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">{{ label }}</a>
+{%- set bg = accent|default('#2563eb') -%}{%- set fg = on_accent|default('#ffffff') -%}
+<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;"><tr>
+<td bgcolor="{{ bg }}" style="background:{{ bg }};border-radius:6px;"><a href="{{ href }}" style="display:inline-block;padding:11px 20px;color:{{ fg }};text-decoration:none;font-weight:600;font-size:14px;border-radius:6px;">{{ label }}</a></td>
+</tr></table>
 {%- endmacro -%}
 {%- macro heading(text) -%}
 <h2 style="margin:28px 0 10px;font-size:15px;line-height:1.3;color:#111827;">{{ text }}</h2>
 {%- endmacro -%}
 {%- macro tiles(items) -%}
-{#- items: (label, value, change_text, change_colour) -#}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:0 8px;">
+{#- items: (label, value, change_text, change_colour). Three to a row; stacked on phones. -#}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 {%- for row in items|batch(3) %}
 <tr>
   {%- for label, value, change, colour in row %}
-  <td width="32%" valign="top" style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+  <td class="tile" width="32%" valign="top" style="padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
     <div style="font-size:12px;color:#6b7280;">{{ label }}</div>
-    <div style="font-size:22px;font-weight:700;color:#111827;line-height:1.3;">{{ value }}</div>
+    <div style="font-size:21px;font-weight:700;color:#111827;line-height:1.3;white-space:nowrap;">{{ value }}</div>
     {% if change %}<div style="font-size:12px;color:{{ colour }};">{{ change }}</div>{% endif %}
   </td>
-  {%- if not loop.last %}<td width="2%" style="font-size:0;">&nbsp;</td>{% endif %}
+  {%- if not loop.last %}<td class="gap" width="2%" style="font-size:0;">&nbsp;</td>{% endif %}
   {%- endfor %}
-  {%- for _ in range(3 - row|length) %}<td width="2%" style="font-size:0;">&nbsp;</td><td width="32%">&nbsp;</td>{% endfor %}
+  {%- for _ in range(3 - row|length) %}<td class="gap" width="2%" style="font-size:0;">&nbsp;</td><td class="gap" width="32%">&nbsp;</td>{% endfor %}
 </tr>
+{%- if not loop.last %}<tr><td class="gap" colspan="5" height="8" style="height:8px;font-size:0;line-height:8px;">&nbsp;</td></tr>{% endif %}
 {%- endfor %}
 </table>
 {%- endmacro -%}

@@ -703,3 +703,56 @@ main[aria-busy="true"] .table-card, main[aria-busy="true"] .tiles { opacity: .7;
 /* A figure in an All tenants table opens that tenant's rows */
 a.figure-link { color: inherit; border-bottom: 1px dashed var(--border-strong); }
 a.figure-link:hover { color: var(--accent); border-bottom-color: var(--accent); text-decoration: none; }
+
+/* -- UI review ------------------------------------------------------------------------- */
+/* Focus rings that show on dark surfaces too (accent-soft all but vanishes on a dark card). */
+input:focus, select:focus, textarea:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+/* Phones: a blank cell says nothing in a stacked row, and a flagged row is marked down its whole edge. */
+@media (max-width: 640px) {
+  table.stack-sm td:empty, table.stack-sm td.wrap:empty { display: none; }
+  table.stack-sm tr[class*="flag-"] td:first-child { box-shadow: none; }
+  table.stack-sm tr.flag-critical { box-shadow: inset 3px 0 0 var(--sev-critical); }
+  table.stack-sm tr.flag-high { box-shadow: inset 3px 0 0 var(--sev-high); }
+  table.stack-sm tr.flag-medium { box-shadow: inset 3px 0 0 var(--sev-medium); }
+}
+/* Change kinds read the same everywhere: added (amber), removed (neutral), changed (blue). */
+.chg-removed { background: var(--sunken); color: var(--text-2); }
+/* Schedule form: detail reports folded by menu group, open where something is chosen. */
+details.report-choices { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; }
+details.report-choices > summary { display: flex; align-items: baseline; gap: 8px; padding: 9px 12px; color: var(--text); font-weight: 400; }
+details.report-choices > summary::after { content: ""; margin-left: auto; align-self: center; width: 7px; height: 7px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(-45deg); transition: transform .15s; }
+details.report-choices[open] > summary::after { transform: rotate(45deg); }
+details.report-choices > summary:hover { background: var(--surface-2); }
+details.report-choices[open] > summary { margin: 0; border-bottom: 1px solid var(--border); }
+details.report-choices fieldset.choices { border: 0; margin: 0; padding: 6px; }
+.error-page p { max-width: 460px; margin: 0 auto 6px; }
+.form-actions.center-actions { justify-content: center; flex-wrap: wrap; }
+/* A table's own title inside a card that holds several (Changes tab). */
+table > caption { caption-side: top; text-align: left; padding: 12px 20px 6px; font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+
+/* -- Client tenant admin (Manage tab, Client tenants, Offboard) ------------
+   Owned by the tenant-admin work; reuses .list, .setup-steps, .pill and tokens. */
+.health-list { padding: 0 20px; }
+.health-list > li { align-items: flex-start; }
+.health-state { min-width: 88px; justify-content: center; margin-top: 2px; }
+.health-fix { margin-top: 4px; font-size: .8125rem; color: var(--text-2); }
+.health-bad .health-fix, .health-warn .health-fix { padding-left: 10px; border-left: 2px solid var(--border-strong); }
+.health-action { flex: none; }
+.health-action:empty { display: none; }
+.onboarding .setup-steps.flush-steps { padding: 0; margin: 0; }
+.onboarding .setup-steps .step-body p { margin: 6px 0 0; }
+.manage-form { display: grid; gap: 12px; }
+.manage-form .form-actions { margin-top: 0; }
+.manage-facts { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.manage-gap { margin-top: 16px; }
+.pre-line { white-space: pre-line; }
+textarea.copy-text { font-size: .8125rem; resize: vertical; margin: 8px 0; }
+.offboard-steps .step-body ol { margin-top: 8px; }
+.connection-problems { margin-top: 10px; }
+.connection-problems .pill { flex: none; }
+@media (max-width: 640px) {
+  .health-list { padding: 0 16px; }
+  .health-list > li { flex-wrap: wrap; }
+  .health-state { min-width: 0; }
+  .health-action { flex-basis: 100%; }
+}

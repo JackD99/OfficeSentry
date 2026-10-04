@@ -128,7 +128,7 @@ METHOD_NAMES = {
     "x509certificatemultifactor": "Certificate", "x509certificate": "Certificate",
     "platformcredential": "Platform credential",
 }
-PHISHING_RESISTANT = ("fido2", "passkey", "windowshello", "x509", "platformcredential")
+PHISHING_RESISTANT = ("fido2", "passkey", "windowshello", "x509", "platformcredential", "macossecureenclave")
 
 
 def _methods(reg: dict | None) -> list[str]:

@@ -41,7 +41,8 @@
   <li class="{{ 'current' if ready else '' }}">
     <div class="step-title">Add client tenants</div>
     <div class="step-body">Each tenant gets a consent link for its Global Administrator. For mailbox reports they also give the app the read-only <em>Global Reader</em> role.
-      {% if ready %}<div class="step-action"><a class="btn sm" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a tenant</a></div>{% endif %}</div>
+      {% if ready %}<div class="step-action"><a class="btn sm" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a tenant</a>
+        <a class="small" href="{{ url_for('tenant_admin.clients') }}">Every client's consent, permissions and Global Reader</a></div>{% endif %}</div>
   </li>
 </ol>
 

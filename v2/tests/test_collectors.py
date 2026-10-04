@@ -8,6 +8,8 @@ from officesentry import store
 from officesentry.collectors import REGISTRY
 from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run, schedule_tick
+from tests import licencedata as ld
+from tests.licencedata import state
 
 V1 = f"{GRAPH_ROOT}/v1.0"
 
@@ -23,14 +25,17 @@ SKUS = [
      "servicePlans": [{"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}]},
 ]
 
+# Ann has Business Premium directly and from the All Staff group; Bob only from the group, with no usage location.
 USERS = [
     {"id": "u1", "displayName": "Ann", "userPrincipalName": "ann@x.com", "userType": "Member",
      "accountEnabled": True, "assignedLicenses": [{"skuId": "sku-bp"}],
+     "licenseAssignmentStates": [state("sku-bp"), state("sku-bp", "s1")], "usageLocation": "GB",
      "signInActivity": {"lastSignInDateTime": "2026-09-30T10:00:00Z"}},
     {"id": "u2", "displayName": "Bob", "userPrincipalName": "bob@x.com", "userType": "Member",
-     "accountEnabled": False, "assignedLicenses": [{"skuId": "sku-bp"}], "signInActivity": {}},
+     "accountEnabled": False, "assignedLicenses": [{"skuId": "sku-bp"}],
+     "licenseAssignmentStates": [state("sku-bp", "s1")], "usageLocation": None, "signInActivity": {}},
     {"id": "u3", "displayName": "Guest", "userPrincipalName": "g#EXT#@x.com", "userType": "Guest",
-     "accountEnabled": True, "assignedLicenses": []},
+     "accountEnabled": True, "assignedLicenses": [], "licenseAssignmentStates": [], "usageLocation": None},
 ]
 
 
@@ -54,12 +59,33 @@ def test_tenant_profile_detects_capabilities(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": SKUS})
+    responses.get(f"{V1}/directory/subscriptions", json={"value": ld.SUBSCRIPTIONS})
     run_id, status = _run(db, alpha, "tenant_profile", factory)
     assert status == "succeeded"
     caps = store.tenant_capabilities(store.get_tenant(db, alpha))
     assert caps["entra_p1"] and caps["intune"] and caps["exchange"]
     assert not caps["entra_p2"]  # only on a suspended SKU
-    assert _metrics(db, run_id) == {"licences.purchased": 10, "licences.assigned": 7, "licences.unassigned": 3}
+    assert _metrics(db, run_id) == {"licences.purchased": 10, "licences.assigned": 7, "licences.unassigned": 3,
+                                    "licences.trials": 0}
+    subs = {s["_id"]: s for s in store.run_objects(db, run_id, "company_subscription")}
+    assert subs["sub-old"]["status"] == "Suspended" and subs["sub-old"]["isTrial"] is True
+    assert subs["sub-bp"]["skuPartNumber"] == "SPB" and subs["sub-bp"]["nextLifecycleDateTime"]
+    assert "ownerType" not in subs["sub-bp"]  # only what the report uses
+    assert store.run_objects(db, run_id, "subscription_status")[0]["available"] is True
+
+
+@responses.activate
+def test_unreadable_subscriptions_leave_the_rest_of_the_profile(db, two_tenants, factory):
+    alpha, _ = two_tenants
+    responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
+    responses.get(f"{V1}/subscribedSkus", json={"value": SKUS})
+    responses.get(f"{V1}/directory/subscriptions", status=403, json={"error": {
+        "code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    run_id, status = _run(db, alpha, "tenant_profile", factory)
+    assert status == "partial"
+    assert len(store.run_objects(db, run_id, "subscribed_sku")) == 2
+    assert store.run_objects(db, run_id, "subscription_status")[0]["available"] is False
+    assert not any(c.request.method != "GET" for c in responses.calls)
 
 
 @responses.activate
@@ -71,10 +97,30 @@ def test_users_with_sign_in_activity(db, two_tenants, factory):
     assert "signInActivity" in responses.calls[0].request.url
     users = {u["_id"]: u for u in store.run_objects(db, run_id, "user")}
     assert users["u1"]["lastSignInDateTime"] == "2026-09-30T10:00:00Z"
+    assert "licenseAssignmentStates" in responses.calls[0].request.url and "usageLocation" in \
+        responses.calls[0].request.url
+    assert [(s["skuId"], s["group"], s["state"], s["error"]) for s in users["u1"]["licenceStates"]] == [
+        ("sku-bp", None, "Active", None), ("sku-bp", "s1", "Active", None)]
+    assert users["u1"]["usageLocation"] == "GB" and users["u2"]["usageLocation"] is None
     assert users["u2"]["signInActivityAvailable"] is True and users["u2"]["lastSignInDateTime"] is None
     m = _metrics(db, run_id)
     assert (m["users.total"], m["users.members"], m["users.guests"]) == (3, 2, 1)
     assert m["users.licensed_disabled"] == 1
+
+
+@responses.activate
+def test_users_licence_assignment_errors(db, two_tenants, factory):
+    alpha, _ = two_tenants
+    old_style = {k: v for k, v in USERS[0].items() if k not in ("licenseAssignmentStates", "usageLocation")}
+    responses.get(f"{V1}/users", json={"value": [*ld.USERS, dict(old_style, id="u0")]})
+    run_id, status = _run(db, alpha, "users", factory)
+    assert status == "succeeded"
+    users = {u["_id"]: u for u in store.run_objects(db, run_id, "user")}
+    assert users["u8"]["licenceStates"][0] == {"skuId": "sku-bp", "group": "l1", "state": "Error",
+                                               "error": "CountViolation", "updated": "2026-09-01T10:00:00Z"}
+    assert users["u8"]["skuIds"] == ["sku-exo"]  # a failed group licence isn't assigned
+    assert users["u0"]["licenceStates"] is None  # not returned: unknown, not "no licences"
+    assert _metrics(db, run_id)["licences.assignment_errors"] == 2
 
 
 @responses.activate
@@ -159,7 +205,8 @@ def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
     assert schedule_tick(db, cfg, now) == 0
     order = [r["collector"] for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? ORDER BY id",
                                                 (two_tenants[0],))]
-    assert order[:2] == ["tenant_profile", "users"]  # capabilities first, then users
+    # Capabilities first, then the connection check, then users.
+    assert order[:3] == ["tenant_profile", "connection", "users"]
 
 
 def test_tenants_without_consent_are_not_scheduled(db, cfg, two_tenants):

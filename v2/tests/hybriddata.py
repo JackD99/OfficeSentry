@@ -18,14 +18,15 @@ ORGANIZATION = {**gd.ORGANIZATION, "onPremisesSyncEnabled": True,
                 "onPremisesLastSyncDateTime": hours_ago(0.3), "onPremisesLastPasswordSyncDateTime": hours_ago(0.3)}
 
 
-def _domain(name, auth="Managed", default=False, services=("Email",)):
+def _domain(name, auth="Managed", default=False, services=("Email",), expiry=2147483647):
     return {"id": name, "authenticationType": auth, "isVerified": True, "isDefault": default,
-            "supportedServices": list(services)}
+            "supportedServices": list(services), "passwordValidityPeriodInDays": expiry,
+            "passwordNotificationWindowInDays": 14}
 
 
 DOMAINS = [
     _domain("x.com", default=True, services=("Email", "OfficeCommunicationsOnline", "Intune")),
-    _domain("parked.com", services=()),
+    _domain("parked.com", services=(), expiry=90),
     _domain("x.onmicrosoft.com", services=("Email", "OfficeCommunicationsOnline")),
 ]
 
