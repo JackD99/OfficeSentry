@@ -33,7 +33,7 @@ USES: tuple[Use, ...] = (
     Use("insurance", "Insurance renewal",
         "The controls cyber insurers ask about, and the reports that prove each one.",
         ("evidence", "mfa", "admins", "conditional-access", "legacy-auth", "domains", "mailboxes", "devices",
-         "admin-activity")),
+         "admin-activity", "sign-ins")),
     Use("sharing", "External sharing",
         "Who outside the organisation can reach what: guests, shared files and sites, and mailbox access.",
         ("guests", "shared-files", "sharepoint", "onedrive", "groups", "tenant-settings", "mailbox-permissions")),
@@ -44,6 +44,11 @@ USES: tuple[Use, ...] = (
         "Paid licences nobody uses, people who could have a cheaper one, accounts that could be shared mailboxes, "
         "and people who've stopped signing in.",
         ("licences", "licence-rightsizing", "usage", "inactive", "shared-mailboxes")),
+    Use("compromise", "Investigate a compromised account",
+        "Someone may have someone else's password: where and how they signed in, failed and risky sign-ins, "
+        "mail rules and forwarding, new app consents and what admins changed.",
+        ("sign-ins", "inbox-rules", "mailboxes", "mailbox-permissions", "legacy-auth", "apps", "admin-activity",
+         "mfa")),
 )
 
 # Words people search for that a report's own title and description don't contain.
@@ -54,6 +59,8 @@ KEYWORDS: dict[str, str] = {
     "inactive": "stale dormant leavers unused accounts sign-in last login",
     "guests": "external users b2b invitations",
     "legacy-auth": "basic auth smtp imap pop old protocols",
+    "sign-ins": "sign-in logs login logins failed failures password spray brute force lockout locked "
+                "countries locations risky risk compromised breach hacked single-factor audit",
     "hybrid": "ad connect entra connect sync on-premises password hash",
     "mailboxes": "forwarding redirect external smtp",
     "inbox-rules": "forward delete move rules mailbox compromise",

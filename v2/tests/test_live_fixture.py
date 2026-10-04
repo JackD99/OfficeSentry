@@ -53,9 +53,10 @@ def _results(db, tenant):
 
 def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
-    # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read.
+    # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
+    # Entra ID P2, so sign-in risk is hidden.
     nothing_to_check = {"tls_rpt", "device_compliance", "device_encryption", "supported_windows", "intune_enrolled",
-                        "device_checkin"}
+                        "device_checkin", "risky_sign_ins"}
     assert {k for k, r in results.items() if r.status == "unavailable"} == nothing_to_check
     assert results["legacy_auth_blocked"].status == "pass"
     assert results["admins_ca_mfa"].status == "pass"
