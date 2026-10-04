@@ -1,7 +1,31 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, downloads, report_nav with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, report_nav, csrf with context %}
+{% from "_report_table.html" import report_table with context %}
 {% block title %}{{ report.title }} · {{ tenant.name }}{% endblock %}
-{% set SEV_RANK = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4} %}
+{% macro saved_views() -%}
+{% set current = saved|selectattr('query', 'equalto', view_query)|first if view_query else none %}
+<details class="menu" id="views-menu">
+  <summary class="btn sm{{ ' on' if view_query }}" title="Save the filters, columns and sort you use often">{{ icon('eye') }} {{ current.name if current else ('Custom view' if view_query else 'Views') }}</summary>
+  <div class="menu-panel right">
+    <div class="menu-head"><strong>Saved views</strong>{% if view_query %}<a href="{{ request.path }}" data-view>Reset</a>{% endif %}</div>
+    {% for v in saved %}
+    <div class="view-row{{ ' on' if current and current.id == v.id }}">
+      <a href="{{ request.path }}?{{ v.query }}" data-view>{{ v.name }}</a>
+      <form method="post" action="{{ url_for('views.delete', view_id=v.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="link faint" title="Delete this view" aria-label="Delete {{ v.name }}">×</button></form>
+    </div>
+    {% else %}
+    <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here to use it on any tenant.</p>
+    {% endfor %}
+    {% if view_query and not current %}
+    <form method="post" action="{{ url_for('views.save', key=report.key) }}" class="save-view">{{ csrf() }}
+      <input type="hidden" name="query" value="{{ view_query }}"><input type="hidden" name="tenant_id" value="{{ tenant.id }}">
+      <label class="small">Save this view as <input name="name" maxlength="80" required placeholder="e.g. Forwarding outside"></label>
+      <button class="sm primary">Save view</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+{%- endmacro %}
 {% block content %}
 {{ tenant_header(tenant, 'data') }}
 {{ report_nav(tenant, groups, group, report.key) }}
@@ -13,8 +37,10 @@
   {% if not report.unavailable %}
   <div class="toolbar-actions">
     {% if current_user.role != 'client' %}<a class="btn sm" href="{{ url_for('across.rollup', key=report.key) }}" title="Compare this report across every tenant">{{ icon('tenants') }} All tenants</a>{% endif %}
-    {{ downloads([('PDF', url_for('reports.data_report_pdf', tenant_id=tenant.id, key=report.key), 'The whole report as a PDF'),
-                  ('XLSX', url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key), 'Every table, one sheet each')]) }}
+    {{ saved_views() }}
+    {% set q = ('?' ~ view_query) if view_query else '' %}
+    {{ downloads([('PDF', url_for('reports.data_report_pdf', tenant_id=tenant.id, key=report.key) ~ q, 'The rows and columns shown, as a PDF' if q else 'The whole report as a PDF'),
+                  ('XLSX', url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key) ~ q, 'The rows and columns shown, one sheet per table' if q else 'Every table, one sheet each')]) }}
   </div>
   {% endif %}
 </div>
@@ -23,25 +49,21 @@
 <div class="card empty"><h3>Not available</h3><p>{{ report.unavailable }}</p></div>
 {% else %}
 {% if report.notice %}<div class="callout warn">{{ icon('alert') }}<div>{{ report.notice }}</div></div>{% endif %}
-{% if report.tiles %}
+{% if report.tiles or report.highlights %}
 <div class="tiles">
-  {% for t in report.tiles %}
-  <div class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}">
-    <div class="label">{{ t.label }}</div>
+  {% for t in report.tiles %}{% set href = links.tiles[loop.index0] %}
+  <{{ 'a' if href else 'div' }} class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view title="Show the rows behind this figure"{% endif %}>
+    <div class="label">{{ t.label }}{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
     <div class="value">{{ t.value }}</div>
     <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
-  </div>
+  </{{ 'a' if href else 'div' }}>
   {% endfor %}
-</div>
-{% endif %}
-{% if report.highlights %}
-<div class="tiles">
-  {% for h in report.highlights %}
-  <div class="tile">
-    <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
+  {% for h in report.highlights %}{% set href = links.highlights[loop.index0] %}
+  <{{ 'a' if href else 'div' }} class="tile{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view title="Show the rows behind this figure"{% endif %}>
+    <div class="label"><span>{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</span>{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
     <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
     {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
-  </div>
+  </{{ 'a' if href else 'div' }}>
   {% endfor %}
 </div>
 {% endif %}
@@ -55,46 +77,19 @@
   {{ report.chart|safe }}
 </section>
 {% endif %}
-{% if report.sections|length > 1 %}
+{% if tables|length > 1 %}
 <div class="jump">
-  {% for section in report.sections %}<a href="#s{{ loop.index }}">{{ section.title }} <span class="faint">{{ section.rows|length }}</span></a>{% endfor %}
+  {% for tv in tables %}<a href="#t-{{ tv.slug }}">{{ tv.section.title }} <span class="faint">{{ tv.rows|length }}</span></a>{% endfor %}
 </div>
 {% endif %}
-{% for section in report.sections %}
-{% if not section.rows %}
-<section class="card flush empty-section" id="s{{ loop.index }}">
-  <h2>{{ section.title }} <span class="count-badge">0</span></h2>
-  <p>{{ section.empty }}{% if section.intro %} <span class="faint">{{ section.intro }}</span>{% endif %}</p>
+{% for tv in tables %}
+{% if not tv.total %}
+<section class="card flush empty-section" id="t-{{ tv.slug }}">
+  <h2>{{ tv.section.title }} <span class="count-badge">0</span></h2>
+  <p>{{ tv.section.empty }}{% if tv.section.intro %} <span class="faint">{{ tv.section.intro }}</span>{% endif %}</p>
 </section>
 {% else %}
-<section class="card flush" id="s{{ loop.index }}">
-  <div class="card-head toolbar">
-    <h2>{{ section.title }} <span class="count-badge">{{ section.rows|length }}</span></h2>
-    <div class="toolbar-actions">
-      {% if section.rows|length > 8 %}<input class="search sm" type="search" data-filter="t{{ loop.index }}" placeholder="Filter rows…" aria-label="Filter {{ section.title }}">{% endif %}
-      {% if section.flagged %}<span class="pill warn">{{ section.flagged }} to review</span>{% endif %}
-      {% if section.rows %}<a class="btn sm ghost" href="{{ url_for('across.data_report_csv', tenant_id=tenant.id, key=report.key, section=loop.index) }}" title="Download this table as CSV">{{ icon('download') }} CSV</a>{% endif %}
-    </div>
-  </div>
-  {% if section.intro %}<p class="intro">{{ section.intro }}</p>{% endif %}
-  {% if section.rows %}
-  <div class="scroll-x">
-  {% set sortable = section.rows|length > 1 %}
-  <table class="stack-sm{{ ' sortable' if sortable }}" id="t{{ loop.index }}">
-    <thead><tr><th class="flagcol" aria-sort="none">{% if sortable and section.flagged %}<button type="button" class="sort" title="Sort by flag">Flag</button>{% else %}<span class="sr-only">Flag</span>{% endif %}</th>
-      {% for c in section.columns %}<th aria-sort="none">{% if sortable %}<button type="button" class="sort">{{ c }}</button>{% else %}{{ c }}{% endif %}</th>{% endfor %}</tr></thead>
-    <tbody>
-    {% for row in section.rows %}{% set flag = section.flags[loop.index0] %}
-    <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ row|join(' ')|lower }}">
-      <td class="flagcol" data-sort="{{ SEV_RANK.get(flag, '') }}">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>
-      {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ section.columns[loop.index0] }}"{% endif %}>{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v }}{% endif %}</td>{% endfor %}
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  {% endif %}
-</section>
+{{ report_table(tv, url_for('across.data_report_csv', tenant_id=tenant.id, key=report.key, section=loop.index) ~ ('&' ~ view_query if view_query)) }}
 {% endif %}
 {% endfor %}
 {% endif %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Reports · Office Sentry{% endblock %}
+{% macro tenant_query(extra={}) -%}
+{%- set q = {} -%}
+{%- if tenant and (staff or tenants|length > 1) %}{% set _ = q.update({'tenant': tenant.id}) %}{% endif -%}
+{%- set _ = q.update(extra) -%}
+{{ url_for('reports.overview', **q) }}
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Reports</h1>
+    <div class="sub">{{ total }} reports{% if staff %}, for one tenant or across all {{ tenants|length }}{% endif %}. Search, or pick the job you're doing.</div>
+  </div>
+</div>
+
+{% if not tenants %}
+<div class="card empty">
+  <h3>No tenants yet</h3>
+  <p>{% if current_user.role == 'admin' %}<a href="{{ url_for('tenants.new_tenant') }}">Add a tenant</a> and its reports appear here once data has been collected.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
+</div>
+{% else %}
+<div class="library-bar">
+  <label class="library-search">{{ icon('search') }}<span class="sr-only">Find a report</span>
+    <input type="search" data-report-search="library" placeholder="Find a report, tenant or setting…" autofocus autocomplete="off"></label>
+  {% if staff or tenants|length > 1 %}
+  <form method="get" action="{{ url_for('reports.overview') }}" class="picker-form" data-autosubmit>
+    {% if use %}<input type="hidden" name="use" value="{{ use.key }}">{% endif %}
+    <label for="library-tenant" class="inline-label">Show for</label>
+    <select id="library-tenant" name="tenant">
+      {% if staff %}<option value=""{% if not tenant %} selected{% endif %}>All tenants</option>{% endif %}
+      {% for t in tenants %}<option value="{{ t.id }}"{% if tenant and t.id == tenant.id %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+    </select>
+    <noscript><button class="btn sm">Show</button></noscript>
+  </form>
+  {% endif %}
+</div>
+
+<nav class="uses" aria-label="Reports for a job">
+  <a href="{{ tenant_query() }}"{% if not use %} class="active" aria-current="true"{% endif %}>All reports</a>
+  {% for u, n in uses if n %}<a href="{{ tenant_query({'use': u.key}) }}"{% if use and use.key == u.key %} class="active" aria-current="true"{% endif %} title="{{ u.description }}">{{ u.title }}<span class="n">{{ n }}</span></a>{% endfor %}
+</nav>
+{% if use %}<p class="use-intro">{{ use.description }}</p>{% endif %}
+
+{% if tenant and saved %}
+<section class="card saved-views">
+  <div class="card-head"><h2>{{ icon('eye') }} Your saved views</h2><span class="meta">Open on {{ tenant.name }}</span></div>
+  <div class="opts">{% for v in saved %}<a class="opt" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=v.report_key) }}?{{ v.query }}">{{ v.name }}<span class="n">{{ titles[v.report_key] }}</span></a>{% endfor %}</div>
+</section>
+{% endif %}
+
+<p class="muted no-match" hidden>Nothing matches that. Try a word like mailbox, admin, guest or licence.</p>
+<div class="library" id="library">
+  {% for area in areas %}
+  <section class="report-group lib-area">
+    <h2>{{ area.title }}<span class="n">{{ area.entries|length }}</span></h2>
+    <div class="lib-grid">
+      {% for e in area.entries %}
+      <article class="lib-card" data-name="{{ e.search }}">
+        <a class="lib-main" href="{{ e.href }}">
+          <span class="title">{{ e.title }}{{ icon('arrow', 'go') }}</span>
+          <span class="desc">{{ e.description }}</span>
+        </a>
+        {% if e.across %}<a class="lib-across" href="{{ e.across }}" title="Compare {{ e.title }} across every tenant">{{ icon('grid') }} All tenants</a>{% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  {% if staff %}
+  <section class="report-group lib-area" data-search-only hidden>
+    <h2>Tenants</h2>
+    <div class="lib-grid">
+      {% for t in tenants %}
+      <article class="lib-card" data-name="{{ (t.name ~ ' ' ~ t.tenant_ref ~ ' tenant')|lower }}"><a class="lib-main" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">
+        <span class="title">{{ t.name }}{{ icon('arrow', 'go') }}</span><span class="desc mono">{{ t.tenant_ref }}</span></a></article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% if settings %}
+  <section class="report-group lib-area" data-search-only hidden>
+    <h2>Settings</h2>
+    <div class="lib-grid">
+      {% for href, title, words in settings %}
+      <article class="lib-card" data-name="{{ (title ~ ' settings ' ~ words)|lower }}"><a class="lib-main" href="{{ href }}">
+        <span class="title">{{ title }}{{ icon('arrow', 'go') }}</span><span class="desc">Settings</span></a></article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+<p class="footnote">{% if tenant %}Reports open for <strong>{{ tenant.name }}</strong>.{% if staff %} Use “All tenants” on a report to compare every tenant.{% endif %}{% else %}Each report opens across all your tenants, one row per tenant. Pick a tenant above to open its own reports.{% endif %}</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

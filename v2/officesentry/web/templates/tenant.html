@@ -35,11 +35,12 @@
 {% endif %}
 
 {# Each headline number opens the report behind it. #}
-{% set KPI_REPORT = {'secure_score.pct': 'secure-score', 'mfa.registered_pct': 'mfa', 'admins.privileged_principals': 'admins',
-                     'users.licensed': 'licences', 'stale': 'inactive', 'waste': 'licences'} %}
+{% set KPI_REPORT = {'secure_score.pct': ('secure-score', ''), 'mfa.registered_pct': ('mfa', ''),
+                     'admins.privileged_principals': ('admins', '#t-privileged-role-holders'), 'users.licensed': ('licences', ''),
+                     'stale': ('inactive', '#t-inactive-members'), 'waste': ('licences', '#t-waste-by-subscription')} %}
 <div class="tiles">
   {% for k in report.kpis %}{% set target = KPI_REPORT.get(k.key) %}
-  <{{ 'a' if target else 'div' }} class="tile{{ ' link' if target }}"{% if target %} href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=target) }}"{% endif %}>
+  <{{ 'a' if target else 'div' }} class="tile{{ ' link' if target }}"{% if target %} href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=target[0]) }}{{ target[1] }}"{% endif %}>
     <div class="label">{{ k.label }}{% if target %}{{ icon('arrow', 'go') }}{% endif %}</div>
     <div class="value">{{ kpi_value(k) }}</div>
     <div class="foot">

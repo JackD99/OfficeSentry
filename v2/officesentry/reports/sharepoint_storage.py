@@ -13,7 +13,7 @@ from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import nouns
-from .data_reports import DataReport, Link, Section, Tile, _date
+from .data_reports import DataReport, Link, Rows, Section, Tile, _date
 from .sharepoint import GROWTH_DAYS, _growth, size, storage_points
 
 SHOW_FOLDERS = 50
@@ -29,6 +29,9 @@ HOW = {
     "hold": "Kept by a Microsoft Purview retention policy or hold. Review the policies that cover these sites.",
     "other": "Lists, pages, site assets, and figures SharePoint hasn't updated yet.",
 }
+
+
+SPACE = Rows("Where the space goes")
 
 
 def _percent(part: float, whole: float) -> str:
@@ -112,16 +115,19 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         pct = 100 * used / quota.total
         report.tiles.append(Tile("Storage used", _percent(used, quota.total) or "0%",
                                  f"{size(used)} of {size(quota.total)} (estimated)",
-                                 "bad" if pct >= 95 else ("warn" if pct >= 85 else "ok")))
+                                 "bad" if pct >= 95 else ("warn" if pct >= 85 else "ok"), SPACE))
         report.tiles.append(Tile("Free space", size(max(quota.total - used, 0)),
-                                 _months_left(quota.total - used, growth)))
+                                 _months_left(quota.total - used, growth), rows=SPACE))
     else:
-        report.tiles.append(Tile("Storage used", size(used), "No SharePoint licence found to size the quota"))
+        report.tiles.append(Tile("Storage used", size(used), "No SharePoint licence found to size the quota",
+                                 rows=SPACE))
     report.tiles += [
         Tile("Older versions", size(versions), f"{_percent(versions, used) or '0%'} of storage",
-             "warn" if used and versions / used >= 0.25 else None),
-        Tile("Recycle bins", size(recycle), "Freed when emptied", "warn" if used and recycle / used >= 0.1 else None),
-        Tile(f"Untouched for {years} years", size(stale_bytes), f"{stale_files:,} {nouns(stale_files, 'file')}"),
+             "warn" if used and versions / used >= 0.25 else None, Rows("Files with the most version history")),
+        Tile("Recycle bins", size(recycle), "Freed when emptied", "warn" if used and recycle / used >= 0.1 else None,
+             Rows("Largest items in recycle bins")),
+        Tile(f"Untouched for {years} years", size(stale_bytes), f"{stale_files:,} {nouns(stale_files, 'file')}",
+             rows=Rows(f"Largest files untouched for {years} years")),
     ]
     # No storage chart here: the SharePoint sites report has it, and the breakdown below matters more
     # on the first page of the client's PDF.

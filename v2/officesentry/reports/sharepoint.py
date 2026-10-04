@@ -13,7 +13,7 @@ from ..devices import parse_day
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart
-from .data_reports import DataReport, Link, Section, Tile, _date
+from .data_reports import DataReport, Link, Rows, Section, Tile, _date
 
 INACTIVE_DAYS = 90
 GROWTH_DAYS = 30
@@ -35,6 +35,9 @@ TEMPLATES = {
     "Group": "Group or Team site", "Team Site": "Team site (no group)", "Site Page Publishing": "Communication site",
     "Team Channel": "Teams channel site", "Publishing Site": "Publishing site",
 }
+
+
+SHARED_SITES = Rows("Sites shared outside the organisation")
 
 
 def size(n: int | float | None) -> str:
@@ -169,11 +172,12 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     guest = sum(r["guestLinks"] for r in rows)
     stale = [r for r in user_sites if inactive(r)]
     report.tiles = [
-        Tile("Sites", len(user_sites), f"plus {plural(len(rows) - len(user_sites), 'system site')}"),
+        Tile("Sites", len(user_sites), f"plus {plural(len(rows) - len(user_sites), 'system site')}",
+             rows=Rows("All sites", {"Type": sorted({site_type(r) for r in user_sites})})),
         Tile("Storage used", size(total), (f"{_signed_size(growth)} in {GROWTH_DAYS} days"
-                                           if growth is not None else "")),
-        Tile("Anyone links", anyone, "No sign-in needed to open", "bad" if anyone else "ok"),
-        Tile("Guest links", guest, "Shared with named people outside"),
+                                           if growth is not None else ""), rows=Rows("All sites")),
+        Tile("Anyone links", anyone, "No sign-in needed to open", "bad" if anyone else "ok", SHARED_SITES),
+        Tile("Guest links", guest, "Shared with named people outside", rows=SHARED_SITES),
         Tile("Inactive sites", len(stale), f"No activity in {INACTIVE_DAYS} days", "warn" if stale else None),
     ]
     report.chart = storage_chart(points, "SharePoint storage over time")
@@ -247,14 +251,15 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     points = storage_points(snap, "onedrive")
     growth = _growth(points, now)
     report.tiles = [
-        Tile("OneDrives", len(rows)),
+        Tile("OneDrives", len(rows), rows=Rows("All OneDrives")),
         Tile("Storage used", size(sum(r["storageUsed"] for r in rows)),
-             f"{_signed_size(growth)} in {GROWTH_DAYS} days" if growth is not None else ""),
+             f"{_signed_size(growth)} in {GROWTH_DAYS} days" if growth is not None else "", rows=Rows("All OneDrives")),
         Tile("Belong to people who've left", len(left) if not hidden else "?", "Disabled or deleted accounts",
-             "warn" if left else None),
+             "warn" if left else None, Rows("OneDrives of people who've left")),
         Tile("Files shared outside", len({s["_id"] for s in personal if s.get("exposure") in ("anyone", "external")})
              if shared is not None else "?",
-             "Anyone links or people outside" if shared is not None else "Needs the Shared files scan"),
+             "Anyone links or people outside" if shared is not None else "Needs the Shared files scan",
+             rows=Rows("Sharing by person")),
     ]
     report.chart = storage_chart(points, "OneDrive storage over time")
     report.chart_title = "OneDrive storage over time"
@@ -347,9 +352,12 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     report.tiles = [
         Tile("Shared with anyone", len(anyone), "Open without signing in", "bad" if anyone else "ok"),
         Tile("Shared with people outside", len(outside), f"{len({p for i in outside for p in i['externalPeople']})} "
-                                                         "outside address(es)"),
-        Tile("Shared organisation-wide", len(org), "Anyone in the organisation, and Copilot"),
-        Tile("Anyone links with no expiry", len(forever), "These should expire", "warn" if forever else None),
+                                                         "outside address(es)",
+             rows=Rows("Shared with people outside the organisation")),
+        Tile("Shared organisation-wide", len(org), "Anyone in the organisation, and Copilot",
+             rows=Rows("Shared with the whole organisation")),
+        Tile("Anyone links with no expiry", len(forever), "These should expire", "warn" if forever else None,
+             Rows("Shared with anyone", {"Expires": "Never"})),
     ]
     links = sum(i.get("anyoneLinks") or 0 for i in snap.objects("sharepoint_usage", "site") or [])
     if links and not anyone:

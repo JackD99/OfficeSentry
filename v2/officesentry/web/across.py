@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from flask import Blueprint, Response, abort, g, redirect, render_template, request, url_for
 
 from ..db import audit
-from ..reports import data_reports, evidence, month_changes, rollups, tables
+from ..reports import data_reports, evidence, month_changes, rollups, tables, views
 from ..reports.monthly_review import build as build_review
 from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
@@ -173,7 +173,8 @@ def data_report_csv(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if key not in data_reports.REPORTS:
         abort(404)
-    report_tables = data_reports.to_tables(data_reports.build(g.db, t, key))
+    report = views.apply(data_reports.build(g.db, t, key), views.View.parse(request.args))
+    report_tables = data_reports.to_tables(report)
     index = request.args.get("section", 1, type=int)
     if not 1 <= index <= len(report_tables):
         abort(404)

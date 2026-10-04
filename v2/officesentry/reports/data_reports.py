@@ -110,6 +110,32 @@ def link_people(sections: list[Section], tenant_id: int, index: dict[str, str]) 
                     row[i] = UserLink(v, user_path(tenant_id, uid))
 
 
+class Many(str):
+    """A list cell ("A, B, C") that still knows its items, so a value filter can offer each one."""
+
+    parts: tuple[str, ...] = ()
+
+    def __new__(cls, items):
+        parts = tuple(str(v) for v in items)
+        obj = super().__new__(cls, ", ".join(parts))
+        obj.parts = parts
+        return obj
+
+
+@dataclass
+class Rows:
+    """The rows behind a headline figure: a table, optionally filtered, that the figure links to.
+
+    ``where`` maps column names to a value (or a list of values, any of which match);
+    ``age`` is (date column, preset), a key of ``views.AGES`` such as "gt90";
+    ``flagged`` keeps the rows flagged for review.
+    """
+    table: str
+    where: dict = field(default_factory=dict)
+    age: tuple[str, str] | None = None
+    flagged: bool = False
+
+
 @dataclass
 class Tile:
     """A headline figure above a report's tables. ``tone``: ok, warn or bad."""
@@ -117,6 +143,7 @@ class Tile:
     value: object
     foot: str = ""
     tone: str | None = None
+    rows: Rows | None = None  # what clicking it shows; a figure named like a table links to that table
 
 
 @dataclass
@@ -126,6 +153,7 @@ class Highlight:
     value: object
     foot: str = ""
     tone: str | None = None  # bad | warn | ok, for the dot next to the label
+    rows: Rows | None = None  # what clicking it shows, as for Tile
 
 
 @dataclass
@@ -145,6 +173,7 @@ class DataReport:
     footnote: str = ""
     highlights: list[Highlight] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # what couldn't be checked, and why
+    filtered: list[str] = field(default_factory=list)  # the table view a download applies, in words
 
 
 def _cell(value):
@@ -153,7 +182,7 @@ def _cell(value):
     if isinstance(value, bool):
         return "Yes" if value else "No"
     if isinstance(value, (list, tuple, set)):
-        return ", ".join(str(v) for v in value)
+        return Many(value)
     return value
 
 
@@ -194,8 +223,10 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                     ("high" if r.get("isEnabled", True) else "low") if external else None)
     outside = sum(1 for row in fwd.rows if row[3] == "Yes")
     report.highlights = [
-        Highlight("Forwarding outside", outside, "Admin-set or by inbox rule", "bad" if outside else "ok"),
-        Highlight("Forwarding inside", len(fwd.rows) - outside, "To colleagues in the organisation"),
+        Highlight("Forwarding outside", outside, "Admin-set or by inbox rule", "bad" if outside else "ok",
+                  Rows("Forwarding", {"Outside the organisation": "Yes"})),
+        Highlight("Forwarding inside", len(fwd.rows) - outside, "To colleagues in the organisation",
+                  rows=Rows("Forwarding", {"Outside the organisation": "No"})),
     ]
 
     sections = [fwd]
@@ -219,7 +250,8 @@ def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             controls.add([f"Remote domain: {d.get('Name')}", target,
                           "Allowed" if d.get("AutoForwardEnabled") else "Blocked"])
         report.highlights.append(Highlight("Automatic forwarding", "Allowed" if allowed else "Blocked",
-                                           "By the outbound spam policy", "warn" if allowed else "ok"))
+                                           "By the outbound spam policy", "warn" if allowed else "ok",
+                                           Rows("What stops forwarding")))
         sections.append(controls)
     report.sections = sections
 
@@ -1018,6 +1050,12 @@ def to_xlsx(report: DataReport) -> bytes:
         ws.column_dimensions["A"].width = 32
         ws.column_dimensions["B"].width = 24
         ws.column_dimensions["C"].width = 60
+    if report.filtered:
+        ws = wb["Summary"] if "Summary" in used else wb.create_sheet("Summary")
+        used.add("Summary")
+        ws.append([])
+        for line in report.filtered:
+            ws.append(["Filtered view", line])
     for section in report.sections or [Section("No data", ["Note"], rows=[[report.unavailable or ""]])]:
         name = section.title[:31]
         while name in used:

@@ -1,0 +1,87 @@
+{#- The detail report table: filters, column chooser, sort and a header that stays put.
+    tv is a reports.views.TableView. Every control is a plain link carrying the whole view in the
+    query string; tables.js swaps the page in place so it feels instant, and it works without JS. -#}
+{% from "_macros.html" import icon %}
+{% set SEV_RANK = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4} %}
+
+{% macro cell(v) -%}
+{%- if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>
+{%- elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>
+{%- else %}{{ v }}{% endif -%}
+{%- endmacro %}
+
+{% macro filter_menu(tv) -%}
+{% set active = tv.chips|length %}
+<details class="menu" id="filter-{{ tv.slug }}">
+  <summary class="btn sm{{ ' on' if active else ' ghost' }}" title="Show only some rows">{{ icon('filter') }} Filter{% if active %} <span class="n">{{ active }}</span>{% endif %}</summary>
+  <div class="menu-panel wide" role="group" aria-label="Filter {{ tv.section.title }}">
+    <div class="menu-head"><strong>Show only rows where…</strong>{% if active %}<a href="{{ tv.clear_href }}" data-view>Clear</a>{% endif %}</div>
+    {% for c in tv.filters %}
+    <div class="menu-group">
+      <div class="menu-label">{{ c.name }}</div>
+      <div class="opts">{% for o in c.options %}<a class="opt{{ ' on' if o.active }}" href="{{ o.href }}" data-view aria-pressed="{{ 'true' if o.active else 'false' }}">{% if o.active %}{{ icon('check') }}{% endif %}{{ o.label }}<span class="n">{{ o.count }}</span></a>{% endfor %}</div>
+    </div>
+    {% endfor %}
+  </div>
+</details>
+{%- endmacro %}
+
+{% macro column_menu(tv) -%}
+{% set only = tv.visible|length == 1 %}
+<details class="menu" id="columns-{{ tv.slug }}">
+  <summary class="btn sm{{ ' on' if tv.hidden_count else ' ghost' }}" title="Choose the columns to show">{{ icon('columns') }} Columns{% if tv.hidden_count %} <span class="n">{{ tv.visible|length }}/{{ tv.columns|length }}</span>{% endif %}</summary>
+  <div class="menu-panel" role="group" aria-label="Columns in {{ tv.section.title }}">
+    <div class="menu-head"><strong>Columns</strong>{% if tv.hidden_count %}<a href="{{ tv.show_all_href }}" data-view>Show all</a>{% endif %}</div>
+    {% for c in tv.columns %}
+    {% if only and not c.hidden %}<span class="check on disabled" title="At least one column stays">{{ icon('check') }}{{ c.name }}</span>
+    {% else %}<a class="check{{ ' on' if not c.hidden }}" href="{{ c.toggle_href }}" data-view role="menuitemcheckbox" aria-checked="{{ 'false' if c.hidden else 'true' }}">{{ icon('check') }}{{ c.name }}</a>{% endif %}
+    {% endfor %}
+  </div>
+</details>
+{%- endmacro %}
+
+{# csv_href: this table's CSV download, already carrying the view. #}
+{% macro report_table(tv, csv_href='') -%}
+{% set section = tv.section %}
+{% set filtered = tv.chips|length > 0 %}
+<section class="card flush table-card" id="t-{{ tv.slug }}">
+  <div class="card-head toolbar">
+    <h2>{{ section.title }} <span class="count-badge" title="{{ 'Rows shown of all rows' if filtered else 'Rows' }}">{% if filtered %}{{ tv.rows|length }} of {{ tv.total }}{% else %}{{ tv.total }}{% endif %}</span></h2>
+    <div class="toolbar-actions">
+      {% if tv.rows|length > 8 %}<input class="search sm" type="search" data-filter="tbl-{{ tv.slug }}" placeholder="Search these rows…" aria-label="Search {{ section.title }}">{% endif %}
+      {% if section.flagged %}{% if tv.flagged_href %}<a class="pill warn" href="{{ tv.flagged_href }}" data-view title="Show only the rows to review">{{ section.flagged }} to review</a>{% else %}<span class="pill warn">{{ section.flagged }} to review</span>{% endif %}{% endif %}
+      {% if tv.filters %}{{ filter_menu(tv) }}{% endif %}
+      {% if tv.columns|length > 2 and (tv.total > 1 or tv.hidden_count) %}{{ column_menu(tv) }}{% endif %}
+      {% if csv_href %}<a class="btn sm ghost" href="{{ csv_href }}" title="Download {{ 'the rows and columns shown' if filtered or tv.hidden_count else 'this table' }} as CSV">{{ icon('download') }} CSV</a>{% endif %}
+    </div>
+  </div>
+  {% if section.intro %}<p class="intro">{{ section.intro }}</p>{% endif %}
+  {% if filtered %}
+  <div class="chips" aria-label="Filters">
+    {% for chip in tv.chips %}<a class="chip" href="{{ chip.href }}" data-view title="Remove this filter">{{ chip.label }}<span aria-hidden="true">×</span><span class="sr-only">Remove</span></a>{% endfor %}
+    <a class="small" href="{{ tv.clear_href }}" data-view>Clear filters</a>
+  </div>
+  {% endif %}
+  {% if not tv.rows %}
+  <p class="no-rows">No rows match {{ 'this filter' if tv.chips|length == 1 else 'these filters' }}. <a href="{{ tv.clear_href }}" data-view>Show all {{ tv.total }}</a></p>
+  {% else %}
+  {% set sortable = tv.total > 1 %}
+  <div class="table-scroll{{ ' tall' if tv.rows|length > 12 }}" data-key="{{ tv.slug }}">
+  <table class="stack-sm" id="tbl-{{ tv.slug }}">
+    <thead><tr>
+      {% if tv.flag %}<th class="flagcol" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(tv.flag.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ tv.flag.sort_href }}" data-view title="Sort by flag">Flag</a>{% else %}Flag{% endif %}{% if tv.flag.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}
+      {% for c in tv.visible %}<th class="{{ 'num' if c.kind == 'num' }}" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(c.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ c.sort_href }}" data-view>{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{% if c.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endfor %}
+    </tr></thead>
+    <tbody>
+    {% for cells, flag in tv.rows %}
+    <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ cells|join(' ')|lower }}">
+      {% if tv.flag %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}
+      {% for v in cells %}{% set c = tv.visible[loop.index0] %}<td class="wrap{{ ' num' if c.kind == 'num' }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{%- endmacro %}

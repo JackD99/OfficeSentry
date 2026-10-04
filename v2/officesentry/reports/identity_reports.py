@@ -27,7 +27,7 @@ from ..licences import (
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart
-from .data_reports import DataReport, Highlight, Section
+from .data_reports import DataReport, Highlight, Rows, Section
 from .monthly_review import _secure_score_points, setting
 
 NEVER_SIGNED_IN_GRACE = 30  # days after creation before "never signed in" counts as inactive (see licences.is_stale)
@@ -317,15 +317,18 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.highlights = [
         Highlight("Fully protected", f"{counts['protected']} of {members}" if both else "Not checked",
                   f"{round(100 * counts['protected'] / members)}% of enabled members" if both and members else "",
-                  ("ok" if counts["protected"] == members else "warn") if both and members else None),
+                  ("ok" if counts["protected"] == members else "warn") if both and members else None,
+                  Rows("Protected accounts")),
         Highlight("No MFA at all", counts["none"] if both else "Not checked", "Not set up and not required",
-                  "bad" if counts["none"] else None),
+                  "bad" if counts["none"] else None, Rows("Accounts with a gap", {"Gap": GAP_TEXT["none"][0]})),
         Highlight("Set up, not required", counts["not_required"] if enf.known else "Not checked",
-                  "A password alone gets in", "warn" if counts["not_required"] else None),
+                  "A password alone gets in", "warn" if counts["not_required"] else None,
+                  Rows("Accounts with a gap", {"Gap": [GAP_TEXT["not_required"][0], "Not required"]})),
         Highlight("Required, not set up", counts["not_registered"] if both else "Not checked",
-                  "Anyone with the password can set it up", "warn" if counts["not_registered"] else None),
+                  "Anyone with the password can set it up", "warn" if counts["not_registered"] else None,
+                  Rows("Accounts with a gap", {"Gap": GAP_TEXT["not_registered"][0]})),
         Highlight("Admins with a gap", admin_gaps if enf.known else "Not checked", "Fix these first",
-                  "bad" if admin_gaps else None),
+                  "bad" if admin_gaps else None, Rows("Accounts with a gap")),
     ]
     if counts["unknown"]:
         report.highlights.append(Highlight("Unknown", counts["unknown"], "See \"Not checked\" below"))
@@ -417,10 +420,13 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     gas = sum(p["global_admin"] for p in roles.values() if p["type"] == "user")
     eligible = {p["id"] for p in roles.values() if p["eligible"]}
     report.highlights = [
-        Highlight("Privileged accounts", len(people), "People with a permanent admin role"),
-        Highlight("Global Administrators", gas, "Keep between 2 and 4", None if 2 <= gas <= 4 else "warn"),
+        Highlight("Privileged accounts", len(people), "People with a permanent admin role",
+                  rows=Rows(privileged.title, {"Kind": ["User", "Guest"],
+                                                     "How assigned": ["Permanent", "Permanent and Eligible (PIM)"]})),
+        Highlight("Global Administrators", gas, "Keep between 2 and 4", None if 2 <= gas <= 4 else "warn",
+                  Rows(privileged.title, {"Roles": "Global Administrator"})),
         Highlight("Admins without MFA", no_mfa if not reg.note else "Not checked", "Not set up at all",
-                  "bad" if no_mfa else None),
+                  "bad" if no_mfa else None, Rows(privileged.title, {"MFA set up": "No"})),
         Highlight("Break-glass accounts", len(glass.rows) or "None found",
                   "Emergency accounts kept out of Conditional Access", None if glass.rows else "warn"),
         Highlight("Using PIM", "Not checked" if p2 is False else (f"{len(eligible)} eligible" if eligible else "No"),
@@ -561,18 +567,21 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Highlight("Waste per month", Money(summary.monthly_waste, currency) if priced else "Not priced",
                   f"{plural(unpriced, 'unpriced licence')} not included" if unpriced and priced
                   else "Unused paid licences",
-                  "warn" if summary.monthly_waste else None),
+                  "warn" if summary.monthly_waste else None, WASTE_ROWS),
         Highlight("Waste per year", Money(summary.monthly_waste * 12, currency) if priced else "Not priced",
-                  "If nothing changes"),
+                  "If nothing changes", rows=WASTE_ROWS),
         Highlight("Unused licences", wasted,
                   f"{sum(x.unassigned for x in paid.values())} unassigned, "
                   f"{sum(x.on_disabled_users for x in paid.values())} on disabled, "
                   f"{sum(x.on_stale_users for x in paid.values()) if summary.stale_available else 'unknown'} "
-                  "on inactive accounts", "warn" if wasted else "ok"),
+                  "on inactive accounts", "warn" if wasted else "ok", WASTE_ROWS),
         Highlight("Overlapping licences", len(overlaps.rows), "Features already included elsewhere",
                   "warn" if overlaps.rows else None),
     ]
 
+
+
+WASTE_ROWS = Rows("Waste by subscription")
 
 # -- Inactive accounts ------------------------------------------------------------------------
 
@@ -669,7 +678,7 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Highlight("Invitations never accepted", len(pending.rows), "Older than 30 days",
                   "warn" if pending.rows else None),
         Highlight("Disabled but still assigned", len(disabled.rows), "Licences or admin roles",
-                  "warn" if disabled.rows else None),
+                  "warn" if disabled.rows else None, Rows(disabled.title)),
     ]
 
 
@@ -787,14 +796,14 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         if delta is None:
             return Highlight(label, "Not enough history", "Builds up as Office Sentry collects")
         return Highlight(label, f"{delta:+g}%", f"Since {_day(datetime.combine(since, datetime.min.time()))}",
-                         None if not delta else ("ok" if delta > 0 else "bad"))
+                         None if not delta else ("ok" if delta > 0 else "bad"), Rows(months.title))
 
     report.highlights = [
-        Highlight("Secure Score", f"{pct:g}%", f"{current:g} of {maximum:g} points"),
+        Highlight("Secure Score", f"{pct:g}%", f"{current:g} of {maximum:g} points", rows=Rows(months.title)),
         trend("Change in 30 days", d30, since30),
         trend("Change in 90 days", d90, since90),
         Highlight("Points available", f"{remaining:g}" if profiles else "Unknown",
-                  f"From {plural(len(open_rows), 'control')} not fully in place"),
+                  f"From {plural(len(open_rows), 'control')} not fully in place", rows=Rows(available.title)),
         Highlight("History", plural(len(points), "day"),
                   f"Since {_day(datetime.combine(points[0][0], datetime.min.time()))}" if points else ""),
     ]

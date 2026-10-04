@@ -9,11 +9,11 @@ from flask import Blueprint, Response, abort, flash, g, redirect, render_templat
 from .. import findings, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
-from ..reports import data_reports, evidence, export
+from ..reports import data_reports, evidence, export, library, views
 from ..reports.monthly_review import build, setting
 from ..rules import RULES
 from ..snapshot import TenantSnapshot
-from .access import login_required, roles_required, tenant_or_404
+from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .printing import pdf_response
 
 RULE_TITLES = {r.key: r.title for r in RULES}
@@ -28,10 +28,56 @@ def _filename(tenant, ext: str) -> str:
     return f"security-review-{slug}.{ext}"
 
 
+SETTINGS_PAGES = (  # what the library's search finds besides reports and tenants (admins only)
+    ("admin.connections", "App connection", "certificate consent entra app registration"),
+    ("reports.prices", "Licence prices", "cost money currency sku"),
+    ("email.settings", "Email delivery", "smtp mail send graph"),
+    ("alerts.settings", "Alerts", "teams slack webhook notifications"),
+    ("branding.settings", "Report branding", "logo colours msp name"),
+    ("admin.users", "Users", "people access roles accounts sign-in"),
+)
+
+
+def _library_href(entry: library.Entry, tenant_id: int | None) -> str:
+    if tenant_id is None:  # across every tenant
+        if entry.kind == "changes":
+            return url_for("across.changes")
+        return url_for("across.rollup", key="review" if entry.kind == "findings" else entry.key)
+    return {
+        "review": lambda: url_for("reports.tenant_report", tenant_id=tenant_id),
+        "evidence": lambda: url_for("reports.evidence_pack", tenant_id=tenant_id),
+        "changes": lambda: url_for("across.tenant_changes", tenant_id=tenant_id),
+        "findings": lambda: url_for("reports.tenant_findings", tenant_id=tenant_id),
+    }.get(entry.kind, lambda: url_for("reports.data_report", tenant_id=tenant_id, key=entry.key))()
+
+
 @bp.get("/reports")
 @login_required
 def overview():
-    return redirect(url_for("tenants.dashboard"))  # the dashboard now carries the overview
+    """The report library: every report, searchable, for one tenant or across all of them."""
+    staff = g.user["role"] in ("admin", "analyst")
+    tenants = visible_tenants(g.db, g.user)
+    choice = request.args.get("tenant", "")
+    tenant = next((t for t in tenants if str(t["id"]) == choice), None)
+    if tenant is None and not (staff and tenants):
+        tenant = tenants[0] if tenants else None  # clients always look at one of their tenants
+    use = next((u for u in library.USES if u.key == request.args.get("use")), None)
+    areas = library.catalogue()
+    for area in areas:
+        if use:
+            area.entries = [e for e in area.entries if use.key in e.uses]
+        for e in area.entries:
+            e.href = _library_href(e, tenant["id"] if tenant else None) if tenants else ""
+            e.across = url_for("across.rollup", key="review" if e.kind == "findings" else e.key) \
+                if staff and tenant and e.kind != "changes" else (url_for("across.changes") if staff and tenant else "")
+    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? ORDER BY report_key, name COLLATE NOCASE",
+                         (g.user["id"],)).fetchall()
+    titles = {k: v[0] for k, v in data_reports.REPORTS.items()}
+    settings = [(url_for(ep), title, words) for ep, title, words in SETTINGS_PAGES] \
+        if g.user["role"] == "admin" else []
+    return render_template("library.html", areas=[a for a in areas if a.entries], tenants=tenants, tenant=tenant,
+                           staff=staff, use=use, uses=library.uses(), total=library.count(), settings=settings,
+                           saved=[v for v in saved if v["report_key"] in titles], titles=titles)
 
 
 @bp.get("/tenants/<int:tenant_id>/report")
@@ -113,8 +159,18 @@ def data_report(tenant_id: int, key: str):
         abort(404)
     groups = data_reports.grouped()
     active = next(gr for gr in groups if any(k == key for k, _, _ in gr.reports))
-    return render_template("data_report.html", tenant=t, report=data_reports.build(g.db, t, key),
-                           groups=groups, group=active)
+    report = data_reports.build(g.db, t, key)
+    view = views.View.parse(request.args)
+    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
+                         (g.user["id"], key)).fetchall()
+    return render_template("data_report.html", tenant=t, report=report, groups=groups, group=active,
+                           tables=views.table_views(report, view, request.path), view_query=view.query(),
+                           links=views.headline_links(report, request.path), saved=saved)
+
+
+def _viewed(report):
+    """The report with the table view in the query string applied, for a download that matches the page."""
+    return views.apply(report, views.View.parse(request.args))
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.pdf")
@@ -125,7 +181,7 @@ def data_report_pdf(tenant_id: int, key: str):
         abort(404)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.pdf")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
-    return pdf_response("reports/detail.html", f"{key}-{slug}", report=data_reports.build(g.db, t, key))
+    return pdf_response("reports/detail.html", f"{key}-{slug}", report=_viewed(data_reports.build(g.db, t, key)))
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.xlsx")
@@ -137,7 +193,7 @@ def data_report_xlsx(tenant_id: int, key: str):
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     return Response(
-        data_reports.to_xlsx(data_reports.build(g.db, t, key)),
+        data_reports.to_xlsx(_viewed(data_reports.build(g.db, t, key))),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={key}-{slug}.xlsx"},
     )

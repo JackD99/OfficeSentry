@@ -21,6 +21,7 @@
 <div class="callout"><strong>Not available.</strong> {{ report.unavailable }}</div>
 {% else %}
 {% if report.notice %}<div class="callout warn">{{ report.notice }}</div>{% endif %}
+{% if report.filtered %}<div class="callout"><strong>Filtered view.</strong> {{ report.filtered|join(' ') }} The headline figures cover every row.</div>{% endif %}
 {% if report.tiles %}
 {% call ui.figures(report.tiles|length) %}{% for t in report.tiles %}{{ ui.figure(t.label, t.value, t.foot, t.tone) }}{% endfor %}{% endcall %}
 {% endif %}

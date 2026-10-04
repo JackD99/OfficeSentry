@@ -21,7 +21,7 @@ def test_overview_numbers_open_their_reports(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
-    for key in ("secure-score", "mfa", "admins", "licences", "inactive"):
+    for key in ("secure-score", "mfa", "admins#t-privileged-role-holders", "licences", "inactive#t-inactive-members"):
         assert f'class="tile link" href="/tenants/{alpha}/data/{key}"' in page, key
 
 

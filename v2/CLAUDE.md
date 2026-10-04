@@ -58,6 +58,19 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   and register in `reports/__init__.py`. A builder can set `tiles` (headline
   figures), `chart`, `notice` (something the admin must fix first) and use
   `Link` cells; the page and XLSX render them.
+- Headline figures open the rows behind them: give a `Tile` or `Highlight`
+  `rows=Rows("<table title>", {"<column>": value or [values]}, age=(col, "gt90"),
+  flagged=True)`. A figure named exactly like a table links to it without that.
+  `test_report_library.py` opens every seeded headline link.
+- Tables are drawn by `templates/_report_table.html` from `reports/views.py`:
+  value filters, date presets, hidden columns and sort all live in the query
+  string (`f=`, `age=`, `hide=`, `sort=`, keyed by table and column slugs), and
+  the page, PDF, XLSX and CSV apply the same view (`views.apply`). Pass lists
+  for list cells (they become `Many`, so a filter offers each item). Saved
+  views are per person, per report key (`saved_views` table, `web/saved_views.py`).
+- The Reports page (`/reports`) lists every registered report. Add a new key to
+  the jobs in `reports/library.USES` and search words to `KEYWORDS` if its
+  title doesn't contain what people would type.
 - Every detail report automatically gets a cross-tenant rollup (`reports/rollups.py`,
   `/across/<key>`) and is compared in the month-over-month change report
   (`reports/month_changes.py`, `/changes`, `/tenants/<id>/changes`). Rollup
