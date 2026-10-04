@@ -10,6 +10,7 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 from .. import alerts, delivery, mailer, store
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
+from ..reports.data_reports import grouped as report_groups
 from ..text import plural
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .filters import _strftime as datefmt
@@ -189,6 +190,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
                                ([values["timezone"]] if values["timezone"] else [])))
     return render_template(
         "schedule_form.html", tenant=tenant, s=values, chosen=chosen, catalog=delivery.catalog(),
+        report_groups=report_groups(),
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [], team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES, days=delivery.DAYS, zones=zones, default_tz=cfg.timezone,
         ordinal=delivery.ordinal, pdf_available=delivery.export.pdf_available(),
