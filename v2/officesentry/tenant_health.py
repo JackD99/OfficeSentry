@@ -56,7 +56,7 @@ class Step:
     key: str
     title: str
     done: bool
-    detail: str = ""
+    todo: str = ""  # the step as an instruction, for "Next: ..."
 
 
 @dataclass
@@ -234,11 +234,15 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
 
     steps = [
         Step("added", "Tenant added", True),
-        Step("consent", "Admin consent granted", bool(tenant["consented_at"])),
-        Step("global_reader", "Global Reader assigned", bool(result and result.get("global_reader"))),
-        Step("collection", "First full collection done", full),
+        Step("consent", "Admin consent granted", bool(tenant["consented_at"]), "grant admin consent"),
+        Step("global_reader", "Global Reader assigned", bool(result and result.get("global_reader")),
+             "assign Global Reader to the app"),
+        Step("collection", "First full collection done", full,
+             "first full collection (collecting now)" if collecting else "collect everything"),
         Step("permissions", "All permissions granted",
-             bool(result and result.get("permissions_checked") and not result.get("missing"))),
+             bool(result and result.get("permissions_checked") and not result.get("missing")),
+             "re-grant admin consent for the missing permissions" if result and result.get("missing")
+             else "check the permissions"),
     ]
 
     onboarding_steps = {"consent", "permissions", "global_reader", "collection"}
@@ -310,8 +314,9 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
             summary = (f"Not assigned (the app holds {', '.join(others)} instead), so mailbox reports may not be "
                        "collected.")
         checks.append(Check("global_reader", "Global Reader role", "bad", summary,
-                            f"In {name}: {GLOBAL_READER_STEPS} ({app}). Microsoft can take up to an hour to apply "
-                            "it; then press Check connection now.", "check"))
+                            f"In {name}: {GLOBAL_READER_STEPS.removesuffix('the Office Sentry app')}{app}. "
+                            "Microsoft can take up to an hour to apply it; then press Check connection now.",
+                            "check"))
     return checks
 
 
@@ -333,13 +338,14 @@ def describe(health: Health) -> str:
         return "Archived: hidden from lists and reports. Restore it to bring it back."
     if health.status == "paused":
         return "Collection and emailed reports are paused."
+    step = health.next_step
     problems = health.problems
-    if problems:
+    if problems and health.status != "onboarding":
         first = problems[0]
         more = len(problems) - 1
-        return first.summary + (f" (and {plural(more, 'other problem')})" if more else "")
-    step = health.next_step
+        summary = first.summary[0].lower() + first.summary[1:]
+        return f"{first.title}: {summary}" + (f" (and {plural(more, 'other problem')})" if more else "")
     if step:
-        return f"Next: {step.title[0].lower() + step.title[1:]}."
+        return f"Next: {step.todo or step.title[0].lower() + step.title[1:]}."
     return "Everything is working."
 
