@@ -301,8 +301,23 @@ def _pdf(app, template: str, **context) -> bytes:
     return export.to_pdf(html, static.as_uri() + "/")
 
 
-def _msp_name(conn) -> str:
-    return mailer.mail_settings(conn).get("msp_name") or "Office Sentry"
+LOGO_CID = "brand-logo"
+
+
+def email_brand(conn) -> tuple[dict, list[tuple[str, str, bytes]]]:
+    """The MSP's name, colour, contact line and logo for an email template, and the logo to attach inline.
+
+    The logo is sent as an inline attachment (``cid:``): Outlook and Gmail don't show data: images.
+    """
+    brand = branding.load(conn)
+    ctx = {"msp_name": mailer.mail_settings(conn).get("msp_name") or brand.display_name,
+           "accent": brand.accent, "on_accent": brand.on_accent, "contact": brand.contact, "logo": None}
+    image = branding.logo_image(brand)
+    size = branding.fit(branding.image_size(image[1]), 32, 200) if image else None
+    if not size:
+        return ctx, []
+    ctx["logo"] = {"src": f"cid:{LOGO_CID}", "width": size[0], "height": size[1]}
+    return ctx, [(LOGO_CID, image[0], image[1])]
 
 
 def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None) -> list[tuple[str, str, bytes]]:
@@ -342,10 +357,11 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
     subject = f"{tenant['name']} security report · {label}"
-    msp = _msp_name(conn)
+    look, inline = email_brand(conn)
+    msp = look["msp_name"]
     html = render(app, "emails/report.html", subject=subject, tenant=tenant, review=review, label=label,
                    failing=failing[:6], more=max(0, len(failing) - 6), files=files, stale=stale,
-                   message=schedule["message"], msp_name=msp, frequency=schedule["frequency"],
+                   message=schedule["message"], frequency=schedule["frequency"], **look,
                    kpis=[k for k in review.kpis if k.value is not None])
 
     lines = [f"{tenant['name']}: security report for {label}", ""]
@@ -370,7 +386,7 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     attachments = _attachments(app, conn, tenant, keys, bool(schedule["include_xlsx"]), now, review) \
         if attach else []
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments), [name for _, name in files])
+                       attachments=attachments, inline=inline), [name for _, name in files])
 
 
 def digest_data(conn, frequency: str, now: datetime) -> dict:
@@ -441,10 +457,10 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
     label = period_label(schedule["frequency"], local)
     data = digest_data(conn, schedule["frequency"], now)
-    msp = _msp_name(conn)
+    look, inline = email_brand(conn)
     subject = f"Tenant digest · {label}"
     filename = f"tenant-digest-{local.strftime('%Y-%m-%d')}.xlsx"
-    html = render(app, "emails/digest.html", subject=subject, d=data, label=label, msp_name=msp,
+    html = render(app, "emails/digest.html", subject=subject, d=data, label=label, **look,
                    message=schedule["message"], titles=RULE_TITLES, frequency=schedule["frequency"],
                    files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [])
     lines = [f"Tenant digest for {label}", "",
@@ -461,7 +477,7 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
         if attach and schedule["include_xlsx"] else []
     names = [filename] if schedule["include_xlsx"] else []
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments), names)
+                       attachments=attachments, inline=inline), names)
 
 
 def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[alerts.Item]:
@@ -478,13 +494,14 @@ def build_alert_email(app, conn, alert, tenant, items: list[alerts.Item], contac
     n = len(items)
     level = "critical" if alert["min_severity"] == "critical" else "critical or high"
     subject = f"{n} new {level} finding{'s' if n != 1 else ''} in {tenant['name']}"
+    look, inline = email_brand(conn)
     html = render(app, "emails/alert.html", subject=subject, tenant=tenant, items=items,
-                  msp_name=_msp_name(conn), level=level, preview=preview)
+                  level=level, preview=preview, **look)
     lines = [subject, ""]
     for i in items:
         lines.append(f"[{i.severity.upper()}] {i.title}: {i.subject}" + (f" ({i.detail})" if i.detail else ""))
     to, bcc = split_recipients(contacts)
-    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html), [])
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html, inline=inline), [])
 
 
 # -- Sending and history ------------------------------------------------------------------

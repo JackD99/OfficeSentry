@@ -1,5 +1,9 @@
-{#- Shared layout for every email. Email clients ignore stylesheets and most
-    modern CSS, so styles are inline and the layout is tables. Light only. -#}
+{#- Shared layout for every email. Email clients ignore most stylesheets and
+    modern CSS, so styles are inline and the layout is tables (Outlook renders
+    with Word). The one <style> block only stacks the figure tiles on phones,
+    where it's supported; without it they stay side by side. Light only.
+    Needs: msp_name, accent, on_accent, contact, logo ({src, width, height} or
+    none) from delivery.email_brand(). -#}
 {%- from "emails/_parts.html" import FONT -%}
 <!doctype html>
 <html lang="en">
@@ -9,24 +13,34 @@
 <meta name="color-scheme" content="light">
 <meta name="supported-color-schemes" content="light">
 <title>{{ subject }}</title>
+<style>
+@media only screen and (max-width: 520px) {
+  .wrap { padding: 0 !important; }
+  .card { border-radius: 0 !important; border-left: 0 !important; border-right: 0 !important; }
+  .pad { padding-left: 18px !important; padding-right: 18px !important; }
+  .tile { display: block !important; width: auto !important; margin-bottom: 8px !important; }
+  .gap { display: none !important; }
+}
+</style>
 </head>
 <body style="margin:0;padding:0;background:#f5f6f8;{{ FONT }}">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{% block preheader %}{% endblock %}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6f8;">
-<tr><td align="center" style="padding:24px 12px;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;{{ FONT }}color:#111827;font-size:14px;line-height:1.55;">
-    <tr><td style="padding:18px 28px;border-bottom:1px solid #e5e7eb;">
+<tr><td class="wrap" align="center" style="padding:24px 12px;">
+  <table class="card" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;{{ FONT }}color:#111827;font-size:14px;line-height:1.55;">
+    <tr><td height="5" bgcolor="{{ accent }}" style="height:5px;line-height:5px;font-size:0;background:{{ accent }};border-radius:10px 10px 0 0;">&nbsp;</td></tr>
+    <tr><td class="pad" style="padding:18px 28px;border-bottom:1px solid #e5e7eb;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-        <td style="font-weight:700;font-size:15px;color:#111827;">{{ msp_name }}</td>
-        <td align="right" style="font-size:12px;color:#6b7280;">{% block kicker %}{% endblock %}</td>
+        <td valign="middle">{% if logo %}<img src="{{ logo.src }}" width="{{ logo.width }}" height="{{ logo.height }}" alt="{{ msp_name }}" style="display:block;border:0;outline:none;width:{{ logo.width }}px;height:{{ logo.height }}px;">{% else %}<span style="font-weight:700;font-size:16px;color:#111827;">{{ msp_name }}</span>{% endif %}</td>
+        <td valign="middle" align="right" style="font-size:12px;color:#6b7280;">{% block kicker %}{% endblock %}</td>
       </tr></table>
     </td></tr>
-    <tr><td style="padding:24px 28px 28px;">
+    <tr><td class="pad" style="padding:24px 28px 28px;">
       {% block body %}{% endblock %}
     </td></tr>
   </table>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;">
-    <tr><td style="padding:14px 28px;font-size:12px;line-height:1.5;color:#6b7280;{{ FONT }}">{% block footer %}{% endblock %}</td></tr>
+    <tr><td class="pad" style="padding:14px 28px;font-size:12px;line-height:1.5;color:#6b7280;{{ FONT }}">{% block footer %}{% endblock %}{% if contact %}<br>{{ msp_name }} · {{ contact }}{% endif %}</td></tr>
   </table>
 </td></tr>
 </table>
