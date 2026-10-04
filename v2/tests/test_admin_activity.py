@@ -52,6 +52,7 @@ def _profile(db, tenant_id, factory, p1=True):
                             for s in SKUS]
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": skus})
+    responses.get(f"{V1}/directory/subscriptions", json={"value": []})
     assert _run(db, tenant_id, "tenant_profile", factory)[1] == "succeeded"
 
 

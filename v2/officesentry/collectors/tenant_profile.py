@@ -3,12 +3,20 @@
 Capabilities tell later collectors and reports what the tenant can provide,
 e.g. sign-in activity and Conditional Access need Entra ID P1. Reports show
 "not available on this tenant's licence" instead of failing.
+
+``subscribedSkus`` gives licence counts per product; ``/directory/subscriptions``
+gives each subscription behind them with its status, trial flag and the date it
+next renews, lapses or is deleted.
 """
 
 from __future__ import annotations
 
 from .. import store
+from ..graph import GraphError
 from .base import Collector, RunContext, register
+
+SUBSCRIPTION_FIELDS = ("commerceSubscriptionId", "skuId", "skuPartNumber", "status", "isTrial", "totalLicenses",
+                       "createdDateTime", "nextLifecycleDateTime")
 
 # Service plan name -> capability flag.
 CAPABILITY_PLANS = {
@@ -48,8 +56,9 @@ def capabilities_from_skus(skus: list[dict]) -> dict:
 class TenantProfile(Collector):
     key = "tenant_profile"
     title = "Tenant profile and licences"
-    description = "Organization details, verified domains, subscriptions and licence capabilities."
-    permissions = ("Organization.Read.All",)
+    description = ("Organization details, verified domains, subscriptions with renewal dates and licence "
+                   "capabilities.")
+    permissions = ("Organization.Read.All", "Directory.Read.All")
 
     def collect(self, ctx: RunContext) -> None:
         orgs = ctx.graph.get("/organization", params={
@@ -72,3 +81,17 @@ class TenantProfile(Collector):
         ctx.metric("licences.assigned", consumed)
         ctx.metric("licences.unassigned", max(enabled - consumed, 0))
         ctx.log("Capabilities: " + (", ".join(sorted(k for k, v in caps.items() if v)) or "none"))
+        self._subscriptions(ctx)
+
+    @staticmethod
+    def _subscriptions(ctx: RunContext) -> None:
+        try:
+            subs = ctx.paged(ctx.graph.get_all("/directory/subscriptions"))
+        except GraphError as exc:
+            ctx.warn(f"Subscription renewal dates weren't readable: {exc.message}")
+            ctx.objects("subscription_status", [("subscriptions", {"available": False})])
+            return
+        ctx.objects("company_subscription", [(s["id"], {k: s.get(k) for k in SUBSCRIPTION_FIELDS})
+                                             for s in subs if s.get("id")])
+        ctx.objects("subscription_status", [("subscriptions", {"available": True})])
+        ctx.metric("licences.trials", sum(1 for s in subs if s.get("isTrial") and s.get("status") == "Enabled"))

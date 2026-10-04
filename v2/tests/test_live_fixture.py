@@ -157,3 +157,16 @@ def test_usage_reports_on_real_data(db, live):
     assert move[1] == "Microsoft 365 Business Standard" and move[3] == "Convert to a shared mailbox"
     usage = data_reports.build(db, live, "usage", RECORDED)
     assert not usage.unavailable and usage.sections[0].rows[0][:2] == ["Email", 1]
+
+
+def test_subscriptions_on_real_data(db, live):
+    # Business Premium (no Teams), Power Automate Free and a lapsed Business Standard trial. The subscriptions
+    # behind them and the users' licence assignment states were added by hand (see those entries' "note").
+    report = data_reports.build(db, live, "subscriptions", RECORDED)
+    renewals = next(s for s in report.sections if s.title == "Renewals and expiry")
+    assert (str(renewals.rows[0][0]), renewals.rows[0][1]) == ("Microsoft 365 Business Standard", "Suspended")
+    who = next(s for s in report.sections if s.title == "Who has which licence")
+    assert who.rows and {r[2] for r in who.rows} == {"Directly"}
+    results = _results(db, live)
+    assert results["licence_assignment_errors"].status == "pass"
+    assert results["subscriptions_lapsing"].status == "pass"  # the lapsed trial has nobody on it

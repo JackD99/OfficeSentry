@@ -138,6 +138,17 @@ pass, and a first run against a real tenant.
     quota with their largest files. Sizes come from SharePoint's own storage
     figures (`SMTotalSize`), which include every version. Needs
     `Sites.Read.All`.
+  - *Licences and subscriptions*: for renewals and fixing licence problems.
+    Every product with licences purchased, in a grace period, suspended,
+    assigned and available, and its monthly cost at your prices; every
+    subscription behind them (`/directory/subscriptions`) with its status and
+    the date it next renews, lapses or is deleted, with trials and
+    subscriptions in their grace period, suspended or locked listed first and
+    bucketed into 30, 60 and 90 days; who holds which licence, directly or by
+    group (filter by licence); group licensing errors (not enough licences,
+    conflicting or missing base licences, usage location) in plain words with
+    what to do; licensed accounts without a usage location; licences assigned
+    both directly and by a group; and the groups that hand licences out.
   - *Microsoft 365 usage*: who used email, Teams, OneDrive, SharePoint and
     the Office apps in the last 30 days (share of licensed people per
     service, and a trend from Office Sentry's own history), when each person
@@ -181,7 +192,10 @@ registering apps, guest directory access, joining by email verification,
 admin consent requests, SharePoint anonymous links, guest
 invitations, stale guest invitations, device compliance, disk encryption,
 Windows releases out of support, joined computers not in Intune, devices not
-checking in, stale device records, SharePoint storage nearly full.
+checking in, stale device records, SharePoint storage nearly full, licence
+assignment errors, and subscriptions about to lapse (trials in use ending
+within 30 days, subscriptions in their grace period, suspended ones still
+assigned).
 For tenants synced from on-premises AD: directory sync running, password
 hash sync on, and admin accounts that are cloud-only.
 checking in, stale device records, domain federation changes.

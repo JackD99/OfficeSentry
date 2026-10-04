@@ -8,7 +8,7 @@ from .base import Collector, RunContext, register
 
 GROUP_FIELDS = (
     "id,displayName,description,groupTypes,mailEnabled,securityEnabled,visibility,resourceProvisioningOptions,"
-    "createdDateTime,mail,membershipRule,onPremisesSyncEnabled,expirationDateTime"
+    "createdDateTime,mail,membershipRule,onPremisesSyncEnabled,expirationDateTime,assignedLicenses"
 )
 OWNER_FIELDS = "id,displayName,userPrincipalName,accountEnabled,userType"
 MEMBER_FIELDS = "id,userType,accountEnabled,userPrincipalName,mail"
@@ -43,6 +43,9 @@ def _summary(group: dict) -> dict:
         "expirationDateTime": group.get("expirationDateTime"),
         "dynamic": "DynamicMembership" in (group.get("groupTypes") or []) or bool(group.get("membershipRule")),
         "synced": bool(group.get("onPremisesSyncEnabled")),
+        # Licences the group gives its members (group-based licensing).
+        "licenceSkuIds": [lic.get("skuId") for lic in group.get("assignedLicenses") or []
+                          if isinstance(lic, dict) and lic.get("skuId")],
         "examined": False,
     }
 

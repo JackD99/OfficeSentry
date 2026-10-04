@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-48 checks, 22 data sources (collectors) and 26 detail reports.
+50 checks, 22 data sources (collectors) and 27 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -101,7 +101,9 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
+| **Every licence assignment works**<br>`licence_assignment_errors` | `groups`, `tenant_profile`, `users` |  | Fix each failed licence from the group's Licenses page in the Entra admin center: buy more licences when there aren't enough, remove licences that conflict, and correct usage locations. The Licences and subscriptions report explains each error. |
 | **No licences on disabled accounts**<br>`licensed_disabled` | `users` |  | Remove licences from disabled accounts, or convert leavers' mailboxes to shared mailboxes (free up to 50 GB) before removing the licence. |
+| **No subscriptions are about to lapse**<br>`subscriptions_lapsing` | `tenant_profile` |  | Renew subscriptions in their grace period, buy or cancel trials people use before they end, and move people off suspended subscriptions. Billing > Your products in the Microsoft 365 admin center (or Partner Center for subscriptions you sell) shows each one. |
 | **No paid licences sit unassigned**<br>`unassigned_licences` | `tenant_profile` |  | Reduce the subscription quantity at the next renewal, or assign the spare licences. |
 
 ### Sharing
@@ -153,8 +155,8 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `sharepoint_storage` | SharePoint storage | What fills each site's storage: libraries, folders, large and old files, version history and recycle bins. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
 | `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
-| `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions and licence capabilities. | `Organization.Read.All` |
-| `users` | Users | Members and guests with licences, password age and last sign-in (sign-in needs Entra ID P1). | `User.Read.All`, `AuditLog.Read.All` |
+| `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions with renewal dates and licence capabilities. | `Organization.Read.All`, `Directory.Read.All` |
+| `users` | Users | Members and guests with licences (and whether each comes directly or from a group), password age and last sign-in (sign-in needs Entra ID P1). | `User.Read.All`, `AuditLog.Read.All` |
 
 ## Detail reports
 
@@ -186,6 +188,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `shared-mailboxes` | Shared mailboxes | Shared, room and equipment mailboxes that can be signed in to, and who uses them. | `mailbox_usage`, `mailboxes`, `users` |
 | `sharepoint` | SharePoint sites | Storage and growth, inactive sites, and which sites are shared outside. | `sharepoint_usage` |
 | `sharepoint-storage` | SharePoint storage | What fills the tenant's SharePoint storage and what to clean up: sites, folders, large and old files, version history and recycle bins. | `sharepoint_storage`, `sharepoint_usage`, `tenant_profile` |
+| `subscriptions` | Licences and subscriptions | Every subscription with licences bought, assigned and available, its cost and renewal date, trials and lapsing subscriptions, and who has which licence, directly or by group. | `groups`, `tenant_profile`, `users` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
 | `usage` | Microsoft 365 usage | Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active. | `m365_usage` |
 
@@ -198,7 +201,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `legacy_signins`, `mfa_registration`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
-| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `devices`, `directory_sync`, `groups` |
+| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `devices`, `directory_sync`, `groups`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `mailbox_usage`, `mailboxes` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | not used by a collector yet |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `inbox_rules` |
