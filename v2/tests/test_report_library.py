@@ -239,3 +239,13 @@ def test_rollup_figures_open_the_tenant_rows(client, db, two_tenants):
     assert f'href="/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes#t-forwarding"' in page
     page = client.get("/across/review").get_data(as_text=True)
     assert re.search(rf'href="/tenants/{alpha}/data/inactive#t-inactive-members"', page)
+
+
+def test_no_filter_with_only_one_choice():
+    report = DataReport("x", "Sample", "", {"name": "T"}, NOW)
+    s = Section("All high", ["Name", "Kind"])
+    s.add(["Ann", "User"], "high")
+    s.add(["Bob", "User"], "high")
+    report.sections = [s]
+    tv = views.table_view(report, 0, views.View(), "/p")
+    assert tv.flag is not None and tv.flag.options == [] and tv.filters == [] and tv.flagged_href == ""

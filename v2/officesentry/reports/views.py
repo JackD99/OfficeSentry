@@ -388,7 +388,8 @@ class TableView:
 
     @property
     def flagged_href(self) -> str:
-        return self.flag.options[0].href if self.flag and self.flag.options else ""
+        review = [o for o in self.flag.options if o.label == "To review"] if self.flag else []
+        return review[0].href if review else ""
 
 
 def link(path: str, view: View, anchor: str = "") -> str:
@@ -445,7 +446,7 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
         flag = Column("Flag", FLAG, -1, "flag", filtered=key in view.filters)
         flag.sort = ("desc" if sort[1] else "asc") if sort and sort[0] == FLAG else None
         flag.sort_href = link(path, view.sorted_by(table, FLAG, flag.sort == "asc"), anchor(table))
-        review = [f for f in REVIEW if counts[f]]
+        review = [f for f in REVIEW if counts[f]] if len(counts) > 1 or wanted else []
         if review:  # one option for everything flagged for review, then each level
             reviewing = sorted(wanted) == sorted(review)
             base = view.without(key)
@@ -453,7 +454,7 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
             flag.options.append(Option("To review", sum(counts[f] for f in review), reviewing,
                                        link(path, target, anchor(table))))
         flag.options += [Option(label, counts[f], f in wanted, link(path, view.toggle_value(key, f), anchor(table)))
-                         for f, label in FLAGS.items() if counts[f] or f in wanted]
+                         for f, label in FLAGS.items() if (counts[f] and len(counts) > 1) or f in wanted]
     names = {c.slug: c.name for c in columns} | {FLAG: "Flag"}
     chips = []
     for (t, c), values in view.filters.items():

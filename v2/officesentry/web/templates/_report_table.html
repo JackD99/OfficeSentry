@@ -49,7 +49,7 @@
     <h2>{{ section.title }} <span class="count-badge" title="{{ 'Rows shown of all rows' if filtered else 'Rows' }}">{% if filtered %}{{ tv.rows|length }} of {{ tv.total }}{% else %}{{ tv.total }}{% endif %}</span></h2>
     <div class="toolbar-actions">
       {% if tv.rows|length > 8 %}<input class="search sm" type="search" data-filter="tbl-{{ tv.slug }}" placeholder="Search these rows…" aria-label="Search {{ section.title }}">{% endif %}
-      {% if section.flagged and tv.flagged_href %}<a class="pill warn" href="{{ tv.flagged_href }}" data-view title="Show only the rows to review">{{ section.flagged }} to review</a>{% endif %}
+      {% if section.flagged %}{% if tv.flagged_href %}<a class="pill warn" href="{{ tv.flagged_href }}" data-view title="Show only the rows to review">{{ section.flagged }} to review</a>{% else %}<span class="pill warn">{{ section.flagged }} to review</span>{% endif %}{% endif %}
       {% if tv.filters %}{{ filter_menu(tv) }}{% endif %}
       {% if tv.columns|length > 2 and (tv.total > 1 or tv.hidden_count) %}{{ column_menu(tv) }}{% endif %}
       {% if csv_href %}<a class="btn sm ghost" href="{{ csv_href }}" title="Download {{ 'the rows and columns shown' if filtered or tv.hidden_count else 'this table' }} as CSV">{{ icon('download') }} CSV</a>{% endif %}
