@@ -1,10 +1,19 @@
 {% extends "base.html" %}
-{% block title %}{{ code }} · Office Sentry{% endblock %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ message|trim('.') }} · Office Sentry{% endblock %}
 {% macro body() %}
-<div class="empty">
+<div class="empty error-page">
   <div class="error-code">{{ code }}</div>
   <h3>{{ message }}</h3>
-  <a class="btn" href="{{ url_for('tenants.dashboard') }}">Go to the start page</a>
+  {% if detail %}<p>{{ detail }}</p>{% endif %}
+  <div class="form-actions center-actions">
+    {% if current_user %}
+    <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">{{ icon('tenants') }} {{ 'Your reports' if current_user.role == 'client' else 'Tenants' }}</a>
+    <a class="btn" href="{{ url_for('reports.overview') }}">{{ icon('library') }} {{ 'All reports' if current_user.role == 'client' else 'Reports' }}</a>
+    {% else %}
+    <a class="btn primary" href="{{ url_for('auth.login') }}">Sign in</a>
+    {% endif %}
+  </div>
 </div>
 {% endmacro %}
 {% block content %}<div class="card">{{ body() }}</div>{% endblock %}
