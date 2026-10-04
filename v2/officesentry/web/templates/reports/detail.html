@@ -48,7 +48,7 @@
 
 <footer class="about keep">
   {% if report.footnote and not report.unavailable %}<p>{{ report.footnote }}</p>{% endif %}
-  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Collected from Microsoft 365 with read-only access; nothing was changed.
-  Data from {% for title, finished in report.sources %}{{ title }} ({{ finished|when if finished else 'not collected yet' }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Read from Microsoft 365 with read-only access; nothing was changed.
+  {{ ui.collected(report.sources) }}</p>
 </footer>
 {% endblock %}

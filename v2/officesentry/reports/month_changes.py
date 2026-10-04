@@ -304,9 +304,9 @@ RULE_TITLES = {r.key: r.title for r in RULES}
 
 
 def to_tables(tc: TenantChanges) -> list[Table]:
-    period = f"{tc.since:%Y-%m-%d} to {tc.until:%Y-%m-%d}"
+    period = f"{tc.since.day} {tc.since:%b %Y} to {tc.until.day} {tc.until:%b %Y}"
     tables = [
-        Table("Key figures", ["Measure", f"On {tc.since:%Y-%m-%d}", "Now", "Change"],
+        Table("Key figures", ["Measure", f"On {tc.since.day} {tc.since:%b %Y}", "Now", "Change"],
               [[f.label, f.before, f.after, f.delta] for f in tc.figures]),
         Table("New findings", ["Severity", "Check", "Subject", "Detail", "First seen"],
               [[r["severity"], RULE_TITLES.get(r["rule_key"], r["rule_key"]), r["subject"], r["detail"],

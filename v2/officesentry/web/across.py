@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from flask import Blueprint, Response, abort, g, redirect, render_template, request, url_for
 
 from ..db import audit
-from ..reports import data_reports, evidence, month_changes, rollups, tables, views
+from ..reports import branding, data_reports, evidence, month_changes, rollups, tables, views, workbook
 from ..reports.monthly_review import build as build_review
 from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
@@ -28,6 +28,13 @@ def _download(body: bytes, filename: str, ext: str) -> Response:
     mimetype = XLSX if ext == "xlsx" else "text/csv; charset=utf-8"
     return Response(body, mimetype=mimetype,
                     headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'})
+
+
+def _cover(title: str, client: str, intro: str = "", tenant_ref: str = "", facts=()) -> workbook.Cover:
+    """The summary sheet of an XLSX download: what it is, for whom, by whom and when."""
+    brand = branding.load(g.db)
+    return workbook.Cover(title, client, datetime.now(UTC), brand.display_name, tenant_ref, brand.accent, intro,
+                          list(facts))
 
 
 def _days() -> int:
@@ -65,7 +72,10 @@ def rollup_download(key: str, ext: str):
     data = _rollup_or_404(key)
     table = data.to_table()
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}.{ext}")
-    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table])
+    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
+        data.title, "All tenants", data.description,
+        facts=[("Tenants", len(data.rows), ""), ("Need attention", data.with_attention, ""),
+               ("No data for this report", data.without_data, "")]))
     return _download(body, f"all-tenants-{tables.slug(data.title)}", ext)
 
 
@@ -121,7 +131,9 @@ def changes_download(ext: str):
     days = _days()
     table = month_changes.across_table(month_changes.across(g.db, visible_tenants(g.db, g.user), days), days)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.{ext}")
-    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table])
+    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
+        f"What changed in the last {days} days", "All tenants",
+        f"Changes in every tenant over the last {days} days, most important first."))
     return _download(body, f"all-tenants-changes-{days}-days", ext)
 
 
@@ -160,7 +172,10 @@ def tenant_changes_download(tenant_id: int, ext: str):
     if ext == "csv":
         body = tables.to_csv(month_changes.all_changes_table(report))
     else:
-        body = tables.to_xlsx(month_changes.to_tables(report))
+        body = tables.to_xlsx(month_changes.to_tables(report), cover=_cover(
+            f"What changed in the last {days} days", t["name"], tenant_ref=t["tenant_ref"],
+            facts=[("Changes", report.total, ""), ("New findings", len(report.new_findings), ""),
+                   ("Fixed findings", len(report.fixed_findings), "")]))
     return _download(body, f"changes-{days}-days-{tables.slug(t['name'])}", ext)
 
 

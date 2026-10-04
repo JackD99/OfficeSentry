@@ -206,4 +206,5 @@ def test_devices_page_and_xlsx(client, db, two_tenants):
     resp = client.get(f"/tenants/{alpha}/data/devices.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
-    assert wb.sheetnames == ["Operating systems", "Needs attention", "Managed devices", "Entra ID device records"]
+    assert wb.sheetnames == ["Summary", "Operating systems", "Needs attention", "Managed devices",
+                             "Entra ID device records"]

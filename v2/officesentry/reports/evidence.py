@@ -14,8 +14,9 @@ from datetime import datetime
 from .. import coverage
 from ..rules import RuleResult
 from ..snapshot import TenantSnapshot
+from ..text import WHOLE_ORGANISATION
 from .monthly_review import build as build_review
-from .safe_xlsx import no_formulas
+from .workbook import Book, Cover
 
 IN_PLACE, PARTLY, NOT_IN_PLACE, NOT_ASSESSED = "In place", "Partly in place", "Not in place", "Not assessed"
 
@@ -145,7 +146,8 @@ def build(conn, tenant, now: datetime | None = None) -> EvidencePack:
                 evidence.append(f"{r.title}: exceptions accepted as a documented risk.")
             else:
                 gaps.append(f"{r.title}: {r.summary}.")
-                gaps += [f"  {f.subject}: {f.detail}" for f in r.findings[:5]]
+                gaps += [f"  {f.detail}" if f.subject in WHOLE_ORGANISATION else f"  {f.subject}: {f.detail}"
+                         for f in r.findings[:5]]
                 if len(r.findings) > 5:
                     gaps.append(f"  …and {len(r.findings) - 5} more")
             if r.key in accepted_keys and r.status != "accepted":
@@ -166,33 +168,22 @@ def _as_pass(r: RuleResult) -> RuleResult:
     return RuleResult(r.key, r.title, r.category, "pass", r.summary, r.recommendation, [])
 
 
-def to_xlsx(pack: EvidencePack) -> bytes:
-    from io import BytesIO
-
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Controls"
-    ws.append(["Question", "Status", "Evidence", "Gaps"])
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for c in pack.controls:
-        ws.append([c.control.question, c.status, "\n".join(c.evidence), "\n".join(c.gaps)])
-    for col, width in zip("ABCD", (60, 16, 70, 70), strict=True):
-        ws.column_dimensions[col].width = width
-    for row in ws.iter_rows(min_row=2):
-        for cell in row:
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
-    ws.freeze_panes = "A2"
-    info = wb.create_sheet("About")
-    info.append(["Tenant", pack.tenant["name"]])
-    info.append(["Tenant ID", pack.tenant["tenant_ref"]])
-    info.append(["Prepared (UTC)", pack.generated_at.strftime("%Y-%m-%d %H:%M")])
-    info.append(["Oldest data used (UTC)", (pack.oldest_data or "")[:16].replace("T", " ")])
-    info.append(["Secure Score", f"{pack.secure_score:g}%" if pack.secure_score is not None else "n/a"])
-    no_formulas(wb)
-    out = BytesIO()
-    wb.save(out)
-    return out.getvalue()
+def to_xlsx(pack: EvidencePack, brand=None) -> bytes:
+    book = Book(brand.accent if brand else "")
+    book.table("Controls", ["Question", "Status", "What we found", "Gaps"],
+               [[c.control.question, c.status, "\n".join(c.evidence), "\n".join(g.strip() for g in c.gaps)]
+                for c in pack.controls], description="Each control insurers ask about, with the evidence")
+    facts = [(status, n, "") for status, n in pack.counts.items()]
+    if pack.secure_score is not None:
+        facts.append(("Microsoft Secure Score", f"{pack.secure_score:g}%", "Microsoft's own measure"))
+    notes = []
+    if pack.oldest_data:
+        oldest = datetime.fromisoformat(pack.oldest_data.replace("Z", "+00:00"))
+        notes.append(("Oldest data used", f"{oldest.day} {oldest:%b %Y, %H:%M} UTC"))
+    notes.append(("How to read it", "Partly in place means the control exists but has the gaps listed. Not assessed "
+                                    "means Microsoft 365 can't show it, so evidence has to come from elsewhere."))
+    cover = Cover("Security controls evidence", pack.tenant["name"], pack.generated_at,
+                  brand.display_name if brand else "", pack.tenant["tenant_ref"], brand.accent if brand else "",
+                  "Answers to the security questions cyber insurers ask, from Microsoft 365 data read with "
+                  "read-only access.", facts, notes)
+    return book.save(cover)

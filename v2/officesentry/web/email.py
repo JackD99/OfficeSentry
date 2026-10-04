@@ -358,7 +358,7 @@ def _email_body(html: str):
 @login_required
 def preview_schedule_body(schedule_id: int):
     _require_staff()
-    return _email_body(_build_preview(_schedule_or_404(schedule_id)).email.html)
+    return _email_body(_build_preview(_schedule_or_404(schedule_id)).email.html_for_browser())
 
 
 def _alert_example(a):
@@ -401,7 +401,7 @@ def preview_alert_body(alert_id: int):
     built = _alert_example(_alert_or_404(alert_id))
     if built is None:
         abort(404)
-    return _email_body(built.email.html)
+    return _email_body(built.email.html_for_browser())
 
 
 # -- Contacts --------------------------------------------------------------------------------
@@ -580,9 +580,10 @@ def settings():
                 flash("Enter a valid address to send the test to.", "error")
                 return redirect(url_for("email.settings"))
             transport = mailer.TRANSPORTS[mailer.transport(current)]
+            look, inline = delivery.email_brand(g.db)
             html = delivery.render(current_app, "emails/test.html", subject="Office Sentry test email",
-                                    msp_name=current.get("msp_name") or "Office Sentry", transport=transport)
-            email = Email(to=to, subject="Office Sentry test email", html=html,
+                                   transport=transport, **look)
+            email = Email(to=to, subject="Office Sentry test email", html=html, inline=inline,
                           text=f"Email from Office Sentry is working. Sent through {transport}.")
             try:
                 used = mailer.send(g.db, vault, email)

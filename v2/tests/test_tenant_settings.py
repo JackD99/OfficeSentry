@@ -275,4 +275,4 @@ def test_tenant_settings_page_and_xlsx(client, db, two_tenants):
     assert "Guest access to the directory" in html and "Admin consent requests" in html
     resp = client.get(f"/tenants/{alpha}/data/tenant-settings.xlsx")
     assert resp.status_code == 200
-    assert load_workbook(BytesIO(resp.data)).sheetnames == ["Settings", "Admin consent requests"]
+    assert load_workbook(BytesIO(resp.data)).sheetnames == ["Summary", "Settings", "Admin consent requests"]

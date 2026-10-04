@@ -6,7 +6,8 @@ import json
 import re
 from datetime import UTC, datetime
 
-from ..text import plural
+from ..reports.cells import breakable, pdf_cell
+from ..text import plural, subject_label
 
 CAPABILITY_LABELS = {
     "entra_p1": "Entra ID P1",
@@ -116,4 +117,5 @@ def figure_columns(rollup) -> set[str]:
 
 def register(app) -> None:
     app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money,
-                                 fromjson=fromjson, run_error=run_error, plural=plural, figure_columns=figure_columns)
+                                 fromjson=fromjson, run_error=run_error, plural=plural, figure_columns=figure_columns,
+                                 pdf_cell=pdf_cell, breakable=breakable, subject_label=subject_label)

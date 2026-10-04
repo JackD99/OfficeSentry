@@ -27,6 +27,9 @@ def test_detail_report_download_has_no_formulas():
     section = data_reports.Section("Users", ["Name", "Count"])
     section.add([EVIL, 2])
     report.sections.append(section)
-    ws = load_workbook(BytesIO(data_reports.to_xlsx(report))).active
+    report.tiles.append(data_reports.Tile(EVIL, EVIL))
+    wb = load_workbook(BytesIO(data_reports.to_xlsx(report)))
+    assert not [c for s in wb.worksheets for row in s.iter_rows() for c in row if c.data_type == "f"]
+    ws = wb["Users"]
     assert ws["A2"].value == EVIL and ws["A2"].data_type == "s"
     assert ws["B2"].value == 2

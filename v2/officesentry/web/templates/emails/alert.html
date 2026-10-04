@@ -1,5 +1,5 @@
 {% extends "emails/_layout.html" %}
-{% from "emails/_parts.html" import sev, button %}
+{% from "emails/_parts.html" import sev, button with context %}
 {% block preheader %}{{ subject }}.{% endblock %}
 {% block kicker %}Alert{% endblock %}
 {% block body %}

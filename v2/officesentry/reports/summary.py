@@ -40,6 +40,11 @@ def plural(n: int | float, word: str, words: str | None = None) -> str:
     return f"{n:g} {word if n == 1 else (words or word + 's')}"
 
 
+def possessive(name: str) -> str:
+    """"Alpha Ltd's", but "Northwind Traders'"."""
+    return f"{name}'" if name.endswith("s") else f"{name}'s"
+
+
 def _join(parts: list[str]) -> str:
     if len(parts) <= 1:
         return "".join(parts)
@@ -58,6 +63,7 @@ def _fmt(value: float, unit: str) -> str:
 def monthly(report) -> ExecSummary:
     """Summary of a ``monthly_review.Report``."""
     name = report.tenant["name"]
+    whose = possessive(name)
     failing = report.failing
     by_sev = {s: [r for r in failing if r.severity == s] for s in SEVERITIES}
     ran = len(report.results) - len(report.unavailable)
@@ -67,16 +73,16 @@ def monthly(report) -> ExecSummary:
                           f"Nothing has been collected for {name} yet, so no security checks could run.")
     elif by_sev["critical"]:
         verdict = Verdict("critical", "Action needed",
-                          f"{name}'s Microsoft 365 has a critical security gap that should be fixed now.")
+                          f"{whose} Microsoft 365 has a critical security gap that should be fixed now.")
     elif by_sev["high"]:
         verdict = Verdict("high", "Needs attention",
-                          f"{name}'s Microsoft 365 is broadly working, with some important gaps to close.")
+                          f"{whose} Microsoft 365 is broadly working, with some important gaps to close.")
     elif failing:
         verdict = Verdict("medium", "In good shape",
-                          f"{name}'s Microsoft 365 is in good shape, with a few smaller items to tidy up.")
+                          f"{whose} Microsoft 365 is in good shape, with a few smaller items to tidy up.")
     else:
         verdict = Verdict("ok", "In good shape",
-                          f"{name}'s Microsoft 365 passed every security check we could run.")
+                          f"{whose} Microsoft 365 passed every security check we could run.")
 
     paragraphs = []
     if failing:
@@ -87,6 +93,11 @@ def monthly(report) -> ExecSummary:
         if top.severity in ("critical", "high"):
             text += f" The most urgent: {_sentence(top.summary[0].lower() + top.summary[1:])}"
         paragraphs.append(text)
+        passing = report.passing
+        if passing:
+            named = _join([f"“{r.title}”" for r in passing[:3]])
+            paragraphs.append(f"On the positive side, {plural(len(passing), 'check')} passed"
+                              f"{', including ' + named if len(passing) > 1 else ': ' + named}.")
     elif ran:
         paragraphs.append(f"We ran {plural(ran, 'security check')} and {'it' if ran == 1 else 'all of them'} passed.")
 
