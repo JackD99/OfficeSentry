@@ -78,10 +78,11 @@
     </div>
   </div>
   <div class="table-scroll{{ ' tall' if rollup.rows|length > 12 }}">
+  {% set figures = rollup|figure_columns %}
   <table class="stack-sm sortable" id="rollup-table">
     <thead><tr>
       <th aria-sort="none"><button type="button" class="sort">Tenant</button></th>
-      {% for c in rollup.columns %}<th class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}" aria-sort="none"{% if c.hint %} title="{{ c.hint }}"{% endif %}><button type="button" class="sort">{{ c.label }}</button></th>{% endfor %}
+      {% for c in rollup.columns %}<th class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" aria-sort="none"{% if c.hint %} title="{{ c.hint }}"{% endif %}><button type="button" class="sort">{{ c.label }}</button></th>{% endfor %}
     </tr></thead>
     <tbody>
     {% for row in rollup.rows %}{% set t = row.tenant %}
@@ -93,7 +94,7 @@
       {% else %}
       {% for c in rollup.columns %}{% set sv = row.sort_value(c) %}
       {% set link = row.links.get(c.key) %}
-      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}" data-label="{{ c.label }}" data-sort="{{ '' if sv is none else sv }}">{% if link and row.values.get(c.key) not in (none, '') %}<a class="figure-link" href="{{ figure_href(t, link) }}" title="Open {{ t.name }}: {{ c.label }}">{{ cell(row, c) }}</a>{% else %}{{ cell(row, c) }}{% endif %}</td>
+      <td class="{{ 'num' if c.kind in ('num', 'pct', 'money') or c.key in figures }}" data-label="{{ c.label }}" data-sort="{{ '' if sv is none else sv }}">{% if link and row.values.get(c.key) not in (none, '') %}<a class="figure-link" href="{{ figure_href(t, link) }}" title="Open {{ t.name }}: {{ c.label }}">{{ cell(row, c) }}</a>{% else %}{{ cell(row, c) }}{% endif %}</td>
       {% endfor %}
       {% endif %}
     </tr>

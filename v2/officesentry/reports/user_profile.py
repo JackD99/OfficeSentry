@@ -1292,7 +1292,7 @@ def directory(conn, tenant, now: datetime | None = None) -> tuple[list[Directory
     rows.sort(key=lambda r: (-r.findings, not r.roles, r.name.lower()))
     members = sum(not r.guest for r in rows)
     tiles = [
-        Highlight("Accounts", len(rows), f"{members} members, {len(rows) - members} guests"),
+        Highlight("Accounts", len(rows), f"{_plural(members, 'member')}, {_plural(len(rows) - members, 'guest')}"),
         Highlight("Sign-in blocked", sum(not r.enabled for r in rows), "Can't sign in"),
         Highlight("No MFA at all", no_mfa if enf.known and not reg.note else "Not checked",
                   "Enabled members", "bad" if no_mfa else None),

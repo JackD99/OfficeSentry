@@ -110,11 +110,15 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.errorhandler(403)
     def _forbidden(_e):
-        return render_template("error.html", code=403, message="You don't have access to this page."), 403
+        return render_template("error.html", code=403, message="You don't have access to this page.",
+                               detail="Ask an admin if you need it."), 403
 
     @app.errorhandler(404)
     def _not_found(_e):
-        return render_template("error.html", code=404, message="Page not found."), 404
+        # Tenants someone hasn't been granted are 404s too, so say both without confirming either.
+        return render_template("error.html", code=404, message="Page not found.",
+                               detail="The link may be out of date, or the page belongs to a tenant you haven't been "
+                                      "given access to."), 404
 
     @app.get("/health")
     def health():
