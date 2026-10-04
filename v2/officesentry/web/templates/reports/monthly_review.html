@@ -80,10 +80,10 @@
   <p class="muted">No changes recorded in this period{% if not report.changes %}. Change tracking starts once there are two collections at least 4 weeks apart{% endif %}.</p>
   {% else %}
   <ul class="changes">
-    {% if report.new_count %}<li><span class="chg chg-added">New</span> {{ report.new_count }} new or returning {{ 'item' if report.new_count == 1 else 'items' }}, marked <span class="new">New</span> below</li>{% endif %}
-    {% for f in report.resolved[:15] %}<li><span class="chg chg-resolved">Fixed</span> {{ f.subject }}: {{ f.detail }}</li>{% endfor %}
+    {% if report.new_count %}<li>{{ ui.change_tag("added") }} {{ report.new_count }} new or returning {{ 'item' if report.new_count == 1 else 'items' }}, marked <span class="new">New</span> below</li>{% endif %}
+    {% for f in report.resolved[:15] %}<li>{{ ui.change_tag("fixed") }} {{ f.subject|subject_label }}: {{ f.detail }}</li>{% endfor %}
     {% if report.resolved|length > 15 %}<li class="muted">…and {{ report.resolved|length - 15 }} more fixed</li>{% endif %}
-    {% for c in report.changes[:30] %}<li><span class="chg chg-{{ c.kind }}">{{ c.kind }}</span> <strong>{{ c.area }}:</strong> {{ c.subject }}: {{ c.detail }}</li>{% endfor %}
+    {% for c in report.changes[:30] %}<li>{{ ui.change_tag(c.kind) }} <strong>{{ c.area }}:</strong> {{ c.subject }}: {{ c.detail }}</li>{% endfor %}
     {% if report.changes|length > 30 %}<li class="muted">…and {{ report.changes|length - 30 }} more changes</li>{% endif %}
   </ul>
   {% endif %}
