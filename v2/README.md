@@ -82,6 +82,16 @@ pass, and a first run against a real tenant.
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.
+  - *Sign-in activity*: the last 7 days of interactive sign-ins from the
+    Entra ID sign-in log (Entra ID P1), summarised rather than stored: accounts
+    with repeated failures (wrong passwords, lockouts), addresses failing
+    against several accounts (password spraying), successful sign-ins from
+    countries the tenant rarely uses, successful sign-ins that needed only a
+    password, failure reasons in plain English (MFA and other prompts counted
+    apart from failures), and sign-ins by country, app and account. With
+    Entra ID P2, risky sign-ins too. Reads at most 50,000 sign-ins per run
+    (the most recent) and says so if it stops. Each account's page shows its
+    own summary.
   - *Admin activity*: security-relevant changes from the Entra ID directory
     audit log over the last 30 days (7 without Entra ID P1, which is all the
     tenant keeps): admin roles granted or removed (including PIM), Conditional
@@ -184,7 +194,8 @@ Windows releases out of support, joined computers not in Intune, devices not
 checking in, stale device records, SharePoint storage nearly full.
 For tenants synced from on-premises AD: directory sync running, password
 hash sync on, and admin accounts that are cloud-only.
-checking in, stale device records, domain federation changes.
+checking in, stale device records, domain federation changes, risky sign-ins
+that succeeded (Entra ID P2).
 
 ### Exchange data
 

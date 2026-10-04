@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-48 checks, 22 data sources (collectors) and 26 detail reports.
+49 checks, 23 data sources (collectors) and 27 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -95,6 +95,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **No unexpected changes to how domains sign in**<br>`domain_federation_changed` | `admin_activity` |  | Confirm with the client that each change was planned (for example, setting up AD FS or another identity provider). If it wasn't, an attacker with admin rights may have federated the domain to their own identity provider so they can sign in as any user without a password or MFA: switch the domain back to managed sign-in, remove unknown federation settings, reset admin credentials and review the audit log. |
 | **Legacy authentication is blocked**<br>`legacy_auth_blocked` | `conditional_access` |  | Block legacy authentication (Exchange ActiveSync and other clients) with a Conditional Access policy for all users. Legacy protocols can't do MFA and are the most common password-spray target. |
 | **MFA is enforced for all users**<br>`mfa_enforced` | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |  | Create a Conditional Access policy requiring MFA for all users and all cloud apps, or turn on Security Defaults if the tenant has no Entra ID P1. Keep exclusions to break-glass accounts. |
+| **No risky sign-ins succeeded**<br>`risky_sign_ins` | `sign_ins` | Sign-in risk needs Entra ID P2; The sign-in log needs Entra ID P1 | Check each sign-in with the person. If they don't recognise it, reset their password, sign them out everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm the account compromised in Entra ID Protection. Add a Conditional Access policy that asks for MFA on medium and high sign-in risk. The Sign-in activity report lists every risky sign-in. |
 | **Every active user has MFA registered**<br>`users_mfa_registered` | `mfa_registration`, `users` |  | Ask these users to register the Microsoft Authenticator app. Until they do, anyone with their password can register MFA in their place. |
 
 ### Licences
@@ -152,6 +153,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `shared_files` | Shared files | Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, or people outside it. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_storage` | SharePoint storage | What fills each site's storage: libraries, folders, large and old files, version history and recycle bins. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
+| `sign_ins` | Sign-in activity | Interactive sign-ins in the last 7 days, summarised by account, country, app and failure reason (needs Entra ID P1; sign-in risk needs P2). | `AuditLog.Read.All` |
 | `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions and licence capabilities. | `Organization.Read.All` |
 | `users` | Users | Members and guests with licences, password age and last sign-in (sign-in needs Entra ID P1). | `User.Read.All`, `AuditLog.Read.All` |
@@ -186,6 +188,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `shared-mailboxes` | Shared mailboxes | Shared, room and equipment mailboxes that can be signed in to, and who uses them. | `mailbox_usage`, `mailboxes`, `users` |
 | `sharepoint` | SharePoint sites | Storage and growth, inactive sites, and which sites are shared outside. | `sharepoint_usage` |
 | `sharepoint-storage` | SharePoint storage | What fills the tenant's SharePoint storage and what to clean up: sites, folders, large and old files, version history and recycle bins. | `sharepoint_storage`, `sharepoint_usage`, `tenant_profile` |
+| `sign-ins` | Sign-in activity | Failed and successful sign-ins over the last week by account, country and app: password guessing, unusual countries, sign-ins without MFA and risky sign-ins. | `sign_ins`, `tenant_profile` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
 | `usage` | Microsoft 365 usage | Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active. | `m365_usage` |
 
@@ -196,7 +199,7 @@ Every application permission the app requests (all read-only) and the collectors
 | Permission | API | Purpose | Used by |
 |---|---|---|---|
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents` |
-| `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `legacy_signins`, `mfa_registration`, `users` |
+| `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `devices`, `directory_sync`, `groups` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `mailbox_usage`, `mailboxes` |
