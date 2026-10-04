@@ -57151,6 +57151,252 @@
   {
    "api": "graph",
    "body": {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(id,appId,displayName,accountEnabled)",
+    "value": [
+     {
+      "accountEnabled": true,
+      "appId": "5e00011b-0000-4000-8000-00000000011b",
+      "displayName": "Test User 8",
+      "id": "5e00011a-0000-4000-8000-00000000011a"
+     }
+    ]
+   },
+   "note": "Added by hand from this recording's other responses, for the connection collector; replaced when the fixture is next re-recorded.",
+   "status": 200,
+   "url": "https://graph.microsoft.com/v1.0/servicePrincipals?%24filter=appId+eq+%275e00011b-0000-4000-8000-00000000011b%27&%24select=id%2CappId%2CdisplayName%2CaccountEnabled"
+  },
+  {
+   "api": "graph",
+   "body": {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(appId,appRoles)/$entity",
+    "appId": "00000003-0000-0000-c000-000000000000",
+    "appRoles": [
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read all applications and service principals without a signed-in user.",
+      "displayName": "Read all applications",
+      "id": "5e000152-0000-4000-8000-000000000152",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Application.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read and query your audit log activities, without a signed-in user.",
+      "displayName": "Read all audit log data",
+      "id": "5e000153-0000-4000-8000-000000000153",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "AuditLog.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read the properties of devices managed by Test User 14, without a signed-in user.",
+      "displayName": "Read Test User 14 devices",
+      "id": "5e000154-0000-4000-8000-000000000154",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "DeviceManagementManagedDevices.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read data in your organization's directory, such as users, groups and apps, without a signed-in user.",
+      "displayName": "Read directory data",
+      "id": "5e000155-0000-4000-8000-000000000155",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Directory.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read the identity risky user information for your organization without a signed in user.",
+      "displayName": "Read all identity risky user information",
+      "id": "5e000156-0000-4000-8000-000000000156",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "IdentityRiskyUser.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read user's mailbox settings without a signed-in user. Does not include permission to send mail.",
+      "displayName": "Read all user mailbox settings",
+      "id": "5e000157-0000-4000-8000-000000000157",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "MailboxSettings.Read"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read the organization and related resources, without a signed-in user. Related resources include things like subscribed skus and tenant branding information.",
+      "displayName": "Read organization information",
+      "id": "5e000158-0000-4000-8000-000000000158",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Organization.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read all your organization's policies without a signed in user.",
+      "displayName": "Read your organization's policies",
+      "id": "5e000159-0000-4000-8000-000000000159",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Policy.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows an app to read all service usage reports without a signed-in user.  Services that provide usage reports include Office 365 and Azure Active Directory.",
+      "displayName": "Read all usage reports",
+      "id": "5e00015a-0000-4000-8000-00000000015a",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Reports.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read the role-based access control (RBAC) settings for your company's directory, without a signed-in user.  This includes reading directory role templates, directory roles and memberships.",
+      "displayName": "Read all directory RBAC settings",
+      "id": "5e00015b-0000-4000-8000-00000000015b",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "RoleManagement.Read.Directory"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read your organization\u2019s security events without a signed-in user.",
+      "displayName": "Read your organization\u2019s security events",
+      "id": "5e00015c-0000-4000-8000-00000000015c",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "SecurityEvents.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the application to read the tenant-level settings of SharePoint and OneDrive, without a signed-in user.",
+      "displayName": "Read SharePoint and OneDrive tenant settings",
+      "id": "5e00015d-0000-4000-8000-00000000015d",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "SharePointTenantSettings.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read documents and list items in all site collections without a signed in user.",
+      "displayName": "Read items in all site collections ",
+      "id": "5e00014c-0000-4000-8000-00000000014c",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Sites.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read user profiles without a signed in user.",
+      "displayName": "Read all users' full profiles",
+      "id": "5e00015e-0000-4000-8000-00000000015e",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "User.Read.All"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to read authentication methods of all users in your organization, without a signed-in user. Authentication methods include things like a user\u2019s phone numbers and Authenticator app settings. This does not allow the app to see secret information like passwords, or to sign-in or otherwise use the authentication methods.",
+      "displayName": "Read all users' authentication methods",
+      "id": "5e00015f-0000-4000-8000-00000000015f",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "UserAuthenticationMethod.Read.All"
+     }
+    ]
+   },
+   "note": "Added by hand from this recording's other responses, for the connection collector; replaced when the fixture is next re-recorded.",
+   "status": 200,
+   "url": "https://graph.microsoft.com/v1.0/servicePrincipals/5e00014b-0000-4000-8000-00000000014b?%24select=appId%2CappRoles"
+  },
+  {
+   "api": "graph",
+   "body": {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals(appId,appRoles)/$entity",
+    "appId": "00000002-0000-0ff1-ce00-000000000000",
+    "appRoles": [
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to manage the organization's Exchange environment without any user interaction. This includes mailboxes, groups, and other configuration objects. To enable management actions, an Test User 1 must assign the appropriate roles directly to the app.",
+      "displayName": "Manage Exchange As Application",
+      "id": "5e00014f-0000-4000-8000-00000000014f",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Exchange.ManageAsApp"
+     },
+     {
+      "allowedMemberTypes": [
+       "Application"
+      ],
+      "description": "Allows the app to manage a limited set of Exchange Online configuration objects without user interaction, for specific scenarios supported by the adminapi/v2.0 endpoint. To enable management actions an Test User 1 must also assign the appropriate Exchange RBAC roles directly to the app.",
+      "displayName": "Manage Exchange as application v2",
+      "id": "5e000150-0000-4000-8000-000000000150",
+      "isEnabled": true,
+      "origin": "Application",
+      "value": "Exchange.ManageAsAppV2"
+     }
+    ]
+   },
+   "note": "Added by hand from this recording's other responses, for the connection collector; replaced when the fixture is next re-recorded.",
+   "status": 200,
+   "url": "https://graph.microsoft.com/v1.0/servicePrincipals/5e0002ba-0000-4000-8000-0000000002ba?%24select=appId%2CappRoles"
+  },
+  {
+   "api": "graph",
+   "body": {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#roleManagement/directory/roleAssignments",
+    "value": [
+     {
+      "directoryScopeId": "/",
+      "id": "LJnv8vs6uUa3z6Em7nTEUbGFJS_lPkdOpy_NnerAcJU-1",
+      "principalId": "5e00011a-0000-4000-8000-00000000011a",
+      "principalOrganizationId": "5e000001-0000-4000-8000-000000000001",
+      "roleDefinitionId": "5e000090-0000-4000-8000-000000000090"
+     }
+    ]
+   },
+   "note": "Added by hand from this recording's other responses, for the connection collector; replaced when the fixture is next re-recorded.",
+   "status": 200,
+   "url": "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?%24filter=principalId+eq+%275e00011a-0000-4000-8000-00000000011a%27"
+  },
+  {
+   "api": "graph",
+   "body": {
     "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#applications(id,appId,displayName,createdDateTime,passwordCredentials,keyCredentials)",
     "value": [
      {

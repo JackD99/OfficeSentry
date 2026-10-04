@@ -159,7 +159,8 @@ def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
     assert schedule_tick(db, cfg, now) == 0
     order = [r["collector"] for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? ORDER BY id",
                                                 (two_tenants[0],))]
-    assert order[:2] == ["tenant_profile", "users"]  # capabilities first, then users
+    # Capabilities first, then the connection check, then users.
+    assert order[:3] == ["tenant_profile", "connection", "users"]
 
 
 def test_tenants_without_consent_are_not_scheduled(db, cfg, two_tenants):

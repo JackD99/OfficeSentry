@@ -63,7 +63,7 @@
 <div class="page-head">
   <div>
     <h1>{{ title or tenant.name }}</h1>
-    <div class="sub">{% if title %}{{ tenant.name }} · {% endif %}<span class="mono">{{ tenant.tenant_ref }}</span></div>
+    <div class="sub">{% if title %}{{ tenant.name }} · {% endif %}<span class="mono">{{ tenant.tenant_ref }}</span>{% if tenant.archived_at %} <span class="pill info">Archived</span>{% elif not tenant.enabled %} <span class="pill info" title="No collection or emailed reports until it's resumed">Paused</span>{% endif %}</div>
   </div>
   <div class="actions">{{ caller() if caller }}
     <a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('doc') }} Monthly review</a>
@@ -78,7 +78,8 @@
   {% set _ = tabs.append(('users', 'Users', url_for('people.people', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('schedules', 'Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) %}
-  {% if staff %}{% set _ = tabs.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
+  {% if staff %}{% set _ = tabs.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}
+  {% set _ = tabs.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}{% endif %}
   {% for key, label, href in tabs %}
   <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}{% if counts and counts.get(key) %}<span class="count">{{ counts[key] }}</span>{% endif %}</a>
   {% endfor %}

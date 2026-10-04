@@ -703,3 +703,30 @@ main[aria-busy="true"] .table-card, main[aria-busy="true"] .tiles { opacity: .7;
 /* A figure in an All tenants table opens that tenant's rows */
 a.figure-link { color: inherit; border-bottom: 1px dashed var(--border-strong); }
 a.figure-link:hover { color: var(--accent); border-bottom-color: var(--accent); text-decoration: none; }
+
+/* -- Client tenant admin (Manage tab, Client tenants, Offboard) ------------
+   Owned by the tenant-admin work; reuses .list, .setup-steps, .pill and tokens. */
+.health-list { padding: 0 20px; }
+.health-list > li { align-items: flex-start; }
+.health-state { min-width: 88px; justify-content: center; margin-top: 2px; }
+.health-fix { margin-top: 4px; font-size: .8125rem; color: var(--text-2); }
+.health-bad .health-fix, .health-warn .health-fix { padding-left: 10px; border-left: 2px solid var(--border-strong); }
+.health-action { flex: none; }
+.health-action:empty { display: none; }
+.onboarding .setup-steps.flush-steps { padding: 0; margin: 0; }
+.onboarding .setup-steps .step-body p { margin: 6px 0 0; }
+.manage-form { display: grid; gap: 12px; }
+.manage-form .form-actions { margin-top: 0; }
+.manage-facts { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.manage-gap { margin-top: 16px; }
+.pre-line { white-space: pre-line; }
+textarea.copy-text { font-size: .8125rem; resize: vertical; margin: 8px 0; }
+.offboard-steps .step-body ol { margin-top: 8px; }
+.connection-problems { margin-top: 10px; }
+.connection-problems .pill { flex: none; }
+@media (max-width: 640px) {
+  .health-list { padding: 0 16px; }
+  .health-list > li { flex-wrap: wrap; }
+  .health-state { min-width: 0; }
+  .health-action { flex-basis: 100%; }
+}

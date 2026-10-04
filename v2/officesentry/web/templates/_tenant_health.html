@@ -1,0 +1,96 @@
+{# Connection health and the onboarding checklist, from tenant_health.assess(). Import "with context". #}
+{% from "_macros.html" import icon, ts, csrf %}
+
+{% set CHECK_STATE = {
+  'ok': ('ok', 'OK'), 'bad': ('bad', 'Fix'), 'warn': ('warn', 'Check'), 'todo': ('accent', 'To do'),
+  'pending': ('accent', 'Checking'), 'unknown': ('', 'Not checked'), 'info': ('info', 'Info'),
+} %}
+
+{% macro status_pill(health) -%}
+<span class="pill {{ health.tone }}">{{ health.label }}</span>
+{%- endmacro %}
+
+{% macro check_button(tenant, back='manage', label='Check connection now', cls='sm') -%}
+<form method="post" action="{{ url_for('tenant_admin.check_connection', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="back" value="{{ back }}"><button class="{{ cls }}">{{ icon('refresh') }} {{ label }}</button></form>
+{%- endmacro %}
+
+{% macro consent_button(consent_link, label='Grant admin consent', cls='btn sm') -%}
+{% if consent_link %}<a class="{{ cls }}" href="{{ consent_link }}" rel="noopener">{{ label }}</a>{% endif %}
+{%- endmacro %}
+
+{# One line per check, each with what to do about it. #}
+{% macro check_list(health, tenant, consent_link, can_check, back='manage') -%}
+<ul class="list health-list">
+  {% for c in health.checks %}{% set st = CHECK_STATE.get(c.state, ('', c.state)) %}
+  <li class="health-{{ c.state }}">
+    <span class="pill {{ st[0] }} health-state">{{ st[1] }}</span>
+    <div class="grow">
+      <div class="title">{{ c.title }}</div>
+      <div class="desc">{{ c.summary }}</div>
+      {% if c.fix and c.state not in ('ok', 'info') %}<div class="health-fix">{{ c.fix }}</div>{% elif c.fix and c.state == 'info' %}<div class="desc">{{ c.fix }}</div>{% endif %}
+    </div>
+    <div class="health-action">
+      {% if c.state not in ('ok', 'pending') %}
+        {% if c.action == 'consent' and consent_link %}{{ consent_button(consent_link, 'Open consent link') }}
+        {% elif c.action == 'check' and can_check %}{{ check_button(tenant, back) }}
+        {% elif c.action == 'collection' %}<a class="btn sm ghost" href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a>
+        {% elif c.action == 'collect' and can_check %}<form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Collect everything</button></form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{%- endmacro %}
+
+{# The onboarding checklist. It ticks itself off from real state and disappears once every step is done. #}
+{% macro checklist(health, tenant, consent_link, redirect_uri, can_check, back='overview') -%}
+{% set nxt = health.next_step %}
+{% set r = health.result or {} %}
+{% set admin = current_user.role == 'admin' %}
+<section class="card setup onboarding">
+  <div class="card-head"><h2>{{ icon('shield') }} Set up {{ tenant.name }}</h2>
+    <span class="meta">{{ health.steps|selectattr('done')|list|length }} of {{ health.steps|length }} done</span></div>
+  <ol class="setup-steps flush-steps">
+    {% for s in health.steps %}
+    <li class="{{ 'done' if s.done else ('current' if nxt and s.key == nxt.key else '') }}">
+      <div class="step-title">{{ s.title }}</div>
+      <div class="step-body">
+      {% if s.key == 'added' %}Added {{ ts(tenant.created_at) }}.
+      {% elif s.key == 'consent' %}
+        {% if s.done %}Granted {{ ts(tenant.consented_at) }}.
+        {% else %}
+          A Global Administrator of {{ tenant.name }} approves Office Sentry's read-only permissions. Open the link yourself, in this browser, if you are one: Office Sentry then records it and starts collecting straight away. Or send it to them (it works for one hour) and press <em>Check connection now</em> once they've approved.
+          {% if not consent_link and not admin %}<p class="small muted m0">Only an Office Sentry admin can open the consent link.</p>{% endif %}
+          {% if nxt and s.key == nxt.key %}
+          <div class="step-action">{{ consent_button(consent_link, 'Grant admin consent', 'btn primary') }}{% if can_check %}{{ check_button(tenant, back, 'Check connection now', '') }}{% endif %}</div>
+          {% if admin %}<details class="by-hand small"><summary>If Microsoft shows an error</summary>
+            <ul class="small"><li>The app registration in your own Entra tenant needs Office Sentry's certificate (Certificates &amp; secrets → upload the .cer from <a href="{{ url_for('admin.connections') }}">App connection</a>; a client secret isn't enough) and the redirect URI <code>{{ redirect_uri }}</code> (Authentication → Web). A new certificate takes 5 to 10 minutes to work.</li></ul>
+          </details>{% endif %}
+          {% endif %}
+        {% endif %}
+      {% elif s.key == 'global_reader' %}
+        {% if s.done %}Assigned. Mailbox reports can be collected.
+        {% else %}
+          In {{ tenant.name }}: Microsoft Entra admin centre → <em>Roles and admins</em> → <em>Global Reader</em> → <em>Add assignments</em>, then select {{ r.app_name or 'the Office Sentry app' }}. It can view settings but not change them. Without it, mailbox reports can't be collected.
+          {% if r.roles_checked %}<span class="muted">Not assigned at the last check, {{ ts(r.checked_at) }}.</span>{% elif tenant.consented_at %}<span class="muted">Checked after consent.</span>{% endif %}
+          {% if tenant.consented_at and can_check %}<div class="step-action">{{ check_button(tenant, back, 'Check again', 'sm') }}</div>{% endif %}
+        {% endif %}
+      {% elif s.key == 'collection' %}
+        {% if s.done %}Every data source has been collected{% if health.last_success %}, most recently {{ ts(health.last_success) }}{% endif %}.
+        {% elif health.collecting %}Collecting now. The first results appear within a few minutes; a large tenant takes longer.
+        {% elif tenant.consented_at %}Starts automatically after consent, or tonight with the nightly collection.
+          {% if can_check %}<div class="step-action"><form method="post" action="{{ url_for('tenants.collect', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="back" value="{{ back }}"><button class="sm">{{ icon('refresh') }} Collect everything now</button></form></div>{% endif %}
+        {% else %}Starts automatically once consent is granted.{% endif %}
+      {% elif s.key == 'permissions' %}
+        {% if s.done %}All of them, checked {{ ts(r.checked_at) }}.
+        {% elif r.permissions_checked and r.missing %}Missing: {{ r.missing|join(', ') }}. A Global Administrator opens the consent link again; it grants every permission at once.
+          {% if consent_link %}<div class="step-action">{{ consent_button(consent_link, 'Re-grant admin consent') }}</div>{% endif %}
+        {% else %}Checked after consent: the permissions approved in {{ tenant.name }} are compared with what Office Sentry asks for.{% endif %}
+      {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{%- endmacro %}

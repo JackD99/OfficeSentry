@@ -58,12 +58,14 @@ def sees_all_tenants(user) -> bool:
     return user["role"] == "admin" or (user["role"] == "analyst" and bool(user["all_tenants"]))
 
 
-def visible_tenants(conn, user):
+def visible_tenants(conn, user, archived: bool = False):
+    """Tenants the user may see. Archived tenants are left out (only admins list them, with ``archived``)."""
+    where = "" if archived and user["role"] == "admin" else " AND t.archived_at IS NULL"
     if sees_all_tenants(user):
-        return conn.execute("SELECT * FROM tenants ORDER BY name COLLATE NOCASE").fetchall()
+        return conn.execute(f"SELECT t.* FROM tenants t WHERE 1 = 1{where} ORDER BY t.name COLLATE NOCASE").fetchall()
     return conn.execute(
         "SELECT t.* FROM tenants t JOIN user_tenants ut ON ut.tenant_id = t.id"
-        " WHERE ut.user_id = ? ORDER BY t.name COLLATE NOCASE",
+        f" WHERE ut.user_id = ?{where} ORDER BY t.name COLLATE NOCASE",
         (user["id"],),
     ).fetchall()
 
@@ -79,8 +81,11 @@ def can_see_tenant(conn, user, tenant_id: int) -> bool:
 
 
 def tenant_or_404(tenant_id: int):
+    """The tenant, if this user may see it. An archived tenant is only there for admins (to restore or delete)."""
     tenant = g.db.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,)).fetchone()
     if tenant is None or not can_see_tenant(g.db, g.user, tenant_id):
+        abort(404)
+    if tenant["archived_at"] and g.user["role"] != "admin":
         abort(404)
     return tenant
 

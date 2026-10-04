@@ -18,7 +18,7 @@
   {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('reports.tenant_report', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'tenants', 'across.tenant_changes')) }}
   {{ nav_link('reports.overview', 'All reports', 'library') }}
   {% else %}
-  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert')) }}
+  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard')) }}
   {{ nav_link('reports.overview', 'Reports', 'library') }}
   {{ nav_link('across.index', 'All tenants', 'grid', ('across.rollup',)) }}
   {{ nav_link('across.changes', 'What changed', 'clock') }}
@@ -27,6 +27,7 @@
   {% endif %}
   {% if current_user.role == 'admin' %}
   <div class="nav-label">Settings</div>
+  {{ nav_link('tenant_admin.clients', 'Client tenants', 'tenants') }}
   {{ nav_link('admin.connections', 'App connection', 'connection') }}
   {{ nav_link('reports.prices', 'Licence prices', 'price') }}
   {{ nav_link('email.settings', 'Email delivery', 'mail') }}

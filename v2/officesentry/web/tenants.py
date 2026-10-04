@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .. import store
+from .. import lifecycle, store, tenant_health
 from ..collectors import REGISTRY
 from ..db import audit, transaction, utcnow
 from ..entra import admin_consent_url
@@ -30,19 +30,18 @@ def _consent_serializer():
 
 
 def _latest_runs(tenant_id: int) -> dict:
-    rows = g.db.execute(
-        "SELECT r.* FROM runs r JOIN (SELECT collector, MAX(id) AS id FROM runs WHERE tenant_id = ?"
-        " GROUP BY collector) latest ON latest.id = r.id",
-        (tenant_id,),
-    ).fetchall()
-    return {r["collector"]: r for r in rows}
+    return tenant_health.latest_runs(g.db, tenant_id)
 
 
 def not_connected(tenant) -> str | None:
     """Why collection can't run for this tenant yet, in plain words, or None when it can."""
+    if tenant["archived_at"]:
+        return "This tenant is archived. Restore it under Manage to collect again."
+    if not tenant["enabled"]:
+        return "Collection is paused for this tenant. Resume it under Manage."
     connection = store.get_connection(g.db, tenant["connection_id"]) if tenant["connection_id"] else None
     if not connection:
-        return "This tenant isn't connected yet: choose its app connection under Connection."
+        return "This tenant isn't connected yet: choose its app connection under Manage."
     if not connection["client_id"]:
         return ("This tenant isn't connected yet: its app connection has no application (client) ID. "
                 "Add it under App connection first.")
@@ -55,6 +54,10 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
     """(tone, label, detail) summarising a tenant's collection state for people."""
     from ..reports.monthly_review import STALE_AFTER
 
+    if tenant["archived_at"]:
+        return "info", "Archived", "Hidden from lists and reports until restored."
+    if not tenant["enabled"]:
+        return "info", "Paused", "Collection and emailed reports are paused."
     if not tenant["consented_at"]:
         return "info", "Awaiting consent", "A tenant admin needs to grant access."
     if not latest:
@@ -147,10 +150,14 @@ def tenant(tenant_id: int):
     report = build(g.db, t)
     sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     attention = sorted(report.failing, key=lambda r: (sev_rank.get(r.severity, 5), -len(r.findings)))
+    from .tenant_admin import _check_problem
+
+    setup = tenant_health.assess(g.db, t)  # the onboarding checklist, until every step is done
     return render_template(
         "tenant.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
         redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"), report=report, attention=attention,
-        health=data_health(t, latest), report_groups=grouped(),
+        health=data_health(t, latest), report_groups=grouped(), setup=None if setup.onboarded else setup,
+        setup_can_check=_check_problem(t) is None,
     )
 
 
@@ -164,10 +171,9 @@ def collection(tenant_id: int):
     ).fetchall()
     latest = _latest_runs(t["id"])
     return render_template(
-        "collection.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
-        capabilities=store.tenant_capabilities(t), runs=runs, latest=latest,
-        collectors=REGISTRY, health=data_health(t, latest), not_connected=not_connected(t),
-        connections=store.list_connections(g.db),
+        "collection.html", tenant=t, connection=connection, capabilities=store.tenant_capabilities(t), runs=runs,
+        latest=latest, collectors=REGISTRY, health=data_health(t, latest), not_connected=not_connected(t),
+        setup=tenant_health.assess(g.db, t),
     )
 
 
@@ -186,6 +192,8 @@ def collect(tenant_id: int):
         store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
     audit(g.db, g.user["username"], "collect_requested", t["id"], ",".join(keys))
     flash(f"Queued {plural(len(keys), 'collection')}. The worker picks them up shortly.", "success")
+    if request.form.get("back") == "overview":  # the onboarding checklist's "Collect everything now"
+        return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
     return redirect(url_for("tenants.collection", tenant_id=t["id"]))
 
 
@@ -196,10 +204,14 @@ def set_connection(tenant_id: int):
     conn_id = request.form.get("connection_id", type=int)
     if conn_id is not None and store.get_connection(g.db, conn_id) is None:
         abort(400)
-    g.db.execute("UPDATE tenants SET connection_id = ? WHERE id = ?", (conn_id, t["id"]))
+    from .tenant_admin import _other_app
+
+    reset = conn_id != t["connection_id"] and _other_app(t["connection_id"], conn_id)
+    g.db.execute("UPDATE tenants SET connection_id = ?, consented_at = CASE WHEN ? THEN NULL ELSE consented_at END"
+                 " WHERE id = ?", (conn_id, int(reset), t["id"]))
     audit(g.db, g.user["username"], "tenant_connection_set", t["id"], str(conn_id))
-    flash("App connection saved. Use Test connection to check it works.", "success")
-    return redirect(url_for("tenants.collection", tenant_id=t["id"]))
+    flash("App connection saved. Use Check connection now to check it works.", "success")
+    return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
 
 
 @bp.post("/tenants/<int:tenant_id>/test-connection")
@@ -211,17 +223,22 @@ def test_connection(tenant_id: int):
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     if not connection or not connection["client_id"]:
         flash(not_connected(t), "error")
-        return redirect(url_for("tenants.collection", tenant_id=t["id"]))
+        return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
     vault = current_app.extensions["officesentry.vault"]
     result = check(t["tenant_ref"], connection["client_id"], vault.decrypt(connection["key_enc"]),
                    connection["thumbprint"])
     audit(g.db, g.user["username"], "connection_tested", t["id"], "ok" if result.ok else result.title)
     if result.ok:
         g.db.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), t["id"]))
-        flash(f"{result.title} Office Sentry can sign in and read this tenant.", "success")
+        queued = 0
+        if not t["consented_at"] and t["enabled"] and not t["archived_at"]:
+            # Consent was given outside the link: start the first collection now.
+            queued = lifecycle.queue_first_collection(g.db, t["id"], requested_by=g.user["username"])
+        flash(f"{result.title} Office Sentry can sign in and read this tenant."
+              + (" The first collection has been queued." if queued else ""), "success")
     else:
         flash(f"{result.title} {result.fix}", "error")
-    return redirect(url_for("tenants.collection", tenant_id=t["id"]))
+    return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
 
 
 @bp.get("/consent/callback")
@@ -253,9 +270,12 @@ def consent_callback():
             g.db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (returned, t["id"]))
         g.db.execute("UPDATE tenants SET consented_at = ? WHERE id = ?", (utcnow(), t["id"]))
         audit(g.db, g.user["username"], "consent_granted", t["id"], returned)
-    for key in REGISTRY:  # tenant_profile is first, so licence-dependent collectors see its result
-        store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
-    flash("Consent recorded. A first collection has been queued.", "success")
+    if t["enabled"] and not t["archived_at"]:
+        for key in REGISTRY:  # tenant_profile is first, so licence-dependent collectors see its result
+            store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
+        flash("Consent recorded. A first collection has been queued.", "success")
+    else:
+        flash("Consent recorded. Collection is paused for this tenant; resume it under Manage.", "success")
     return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
 
 

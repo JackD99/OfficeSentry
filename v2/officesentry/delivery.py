@@ -376,7 +376,9 @@ def digest_data(conn, frequency: str, now: datetime) -> dict:
     """Cross-tenant summary for the MSP digest: the worst tenants first, and what's new."""
     since = (now - DIGEST_LOOKBACK[frequency]).strftime(ISO)
     rows = []
-    for t in conn.execute("SELECT * FROM tenants WHERE enabled = 1 ORDER BY name COLLATE NOCASE"):
+    # Paused and archived tenants aren't being collected, so they stay out of the digest.
+    for t in conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
+                          " ORDER BY name COLLATE NOCASE"):
         row = monthly_review.rollup_row(conn, t, now)
         counts = conn.execute(
             "SELECT"
@@ -392,7 +394,8 @@ def digest_data(conn, frequency: str, now: datetime) -> dict:
     scores = [r["kpis"]["secure_score.pct"].value for r in rows if r["kpis"]["secure_score.pct"].value is not None]
     new_findings = conn.execute(
         "SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
-        " WHERE t.enabled = 1 AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
+        " WHERE t.enabled = 1 AND t.archived_at IS NULL"
+        " AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
         " AND (f.first_seen >= :since OR IFNULL(f.reopened_at, '') >= :since)"
         " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= :now))"
         " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key"
@@ -663,8 +666,8 @@ def _tick_schedule(app, conn, vault, s, cfg, now: datetime) -> bool:
 def _retry_alert(app, conn, vault, d, now: datetime) -> bool:
     conn.execute("UPDATE email_deliveries SET retry_at = NULL WHERE id = ?", (d["id"],))
     alert, tenant, items = _alert_resend(conn, d)
-    if alert is None or not alert["enabled"] or tenant is None or not items:
-        return False
+    if alert is None or not alert["enabled"] or tenant is None or not tenant["enabled"] or not items:
+        return False  # a paused (or archived) tenant's alerts aren't retried
     send_alert(app, conn, vault, alert, tenant, items, attempt=d["attempt"] + 1, now=now)
     return True
 

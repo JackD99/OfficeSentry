@@ -41,7 +41,7 @@ def live(db):
         statuses = {}
         for key in REGISTRY:
             store.enqueue_run(db, tenant_id, key)
-            statuses[key] = execute_run(db, store.claim_next_run(db), graph, exo)
+            statuses[key] = execute_run(db, store.claim_next_run(db), graph, exo, client_id=FIXTURE["client_id"])
     assert not missing, f"requests not in the recording: {missing}"
     assert {k for k, v in statuses.items() if v != "succeeded"} == set(), statuses
     return store.get_tenant(db, tenant_id)
@@ -157,3 +157,16 @@ def test_usage_reports_on_real_data(db, live):
     assert move[1] == "Microsoft 365 Business Standard" and move[3] == "Convert to a shared mailbox"
     usage = data_reports.build(db, live, "usage", RECORDED)
     assert not usage.unavailable and usage.sections[0].rows[0][:2] == ["Email", 1]
+
+
+def test_connection_health_on_real_data(db, live):
+    # The test app holds every permission Office Sentry asks for, and Global Reader.
+    from officesentry import tenant_health
+
+    health = tenant_health.assess(db, live)
+    result = health.result
+    assert result["app_found"] and result["global_reader"] and not result["missing"]
+    assert "Exchange.ManageAsAppV2" in result["other"]  # granted, but not one Office Sentry asks for
+    assert health.onboarded
+    # The replay signs in without an app connection; that is all there is to fix.
+    assert [c.key for c in health.problems] == ["connection"], health.problems

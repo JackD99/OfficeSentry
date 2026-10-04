@@ -16,7 +16,7 @@ import time
 import traceback
 from datetime import UTC, datetime, timedelta
 
-from . import alerts, findings, schedule, store
+from . import alerts, findings, lifecycle, schedule, store
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -55,8 +55,13 @@ def default_exchange_factory(vault: Vault):
     return factory
 
 
-def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alerts.Alerting | None = None) -> str:
-    """Execute one claimed run. Returns the final status."""
+def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alerts.Alerting | None = None,
+                client_id: str | None = None) -> str:
+    """Execute one claimed run. Returns the final status.
+
+    ``client_id`` is the app the graph client signs in as, when that isn't the
+    tenant's app connection (``live-test`` signs in with a separate test app).
+    """
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
     collector_cls = REGISTRY.get(run["collector"])
@@ -69,7 +74,8 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
     try:
         graph = graph_factory(dict(tenant), dict(connection) if connection else None)
         ctx = RunContext(conn=conn, run_id=run_id, tenant=dict(tenant), graph=graph,
-                         capabilities=store.tenant_capabilities(tenant))
+                         capabilities=store.tenant_capabilities(tenant),
+                         client_id=client_id or (connection["client_id"] if connection else None))
         if exchange_factory is not None:
             ctx.exchange_factory = lambda: exchange_factory(dict(tenant), dict(connection) if connection else None)
         collector_cls().collect(ctx)
@@ -92,6 +98,12 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
     # Data came back, so consent exists even if it was granted outside Office Sentry's consent link.
     conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
                  (utcnow(), run["tenant_id"]))
+    if tenant["consented_at"] is None:
+        # Consent was given outside the link (say the client's admin opened it): collect the rest now
+        # rather than at the next nightly slot.
+        queued = lifecycle.queue_first_collection(conn, run["tenant_id"])
+        if queued:
+            store.log_event(conn, run_id, "info", f"Consent confirmed; queued {plural(queued, 'data source')}")
     try:
         stats = findings.sync(conn, store.get_tenant(conn, run["tenant_id"]))
         if any(stats.values()):
@@ -115,8 +127,9 @@ def schedule_tick(conn, cfg: Config, now: datetime | None = None) -> int:
     queued = 0
     tenants = conn.execute(
         # Nothing is scheduled before consent: every run would fail to sign in.
-        "SELECT id FROM tenants WHERE enabled = 1 AND connection_id IS NOT NULL AND consented_at IS NOT NULL"
-        " ORDER BY id"
+        # Paused and archived tenants keep their data but aren't collected.
+        "SELECT id FROM tenants WHERE enabled = 1 AND archived_at IS NULL AND connection_id IS NOT NULL"
+        " AND consented_at IS NOT NULL ORDER BY id"
     ).fetchall()
     for tenant in tenants:
         for key in schedule.nightly_collectors():

@@ -112,6 +112,47 @@ APP_ROLE_ASSIGNMENTS = {
     "sp-zoom": [{"id": "ara2", "resourceId": "sp-graph", "resourceDisplayName": "Microsoft Graph",
                  "appRoleId": "r-userread", "createdDateTime": "2025-01-01T00:00:00Z"}],
 }
+# -- Office Sentry's own app in the client tenant (the connection collector) -----------------
+# conftest's app connection signs in as OUR_APP; seeded tenants grant it every permission and Global Reader.
+
+OUR_APP = "11111111-2222-3333-4444-555555555555"
+OUR_SP = {"id": "sp-officesentry", "appId": OUR_APP, "displayName": "Office Sentry (read-only)",
+          "accountEnabled": True}
+GLOBAL_READER = "f2ef992c-3afb-46b9-b7cf-a126ee74c451"  # Microsoft's built-in role template ID
+
+
+def _role_id(permission: str) -> str:
+    return {"User.Read.All": "r-userread"}.get(permission, "r-" + permission.lower())
+
+
+def _resource_roles():
+    from officesentry.entra import EXCHANGE_APP_ID, GRAPH_APP_ID, GRAPH_PERMISSIONS
+
+    graph = [{"id": "r-mailread", "value": "Mail.Read"}] + [{"id": _role_id(p), "value": p} for p in GRAPH_PERMISSIONS]
+    return {"sp-graph": {"id": "sp-graph", "appId": GRAPH_APP_ID, "appRoles": graph},
+            "sp-exchange": {"id": "sp-exchange", "appId": EXCHANGE_APP_ID,
+                            "appRoles": [{"id": "r-exo", "value": "Exchange.ManageAsApp"},
+                                         {"id": "r-exo-full", "value": "full_access_as_app"}]}}
+
+
+RESOURCE_APP_ROLES = _resource_roles()
+
+
+def our_assignments(missing=()) -> list[dict]:
+    """The app's granted application permissions, less ``missing``."""
+    from officesentry.entra import GRAPH_PERMISSIONS
+
+    rows = [{"id": f"our-{p}", "resourceId": "sp-graph", "resourceDisplayName": "Microsoft Graph",
+             "appRoleId": _role_id(p), "principalId": OUR_SP["id"]} for p in GRAPH_PERMISSIONS if p not in missing]
+    if "Exchange.ManageAsApp" not in missing:
+        rows.append({"id": "our-exo", "resourceId": "sp-exchange", "resourceDisplayName": "Office 365 Exchange Online",
+                     "appRoleId": "r-exo", "principalId": OUR_SP["id"]})
+    return rows
+
+
+OUR_ROLE_ASSIGNMENTS = [{"id": "a-gr", "roleDefinitionId": GLOBAL_READER, "principalId": OUR_SP["id"],
+                         "directoryScopeId": "/"}]
+
 DELEGATED_GRANTS = [
     {"id": "g1", "clientId": "sp-zoom", "consentType": "AllPrincipals", "resourceId": "sp-graph",
      "scope": "openid User.Read"},

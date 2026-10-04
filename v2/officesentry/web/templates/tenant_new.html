@@ -2,7 +2,7 @@
 {% block title %}Add tenant · Office Sentry{% endblock %}
 {% block content %}
 <div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span><span>Add tenant</span></div>
-<div class="page-head"><div><h1>Add a tenant</h1><div class="sub">You'll get a consent link to send to the client's Global Administrator next.</div></div></div>
+<div class="page-head"><div><h1>Add a tenant</h1><div class="sub">Next comes admin consent; collection starts by itself once it's granted.</div></div></div>
 {% if not connections %}
 <div class="card empty narrow-lg">
   <h3>Set up the app connection first</h3>
@@ -12,18 +12,19 @@
 {% else %}
 <form method="post" class="card narrow-lg">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <label>Client name <input name="name" maxlength="200" required autofocus placeholder="Contoso Ltd">
+  <label>Client name <input name="name" maxlength="200" required autofocus placeholder="Contoso Ltd" value="{{ request.form.name }}">
     <span class="hint">How the tenant appears in Office Sentry and on reports.</span></label>
-  <label>Tenant ID or domain <input name="tenant_ref" placeholder="contoso.onmicrosoft.com" required autocomplete="off">
+  <label>Tenant ID or domain <input name="tenant_ref" placeholder="contoso.onmicrosoft.com" required autocomplete="off" value="{{ request.form.tenant_ref }}">
     <span class="hint">The Directory (tenant) ID, or any domain the tenant uses. It's replaced with the tenant ID once consent is granted.</span></label>
   {% if connections|length > 1 %}
   <label>App connection
     <select name="connection_id">
-      {% for c in connections %}<option value="{{ c.id }}">{{ c.name }}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
+      {% for c in connections %}<option value="{{ c.id }}"{% if request.form.connection_id == c.id|string %} selected{% endif %}>{{ c.name }}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
     </select>
   </label>
   {% else %}<input type="hidden" name="connection_id" value="{{ connections[0].id }}">{% endif %}
   <div class="form-actions"><button class="primary">Add tenant</button><a class="btn ghost" href="{{ url_for('tenants.dashboard') }}">Cancel</a></div>
+  <p class="footnote m0">The tenant's page then shows a checklist: a Global Administrator of the client's tenant grants admin consent (read-only), assigns Global Reader for mailbox reports, and the first collection runs on its own.</p>
 </form>
 {% endif %}
 {% endblock %}

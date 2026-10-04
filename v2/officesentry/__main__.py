@@ -176,6 +176,40 @@ def cmd_backup(args, cfg):
           " without it the stored certificates can't be decrypted.")
 
 
+def cmd_delete_tenant(args, cfg):
+    """Delete a tenant and everything stored for it: the portal's Offboard → Delete permanently."""
+    from . import lifecycle
+
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    tenant = store.get_tenant(conn, args.tenant_id)
+    if tenant is None:
+        sys.exit(f"No tenant with id {args.tenant_id}. The id is the number in the tenant's address (/tenants/<id>).")
+    stored = lifecycle.stored(conn, tenant["id"])
+    clients = lifecycle.client_only_users(conn, tenant["id"])
+    print(f"{tenant['name']} ({tenant['tenant_ref']}): {plural(stored['runs'], 'collection run')}, "
+          f"{plural(stored['objects'], 'stored item')}, {plural(stored['findings'], 'finding')}, "
+          f"{plural(stored['schedules'], 'emailed report')}, {plural(stored['contacts'], 'contact')}, "
+          f"access for {plural(stored['access'], 'user')}.")
+    if clients:
+        names = ", ".join(u["username"] for u in clients)
+        print(f"Client accounts with no other tenant: {names}"
+              + (" (deleted too)" if args.delete_client_users else " (kept; add --delete-client-users to delete)"))
+    print("This can't be undone. Back up first with: python -m officesentry backup")
+    if not args.yes:
+        answer = input(f"Type the tenant's name ({tenant['name']}) to delete it: ")
+        if answer.strip() != tenant["name"].strip():
+            sys.exit("Not deleted.")
+    users = [u["id"] for u in clients] if args.delete_client_users else []
+    try:
+        removed = lifecycle.delete_tenant(conn, tenant, "cli", users)
+    except lifecycle.DeleteError as exc:
+        sys.exit(f"Nothing was deleted: {exc}")
+    print(f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
+          + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "") + ".")
+    print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
+
+
 def cmd_live_test(args, cfg):
     """Collect from a real test tenant with a client secret (development only)."""
     from pathlib import Path
@@ -225,6 +259,13 @@ def main(argv=None):
     backup.add_argument("--dir", help="folder for backups (default: <data dir>/backups)")
     backup.add_argument("--keep", type=int, default=7, help="how many backups to keep (0 = all)")
     backup.set_defaults(func=cmd_backup)
+
+    delete = sub.add_parser("delete-tenant", help="delete a client tenant and everything stored for it")
+    delete.add_argument("tenant_id", type=int, help="the number in the tenant's address, /tenants/<id>")
+    delete.add_argument("--delete-client-users", action="store_true",
+                        help="also delete client accounts that have no other tenant")
+    delete.add_argument("--yes", action="store_true", help="don't ask for the tenant's name (for scripts)")
+    delete.set_defaults(func=cmd_delete_tenant)
 
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")

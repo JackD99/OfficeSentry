@@ -74,7 +74,8 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
     for key in keys:
         store.enqueue_run(conn, tenant_id, key, trigger="manual")
         run_row = store.claim_next_run(conn)
-        status = execute_run(conn, run_row, lambda t, c: graph, lambda t, c: exo)
+        # The connection check looks up the app that actually signs in: the test app, not the tenant's connection.
+        status = execute_run(conn, run_row, lambda t, c: graph, lambda t, c: exo, client_id=client_id)
         finished = conn.execute("SELECT * FROM runs WHERE id = ?", (run_row["id"],)).fetchone()
         count = conn.execute("SELECT COUNT(*) FROM objects WHERE run_id = ?", (run_row["id"],)).fetchone()[0]
         print(f"{REGISTRY[key].title:32} {status:10} {count:6} objects  {finished['error'] or ''}")
