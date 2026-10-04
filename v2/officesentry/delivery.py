@@ -33,9 +33,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from . import alerts, mailer, schedule, store
 from .db import utcnow
 from .mailer import Email, MailError
-from .reports import data_reports, evidence, export, monthly_review
+from .reports import branding, data_reports, evidence, export, monthly_review, workbook
 from .rules import RULES
-from .text import plural
+from .text import day, plural
 
 log = logging.getLogger(__name__)
 
@@ -307,17 +307,18 @@ def _msp_name(conn) -> str:
 
 def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None) -> list[tuple[str, str, bytes]]:
     files, built = [], {}
+    brand = branding.load(conn)
     for key, filename in attachment_plan(tenant, keys, include_xlsx):
         if key == "review":
             report = built.setdefault(key, review or monthly_review.build(conn, tenant, now))
             data = _pdf(app, "reports/monthly_review.html", report=report) if filename.endswith(".pdf") \
-                else export.to_xlsx(report)
+                else export.to_xlsx(report, brand=brand)
         elif key == "evidence":
             pack = built.setdefault(key, evidence.build(conn, tenant, now))
             data = _pdf(app, "reports/evidence.html", pack=pack) if filename.endswith(".pdf") \
-                else evidence.to_xlsx(pack)
+                else evidence.to_xlsx(pack, brand=brand)
         else:
-            data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now))
+            data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now), brand=brand)
         files.append((filename, "application/pdf" if filename.endswith(".pdf") else XLSX, data))
     return files
 
@@ -411,30 +412,27 @@ def digest_data(conn, frequency: str, now: datetime) -> dict:
     }
 
 
-def digest_xlsx(data: dict) -> bytes:
-    from io import BytesIO
-
-    from openpyxl import Workbook
-    from openpyxl.styles import Font
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Tenants"
-    header = ["Tenant", "Critical", "High", "Medium", "Low", "New critical/high", "Fixed", "Secure Score %",
-              "Secure Score change", "Users with MFA %", f"Licence waste / month ({data['currency']})",
+def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
+    book = workbook.Book(brand.accent if brand else "")
+    header = ["Tenant", "Critical", "High", "Medium", "Low", "New critical/high", "Fixed", "Secure Score",
+              "Secure Score change", "Users with MFA", f"Licence waste / month ({data['currency']})",
               "Data up to date"]
-    ws.append(header)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
+    rows = []
     for r in data["rows"]:
         score, mfa, waste = (r["kpis"][k] for k in ("secure_score.pct", "mfa.registered_pct", "waste"))
-        ws.append([r["tenant"]["name"], r["counts"]["critical"], r["counts"]["high"], r["counts"]["medium"],
-                   r["counts"]["low"], r["new_severe"], r["fixed"], score.value, score.delta, mfa.value,
-                   waste.value, "No" if r["stale_data"] else "Yes"])
-    ws.column_dimensions["A"].width = 32
-    buf = BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+        rows.append([r["tenant"]["name"], r["counts"]["critical"], r["counts"]["high"], r["counts"]["medium"],
+                     r["counts"]["low"], r["new_severe"], r["fixed"],
+                     None if score.value is None else f"{score.value:g}%", score.delta,
+                     None if mfa.value is None else f"{mfa.value:g}%", waste.value,
+                     "No" if r["stale_data"] else "Yes"])
+    book.table("Tenants", header, rows, description="Every tenant, worst first")
+    cover = workbook.Cover(
+        "Tenant digest", "All tenants", now or datetime.now(UTC), brand.display_name if brand else "",
+        accent=brand.accent if brand else "", intro=f"Since {day(data['since'])}.",
+        facts=[("Tenants", data["tenants"], ""), ("Need attention", data["urgent"], "critical or high findings"),
+               ("New critical or high findings", data["new_severe"], ""), ("Fixed", data["fixed"], ""),
+               ("Average Secure Score", None if data["avg_score"] is None else f"{data['avg_score']:g}%", "")])
+    return book.save(cover)
 
 
 def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = None,
@@ -459,7 +457,8 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
         if r["counts"]["critical"] or r["counts"]["high"]:
             lines.append(f"  {r['tenant']['name']}: {r['counts']['critical']} critical, {r['counts']['high']} high")
     to, bcc = split_recipients(contacts)
-    attachments = [(filename, XLSX, digest_xlsx(data))] if attach and schedule["include_xlsx"] else []
+    attachments = [(filename, XLSX, digest_xlsx(data, branding.load(conn), now))] \
+        if attach and schedule["include_xlsx"] else []
     names = [filename] if schedule["include_xlsx"] else []
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
                        attachments=attachments), names)

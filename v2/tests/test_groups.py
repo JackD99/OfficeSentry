@@ -345,7 +345,7 @@ def test_groups_page_and_xlsx(client, db, two_tenants):
     resp = client.get(f"/tenants/{alpha}/data/groups.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
-    assert wb.sheetnames == ["Settings", "Needs attention", "Teams and groups", "Guests in teams and groups",
+    assert wb.sheetnames == ["Summary", "Settings", "Needs attention", "Teams and groups", "Guests in teams and groups",
                              "Other groups"]
 
 

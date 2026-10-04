@@ -28,7 +28,7 @@ from ..rules import (
 )
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
-from .safe_xlsx import no_formulas
+from . import workbook
 from .tables import Table
 
 
@@ -1010,75 +1010,32 @@ def to_tables(report: DataReport) -> list[Table]:
 
 
 # Flag cell colours in XLSX (background, text), matching the severity colours on the page.
-FLAG_FILLS = {"critical": ("FDECEA", "B42318"), "high": ("FDF0E6", "B54708"), "medium": ("FDF6E1", "8A5A00"),
-              "low": ("F0F2F5", "475467")}
+FLAG_FILLS = workbook.FLAG_FILLS
 
 
-def to_xlsx(report: DataReport) -> bytes:
-    from io import BytesIO
+def xlsx_cover(report: DataReport, brand=None) -> workbook.Cover:
+    """The Summary sheet of a detail report's workbook: what it is, for whom, and its headline figures."""
+    facts = [(t.label, t.value, t.foot) for t in report.tiles + report.highlights]
+    notes = [("Note", report.notice)] if report.notice else []
+    notes += [("Not checked", note) for note in report.notes]
+    notes += [("Filtered view", line) for line in report.filtered]
+    if report.unavailable:
+        notes.append(("Not available", report.unavailable))
+    done = [finished for _, finished in report.sources if finished]
+    if done:
+        last = datetime.fromisoformat(max(done).replace("Z", "+00:00"))
+        notes.append(("Data collected", f"{last.day} {last:%b %Y, %H:%M} UTC"))
+    return workbook.Cover(report.title, report.tenant.get("name", ""), report.generated_at,
+                          brand.display_name if brand else "", report.tenant.get("tenant_ref", ""),
+                          brand.accent if brand else "", report.description, facts, notes)
 
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill
-    from openpyxl.utils import get_column_letter
 
-    wb = Workbook()
-    wb.remove(wb.active)
-    used = set()
-    if report.tiles:
-        ws = wb.create_sheet("Summary")
-        used.add("Summary")
-        ws.append(["Measure", "Value", "Note"])
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for t in report.tiles:
-            ws.append([t.label, t.value, t.foot])
-        if report.notice:
-            ws.append([])
-            ws.append(["Note", report.notice])
-        ws.column_dimensions["A"].width = 32
-        ws.column_dimensions["B"].width = 16
-        ws.column_dimensions["C"].width = 48
-    elif report.highlights or report.notes:
-        ws = wb.create_sheet("Summary")
-        used.add("Summary")
-        ws.append([report.title, report.tenant.get("name", "")])
-        ws["A1"].font = Font(bold=True)
-        for h in report.highlights:
-            ws.append([h.label, h.value, h.foot])
-        for note in report.notes:
-            ws.append(["Not checked", note])
-        ws.column_dimensions["A"].width = 32
-        ws.column_dimensions["B"].width = 24
-        ws.column_dimensions["C"].width = 60
-    if report.filtered:
-        ws = wb["Summary"] if "Summary" in used else wb.create_sheet("Summary")
-        used.add("Summary")
-        ws.append([])
-        for line in report.filtered:
-            ws.append(["Filtered view", line])
-    for section in report.sections or [Section("No data", ["Note"], rows=[[report.unavailable or ""]])]:
-        name = section.title[:31]
-        while name in used:
-            name = name[:29] + str(len(used))
-        used.add(name)
-        ws = wb.create_sheet(name)
-        ws.append(section.columns + (["Flag"] if any(section.flags) else []))
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-        for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False):
-            cells = [str(v) if isinstance(v, Link) else v for v in row]
-            ws.append(cells + ([flag or ""] if any(section.flags) else []))
-            if flag in FLAG_FILLS:  # the same colours as the page, so flagged rows stand out in Excel too
-                ws.cell(ws.max_row, ws.max_column).fill = PatternFill("solid", fgColor=FLAG_FILLS[flag][0])
-                ws.cell(ws.max_row, ws.max_column).font = Font(bold=True, color=FLAG_FILLS[flag][1])
-            for col, v in enumerate(row, 1):
-                if isinstance(v, Link) and v.safe_href:
-                    ws.cell(ws.max_row, col).hyperlink = v.safe_href
-        ws.freeze_panes = "A2"
-        for i in range(1, ws.max_column + 1):
-            width = max((len(str(c.value or "")) for c in ws[get_column_letter(i)]), default=10)
-            ws.column_dimensions[get_column_letter(i)].width = min(max(width + 2, 10), 60)
-    no_formulas(wb)
-    out = BytesIO()
-    wb.save(out)
-    return out.getvalue()
+def to_xlsx(report: DataReport, brand=None) -> bytes:
+    book = workbook.Book(brand.accent if brand else "")
+    for section in report.sections or [Section("No data", ["Note"], rows=[[report.unavailable or "Nothing to show."]])]:
+        links = {(i, j): v.safe_href for i, row in enumerate(section.rows) for j, v in enumerate(row)
+                 if isinstance(v, Link) and v.safe_href}
+        rows = [[str(v) if isinstance(v, Link) else v for v in row] for row in section.rows]
+        book.table(section.title, section.columns, rows, flags=section.flags, links=links,
+                   description=section.intro)
+    return book.save(xlsx_cover(report, brand))

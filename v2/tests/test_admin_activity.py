@@ -283,5 +283,5 @@ def test_admin_activity_page_and_xlsx(client, db, two_tenants, monkeypatch):
     resp = client.get(f"/tenants/{alpha}/data/admin-activity.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
-    assert wb.sheetnames == ["Changes to review", "All admin changes", "Who made changes"]
+    assert wb.sheetnames == ["Summary", "Changes to review", "All admin changes", "Who made changes"]
     assert wb["Changes to review"]["G2"].value == "high"

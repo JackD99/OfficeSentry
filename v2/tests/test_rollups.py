@@ -110,7 +110,9 @@ def test_rollup_pages_and_downloads(client, db, two_tenants):
     assert rows[0][:2] == ["Tenant", "Tenant ID"] and {r[0] for r in rows[1:]} == {"Alpha Ltd", "Bravo Inc"}
     resp = client.get("/across/mailboxes.xlsx")
     assert resp.status_code == 200
-    assert load_workbook(io.BytesIO(resp.data)).worksheets[0]["A1"].value == "Tenant"
+    wb = load_workbook(io.BytesIO(resp.data))
+    assert wb.sheetnames[0] == "Summary" and wb["Summary"]["A2"].value == "All tenants"
+    assert wb.worksheets[1]["A1"].value == "Tenant"
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'rollup_downloaded'").fetchone()[0] == 2
 
 

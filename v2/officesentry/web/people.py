@@ -7,7 +7,7 @@ import re
 from flask import Blueprint, Response, abort, g, render_template
 
 from ..db import audit
-from ..reports import data_reports, user_profile
+from ..reports import branding, data_reports, user_profile
 from .access import login_required, tenant_or_404
 from .printing import pdf_response
 
@@ -57,7 +57,7 @@ def person_xlsx(tenant_id: int, user_id: str):
     t, profile = _profile(tenant_id, user_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "user.xlsx")
     return Response(
-        data_reports.to_xlsx(profile.as_report()),
+        data_reports.to_xlsx(profile.as_report(), brand=branding.load(g.db)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=account-{_slug(profile.upn or profile.name)}.xlsx"},
     )
