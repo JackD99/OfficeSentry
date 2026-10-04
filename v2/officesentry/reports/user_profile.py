@@ -24,6 +24,7 @@ from ..licences import FREE_SKUS, is_stale, last_sign_in, load_prices, sku_name
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
 from ..rules import SENSITIVE_DELEGATED
 from ..snapshot import TenantSnapshot
+from ..text import plural as _plural
 from .data_reports import (
     COMPLIANCE,
     DataReport,
@@ -204,10 +205,6 @@ def _when(value, now: datetime) -> str:
     days = (now - when).days
     ago = "today" if days <= 0 else ("yesterday" if days == 1 else f"{days} days ago")
     return f"{_day(when)} ({ago})"
-
-
-def _plural(n: int, word: str, many: str | None = None) -> str:
-    return f"{n} {word if n == 1 else (many or word + 's')}"
 
 
 def _yes(value) -> str:
