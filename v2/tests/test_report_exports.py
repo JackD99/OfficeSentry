@@ -112,6 +112,27 @@ def test_report_email_carries_the_brand_and_counts_every_failing_check(client, d
     assert "cid:" not in body and "data:image/png;base64," in body
 
 
+def test_demo_data_builds_three_tenants_with_history(db, vault):
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "demo_data.py"
+    spec = importlib.util.spec_from_file_location("demo_data", path)
+    demo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(demo)
+    ids = demo.populate(db, vault)
+    assert len(ids) == 3 and branding.load(db).name == "Harbour IT"
+    tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (ids[0],)).fetchone()
+    report = build(db, tenant)
+    assert not report.first_report and report.licences.monthly_waste  # history and priced waste
+    users = data_reports.build(db, tenant, "mfa")
+    text = str([s.rows for s in users.sections])
+    assert "@northwindtraders.com" in text and "@x.com" not in text  # fixture names swapped out
+    from tests import graphdata
+
+    assert "ann@x.com" in str(graphdata.REGISTRATION_DETAILS)  # fixtures restored for other tests
+
+
 def test_logo_sizes_for_email():
     assert branding.image_size(PNG) == (1, 1)
     assert branding.fit((720, 180), 32, 200) == (128, 32)
