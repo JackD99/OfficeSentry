@@ -83,11 +83,11 @@ def test_report(db, two_tenants):
     tiles = {t.label: t for t in report.tiles}
     assert tiles["Storage used"].value == "Under 1%" and "of 1.1 TB (estimated)" in tiles["Storage used"].foot
     assert tiles["Recycle bins"].value == "1.0 GB"
-    assert tiles["Untouched for 2 years"].foot == "1 file(s)"
+    assert tiles["Untouched for 2 years"].foot == "1 file"
     parts = _section(report, "Where the space goes")
     assert _column(parts, "Part") == ["Current files", "Recycle bins", "Older versions of files",
                                       "Preservation Hold libraries", "Lists, pages and other"]
-    assert "1 TB + 10 GB × 10 licence(s)" in parts.intro
+    assert "1 TB + 10 GB × 10 licences" in parts.intro
     assert _column(_section(report, "Largest files"), "File")[0] == "Clients/Mail export.pst"  # largest first
     assert _column(_section(report, "Largest files"), "Location")[0] == "Finance / Documents"
     assert _column(_section(report, "Files with the most version history"), "Version") == ["320"]

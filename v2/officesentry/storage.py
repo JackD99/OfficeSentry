@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from .licences import FREE_UNIT_THRESHOLD
 from .snapshot import TenantSnapshot
+from .text import nouns
 
 GB = 1024 ** 3
 BASE = 1024 * GB
@@ -29,7 +30,7 @@ class TenantQuota:
     @property
     def explained(self) -> str:
         extra = f" + {self.extra_gb:,} GB of extra storage" if self.extra_gb else ""
-        return f"1 TB + 10 GB × {self.licences:,} licence(s){extra}"
+        return f"1 TB + 10 GB × {self.licences:,} {nouns(self.licences, 'licence')}{extra}"
 
 
 def tenant_quota(skus: list[dict] | None) -> TenantQuota | None:

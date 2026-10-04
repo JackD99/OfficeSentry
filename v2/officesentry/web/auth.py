@@ -18,6 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .. import totp
 from ..config import clear_setup_token, setup_token
 from ..db import audit, transaction, utcnow
+from ..text import plural
 from . import sessions
 from .access import login_required, safe_next
 
@@ -386,7 +387,7 @@ def end_session(session_id: int):
 @login_required
 def end_other_sessions():
     ended = sessions.revoke_user(g.user["id"], except_current=True)
-    audit(g.db, g.user["username"], "sessions_ended", detail=f"{ended} other session(s)")
+    audit(g.db, g.user["username"], "sessions_ended", detail=plural(ended, "other session"))
     flash(f"Signed out of {ended} other browser{'s' if ended != 1 else ''}." if ended
           else "You weren't signed in anywhere else.", "success")
     return redirect(url_for("auth.account"))

@@ -12,6 +12,7 @@ from datetime import datetime
 from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
+from ..text import nouns
 from .data_reports import DataReport, Link, Section, Tile, _date
 from .sharepoint import GROWTH_DAYS, _growth, size, storage_points
 
@@ -120,7 +121,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile("Older versions", size(versions), f"{_percent(versions, used) or '0%'} of storage",
              "warn" if used and versions / used >= 0.25 else None),
         Tile("Recycle bins", size(recycle), "Freed when emptied", "warn" if used and recycle / used >= 0.1 else None),
-        Tile(f"Untouched for {years} years", size(stale_bytes), f"{stale_files:,} file(s)"),
+        Tile(f"Untouched for {years} years", size(stale_bytes), f"{stale_files:,} {nouns(stale_files, 'file')}"),
     ]
     # No storage chart here: the SharePoint sites report has it, and the breakdown below matters more
     # on the first page of the client's PDF.

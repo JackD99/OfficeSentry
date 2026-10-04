@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .. import store
 from ..graph import GraphError, LicenseRequired, PermissionMissing
+from ..text import plural
 from .base import Collector, RunContext, register
 
 # Built-in roles treated as privileged. Graph v1.0 has no isPrivileged property
@@ -212,7 +213,7 @@ class MfaRegistration(Collector):
             # anyone it leaves out one by one, so they're never counted as registered or skipped.
             missing = self._per_user(ctx, skip={uid for uid, _ in rows}, fetch_users=not rows)
             if missing:
-                ctx.log(f"Registration report left out {len(missing)} enabled member(s); checked their methods "
+                ctx.log(f"Registration report left out {plural(len(missing), 'enabled member')}; checked their methods "
                         "one by one")
                 rows += missing
 

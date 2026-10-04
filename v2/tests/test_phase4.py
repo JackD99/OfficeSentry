@@ -348,4 +348,4 @@ def test_live_test_command_runs_every_collector(cfg, db, monkeypatch, capsys):
         mock_tenant(rsps)
         assert livetest.run(cfg) == 0
     out = capsys.readouterr().out
-    assert "Mailboxes" in out and "0 collector(s) failed" in out
+    assert "Mailboxes" in out and "0 collectors failed" in out

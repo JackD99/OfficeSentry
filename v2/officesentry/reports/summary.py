@@ -118,7 +118,7 @@ def monthly(report) -> ExecSummary:
         paragraphs.append(f"{plural(len(report.unavailable), 'check', 'checks')} couldn't run because the data or "
                           "a licence they need is missing. They're listed at the end.")
 
-    actions = [Action(r.title, r.summary, r.severity or "info", f"check-{r.key}")
+    actions = [Action(r.action, r.summary, r.severity or "info", f"check-{r.key}")
                for r in failing if r.severity in ("critical", "high")][:3]
     return ExecSummary(verdict, paragraphs, actions)
 

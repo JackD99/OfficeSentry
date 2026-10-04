@@ -43,8 +43,8 @@
   {% for r in failing %}
   <tr><td valign="top" width="78" style="padding:10px 0;border-top:1px solid #e5e7eb;">{{ sev(r.severity or 'info') }}</td>
     <td valign="top" style="padding:10px 0 10px 8px;border-top:1px solid #e5e7eb;">
-      <div style="font-weight:600;color:#111827;">{{ r.title }}</div>
-      <div style="font-size:13px;color:#4b5563;">{{ r.summary }}</div>
+      <div style="font-weight:600;color:#111827;">{{ r.summary|trim('.') }}</div>
+      <div style="font-size:13px;color:#4b5563;">{{ r.action }}.</div>
     </td></tr>
   {% endfor %}
 </table>

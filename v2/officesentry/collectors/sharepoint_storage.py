@@ -24,6 +24,7 @@ from urllib.parse import unquote, urlparse
 
 from ..graph import GraphError, PermissionMissing
 from ..snapshot import TenantSnapshot
+from ..text import plural
 from .base import Collector, RunContext, register
 
 ITEM_FIELDS = ("FileLeafRef,FileRef,FSObjType,SMTotalSize,SMTotalFileStreamSize,SMTotalFileCount,"
@@ -237,7 +238,7 @@ class SharePointStorage(Collector):
             ctx.warn(f"Scanned the first {MAX_SITES} of {len(team_sites)} sites")
             ctx.truncated = True
         if skipped:
-            ctx.warn(f"{skipped} site(s) couldn't be read")
+            ctx.warn(f"{plural(skipped, 'site')} couldn't be read")
 
         recycled = self._recycle_bins(ctx, recycle_candidates)
         onedrives = self._onedrives(ctx, scan)
