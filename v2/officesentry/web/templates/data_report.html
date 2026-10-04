@@ -87,7 +87,7 @@
     {% for row in section.rows %}{% set flag = section.flags[loop.index0] %}
     <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ row|join(' ')|lower }}">
       <td class="flagcol" data-sort="{{ SEV_RANK.get(flag, '') }}">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>
-      {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ section.columns[loop.index0] }}"{% endif %}>{% if v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v }}{% endif %}</td>{% endfor %}
+      {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ section.columns[loop.index0] }}"{% endif %}>{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v }}{% endif %}</td>{% endfor %}
     </tr>
     {% endfor %}
     </tbody>

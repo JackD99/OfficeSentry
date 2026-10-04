@@ -12,6 +12,7 @@ from ..licences import sku_name
 from ..reports import data_reports, evidence, export
 from ..reports.monthly_review import build, setting
 from ..rules import RULES
+from ..snapshot import TenantSnapshot
 from .access import login_required, roles_required, tenant_or_404
 from .printing import pdf_response
 
@@ -220,8 +221,11 @@ def tenant_findings(tenant_id: int):
     groups: dict[str, list] = {}
     for row in rows:
         groups.setdefault(row["rule_key"], []).append(row)
+    # Findings that name an account link to its page.
+    people = data_reports.people_index(TenantSnapshot(g.db, t))
+    people.update({uid: uid for uid in set(people.values())})
     return render_template("findings.html", tenant=t, rows=rows, groups=list(groups.items()), view=view,
-                           titles=RULE_TITLES)
+                           titles=RULE_TITLES, people=people)
 
 
 def _finding_or_404(finding_id: int):

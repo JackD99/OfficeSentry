@@ -16,6 +16,7 @@ GROUP_LIMIT = 1000     # Microsoft 365 groups whose owners and members are read 
 MEMBER_PAGES = 100     # 999 members a page
 OWNERS_KEPT = 20       # owner names stored per group; the counts are always complete
 GUESTS_KEPT = 50       # guest addresses stored per group
+MEMBER_IDS_KEPT = 5000  # member object IDs stored per group, for each person's page
 
 # Microsoft's defaults when the tenant has never saved a Group.Unified setting.
 DEFAULT_SETTINGS = {"EnableGroupCreation": True, "GroupCreationAllowedGroupId": "", "AllowGuestsToAccessGroups": True,
@@ -111,6 +112,8 @@ class Groups(Collector):
             "memberCount": len(members),
             "guestCount": len(guests),
             "guests": guests[:GUESTS_KEPT],
+            "memberIds": [m["id"] for m in members[:MEMBER_IDS_KEPT] if m.get("id")],
+            "memberIdsComplete": len(members) <= MEMBER_IDS_KEPT,
         }
 
     @staticmethod
