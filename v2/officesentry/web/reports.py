@@ -6,12 +6,13 @@ import re
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import findings
+from .. import findings, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
 from ..reports import data_reports, evidence, export, library, views
 from ..reports.monthly_review import build, setting
 from ..rules import RULES
+from ..snapshot import TenantSnapshot
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .printing import pdf_response
 
@@ -199,7 +200,7 @@ def data_report_xlsx(tenant_id: int, key: str):
 
 
 def _known_skus() -> list[tuple[str, str]]:
-    """Every paid SKU part number seen in any tenant's latest licence snapshot."""
+    """Every paid SKU part number seen in any tenant's latest licence snapshot, plus right-sizing's targets."""
     rows = g.db.execute(
         """
         SELECT DISTINCT json_extract(o.data, '$.skuPartNumber') AS part
@@ -211,6 +212,8 @@ def _known_skus() -> list[tuple[str, str]]:
     ).fetchall()
     parts = {r["part"] for r in rows if r["part"]}
     parts |= {r["sku_part_number"] for r in g.db.execute("SELECT sku_part_number FROM sku_prices")}
+    if parts:  # the cheaper plans right-sizing suggests, so its savings can be priced
+        parts |= set(usage.TARGETS)
     return sorted(((p, sku_name(p)) for p in parts), key=lambda x: x[1].lower())
 
 
@@ -274,8 +277,11 @@ def tenant_findings(tenant_id: int):
     groups: dict[str, list] = {}
     for row in rows:
         groups.setdefault(row["rule_key"], []).append(row)
+    # Findings that name an account link to its page.
+    people = data_reports.people_index(TenantSnapshot(g.db, t))
+    people.update({uid: uid for uid in set(people.values())})
     return render_template("findings.html", tenant=t, rows=rows, groups=list(groups.items()), view=view,
-                           titles=RULE_TITLES)
+                           titles=RULE_TITLES, people=people)
 
 
 def _finding_or_404(finding_id: int):

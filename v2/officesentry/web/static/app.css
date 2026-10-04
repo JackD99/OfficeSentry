@@ -562,6 +562,45 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
   table.compact-sm th, table.compact-sm td { padding: 7px 8px; font-size: .8125rem; }
 }
 
+/* -- One page per account (user.html, people.html) ------------------------------------ */
+.person-head { display: flex; gap: 16px; align-items: flex-start; margin: 0 0 20px; flex-wrap: wrap; }
+.person-head .avatar { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-size: 1.35rem; font-weight: 700; }
+.person-head .person-id { flex: 1; min-width: 0; }
+.person-head .crumbs { margin-bottom: 2px; }
+.person-head h2 { font-size: 1.25rem; margin: 0; line-height: 1.3; word-break: break-word; }
+.person-head .muted { word-break: break-all; }
+.person-head .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.person-head .person-actions { flex: none; align-self: center; }
+.card.part .kv { margin-bottom: 4px; }
+.part-sub { font-size: .8125rem; font-weight: 600; color: var(--text-2); margin: 18px 0 4px; display: flex; gap: 8px; align-items: center; }
+.card-head + .scroll-x > .part-table { margin-top: -4px; }
+.part-table td, .part-table th { padding: 8px 10px; }
+.kv.stacked { grid-template-columns: 1fr; gap: 0; }
+.kv.stacked dt { font-size: .75rem; margin-top: 10px; }
+.kv.stacked dt:first-child { margin-top: 0; }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { display: grid; grid-template-columns: 84px 1fr; gap: 10px; padding: 7px 0 7px 12px; border-left: 2px solid var(--border); font-size: .875rem; }
+.timeline li.tone-warn { border-left-color: var(--warn); }
+.timeline li.tone-bad { border-left-color: var(--bad); }
+.timeline li.tone-ok { border-left-color: var(--ok); }
+.timeline .when { color: var(--muted); font-size: .8125rem; white-space: nowrap; }
+.timeline .area { font-weight: 600; color: var(--text); }
+#attention .list > li { align-items: baseline; }
+@media (max-width: 640px) {
+  .person-head .person-actions { width: 100%; }
+  .timeline li { grid-template-columns: 1fr; gap: 0; }
+}
+.card:not(.flush) .part-table th:first-child, .card:not(.flush) .part-table td:first-child { padding-left: 10px; }
+@media (max-width: 640px) {
+  .card.part .kv { grid-template-columns: 1fr; gap: 0; }
+  .card.part .kv dt { font-size: .75rem; margin-top: 8px; }
+  .card.part .kv dt:first-child { margin-top: 0; }
+}
+@media (max-width: 640px) {
+  table.stack-sm.part-table td.wrap:empty { display: none; }
+  .part-table tr[class*="flag-"] td:first-child { padding-left: 8px !important; }
+}
+
 /* -- Report tables: filters, columns, saved views, sticky headers --------------------- */
 /* Menus are <details class="menu">: the summary is the button, the panel drops below it. */
 details.menu { position: relative; }

@@ -41,8 +41,9 @@ USES: tuple[Use, ...] = (
         "What's filling SharePoint, OneDrive and mailboxes, and what can go.",
         ("sharepoint-storage", "sharepoint", "onedrive", "mailbox-size", "shared-mailboxes")),
     Use("licences", "Licence savings",
-        "Paid licences nobody uses, accounts that could be shared mailboxes, and people who've stopped signing in.",
-        ("licences", "inactive", "shared-mailboxes")),
+        "Paid licences nobody uses, people who could have a cheaper one, accounts that could be shared mailboxes, "
+        "and people who've stopped signing in.",
+        ("licences", "licence-rightsizing", "usage", "inactive", "shared-mailboxes")),
 )
 
 # Words people search for that a report's own title and description don't contain.
@@ -68,6 +69,8 @@ KEYWORDS: dict[str, str] = {
     "devices": "intune compliance bitlocker encryption windows",
     "apps": "enterprise applications oauth consent secrets certificates expiry",
     "licences": "licenses waste cost money unused subscriptions",
+    "licence-rightsizing": "licenses downgrade cheaper plan savings cost copilot business basic standard e1 e3",
+    "usage": "adoption activity active users teams onedrive outlook office apps copilot",
     "secure-score": "score trend controls",
     "tenant-settings": "defaults user consent authorization policy",
     "admin-activity": "audit log directory changes who changed",

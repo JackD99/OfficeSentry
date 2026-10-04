@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header with context %}
+{% block title %}Users · {{ tenant.name }}{% endblock %}
+{% set PILL = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad'} %}
+{% block content %}
+{{ tenant_header(tenant, 'users') }}
+
+{% if not collected %}
+<div class="card empty"><h3>No users yet</h3><p>Accounts show here once Users has been collected for this tenant.</p></div>
+{% else %}
+<div class="tiles">
+  {% for h in tiles %}
+  <div class="tile">
+    <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
+    {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<section class="card flush">
+  <div class="card-head toolbar">
+    <h2>Every account <span class="count-badge">{{ rows|length }}</span></h2>
+    <div class="toolbar-actions">
+      <input class="search sm" type="search" data-filter="people" placeholder="Find a person…" aria-label="Find a person">
+    </div>
+  </div>
+  <p class="intro">Open anyone to see their licences, MFA, roles, groups, mailbox, devices, OneDrive sharing and history on one page. Accounts with open findings come first.</p>
+  <div class="scroll-x">
+  <table class="stack-sm sortable" id="people">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Name</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Type</button></th>
+      <th aria-sort="none"><button type="button" class="sort">MFA</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Admin roles</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Licences</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Last sign-in</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Open findings</button></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr data-name="{{ (r.name ~ ' ' ~ r.upn ~ ' ' ~ r.roles|join(' '))|lower }}">
+      <td class="wrap"><a class="strong" href="{{ url_for('people.person', tenant_id=tenant.id, user_id=r.id) }}">{{ r.name }}</a>{% if r.upn and r.upn != r.name %}<span class="sub">{{ r.upn }}</span>{% endif %}</td>
+      <td data-label="Type">{{ 'Guest' if r.guest else 'Member' }}{% if not r.enabled %}<span class="sub">Sign-in blocked</span>{% endif %}</td>
+      <td data-label="MFA">{% if r.mfa_tone %}<span class="pill {{ PILL[r.mfa_tone] }}">{{ r.mfa }}</span>{% else %}<span class="muted">{{ r.mfa }}</span>{% endif %}</td>
+      <td data-label="Admin roles" class="wrap">{{ r.roles|join(', ') if r.roles else '' }}</td>
+      <td data-label="Licences" class="num">{{ r.licences }}</td>
+      <td data-label="Last sign-in" data-sort="{{ r.last_sign_in_sort }}">{{ r.last_sign_in }}</td>
+      <td data-label="Open findings" class="num">{% if r.findings %}<span class="pill warn">{{ r.findings }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

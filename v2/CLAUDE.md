@@ -83,6 +83,11 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 - Report builders in `reports/` return plain data; templates and
   `reports/export.py` only format it. Charts are server-side SVG
   (`reports/charts.py`) so the PDF matches the page.
+- Per-person Microsoft 365 usage lives in `usage.py`: `usage.person(snap, upn)`
+  returns one account's last activity and use per service (keys in
+  `usage.SERVICES`), Office apps by platform, installs and activity counts, for
+  any page about one person. Usage reports may conceal names (32-character
+  codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
 - Client-facing reports (page + PDF) extend `templates/reports/_layout.html`
@@ -104,6 +109,18 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   with `python -m officesentry live-test --record tests/fixtures/live_tenant.json`
   (needs the `OFFICESENTRY_TEST_*` variables). Scrubbing happens in memory and
   refuses to write the file if a name or domain survives; still skim the diff.
+
+## One page per account
+
+`reports/user_profile.py` builds `/tenants/<id>/users/<object id>` (and the
+Users tab, `directory()`) from stored snapshots. Each area is a function
+decorated `@part(order)` returning a `Part` (facts, `Section` tables, a short
+summary); call `person.flag(severity, text, part_key)` for "Needs attention".
+Orders are spaced by 10, so a new area slots in without touching the others.
+`history()` diffs the account across retained snapshots. Detail report cells
+that are exactly an account's sign-in name or address become `UserLink`s in
+`data_reports.build()` (a `str` with `page_href`), so builders don't need to do
+anything to link people; PDFs and spreadsheets show the plain name.
 
 ## Web UI conventions
 

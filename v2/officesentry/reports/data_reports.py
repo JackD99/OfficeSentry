@@ -10,6 +10,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 from .. import adminactivity, coverage, devices, dnscheck, hybrid
 from ..collectors import REGISTRY
@@ -63,6 +64,50 @@ class Link:
     @property
     def safe_href(self) -> str | None:
         return self.href if self.href.lower().startswith("https://") else None
+
+
+class UserLink(str):
+    """An account's name that opens its page in Office Sentry.
+
+    A ``str``, so comparisons, sorting and exports treat it as the name. Pages link ``page_href``
+    (a path in the portal); ``safe_href`` is None so PDFs and spreadsheets show the name alone.
+    """
+
+    safe_href = None
+
+    def __new__(cls, text: str, href: str):
+        obj = super().__new__(cls, text)
+        obj.page_href = href
+        return obj
+
+    @property
+    def text(self) -> str:
+        return str(self)
+
+
+def user_path(tenant_id: int, user_id: str) -> str:
+    return f"/tenants/{tenant_id}/users/{quote(str(user_id), safe='')}"
+
+
+def people_index(snap: TenantSnapshot) -> dict[str, str]:
+    """Account object IDs by lower-cased sign-in name and email address."""
+    out: dict[str, str] = {}
+    for u in snap.objects("users", "user") or []:
+        for key in ("userPrincipalName", "mail"):
+            if isinstance(u.get(key), str) and u[key]:
+                out.setdefault(u[key].lower(), u["_id"])
+    return out
+
+
+def link_people(sections: list[Section], tenant_id: int, index: dict[str, str]) -> None:
+    """Turn every cell that is exactly an account's sign-in name or address into a link to its page."""
+    if not index:
+        return
+    for section in sections:
+        for row in section.rows:
+            for i, v in enumerate(row):
+                if type(v) is str and (uid := index.get(v.lower())):
+                    row[i] = UserLink(v, user_path(tenant_id, uid))
 
 
 class Many(str):
@@ -904,7 +949,8 @@ GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
                         "domains")),
     ("files", "Files and Teams", ("sharepoint", "sharepoint-storage", "onedrive", "shared-files", "groups")),
     ("devices", "Devices and apps", ("devices", "apps")),
-    ("tenant", "Tenant and licences", ("secure-score", "licences", "tenant-settings", "admin-activity")),
+    ("tenant", "Tenant and licences", ("secure-score", "licences", "licence-rightsizing", "usage", "tenant-settings",
+                                       "admin-activity")),
 )
 
 
@@ -945,6 +991,8 @@ def build(conn, tenant, key: str, now: datetime | None = None, as_of: datetime |
         logging.getLogger(__name__).exception("Report %s failed", key)
         report.sections = []
         report.unavailable = f"This report couldn't be built: {type(exc).__name__}"
+    if as_of is None:  # comparisons of older data don't need links
+        link_people(report.sections, report.tenant["id"], people_index(snap))
     return report
 
 

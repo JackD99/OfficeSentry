@@ -75,6 +75,7 @@
   {% set _ = tabs.append(('findings', 'Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('changes', 'Changes', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('data', 'Detail reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
+  {% set _ = tabs.append(('users', 'Users', url_for('people.people', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('schedules', 'Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) %}
   {% if staff %}{% set _ = tabs.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}

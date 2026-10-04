@@ -1,0 +1,63 @@
+"""One page per account (``reports/user_profile.py``) and the Users tab that lists them."""
+
+from __future__ import annotations
+
+import re
+
+from flask import Blueprint, Response, abort, g, render_template
+
+from ..db import audit
+from ..reports import data_reports, user_profile
+from .access import login_required, tenant_or_404
+from .printing import pdf_response
+
+bp = Blueprint("people", __name__)
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "account"
+
+
+def _profile(tenant_id: int, user_id: str):
+    t = tenant_or_404(tenant_id)
+    profile = user_profile.build(g.db, t, user_id)
+    if profile is None:
+        abort(404)
+    return t, profile
+
+
+@bp.get("/tenants/<int:tenant_id>/users")
+@login_required
+def people(tenant_id: int):
+    t = tenant_or_404(tenant_id)
+    found = user_profile.directory(g.db, t)
+    rows, tiles = found if found else ([], [])
+    return render_template("people.html", tenant=t, rows=rows, tiles=tiles, collected=found is not None)
+
+
+@bp.get("/tenants/<int:tenant_id>/users/<user_id>")
+@login_required
+def person(tenant_id: int, user_id: str):
+    t, profile = _profile(tenant_id, user_id)
+    return render_template("user.html", tenant=t, profile=profile)
+
+
+@bp.get("/tenants/<int:tenant_id>/users/<user_id>.pdf")
+@login_required
+def person_pdf(tenant_id: int, user_id: str):
+    t, profile = _profile(tenant_id, user_id)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "user.pdf")
+    return pdf_response("reports/detail.html", f"account-{_slug(profile.upn or profile.name)}",
+                        report=profile.as_report())
+
+
+@bp.get("/tenants/<int:tenant_id>/users/<user_id>.xlsx")
+@login_required
+def person_xlsx(tenant_id: int, user_id: str):
+    t, profile = _profile(tenant_id, user_id)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "user.xlsx")
+    return Response(
+        data_reports.to_xlsx(profile.as_report()),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=account-{_slug(profile.upn or profile.name)}.xlsx"},
+    )

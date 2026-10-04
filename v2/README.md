@@ -34,7 +34,8 @@ pass, and a first run against a real tenant.
   comparison of every detail report.
 - **Downloads**: every page above has CSV and XLSX. Values from tenants can
   never become spreadsheet formulas.
-- **Licence prices** (admin): enter monthly prices per SKU to cost waste.
+- **Licence prices** (admin): enter monthly prices per SKU to cost waste and
+  right-sizing savings.
 - **Findings** (`/tenants/<id>/findings`): every finding keeps first seen,
   resolved and reopened dates. Analysts can accept a risk with a reason and an
   optional expiry; accepted risks leave the totals and get their own section.
@@ -137,6 +138,23 @@ pass, and a first run against a real tenant.
     quota with their largest files. Sizes come from SharePoint's own storage
     figures (`SMTotalSize`), which include every version. Needs
     `Sites.Read.All`.
+  - *Microsoft 365 usage*: who used email, Teams, OneDrive, SharePoint and
+    the Office apps in the last 30 days (share of licensed people per
+    service, and a trend from Office Sentry's own history), when each person
+    was last active in each service, Office apps by platform (Windows, Mac,
+    mobile, web), Office installs per person, and email and Teams activity
+    counts. From Microsoft's usage reports (`Reports.Read.All`).
+  - *Licence right-sizing*: people who could move to a cheaper licence, with
+    the saving at your prices: nothing used in 30 days (remove the licence,
+    or convert to a shared mailbox when it still receives mail), Copilot
+    unused, only email used (Exchange Online Plan 1, or Plan 2 for big,
+    archived or held mailboxes), no desktop Office apps used (Business
+    Standard to Basic, Office 365 E3 to E1, apps-only plans removed), and
+    Exchange Online Plan 2 on small mailboxes. Also lists services people are
+    licensed for but don't use. Disabled and inactive accounts stay in
+    Licence waste so nothing is counted twice. When the tenant hides names in
+    usage reports, people show as short codes, licences are read from
+    Microsoft's product names, and the page explains how to show names.
 - **Insurance evidence** (`/tenants/<id>/evidence`, PDF, XLSX): the controls
   cyber-insurance questionnaires ask about (MFA, admin accounts, legacy auth,
   email authentication, forwarding, logging, leavers, apps, sharing, devices), each
@@ -308,6 +326,7 @@ officesentry/
   snapshot.py    latest successful data per collector, for rules/reports
   rules.py       checks: snapshot -> pass / fail with findings / unavailable
   licences.py    SKU names, prices, licence-waste maths
+  usage.py       per-person Microsoft 365 usage and licence right-sizing rules
   reports/       report builders (data only), SVG charts, XLSX/PDF export
   findings.py    findings lifecycle (new, resolved, reopened, accepted)
   changes.py     snapshot diffs for "since last month"

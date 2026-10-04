@@ -24,7 +24,8 @@
   <tr class="group"><td colspan="5">{{ titles.get(rule_key, rule_key) }} <span class="faint">· {{ items|length }}</span></td></tr>
   {% for f in items %}
   <tr>
-    <td class="wrap"><span class="strong">{{ f.subject }}</span></td>
+    {% set person = people.get(f.object_id) or people.get(f.subject|lower) %}
+    <td class="wrap">{% if person %}<a class="strong" href="{{ url_for('people.person', tenant_id=tenant.id, user_id=person) }}">{{ f.subject }}</a>{% else %}<span class="strong">{{ f.subject }}</span>{% endif %}</td>
     <td data-label="Severity"><span class="sevtext {{ f.severity }}">{{ f.severity }}</span></td>
     <td data-label="Detail" class="wrap">{{ f.detail }}</td>
     <td data-label="First seen" class="nowrap">{{ f.first_seen|day }}</td>
