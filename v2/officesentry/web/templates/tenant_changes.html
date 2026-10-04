@@ -1,7 +1,6 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, tenant_header, downloads with context %}
+{% from "_macros.html" import icon, tenant_header, downloads, change_tag with context %}
 {% block title %}Changes · {{ tenant.name }}{% endblock %}
-{% set KIND = {'added': ('added', 'New'), 'removed': ('resolved', 'Gone'), 'changed': ('changed', 'Changed')} %}
 {% block content %}
 {{ tenant_header(tenant, 'changes') }}
 <div class="toolbar">
@@ -71,8 +70,8 @@
   <div class="card-head"><h2>Key changes <span class="count-badge">{{ report.key_changes|length }}</span></h2></div>
   <p class="intro">Admin roles, Conditional Access, accounts, mail forwarding, app permissions, devices and groups.</p>
   <ul class="change-list">
-    {% for c in report.key_changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
-    <li><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span><div><span class="strong">{{ c.area }}</span> {{ c.subject }}<span class="desc">{{ c.detail }}</span></div></li>
+    {% for c in report.key_changes %}
+    <li>{{ change_tag(c.kind) }}<div><span class="strong">{{ c.area }}</span> {{ c.subject }}<span class="desc">{{ c.detail }}</span></div></li>
     {% endfor %}
   </ul>
 </section>
@@ -92,10 +91,11 @@
   {% for s in r.sections %}
   <div class="scroll-x">
   <table class="stack-sm">
-    <thead><tr><th class="flagcol">{{ s.title }}</th><th>{{ s.columns[0] }}</th><th>What changed</th></tr></thead>
+    <caption>{{ s.title }}</caption>
+    <thead><tr><th class="flagcol"><span class="sr-only">Change</span></th><th>{{ s.columns[0] }}</th><th>What changed</th></tr></thead>
     <tbody>
-    {% for c in s.changes %}{% set k = KIND.get(c.kind, ('changed', c.kind)) %}
-    <tr><td class="flagcol"><span class="chg chg-{{ k[0] }}">{{ k[1] }}</span></td>
+    {% for c in s.changes %}
+    <tr><td class="flagcol">{{ change_tag(c.kind) }}</td>
       <td class="wrap">{{ c.subject }}</td><td class="wrap" data-label="What changed">{{ c.detail }}</td></tr>
     {% endfor %}
     </tbody>

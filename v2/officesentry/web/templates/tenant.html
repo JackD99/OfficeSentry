@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header with context %}
+{% from "_macros.html" import icon, ts, tenant_header, change_tag with context %}
 {% block title %}{{ tenant.name }} · Office Sentry{% endblock %}
 {% macro kpi_value(k) -%}
 {% if k.value is none %}<span class="faint">–</span>{% elif k.unit == 'currency' %}{{ k.value|money(report.currency) }}{% else %}{{ '%g'|format(k.value) }}{{ k.unit }}{% endif %}
 {%- endmacro %}
 {% block content %}
 {% set open_total = report.counts.values()|sum %}
+{% set collected = report.freshness|map(attribute='finished_at')|select|list %}
 {{ tenant_header(tenant, 'overview', counts={'findings': open_total}) }}
 
 {% if not tenant.consented_at %}
@@ -34,6 +35,13 @@
 </section>
 {% endif %}
 
+{% if not collected %}
+<section class="card empty">
+  <h3>No data yet</h3>
+  <p class="m0">Figures, findings and changes appear here after the first collection{% if not tenant.consented_at %}, which starts once a Global Administrator grants consent{% endif %}.
+    {% if tenant.consented_at %}Follow it on <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a>.{% endif %}</p>
+</section>
+{% else %}
 {# Each headline number opens the report behind it. #}
 {% set KPI_REPORT = {'secure_score.pct': ('secure-score', ''), 'mfa.registered_pct': ('mfa', ''),
                      'admins.privileged_principals': ('admins', '#t-privileged-role-holders'), 'users.licensed': ('licences', ''),
@@ -82,28 +90,30 @@
   </section>
 
   <section class="card">
-    <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2></div>
+    <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2>
+      <a class="small" href="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">Everything that changed</a></div>
     {% if report.first_report and not report.new_count and not report.resolved %}
     <p class="muted small">Collection for this tenant started in this period, so its first findings are the starting point rather than new. New and fixed findings are tracked from here on.</p>
     {% else %}
     <div class="mini-stats">
       <div><span class="value">{{ report.new_count }}</span><span class="label">new findings</span></div>
       <div><span class="value">{{ report.resolved|length }}</span><span class="label">fixed</span></div>
-      <div><span class="value">{{ report.changes|length }}</span><span class="label">changes spotted</span></div>
+      <div><span class="value">{{ report.changes|length }}</span><span class="label">key {{ 'change' if report.changes|length == 1 else 'changes' }}</span></div>
     </div>
     {% endif %}
     {% if report.changes %}
     <ul class="list compact">
       {% for c in report.changes[:5] %}
-      <li><span class="chg chg-{{ c.kind }}">{{ c.kind }}</span><div class="grow"><span class="title">{{ c.area }}</span> <span class="desc">{{ c.subject }}: {{ c.detail }}</span></div></li>
+      <li>{{ change_tag(c.kind) }}<div class="grow"><span class="title">{{ c.area }}</span> <span class="desc">{{ c.subject }}: {{ c.detail }}</span></div></li>
       {% endfor %}
     </ul>
-    {% if report.changes|length > 5 %}<p class="footnote">{{ report.changes|length - 5 }} more in the monthly review.</p>{% endif %}
+    {% if report.changes|length > 5 %}<p class="footnote">{{ report.changes|length - 5 }} more on the <a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">Changes</a> tab.</p>{% endif %}
     {% elif not report.first_report %}
     <p class="muted small">No configuration changes spotted. Change tracking needs two collections at least 4 weeks apart.</p>
     {% endif %}
   </section>
 </div>
+{% endif %}
 
 <section class="card">
   <div class="card-head"><h2>Reports</h2>
@@ -127,8 +137,7 @@
 
 <p class="footnote data-line">
   <span class="pill {{ health[0] }}">{{ health[1] }}</span>
-  {% set finished = report.freshness|map(attribute='finished_at')|select|list %}
-  {% if finished %}<span>Data last collected {{ ts(finished|max) }}.</span>{% endif %}
+  {% if collected %}<span>Data last collected {{ ts(collected|max) }}.</span>{% endif %}
   {% if health[2] %}<span>{{ health[2] }}</span>{% endif %}
   <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection details</a>
 </p>
