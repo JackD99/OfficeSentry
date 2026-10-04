@@ -1,7 +1,7 @@
 """Screenshots and example reports for the README, from fictional demo data.
 
-Seeds a throwaway database with a made-up MSP and four made-up client tenants
-(``scripts/screenshot_data.py``), runs the portal on a free local port, and
+Seeds a throwaway database with a made-up MSP and made-up client tenants
+(``scripts/demo_data.py``, see ``seed()``), runs the portal on a free local port, and
 uses Playwright's Chromium to save:
 
 * ``docs/screenshots/*.png``: pages at 1440 px wide (light), two at phone
@@ -56,11 +56,67 @@ ADMIN = "demo"
 CLIENT = "alpha.client"
 
 
-def seed(db, vault) -> list[int]:
-    """Fill a migrated database with demo data and return the tenant ids (the first is shown most)."""
-    import screenshot_data
+SHOWCASE = "Fabrikam Dental Group"  # the tenant most pages show: SharePoint nearly full, plenty to fix
 
-    return screenshot_data.populate(db, vault)
+
+def seed(db, vault) -> list[int]:
+    """Fill a migrated database with demo data and return the tenant ids, the showcase tenant first."""
+    import demo_data
+
+    ids = demo_data.populate(db, vault)
+    names = {db.execute("SELECT name FROM tenants WHERE id = ?", (i,)).fetchone()[0]: i for i in ids}
+    first = names.get(SHOWCASE, ids[0])
+    ids = [first] + [i for i in ids if i != first]
+    add_email(db, first)
+    add_prospect(db)
+    return ids
+
+
+def add_email(db, tenant_id: int) -> None:
+    """Contacts, a monthly report schedule that has sent once, and an alert email, for the email pages."""
+    import json
+    from datetime import UTC, datetime, timedelta
+
+    from officesentry import delivery
+
+    domain = db.execute("SELECT object_id FROM objects o JOIN runs r ON r.id = o.run_id WHERE r.tenant_id = ?"
+                        " AND o.kind = 'accepted_domain' ORDER BY r.id DESC LIMIT 1", (tenant_id,)).fetchone()
+    domain = domain[0] if domain else "client.example"
+    people = [delivery.add_contact(db, tenant_id, name, f"{local}@{domain}")
+              for name, local in (("Practice manager", "practice.manager"), ("Finance director", "finance"))]
+    team = delivery.add_contact(db, None, "Service desk", "servicedesk@msp.example")
+    now = datetime.now(UTC)
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, include_xlsx, message, frequency, day_of_month, hour,"
+        " timezone, last_period, last_status, last_sent_at, created_by, created_at)"
+        " VALUES ('report', ?, ?, 1, ?, 'monthly', 1, 8, 'Europe/London', ?, 'sent', ?, ?, ?)",
+        (tenant_id, json.dumps(["review", "evidence", "data:sharepoint-storage", "data:licence-rightsizing"]),
+         "Your monthly review is attached. Give us a call if anything needs a hand.",
+         now.strftime("%Y-%m"), (now - timedelta(days=3)).strftime("%Y-%m-%dT08:00:00Z"), ADMIN,
+         utcnow())).lastrowid
+    delivery.set_recipients(db, "schedule", sid, people + [team])
+    alert = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_by, created_at)"
+                       " VALUES (?, 'high', ?, ?)", (tenant_id, ADMIN, utcnow())).lastrowid
+    delivery.set_recipients(db, "alert", alert, [team])
+
+
+def add_prospect(db) -> None:
+    """A prospect assessment of a fictional domain, with DNS and Microsoft's sign-in discovery faked."""
+    import responses
+
+    from officesentry import prospect
+
+    domain = "kingsley-optometry.example"
+    records = {(domain, "MX"): ["kingsley-optometry-example.mail.protection.outlook.com"],
+               (domain, "TXT"): ["v=spf1 include:spf.protection.outlook.com include:bulkmail.example ?all"],
+               ("spf.protection.outlook.com", "TXT"): ["v=spf1 ip4:40.92.0.0/15 -all"],
+               (f"_dmarc.{domain}", "TXT"): ["v=DMARC1; p=none"]}
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        rsps.get(f"{prospect.LOGIN}/{domain}/v2.0/.well-known/openid-configuration",
+                 json={"issuer": "https://login.microsoftonline.com/7c1e5f0a-3b9d-4e62-9a51-2f6c0d8e4b17/v2.0"})
+        rsps.get(f"{prospect.LOGIN}/getuserrealm.srf", json={"NameSpaceType": "Managed"})
+        assessment = prospect.run(domain, "Kingsley Optometry", resolve=lambda n, t: list(records.get((n, t), [])))
+    prospect.save(db, assessment, ADMIN)
 
 
 # -- What to capture ------------------------------------------------------------------------
@@ -132,7 +188,8 @@ EXAMPLES = {
     "licence-right-sizing.pdf": (
         "/tenants/{t}/data/licence-rightsizing.pdf", "People who could move to a cheaper licence, with the saving."),
     "conditional-access-coverage.pdf": (
-        "/tenants/{t}/data/conditional-access.pdf", "Every Conditional Access policy in plain words, and who it covers."),
+        "/tenants/{t}/data/conditional-access.pdf",
+        "Every Conditional Access policy in plain words, and who it covers."),
     "account-page.pdf": ("/tenants/{t}/users/u1.pdf", "Everything about one person's account on one page."),
     "what-changed-all-tenants.pdf": ("/changes.pdf", "Month-over-month changes across every client."),
     "all-tenants-monthly-review.pdf": (
@@ -148,12 +205,15 @@ EXAMPLES = {
 
 
 def build_site(data_dir: Path):
-    """Seed a new data directory; returns (config, tenant ids, admin password, client password)."""
+    """Seed a new, empty data directory; returns (config, tenant ids, passwords by username, names)."""
     from officesentry import worker
     from officesentry.config import load_config
     from officesentry.crypto import Vault
     from officesentry.db import connect, migrate
+    from officesentry.reports import branding
 
+    if data_dir.exists() and any(data_dir.iterdir()):
+        sys.exit(f"{data_dir} isn't empty; use a new data directory.")
     cfg = load_config(data_dir=data_dir, secure_cookies=False, require_mfa="off")
     db = connect(cfg.db_path)
     migrate(db)
@@ -167,19 +227,24 @@ def build_site(data_dir: Path):
         if not all_tenants:
             db.execute("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", (uid, ids[0]))
     worker.beat(db)
+    names = {"msp": branding.load(db).display_name,
+             "tenants": [db.execute("SELECT name FROM tenants WHERE id = ?", (i,)).fetchone()[0] for i in ids]}
     db.close()
-    return cfg, ids, passwords
+    return cfg, ids, passwords, names
 
 
 class Server:
     """The portal on a free port, in a thread, with a fresh worker heartbeat so no warning banner shows."""
 
     def __init__(self, cfg):
+        import logging
+
         from werkzeug.serving import make_server
 
         from officesentry.web import create_app
 
         self.cfg = cfg
+        logging.getLogger("werkzeug").setLevel(logging.ERROR)  # no line per request
         self.http = make_server("127.0.0.1", 0, create_app(cfg), threaded=True)
         self.url = f"http://127.0.0.1:{self.http.server_port}"
         self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
@@ -224,7 +289,8 @@ def sign_in(context, url: str, username: str, password: str) -> None:
     page.goto(f"{url}/login")
     page.fill("input[name=username]", username)
     page.fill("input[name=password]", password)
-    page.click("button[type=submit]")
+    with page.expect_navigation():
+        page.press("input[name=password]", "Enter")
     page.wait_for_load_state("networkidle")
     if "/login" in page.url:
         sys.exit(f"Couldn't sign in as {username}")
@@ -333,14 +399,15 @@ def pdf_first_page(pdf: bytes, png_path: Path, dpi: int = 90) -> bool:
     return True
 
 
-def write_examples(files: dict[str, bytes], out: Path) -> None:
+def write_examples(files: dict[str, bytes], out: Path, msp: str, tenants: list[str]) -> None:
     out.mkdir(parents=True, exist_ok=True)
     for name, body in files.items():
         (out / name).write_bytes(body)
     lines = ["# Example reports", "",
-             "Real exports from Office Sentry, made from **fictional demo data**: Northgate IT is a made-up MSP,",
-             "Alpha Dental Ltd and the other clients are made-up companies, and every person, address and",
-             "`.example` domain is invented. Nothing here comes from a real Microsoft 365 tenant.", "",
+             "Real exports from Office Sentry, made from **fictional demo data**. "
+             f"{msp} is a made-up MSP and its clients ({', '.join(tenants)}) are made-up companies; every person,",
+             "address and `.example` domain is invented. Nothing here comes from a real Microsoft 365 tenant.",
+             f"The single-client reports are for {tenants[0]}.", "",
              "Regenerate them with `python scripts/screenshots.py` (from `v2/`) after report changes.", "",
              "| File | What it is |", "|---|---|"]
     lines += [f"| [{name}]({name}) | {EXAMPLES[name][1]} |" for name in EXAMPLES if name in files]
@@ -364,7 +431,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="officesentry-shots-") as tmp:
         data_dir = args.data_dir or Path(tmp) / "data"
         print(f"Seeding demo data in {data_dir}")
-        cfg, ids, passwords = build_site(data_dir)
+        cfg, ids, passwords, names = build_site(data_dir)
         with Server(cfg) as server:
             if args.serve:
                 print(f"Portal: {server.url}  sign in as {ADMIN} / {passwords[ADMIN]}"
@@ -384,7 +451,8 @@ def main() -> None:
                 if name in files and pdf_first_page(files[name], args.out / f"{name}.png"):
                     saved.append(name)
             if examples:
-                write_examples({n: files[n] for n in examples if n in files}, args.examples_dir)
+                write_examples({n: files[n] for n in examples if n in files}, args.examples_dir, names["msp"],
+                               names["tenants"])
                 print(f"Wrote {len([n for n in examples if n in files])} example files to {args.examples_dir}")
     total = sum((args.out / f"{n}.png").stat().st_size for n in saved)
     print(f"Saved {len(saved)} images ({total / 1024 / 1024:.1f} MB). Look at every one before committing.")
