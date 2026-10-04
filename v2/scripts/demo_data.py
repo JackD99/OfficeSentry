@@ -67,7 +67,8 @@ OUTSIDE_DOMAINS = {"gmail.com": "homemail.example", "supplier.com": "supplier.ex
                    "parked.com": "parked.example"}
 
 # Monthly prices (GBP) the MSP has entered, so licence waste shows money.
-PRICES = {"SPB": 18.10, "O365_BUSINESS_PREMIUM": 10.30, "O365_BUSINESS_ESSENTIALS": 4.90, "EXCHANGESTANDARD": 3.30}
+PRICES = {"SPB": 18.10, "O365_BUSINESS_PREMIUM": 10.30, "O365_BUSINESS_ESSENTIALS": 4.90, "EXCHANGESTANDARD": 3.30,
+          "EXCHANGEENTERPRISE": 6.60, "ENTERPRISEPACK": 18.10}
 
 TENANTS = [
     # name, domain base, top-level domain, staff, share of staff with MFA (first collection, now),
@@ -153,7 +154,7 @@ class Renamed:
 
 def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_recently: bool):
     """Extra member accounts (beyond the fixture's few), their MFA registration and Microsoft 365 use."""
-    users, registration, active = [], [], []
+    users, registration, active, apps = [], [], [], []
     names = set(t["people"].values())
     n = t["staff"] - (0 if joined_recently else 2)
     for i in range(n):
@@ -177,9 +178,19 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
                              "methodsRegistered": ["microsoftAuthenticatorPush"] if registered else []})
         product = "MICROSOFT 365 BUSINESS PREMIUM" if sku == "sku-bp" else "MICROSOFT 365 BUSINESS BASIC"
         quiet = None if inactive else rng.choice([0, 1, 2, 4])
-        active.append(usagedata.active_user(upn, [product], name=name, exchange=quiet, teams=quiet,
-                                            onedrive=None if inactive else rng.choice([1, 3, 9, None])))
-    return users, registration, active
+        mail_only = not inactive and i % 7 == 3  # Business Premium used for email alone: right-sizing finds them
+        active.append(usagedata.active_user(upn, [product], name=name, exchange=quiet,
+                                            teams=None if mail_only else quiet,
+                                            onedrive=None if inactive or mail_only else rng.choice([1, 3, 9, None])))
+        if inactive:
+            apps.append(usagedata.app_user(upn))
+        elif mail_only or sku == "sku-basic":
+            apps.append(usagedata.app_user(upn, quiet, outlook=("Web", "Mobile")))
+        else:
+            desk = ("Mac",) if i % 9 == 2 else ("Windows",)
+            apps.append(usagedata.app_user(upn, quiet, outlook=desk + ("Mobile",), word=desk, excel=desk,
+                                           teams=desk + ("Mobile",)))
+    return users, registration, active, apps
 
 
 def skus(t: dict, assigned_bp: int, assigned_basic: int) -> list[dict]:
@@ -313,7 +324,7 @@ def inbox_rules(users: list[dict]) -> dict:
 def devices(users: list[dict], rng: random.Random) -> tuple[list[dict], list[dict]]:
     """A Windows PC per person: mostly current builds, a few on Windows 10, some not checking in or unencrypted."""
     entra, managed = list(devicedata.ENTRA_DEVICES), list(devicedata.MANAGED_DEVICES)
-    builds = ["10.0.26100.6584", "10.0.26100.4946", "10.0.22631.5909", "10.0.22631.5189", "10.0.19045.6332"]
+    builds = ["10.0.26200.6899", "10.0.26100.6584", "10.0.26200.6584", "10.0.26100.4946", "10.0.19045.6332"]
     models = [("Dell", "Latitude 7450"), ("Lenovo", "ThinkPad T14 Gen 5"), ("HP", "EliteBook 840 G10"),
               ("Microsoft", "Surface Laptop 6"), ("Dell", "OptiPlex 7010")]
     for i, u in enumerate(u for u in users if u["id"].startswith("d") and u["accountEnabled"]):
@@ -355,7 +366,7 @@ def _library(t: dict, now: datetime, slug: str, size: int, rng: random.Random) -
     """Folders and files adding up to ``size``: big files nobody opens, files with long version histories."""
     root = f"/sites/{slug}/Shared Documents"
     authors = [_upn(t, k) for k in ("ann", "carl", "eve", "carol")]
-    out, left = [], size
+    out, left = [], size - (int(9.6 * GB) + 31 * GB if slug == "practice" else 0)  # the two files added below
     folders = FOLDERS.get(slug, ["Projects", "Archive", "Templates", "Shared", "Scans"])
     for n, folder in enumerate(folders):
         part = left * (0.42 if n < len(folders) - 1 else 1.0)
@@ -370,6 +381,15 @@ def _library(t: dict, now: datetime, slug: str, size: int, rng: random.Random) -
             current = total if version == "1.0" else max(int(total / float(version) * 3), 8 * MB)
             out.append(_list_item(t, now, f"{path}/{folder} {suffix}", total=total, current=current,
                                   version=version, modified=age, by=rng.choice(authors)))
+        # The rest of the folder: ordinary files, so the libraries add up to what the sites use.
+        rest = part * (1 - sum(share for _, share, _, _ in files)) / 12
+        for k in range(12):
+            stem, ext = (("Scans", ".zip"), ("Photos", ".zip"), ("Recording", ".mp4"), ("Export", ".zip"))[k % 4]
+            year = int(folder[-4:]) if folder[-4:].isdigit() else 2019 + k % 6
+            name = f"{stem} {year}-{1 + k % 12:02d}{ext}"
+            size = int(rest * (0.6 + 0.8 * k / 11))
+            out.append(_list_item(t, now, f"{path}/{name}", total=size, current=int(size * 0.93),
+                                  version=f"{2 + k % 5}.0", modified=rng.randint(3, 1500), by=rng.choice(authors)))
     if slug == "practice":
         out.append(_list_item(t, now, f"{root}/Appointment book.xlsx", total=int(9.6 * GB), current=14 * MB,
                               version="1184.0", modified=0, by=_upn(t, "carl")))
@@ -458,7 +478,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
     with Renamed(renamer(t)):
         # The same seed both times: the same people, two of whom join after the first collection.
         rng = random.Random(t["name"])  # noqa: S311 (demo data, not security)
-        users, registration, active = staff(t, rng, now, t["mfa"][0 if first else 1], joined_recently=not first)
+        users, registration, active, apps = staff(t, rng, now, t["mfa"][0 if first else 1], joined_recently=not first)
         everyone = fixture_users.USERS + users
         bp = sum(1 for u in everyone if {"skuId": "sku-bp"} in u.get("assignedLicenses", []))
         basic = sum(1 for u in everyone if {"skuId": "sku-basic"} in u.get("assignedLicenses", []))
@@ -474,7 +494,8 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
                         registration=graphdata.REGISTRATION_DETAILS + registration,
                         secure_scores=secure_scores(t["score"][0] - 4, t["score"][0], now) if first
                         else secure_scores(t["score"][0] - 4, t["score"][1], now, 105),
-                        usage_kw={"active": usagedata.ACTIVE_USERS + active}, inbox_rules=inbox_rules(everyone))
+                        usage_kw={"active": usagedata.ACTIVE_USERS + active, "apps": usagedata.APP_USERS + apps},
+                        inbox_rules=inbox_rules(everyone))
 
 
 def backdate(db, tenant_id: int, days: int) -> None:

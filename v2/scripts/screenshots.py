@@ -136,13 +136,13 @@ class Shot:
 
 
 SHOTS = [
-    Shot("dashboard", "/", height=820),
+    Shot("dashboard", "/", height=600),
     Shot("tenant-overview", "/tenants/{t}", height=1000),
     Shot("review", "/tenants/{t}/report", height=1100),
-    Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="text=Needs attention"),
+    Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="h2:has-text('What we recommend next')"),
     Shot("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=1100),
     Shot("sharepoint-storage-files", "/tenants/{t}/data/sharepoint-storage", height=950,
-         scroll_to="text=Largest folders"),
+         scroll_to="h2:has-text('Largest files')"),
     Shot("mfa", "/tenants/{t}/data/mfa", height=950),
     Shot("mail-forwarding", "/tenants/{t}/data/mailboxes", height=900),
     Shot("mailbox-permissions", "/tenants/{t}/data/mailbox-permissions", height=950),
@@ -152,7 +152,7 @@ SHOTS = [
     Shot("reports-library", "/reports", height=1000),
     Shot("person", "/tenants/{t}/users/u1", height=1100),
     Shot("all-tenants", "/across/review", height=760),
-    Shot("what-changed", "/changes", height=1000),
+    Shot("what-changed", "/changes", height=640),
     Shot("evidence", "/tenants/{t}/evidence", height=1000),
     Shot("emailed-reports", "/tenants/{t}/schedules", height=900),
     Shot("email-schedule-form", "/tenants/{t}/schedules/new", height=1000),
