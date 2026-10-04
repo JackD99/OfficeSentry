@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 from .licences import FREE_SKUS, SKU_NAMES
 from .snapshot import TenantSnapshot
+from .text import plural
 
 ACTIVE_DAYS = 30
 COLLECTOR = "m365_usage"
@@ -128,11 +129,14 @@ def desktop_use(row: dict) -> bool | None:
 
 
 def email_only(row: dict) -> bool:
-    """Active in email and nothing else: no Teams, files, desktop apps or web apps other than Outlook."""
+    """Active in email and nothing else: no Teams, files, desktop apps or web apps other than Outlook.
+
+    False when the apps report wasn't read, since desktop app use can't be ruled out.
+    """
     active = row.get("active") or {}
     if not active.get("exchange") or any(active.get(k) for k in ("teams", "onedrive", "sharepoint")):
         return False
-    if desktop_use(row):
+    if desktop_use(row) is not False:
         return False
     apps = row.get("apps") or {}
     return not any(apps.get(k) for k, _ in APPS if k != "outlook")
@@ -212,7 +216,7 @@ def rightsize(row: dict, held: list[str], mailbox: dict | None = None) -> list[S
         received = (row.get("email") or {}).get("received") or 0
         if received and (row.get("licensed") or {}).get("exchange"):
             # Removing the licence deletes the mailbox; a shared mailbox keeps it for free (up to 50 GB).
-            return [Suggestion(p, "", f"{why}, but the mailbox still received {received} message(s). A shared "
+            return [Suggestion(p, "", f"{why}, but the mailbox still received {plural(received, 'message')}. A shared "
                                       "mailbox keeps it without a licence", keep_mailbox=True) for p in held]
         return [Suggestion(p, "", why) for p in held]
     out: list[Suggestion] = []

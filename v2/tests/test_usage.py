@@ -124,6 +124,8 @@ def test_rules():
     assert usage.rightsize(desktop, ["SPB"]) == []
     unknown = _row({"exchange", "teams"}, None)  # apps report not read: no desktop suggestion
     assert usage.rightsize(unknown, ["O365_BUSINESS_PREMIUM"]) == []
+    mail_unknown = _row({"exchange"}, None)  # apps report not read: desktop apps may be in use
+    assert usage.rightsize(mail_unknown, ["O365_BUSINESS_PREMIUM"]) == []
     assert usage.rightsize(desktop, ["Microsoft_365_Copilot"]) == []  # Copilot use not known
     desktop["copilotActive"] = False
     copilot = usage.rightsize(desktop, ["SPB", "Microsoft_365_Copilot"])
