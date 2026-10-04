@@ -11,9 +11,10 @@
     <h1>Tenants</h1>
     <div class="sub">Latest results for every tenant you look after, worst first.</div>
   </div>
-  {% if current_user.role == 'admin' %}
-  <div class="actions"><a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a></div>
-  {% endif %}
+  <div class="actions">
+    <a class="btn" href="{{ url_for('tenant_admin.clients') }}">{{ icon('connection') }} Connection health</a>
+    {% if current_user.role == 'admin' %}<a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a>{% endif %}
+  </div>
 </div>
 
 {% if not rows %}

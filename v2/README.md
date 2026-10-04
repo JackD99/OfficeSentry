@@ -250,8 +250,8 @@ this command; the product signs in with a certificate.
   asked to approve access. Every permission, what is and isn't read, where the
   data is kept and how to remove access.
 - [Onboarding a client](docs/onboarding-a-client.md): for technicians. Adding
-  a tenant, consent, Global Reader, the first collection, and the errors on the
-  Data collection tab.
+  a tenant, consent, Global Reader, the first collection, connection health,
+  the errors on the Data collection tab, pausing, archiving and offboarding.
 - [Check catalogue](docs/checks.md): every check, data source, detail report
   and permission, generated from the code by `scripts/gen_check_catalogue.py`.
 
@@ -325,10 +325,34 @@ Then:
    add the redirect URI `https://<your portal>/consent/callback` as a Web
    platform. Enter your Directory (tenant) ID with the client ID to check the
    certificate straight away.
-3. **Add tenant**, then have a Global Administrator of that tenant open the
-   consent link on the tenant's Data collection tab. A first collection is
-   queued on return. **Test connection** on the same tab says in plain words
-   what's wrong if Office Sentry can't sign in.
+3. **Add tenant**. The tenant's page shows a setup checklist that ticks itself
+   off: grant admin consent (a Global Administrator of the tenant opens the
+   link; a full collection is queued on return), assign Global Reader, first
+   full collection, all permissions granted. The tenant's **Manage** tab says
+   in plain words what's wrong and how to fix it if Office Sentry can't sign
+   in or is missing a permission or role.
+
+## Managing client tenants
+
+- **Client tenants** (*Settings*, or *Connection health* on the Tenants page)
+  lists every tenant with its status (*Onboarding*, *Healthy*, *Needs
+  attention*, *Paused*, *Archived*), consent, missing permissions, Global
+  Reader, last good collection and failing data sources, worst first.
+- A tenant's **Manage** tab (admins and analysts) shows its connection health:
+  consent, sign-in, which of the app's permissions the tenant actually granted,
+  whether the app holds Global Reader (or more than it needs), licences, last
+  collection and failing data sources, each with the fix. It's read by the
+  `connection` collector with every collection (GET only, from permissions the
+  app already has); *Check connection now* queues it straight away.
+- Admins can rename a tenant, change its tenant ID (until data has been
+  collected) or app connection, keep notes, **pause** it (no collection,
+  emailed reports or alert emails; data stays) and **archive** it (also hidden
+  from lists, dashboards, rollups, digests and its client users; restorable).
+- **Offboard** walks through a final export, the client's side (remove Global
+  Reader, delete the enterprise app) and what will be deleted, then deletes the
+  tenant and everything stored for it after you type its name, optionally with
+  client accounts that had no other tenant. `python -m officesentry
+  delete-tenant <id>` does the same from the server.
 
 ## Development
 
@@ -374,5 +398,7 @@ officesentry/
   delivery.py    schedules, digests, alert emails, retries and email rendering
   schedule.py    cron slots in a timezone, freshness (max age), periodic jobs
   worker.py      queue runner, schedule, retention, heartbeat
+  tenant_health.py  connection health and the onboarding checklist, from stored state
+  lifecycle.py   first collection, pause, archive and deleting a tenant
   web/           Flask app: access.py is the single authorization gate
 ```

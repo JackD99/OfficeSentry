@@ -77,10 +77,16 @@ def enqueue_run(conn, tenant_id: int, collector: str, trigger: str = "manual",
 
 
 def claim_next_run(conn):
-    """Atomically move the oldest queued run to 'running' and return it."""
+    """Atomically move the oldest queued run to 'running' and return it.
+
+    Runs of paused or archived tenants stay queued (pausing removes them, so
+    only a run queued in the same moment can be left) and are never claimed.
+    """
     with transaction(conn, immediate=True):
         row = conn.execute(
-            "SELECT id FROM runs WHERE status = 'queued' ORDER BY created_at, id LIMIT 1"
+            "SELECT r.id FROM runs r JOIN tenants t ON t.id = r.tenant_id"
+            " WHERE r.status = 'queued' AND t.enabled = 1 AND t.archived_at IS NULL"
+            " ORDER BY r.created_at, r.id LIMIT 1"
         ).fetchone()
         if not row:
             return None

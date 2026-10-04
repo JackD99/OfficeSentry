@@ -63,7 +63,8 @@ def test_choose_app_connection_for_a_tenant(client, db, two_tenants, connection_
     make_user(db, "admin")
     login(client, "admin")
     page = client.get(f"/tenants/{t}/collection").get_data(as_text=True)
-    assert "choose its app connection" in page and 'name="connection_id"' in page
+    assert "choose its app connection" in page
+    assert 'name="connection_id"' in client.get(f"/tenants/{t}/manage").get_data(as_text=True)
     client.post(f"/tenants/{t}/connection", data={"connection_id": connection_id})
     assert store.get_tenant(db, t)["connection_id"] == connection_id
     assert client.post(f"/tenants/{t}/connection", data={"connection_id": 999}).status_code == 400

@@ -26,6 +26,7 @@ from . import (
     prospects,
     reports,
     saved_views,
+    tenant_admin,
     tenants,
 )
 
@@ -135,4 +136,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(across.bp)
     app.register_blueprint(people.bp)
     app.register_blueprint(saved_views.bp)
+    app.register_blueprint(tenant_admin.bp)
     return app
