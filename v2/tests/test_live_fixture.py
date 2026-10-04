@@ -145,3 +145,15 @@ def test_pages_and_downloads(client, db, live):
         assert client.get(url).status_code == 200, url
     page = client.get(f"{t}/report").get_data(as_text=True)
     assert "first report for this tenant" in page
+
+
+def test_usage_reports_on_real_data(db, live):
+    # The recording's usage reports have one Business Standard user who only receives mail.
+    snap = TenantSnapshot(db, live)
+    people = [r for r in snap.objects("m365_usage", "user_usage") if r["products"]]
+    assert len(people) == 2 and all(r["platforms"] is not None for r in people)
+    report = data_reports.build(db, live, "licence-rightsizing", RECORDED)
+    [move] = report.sections[0].rows
+    assert move[1] == "Microsoft 365 Business Standard" and move[3] == "Convert to a shared mailbox"
+    usage = data_reports.build(db, live, "usage", RECORDED)
+    assert not usage.unavailable and usage.sections[0].rows[0][:2] == ["Email", 1]

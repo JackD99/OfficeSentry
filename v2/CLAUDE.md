@@ -70,6 +70,11 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 - Report builders in `reports/` return plain data; templates and
   `reports/export.py` only format it. Charts are server-side SVG
   (`reports/charts.py`) so the PDF matches the page.
+- Per-person Microsoft 365 usage lives in `usage.py`: `usage.person(snap, upn)`
+  returns one account's last activity and use per service (keys in
+  `usage.SERVICES`), Office apps by platform, installs and activity counts, for
+  any page about one person. Usage reports may conceal names (32-character
+  codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
 - Client-facing reports (page + PDF) extend `templates/reports/_layout.html`

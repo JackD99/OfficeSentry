@@ -872,7 +872,8 @@ GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
                         "domains")),
     ("files", "Files and Teams", ("sharepoint", "sharepoint-storage", "onedrive", "shared-files", "groups")),
     ("devices", "Devices and apps", ("devices", "apps")),
-    ("tenant", "Tenant and licences", ("secure-score", "licences", "tenant-settings", "admin-activity")),
+    ("tenant", "Tenant and licences", ("secure-score", "licences", "licence-rightsizing", "usage", "tenant-settings",
+                                       "admin-activity")),
 )
 
 
