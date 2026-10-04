@@ -12,6 +12,7 @@ from .. import store
 from ..collectors import REGISTRY
 from ..db import audit, transaction, utcnow
 from ..entra import admin_consent_url
+from ..text import plural
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 
 bp = Blueprint("tenants", __name__)
@@ -184,7 +185,7 @@ def collect(tenant_id: int):
     for key in keys:
         store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
     audit(g.db, g.user["username"], "collect_requested", t["id"], ",".join(keys))
-    flash(f"Queued {len(keys)} collection(s). The worker picks them up shortly.", "success")
+    flash(f"Queued {plural(len(keys), 'collection')}. The worker picks them up shortly.", "success")
     return redirect(url_for("tenants.collection", tenant_id=t["id"]))
 
 

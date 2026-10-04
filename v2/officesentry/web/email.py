@@ -10,6 +10,7 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 from .. import alerts, delivery, mailer, store
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
+from ..text import plural
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .filters import _strftime as datefmt
 
@@ -238,7 +239,7 @@ def _save_schedule(tenant, existing=None):
             action = "email_schedule_updated"
         delivery.set_recipients(g.db, "schedule", schedule_id, ids)
         audit(g.db, g.user["username"], action, tenant_id,
-              f"{kind} {values['frequency']} to {len(ids)} recipient(s)")
+              f"{kind} {values['frequency']} to {plural(len(ids), 'recipient')}")
     s = g.db.execute("SELECT * FROM email_schedules WHERE id = ?", (schedule_id,)).fetchone()
     nxt = delivery.next_send(s, _cfg().timezone)
     flash("Saved. " + (f"Next email: {datefmt(nxt, '%a %-d %b, %H:%M')} ({nxt.tzname()})." if nxt
@@ -472,7 +473,8 @@ def _save_alert(tenant_id: int | None):
                 "INSERT INTO email_alerts (tenant_id, min_severity, created_by, created_at)"
                 " VALUES (?, ?, ?, ?)", (tenant_id, severity, g.user["username"], utcnow())).lastrowid
         delivery.set_recipients(g.db, "alert", alert_id, ids)
-        audit(g.db, g.user["username"], "email_alert_saved", tenant_id, f"{severity} to {len(ids)} recipient(s)")
+        audit(g.db, g.user["username"], "email_alert_saved", tenant_id,
+              f"{severity} to {plural(len(ids), 'recipient')}")
     flash("Alerts are on. You'll get an email when a scan finds something new.", "success")
     return _back(tenant_id)
 

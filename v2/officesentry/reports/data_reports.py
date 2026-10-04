@@ -26,6 +26,7 @@ from ..rules import (
     user_consent_level,
 )
 from ..snapshot import TenantSnapshot
+from ..text import plural, verb
 from .safe_xlsx import no_formulas
 from .tables import Table
 
@@ -262,7 +263,7 @@ def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     for a in risks:
         publisher = a["publisher"] + (" (verified)" if a["verified"] else (" (unverified)" if a["publisher"]
                                                                            else "Unverified"))
-        users = f"{a['users']} user(s): {', '.join(a['user_scopes'])}" if a["user_scopes"] else ""
+        users = f"{plural(a['users'], 'user')}: {', '.join(a['user_scopes'])}" if a["user_scopes"] else ""
         third.add([a["name"], publisher, a["app_permissions"], a["tenant_scopes"], users,
                    ", ".join(a["risky"]) or "Low"], a["severity"])
 
@@ -284,7 +285,7 @@ def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             status, flag = "Expiring soon", "medium"
         else:
             status, flag = "OK", None
-        kinds = ", ".join(f"{sum(c['type'] == k for c in creds)} {k}(s)" for k in ("secret", "certificate")
+        kinds = ", ".join(plural(sum(c['type'] == k for c in creds), k) for k in ("secret", "certificate")
                           if any(c["type"] == k for c in creds))
         regs.add([a.get("displayName"), _date(a.get("createdDateTime")), kinds or "None",
                   _date(future[0]) if future else (_date(ends[-1]) + " (expired)" if ends else ""), status], flag)
@@ -383,7 +384,8 @@ def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) 
     sd = bool(defaults and defaults[0].get("isEnabled"))
     accounts = Section("Coverage by account", ["Account", "Type", "Admin roles", "MFA required by",
                                                "Legacy sign-in blocked", "Excluded from"],
-                       intro=(f"{covered} of {len(cov)} enabled account(s) are covered by an enforced policy that "
+                       intro=(f"{covered} of {plural(len(cov), 'enabled account')} {verb(covered, 'is', 'are')} "
+                              "covered by an enforced policy that "
                               "requires MFA for all apps." + (" Security Defaults also apply." if sd else "")),
                        empty="No enabled accounts.")
     for c in cov:
@@ -620,7 +622,7 @@ def group_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         for guest in g.get("guests") or []:
             outside.rows.append([guest, name, kind])
         if (g.get("guestCount") or 0) > len(g.get("guests") or []):
-            outside.rows.append([f"{g['guestCount'] - len(g.get('guests') or [])} more guest(s)", name, kind])
+            outside.rows.append([plural(g['guestCount'] - len(g.get('guests') or []), "more guest"), name, kind])
     for row, flag in sorted(needs, key=lambda n: (FLAG_ORDER[n[1]], n[0][0].lower())):
         attention.add(row, flag)
     outside.rows.sort(key=lambda r: (r[0].lower(), r[1].lower()))
@@ -642,7 +644,7 @@ def _mta_sts_text(h: dnscheck.DomainHealth) -> str:
         return "None"
     text = f"id={h.mta_sts_id}" if h.mta_sts_id else "Record without id="
     if h.mta_sts_records > 1:
-        text += f" (and {h.mta_sts_records - 1} more record(s))"
+        text += f" (and {plural(h.mta_sts_records - 1, 'more record')})"
     if h.mta_sts_error:
         return f"{text}; {h.mta_sts_error}"
     if h.mta_sts_mode:

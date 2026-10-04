@@ -41,7 +41,7 @@
     <tbody>
     <tr class="group"><td colspan="2">Email authentication</td></tr>
     <tr><th>Mail is received by</th><td>{% if a.health.microsoft_365 %}Microsoft 365{% elif a.health.mx %}{{ a.health.mx|join(', ') }}{% else %}No mail servers published{% endif %}</td></tr>
-    <tr><th>SPF</th><td>{{ a.health.spf or 'Not published' }}{% if a.health.spf %}<div class="muted small">{{ a.health.spf_lookups }} DNS lookup(s); the limit is 10</div>{% endif %}</td></tr>
+    <tr><th>SPF</th><td>{{ a.health.spf or 'Not published' }}{% if a.health.spf %}<div class="muted small">{{ a.health.spf_lookups|plural('DNS lookup') }}; the limit is 10</div>{% endif %}</td></tr>
     <tr><th>DMARC</th><td>{{ a.health.dmarc or 'Not published' }}</td></tr>
     <tr><th>DKIM (Microsoft 365)</th><td>{% if not a.health.microsoft_365 %}Not applicable{% elif a.health.dkim.values()|select|list|length == 2 %}Both selectors published{% elif a.health.dkim.values()|select|list %}One selector published{% else %}Not set up{% endif %}</td></tr>
     <tr><th>MTA-STS</th><td>{{ 'Published' if a.health.mta_sts else 'Not published' }}</td></tr>

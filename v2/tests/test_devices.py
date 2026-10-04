@@ -103,7 +103,7 @@ def test_device_checks(db, two_tenants):
     assert r["device_compliance"].status == "fail"
     assert [(f.severity, f.subject) for f in r["device_compliance"].findings] == [("medium", "LAPTOP-BOB (bob@x.com)")]
     assert [f.severity for f in r["device_encryption"].findings] == ["high"]
-    assert r["device_encryption"].summary == "1 of 2 computer(s) not encrypted"  # the iPhone isn't a computer
+    assert r["device_encryption"].summary == "1 of 2 computers not encrypted"  # the iPhone isn't a computer
     assert [(f.severity, f.subject) for f in r["supported_windows"].findings] == [("high", "LAPTOP-BOB (bob@x.com)")]
     assert [f.subject for f in r["intune_enrolled"].findings] == ["DESK-RECEPTION"]
     assert "Hybrid joined" in r["intune_enrolled"].findings[0].detail

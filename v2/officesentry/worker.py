@@ -24,6 +24,7 @@ from .crypto import Vault
 from .db import connect, migrate, utcnow
 from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError, LicenseRequired, PermissionMissing
+from .text import plural
 
 log = logging.getLogger(__name__)
 
@@ -184,14 +185,14 @@ def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> 
     now = now or datetime.now(UTC)
     queued = schedule_tick(conn, cfg, now)
     if queued:
-        log.info("Queued %s scheduled run(s)", queued)
+        log.info("Queued %s", plural(queued, "scheduled run"))
     schedule.run_periodic(schedule.TickContext(app=app, conn=conn, vault=vault, cfg=cfg, now=now))
 
 
 def prune(conn, cfg: Config) -> int:
     removed = store.prune_snapshots(conn, cfg.keep_daily, cfg.keep_monthly, cfg.timezone)
     if removed:
-        log.info("Retention: removed the stored objects of %s older run(s)", removed)
+        log.info("Retention: removed the stored objects of %s", plural(removed, "older run"))
     return removed
 
 
@@ -207,7 +208,7 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     alerting = alerts.Alerting(cfg.base_url, vault, app)
     recovered = store.recover_orphaned_runs(conn)
     if recovered:
-        log.warning("Marked %s orphaned run(s) as failed", recovered)
+        log.warning("Marked %s as failed", plural(recovered, "orphaned run"))
 
     stop = threading.Event()
     if not once:

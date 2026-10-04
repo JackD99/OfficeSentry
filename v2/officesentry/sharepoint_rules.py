@@ -7,6 +7,7 @@ from datetime import datetime
 from .rules import Finding, _unavailable, rule
 from .snapshot import TenantSnapshot
 from .storage import tenant_storage
+from .text import plural
 
 
 def _where(item: dict) -> str:
@@ -26,7 +27,7 @@ def anyone_links(snap: TenantSnapshot, now: datetime):
                             ("Anyone can edit" if i.get("editable") else "Anyone can view")
                             + (", link never expires" if i.get("neverExpires") else ""), i["_id"])
                     for i in items]
-        return ("fail", f"{len(findings)} file(s) or folder(s) shared with anyone", findings) if findings else \
+        return ("fail", f"{plural(len(findings), 'file or folder')} shared with anyone", findings) if findings else \
             ("pass", f"No anyone links among {status.get('items', 0):,} scanned files and folders", [])
     usage = (snap.objects("sharepoint_usage", "usage_status") or [None])[0]
     if usage is None:
@@ -35,9 +36,9 @@ def anyone_links(snap: TenantSnapshot, now: datetime):
         return _unavailable("The tenant has no SharePoint licence")
     sites = [s for s in snap.objects("sharepoint_usage", "site") or [] if s.get("anyoneLinks") and not s.get("deleted")]
     findings = [Finding("medium", s.get("url") or f"Site with hidden name ({s.get('template')})",
-                        f"{s['anyoneLinks']} anyone link(s)", s["_id"]) for s in sites]
+                        plural(s['anyoneLinks'], 'anyone link'), s["_id"]) for s in sites]
     total = sum(s["anyoneLinks"] for s in sites)
-    return ("fail", f"{total} anyone link(s) across {len(sites)} site(s)", findings) if findings else \
+    return ("fail", f"{plural(total, 'anyone link')} across {plural(len(sites), 'site')}", findings) if findings else \
         ("pass", "No site has anyone links", [])
 
 

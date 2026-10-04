@@ -24,6 +24,7 @@ from . import dnscheck
 from .collectors.apps import MICROSOFT_TENANTS
 from .exchange import EXCHANGE_ROOT
 from .graph import GRAPH_ROOT
+from .text import plural
 
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 EMAIL = re.compile(r"[A-Za-z0-9._%+'{}#-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
@@ -313,7 +314,7 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites])
     if leaks:
         hints = ", ".join(f"{v[0]}… ({len(v)} chars)" for v in leaks)  # never print the values themselves
-        raise ValueError(f"scrubbing left {len(leaks)} identifying value(s) in the fixture: {hints}")
+        raise ValueError(f"scrubbing left {plural(len(leaks), 'identifying value')} in the fixture: {hints}")
     return fixture
 
 

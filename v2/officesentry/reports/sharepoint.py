@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from .. import store
 from ..devices import parse_day
 from ..snapshot import TenantSnapshot
+from ..text import plural
 from .charts import line_chart
 from .data_reports import DataReport, Link, Rows, Section, Tile, _date
 
@@ -171,7 +172,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     guest = sum(r["guestLinks"] for r in rows)
     stale = [r for r in user_sites if inactive(r)]
     report.tiles = [
-        Tile("Sites", len(user_sites), f"plus {len(rows) - len(user_sites)} system site(s)",
+        Tile("Sites", len(user_sites), f"plus {plural(len(rows) - len(user_sites), 'system site')}",
              rows=Rows("All sites", {"Type": sorted({site_type(r) for r in user_sites})})),
         Tile("Storage used", size(total), (f"{_signed_size(growth)} in {GROWTH_DAYS} days"
                                            if growth is not None else ""), rows=Rows("All sites")),
@@ -360,8 +361,9 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     ]
     links = sum(i.get("anyoneLinks") or 0 for i in snap.objects("sharepoint_usage", "site") or [])
     if links and not anyone:
-        report.notice = (f"Microsoft counts {links} anyone link(s) in this tenant, but the scan found none. Some "
-                         "libraries may not have been readable; check the last Shared files run on the tenant page.")
+        report.notice = (f"Microsoft counts {plural(links, 'anyone link')} in this tenant, but the scan found none. "
+                         "Some libraries may not have been readable; check the last Shared files run on the tenant "
+                         "page.")
     report.footnote = (f"Scanned {status.get('items') or 0:,} files and folders in {status.get('drives') or 0} "
                        "libraries and OneDrives. A shared folder is listed once; the files inside it are shared "
                        "the same way.")

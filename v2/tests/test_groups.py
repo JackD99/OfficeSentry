@@ -124,7 +124,7 @@ def test_group_cap_warns_and_reads_teams_first(db, two_tenants, factory, monkeyp
     examined = sorted(g["displayName"] for g in _groups(db, run_id).values() if g["examined"])
     assert examined == ["Board", "Project Phoenix"]  # teams, by name
     r = _results(db, alpha)["ownerless_groups"]
-    assert r.summary == "1 team(s) and group(s) without an owner (2 of 5 checked)"
+    assert r.summary == "1 team or group without an owner (2 of 5 checked)"
 
 
 @responses.activate
@@ -137,7 +137,7 @@ def test_guest_list_is_bounded(db, two_tenants, factory, monkeypatch):
     assert (phoenix["guestCount"], len(phoenix["guests"])) == (2, 1)
     report = data_reports.build(db, store.get_tenant(db, alpha), "groups")
     guests = {s.title: s for s in report.sections}["Guests in teams and groups"]
-    assert ["1 more guest(s)", "Project Phoenix", "Team"] in guests.rows
+    assert ["1 more guest", "Project Phoenix", "Team"] in guests.rows
 
 
 @responses.activate
@@ -193,7 +193,7 @@ def test_group_checks(db, two_tenants):
         ("low", "Marketing", "Microsoft 365 group, no owner"),
         ("low", "Provisioned", "Microsoft 365 group, owned only by an app (Provisioning app)"),
     ]
-    assert ownerless.summary == "3 team(s) and group(s) without an owner"
+    assert ownerless.summary == "3 teams and groups without an owner"
     assert r["group_creation"].status == "pass"
     assert r["group_creation"].summary == "Only admins and members of Group creators can create teams and groups"
     assert r["group_expiration"].status == "pass"
@@ -206,7 +206,7 @@ def test_every_group_with_an_owner_passes(db, two_tenants, monkeypatch):
     monkeypatch.setattr(grp, "OWNERS", owners)
     seed_tenant(db, alpha)
     r = _results(db, alpha)["ownerless_groups"]
-    assert (r.status, r.summary) == ("pass", "All 5 team(s) and group(s) have an owner")
+    assert (r.status, r.summary) == ("pass", "All 5 teams and groups have an owner")
 
 
 def test_microsoft_defaults_fail(db, two_tenants, monkeypatch):
@@ -220,7 +220,7 @@ def test_microsoft_defaults_fail(db, two_tenants, monkeypatch):
         ("low", "Every user can create teams and Microsoft 365 groups (Microsoft's default)")]
     assert r["group_expiration"].status == "fail"
     assert [(f.severity, f.detail) for f in r["group_expiration"].findings] == [
-        ("low", "No expiration policy: 5 team(s) and group(s) are kept until someone deletes them")]
+        ("low", "No expiration policy: 5 teams and groups are kept until someone deletes them")]
 
 
 def test_creation_limited_to_admins(db, two_tenants, monkeypatch):
@@ -240,7 +240,7 @@ def test_expiration_for_selected_groups(db, two_tenants, monkeypatch):
     seed_tenant(db, alpha)
     r = _results(db, alpha)["group_expiration"]
     assert (r.status, r.summary) == ("fail", "Expiration covers selected groups only")
-    assert r.findings[0].detail == "4 of 5 team(s) and group(s) never expire"
+    assert r.findings[0].detail == "4 of 5 teams and groups never expire"
 
 
 def test_without_entra_p1_settings_checks_are_unavailable(db, two_tenants, monkeypatch):

@@ -45,6 +45,11 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   bottom of `rules.py` (see `sharepoint_rules.py`). They read `TenantSnapshot` only,
   never Graph, and return `unavailable` (with the reason) when data or the
   tenant's licence is missing, rather than passing or failing.
+- A check's title is its goal ("No inactive accounts"); its summary is what was
+  found ("4 accounts inactive for 90+ days") and leads wherever a failing check
+  is listed, with `RuleResult.action` (the recommendation's first instruction)
+  under it. Count things with `text.plural(n, "account")` (the `plural` filter
+  in templates), never "account(s)".
 - Detail reports are builders in `reports/data_reports.py` returning
   `Section`s of rows; register them in `REPORTS` and they get a page, a tab
   and XLSX, CSV and PDF exports. Add the key to a menu group in

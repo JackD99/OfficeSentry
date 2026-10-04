@@ -25,6 +25,7 @@ from ..licences import (
     sku_name,
 )
 from ..snapshot import TenantSnapshot
+from ..text import plural
 from .charts import line_chart
 from .data_reports import DataReport, Highlight, Rows, Section
 from .monthly_review import _secure_score_points, setting
@@ -226,7 +227,7 @@ class Enforcement:
                 None if legacy or self.security_defaults else "high"))
         if self.per_user_checked:
             n = sum(s in ("enforced", "enabled") for s in self.per_user.values())
-            rows.append((["Per-user MFA", f"{n} of {len(self.per_user)} member(s)"], None))
+            rows.append((["Per-user MFA", f"{n} of {plural(len(self.per_user), 'member')}"], None))
         elif self.p1:
             rows.append((["Per-user MFA", "Not read: Conditional Access is the way to require MFA on this tenant"],
                          None))
@@ -564,7 +565,8 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     unpriced = sum(line.wasted_units for line in paid.values() if line.monthly_price is None)
     report.highlights = [
         Highlight("Waste per month", Money(summary.monthly_waste, currency) if priced else "Not priced",
-                  f"{unpriced} unpriced licence(s) not included" if unpriced and priced else "Unused paid licences",
+                  f"{plural(unpriced, 'unpriced licence')} not included" if unpriced and priced
+                  else "Unused paid licences",
                   "warn" if summary.monthly_waste else None, WASTE_ROWS),
         Highlight("Waste per year", Money(summary.monthly_waste * 12, currency) if priced else "Not priced",
                   "If nothing changes", rows=WASTE_ROWS),
@@ -801,8 +803,8 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         trend("Change in 30 days", d30, since30),
         trend("Change in 90 days", d90, since90),
         Highlight("Points available", f"{remaining:g}" if profiles else "Unknown",
-                  f"From {len(open_rows)} control(s) not fully in place", rows=Rows(available.title)),
-        Highlight("History", f"{len(points)} day(s)",
+                  f"From {plural(len(open_rows), 'control')} not fully in place", rows=Rows(available.title)),
+        Highlight("History", plural(len(points), "day"),
                   f"Since {_day(datetime.combine(points[0][0], datetime.min.time()))}" if points else ""),
     ]
 

@@ -141,6 +141,9 @@ tr.flag-medium td:first-child { box-shadow: inset 3px 0 0 var(--sev-medium); }
 .sevtext.critical { color: var(--sev-critical); } .sevtext.high { color: var(--sev-high); }
 .sevtext.medium { color: var(--sev-medium); } .sevtext.low, .sevtext.info { color: var(--sev-low); }
 .sevbar { display: flex; gap: 4px; align-items: center; }
+.sev-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin: 2px 0 0; font-size: .75rem; color: var(--muted); }
+.sev-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sev-legend .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .new-tag { font-size: .6875rem; font-weight: 700; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 5px; margin-left: 4px; }
 .grade { display: inline-grid; place-items: center; width: 28px; height: 28px; font-weight: 800; border-radius: 8px; color: #fff; }
 .grade-A { background: var(--ok); } .grade-C { background: var(--sev-medium); } .grade-F { background: var(--bad); }
