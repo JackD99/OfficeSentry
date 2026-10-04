@@ -1,0 +1,394 @@
+"""Screenshots and example reports for the README, from fictional demo data.
+
+Seeds a throwaway database with a made-up MSP and four made-up client tenants
+(``scripts/screenshot_data.py``), runs the portal on a free local port, and
+uses Playwright's Chromium to save:
+
+* ``docs/screenshots/*.png``: pages at 1440 px wide (light), two at phone
+  width and one in dark mode, plus the first pages of report PDFs;
+* ``examples/*``: real exported PDFs and an XLSX (``--examples``, on by default).
+
+Re-run it whenever the UI or the reports change, then look at the images
+before committing them::
+
+    cd v2
+    pip install -e '.[dev]' playwright pillow   # never `playwright install` here: it uses the browsers
+                                                 # in $PLAYWRIGHT_BROWSERS_PATH (e.g. /opt/pw-browsers)
+    python scripts/screenshots.py                # everything
+    python scripts/screenshots.py --only sharepoint-storage,review   # some shots (names below)
+    python scripts/screenshots.py --no-examples  # screenshots only
+    python scripts/screenshots.py --serve        # seed and keep the portal running to look around
+
+Needs WeasyPrint (PDFs) and ``pdftoppm`` (poppler-utils) for the PDF page
+images; without them those are skipped with a message. Outputs go to the
+repository root (``--out`` and ``--examples-dir`` change that). The data is
+fictional: companies, people and ``.example`` domains are made up.
+
+To use other demo data, change ``seed()``: it only has to fill a migrated
+database and return the tenant ids, the first one being the showcase tenant.
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import os
+import secrets
+import shutil
+import subprocess  # noqa: S404 (runs pdftoppm on files this script wrote)
+import sys
+import tempfile
+import threading
+from dataclasses import dataclass, field
+from io import BytesIO
+from pathlib import Path
+
+V2 = Path(__file__).resolve().parents[1]
+ROOT = V2.parent
+sys.path.insert(0, str(V2))
+sys.path.insert(0, str(V2 / "scripts"))
+
+from werkzeug.security import generate_password_hash  # noqa: E402
+
+from officesentry.db import utcnow  # noqa: E402
+
+ADMIN = "demo"
+CLIENT = "alpha.client"
+
+
+def seed(db, vault) -> list[int]:
+    """Fill a migrated database with demo data and return the tenant ids (the first is shown most)."""
+    import screenshot_data
+
+    return screenshot_data.populate(db, vault)
+
+
+# -- What to capture ------------------------------------------------------------------------
+
+
+@dataclass
+class Shot:
+    name: str
+    path: str                    # "{t}" is the showcase tenant's id
+    height: int = 900            # viewport height: the picture is what fits in it
+    width: int = 1440
+    scroll_to: str | None = None  # CSS selector (or text=...) to bring to the top first
+    dark: bool = False
+    phone: bool = False
+    user: str = ADMIN
+    hide: list[str] = field(default_factory=list)  # selectors hidden before the capture
+
+
+SHOTS = [
+    Shot("dashboard", "/", height=820),
+    Shot("tenant-overview", "/tenants/{t}", height=1000),
+    Shot("review", "/tenants/{t}/report", height=1100),
+    Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="text=Needs attention"),
+    Shot("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=1100),
+    Shot("sharepoint-storage-files", "/tenants/{t}/data/sharepoint-storage", height=950,
+         scroll_to="text=Largest folders"),
+    Shot("mfa", "/tenants/{t}/data/mfa", height=950),
+    Shot("mail-forwarding", "/tenants/{t}/data/mailboxes", height=900),
+    Shot("mailbox-permissions", "/tenants/{t}/data/mailbox-permissions", height=950),
+    Shot("licence-rightsizing", "/tenants/{t}/data/licence-rightsizing", height=1000),
+    Shot("conditional-access", "/tenants/{t}/data/conditional-access", height=950),
+    Shot("devices", "/tenants/{t}/data/devices", height=950),
+    Shot("reports-library", "/reports", height=1000),
+    Shot("person", "/tenants/{t}/users/u1", height=1100),
+    Shot("all-tenants", "/across/review", height=760),
+    Shot("what-changed", "/changes", height=1000),
+    Shot("evidence", "/tenants/{t}/evidence", height=1000),
+    Shot("emailed-reports", "/tenants/{t}/schedules", height=900),
+    Shot("email-schedule-form", "/tenants/{t}/schedules/new", height=1000),
+    Shot("prospect", "/prospects/1", height=950),
+    Shot("client-view", "/", height=950, user=CLIENT),
+    Shot("phone-review", "/tenants/{t}/report", width=390, height=844, phone=True),
+    Shot("phone-overview", "/tenants/{t}", width=390, height=844, phone=True),
+    Shot("dark-overview", "/tenants/{t}", height=900, dark=True),
+]
+
+# PDFs whose first page becomes a picture: name -> path.
+PDF_SHOTS = {
+    "pdf-review": "/tenants/{t}/report.pdf",
+    "pdf-evidence": "/tenants/{t}/evidence.pdf",
+    "pdf-sharepoint-storage": "/tenants/{t}/data/sharepoint-storage.pdf",
+}
+
+# Example downloads for examples/: file name -> (path, one line for examples/README.md).
+EXAMPLES = {
+    "monthly-security-licensing-review.pdf": (
+        "/tenants/{t}/report.pdf", "The Monthly Security & Licensing Review for one client, as sent to them."),
+    "insurance-evidence-pack.pdf": (
+        "/tenants/{t}/evidence.pdf", "The controls cyber-insurance questionnaires ask about, answered from the data."),
+    "sharepoint-storage.pdf": (
+        "/tenants/{t}/data/sharepoint-storage.pdf",
+        "A tenant nearly out of SharePoint space: where it went, when it fills up, what to clean up."),
+    "mfa-coverage.pdf": ("/tenants/{t}/data/mfa.pdf", "Who has MFA registered and who is enforced to use it."),
+    "mailbox-permissions.pdf": (
+        "/tenants/{t}/data/mailbox-permissions.pdf",
+        "Full access, send as and send on behalf, with leavers and outsiders flagged."),
+    "mail-forwarding.pdf": (
+        "/tenants/{t}/data/mailboxes.pdf", "Every mailbox and inbox rule that forwards mail, and the policies."),
+    "licence-right-sizing.pdf": (
+        "/tenants/{t}/data/licence-rightsizing.pdf", "People who could move to a cheaper licence, with the saving."),
+    "conditional-access-coverage.pdf": (
+        "/tenants/{t}/data/conditional-access.pdf", "Every Conditional Access policy in plain words, and who it covers."),
+    "account-page.pdf": ("/tenants/{t}/users/u1.pdf", "Everything about one person's account on one page."),
+    "what-changed-all-tenants.pdf": ("/changes.pdf", "Month-over-month changes across every client."),
+    "all-tenants-monthly-review.pdf": (
+        "/across/review.pdf", "One row per client: the monthly review's key figures side by side."),
+    "prospect-assessment.pdf": (
+        "/prospects/1.pdf", "Email security grade for a prospect, from public DNS only."),
+    "monthly-security-licensing-review.xlsx": (
+        "/tenants/{t}/report.xlsx", "The monthly review as a spreadsheet: every finding and figure."),
+}
+
+
+# -- Demo site ------------------------------------------------------------------------------
+
+
+def build_site(data_dir: Path):
+    """Seed a new data directory; returns (config, tenant ids, admin password, client password)."""
+    from officesentry import worker
+    from officesentry.config import load_config
+    from officesentry.crypto import Vault
+    from officesentry.db import connect, migrate
+
+    cfg = load_config(data_dir=data_dir, secure_cookies=False, require_mfa="off")
+    db = connect(cfg.db_path)
+    migrate(db)
+    ids = seed(db, Vault(cfg.encryption_keys))
+    passwords = {ADMIN: secrets.token_urlsafe(12), CLIENT: secrets.token_urlsafe(12)}
+    for username, role, all_tenants in ((ADMIN, "admin", 1), (CLIENT, "client", 0)):
+        uid = db.execute("INSERT INTO users (username, password_hash, role, all_tenants, created_at)"
+                         " VALUES (?, ?, ?, ?, ?)",
+                         (username, generate_password_hash(passwords[username]), role, all_tenants,
+                          utcnow())).lastrowid
+        if not all_tenants:
+            db.execute("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", (uid, ids[0]))
+    worker.beat(db)
+    db.close()
+    return cfg, ids, passwords
+
+
+class Server:
+    """The portal on a free port, in a thread, with a fresh worker heartbeat so no warning banner shows."""
+
+    def __init__(self, cfg):
+        from werkzeug.serving import make_server
+
+        from officesentry.web import create_app
+
+        self.cfg = cfg
+        self.http = make_server("127.0.0.1", 0, create_app(cfg), threaded=True)
+        self.url = f"http://127.0.0.1:{self.http.server_port}"
+        self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.http.shutdown()
+
+    def beat(self):
+        from officesentry import worker
+        from officesentry.db import connect
+
+        db = connect(self.cfg.db_path)
+        try:
+            worker.beat(db)
+        finally:
+            db.close()
+
+
+# -- Browser -----------------------------------------------------------------------------------
+
+
+def chromium_path() -> str | None:
+    """Playwright's own Chromium if it is installed, else any Chromium under $PLAYWRIGHT_BROWSERS_PATH."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        if Path(p.chromium.executable_path).exists():
+            return None
+    root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
+    found = sorted(glob.glob(f"{root}/chromium-*/chrome-linux*/chrome"), reverse=True)
+    if not found:
+        sys.exit(f"No Chromium found for Playwright under {root}; set PLAYWRIGHT_BROWSERS_PATH.")
+    return found[0]
+
+
+def sign_in(context, url: str, username: str, password: str) -> None:
+    page = context.new_page()
+    page.goto(f"{url}/login")
+    page.fill("input[name=username]", username)
+    page.fill("input[name=password]", password)
+    page.click("button[type=submit]")
+    page.wait_for_load_state("networkidle")
+    if "/login" in page.url:
+        sys.exit(f"Couldn't sign in as {username}")
+    page.close()
+
+
+def optimise(png: bytes, path: Path, max_width: int | None = None) -> None:
+    """Save a PNG with a 256-colour palette: UI screenshots stay sharp at a fraction of the size."""
+    from PIL import Image
+
+    img = Image.open(BytesIO(png)).convert("RGB")
+    if max_width and img.width > max_width:
+        img = img.resize((max_width, round(img.height * max_width / img.width)), Image.Resampling.LANCZOS)
+    img.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(
+        path, optimize=True)
+
+
+def capture(server: Server, passwords: dict, tenant: int, shots: list[Shot], out: Path) -> list[str]:
+    from playwright.sync_api import sync_playwright
+
+    saved = []
+    executable = chromium_path()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=executable)
+        contexts = {}
+        try:
+            for shot in shots:
+                key = (shot.user, shot.dark, shot.phone)
+                if key not in contexts:
+                    options = {"viewport": {"width": shot.width, "height": shot.height},
+                               "color_scheme": "dark" if shot.dark else "light", "device_scale_factor": 1}
+                    if shot.phone:
+                        options.update(device_scale_factor=2, is_mobile=True, has_touch=True)
+                    contexts[key] = browser.new_context(**options)
+                    sign_in(contexts[key], server.url, shot.user, passwords[shot.user])
+                server.beat()
+                page = contexts[key].new_page()
+                page.set_viewport_size({"width": shot.width, "height": shot.height})
+                response = page.goto(server.url + shot.path.format(t=tenant))
+                page.wait_for_load_state("networkidle")
+                if response is None or response.status != 200:
+                    print(f"  {shot.name}: {shot.path} returned {response.status if response else 'nothing'}")
+                    page.close()
+                    continue
+                for selector in shot.hide:
+                    page.add_style_tag(content=f"{selector} {{ display: none !important; }}")
+                if shot.scroll_to:
+                    target = page.locator(shot.scroll_to).first
+                    if target.count():
+                        target.evaluate("el => window.scrollTo(0, el.getBoundingClientRect().top"
+                                        " + window.scrollY - 16)")
+                    else:
+                        print(f"  {shot.name}: {shot.scroll_to!r} not found; capturing the top")
+                page.wait_for_timeout(150)
+                optimise(page.screenshot(), out / f"{shot.name}.png",
+                         max_width=shot.width if shot.phone else None)
+                saved.append(shot.name)
+                page.close()
+        finally:
+            browser.close()
+    return saved
+
+
+def download(server: Server, passwords: dict, paths: dict[str, str]) -> dict[str, bytes]:
+    """Fetch report files as the admin: name -> body."""
+    import requests
+
+    http = requests.Session()
+    login = http.get(f"{server.url}/login")
+    token = _csrf(login.text)
+    resp = http.post(f"{server.url}/login", data={"username": ADMIN, "password": passwords[ADMIN],
+                                                  "csrf_token": token})
+    if "/login" in resp.url:
+        sys.exit("Couldn't sign in to download reports")
+    files = {}
+    for name, path in paths.items():
+        server.beat()
+        r = http.get(server.url + path, timeout=300)
+        kind = r.headers.get("Content-Type", "")
+        if r.status_code != 200 or not ("pdf" in kind or "spreadsheet" in kind):
+            print(f"  {name}: {path} returned {r.status_code} {kind} (is WeasyPrint installed?)")
+            continue
+        files[name] = r.content
+    return files
+
+
+def _csrf(html: str) -> str:
+    import re
+
+    m = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html) or re.search(
+        r'value="([^"]+)"[^>]*name="csrf_token"', html)
+    return m.group(1) if m else ""
+
+
+def pdf_first_page(pdf: bytes, png_path: Path, dpi: int = 90) -> bool:
+    pdftoppm = shutil.which("pdftoppm")
+    if not pdftoppm:
+        print("  pdftoppm not found (install poppler-utils); skipping PDF page images")
+        return False
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "report.pdf"
+        src.write_bytes(pdf)
+        subprocess.run([pdftoppm, "-png", "-r", str(dpi), "-f", "1", "-l", "1", "-singlefile", str(src),  # noqa: S603
+                        str(Path(tmp) / "page")], check=True)
+        optimise((Path(tmp) / "page.png").read_bytes(), png_path)
+    return True
+
+
+def write_examples(files: dict[str, bytes], out: Path) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    for name, body in files.items():
+        (out / name).write_bytes(body)
+    lines = ["# Example reports", "",
+             "Real exports from Office Sentry, made from **fictional demo data**: Northgate IT is a made-up MSP,",
+             "Alpha Dental Ltd and the other clients are made-up companies, and every person, address and",
+             "`.example` domain is invented. Nothing here comes from a real Microsoft 365 tenant.", "",
+             "Regenerate them with `python scripts/screenshots.py` (from `v2/`) after report changes.", "",
+             "| File | What it is |", "|---|---|"]
+    lines += [f"| [{name}]({name}) | {EXAMPLES[name][1]} |" for name in EXAMPLES if name in files]
+    (out / "README.md").write_text("\n".join(lines) + "\n")
+
+
+# -- Main -----------------------------------------------------------------------------------------
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--out", type=Path, default=ROOT / "docs" / "screenshots")
+    parser.add_argument("--examples-dir", type=Path, default=ROOT / "examples")
+    parser.add_argument("--only", help="comma-separated shot names, e.g. review,mfa (PDF pages: pdf-review)")
+    parser.add_argument("--no-examples", action="store_true", help="don't write examples/")
+    parser.add_argument("--data-dir", type=Path, help="keep the demo database here (default: a temporary folder)")
+    parser.add_argument("--serve", action="store_true", help="seed, print the sign-in and keep the portal running")
+    args = parser.parse_args()
+
+    only = set(args.only.split(",")) if args.only else None
+    with tempfile.TemporaryDirectory(prefix="officesentry-shots-") as tmp:
+        data_dir = args.data_dir or Path(tmp) / "data"
+        print(f"Seeding demo data in {data_dir}")
+        cfg, ids, passwords = build_site(data_dir)
+        with Server(cfg) as server:
+            if args.serve:
+                print(f"Portal: {server.url}  sign in as {ADMIN} / {passwords[ADMIN]}"
+                      f"  (client: {CLIENT} / {passwords[CLIENT]}). Ctrl+C to stop.")
+                try:
+                    threading.Event().wait()
+                except KeyboardInterrupt:
+                    return
+            args.out.mkdir(parents=True, exist_ok=True)
+            shots = [s for s in SHOTS if only is None or s.name in only]
+            print(f"Capturing {len(shots)} pages to {args.out}")
+            saved = capture(server, passwords, ids[0], shots, args.out)
+            pdfs = {n: p.format(t=ids[0]) for n, p in PDF_SHOTS.items() if only is None or n in only}
+            examples = {} if args.no_examples or only else {n: p.format(t=ids[0]) for n, (p, _) in EXAMPLES.items()}
+            files = download(server, passwords, {**pdfs, **examples})
+            for name in pdfs:
+                if name in files and pdf_first_page(files[name], args.out / f"{name}.png"):
+                    saved.append(name)
+            if examples:
+                write_examples({n: files[n] for n in examples if n in files}, args.examples_dir)
+                print(f"Wrote {len([n for n in examples if n in files])} example files to {args.examples_dir}")
+    total = sum((args.out / f"{n}.png").stat().st_size for n in saved)
+    print(f"Saved {len(saved)} images ({total / 1024 / 1024:.1f} MB). Look at every one before committing.")
+
+
+if __name__ == "__main__":
+    main()
