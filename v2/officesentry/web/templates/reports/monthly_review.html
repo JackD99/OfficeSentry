@@ -5,12 +5,21 @@
 {%- set es = summary.monthly(report) -%}
 {%- set whole_org = ('Tenant', 'Organisation') -%}
 {%- set since = report.period_start.day ~ ' ' ~ report.period_start.strftime('%B') -%}
+{#- month_end (optional, from month_end.report_context): the lead's commentary, curated recommendations and
+    notes. Staff-only notes are only in it for staff on the page, never for clients or PDFs. -#}
+{%- set me = month_end if month_end is defined and month_end else none -%}
+{%- set tl_actions = me.actions if me else [] -%}
+{%- macro tl_notes(key) -%}
+{%- set ns = me.notes.get(key, []) if me else [] -%}
+{%- if ns %}<ul class="tl-notes">{% for n in ns %}<li class="{{ n.visibility }}">{% if n.visibility == 'staff' %}<span class="who">Staff only:</span> {% endif %}{% if n.subject %}<span class="who">{{ n.subject|subject_label }}:</span> {% endif %}{{ n.body }}</li>{% endfor %}</ul>{% endif %}
+{%- endmacro -%}
 
 {% block doc_title %}{{ report.title }}{% endblock %}
 {% block client %}{{ report.tenant.name }}{% endblock %}
 {% block toolbar %}
   <a class="back" href="{{ url_for('tenants.tenant', tenant_id=report.tenant.id) }}">&larr; {{ report.tenant.name }}</a>
   <span class="spacer"></span>
+  {% if review_href is defined and review_href %}<a class="button" href="{{ review_href }}" title="Commentary, recommendations and notes for this month">Review and annotate</a>{% endif %}
   <a class="button primary" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>PDF</a>
   <a class="button" href="{{ url_for('reports.tenant_report_xlsx', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>XLSX</a>
   <a class="button" href="{{ url_for('across.review_csv', tenant_id=report.tenant.id) }}" title="Every finding, one row per affected account"><span class="wide">Findings </span>CSV</a>
@@ -21,11 +30,14 @@
   {{ ui.meta('Period covered', since ~ ' to ' ~ report.generated_at.day ~ ' ' ~ report.generated_at.strftime('%B %Y')) }}
   {{ ui.meta('Microsoft 365 tenant', report.tenant.tenant_ref) }}
 {% endblock %}
-{% block cover_status %}{{ ui.verdict(es.verdict) }}{% endblock %}
+{% block cover_status %}{{ ui.verdict(es.verdict) }}
+{%- if me and me.commentary %}
+<div class="tl-commentary"><div class="tl-label">From {{ brand.display_name }}</div>{% for p in me.commentary.split('\n\n') if p.strip() %}<p>{{ p.strip() }}</p>{% endfor %}</div>
+{%- endif %}{% endblock %}
 {% block contents %}
   {%- set urgent_n = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list|length -%}
   <li><a href="#summary">Summary and key figures</a></li>
-  {% if es.actions %}<li><a href="#next">What we recommend next</a></li>{% endif %}
+  {% if tl_actions or es.actions %}<li><a href="#next">What we recommend next</a></li>{% endif %}
   <li><a href="#changes">What changed since {{ since }}</a></li>
   {% if urgent_n %}<li><a href="#fix-first">Fix first</a></li>{% endif %}
   {% if report.failing|length > urgent_n %}<li><a href="#also">{{ 'Also worth fixing' if urgent_n else 'What needs attention' }}</a></li>{% endif %}
@@ -65,7 +77,18 @@
   {% endif %}
 </section>
 
-{% if es.actions %}
+{% if tl_actions %}
+<section id="next">
+  <h2>What we recommend next</h2>
+  <ol class="actions">
+    {% for a in tl_actions %}<li class="{{ 'done' if a.status == 'done' }}">
+      <div class="act-title">{{ a.title }}</div>
+      {% if a.detail %}<p class="act-why">{{ a.detail }}</p>{% endif %}
+      <div class="act-meta"><span class="act-status st-{{ a.status }}">{{ a.status_label }}</span>{% if a.target_label and a.status != 'done' %}<span>Target: {{ a.target_label }}</span>{% endif %}</div>
+    </li>{% endfor %}
+  </ol>
+</section>
+{% elif es.actions %}
 <section id="next">
   <h2>What we recommend next</h2>
   {{ ui.actions(es.actions) }}
@@ -106,6 +129,7 @@
   <div class="check s-{{ r.severity }}" id="check-{{ r.key }}">
     <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.summary|trim('.') }}</h3><span class="category">{{ r.category }}</span></div>
     <p class="recommendation"><strong>What to do:</strong> {{ r.recommendation }}</p>
+    {{ tl_notes(r.key) }}
     {% if r.findings %}
     <div class="table-wrap"><table class="findings">
       <thead><tr><th>Account or item</th><th>Detail</th><th>Severity</th></tr></thead>
@@ -132,6 +156,7 @@
     {% if named %}<p class="tidy-found"><span class="muted">Affects {% for f in named[:4] %}{{ f.subject|breakable }}{% if f.new %}<span class="new">New</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if named|length > 4 %} and {{ named|length - 4 }} more{% endif %}.</span></p>
     {% elif r.findings %}<p class="tidy-found"><span class="muted">Applies to the whole organisation.</span>{% if r.findings|selectattr('new')|list %}<span class="new">New</span>{% endif %}</p>{% endif %}
     <p class="tidy-rec">{{ r.recommendation }}</p>
+    {{ tl_notes(r.key) }}
   </div>
   {% endfor %}
   </div>

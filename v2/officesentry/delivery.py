@@ -320,13 +320,17 @@ def email_brand(conn) -> tuple[dict, list[tuple[str, str, bytes]]]:
     return ctx, [(LOGO_CID, image[0], image[1])]
 
 
-def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None) -> list[tuple[str, str, bytes]]:
+def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None,
+                 review_context: dict | None = None) -> list[tuple[str, str, bytes]]:
+    """Build every file a bundle attaches. ``review_context`` is extra template context for the review PDF
+    (the month-end commentary, recommendations and notes, see ``month_end.report_context``)."""
     files, built = [], {}
     brand = branding.load(conn)
     for key, filename in attachment_plan(tenant, keys, include_xlsx):
         if key == "review":
             report = built.setdefault(key, review or monthly_review.build(conn, tenant, now))
-            data = _pdf(app, "reports/monthly_review.html", report=report) if filename.endswith(".pdf") \
+            data = _pdf(app, "reports/monthly_review.html", report=report, **(review_context or {})) \
+                if filename.endswith(".pdf") \
                 else export.to_xlsx(report, brand=brand)
         elif key == "evidence":
             pack = built.setdefault(key, evidence.build(conn, tenant, now))
@@ -336,6 +340,16 @@ def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None) -> lis
             data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now), brand=brand)
         files.append((filename, "application/pdf" if filename.endswith(".pdf") else XLSX, data))
     return files
+
+
+def _field(row, key: str, default=None):
+    """A column that older rows (or a plain dict) may not have."""
+    return row[key] if key in row.keys() else default
+
+
+def fill_placeholders(template: str, client: str, month: str) -> str:
+    """A report plan's subject or message with {client} and {month} filled in. Nothing else is expanded."""
+    return template.replace("{client}", client).replace("{month}", month)
 
 
 @dataclass
@@ -356,17 +370,19 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     files = [(known[k].title, name) for k, name in plan]
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
-    subject = f"{tenant['name']} security report · {label}"
+    subject = fill_placeholders(_field(schedule, "subject", "") or "", tenant["name"], label).strip() \
+        or f"{tenant['name']} security report · {label}"
+    message = fill_placeholders(schedule["message"] or "", tenant["name"], label)
     look, inline = email_brand(conn)
     msp = look["msp_name"]
     html = render(app, "emails/report.html", subject=subject, tenant=tenant, review=review, label=label,
                    failing=failing[:6], more=max(0, len(failing) - 6), files=files, stale=stale,
-                   message=schedule["message"], frequency=schedule["frequency"], **look,
+                   message=message, frequency=schedule["frequency"], **look,
                    kpis=[k for k in review.kpis if k.value is not None])
 
     lines = [f"{tenant['name']}: security report for {label}", ""]
-    if schedule["message"]:
-        lines += [schedule["message"], ""]
+    if message:
+        lines += [message, ""]
     for k in review.kpis:
         if k.value is None:
             continue
@@ -595,6 +611,28 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     return error
 
 
+def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tuple[str, str, bytes]], *,
+                user: str | None, now: datetime | None = None) -> str | None:
+    """Email a report schedule's recipients the files approved for ``period`` (``month_end.approve``), exactly
+    as they were frozen into ``issued_reports``, and count the period as done. Returns an error or None."""
+    now = now or datetime.now(UTC)
+    contacts = recipients(conn, "schedule", schedule["id"])
+
+    def build():
+        built = build_report_email(app, conn, schedule, tenant, contacts, now=now, attach=False)
+        built.email.attachments = list(files)
+        return built
+    error = _send(conn, vault, build, kind="report", fallback_subject=f"{tenant['name']} security report",
+                  trigger="manual", user=user, schedule_id=schedule["id"], tenant_id=tenant["id"], period=period)
+    if error is None:
+        conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
+                     " last_status = 'sent', last_sent_at = ? WHERE id = ?",
+                     (period, now.strftime(ISO), schedule["id"]))
+    else:
+        conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
+    return error
+
+
 def _archive(conn, schedule, tenant, email: Email, *, period: str, trigger: str, user: str | None,
              now: str) -> None:
     """Keep a copy of every file a sent report email attached (``issued.py``). Never fails the send."""
@@ -669,6 +707,8 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
         schedule = conn.execute("SELECT * FROM email_schedules WHERE id = ?", (delivery["schedule_id"],)).fetchone()
         if schedule is None:
             return "That schedule has been removed"
+        if _field(schedule, "on_approval", 0):
+            return "This report goes out when its month-end review is approved; send it from Month-end reporting"
         return send_schedule(app, conn, vault, schedule, trigger="retry", user=user)
     if delivery["alert_id"] and delivery["payload"]:
         conn.execute("UPDATE email_deliveries SET retry_at = NULL WHERE id = ?", (delivery["id"],))
@@ -682,6 +722,8 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
 
 
 def _tick_schedule(app, conn, vault, s, cfg, now: datetime) -> bool:
+    if _field(s, "on_approval", 0):
+        return False  # a report plan that waits for approval: month_end.approve sends it
     period, due = schedule_slot(s, cfg.timezone, now)
     if s["last_period"] == period:
         return False

@@ -415,3 +415,19 @@ body.print-view .runhead, body.print-view .doc-strings { display: none; }
 /* Links in running text are underlined on the page, not told apart by colour alone.
    PDFs are unchanged. */
 body.report:not(.pdf) .content p a:not([class]), body.report:not(.pdf) .content li a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+
+/* -- Month-end review: the lead's commentary, curated recommendations, notes -- */
+.tl-commentary { margin-top: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper); }
+.tl-commentary .tl-label { font-size: .74rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+.tl-commentary p { color: var(--text-2); }
+.tl-commentary p:last-child { margin-bottom: 0; }
+.actions .act-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 4px; font-size: .82rem; color: var(--muted); }
+.act-status { display: inline-block; white-space: nowrap; font-size: .72rem; font-weight: 600; line-height: 1.5; padding: 1px 9px; border-radius: 999px; background: var(--low-soft); color: var(--low); }
+.act-status.st-in_progress { background: var(--brand-soft); color: var(--brand-ink); }
+.act-status.st-waiting { background: var(--medium-soft); color: var(--medium); }
+.act-status.st-done { background: var(--ok-soft); color: var(--ok); }
+.actions li.done .act-title { color: var(--muted); }
+.tl-notes { list-style: none; margin: 8px 0 0; padding: 0; }
+.tl-notes li { margin: 0 0 6px; padding: 8px 12px; border-left: 3px solid var(--brand); background: var(--brand-soft); border-radius: 0 8px 8px 0; color: var(--text-2); font-size: .92em; }
+.tl-notes li.staff { border-left-color: var(--medium-fill); background: var(--medium-soft); }
+.tl-notes .who { font-weight: 600; color: var(--text); }
