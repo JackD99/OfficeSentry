@@ -292,6 +292,9 @@ this command; the product signs in with a certificate.
   sign out other browsers on their **Account** page. Sessions end after 2 hours
   without activity or 8 hours in total, and when a password, role, access or
   two-step setting changes.
+- **Activity log:** admins see sign-ins and every change, with the address,
+  under *Settings → Activity log* (filters, paging, CSV). Failed sign-ins are
+  kept for 90 days, the rest for good.
 - **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
   prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
   real client IP and scheme are used.

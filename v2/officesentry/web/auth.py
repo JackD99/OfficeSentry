@@ -21,7 +21,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from .. import throttle, totp
 from ..config import clear_setup_token, setup_token
-from ..db import audit, transaction, utcnow
+from ..db import audit, audit_counted, transaction, utcnow
 from ..text import plural
 from . import sessions
 from .access import login_required, safe_next
@@ -177,8 +177,10 @@ def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     user = g.db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    reserved = throttle.reserve(g.db, client_ip(), username, user["id"] if user else None)
+    ip = client_ip()
+    reserved = throttle.reserve(g.db, ip, username, user["id"] if user else None)
     if isinstance(reserved, throttle.Refused):
+        audit_counted(g.db, "login_throttled", ip, user["username"] if user else None)
         return _throttled(username, reserved)
     # Unknown names still pay for a hash, so timing doesn't tell them apart.
     ok = check_password_hash(user["password_hash"] if user else _DUMMY_HASH, password)
@@ -197,8 +199,11 @@ def login():
             _set_pending(user, enroll=True, next_url=next_url)
             return redirect(url_for("auth.two_step_setup"))
         return redirect(_finish_login(user, next_url))
+    elif user is not None:
+        audit(g.db, user["username"], "login_failed")
     else:
-        audit(g.db, username[:64], "login_failed")
+        # Not one row per stranger's guess, and never what they typed (it is sometimes a password).
+        audit_counted(g.db, "login_failed_unknown", ip)
     flash(_SIGN_IN_FAILED, "error")
     return render_template("login.html", username=username), 200
 

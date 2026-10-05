@@ -94,6 +94,13 @@ for each tenant and data source:
 Older snapshots are cleared once a day. Run pages for cleared snapshots still
 show their log and numbers.
 
+The **activity log** (*Settings → Activity log*, admins only) records sign-ins
+and every change, with the address it came from; filter it by user, action,
+tenant and date, and download it as CSV. Failed and slowed-down sign-ins are
+removed after 90 days; everything else is kept. Failed sign-ins with
+usernames that don't exist are counted per address and hour, without storing
+what was typed.
+
 ## Backups
 
 Everything is in the `officesentry-data` volume. To save a safe copy of the
