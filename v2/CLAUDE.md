@@ -152,7 +152,10 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
-  `_macros.html` (import it `with context`). Add new tenant pages as a tab there.
+  `_macros.html` (import it `with context`). There are seven tabs (Overview,
+  Findings, Changes, Reports, Users, Emails, Settings); a page that belongs
+  under one gets its own key, mapped to that tab in `TAB_OF`, and a link in
+  the tab's second row (`.tab-pages`), rather than a new tab.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
   ISO strings. Licence flags go through the `capability` filter.
 - Tables that people read on phones get `class="stack-sm"` and a

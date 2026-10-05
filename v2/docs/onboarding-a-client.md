@@ -2,7 +2,7 @@
 
 For MSP technicians adding a client's Microsoft 365 tenant to Office Sentry,
 getting the first data in, keeping its connection healthy, reading what the
-**Manage** and **Data collection** tabs say, and offboarding the client.
+**Manage** and **Data collection** pages (under **Settings**) say, and offboarding the client.
 
 Office Sentry itself must already be installed and running: see the
 [README](../README.md) for installation. For what the client is approving, send
@@ -47,7 +47,7 @@ off from what Office Sentry can see, and stays until every step is done:
 5. All permissions granted: the permissions the client's tenant actually
    granted match what Office Sentry asks for.
 
-The **Manage** tab shows the same checklist above the connection health.
+The **Manage** page shows the same checklist above the connection health.
 
 ## 2. Get admin consent
 
@@ -80,7 +80,7 @@ is a Global Administrator of the client's tenant.
 If you send the link to the client's Global Administrator instead, their
 approval still takes effect at Microsoft, but Microsoft sends them to your
 Office Sentry sign-in page and the consent isn't recorded there. Once they've
-approved, press **Check connection now** on the checklist or the Manage tab:
+approved, press **Check connection now** on the checklist or the Manage page:
 when Office Sentry can sign in and read the tenant, it records the consent
 itself and queues the first full collection.
 
@@ -104,7 +104,7 @@ view but not change settings.
 In the client's tenant: *Microsoft Entra admin centre → Roles and admins →
 Global Reader → Add assignments*, then select the Office Sentry app (the name
 you gave the app registration, for example "Office Sentry (read-only)"). The
-Manage tab names the app as it appears in the client's tenant.
+Manage page names the app as it appears in the client's tenant.
 
 Without it, the **Mailboxes** data source fails and the checks that need it
 show as not checked. Everything else works, including inbox rules, which are
@@ -113,7 +113,7 @@ assignment; press **Check again** on the checklist after a few minutes, and
 refresh Mailboxes once it shows as assigned.
 
 If the app holds **Global Administrator** or **Exchange Administrator**, the
-Manage tab warns: those work, but give the app far more than reporting needs.
+Manage page warns: those work, but give the app far more than reporting needs.
 Ask the client to remove them and keep Global Reader.
 
 ## 4. First collection
@@ -128,11 +128,11 @@ the step. Otherwise the rest arrives with the nightly collection
 The worker runs one data source at a time, tenant profile first: it finds out
 which licences the tenant has, and the others use that to skip what the tenant
 can't provide. A large tenant can take a while. To collect again later, use
-**Refresh all data** on the **Data collection** tab.
+**Refresh all data** on the **Data collection** page.
 
-## 5. Connection health: the Manage tab
+## 5. Connection health: the Manage page
 
-Every tenant's **Manage** tab (admins and analysts) has a **Connection
+Every tenant's **Manage** page (under **Settings**, admins and analysts) has a **Connection
 health** list, one line per thing that can go wrong, each with what to do:
 
 | Line | What it checks | Typical fix |
@@ -167,7 +167,7 @@ The tenant's overall status is one of:
 health* on the Tenants page) lists every tenant with its status, consent,
 missing permissions, Global Reader, last good collection and failing data
 sources, the ones that need fixing first. Click a tenant to open its Manage
-tab.
+page.
 
 Admins also edit the tenant under *Manage → Settings*: its name, notes for the
 team, its app connection (moving to an app with a different client ID needs
@@ -177,12 +177,12 @@ data has been collected, except from a domain to the tenant ID it stands for
 to report on a different tenant, add it as a new one. *Test sign-in* there
 signs in from the portal straight away without checking permissions.
 
-## 6. Read the Data collection tab
+## 6. Read the Data collection page
 
-The **Data collection** tab (admins and analysts) has four parts:
+The **Data collection** page (under **Settings**, admins and analysts) has four parts:
 
 - **Connection**: tenant ID, app, whether consent is recorded, the status
-  and the top problems from the Manage tab, with a link to it.
+  and the top problems from the Manage page, with a link to it.
 - **Licences found**: the licence features the tenant profile found (Entra ID
   P1 and P2, Intune, Defender for Office 365 P1 and P2, Exchange Online,
   SharePoint Online). Unlicensed features are greyed out.
@@ -263,7 +263,7 @@ The [check catalogue](checks.md) lists the licence note for each check.
 ## Re-consent when permissions change
 
 Adding a permission to the app means every tenant must approve again. Until a
-tenant does, the Manage tab lists the new permission as missing, and data
+tenant does, the Manage page lists the new permission as missing, and data
 sources that need it fail with `Graph 403 Authorization_RequestDenied` (or
 are partial). *Settings → Client tenants* shows which tenants still miss it.
 
@@ -273,15 +273,15 @@ are partial). *Settings → Client tenants* shows which tenants still miss it.
    asks for* lists what this version of Office Sentry expects. Don't run
    `create-app` again: it creates a second app, and existing tenants stay on
    the first.
-2. **Re-consent each tenant**: on the **Manage** tab, open *Re-grant consent
+2. **Re-consent each tenant**: on the **Manage** page, open *Re-grant consent
    (after new permissions)* under Settings, or *Open consent link* next to
    *Permissions*, the same way as step 2.
 3. Press **Check connection now**, then **Refresh all data** on the Data
-   collection tab.
+   collection page.
 
 ## Pausing and archiving
 
-On the **Manage** tab, admins can:
+On the **Manage** page, admins can:
 
 - **Pause collection**, for example while a client's contract is on hold.
   Nothing is collected (scheduled or manual), no emailed reports or alert
@@ -297,7 +297,7 @@ On the **Manage** tab, admins can:
 
 ## Offboarding a client
 
-On the tenant's **Manage** tab, choose **Offboard…** (admins only). The page
+On the tenant's **Manage** page, choose **Offboard…** (admins only). The page
 walks through it:
 
 1. **Download a final copy**: the monthly review and insurance evidence pack

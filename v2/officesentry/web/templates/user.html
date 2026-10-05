@@ -90,7 +90,7 @@
     {% endfor %}
   </div>
 
-  <aside>
+  <aside aria-label="Account summary">
     <section class="card">
       <div class="card-head"><h2>Account</h2></div>
       <dl class="kv stacked">{% for label, value in profile.account %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>

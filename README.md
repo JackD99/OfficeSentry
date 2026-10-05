@@ -184,7 +184,7 @@ everything stored for it, with no SQL.
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/client-tenants.png" alt="Client tenants: connection health for every client"></td>
-    <td width="50%"><img src="docs/screenshots/manage-tenant.png" alt="A tenant's Manage tab"></td>
+    <td width="50%"><img src="docs/screenshots/manage-tenant.png" alt="A tenant's Manage page"></td>
   </tr>
   <tr>
     <td>Connection health for every client</td>

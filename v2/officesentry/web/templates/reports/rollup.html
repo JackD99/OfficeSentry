@@ -6,7 +6,7 @@
 {% set wide = rollup.columns|length >= 4 %}
 {% macro cell(row, c) -%}
 {% set v = row.values.get(c.key) %}
-{% if c.kind == 'sev' %}{% if v is not none %}<span class="sevbar">{% for s in ('critical', 'high', 'medium', 'low') %}<span class="n {{ s }}{{ ' zero' if not v[s] }}">{{ v[s] }}</span>{% endfor %}</span>{% else %}–{% endif %}
+{% if c.kind == 'sev' %}{% if v is not none %}<span class="sevbar" role="img" aria-label="{% for s in ('critical', 'high', 'medium', 'low') %}{{ v[s] }} {{ s }}{{ ', ' if not loop.last }}{% endfor %}">{% for s in ('critical', 'high', 'medium', 'low') %}<span class="n {{ s }}{{ ' zero' if not v[s] }}">{{ v[s] }}</span>{% endfor %}</span>{% else %}–{% endif %}
 {% elif v is none or v == '' %}<span class="muted">–</span>
 {% elif c.kind == 'status' %}<span class="pill {{ row.tones.get(c.key, '') }}">{{ v }}</span>
 {% elif c.kind == 'money' %}{{ v|money(rollup.currency) }}

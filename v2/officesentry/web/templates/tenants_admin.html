@@ -30,7 +30,7 @@
 
 {% if not rows %}
 <div class="card empty">
-  {% if show_archived %}<h3>No archived tenants</h3><p>Archive a tenant from its Manage tab to hide it without deleting its data.</p>
+  {% if show_archived %}<h3>No archived tenants</h3><p>Archive a tenant from its Manage page (under Settings) to hide it without deleting its data.</p>
   {% elif admin %}<h3>No tenants yet</h3><p>Set up the app connection once, then add each client tenant.</p>
   <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a>
   {% else %}<h3>No tenants to show</h3><p>You haven't been given access to any tenants yet.</p>{% endif %}

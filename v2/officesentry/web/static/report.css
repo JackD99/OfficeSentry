@@ -407,3 +407,7 @@ body.print-view .runhead, body.print-view .doc-strings { display: none; }
   body.print-view .cover.compact { padding: 4mm 4mm 0; }
   body.print-view .content { padding: 0 4mm 6mm; }
 }
+
+/* Links in running text are underlined on the page, not told apart by colour alone.
+   PDFs are unchanged. */
+body.report:not(.pdf) .content p a:not([class]), body.report:not(.pdf) .content li a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
