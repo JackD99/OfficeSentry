@@ -145,7 +145,8 @@ def refresh_for_report(conn, tenant_id: int, slot: datetime, max_age_hours: floa
             (tenant_id, key, iso(slot)),
         ).fetchone()
         if tried is None:
-            store.enqueue_run(conn, tenant_id, key, trigger="schedule", scheduled_for=iso(slot))
+            store.enqueue_run(conn, tenant_id, key, trigger="schedule", scheduled_for=iso(slot),
+                              priority=store.PRIORITY_WAITING)  # a report is waiting for it
             ready = False
         elif tried["status"] in ("queued", "running"):
             ready = False

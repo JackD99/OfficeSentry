@@ -114,9 +114,9 @@ class GraphClient:
     @classmethod
     def from_certificate(cls, tenant_ref: str, client_id: str, key_pem: str,
                          thumbprint: str, **kwargs) -> GraphClient:
-        from .msauth import TokenError, certificate_token_provider
+        from .msauth import TokenError, shared_certificate_token_provider
 
-        provider = certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, GRAPH_ROOT)
+        provider = shared_certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, GRAPH_ROOT)
 
         def token() -> str:
             try:

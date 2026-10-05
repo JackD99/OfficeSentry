@@ -169,19 +169,38 @@ anything to link people; PDFs and spreadsheets show the plain name.
 
 ## Background work
 
-`worker.py` is the only background process: one loop that claims queued runs
-and, once a minute, queues the collection slot (`schedule.py`, cron +
-timezone, skipping collectors fresher than `max_age_hours`) and sends due
-report emails (which first refresh stale collectors). It prunes snapshots once
-a day with `store.prune_snapshots` (latest run per day for 30 days and per
-month for 12; metrics, findings and run rows are never pruned), so code that
-reads an older run must cope with its objects being gone (see
-`changes._baseline_run`). A side thread records the heartbeat that the
-portal banner and `healthcheck worker` read, but only while the main loop
-makes progress (`worker.Liveness`: it came round in the last 10 minutes, or
-one run has gone for under 4 hours), so a wedged loop shows as down. A
-failing housekeeping pass (say "database is locked") is logged and retried
-the next minute; it never ends the worker. Don't add Celery or Redis.
+`worker.py` is the only background process (run one): `cfg.worker_concurrency`
+collector threads claim queued runs (`store.claim_next_run`: highest
+`runs.priority` first, then oldest, and never two runs for one tenant at once).
+`execute_run` syncs findings (and alerts) once the tenant has nothing else
+queued or running, so a night's collection is evaluated once. Token providers
+(`msauth.shared_certificate_token_provider`) and each thread's HTTP session are
+reused across runs. Meanwhile the main thread, once a
+minute, queues the collection slot (`schedule.py`, cron + timezone, skipping
+collectors fresher than `max_age_hours`) and sends due report emails (which
+first refresh stale collectors). Every thread opens its own SQLite connection;
+never share one across threads. Manual runs and report refreshes get
+`store.PRIORITY_WAITING`. Once a day it prunes snapshots with
+`store.prune_snapshots` (latest run per day for 30 days and per month for 12;
+metrics, findings and run rows are never pruned), so code that reads an older
+run must cope with its objects being gone (see `changes._baseline_run`), and
+run log info lines older than 90 days (`store.prune_run_logs`; warnings and
+errors stay). A side thread records the heartbeat that the portal banner and
+`healthcheck worker` read, but only while the worker makes progress
+(`worker.Liveness`: the main loop came round in the last 10 minutes and no run
+has gone for 4 hours), so a wedged loop or thread shows as down. A failing
+housekeeping pass (say "database is locked") is logged, rolled back and
+retried the next minute; it never ends the worker. Don't add Celery or Redis.
+
+The dashboard and the All tenants review read each tenant's row from
+`rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
+its `_fingerprint` changes (latest run, findings, prices, currency, app
+connections, the code, the day). If the row comes to depend on something
+else, add it to the fingerprint. The worker rebuilds a tenant's row after its
+last queued run and every row once a day. Runs are read through the indexes in
+`migrations/0016`; check a new query on `runs` with `EXPLAIN QUERY PLAN`, and
+note that most rows are finished, so a filter on `status` alone needs
+`INDEXED BY idx_runs_status`.
 
 To add timed work (emails, digests), register a job in its own module with
 `@schedule.periodic("name")`; it gets a `TickContext` every minute and uses
@@ -194,7 +213,7 @@ decide whether to act. Add the module to `worker.JOB_MODULES`. See
 `delivery.tick()` (the `email_delivery` periodic job) sends scheduled emails
 and retries failed alert emails. A report schedule's send time is a cron slot
 (`delivery.schedule_cron`), and stale collectors are refreshed first. Alert emails are not a separate engine: `alerts.after_sync()`
-(the Teams/Slack/webhook alert event after each collection) calls
+(the Teams/Slack/webhook alert event after each findings sync) calls
 `delivery.after_sync()`, so both go out on the same findings. Schedules store their own timezone and the last period they finished
 ("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
 show up in the schedule form automatically. Email templates live in
