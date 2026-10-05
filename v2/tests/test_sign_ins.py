@@ -1,6 +1,7 @@
 """Sign-in activity: collector, report, the risky sign-in check and the account page."""
 
 import copy
+import json
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from unittest.mock import patch
@@ -316,3 +317,116 @@ def test_account_page_without_entra_p1(db, two_tenants):
     profile = user_profile.build(db, store.get_tenant(db, alpha), "u1")
     part = {p.key: p for p in profile.parts}["signins"]
     assert "Entra ID P1" in part.unavailable
+
+
+# -- When Microsoft times out -----------------------------------------------------------------
+
+SIGNIN_KINDS = ("sign_in_account", "sign_in_location", "sign_in_country", "sign_in_app", "sign_in_failure",
+                "sign_in_failure_ip", "risky_sign_in")
+
+
+def _recent_signins():
+    """Sign-ins spread over the last six days, newest first, several sharing a timestamp."""
+    now = datetime.now(UTC).replace(microsecond=0)
+    out = []
+    for i in range(40):
+        when = (now - timedelta(hours=1 + 3.5 * i)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for _ in range(1 + (i % 3 == 0)):  # every third time has two sign-ins
+            n = len(out)
+            out.append(gd._signin(n, when, ["ann@x.com", "bob@x.com", "cat@x.com"][n % 3], f"u{n % 3}",
+                                  [0, 0, 50126, 50074][n % 4], ip=f"198.51.100.{n % 5}",
+                                  country=["GB", "FR", "RU"][n % 3], app=["Teams", "Outlook"][n % 2],
+                                  mfa=bool(n % 2)))
+    return out
+
+
+def _signin_log(rows, fail=lambda flt, skip: False, page=7):
+    """A fake /beta/auditLogs/signIns honouring the createdDateTime filter, newest first, in pages."""
+    def handler(request):
+        query = parse_qs(urlsplit(request.url).query)
+        flt, skip = query["$filter"][0], int(query.get("$skiptoken", ["0"])[0])
+        if fail(flt, skip):
+            return 504, {}, json.dumps({"error": {"code": "GatewayTimeout", "message": "Request timed out"}})
+        clauses = [c.split(" ") for c in flt.split(" and ")]
+        ops = {"ge": str.__ge__, "le": str.__le__, "lt": str.__lt__}
+        match = [s for s in rows if all(ops[op](s["createdDateTime"], value) for _, op, value in clauses)]
+        match.sort(key=lambda s: s["createdDateTime"], reverse=True)
+        body = {"value": match[skip:skip + page]}
+        if skip + page < len(match):
+            body["@odata.nextLink"] = (f"{BETA}/auditLogs/signIns?$filter={flt}&$skiptoken={skip + page}")
+        return 200, {}, json.dumps(body)
+    responses.add_callback(responses.GET, f"{BETA}/auditLogs/signIns", callback=handler,
+                           content_type="application/json")
+
+
+def _stored(db, run_id):
+    return {kind: store.run_objects(db, run_id, kind) for kind in SIGNIN_KINDS}
+
+
+def _is_week_query(flt):
+    since = flt.split(" ")[2]
+    return " and " not in flt and since < (datetime.now(UTC) - timedelta(days=3)).strftime("%Y-%m-%dT")
+
+
+@responses.activate
+def test_a_timed_out_week_is_read_a_day_at_a_time_with_the_same_result(db, two_tenants):
+    alpha, bravo = two_tenants
+    rows = _recent_signins()
+    _signin_log(rows)
+    base_id, status = _run(db, alpha)
+    assert status == "succeeded"
+    expected = _stored(db, base_id)
+    assert store.run_objects(db, base_id, "sign_in_status")[0]["signIns"] == len(rows)
+
+    responses.reset()
+    _signin_log(rows, fail=lambda flt, skip: _is_week_query(flt))
+    run_id, status = _run(db, bravo)
+    assert status == "succeeded"
+    assert _stored(db, run_id) == expected
+    assert store.run_objects(db, run_id, "sign_in_status")[0]["signIns"] == len(rows)
+    filters = [parse_qs(urlsplit(c.request.url).query)["$filter"][0] for c in responses.calls]
+    assert sum(" and " in f for f in filters) >= 6  # one-day windows after the first
+    assert all(c.request.method == "GET" for c in responses.calls)
+
+
+@responses.activate
+def test_a_timeout_part_way_through_carries_on_from_the_oldest_sign_in(db, two_tenants):
+    alpha, bravo = two_tenants
+    rows = _recent_signins()
+    _signin_log(rows)
+    expected = _stored(db, _run(db, alpha)[0])
+
+    # Page 1 of the week arrives, then Microsoft times out. Page 1 ends part-way through a
+    # timestamp shared by two sign-ins, which must be neither lost nor counted twice.
+    responses.reset()
+    _signin_log(rows, fail=lambda flt, skip: _is_week_query(flt) and skip > 0, page=13)
+    run_id, status = _run(db, bravo)
+    assert status == "succeeded"
+    assert _stored(db, run_id) == expected
+    assert store.run_objects(db, run_id, "sign_in_status")[0]["signIns"] == len(rows)
+    resumed = [parse_qs(urlsplit(c.request.url).query)["$filter"][0] for c in responses.calls]
+    assert any(" and createdDateTime le " in f for f in resumed)
+
+
+@responses.activate
+def test_a_day_that_still_times_out_is_left_out_with_a_warning(db, two_tenants):
+    alpha, bravo = two_tenants
+    rows = _recent_signins()
+    day = (datetime.now(UTC) - timedelta(days=2)).strftime("%Y-%m-%dT")
+
+    def fail(flt, skip):
+        return _is_week_query(flt) or (" and " in flt and flt.split(" ")[2].startswith(day))
+    _signin_log(rows, fail=fail)
+    run_id, status = _run(db, alpha)
+    assert status == "partial"
+    [st] = store.run_objects(db, run_id, "sign_in_status")
+    assert st["available"] and 0 < st["signIns"] < len(rows)
+    error = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
+    assert "timed out for 1 one-day window" in error
+
+    # Nothing at all comes back: the run fails as before rather than claiming an empty week.
+    responses.reset()
+    _signin_log(rows, fail=lambda flt, skip: True)
+    run_id, status = _run(db, bravo)
+    assert status == "failed"
+    assert store.run_objects(db, run_id, "sign_in_status") == []

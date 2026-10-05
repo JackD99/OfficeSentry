@@ -29,6 +29,15 @@ from .text import plural
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 EMAIL = re.compile(r"[A-Za-z0-9._%+'{}#-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
 PHONE = re.compile(r"\+\d[\d ()-]{6,}\d")
+# National formats: UK and similar (07700 900123, 020 7946 0000) and North American ((555) 010-0199).
+NATIONAL_PHONE = re.compile(r"(?<![\w.:/+-])(?:0\d(?: ?\d){8,10}|\(\d{3}\) ?\d{3}[-. ]\d{4}|\d{3}-\d{3}-\d{4})"
+                            r"(?![\w.:/-])")
+# Keys (lower case) that hold phone numbers in Graph and Exchange, replaced whatever their format.
+PHONE_KEYS = {"businessphones", "mobilephone", "homephones", "otherphones", "faxnumber", "phonenumber",
+              "telephonenumber", "phone", "phones", "mobile", "homephone", "othertelephone", "fax",
+              "otherfax", "otherhomephone", "pager"}
+# Fictional numbers (555-0100 to 555-0199 are reserved for fiction); the leak check accepts only these.
+FAKE_PHONE = "+1 555 01{:02d}"
 # OneDrive addresses carry the owner's sign-in name: /personal/jane_contoso_com/Documents.
 PERSONAL = re.compile(r"(?<=/personal/)[^/?#\s\"]+", re.I)
 FAKE_DOMAIN = "sentrytest"
@@ -123,6 +132,15 @@ class Scrubber:
         taken = {k.lower() for k in self.domain_strings}
         self.strings.update({k: v for k, v in names.items() if len(k) >= 3 and k.lower() not in taken})
         self.personal_sites: dict[str, str] = {}
+        self.phones: dict[str, str] = {}
+
+    def phone(self, value: str) -> str:
+        key = re.sub(r"\D", "", value)
+        if not key:
+            return value
+        if key not in self.phones:
+            self.phones[key] = FAKE_PHONE.format(len(self.phones) % 100)
+        return self.phones[key]
 
     def guid(self, value: str) -> str:
         low = value.lower()
@@ -166,7 +184,8 @@ class Scrubber:
             # Request and paging URLs carry IDs and domains, not names; a person called "admin"
             # mustn't rewrite /admin/sharepoint/settings.
             return self._domains_only(value)
-        value = PHONE.sub("+1 555 0100", value)
+        value = PHONE.sub(lambda m: self.phone(m.group(0)), value)
+        value = NATIONAL_PHONE.sub(lambda m: self.phone(m.group(0)), value)
         return self.text_only(value)
 
     def _domains_only(self, value: str) -> str:
@@ -176,13 +195,23 @@ class Scrubber:
 
     def walk(self, value, device: bool = False):
         if isinstance(value, dict):
-            return {k: ("redacted" if device and k in DEVICE_KEYS and isinstance(v, str) else self.walk(v, device))
-                    for k, v in value.items()}
+            return {k: self._field(k, v, device) for k, v in value.items()}
         if isinstance(value, list):
             return [self.walk(v, device) for v in value]
         if isinstance(value, str):
             return self.text(value)
         return value
+
+
+    def _field(self, key: str, value, device: bool):
+        if device and key in DEVICE_KEYS and isinstance(value, str):
+            return "redacted"
+        if key.lower() in PHONE_KEYS and isinstance(value, str | list):
+            # A phone field is replaced whatever its format; True/False flags under the same names stay.
+            if isinstance(value, str):
+                return self.phone(value)
+            return [self.phone(v) if isinstance(v, str) else self.walk(v, device) for v in value]
+        return self.walk(value, device)
 
 
 def _word(value: str) -> re.Pattern:
@@ -312,6 +341,7 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     text = "\n".join(v for v in _strings(fixture) if not v.startswith("https://"))
     leaks = find_leaks(text, [*names, *personal])
     leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites])
+    leaks += phone_leaks(fixture)
     if leaks:
         hints = ", ".join(f"{v[0]}… ({len(v)} chars)" for v in leaks)  # never print the values themselves
         raise ValueError(f"scrubbing left {plural(len(leaks), 'identifying value')} in the fixture: {hints}")
@@ -340,6 +370,29 @@ def _strings(value):
             yield from _strings(v)
     elif isinstance(value, str):
         yield value
+
+
+def _is_fake_phone(value: str) -> bool:
+    return re.fullmatch(r"\+1 555 01\d\d", value) is not None
+
+
+def phone_leaks(fixture) -> list[str]:
+    """Phone numbers that aren't the fictional placeholders: any value with 7 or more digits under a
+    phone key, and anything shaped like a phone number in other text (request URLs aside)."""
+    found = []
+    for obj in _objects(fixture):
+        for key, value in obj.items():
+            if key.lower() not in PHONE_KEYS:
+                continue
+            for v in value if isinstance(value, list) else [value]:
+                if isinstance(v, str) and len(re.sub(r"\D", "", v)) >= 7 and not _is_fake_phone(v):
+                    found.append(v)
+    for text in _strings(fixture):
+        if text.startswith("https://"):
+            continue
+        found += [m.group(0) for m in (*PHONE.finditer(text), *NATIONAL_PHONE.finditer(text))
+                  if not _is_fake_phone(m.group(0))]
+    return sorted(set(found))
 
 
 def find_leaks(text: str, sensitive) -> list[str]:

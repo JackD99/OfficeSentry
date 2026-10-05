@@ -88,7 +88,7 @@ def dashboard():
     from ..reports.monthly_review import rollup_row, setting
 
     tenants = visible_tenants(g.db, g.user)
-    rows = [rollup_row(g.db, t) for t in tenants]
+    rows = [rollup_row(g.db, t, cached=True) for t in tenants]
     if g.user["role"] == "client":
         from ..reports.data_reports import grouped
 

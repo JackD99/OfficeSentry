@@ -1,8 +1,13 @@
 """Background worker: runs queued collector runs, the collection schedule,
 emailed reports and snapshot retention.
 
-One process, no broker. Run it with ``python -m officesentry worker``. It
-records a heartbeat so the portal and ``healthcheck`` can tell it is running.
+One process, no broker. Run it with ``python -m officesentry worker``. Inside
+it, ``cfg.worker_concurrency`` collector threads each claim and execute runs
+(one tenant per thread at a time, see ``store.claim_next_run``), while the main
+thread does the once-a-minute housekeeping, so a long collection doesn't hold
+up the schedule or emails. Every thread has its own SQLite connection. Only
+run one worker process: at start it marks any run left 'running' as failed.
+It records a heartbeat so the portal and ``healthcheck`` can tell it is running.
 """
 
 from __future__ import annotations
@@ -16,6 +21,8 @@ import time
 import traceback
 from datetime import UTC, datetime, timedelta
 
+import requests
+
 from . import alerts, findings, lifecycle, schedule, store, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
@@ -24,6 +31,7 @@ from .crypto import Vault
 from .db import connect, migrate, prune_audit, utcnow
 from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError, LicenseRequired, PermissionMissing
+from .reports import monthly_review
 from .text import plural
 
 log = logging.getLogger(__name__)
@@ -33,13 +41,26 @@ class NotConnected(Exception):
     pass
 
 
+_local = threading.local()
+
+
+def _session() -> requests.Session:
+    """One HTTP session per thread, so its connections to Microsoft are reused from run to run.
+
+    Sessions aren't shared between threads; each collector thread has its own.
+    """
+    if getattr(_local, "session", None) is None:
+        _local.session = requests.Session()
+    return _local.session
+
+
 def default_graph_factory(vault: Vault):
     def factory(tenant: dict, connection: dict | None) -> GraphClient:
         if not connection or not connection["client_id"]:
             raise NotConnected("tenant has no app connection with a client ID")
         return GraphClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
-            vault.decrypt(connection["key_enc"]), connection["thumbprint"],
+            vault.decrypt(connection["key_enc"]), connection["thumbprint"], session=_session(),
         )
     return factory
 
@@ -50,7 +71,7 @@ def default_exchange_factory(vault: Vault):
             raise NotConnected("tenant has no app connection with a client ID")
         return ExchangeClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
-            vault.decrypt(connection["key_enc"]), connection["thumbprint"],
+            vault.decrypt(connection["key_enc"]), connection["thumbprint"], session=_session(),
         )
     return factory
 
@@ -61,7 +82,36 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
 
     ``client_id`` is the app the graph client signs in as, when that isn't the
     tenant's app connection (``live-test`` signs in with a separate test app).
+
+    Findings are synced (and alerted on) once the tenant has nothing else queued
+    or running, so a night's collection evaluates the checks once on complete
+    data rather than after each of its runs.
     """
+    status = _collect(conn, run, graph_factory, exchange_factory, client_id)
+    tenant = store.get_tenant(conn, run["tenant_id"])
+    if tenant is not None and not conn.execute(
+            "SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('queued', 'running')", (tenant["id"],)).fetchone():
+        _sync(conn, tenant, run["id"], alerting)
+        # Rebuild the tenant's dashboard row now rather than on the next page load.
+        warm_rollup(conn, store.get_tenant(conn, tenant["id"]))
+    return status
+
+
+def _sync(conn, tenant, run_id: int, alerting: alerts.Alerting | None) -> None:
+    if not conn.execute("SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial') LIMIT 1",
+                        (tenant["id"],)).fetchone():
+        return  # nothing collected yet
+    try:
+        stats = findings.sync(conn, tenant)
+        if any(stats.values()):
+            store.log_event(conn, run_id, "info", "Findings: {new} new, {reopened} reopened, {resolved} resolved"
+                            .format(**stats))
+        alerts.after_sync(conn, alerting, tenant, stats, run_id)
+    except Exception:  # a rule bug must not mark a good collection as failed
+        store.log_event(conn, run_id, "error", "Updating findings failed:\n" + traceback.format_exc())
+
+
+def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) -> str:
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
     collector_cls = REGISTRY.get(run["collector"])
@@ -104,15 +154,20 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
         queued = lifecycle.queue_first_collection(conn, run["tenant_id"])
         if queued:
             store.log_event(conn, run_id, "info", f"Consent confirmed; queued {plural(queued, 'data source')}")
-    try:
-        stats = findings.sync(conn, store.get_tenant(conn, run["tenant_id"]))
-        if any(stats.values()):
-            store.log_event(conn, run_id, "info", "Findings: {new} new, {reopened} reopened, {resolved} resolved"
-                            .format(**stats))
-        alerts.after_sync(conn, alerting, tenant, stats, run_id)
-    except Exception:  # a rule bug must not mark a good collection as failed
-        store.log_event(conn, run_id, "error", "Updating findings failed:\n" + traceback.format_exc())
     return status
+
+
+def warm_rollup(conn, tenant) -> None:
+    try:
+        monthly_review.rollup_row(conn, tenant, cached=True)
+    except Exception:  # the page builds it again, and says what's wrong
+        log.exception("Building the dashboard row for tenant %s failed", tenant["id"])
+
+
+def warm_rollups(conn) -> None:
+    """Rebuild every dashboard row that's out of date, once a day as "new" and the 4-week comparison move."""
+    for tenant in conn.execute("SELECT * FROM tenants WHERE archived_at IS NULL ORDER BY id").fetchall():
+        warm_rollup(conn, tenant)
 
 
 def schedule_tick(conn, cfg: Config, now: datetime | None = None) -> int:
@@ -156,6 +211,11 @@ def beat(conn) -> None:
                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (HEARTBEAT_KEY, utcnow()))
 
 
+def clear_heartbeat(conn) -> None:
+    """A worker that stopped cleanly says so at once, rather than looking alive for HEARTBEAT_STALE."""
+    conn.execute("DELETE FROM settings WHERE key = ?", (HEARTBEAT_KEY,))
+
+
 def last_seen(conn) -> datetime | None:
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (HEARTBEAT_KEY,)).fetchone()
     return datetime.fromisoformat(row["value"].replace("Z", "+00:00")) if row else None
@@ -166,14 +226,70 @@ def is_alive(conn, now: datetime | None = None) -> bool:
     return seen is not None and (now or datetime.now(UTC)) - seen < HEARTBEAT_STALE
 
 
-def _heartbeat_thread(db_path, stop: threading.Event) -> threading.Thread:
+# The worker counts as stuck when its main loop (housekeeping) hasn't come
+# round for this long, or a single collection has run for longer than RUN_STALE.
+LOOP_STALE = timedelta(minutes=10)
+RUN_STALE = timedelta(hours=4)
+
+
+class Liveness:
+    """What the worker's threads are doing, shared with the heartbeat thread.
+
+    The heartbeat is only written while the worker makes progress, so a
+    wedged main loop or a collector thread stuck in one run (a deadlocked
+    write, a hung request) stops the heartbeat and shows as unhealthy in the
+    portal banner and ``healthcheck worker``. Collector threads record their
+    runs with ``start_run``/``end_run``; the main loop calls ``tick``.
+    """
+
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.loop_at = clock()
+        self.runs: dict[int, tuple[int, float]] = {}  # thread ident -> (run id, started)
+        self._lock = threading.Lock()
+
+    def tick(self) -> None:
+        with self._lock:
+            self.loop_at = self.clock()
+
+    def start_run(self, run_id: int) -> None:
+        with self._lock:
+            self.runs[threading.get_ident()] = (run_id, self.clock())
+
+    def end_run(self) -> None:
+        with self._lock:
+            self.runs.pop(threading.get_ident(), None)
+
+    def problem(self) -> str | None:
+        """Why the worker looks stuck, or None while it's making progress."""
+        with self._lock:
+            now = self.clock()
+            for run_id, started in self.runs.values():
+                if now - started > RUN_STALE.total_seconds():
+                    return f"run {run_id} has been going for {int((now - started) // 60)} minutes"
+            if now - self.loop_at > LOOP_STALE.total_seconds():
+                return f"the main loop hasn't moved for {int((now - self.loop_at) // 60)} minutes"
+            return None
+
+
+def heartbeat_step(conn, liveness: Liveness | None) -> bool:
+    """Record the heartbeat if the main loop is making progress. Returns whether it did."""
+    problem = liveness.problem() if liveness else None
+    if problem:
+        log.error("Worker looks stuck (%s); not recording a heartbeat", problem)
+        return False
+    beat(conn)
+    return True
+
+
+def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None = None) -> threading.Thread:
     """Report liveness from a side thread, so a long collection doesn't look like a dead worker."""
     def loop():
         conn = connect(db_path)
         try:
             while not stop.is_set():
                 try:
-                    beat(conn)
+                    heartbeat_step(conn, liveness)
                 except sqlite3.Error:
                     log.warning("Could not record worker heartbeat", exc_info=True)
                 stop.wait(HEARTBEAT_EVERY)
@@ -209,10 +325,88 @@ def prune(conn, cfg: Config) -> int:
     throttle.prune(conn)
     if noise := prune_audit(conn):
         log.info("Retention: removed %s", plural(noise, "old failed sign-in record"))
+    lines = store.prune_run_logs(conn)
+    if lines:
+        log.info("Retention: removed %s", plural(lines, "old run log line"))
+    conn.execute("PRAGMA optimize")  # keeps the query planner's statistics current
     return removed
 
 
-def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None) -> None:
+TICK_EVERY = 60  # seconds between housekeeping passes
+IDLE_WAIT = 2  # seconds to wait when the queue is empty
+
+
+def _rollback(conn) -> None:
+    if conn.in_transaction:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            log.warning("Rollback after a failed housekeeping pass failed", exc_info=True)
+
+
+def _execute(conn, run, graph_factory, exchange_factory, alerting, liveness: Liveness) -> None:
+    log.info("Run %s: %s for tenant %s", run["id"], run["collector"], run["tenant_id"])
+    liveness.start_run(run["id"])
+    try:
+        status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
+        alerts.after_run(conn, alerting, run["id"], status)
+    finally:
+        liveness.end_run()
+
+
+def _claim(conn):
+    try:
+        return store.claim_next_run(conn)
+    except sqlite3.OperationalError:
+        log.exception("Could not claim the next run; trying again shortly")
+        _rollback(conn)
+        return None
+
+
+def _collector_thread(cfg: Config, number: int, stop: threading.Event, graph_factory, exchange_factory,
+                      alerting, liveness: Liveness | None = None) -> threading.Thread:
+    """Claim and execute queued runs until ``stop`` is set, then finish the current run."""
+    liveness = liveness or Liveness()
+
+    def loop():
+        conn = connect(cfg.db_path)
+        try:
+            while not stop.is_set():
+                run = _claim(conn)
+                if run is None:
+                    stop.wait(IDLE_WAIT)
+                    continue
+                try:
+                    _execute(conn, run, graph_factory, exchange_factory, alerting, liveness)
+                except Exception:  # say, the database stayed locked: keep the thread alive
+                    log.exception("Run %s could not be finished", run["id"])
+                    _rollback(conn)
+        finally:
+            conn.close()
+    thread = threading.Thread(target=loop, name=f"collector-{number}", daemon=True)
+    thread.start()
+    return thread
+
+
+def _housekeeping(app, conn, vault, cfg: Config) -> None:
+    try:
+        housekeeping(app, conn, vault, cfg)
+    except Exception:  # say "database is locked": try again next minute rather than exit
+        log.exception("Housekeeping failed; trying again in a minute")
+        _rollback(conn)
+
+
+def _daily(conn, cfg: Config) -> None:
+    try:
+        prune(conn, cfg)
+    except sqlite3.Error:
+        log.exception("Pruning old snapshots failed")
+        _rollback(conn)
+    warm_rollups(conn)
+
+
+def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None,
+               stop: threading.Event | None = None) -> None:
     conn = connect(cfg.db_path)
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
@@ -226,37 +420,43 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     if recovered:
         log.warning("Marked %s as failed", plural(recovered, "orphaned run"))
 
-    stop = threading.Event()
-    if not once:
-        # Finish the current run on "docker stop" rather than leave it half done.
+    stop = stop or threading.Event()
+    liveness = Liveness()
+    if once:
+        # Tests and one-off use: housekeeping, then drain the queue in this thread.
+        _housekeeping(app, conn, vault, cfg)
+        _daily(conn, cfg)
+        while (run := _claim(conn)) is not None:
+            _execute(conn, run, graph_factory, exchange_factory, alerting, liveness)
+        return
+
+    if threading.current_thread() is threading.main_thread():
+        # Finish the current runs on "docker stop" rather than leave them half done.
         for sig in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sig, lambda *_: stop.set())
-        _heartbeat_thread(cfg.db_path, stop)
-    log.info("Worker started. Collecting on '%s' (%s); next slot %s", cfg.collect_cron, cfg.timezone,
+    heartbeat = _heartbeat_thread(cfg.db_path, stop, liveness)
+    log.info("Worker started with %s. Collecting on '%s' (%s); next slot %s",
+             plural(cfg.worker_concurrency, "collector thread"), cfg.collect_cron, cfg.timezone,
              schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat())
+    collectors = [_collector_thread(cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness)
+                  for n in range(cfg.worker_concurrency)]
 
-    last_tick = None  # tick on the first pass; monotonic() can be under 60s on a freshly booted host
-    last_prune_day = None
+    last_day = None
     while not stop.is_set():
-        if last_tick is None or time.monotonic() - last_tick >= 60:
-            last_tick = time.monotonic()
-            housekeeping(app, conn, vault, cfg)
-            today = datetime.now(UTC).date()
-            if today != last_prune_day:
-                try:
-                    prune(conn, cfg)
-                except sqlite3.Error:
-                    log.exception("Pruning old snapshots failed")
-                last_prune_day = today
-
-        run = store.claim_next_run(conn)
-        if run is not None:
-            log.info("Run %s: %s for tenant %s", run["id"], run["collector"], run["tenant_id"])
-            status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
-            alerts.after_run(conn, alerting, run["id"], status)
-            continue
-        if once:
-            break
-        stop.wait(2)
-    stop.set()
+        started = time.monotonic()
+        liveness.tick()
+        _housekeeping(app, conn, vault, cfg)
+        today = datetime.now(UTC).date()
+        if today != last_day:
+            _daily(conn, cfg)
+            last_day = today
+        liveness.tick()
+        stop.wait(max(IDLE_WAIT, TICK_EVERY - (time.monotonic() - started)))
+    for thread in collectors:
+        thread.join()
+    heartbeat.join(timeout=10)
+    try:
+        clear_heartbeat(conn)
+    except sqlite3.Error:
+        log.warning("Could not clear the worker heartbeat", exc_info=True)
     log.info("Worker stopped")
