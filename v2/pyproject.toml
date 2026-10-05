@@ -11,7 +11,8 @@ dependencies = [
     "PyJWT>=2.15.0",  # through msal
     "requests>=2.32.4",
     "urllib3>=2.8.0",  # through requests
-    "gunicorn>=23",
+    "gunicorn>=23; sys_platform != 'win32'",
+    "waitress>=3.0.2; sys_platform == 'win32'",  # `serve` on Windows, where gunicorn doesn't run
     "openpyxl>=3.1",
     "dnspython>=2.6",
     "segno>=1.6",

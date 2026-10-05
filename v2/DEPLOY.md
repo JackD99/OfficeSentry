@@ -191,3 +191,44 @@ the upgrade is lost.
 `docker compose down` stops everything and keeps your data. A collection in
 progress is given up to two minutes to finish. Never use `down -v` unless you
 mean to delete all data.
+
+## Running on Windows without Docker
+
+Docker is the supported way to run Office Sentry. A Windows server without
+Docker works too, with one difference: PDF buttons open a print-ready page
+(choose **Save as PDF** in the print window) and scheduled emails go out
+without PDF attachments, because WeasyPrint's Pango libraries aren't
+available on Windows.
+
+1. Install Python 3.12 from python.org, and copy the `v2` folder to the
+   server (say `C:\OfficeSentry\v2`).
+2. In PowerShell, in that folder:
+
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\pip install .
+   ```
+
+3. Set the settings from `.env.example` as system environment variables
+   (System Properties → Environment Variables), at least
+   `OFFICESENTRY_BASE_URL`, `OFFICESENTRY_TIMEZONE` and
+   `OFFICESENTRY_DATA_DIR` (say `C:\OfficeSentry\data`; only the service
+   account should be able to read it, since `secrets.json` lives there).
+4. Run two services that start at boot, for example with
+   [NSSM](https://nssm.cc/) or Task Scheduler ("At startup", "Run whether
+   user is logged on or not"):
+   - the portal: `C:\OfficeSentry\v2\.venv\Scripts\python.exe -m officesentry serve`
+     (waitress, on 127.0.0.1:8000)
+   - the worker: `C:\OfficeSentry\v2\.venv\Scripts\python.exe -m officesentry worker`
+5. Put HTTPS in front: IIS with URL Rewrite and Application Request Routing,
+   or Caddy for Windows, forwarding to `http://127.0.0.1:8000`, and set
+   `OFFICESENTRY_TRUSTED_PROXIES=1`.
+6. Create the first admin from the link that
+   `.venv\Scripts\python.exe -m officesentry setup-link` prints.
+7. Back up with a scheduled task running
+   `python.exe -m officesentry backup --dir D:\OfficeSentryBackups` (a
+   different disk from the data), and keep a copy of `secrets.json`
+   elsewhere. Restoring works as above: stop both services, run
+   `python -m officesentry restore <file>`, start them. To update, stop both
+   services, replace the `v2` folder, run `.venv\Scripts\pip install .` again
+   and start them.

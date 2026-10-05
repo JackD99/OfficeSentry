@@ -353,13 +353,19 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 python -m officesentry worker                                 # second terminal
 ```
 
-On Windows, use `.venv\Scripts\activate` and `set OFFICESENTRY_INSECURE_COOKIES=1`.
-Everything works natively. One-click PDF files come from WeasyPrint, which
-needs the Pango libraries (Docker includes them; WeasyPrint can't install them
-on Windows by itself). Without Pango, every PDF button opens the same report
-as a print-ready page instead and the browser's print window comes up: choose
-**Save as PDF** as the printer to get the same layout. Scheduled emails can
-only attach PDFs when WeasyPrint works.
+`pytest -n auto` runs the tests on every core. `web` is Werkzeug's
+development server; `python -m officesentry serve` runs the portal on a
+production server (gunicorn, or waitress on Windows).
+
+**Windows without Docker** works for development and for a small
+production install (see "Running on Windows without Docker" in
+[DEPLOY.md](DEPLOY.md)): use `.venv\Scripts\activate` and
+`set OFFICESENTRY_INSECURE_COOKIES=1`, and `serve` instead of gunicorn. What
+differs is PDF files: WeasyPrint needs the Pango libraries, which Docker
+includes and Windows doesn't have. Without Pango, every PDF button opens the
+same report as a print-ready page and the browser's print window comes up:
+choose **Save as PDF** as the printer to get the same layout. Scheduled
+emails can only attach PDFs when WeasyPrint works.
 
 Tests mock Microsoft Graph at the HTTP layer (`responses`), not the client
 class, so URL and paging bugs are caught.

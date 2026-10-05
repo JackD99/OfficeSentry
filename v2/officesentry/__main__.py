@@ -25,6 +25,12 @@ def cmd_web(args, cfg):
     create_app(cfg).run(host=args.host, port=args.port, debug=False)
 
 
+def cmd_serve(args, cfg):
+    from .serve import serve
+
+    serve(cfg, host=args.host, port=args.port, threads=args.threads)
+
+
 def cmd_worker(args, cfg):
     from .worker import run_worker
 
@@ -257,6 +263,13 @@ def main(argv=None):
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=8000)
     web.set_defaults(func=cmd_web)
+
+    serve = sub.add_parser("serve", help="run the web portal on a production server (waitress on Windows, "
+                                         "gunicorn elsewhere), for running without Docker")
+    serve.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this machine only)")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--threads", type=int, default=8, help="requests handled at once")
+    serve.set_defaults(func=cmd_serve)
 
     worker = sub.add_parser("worker", help="run collections, the schedule, emailed reports and retention")
     worker.add_argument("--once", action="store_true", help="drain the queue and exit")

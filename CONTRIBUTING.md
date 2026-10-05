@@ -16,17 +16,27 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 python -m officesentry worker                                 # second terminal
 ```
 
-PDF export needs the Pango libraries (WeasyPrint). On Windows, use Docker.
+Use a virtual environment as above: on Debian or Ubuntu, installing into the
+system Python fails on the apt-installed `blinker` (if you must, add
+`--ignore-installed blinker`).
+
+PDF export needs the Pango libraries (WeasyPrint); on Debian or Ubuntu,
+`apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0`. On
+Windows everything else works natively (`.venv\Scripts\activate`), and PDF
+buttons open a print-ready page instead; use Docker if you're working on PDF
+layout. Tests that need real PDF rendering skip themselves without Pango.
 
 ## Before opening a pull request
 
 ```bash
 cd v2
 ruff check .
-pytest
+pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
 
-CI runs the same two commands on every push and pull request.
+CI runs the same on Python 3.11 and 3.12 for every pull request and push to
+main, plus a subset on Windows, a Docker image build and a dependency audit
+(`pip-audit`).
 
 - Keep changes small and finished end to end; update `v2/CLAUDE.md` and
   `v2/README.md` in the same pull request when behaviour changes.

@@ -57,6 +57,27 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: pytest -n auto
 
+  windows:
+    # Windows without Docker: no Pango, so PDF buttons fall back to print-ready pages and the tests that
+    # need real PDF rendering skip themselves. The files below cover the parts that differ on Windows
+    # (file modes, paths, SQLite files, the waitress server). Not required until it has a run of passes.
+    name: test (Windows, no Pango)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: v2/pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: >-
+          pytest -n auto tests/test_foundation.py tests/test_access.py tests/test_login_security.py
+          tests/test_scheduling.py tests/test_backups.py tests/test_serve.py tests/test_recording.py
+          tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
+
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 20

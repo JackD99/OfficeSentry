@@ -230,6 +230,7 @@ and `python -m officesentry <command>`:
 | Command | What it does |
 |---|---|
 | `web` | the portal on Werkzeug's server, for development (Docker runs gunicorn) |
+| `serve` | the portal on a production server without Docker: waitress on Windows, gunicorn elsewhere |
 | `worker [--once]` | collections, the schedule, emailed reports and retention |
 | `migrate` | apply database upgrades now (the portal and worker also do it on start) |
 | `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
