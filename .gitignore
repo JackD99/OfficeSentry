@@ -28,3 +28,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Example exports made from fictional demo data (v2/scripts/screenshots.py)
+!examples/*.xlsx
