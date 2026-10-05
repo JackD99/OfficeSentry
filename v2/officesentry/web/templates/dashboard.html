@@ -32,9 +32,9 @@
 <div class="tiles">
   <div class="tile"><div class="label">Tenants</div><div class="value">{{ rows|length }}</div>
     <div class="foot">{{ summary.up_to_date }} up to date{% if summary.data_issues %}, <span class="warn-text">{{ summary.data_issues }} with data problems</span>{% endif %}</div></div>
-  <div class="tile"><div class="label">Need urgent attention</div><div class="value">{{ summary.urgent }}</div>
+  <div class="tile{{ ' tone-warn' if summary.urgent }}"><div class="label">Need urgent attention</div><div class="value">{{ summary.urgent }}</div>
     <div class="foot">with critical or high findings</div></div>
-  <div class="tile"><div class="label">Critical and high findings</div>
+  <div class="tile{{ ' tone-bad' if summary.severe }}"><div class="label">Critical and high findings</div>
     <div class="value">{{ summary.severe }}</div>
     <div class="foot">across all tenants</div></div>
   <div class="tile"><div class="label">Average Secure Score</div>
@@ -57,7 +57,7 @@
     {% for row in rows %}{% set t = row.tenant %}
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
       <td><a class="strong" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
-      <td data-label="Open findings">{{ sev_counts(row.counts) }}</td>
+      <td data-label="Open findings">{% if t.consented_at %}{{ sev_counts(row.counts) }}{% else %}<span class="faint">–</span>{% endif %}</td>
       <td class="num" data-label="Secure Score">{{ kpi(row, 'secure_score.pct', '%') }}</td>
       <td class="num" data-label="Users with MFA">{{ kpi(row, 'mfa.registered_pct', '%') }}</td>
       <td class="num" data-label="Licence waste / mo">{{ kpi(row, 'waste', 'money') }}</td>

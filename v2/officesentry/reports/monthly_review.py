@@ -6,11 +6,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import hashlib
+import json
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from functools import cache
+from pathlib import Path
 
 from ..changes import Change, all_changes
 from ..collectors import REGISTRY
+from ..db import utcnow
 from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
@@ -205,8 +210,35 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
     )
 
 
-def rollup_row(conn, tenant, now: datetime | None = None) -> dict:
-    """One row of the cross-tenant overview."""
+def rollup_row(conn, tenant, now: datetime | None = None, cached: bool = False) -> dict:
+    """One row of the cross-tenant overview.
+
+    ``cached`` (live pages only, so ``now`` is the present) reuses the row in
+    ``rollup_cache`` while nothing it was built from has changed (see
+    ``_fingerprint``) and stores it when something has. Data freshness is
+    always worked out now.
+    """
+    if not cached:
+        return _rollup_row(conn, tenant, now)
+    fingerprint = _fingerprint(conn, tenant, datetime.now(UTC))
+    hit = conn.execute("SELECT fingerprint, data FROM rollup_cache WHERE tenant_id = ?", (tenant["id"],)).fetchone()
+    if hit and hit["fingerprint"] == fingerprint:
+        data = json.loads(hit["data"])
+    else:
+        row = _rollup_row(conn, tenant)
+        data = {k: v for k, v in row.items() if k not in ("tenant", "stale_data")}
+        data["kpis"] = [asdict(k) for k in row["kpis"].values()]
+        conn.execute("INSERT INTO rollup_cache (tenant_id, fingerprint, data, built_at) VALUES (?, ?, ?, ?)"
+                     " ON CONFLICT(tenant_id) DO UPDATE SET fingerprint = excluded.fingerprint,"
+                     " data = excluded.data, built_at = excluded.built_at",
+                     (tenant["id"], fingerprint, json.dumps(data), utcnow()))
+        return row
+    kpis = [Kpi(**k) for k in data.pop("kpis")]
+    return {**data, "tenant": dict(tenant), "kpis": {k.key: k for k in kpis},
+            "stale_data": _stale(conn, tenant["id"], datetime.now(UTC))}
+
+
+def _rollup_row(conn, tenant, now: datetime | None = None) -> dict:
     report = build(conn, tenant, now)
     return {
         "tenant": report.tenant,
@@ -219,3 +251,46 @@ def rollup_row(conn, tenant, now: datetime | None = None) -> dict:
         "unavailable": len(report.unavailable),
         "stale_data": any(f.stale for f in report.freshness),
     }
+
+
+@cache
+def _code_version() -> str:
+    """A hash of Office Sentry's code, so an upgrade (new checks, say) rebuilds every cached rollup row."""
+    digest = hashlib.sha256()
+    for path in sorted(Path(__file__).resolve().parents[1].rglob("*.py")):
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def _fingerprint(conn, tenant, now: datetime) -> str:
+    """What a tenant's rollup row is built from, cheaply: when this changes, the row is rebuilt.
+
+    The tenant's latest run (its snapshots and metrics) and licence flags, its
+    findings (including accepted risks), licence prices, currency and app
+    connections, the code, and the day (what counts as "new" and the 4-week
+    comparison move daily).
+    """
+    run = conn.execute("SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL"
+                       " ORDER BY finished_at DESC, id DESC LIMIT 1", (tenant["id"],)).fetchone()
+    findings = conn.execute(
+        "SELECT COUNT(*), MAX(last_seen), MAX(resolved_at), MAX(reopened_at), COUNT(accepted_at),"
+        " MAX(accepted_at), MAX(accepted_until) FROM findings WHERE tenant_id = ?", (tenant["id"],)).fetchone()
+    prices = conn.execute("SELECT COUNT(*), MAX(updated_at), TOTAL(monthly_price) FROM sku_prices").fetchone()
+    apps = conn.execute("SELECT GROUP_CONCAT(client_id) FROM app_connections").fetchone()[0]
+    return json.dumps([_code_version(), now.date().isoformat(), list(run or ()), tenant["capabilities"], list(findings),
+                       list(prices), setting(conn, "currency", "GBP"), apps])
+
+
+def _stale(conn, tenant_id: int, now: datetime) -> bool:
+    """True when a data source has never succeeded or last did longer than ``STALE_AFTER`` ago."""
+    keys = list(REGISTRY)
+    # One MAX per collector and status, each a single index lookup (idx_runs_latest).
+    rows = conn.execute(
+        f"WITH c(key) AS (VALUES {','.join(f'(:k{i})' for i in range(len(keys)))})"
+        " SELECT MAX(IFNULL((SELECT MAX(finished_at) FROM runs WHERE tenant_id = :t AND collector = c.key"
+        "                    AND status = 'succeeded'), ''),"
+        "            IFNULL((SELECT MAX(finished_at) FROM runs WHERE tenant_id = :t AND collector = c.key"
+        "                    AND status = 'partial'), '')) AS at FROM c",
+        {**{f"k{i}": k for i, k in enumerate(keys)}, "t": tenant_id}).fetchall()
+    cutoff = (now - STALE_AFTER).strftime(ISO)
+    return any(not r["at"] or r["at"] < cutoff for r in rows)

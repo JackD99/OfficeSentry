@@ -87,6 +87,11 @@ their own address.
 | `OFFICESENTRY_COLLECT_CRON` | `0 2 * * *` | When every tenant is collected, as cron (minute hour day month weekday). The default is 02:00 every night. |
 | `OFFICESENTRY_TIMEZONE` | `UTC` | The timezone for the collection time and for emailed reports. |
 | `OFFICESENTRY_MAX_AGE_HOURS` | `12` | A collection is skipped if it already ran this recently (say, by hand that evening). Before a scheduled email goes out, anything older than this is collected again first, so the report is fresh. |
+| `OFFICESENTRY_WORKER_CONCURRENCY` | `4` | How many tenants are collected at once. Each tenant still runs one data source at a time. With many tenants, raise it (8 suits about 200) so the night's collection finishes before morning. |
+
+"Run now", a tenant's first collection and the refresh before an emailed
+report go ahead of the nightly queue, so they don't wait for every tenant to
+be collected.
 
 Some cron examples: `0 2 * * *` nightly at 02:00, `0 2 * * 1-5` weeknights
 only, `30 1,13 * * *` twice a day at 01:30 and 13:30.
@@ -101,7 +106,8 @@ for each tenant and data source:
 - the last run of each of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`).
 
 Older snapshots are cleared once a day. Run pages for cleared snapshots still
-show their log and numbers.
+show their numbers. Run logs older than 90 days keep only their warnings and
+errors, so a page still says why an old run failed or was partial.
 
 The **activity log** (*Settings → Activity log*, admins only) records sign-ins
 and every change, with the address it came from; filter it by user, action,

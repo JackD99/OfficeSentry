@@ -276,11 +276,14 @@ def test_a_stuck_main_loop_stops_the_heartbeat(db):
     assert not worker.is_alive(db)
     live.tick()
     assert worker.heartbeat_step(db, live)
-    # A long collection is progress, up to a ceiling.
+    # A long collection is progress, up to a ceiling, while the main loop keeps coming round.
     live.start_run(7)
-    now[0] += worker.LOOP_STALE.total_seconds() * 3
+    for _ in range(3):
+        now[0] += worker.LOOP_STALE.total_seconds()
+        live.tick()
     assert live.problem() is None
     now[0] += worker.RUN_STALE.total_seconds()
+    live.tick()
     assert "run 7" in live.problem()
     live.end_run()
     assert live.problem() is None
