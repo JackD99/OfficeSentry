@@ -1,9 +1,10 @@
-"""MSP branding for client-facing reports: company name, logo, accent colour and contact line.
+"""MSP branding: company name, logo, accent colour, contact details and report footer.
 
-Stored in the ``settings`` table. Report templates get a ``Brand`` as ``brand``
-(see ``web/branding.py``); it supplies the CSS variables that colour the cover,
-headings and charts, worked out here so the accent stays readable whatever
-colour the MSP picks.
+Stored in the ``settings`` table. Templates get a ``Brand`` as ``brand`` (see
+``web/branding.py``): client-facing reports, the portal shell and the sign-in
+pages. It supplies the CSS variables that colour report covers, headings and
+charts and the branded parts of the portal, worked out here so the accent
+stays readable whatever colour the MSP picks.
 """
 
 from __future__ import annotations
@@ -16,7 +17,9 @@ from hashlib import sha256
 DEFAULT_NAME = "Office Sentry"
 DEFAULT_ACCENT = "#2557d6"
 MAX_LOGO_BYTES = 512 * 1024
-KEYS = ("brand_name", "brand_logo", "brand_accent", "brand_contact")
+KEYS = ("brand_name", "brand_logo", "brand_accent", "brand_contact", "brand_support_name",
+        "brand_support_email", "brand_support_phone", "brand_report_footer")
+MAX_FOOTER = 400
 HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 LOGO_TYPES = {b"\x89PNG\r\n\x1a\n": "image/png", b"\xff\xd8\xff": "image/jpeg"}
 
@@ -75,6 +78,15 @@ class Brand:
     logo: str = ""  # data: URI (PNG or JPEG), or ""
     accent: str = DEFAULT_ACCENT
     contact: str = ""
+    # Who clients should contact, shown on their portal home page.
+    support_name: str = ""
+    support_email: str = ""
+    support_phone: str = ""
+    report_footer: str = ""  # a note or disclaimer printed at the end of every client report
+
+    @property
+    def has_support(self) -> bool:
+        return bool(self.support_name or self.support_email or self.support_phone)
 
     @property
     def display_name(self) -> str:
@@ -103,7 +115,7 @@ class Brand:
             ":root{"
             f"--brand:{self.accent};--brand-ink:{light_ink};--on-brand:{self.on_accent};"
             f"--brand-soft:{mix(self.accent, '#ffffff', 0.92)};--brand-line:{mix(self.accent, '#ffffff', 0.7)};"
-            f"--brand-cover-2:{mix(self.accent, '#000000', 0.25)};"
+            f"--brand-cover-2:{mix(self.accent, '#000000', 0.25)};--brand-ink-dark:{dark_ink};"
             "}"
             "@media (prefers-color-scheme: dark){body.report:not(.pdf){"
             f"--brand-ink:{dark_ink};--brand-soft:{mix(self.accent, '#181e27', 0.82)};"
@@ -159,6 +171,10 @@ def load(conn) -> Brand:
         logo=rows.get("brand_logo") or "",
         accent=accent if HEX_RE.match(accent) else DEFAULT_ACCENT,
         contact=rows.get("brand_contact") or "",
+        support_name=rows.get("brand_support_name") or "",
+        support_email=rows.get("brand_support_email") or "",
+        support_phone=rows.get("brand_support_phone") or "",
+        report_footer=rows.get("brand_report_footer") or "",
     )
 
 

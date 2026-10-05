@@ -57,6 +57,7 @@
 <div class="content">
 {% block body %}{% endblock %}
 </div>
+{% if brand.report_footer %}<footer class="report-footer">{{ brand.report_footer }}</footer>{% endif %}
 </article>
 {% if print_view %}<script src="{{ url_for('static', filename='print.js') }}" nonce="{{ csp_nonce }}"></script>{% endif %}
 </body>

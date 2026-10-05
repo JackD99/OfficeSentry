@@ -33,7 +33,7 @@ SETTINGS_PAGES = (  # what the library's search finds besides reports and tenant
     ("reports.prices", "Licence prices", "cost money currency sku"),
     ("email.settings", "Email delivery", "smtp mail send graph"),
     ("alerts.settings", "Alerts", "teams slack webhook notifications"),
-    ("branding.settings", "Report branding", "logo colours msp name"),
+    ("branding.settings", "Branding", "logo colours msp name report footer support contact favicon"),
     ("admin.users", "Users", "people access roles accounts sign-in"),
 )
 

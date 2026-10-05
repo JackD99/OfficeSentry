@@ -229,6 +229,10 @@ body.report .about h2 { border: 0; font-size: .95rem; margin: 0 0 6px; padding: 
 .about table { font-size: .95em; }
 .about td { padding: 3px 0; border: 0; }
 .about td:first-child { width: 45%; }
+/* The MSP's own note or disclaimer (Branding page), at the end of every report. */
+.report-footer { margin: 0 48px 32px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: .8em; white-space: pre-line; }
+@media (max-width: 720px) { .report-footer { margin: 0 18px 24px; } }
+body.pdf .report-footer { margin: 24px 0 0; break-inside: avoid; }
 
 /* -- Document reports (detail, all tenants, what changed) -------------------- */
 .lede { color: var(--text-2); font-size: 1.02em; margin: 18px 0 16px; }
