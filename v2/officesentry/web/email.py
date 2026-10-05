@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
-from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import alerts, delivery, mailer, store
+from .. import alerts, delivery, issued, mailer, store
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
 from ..reports.data_reports import grouped as report_groups
@@ -126,6 +126,25 @@ def tenant_emails(tenant_id: int):
         upcoming=upcoming[0] if upcoming else None, failing=failing, mail_ready=mailer.is_configured(settings),
         sent_30=g.db.execute("SELECT COUNT(*) FROM email_deliveries WHERE tenant_id = ? AND status = 'sent'"
                              " AND created_at >= ?", (t["id"], _days_ago(30))).fetchone()[0])
+
+
+@bp.get("/tenants/<int:tenant_id>/report-history")
+@login_required
+def report_history(tenant_id: int):
+    """Every report file emailed for this tenant, as it was sent. Clients don't see who it went to."""
+    t = tenant_or_404(tenant_id)
+    return render_template("report_history.html", tenant=t, staff=_is_staff(), sends=issued.history(g.db, t["id"]))
+
+
+@bp.get("/tenants/<int:tenant_id>/report-history/<int:report_id>")
+@login_required
+def issued_report(tenant_id: int, report_id: int):
+    t = tenant_or_404(tenant_id)
+    r = issued.get(g.db, t["id"], report_id)
+    if r is None:
+        abort(404)
+    return Response(bytes(r["data"]), mimetype=r["content_type"],
+                    headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'})
 
 
 def _days_ago(days: int) -> str:

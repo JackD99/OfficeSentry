@@ -26,6 +26,8 @@
       <span class="title">Findings {{ icon('arrow') }}</span><span class="desc">Every account and setting the checks flagged.</span></a>
     <a class="report-link" href="{{ url_for('reports.data_index', tenant_id=t.id) }}">
       <span class="title">Detail reports {{ icon('arrow') }}</span><span class="desc">{{ report_groups|map(attribute='title')|join(', ') }}.</span></a>
+    <a class="report-link" href="{{ url_for('email.report_history', tenant_id=t.id) }}">
+      <span class="title">Report history {{ icon('arrow') }}</span><span class="desc">Every report emailed to you, exactly as it was sent.</span></a>
   </div>
   {% if row.stale_data %}<p class="footnote warn-text">Some of this data is more than a day old.</p>{% endif %}
 </section>

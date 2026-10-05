@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, tenant_header with context %}
+{% block title %}Report history · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'schedules', title='Report history') }}
+
+<section class="card flush">
+  <div class="card-head toolbar">
+    <h2>Reports sent</h2>
+    <a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}">{{ 'Scheduled emails' if staff else 'Emailed reports' }}</a>
+  </div>
+  {% if sends %}
+  <p class="intro small muted">A copy of every report file as it was emailed{% if staff %}, kept for good{% endif %}. Reports on the other tabs show today's data.</p>
+  <table class="stack-sm issued-reports">
+    <thead><tr><th>Period</th><th>Files</th>{% if staff %}<th>To</th>{% endif %}<th>Sent</th></tr></thead>
+    <tbody>
+    {% for s in sends %}
+    <tr>
+      <td class="wrap"><span class="strong">{{ s.period_label or 'Sent by hand' }}</span>
+        <span class="sub">{{ s.titles|join(' + ') }}{% if s.version > 1 %} · sent again (version {{ s.version }}){% endif %}</span></td>
+      <td data-label="Files" class="wrap">{% for f in s.files %}
+        <a href="{{ url_for('email.issued_report', tenant_id=tenant.id, report_id=f.id) }}" title="{{ f.filename }}{% if staff %} · SHA-256 {{ f.sha256 }}{% endif %}">{{ icon('download') }} {{ f.title }} ({{ f.format }}, {{ f.size_label }})</a>{% if not loop.last %}<br>{% endif %}
+      {% endfor %}</td>
+      {% if staff %}<td data-label="To" class="wrap small">{{ s.recipients }}{% if s.bcc %}<span class="sub">Hidden copy: {{ s.bcc }}</span>{% endif %}</td>{% endif %}
+      <td data-label="Sent" class="nowrap">{{ ts(s.issued_at) }}{% if staff %}<span class="sub">{% if s.trigger == 'schedule' %}On schedule{% else %}By {{ s.issued_by or 'someone' }}{% endif %}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty compact"><p>No reports have been emailed{% if not staff %} to your team{% endif %} yet. Each one sent from now on is kept here, exactly as it went out.</p></div>
+  {% endif %}
+</section>
+{% endblock %}
