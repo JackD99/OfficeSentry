@@ -16,12 +16,12 @@ import time
 import traceback
 from datetime import UTC, datetime, timedelta
 
-from . import alerts, findings, lifecycle, schedule, store
+from . import alerts, findings, lifecycle, schedule, store, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
 from .crypto import Vault
-from .db import connect, migrate, utcnow
+from .db import connect, migrate, prune_audit, utcnow
 from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError, LicenseRequired, PermissionMissing
 from .text import plural
@@ -268,6 +268,9 @@ def prune(conn, cfg: Config) -> int:
     removed = store.prune_snapshots(conn, cfg.keep_daily, cfg.keep_monthly, cfg.timezone)
     if removed:
         log.info("Retention: removed the stored objects of %s", plural(removed, "older run"))
+    throttle.prune(conn)
+    if noise := prune_audit(conn):
+        log.info("Retention: removed %s", plural(noise, "old failed sign-in record"))
     return removed
 
 

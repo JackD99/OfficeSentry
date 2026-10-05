@@ -369,6 +369,40 @@ def test_private_webhooks_can_be_allowed(monkeypatch):
     assert len(responses.calls) == 1
 
 
+def _record_connections(monkeypatch) -> list:
+    """Stop real connections and record where they would have gone."""
+    import urllib3.util.connection
+
+    for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.delenv(var, raising=False)
+    targets = []
+
+    def connect(address, *args, **kwargs):
+        targets.append(address)
+        raise OSError("not in tests")
+    monkeypatch.setattr(urllib3.util.connection, "create_connection", connect)
+    return targets
+
+
+def test_webhook_connects_to_the_address_it_checked(monkeypatch):
+    # DNS rebinding: public when checked, internal a moment later when the request connects.
+    answers = iter([PUBLIC_IP] + ["127.0.0.1"] * 10)
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, *a, **k: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", (next(answers), port))])
+    targets = _record_connections(monkeypatch)
+    with pytest.raises(alerts.AlertError, match="Couldn't connect"):
+        alerts.post(HOOK, {"x": 1})
+    assert targets and all(t == (PUBLIC_IP, 443) for t in targets)
+
+
+def test_pinned_connection_keeps_the_name_for_tls():
+    from officesentry import outbound
+
+    request = requests.Request("POST", HOOK).prepare()
+    host, pool = outbound.PinnedAdapter(PUBLIC_IP).build_connection_pool_key_attributes(request, True)
+    assert host["host"] == PUBLIC_IP and pool["server_hostname"] == pool["assert_hostname"] == "hooks.example.com"
+
+
 @responses.activate
 def test_unresolvable_host(monkeypatch):
     def fail(*a, **k):

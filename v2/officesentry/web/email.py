@@ -612,12 +612,20 @@ def settings():
                 return redirect(url_for("email.settings"))
             values |= {"smtp_host": host, "smtp_port": str(port), "smtp_security": security,
                        "smtp_user": request.form.get("smtp_user", "").strip(), "smtp_from": sender}
+            if security == "none" and values["smtp_user"] and not mailer.is_loopback(host):
+                flash("With no encryption the password would be sent unencrypted, so Office Sentry won't sign in "
+                      "that way. Choose STARTTLS or SSL/TLS, or leave the username empty for an internal relay "
+                      "that doesn't need a sign-in.", "error")
+                return redirect(url_for("email.settings"))
             password = request.form.get("smtp_password", "")
-            # A changed host must not receive the stored password: require it again.
+            # The stored password only goes to the server, port and security it was entered for.
+            same_server = (current.get("smtp_host"), current.get("smtp_port"), current.get("smtp_security")) == (
+                host, str(port), security)
             if password:
                 values["smtp_password_enc"] = vault.encrypt(password)
-            elif current.get("smtp_host") and current["smtp_host"] != host:
+            elif current.get("smtp_password_enc") and not same_server:
                 values["smtp_password_enc"] = ""
+                flash("The server, port or security changed, so enter the password again.", "warning")
         else:
             tenant = request.form.get("graph_tenant", "").strip().lower()
             client_id = request.form.get("graph_client_id", "").strip().lower()

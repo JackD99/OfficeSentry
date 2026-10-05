@@ -11,7 +11,7 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -26,6 +26,9 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
+    # Zero deleted content when it costs no extra I/O (pruned snapshots, removed people);
+    # tenant deletion turns it fully on (lifecycle.delete_tenant).
+    conn.execute("PRAGMA secure_delete = FAST")
     return conn
 
 
@@ -133,9 +136,49 @@ def migrate(conn: sqlite3.Connection) -> int:
     return current
 
 
+def _request_ip() -> str | None:
+    """The portal visitor's address when called during a web request, else None (CLI, worker)."""
+    try:
+        from flask import has_request_context, request
+    except ImportError:  # pragma: no cover
+        return None
+    if not has_request_context():
+        return None
+    return (request.remote_addr or "")[:64] or None
+
+
 def audit(conn: sqlite3.Connection, username: str | None, action: str,
           tenant_id: int | None = None, detail: str = "") -> None:
     conn.execute(
-        "INSERT INTO audit_log (ts, username, action, tenant_id, detail) VALUES (?, ?, ?, ?, ?)",
-        (utcnow(), username, action, tenant_id, detail),
+        "INSERT INTO audit_log (ts, username, action, tenant_id, detail, ip) VALUES (?, ?, ?, ?, ?, ?)",
+        (utcnow(), username, action, tenant_id, detail, _request_ip()),
     )
+
+
+# Sign-in noise: kept for AUDIT_NOISE_DAYS, then pruned by the worker. Everything else is kept.
+AUDIT_NOISE = ("login_failed", "login_failed_unknown", "login_throttled", "login_code_failed",
+               "two_step_setup_failed", "consent_link_refused")
+AUDIT_NOISE_DAYS = 90
+COUNTED_WINDOW_MINUTES = 60
+
+
+def audit_counted(conn: sqlite3.Connection, action: str, ip: str, username: str | None = None) -> None:
+    """Record repeated, anonymous events (failed sign-ins with unknown names, throttled attempts) as one row per
+    address, name and hour with a count, so they can't flood the log or store what strangers typed."""
+    since = (datetime.now(UTC) - timedelta(minutes=COUNTED_WINDOW_MINUTES)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    row = conn.execute(
+        "SELECT id, detail FROM audit_log WHERE action = ? AND ip = ? AND username IS ? AND ts >= ?"
+        " ORDER BY id DESC LIMIT 1", (action, ip, username, since)).fetchone()
+    if row is None:
+        conn.execute("INSERT INTO audit_log (ts, username, action, detail, ip) VALUES (?, ?, ?, '1 attempt', ?)",
+                      (utcnow(), username, action, ip))
+        return
+    count = int((row["detail"] or "1").split(" ", 1)[0] or 1) + 1
+    conn.execute("UPDATE audit_log SET detail = ? WHERE id = ?", (f"{count} attempts", row["id"]))
+
+
+def prune_audit(conn: sqlite3.Connection, now: datetime | None = None) -> int:
+    """Drop sign-in noise older than AUDIT_NOISE_DAYS. Who changed what is kept for good."""
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=AUDIT_NOISE_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return conn.execute(f"DELETE FROM audit_log WHERE ts < ? AND action IN ({','.join('?' * len(AUDIT_NOISE))})",
+                        (cutoff, *AUDIT_NOISE)).rowcount

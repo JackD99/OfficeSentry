@@ -98,13 +98,12 @@ def test_successful_collection_records_consent(db, two_tenants):
 
 
 def test_consent_callback_error_is_explained(client, db, two_tenants):
-    from officesentry.web.tenants import _consent_serializer
+    from tests.test_onboarding import _consent_state
 
     alpha, _ = two_tenants
     make_user(db, "admin")
     login(client, "admin")
-    with client.application.test_request_context():
-        state = _consent_serializer().dumps({"t": alpha})
+    state = _consent_state(client, alpha)["state"][0]
     page = client.get("/consent/callback", query_string={
         "state": state, "error": "invalid_request",
         "error_description": "AADSTS50011: The redirect URI 'x' specified in the request does not match"},

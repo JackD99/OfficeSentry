@@ -6,13 +6,11 @@ tied to a tenant: the same view opens on every tenant the person can see.
 
 from __future__ import annotations
 
-from urllib.parse import urlsplit
-
 from flask import Blueprint, abort, flash, g, redirect, request, url_for
 
 from ..db import transaction, utcnow
 from ..reports import data_reports, views
-from .access import login_required, tenant_or_404
+from .access import login_required, safe_next, tenant_or_404
 
 bp = Blueprint("views", __name__)
 
@@ -20,10 +18,8 @@ MAX_VIEWS = 100  # per person
 
 
 def _back(default: str) -> str:
-    """Only ever redirect within the portal."""
-    target = request.form.get("next", "")
-    parts = urlsplit(target)
-    return target if target.startswith("/") and not target.startswith("//") and not parts.netloc else default
+    """Only ever redirect within the portal (the same check as after sign-in)."""
+    return safe_next(request.form.get("next"), default)
 
 
 @bp.post("/reports/<key>/views")

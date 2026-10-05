@@ -266,17 +266,30 @@ this command; the product signs in with a certificate.
 ## Sign-in security
 
 - **Two-step sign-in** (a 6-digit code from an authenticator app) is required
-  for admins and analysts and optional for client users. Change it with
-  `OFFICESENTRY_REQUIRE_MFA` (`staff`, `all` or `off`). Each user gets ten
+  for everyone on new installs, client accounts included. Installs set up
+  before October 2026 keep requiring it for admins and analysts only, so
+  nobody is surprised after an upgrade; *Settings → Users* shows the policy
+  and recommends extending it to clients. Set it with
+  `OFFICESENTRY_REQUIRE_MFA` (`all`, `staff` or `off`). Adding an
+  authenticator from the account page asks for the password, and a password
+  an admin set (new user or reset) has to be replaced at the next sign-in,
+  before two-step setup (or right after the code, for accounts that have it). Each user gets ten
   one-time recovery codes. An admin can reset someone's two-step sign-in from
   their user page if they lose their phone.
-- **Lockout:** five wrong passwords or codes lock the account for 15 minutes.
-  Admins can unlock it straight away from the user page.
+- **Sign-in limits by address, not account lockout:** wrong passwords slow
+  down the address they come from (5 per username or 20 in all per 15
+  minutes), and a spread-out attack on one account slows new addresses only,
+  so nobody can lock a person out from elsewhere. Five wrong two-step codes
+  (which need the password) lock that step for 15 minutes. Admins can clear
+  both from the user page. Details in [DEPLOY.md](DEPLOY.md#sign-in-protection).
 - **Sessions are stored on the server.** Signing out ends the session, so a
   copied cookie stops working. People can see where they're signed in and
   sign out other browsers on their **Account** page. Sessions end after 2 hours
   without activity or 8 hours in total, and when a password, role, access or
   two-step setting changes.
+- **Activity log:** admins see sign-ins and every change, with the address,
+  under *Settings → Activity log* (filters, paging, CSV). Failed sign-ins are
+  kept for 90 days, the rest for good.
 - **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
   prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
   real client IP and scheme are used.
