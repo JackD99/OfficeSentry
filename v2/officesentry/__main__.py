@@ -24,10 +24,26 @@ def cmd_web(args, cfg):
     create_app(cfg).run(host=args.host, port=args.port, debug=False)
 
 
+def cmd_serve(args, cfg):
+    from .serve import serve
+
+    serve(cfg, host=args.host, port=args.port, threads=args.threads)
+
+
 def cmd_worker(args, cfg):
     from .worker import run_worker
 
     run_worker(cfg, once=args.once)
+
+
+def cmd_migrate(args, cfg):
+    """Apply database upgrades now. The portal and worker also do this when they start."""
+    from .db import schema_version
+
+    conn = connect(cfg.db_path)
+    before = schema_version(conn)
+    after = migrate(conn)
+    print(f"Database schema is at version {after}" + (f" (upgraded from {before})." if after != before else "."))
 
 
 def cmd_create_admin(args, cfg):
@@ -179,26 +195,45 @@ def cmd_healthcheck(args, cfg):
 
 def cmd_backup(args, cfg):
     """Write a consistent copy of the database, safe while the portal is running."""
-    import os
-    import sqlite3
-    from datetime import UTC, datetime
     from pathlib import Path
 
-    folder = Path(args.dir) if args.dir else cfg.data_dir / "backups"
-    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-    dest = folder / f"officesentry-{datetime.now(UTC):%Y%m%d-%H%M%S}.db"
-    src = connect(cfg.db_path)
-    out = sqlite3.connect(dest)
-    with out:
-        src.backup(out)
-    out.close()
-    os.chmod(dest, 0o600)
-    old = sorted(folder.glob("officesentry-*.db"))[:-args.keep] if args.keep else []
-    for path in old:
-        path.unlink()
+    from .backups import backup
+
+    dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
     print(f"Saved {dest}" + (f" (removed {plural(len(old), 'older backup')})" if old else ""))
     print("Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
           " without it the stored certificates can't be decrypted.")
+
+
+def cmd_restore(args, cfg):
+    """Replace the database with a backup. Stop the portal and the worker first."""
+    import sqlite3
+    from pathlib import Path
+
+    from .backups import RestoreError, restore
+    from .db import latest_version
+    from .worker import is_alive
+
+    running = False
+    if cfg.db_path.exists():
+        conn = connect(cfg.db_path)
+        try:
+            running = is_alive(conn)
+        except sqlite3.Error:  # an empty or unreadable database has no heartbeat
+            running = False
+        finally:
+            conn.close()
+    try:
+        result = restore(cfg.db_path, Path(args.file), worker_running=running, force=args.force)
+    except RestoreError as exc:
+        sys.exit(f"Not restored: {exc}")
+    if result["saved"]:
+        print(f"The database it replaced is saved as {result['saved']}.")
+    print(f"Restored {args.file} (database version {result['version']}).")
+    if result["version"] < latest_version():
+        print(f"It's upgraded to version {latest_version()} when the portal starts.")
+    print("Put back the secrets.json (or OFFICESENTRY_ENCRYPTION_KEYS) from the same time as the backup, "
+          "then start the portal and the worker.")
 
 
 def cmd_delete_tenant(args, cfg):
@@ -254,9 +289,19 @@ def main(argv=None):
     web.add_argument("--port", type=int, default=8000)
     web.set_defaults(func=cmd_web)
 
+    serve = sub.add_parser("serve", help="run the web portal on a production server (waitress on Windows, "
+                                         "gunicorn elsewhere), for running without Docker")
+    serve.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this machine only)")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--threads", type=int, default=8, help="requests handled at once")
+    serve.set_defaults(func=cmd_serve)
+
     worker = sub.add_parser("worker", help="run collections, the schedule, emailed reports and retention")
     worker.add_argument("--once", action="store_true", help="drain the queue and exit")
     worker.set_defaults(func=cmd_worker)
+
+    mig = sub.add_parser("migrate", help="apply database upgrades (the portal and worker also do this on start)")
+    mig.set_defaults(func=cmd_migrate)
 
     admin = sub.add_parser("create-admin", help="create an admin user")
     admin.add_argument("username")
@@ -284,6 +329,11 @@ def main(argv=None):
     backup.add_argument("--dir", help="folder for backups (default: <data dir>/backups)")
     backup.add_argument("--keep", type=int, default=7, help="how many backups to keep (0 = all)")
     backup.set_defaults(func=cmd_backup)
+
+    restore = sub.add_parser("restore", help="replace the database with a backup (stop the portal and worker first)")
+    restore.add_argument("file", help="the backup to restore, e.g. /data/backups/officesentry-20261005-033000.db")
+    restore.add_argument("--force", action="store_true", help="restore even if the worker seems to be running")
+    restore.set_defaults(func=cmd_restore)
 
     delete = sub.add_parser("delete-tenant", help="delete a client tenant and everything stored for it")
     delete.add_argument("tenant_id", type=int, help="the number in the tenant's address, /tenants/<id>")

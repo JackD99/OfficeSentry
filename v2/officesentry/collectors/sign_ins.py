@@ -7,6 +7,11 @@ per account and country, per country, per app, per failure reason and per
 address that failed, plus the risky sign-ins themselves when the tenant has
 Entra ID P2 (Identity Protection). Without P2 Microsoft hides sign-in risk.
 
+Microsoft's sign-in log can time out on busy tenants. When the one big query
+fails with a timeout or server error (after the Graph client's retries), the
+collector carries on from the oldest sign-in it already has, one day at a time,
+so the summary is the same as the big query would have given.
+
 Legacy-protocol sign-ins keep their own 30-day query in ``mail_usage.py``; this
 one covers every client for a shorter window, so the two don't share a fetch.
 """
@@ -17,7 +22,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from .. import signins
-from ..graph import LicenseRequired, PermissionMissing
+from ..graph import GraphError, LicenseRequired, PermissionMissing, is_transient
 from ..text import plural
 from .base import Collector, RunContext, register
 
@@ -25,6 +30,7 @@ PAGE_SIZE = 1000
 SIGNIN_PAGES = 50  # 50,000 sign-ins; the most recent come first
 FAILURE_IP_LIMIT = 200
 RISKY_LIMIT = 500
+FALLBACK_WINDOW = timedelta(days=1)
 
 
 def _text(value) -> str:
@@ -238,6 +244,85 @@ class Summary:
         return rows
 
 
+def _iso(value: datetime) -> str:
+    return value.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class Reader:
+    """Pages the sign-in log into a Summary, newest first, across one or more queries.
+
+    It remembers the oldest time seen and the sign-ins at exactly that time, so
+    a later query ending at that time (inclusive) neither misses nor
+    double-counts anything. ``pages`` counts across queries, so the cap holds.
+    """
+
+    def __init__(self, ctx: RunContext, summary: Summary):
+        self.ctx = ctx
+        self.summary = summary
+        self.pages = 0
+        self.truncated = False
+        self.oldest: str | None = None
+        self.at_oldest: set[str] = set()
+
+    def read(self, flt: str) -> None:
+        url: str | None = "/auditLogs/signIns"
+        params: dict | None = {"$filter": flt, "$top": str(PAGE_SIZE)}
+        while url:
+            if self.pages >= SIGNIN_PAGES:
+                self.truncated = True
+                return
+            data = self.ctx.graph.get(url, params, version="beta")
+            params = None
+            self.pages += 1
+            for s in data.get("value") or []:
+                self._add(s)
+            url = data.get("@odata.nextLink")
+
+    def _add(self, s) -> None:
+        when = _text(s.get("createdDateTime")) if isinstance(s, dict) else ""
+        sid = _text(s.get("id")) if isinstance(s, dict) else ""
+        if when and when == self.oldest:
+            if sid in self.at_oldest:
+                return
+            if sid:
+                self.at_oldest.add(sid)
+        elif when and (self.oldest is None or when < self.oldest):
+            self.oldest, self.at_oldest = when, ({sid} if sid else set())
+        self.summary.add(s)
+
+    def read_by_day(self, since: datetime, failure: GraphError) -> None:
+        """Read from the oldest sign-in so far back to ``since`` in one-day windows, newest first.
+
+        A window that still times out is skipped with a warning; if every one
+        does and nothing was read at all, the original failure is raised.
+        """
+        end, upper = datetime.now(UTC), ""
+        if self.oldest:
+            try:
+                end = datetime.fromisoformat(self.oldest.replace("Z", "+00:00"))
+                upper = f" and createdDateTime le {self.oldest}"
+            except ValueError:
+                pass
+        windows = failed = 0
+        while end > since and not self.truncated:
+            start = max(end - FALLBACK_WINDOW, since)
+            windows += 1
+            try:
+                self.read(f"createdDateTime ge {_iso(start)}{upper}")
+            except GraphError as exc:
+                if not is_transient(exc):
+                    raise
+                failed += 1
+                self.ctx.log(f"Sign-ins from {_iso(start)} to {_iso(end)} failed too: {exc}")
+            upper = f" and createdDateTime lt {_iso(start)}"
+            end = start
+        if failed and failed == windows and not self.pages:
+            raise failure
+        if failed:
+            self.ctx.warn(f"Microsoft's sign-in log timed out for {plural(failed, 'one-day window')}; "
+                          "those sign-ins are missing from the summary")
+
+
 @register
 class SignIns(Collector):
     key = "sign_ins"
@@ -251,28 +336,25 @@ class SignIns(Collector):
             ctx.log("Tenant has no Entra ID P1; the sign-in log isn't available")
             ctx.objects("sign_in_status", [("status", {"available": False, "reason": "licence"})])
             return
-        since = (datetime.now(UTC) - timedelta(days=signins.WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        start = (datetime.now(UTC) - timedelta(days=signins.WINDOW_DAYS)).replace(microsecond=0)
+        since = _iso(start)
         p2 = ctx.capabilities.get("entra_p2")
         summary = Summary(risk_visible=p2 is not False)
-        url: str | None = "/auditLogs/signIns"
-        params: dict | None = {"$filter": f"createdDateTime ge {since}", "$top": str(PAGE_SIZE)}
-        pages, truncated = 0, False
+        reader = Reader(ctx, summary)
         try:
-            while url:
-                if pages >= SIGNIN_PAGES:
-                    truncated = True
-                    break
-                data = ctx.graph.get(url, params, version="beta")
-                params = None
-                pages += 1
-                for s in data.get("value") or []:
-                    summary.add(s)
-                url = data.get("@odata.nextLink")
+            try:
+                reader.read(f"createdDateTime ge {since}")
+            except GraphError as exc:
+                if not is_transient(exc):
+                    raise
+                ctx.log(f"The sign-in log query failed ({exc}); reading it a day at a time instead")
+                reader.read_by_day(start, exc)
         except (LicenseRequired, PermissionMissing) as exc:
             ctx.warn(f"The sign-in log isn't available: {exc.message}")
             reason = "licence" if isinstance(exc, LicenseRequired) else "permission"
             ctx.objects("sign_in_status", [("status", {"available": False, "reason": reason})])
             return
+        truncated = reader.truncated
         if truncated:
             ctx.truncated = True
             ctx.warn(f"More than {SIGNIN_PAGES * PAGE_SIZE:,} sign-ins in {signins.WINDOW_DAYS} days; summarised "

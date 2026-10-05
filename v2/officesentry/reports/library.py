@@ -25,8 +25,8 @@ class Use:
 USES: tuple[Use, ...] = (
     Use("offboarding", "Offboarding check",
         "Someone has left: check their access is gone, their mail isn't forwarded and their licences come back.",
-        ("inactive", "licences", "mailboxes", "inbox-rules", "mailbox-permissions", "onedrive", "shared-files",
-         "admins", "devices", "groups", "deleted-items")),
+        ("inactive", "licences", "mailboxes", "inbox-rules", "mailbox-permissions", "mailbox-holds", "onedrive",
+         "shared-files", "admins", "devices", "groups", "deleted-items")),
     Use("quarterly", "Quarterly review",
         "What a client review meeting covers: the summary, what changed, and the trends behind it.",
         ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests")),
@@ -43,7 +43,8 @@ USES: tuple[Use, ...] = (
         ("guests", "shared-files", "sharepoint", "onedrive", "groups", "tenant-settings", "mailbox-permissions")),
     Use("storage", "Storage cleanup",
         "What's filling SharePoint, OneDrive and mailboxes, and what can go.",
-        ("sharepoint-storage", "sharepoint", "onedrive", "mailbox-size", "shared-mailboxes")),
+        ("sharepoint-storage", "sharepoint", "onedrive", "mailbox-size", "shared-mailboxes",
+         "mailbox-holds")),
     Use("licences", "Licence savings",
         "Paid licences nobody uses, people who could have a cheaper one, accounts that could be shared mailboxes, "
         "and people who've stopped signing in.",
@@ -84,6 +85,7 @@ KEYWORDS: dict[str, str] = {
     "mailbox-permissions": "full access send as delegates",
     "shared-mailboxes": "rooms equipment sign-in",
     "mailbox-size": "quota storage full large",
+    "mailbox-holds": "litigation hold archive retention ediscovery",
     "domains": "spf dkim dmarc dns mta-sts email authentication spoofing",
     "sharepoint": "sites storage sharing anyone links",
     "sharepoint-storage": "quota versions recycle bin large old files cleanup",

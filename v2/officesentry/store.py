@@ -58,35 +58,57 @@ def set_capabilities(conn, tenant_id: int, caps: dict) -> None:
 # -- Runs --------------------------------------------------------------------
 
 
+# Queue priorities: someone is waiting for these (1), or nobody is (0).
+PRIORITY_WAITING = 1
+PRIORITY_NIGHTLY = 0
+
+
 def enqueue_run(conn, tenant_id: int, collector: str, trigger: str = "manual",
-                requested_by: str | None = None, scheduled_for: str | None = None) -> int:
-    """Queue a run unless one for the same tenant+collector is already pending."""
+                requested_by: str | None = None, scheduled_for: str | None = None,
+                priority: int | None = None) -> int:
+    """Queue a run unless one for the same tenant+collector is already pending.
+
+    Manual runs default to ``PRIORITY_WAITING``, so "Run now" goes ahead of the
+    nightly backlog; asking again for a run already queued raises its priority.
+    """
+    if priority is None:
+        priority = PRIORITY_WAITING if trigger == "manual" else PRIORITY_NIGHTLY
     with transaction(conn, immediate=True):
         existing = conn.execute(
-            "SELECT id FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('queued', 'running')",
+            "SELECT id, status, priority FROM runs WHERE tenant_id = ? AND collector = ?"
+            " AND status IN ('queued', 'running')",
             (tenant_id, collector),
         ).fetchone()
         if existing:
+            if existing["status"] == "queued" and existing["priority"] < priority:
+                conn.execute("UPDATE runs SET priority = ? WHERE id = ?", (priority, existing["id"]))
             return existing["id"]
         cur = conn.execute(
             "INSERT INTO runs (tenant_id, collector, status, trigger, requested_by, scheduled_for,"
-            " created_at) VALUES (?, ?, 'queued', ?, ?, ?, ?)",
-            (tenant_id, collector, trigger, requested_by, scheduled_for, utcnow()),
+            " created_at, priority) VALUES (?, ?, 'queued', ?, ?, ?, ?, ?)",
+            (tenant_id, collector, trigger, requested_by, scheduled_for, utcnow(), priority),
         )
         return cur.lastrowid
 
 
 def claim_next_run(conn):
-    """Atomically move the oldest queued run to 'running' and return it.
+    """Atomically move the next queued run to 'running' and return it.
+
+    Highest priority first, then oldest. A tenant runs one collector at a time,
+    so parallel workers spread over tenants (Microsoft throttles per tenant)
+    and a tenant's findings are synced by one run at a time.
 
     Runs of paused or archived tenants stay queued (pausing removes them, so
     only a run queued in the same moment can be left) and are never claimed.
     """
     with transaction(conn, immediate=True):
+        # Nearly every run has finished, so the planner's statistics make status look unselective;
+        # INDEXED BY keeps this to the few queued and running rows rather than every run.
         row = conn.execute(
-            "SELECT r.id FROM runs r JOIN tenants t ON t.id = r.tenant_id"
+            "SELECT r.id FROM runs r INDEXED BY idx_runs_status CROSS JOIN tenants t ON t.id = r.tenant_id"
             " WHERE r.status = 'queued' AND t.enabled = 1 AND t.archived_at IS NULL"
-            " ORDER BY r.created_at, r.id LIMIT 1"
+            " AND r.tenant_id NOT IN (SELECT tenant_id FROM runs INDEXED BY idx_runs_status WHERE status = 'running')"
+            " ORDER BY r.priority DESC, r.created_at, r.id LIMIT 1"
         ).fetchone()
         if not row:
             return None
@@ -179,9 +201,12 @@ def snapshots_to_keep(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: st
     keep: set[int] = set()
     days: dict[tuple, list] = {}
     months: dict[tuple, list] = {}
+    # Runs already pruned can't be kept again, so they're skipped: after a year
+    # nearly every run has been pruned and reading them all took seconds.
     rows = conn.execute(
         "SELECT id, tenant_id, collector, finished_at FROM runs"
         " WHERE status IN ('succeeded', 'partial') AND finished_at IS NOT NULL"
+        " AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id)"
         " ORDER BY tenant_id, collector, finished_at DESC, id DESC"
     )
     for r in rows:
@@ -201,7 +226,8 @@ def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str 
                     grace_hours: int = 24, batch: int = 200) -> int:
     """Delete the objects of runs the retention policy doesn't keep. Returns runs pruned.
 
-    Metrics, findings, the run rows and their logs are never pruned. Runs that
+    Metrics, findings and the run rows are never pruned (run logs are, see
+    ``prune_run_logs``). Runs that
     finished within ``grace_hours`` are left alone, so today's extra runs stay
     inspectable until tomorrow. Deletes go in small batches so the portal
     stays responsive.
@@ -219,3 +245,33 @@ def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str 
             conn.execute(f"DELETE FROM objects WHERE run_id IN ({','.join('?' * len(chunk))})", chunk)
     return len(candidates)
 
+
+
+# Run log lines older than this are deleted, except warnings and errors.
+RUN_LOG_DAYS = 90
+RUN_LOG_WATERMARK = "run_log_pruned_to"
+
+
+def prune_run_logs(conn, days: int = RUN_LOG_DAYS, batch: int = 500, now: datetime | None = None) -> int:
+    """Delete the info lines of run logs older than ``days``. Returns lines deleted.
+
+    Warnings and errors stay, so a run's page still says why it failed or was
+    partial. Works through runs in id order from where the last prune stopped
+    (kept in settings), in small batches so the portal stays responsive.
+    """
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mark = conn.execute("SELECT value FROM settings WHERE key = ?", (RUN_LOG_WATERMARK,)).fetchone()
+    start = int(mark["value"]) if mark else 0
+    # Run ids grow with created_at, so only the runs since the last prune are read.
+    row = conn.execute("SELECT MAX(id) AS id FROM runs WHERE id > ? AND created_at < ?", (start, cutoff)).fetchone()
+    last = row["id"] if row and row["id"] else start
+    deleted = 0
+    while start < last:
+        end = min(start + batch, last)
+        with transaction(conn, immediate=True):
+            deleted += conn.execute("DELETE FROM run_events WHERE run_id > ? AND run_id <= ? AND level = 'info'",
+                                    (start, end)).rowcount
+            conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
+                         " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (RUN_LOG_WATERMARK, str(end)))
+        start = end
+    return deleted
