@@ -114,7 +114,7 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
                 secure_scores=None, per_user=None, usage_kw=None, signins=None, auth_methods_policy=None,
-                subscriptions=None, groups=None, **phase4):
+                subscriptions=None, groups=None, risky_users=None, **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
     rsps.get(f"{V1}/directory/subscriptions",
@@ -159,6 +159,8 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
     rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
     rsps.get(f"{BETA}/auditLogs/signIns", json={"value": gd.SIGNINS if signins is None else signins})
+    rsps.get(f"{V1}/identityProtection/riskyUsers",
+             json={"value": gd.RISKY_USERS if risky_users is None else risky_users})
     mock_phase4(rsps, **phase4)
     mock_sharepoint(rsps, **(sharepoint_kw or {}))
     mock_usage(rsps, **(usage_kw or {}))

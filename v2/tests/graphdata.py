@@ -1,5 +1,7 @@
 """Recorded-style Graph payloads shared by collector, rule and report tests."""
 
+from datetime import UTC, datetime, timedelta
+
 GA = "role-ga"
 EXCH = "role-exch"
 READER = "role-reader"
@@ -307,6 +309,29 @@ SIGNINS = (
        _signin(62, "2026-10-01T16:00:00Z", "g#EXT#@x.com", "u3", 53003, ip="192.0.2.99", country="US",
                city="Seattle", app="Microsoft Teams", reason="Access has been blocked by Conditional Access policies.")]
 )
+
+def _days_ago(days: int) -> str:
+    return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.1234567Z")
+
+
+def _risky_user(uid, upn, level, state, detail="none", days=1, deleted=False):
+    """One entry of /v1.0/identityProtection/riskyUsers."""
+    return {"id": uid, "isDeleted": deleted, "isProcessing": False, "riskLastUpdatedDateTime": _days_ago(days),
+            "riskLevel": level, "riskState": state, "riskDetail": detail, "userDisplayName": upn.split("@")[0].title(),
+            "userPrincipalName": upn}
+
+
+# Entra ID Protection (P2): Ann is at medium risk after the Paris sign-in, Bob's disabled account was
+# confirmed compromised, info@ was remediated by a password reset last month, and older or never-risky
+# entries (and a deleted account's) are what the collector leaves out or doesn't count.
+RISKY_USERS = [
+    _risky_user("u1", "ann@x.com", "medium", "atRisk", days=5),
+    _risky_user("u2", "bob@x.com", "high", "confirmedCompromised", "adminConfirmedUserCompromised", days=6),
+    _risky_user("u7", "info@x.com", "none", "remediated", "userPerformedSecuredPasswordReset", days=30),
+    _risky_user("u8", "old@x.com", "none", "dismissed", "adminDismissedAllRiskForUser", days=200),
+    _risky_user("u9", "fine@x.com", "none", "none", days=10),
+    _risky_user("u10", "gone@x.com", "high", "atRisk", days=20, deleted=True),
+]
 
 ORGANIZATION = {"id": "org", "displayName": "Org", "verifiedDomains": [
     {"name": "x.com", "isDefault": True}, {"name": "parked.com"}, {"name": "x.onmicrosoft.com"}]}

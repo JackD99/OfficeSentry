@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-53 checks, 25 data sources (collectors) and 29 detail reports.
+54 checks, 26 data sources (collectors) and 30 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -98,6 +98,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **MFA is enforced for all users**<br>`mfa_enforced` | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |  | Create a Conditional Access policy requiring MFA for all users and all cloud apps, or turn on Security Defaults if the tenant has no Entra ID P1. Keep exclusions to break-glass accounts. |
 | **Nobody relies on a text or call as their only second factor**<br>`phone_only_mfa` | `admin_roles`, `mfa_registration`, `users` |  | Ask these people to set up the Microsoft Authenticator app (the registration campaign in the authentication methods policy prompts them at sign-in), then turn off text message and voice call sign-in, or keep them only as a backup. Texts and calls can be intercepted or moved to an attacker's SIM. |
 | **No risky sign-ins succeeded**<br>`risky_sign_ins` | `sign_ins` | Sign-in risk needs Entra ID P2; The sign-in log needs Entra ID P1 | Check each sign-in with the person. If they don't recognise it, reset their password, sign them out everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm the account compromised in Entra ID Protection. Add a Conditional Access policy that asks for MFA on medium and high sign-in risk. The Sign-in activity report lists every risky sign-in. |
+| **No accounts are at risk in Entra ID Protection**<br>`risky_users` | `risky_users` | Risky users need Entra ID P2 | Check each account with the person. If they don't recognise recent sign-ins, reset the password, sign them out everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm the account compromised or dismiss the risk in Entra ID Protection. Add a Conditional Access policy that asks for a secure password change on high user risk. The Risky users report lists each account. |
 | **Every active user has MFA registered**<br>`users_mfa_registered` | `mfa_registration`, `users` |  | Ask these users to register the Microsoft Authenticator app. Until they do, anyone with their password can register MFA in their place. |
 
 ### Licences
@@ -155,6 +156,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `mailboxes` | Mailboxes | Mailboxes, forwarding, delegated access and organisation mail settings (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mfa_registration` | MFA registration | Which users have registered a second factor. | `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All` |
 | `per_user_mfa` | Per-user MFA | The per-user MFA setting on each member, for tenants without Entra ID P1. | `Policy.Read.All` |
+| `risky_users` | Risky users | Accounts Entra ID Protection rates at risk or confirmed compromised, and those resolved in the last 90 days (needs Entra ID P2). | `IdentityRiskyUser.Read.All` |
 | `secure_score` | Secure Score | Current Secure Score, per-control scores and up to 90 days of daily history. | `SecurityEvents.Read.All` |
 | `shared_files` | Shared files | Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, or people outside it. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_storage` | SharePoint storage | What fills each site's storage: libraries, folders, large and old files, version history and recycle bins. Needs the Sites.Read.All permission. | `Sites.Read.All` |
@@ -190,6 +192,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `mailboxes` | Mail forwarding | Every mailbox that sends mail on automatically, and the settings that allow it. | `inbox_rules`, `mailboxes` |
 | `mfa` | MFA coverage | Who has set up MFA, who is required to use it, and where the two don't match. | `admin_roles`, `conditional_access`, `mfa_registration`, `per_user_mfa`, `users` |
 | `onedrive` | OneDrive | Each person's OneDrive: storage, activity, sharing, and OneDrives of people who've left. | `shared_files`, `sharepoint_usage`, `users` |
+| `risky-users` | Risky users | Accounts Entra ID Protection rates at risk or confirmed compromised, and the risk resolved recently (needs Entra ID P2). | `risky_users`, `tenant_profile` |
 | `secure-score` | Secure Score trend | Secure Score over time, which controls changed, and where the points are. | `secure_score` |
 | `shared-files` | Shared files | Every file and folder shared with anyone, people outside, or the whole organisation. | `shared_files`, `sharepoint_usage` |
 | `shared-mailboxes` | Shared mailboxes | Shared, room and equipment mailboxes that can be signed in to, and who uses them. | `mailbox_usage`, `mailboxes`, `users` |
@@ -211,7 +214,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `devices`, `directory_sync`, `groups`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `mailbox_usage`, `mailboxes` |
-| `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | not used by a collector yet |
+| `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
 | `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `auth_methods_policy`, `conditional_access`, `per_user_mfa`, `tenant_policies` |

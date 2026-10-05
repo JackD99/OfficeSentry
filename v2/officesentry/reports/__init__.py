@@ -3,6 +3,7 @@
 from . import (
     auth_methods,
     data_reports,
+    risky_users,
     sharepoint,
     sharepoint_storage,
     sign_in_reports,
@@ -27,6 +28,12 @@ _items = list(data_reports.REPORTS.items())
 _at = [k for k, _ in _items].index("inactive") + 1
 data_reports.REPORTS.clear()
 data_reports.REPORTS.update(_items[:_at] + list(sign_in_reports.REPORTS.items()) + _items[_at:])
+
+# Risky users sits next to Sign-in activity.
+_items = list(data_reports.REPORTS.items())
+_at = [k for k, _ in _items].index("sign-ins") + 1
+data_reports.REPORTS.clear()
+data_reports.REPORTS.update(_items[:_at] + list(risky_users.REPORTS.items()) + _items[_at:])
 
 # Passwords and sign-in methods sits next to MFA coverage.
 _items = list(data_reports.REPORTS.items())

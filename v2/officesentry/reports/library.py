@@ -33,7 +33,7 @@ USES: tuple[Use, ...] = (
     Use("insurance", "Insurance renewal",
         "The controls cyber insurers ask about, and the reports that prove each one.",
         ("evidence", "mfa", "auth-methods", "admins", "conditional-access", "legacy-auth", "domains", "mailboxes",
-         "devices", "admin-activity", "sign-ins")),
+         "devices", "admin-activity", "sign-ins", "risky-users")),
     Use("phishing-resistant", "Phishing-resistant MFA rollout",
         "Moving admins, then everyone, to passkeys: who signs in with what, what the methods policy allows, and "
         "which Conditional Access policies require it.",
@@ -51,8 +51,8 @@ USES: tuple[Use, ...] = (
     Use("compromise", "Investigate a compromised account",
         "Someone may have someone else's password: where and how they signed in, failed and risky sign-ins, "
         "mail rules and forwarding, new app consents and what admins changed.",
-        ("sign-ins", "inbox-rules", "mailboxes", "mailbox-permissions", "legacy-auth", "apps", "admin-activity",
-         "mfa")),
+        ("sign-ins", "risky-users", "inbox-rules", "mailboxes", "mailbox-permissions", "legacy-auth", "apps",
+         "admin-activity", "mfa")),
     Use("renewal", "Licence renewal",
         "Before a renewal or true-up: what's bought, used and spare, what it costs, and which subscriptions and "
         "trials end soon.",
@@ -76,6 +76,8 @@ KEYWORDS: dict[str, str] = {
     "legacy-auth": "basic auth smtp imap pop old protocols",
     "sign-ins": "sign-in logs login logins failed failures password spray brute force lockout locked "
                 "countries locations risky risk compromised breach hacked single-factor audit",
+    "risky-users": "identity protection risk compromised hacked breach leaked credentials at risk p2 "
+                   "remediated dismissed",
     "hybrid": "ad connect entra connect sync on-premises password hash",
     "mailboxes": "forwarding redirect external smtp",
     "inbox-rules": "forward delete move rules mailbox compromise",

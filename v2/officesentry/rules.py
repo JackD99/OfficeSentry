@@ -1365,3 +1365,6 @@ from . import licence_rules  # noqa: E402, F401, I001
 
 # Checks over sign-in activity.
 from . import signin_rules  # noqa: E402, F401, I001
+
+# Checks over Entra ID Protection's risky users.
+from . import identity_protection_rules  # noqa: E402, F401, I001
