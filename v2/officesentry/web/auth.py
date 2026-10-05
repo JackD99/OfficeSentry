@@ -132,15 +132,16 @@ def _use_totp(user, secret: str, value: str) -> bool:
 # -- Pending sign-in (password accepted, two-step still to do) ----------------
 
 
-def _set_pending(user, enroll: bool, next_url: str | None) -> None:
+def _set_pending(user, enroll: bool, next_url: str | None, change: bool = False) -> None:
     session.clear()
     session["pending"] = {"uid": user["id"], "sv": user["session_version"], "at": int(time.time()),
-                          "enroll": enroll, "next": safe_next(next_url)}
+                          "enroll": enroll, "change": change, "next": safe_next(next_url)}
 
 
-def _pending_user(enroll: bool):
+def _pending_user(enroll: bool, change: bool = False):
     p = session.get("pending")
-    if not p or "uid" not in p or bool(p.get("enroll")) != enroll or time.time() - p.get("at", 0) > PENDING_SECONDS:
+    if (not p or "uid" not in p or bool(p.get("enroll")) != enroll or bool(p.get("change")) != change
+            or time.time() - p.get("at", 0) > PENDING_SECONDS):
         return None
     user = _user(p["uid"])
     if user is None or user["disabled"] or user["session_version"] != p["sv"] or _locked(user):
@@ -157,6 +158,49 @@ def _finish_login(user, next_url: str | None = None) -> str:
     sessions.start(user)
     audit(g.db, user["username"], "login")
     return next_url
+
+
+def _continue_sign_in(user, next_url: str | None, code_done: bool = False) -> str:
+    """Where sign-in goes once the password (and the two-step code, ``code_done``) were right.
+
+    The two-step code comes first for accounts that have it, so an admin-set
+    password alone can't be changed. Then a password an admin chose is replaced,
+    before two-step is set up for accounts that don't have it yet.
+    """
+    if user["totp_enabled_at"] and not code_done:
+        _set_pending(user, enroll=False, next_url=next_url)
+        return url_for("auth.login_code")
+    if user["must_change_password"]:
+        _set_pending(user, enroll=False, next_url=next_url, change=True)
+        return url_for("auth.new_password")
+    if _needs_enrolment(user):
+        _set_pending(user, enroll=True, next_url=next_url)
+        return url_for("auth.two_step_setup")
+    return _finish_login(user, next_url)
+
+
+@bp.route("/login/new-password", methods=["GET", "POST"])
+def new_password():
+    """First sign-in with a password an admin chose (or reset): pick your own before going on."""
+    user = _pending_user(enroll=False, change=True)
+    if user is None:
+        return redirect(url_for("auth.login"))
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        problem = password_problem(password, request.form.get("confirm", ""))
+        if not problem and check_password_hash(user["password_hash"], password):
+            problem = "Choose a new password, not the one you were given."
+        if problem:
+            flash(problem, "error")
+        else:
+            next_url = session["pending"].get("next")
+            g.db.execute("UPDATE users SET password_hash = ?, must_change_password = 0,"
+                         " session_version = session_version + 1 WHERE id = ?",
+                         (generate_password_hash(password), user["id"]))
+            audit(g.db, user["username"], "password_changed", detail="replaced the password an admin set")
+            user = _user(user["id"])
+            return redirect(_continue_sign_in(user, next_url, code_done=bool(user["totp_enabled_at"])))
+    return render_template("new_password.html", username=user["username"], min_password=MIN_PASSWORD)
 
 
 def _needs_enrolment(user) -> bool:
@@ -191,14 +235,7 @@ def login():
         # Right password, but two-step codes are locked: someone who has the password is guessing codes.
         audit(g.db, user["username"], "login_failed", detail="two-step codes locked")
     elif ok:
-        next_url = request.args.get("next")
-        if user["totp_enabled_at"]:
-            _set_pending(user, enroll=False, next_url=next_url)
-            return redirect(url_for("auth.login_code"))
-        if _needs_enrolment(user):
-            _set_pending(user, enroll=True, next_url=next_url)
-            return redirect(url_for("auth.two_step_setup"))
-        return redirect(_finish_login(user, next_url))
+        return redirect(_continue_sign_in(user, request.args.get("next")))
     elif user is not None:
         audit(g.db, user["username"], "login_failed")
     else:
@@ -269,7 +306,7 @@ def login_code():
 
         if ok:
             attempt.succeeded()
-            next_url = _finish_login(user)
+            next_url = _continue_sign_in(user, (session.get("pending") or {}).get("next"), code_done=True)
             if used_recovery:
                 audit(g.db, user["username"], "recovery_code_used")
                 left = g.db.execute("SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = ? AND used_at IS NULL",
@@ -297,6 +334,9 @@ def two_step_setup():
         return redirect(url_for("auth.account"))
     vault = _vault()
 
+    if request.method == "POST" and user["totp_pending_enc"] and signed_in and not _confirm_password():
+        # From the account page, adding an authenticator needs the password: a stolen session isn't enough.
+        return _setup_page(user, signed_in)
     if request.method == "POST" and user["totp_pending_enc"]:
         attempt = None
         if not signed_in and (attempt := _reserve_attempt(user)) is None:
@@ -333,7 +373,11 @@ def two_step_setup():
             return redirect(url_for("auth.login"))
         flash("That code didn't match. Check your phone's clock is set automatically, then try the newest code.",
               "error")
+    return _setup_page(user, signed_in)
 
+
+def _setup_page(user, signed_in: bool):
+    vault = _vault()
     if user["totp_pending_enc"]:
         secret = vault.decrypt(user["totp_pending_enc"])
     else:
@@ -439,8 +483,20 @@ def change_password():
 
 
 def _confirm_password() -> bool:
+    """The signed-in person's password, asked again before a security change.
+
+    Wrong answers count towards the two-step lock (MAX_FAILURES), so a stolen
+    session can't be used to guess the password here.
+    """
+    attempt = _reserve_attempt(g.user)
+    if attempt is None:
+        flash("Too many wrong passwords or codes. Try again in 15 minutes.", "error")
+        return False
     if check_password_hash(g.user["password_hash"], request.form.get("password", "")):
+        attempt.succeeded()
+        g.db.execute("UPDATE users SET failed_logins = 0 WHERE id = ?", (g.user["id"],))
         return True
+    attempt.failed("password_confirm_failed")
     flash("That password isn't right.", "error")
     return False
 

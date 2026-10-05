@@ -281,7 +281,10 @@ this command; the product signs in with a certificate.
   before October 2026 keep requiring it for admins and analysts only, so
   nobody is surprised after an upgrade; *Settings → Users* shows the policy
   and recommends extending it to clients. Set it with
-  `OFFICESENTRY_REQUIRE_MFA` (`all`, `staff` or `off`). Each user gets ten
+  `OFFICESENTRY_REQUIRE_MFA` (`all`, `staff` or `off`). Adding an
+  authenticator from the account page asks for the password, and a password
+  an admin set (new user or reset) has to be replaced at the next sign-in,
+  before two-step setup (or right after the code, for accounts that have it). Each user gets ten
   one-time recovery codes. An admin can reset someone's two-step sign-in from
   their user page if they lose their phone.
 - **Sign-in limits by address, not account lockout:** wrong passwords slow

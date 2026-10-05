@@ -22,7 +22,6 @@ import json
 import logging
 import os
 import re
-import socket
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -30,6 +29,7 @@ from urllib.parse import urlsplit
 
 import requests
 
+from . import outbound
 from .collectors import REGISTRY
 from .crypto import Vault
 from .db import audit
@@ -133,28 +133,28 @@ def masked_url(vault: Vault, s: dict) -> str | None:
 # -- Delivery ----------------------------------------------------------------
 
 
-def check_destination(url: str) -> None:
-    """Refuse non-https URLs and hosts that resolve to internal addresses (SSRF guard)."""
+def check_destination(url: str) -> str | None:
+    """Refuse non-https URLs and hosts that resolve to internal addresses (SSRF guard).
+
+    Returns the vetted address that ``post`` then connects to (so DNS can't change in between),
+    or None when internal webhooks are allowed.
+    """
     if problem := url_problem(url):
         raise AlertError(problem)
     if os.environ.get(ALLOW_PRIVATE_ENV) == "1":
-        return
+        return None
     parts = urlsplit(url)
     host = parts.hostname
     try:
-        infos = socket.getaddrinfo(host, parts.port or 443, proto=socket.IPPROTO_TCP)
-    except (OSError, UnicodeError) as exc:
+        return outbound.public_address(host, parts.port or 443)
+    except outbound.LookupFailed as exc:
         raise AlertError(f"Couldn't look up {host}.") from exc
-    if not infos:
-        raise AlertError(f"Couldn't look up {host}.")
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0].split("%", 1)[0])
+    except outbound.NotPublic as exc:
+        ip = ipaddress.ip_address(exc.address)
         if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
             ip = ip.ipv4_mapped
-        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
-                or ip.is_unspecified or not ip.is_global):
-            raise AlertError(f"{host} resolves to an internal address ({ip}), so it was not called. "
-                             f"Set {ALLOW_PRIVATE_ENV}=1 to allow internal webhooks.")
+        raise AlertError(f"{host} resolves to an internal address ({ip}), so it was not called. "
+                         f"Set {ALLOW_PRIVATE_ENV}=1 to allow internal webhooks.") from None
 
 
 def sign(secret: str, body: bytes) -> str:
@@ -162,13 +162,15 @@ def sign(secret: str, body: bytes) -> str:
 
 
 def post(url: str, payload: dict, secret: str | None = None) -> None:
-    check_destination(url)
+    address = check_destination(url)
     body = json.dumps(payload, separators=(",", ":")).encode()
     headers = {"Content-Type": "application/json", "User-Agent": "OfficeSentry-Alerts"}
     if secret:
         headers["X-OfficeSentry-Signature"] = sign(secret, body)
+    http, host_header = outbound.pinned_session(url, address)
     try:
-        resp = requests.post(url, data=body, headers=headers, timeout=TIMEOUT, allow_redirects=False)
+        with http:
+            resp = http.post(url, data=body, headers=headers | host_header, timeout=TIMEOUT, allow_redirects=False)
     except requests.Timeout as exc:
         raise AlertError(f"No answer within {TIMEOUT} seconds.") from exc
     except requests.ConnectionError as exc:

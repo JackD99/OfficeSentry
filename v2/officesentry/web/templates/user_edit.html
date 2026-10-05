@@ -22,7 +22,7 @@
     </div>
   </fieldset>
   <label>New password <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
-    <span class="hint">Leave blank to keep the current password. Changing it signs them out.</span></label>
+    <span class="hint">Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.</span></label>
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
   <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>

@@ -15,6 +15,8 @@
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>Code from the app <input class="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*" required {% if not signed_in %}autofocus{% endif %}></label>
+  {% if signed_in %}<label>Your password <input type="password" name="password" autocomplete="current-password" required>
+    <span class="hint">So nobody else using this browser can add their own phone.</span></label>{% endif %}
   <div class="form-actions">
     <button class="primary">Turn on two-step sign-in</button>
     {% if signed_in %}<a class="btn ghost" href="{{ url_for('auth.account') }}">Cancel</a>{% endif %}

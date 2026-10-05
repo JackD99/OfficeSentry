@@ -188,6 +188,13 @@ def test_saved_views(client, db, two_tenants):
     resp = client.post(f"/views/{view_id}/delete", data={"next": "//evil.example/x"})
     assert resp.status_code == 302 and resp.headers["Location"] == "/reports"
     assert db.execute("SELECT COUNT(*) FROM saved_views").fetchone()[0] == 0
+    # The same check as after sign-in: backslashes and control characters (which browsers drop) are refused too.
+    uid = db.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()[0]
+    for target in ("/\\evil.example/path", "/\t/evil.example"):
+        vid = db.execute("INSERT INTO saved_views (user_id, report_key, name, query, created_at)"
+                         " VALUES (?, 'mailboxes', ?, 'a', 'now')", (uid, target)).lastrowid
+        resp = client.post(f"/views/{vid}/delete", data={"next": target})
+        assert resp.headers["Location"] == "/reports", target
 
 
 def test_saved_view_needs_a_tenant_the_user_can_see(client, db, two_tenants):

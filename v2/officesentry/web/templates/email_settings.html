@@ -38,7 +38,7 @@
       <label>Port <input name="smtp_port" value="{{ s.smtp_port or 587 }}" inputmode="numeric"></label>
     </div>
     <label>Security <select name="smtp_security">
-      {% for v, label in [('starttls', 'STARTTLS (usually port 587)'), ('ssl', 'SSL/TLS (usually port 465)'), ('none', 'None (internal relay only)')] %}<option value="{{ v }}" {% if (s.smtp_security or 'starttls') == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      {% for v, label in [('starttls', 'STARTTLS (usually port 587)'), ('ssl', 'SSL/TLS (usually port 465)'), ('none', 'None (internal relay without sign-in)')] %}<option value="{{ v }}" {% if (s.smtp_security or 'starttls') == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select></label>
     <div class="form-row">
       <label>Username <input name="smtp_user" value="{{ s.smtp_user or '' }}" autocomplete="off"></label>

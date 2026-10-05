@@ -3,6 +3,7 @@
 import itertools
 import json
 import re
+import socket
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +20,38 @@ from tests.test_prospects import mock_login
 
 POLICY = "version: STSv1\r\nmode: enforce\r\nmx: *.mail.protection.outlook.com\r\nmax_age: 604800\r\n"
 POLICY_URL = "https://mta-sts.a.com/.well-known/mta-sts.txt"
+PUBLIC_IP = "52.1.2.3"
+
+
+@pytest.fixture(autouse=True)
+def public_dns(monkeypatch):
+    """mta-sts.<domain> resolves to a public address unless a test says otherwise (no real DNS in tests)."""
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, *a, **k: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, port))])
+
+
+@pytest.mark.parametrize("ip", ["10.0.0.5", "127.0.0.1", "169.254.169.254", "::1"])
+def test_policy_fetch_refuses_internal_addresses(monkeypatch, ip):
+    family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, *a, **k: [
+        (family, socket.SOCK_STREAM, 6, "", (ip, port))])
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        rsps.get(POLICY_URL, body=POLICY)
+        with pytest.raises(dnscheck.FetchError, match="internal address"):
+            dnscheck.fetch_mta_sts("a.com")
+        assert not rsps.calls
+
+
+def test_policy_fetch_connects_to_the_address_it_checked(monkeypatch):
+    from tests.test_alerts import _record_connections
+
+    answers = iter([PUBLIC_IP] + ["10.0.0.5"] * 10)  # DNS rebinding
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, *a, **k: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", (next(answers), port))])
+    targets = _record_connections(monkeypatch)
+    with pytest.raises(dnscheck.FetchError, match="couldn't connect"):
+        dnscheck.fetch_mta_sts("a.com")
+    assert targets and all(t == (PUBLIC_IP, 443) for t in targets)
 
 # A Microsoft 365 mail domain with everything set up. spf.protection.outlook.com is deliberately absent: Microsoft's
 # own include is trusted rather than reported as missing.

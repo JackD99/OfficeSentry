@@ -62,7 +62,8 @@ def create_user():
         flash(problem, "error")
         return redirect(url_for("admin.users"))
     cur = g.db.execute(
-        "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
+        # The admin chose this password, so they replace it at first sign-in.
+        "INSERT INTO users (username, password_hash, role, created_at, must_change_password) VALUES (?, ?, ?, ?, 1)",
         (username, generate_password_hash(password), role, utcnow()),
     )
     audit(g.db, g.user["username"], "user_created", detail=f"{username} ({role})")
@@ -105,7 +106,7 @@ def edit_user(user_id: int):
                 flash(problem, "error")
             else:
                 g.db.execute("UPDATE users SET password_hash = ?, session_version = session_version + 1,"
-                             " failed_logins = 0, locked_until = NULL WHERE id = ?",
+                             " failed_logins = 0, locked_until = NULL, must_change_password = 1 WHERE id = ?",
                              (generate_password_hash(request.form["password"]), user_id))
                 audit(g.db, g.user["username"], "user_password_reset", detail=user["username"])
         flash("Saved.", "success")

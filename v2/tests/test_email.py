@@ -107,6 +107,38 @@ def test_changing_host_clears_password(client, db):
     assert mailer.mail_settings(db)["smtp_password_enc"] == ""
 
 
+def test_password_isnt_kept_when_security_or_port_changes(client, db):
+    make_user(db, "admin")
+    login(client, "admin")
+    for change in ({"smtp_security": "ssl", "smtp_port": "587"}, {"smtp_port": "2525"}):
+        _configure(client)
+        _configure(client, smtp_password="", **change)
+        assert mailer.mail_settings(db)["smtp_password_enc"] == "", change
+
+
+def test_no_password_over_an_unencrypted_connection(client, db, vault):
+    make_user(db, "admin")
+    login(client, "admin")
+    _configure(client)
+    # Switching an existing server to no encryption (say, to troubleshoot on port 25) is refused...
+    page = _configure(client, smtp_security="none", smtp_port="25", smtp_password="").get_data(as_text=True)
+    stored = mailer.mail_settings(db)
+    assert stored["smtp_security"] == "starttls" and vault.decrypt(stored["smtp_password_enc"]) == "s3cret"
+    page = client.get("/admin/email").get_data(as_text=True)
+    assert "sent unencrypted" in page
+    # ...and even if the settings say so, the password is never sent in clear to another machine.
+    db.execute("UPDATE settings SET value = 'none' WHERE key = 'smtp_security'")
+    with pytest.raises(mailer.MailError, match="unencrypted"):
+        mailer.send(db, vault, mailer.Email(to=["a@client.com"], subject="s", html="<p>x</p>", text="x"))
+    assert not SENT
+    # A relay on this same machine may take a password without TLS.
+    db.execute("UPDATE settings SET value = '127.0.0.1' WHERE key = 'smtp_host'")
+    mailer.send(db, vault, mailer.Email(to=["a@client.com"], subject="s", html="<p>x</p>", text="x"))
+    assert SENT[0] == ("login", "reports@msp.com", "s3cret")
+    assert _configure(client, smtp_host="localhost", smtp_security="none", smtp_port="25").status_code == 302
+    assert mailer.mail_settings(db)["smtp_security"] == "none"
+
+
 def test_graph_settings_keep_secret_only_for_the_same_app(client, db, vault):
     make_user(db, "admin")
     login(client, "admin")
