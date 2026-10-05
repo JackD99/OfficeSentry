@@ -3,7 +3,11 @@
 Sign-in has two stages. A correct password puts a short-lived "pending" marker
 in the cookie; the browser is only signed in (a server-side session is created)
 after the authenticator code, or straight away for accounts that don't need one.
-Wrong passwords and wrong codes count towards the same per-account lockout.
+
+Wrong passwords are limited by address (``throttle.py``), never by locking the
+account, so nobody can lock a person out from elsewhere just by knowing their
+username. Wrong two-step codes (which need the password first) lock the
+account's two-step step for LOCKOUT after MAX_FAILURES.
 """
 
 from __future__ import annotations
@@ -12,10 +16,10 @@ import hmac
 import time
 from datetime import UTC, datetime, timedelta
 
-from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, g, make_response, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .. import totp
+from .. import throttle, totp
 from ..config import clear_setup_token, setup_token
 from ..db import audit, transaction, utcnow
 from ..text import plural
@@ -25,7 +29,7 @@ from .access import login_required, safe_next
 bp = Blueprint("auth", __name__)
 
 MIN_PASSWORD = 12
-MAX_FAILURES = 5
+MAX_FAILURES = 5  # wrong two-step codes (sign-in or enrolment) before LOCKOUT
 LOCKOUT = timedelta(minutes=15)
 PENDING_SECONDS = 10 * 60
 # Compared against when the username doesn't exist, so timing doesn't reveal it.
@@ -173,12 +177,18 @@ def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     user = g.db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    attempt = _reserve_attempt(user) if user is not None else None
-    # Locked accounts and unknown names still pay for a hash, so timing doesn't tell them apart.
-    ok = check_password_hash(user["password_hash"] if attempt else _DUMMY_HASH, password)
+    reserved = throttle.reserve(g.db, client_ip(), username, user["id"] if user else None)
+    if isinstance(reserved, throttle.Refused):
+        return _throttled(username, reserved)
+    # Unknown names still pay for a hash, so timing doesn't tell them apart.
+    ok = check_password_hash(user["password_hash"] if user else _DUMMY_HASH, password)
+    ok = ok and user is not None and not user["disabled"]
+    throttle.finish(g.db, reserved, ok)
 
-    if attempt and ok and not user["disabled"]:
-        attempt.succeeded()
+    if ok and _locked(user):
+        # Right password, but two-step codes are locked: someone who has the password is guessing codes.
+        audit(g.db, user["username"], "login_failed", detail="two-step codes locked")
+    elif ok:
         next_url = request.args.get("next")
         if user["totp_enabled_at"]:
             _set_pending(user, enroll=False, next_url=next_url)
@@ -187,13 +197,42 @@ def login():
             _set_pending(user, enroll=True, next_url=next_url)
             return redirect(url_for("auth.two_step_setup"))
         return redirect(_finish_login(user, next_url))
-
-    if attempt:
-        attempt.failed("login_failed")
     else:
         audit(g.db, username[:64], "login_failed")
     flash(_SIGN_IN_FAILED, "error")
     return render_template("login.html", username=username), 200
+
+
+_proxy_warning = {"given": False}
+
+
+def client_ip() -> str:
+    """The address sign-in limits are keyed on.
+
+    ``request.remote_addr``, which ProxyFix sets from X-Forwarded-For only when
+    OFFICESENTRY_TRUSTED_PROXIES says how many proxies to trust; a header sent
+    straight to the portal is ignored.
+    """
+    if "X-Forwarded-For" in request.headers and not _cfg().trusted_proxies and not _proxy_warning["given"]:
+        _proxy_warning["given"] = True
+        current_app.logger.warning(
+        "Requests carry X-Forwarded-For but OFFICESENTRY_TRUSTED_PROXIES is 0, so every visitor appears to come "
+        "from the proxy's address and shares its sign-in limits. Set OFFICESENTRY_TRUSTED_PROXIES to the number "
+        "of proxies in front of Office Sentry (1 for the bundled Caddy).")
+    return (request.remote_addr or "unknown")[:64]
+
+
+def _throttled(username: str, refused: throttle.Refused):
+    wait = (plural(-(-refused.retry_after // 60), "minute") if refused.retry_after > 90
+            else plural(refused.retry_after, "second"))
+    if refused.reason == "name":
+        flash(f"This account has had a lot of failed sign-ins from other places, so new devices are slowed down. "
+              f"Try again in {wait}.", "error")
+    else:
+        flash(f"Too many failed sign-ins from your network. Try again in {wait}.", "error")
+    resp = make_response(render_template("login.html", username=username), 429)
+    resp.headers["Retry-After"] = str(refused.retry_after)
+    return resp
 
 
 @bp.route("/login/code", methods=["GET", "POST"])

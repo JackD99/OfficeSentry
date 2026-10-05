@@ -115,7 +115,7 @@ def test_password_lockout_and_admin_unlock(client, db):
     uid = make_user(db, "analyst", role="analyst")
     for _ in range(5):
         login(client, "analyst", "wrong password!")
-    assert login(client, "analyst").status_code == 200  # locked, so not signed in
+    assert login(client, "analyst").status_code == 429  # this address waits, so not signed in
     make_user(db, "boss")
     other = client.application.test_client()
     login(other, "boss")

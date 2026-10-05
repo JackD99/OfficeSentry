@@ -281,8 +281,12 @@ this command; the product signs in with a certificate.
   `OFFICESENTRY_REQUIRE_MFA` (`staff`, `all` or `off`). Each user gets ten
   one-time recovery codes. An admin can reset someone's two-step sign-in from
   their user page if they lose their phone.
-- **Lockout:** five wrong passwords or codes lock the account for 15 minutes.
-  Admins can unlock it straight away from the user page.
+- **Sign-in limits by address, not account lockout:** wrong passwords slow
+  down the address they come from (5 per username or 20 in all per 15
+  minutes), and a spread-out attack on one account slows new addresses only,
+  so nobody can lock a person out from elsewhere. Five wrong two-step codes
+  (which need the password) lock that step for 15 minutes. Admins can clear
+  both from the user page. Details in [DEPLOY.md](DEPLOY.md#sign-in-protection).
 - **Sessions are stored on the server.** Signing out ends the session, so a
   copied cookie stops working. People can see where they're signed in and
   sign out other browsers on their **Account** page. Sessions end after 2 hours

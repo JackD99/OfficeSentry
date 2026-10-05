@@ -7,7 +7,7 @@ import re
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
-from .. import store
+from .. import store, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
@@ -108,6 +108,7 @@ def edit_user(user_id: int):
     return render_template(
         "user_edit.html", user=user, tenants=tenants, granted=granted, roles=ROLES,
         sessions=sessions.list_for(user_id), locked=_is_locked(user),
+        failures=throttle.recent_failures(g.db, user["username"]),
         two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"]),
     )
 
@@ -149,6 +150,7 @@ def sign_out_user(user_id: int):
 def unlock_user(user_id: int):
     user = _user_or_404(user_id)
     g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", (user_id,))
+    throttle.clear(g.db, user["username"])
     audit(g.db, g.user["username"], "user_unlocked", detail=user["username"])
     flash(f"{user['username']} can sign in again.", "success")
     return redirect(url_for("admin.edit_user", user_id=user_id))

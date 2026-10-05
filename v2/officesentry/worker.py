@@ -16,7 +16,7 @@ import time
 import traceback
 from datetime import UTC, datetime, timedelta
 
-from . import alerts, findings, lifecycle, schedule, store
+from . import alerts, findings, lifecycle, schedule, store, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -206,6 +206,7 @@ def prune(conn, cfg: Config) -> int:
     removed = store.prune_snapshots(conn, cfg.keep_daily, cfg.keep_monthly, cfg.timezone)
     if removed:
         log.info("Retention: removed the stored objects of %s", plural(removed, "older run"))
+    throttle.prune(conn)
     return removed
 
 

@@ -8,7 +8,7 @@ import pytest
 import requests
 from werkzeug.serving import make_server
 
-from officesentry import totp
+from officesentry import throttle, totp
 from officesentry.web import auth
 from tests.conftest import PASSWORD, make_user
 from tests.test_login_security import enrol
@@ -57,8 +57,8 @@ def test_parallel_wrong_passwords_cannot_exceed_the_limit(live, db, monkeypatch)
     with ThreadPoolExecutor(max_workers=40) as pool:
         codes = list(pool.map(guess, range(40)))
     assert all(code in (200, 429) for code in codes)
-    # Every password checked was counted before it was checked, so 40 at once still only get MAX_FAILURES tries.
-    assert len(checked) <= auth.MAX_FAILURES
+    # Every password is counted before it is checked, so 40 at once still only get the limit's worth of tries.
+    assert len(checked) <= throttle.PER_ADDRESS_AND_NAME
     # And the limit is in force: the right password from the same place is refused now.
     resp = _browser().post(f"{live}/login", data={"username": "victim", "password": PASSWORD}, allow_redirects=False)
     assert resp.status_code != 302

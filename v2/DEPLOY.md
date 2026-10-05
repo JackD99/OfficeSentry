@@ -41,6 +41,36 @@ worker stops, admins see a yellow notice at the top of every page.
 
 To see what the worker is doing: `docker compose logs -f worker`
 
+## Sign-in protection
+
+Wrong passwords never lock an account, so nobody can keep you out just by
+knowing your username. Instead, Office Sentry slows down **where** the
+wrong passwords come from (15-minute sliding window):
+
+- 5 wrong passwords for one username from one address: that address waits
+  until the oldest of them is 15 minutes old. The same person signing in from
+  anywhere else isn't affected.
+- 20 wrong passwords from one address, whatever the usernames: that address
+  waits too.
+- 10 wrong passwords for one username from anywhere (a spread-out attack):
+  addresses that haven't signed in to that account in the last 90 days get one
+  attempt at a time, 5 seconds apart, doubling for each further 10 failures up
+  to 5 minutes. Addresses the person has signed in from before are never slowed.
+- 5 wrong two-step codes lock the two-step step of that account for 15
+  minutes. Reaching it needs the right password, so if this happens, change
+  the password.
+
+Unknown usernames are limited exactly like real ones. An admin can clear an
+account's limits under *Settings → Users → (user) → Unlock now*.
+Attempts are kept for two days (successful ones for 90, to recognise addresses).
+
+These limits need the visitor's real address. Behind the bundled Caddy or your
+own reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` (one proxy) in `.env`;
+with it at `0` the `X-Forwarded-For` header is ignored, everyone appears to come
+from the proxy and shares its limits, and the portal logs a warning. Don't set
+it higher than the number of proxies you really have, or visitors could choose
+their own address.
+
 ## When things run
 
 | Setting in `.env` | Default | What it does |

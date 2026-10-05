@@ -33,10 +33,11 @@
     <dd>{% if user.totp_enabled_at %}<span class="pill ok">On</span>{% elif two_step_required %}<span class="pill warn">Not set up</span> <span class="muted small">They'll be asked to set it up at their next sign-in.</span>{% else %}<span class="pill">Off</span>{% endif %}</dd>
     <dt>Signed in on</dt>
     <dd>{{ sessions|length }} browser{{ '' if sessions|length == 1 else 's' }}</dd>
-    {% if locked %}<dt>Status</dt><dd><span class="pill warn">Locked</span> <span class="muted small">Too many wrong passwords or codes. Unlocks by itself {{ user.locked_until|ago }}.</span></dd>{% endif %}
+    {% if locked %}<dt>Status</dt><dd><span class="pill warn">Two-step locked</span> <span class="muted small">Too many wrong two-step codes, which needs their password. Unlocks by itself {{ user.locked_until|ago }}; consider resetting their password.</span></dd>{% endif %}
+    {% if failures[0] %}<dt>Failed sign-ins</dt><dd>{{ failures[0]|plural('wrong password') }} from {{ failures[1]|plural('address', 'addresses') }} in the last 15 minutes. <span class="muted small">Those addresses are slowed down; {{ user.username }} can still sign in from anywhere else.</span></dd>{% endif %}
   </dl>
   <div class="form-actions wrap">
-    {% if locked %}<form method="post" action="{{ url_for('admin.unlock_user', user_id=user.id) }}" class="inline">
+    {% if locked or failures[0] %}<form method="post" action="{{ url_for('admin.unlock_user', user_id=user.id) }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Unlock now</button></form>{% endif %}
     {% if sessions %}<form method="post" action="{{ url_for('admin.sign_out_user', user_id=user.id) }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Sign out everywhere{{ ' else' if user.id == current_user.id else '' }}</button></form>{% endif %}
