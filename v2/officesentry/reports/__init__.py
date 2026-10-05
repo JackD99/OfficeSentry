@@ -3,6 +3,7 @@
 from . import (
     auth_methods,
     data_reports,
+    group_membership,
     sharepoint,
     sharepoint_storage,
     sign_in_reports,
@@ -39,3 +40,9 @@ _items = list(data_reports.REPORTS.items())
 _at = [k for k, _ in _items].index("licences")
 data_reports.REPORTS.clear()
 data_reports.REPORTS.update(_items[:_at] + list(subscriptions.REPORTS.items()) + _items[_at:])
+
+# Group membership sits next to Groups and Teams.
+_items = list(data_reports.REPORTS.items())
+_at = [k for k, _ in _items].index("groups") + 1
+data_reports.REPORTS.clear()
+data_reports.REPORTS.update(_items[:_at] + list(group_membership.REPORTS.items()) + _items[_at:])
