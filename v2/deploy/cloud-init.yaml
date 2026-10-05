@@ -1,0 +1,43 @@
+#cloud-config
+# Paste this into "Cloud config" when creating an Ubuntu 24.04 server in the
+# Hetzner Cloud console, after replacing the ssh-ed25519 line below with the
+# public half of your deploy key. Steps are in DEPLOY.md ("Hetzner, from a phone").
+#
+# It installs Docker, creates the "deploy" user that the "Deploy" GitHub
+# workflow signs in as, turns off password and root sign-in over SSH, and
+# backs up the database every night inside the data volume.
+
+users:
+  - name: deploy
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAA...replace-with-your-deploy-public-key... officesentry-deploy
+
+package_update: true
+package_upgrade: true
+packages: [docker.io, docker-compose-v2, rsync, unattended-upgrades]
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-officesentry.conf
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AllowUsers deploy
+  # A consistent copy of the database every night, so the server's own
+  # Hetzner backups always hold one even if they catch SQLite mid-write.
+  - path: /etc/cron.d/officesentry-backup
+    content: |
+      30 3 * * * deploy cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup --keep 14 >/dev/null
+  - path: /etc/docker/daemon.json
+    content: |
+      {"log-driver": "local", "log-opts": {"max-size": "20m", "max-file": "5"}}
+
+runcmd:
+  # Docker's group only exists once its package is installed.
+  - usermod -aG docker deploy
+  - install -d -o deploy -g deploy /opt/officesentry
+  - systemctl enable --now docker
+  - systemctl restart docker
+  - systemctl restart ssh

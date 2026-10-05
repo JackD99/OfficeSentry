@@ -1,0 +1,186 @@
+name: Deploy
+# Deploys v2 to a Hetzner Cloud server and runs the everyday server jobs, all
+# from GitHub (the mobile app's "Run workflow" button works). The server's
+# Hetzner Cloud Firewall keeps SSH closed: each run opens port 22 to this
+# runner's address only, and closes it again at the end, even if a step fails.
+# Setup is in v2/DEPLOY.md ("Hetzner, from a phone").
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do
+        type: choice
+        default: deploy
+        options: [deploy, status, setup-link, backup, restart]
+      ref:
+        description: Branch, tag or commit to deploy (deploy only)
+        default: main
+  # Deploy main after its tests pass, once AUTO_DEPLOY is set to "true".
+  workflow_run:
+    workflows: [v2]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One run at a time, and never cancel a deploy half way.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  server:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (vars.AUTO_DEPLOY == 'true' && github.event.workflow_run.conclusion == 'success'
+       && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ACTION: ${{ inputs.action || 'deploy' }}
+      HOST: ${{ vars.DEPLOY_HOST }}
+      FIREWALL: ${{ vars.HCLOUD_FIREWALL || 'officesentry' }}
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      API: https://api.hetzner.cloud/v1
+      # Marks the temporary rule so it is the only one this workflow removes.
+      RULE: github-actions-deploy (temporary)
+    steps:
+      - name: Check the settings
+        env:
+          HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
+        run: |
+          missing=""
+          [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (variable)"
+          [ -n "$HCLOUD_TOKEN" ] || missing="$missing HCLOUD_TOKEN (secret)"
+          [ "$HAS_KEY" = true ] || missing="$missing DEPLOY_SSH_KEY (secret)"
+          if [ "$ACTION" = deploy ] && [ -z "$DOMAIN" ]; then missing="$missing OFFICESENTRY_DOMAIN (variable)"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Set these under Settings > Secrets and variables > Actions:$missing"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+        if: env.ACTION == 'deploy'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || inputs.ref || 'main' }}
+
+      - name: Write the server's settings file
+        if: env.ACTION == 'deploy'
+        env:
+          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
+          TIMEZONE: ${{ vars.OFFICESENTRY_TIMEZONE || 'UTC' }}
+          EXTRA: ${{ vars.OFFICESENTRY_SETTINGS }}
+        run: |
+          umask 077
+          {
+            echo "# Written by the Deploy workflow; edit the repository variables instead."
+            echo "OFFICESENTRY_DOMAIN=$DOMAIN"
+            echo "OFFICESENTRY_BASE_URL=https://$DOMAIN"
+            echo "OFFICESENTRY_TIMEZONE=$TIMEZONE"
+            echo "OFFICESENTRY_TRUSTED_PROXIES=1"
+            printf '%s\n' "$EXTRA"
+          } > v2/.env
+
+      - name: Open SSH to this runner in the Hetzner firewall
+        run: |
+          ip=$(curl -fsS https://api.ipify.org)
+          echo "::add-mask::$ip"
+          echo "RUNNER_IP=$ip" >> "$GITHUB_ENV"
+          fw=$(curl -fsS -H "Authorization: Bearer $HCLOUD_TOKEN" "$API/firewalls?name=$FIREWALL" | jq '.firewalls[0]')
+          if [ "$fw" = null ]; then
+            echo "::error::No Hetzner Cloud Firewall named \"$FIREWALL\" (set HCLOUD_FIREWALL if yours is named differently)"
+            exit 1
+          fi
+          echo "FIREWALL_ID=$(jq -r .id <<<"$fw")" >> "$GITHUB_ENV"
+          # set_rules replaces the whole list: keep every rule except an old
+          # temporary one, then add this run's.
+          jq --arg ip "$ip/32" --arg rule "$RULE" '{rules: ([.rules[] | select(.description != $rule)]
+              + [{direction: "in", protocol: "tcp", port: "22", source_ips: [$ip], description: $rule}])
+              | map(with_entries(select(.value != null and .value != []))
+                    | if .direction == "in" then del(.destination_ips) else del(.source_ips) end)}' <<<"$fw" > rules.json
+          curl -fsS -X POST -H "Authorization: Bearer $HCLOUD_TOKEN" -H "Content-Type: application/json" \
+            --data @rules.json "$API/firewalls/$(jq -r .id <<<"$fw")/actions/set_rules" > /dev/null
+
+      - name: Prepare SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf 'Host server\n  HostName %s\n  User deploy\n  IdentityFile ~/.ssh/id_deploy\n  ServerAliveInterval 30\n' "$HOST" > ~/.ssh/config
+          # The firewall change takes a few seconds to reach the server.
+          for i in $(seq 30); do nc -z -w 3 "$HOST" 22 && break; sleep 3; done
+          if [ -n "$HOST_KEY" ]; then
+            printf '%s %s\n' "$HOST" "$HOST_KEY" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -t ed25519 "$HOST" > ~/.ssh/known_hosts
+            echo "To pin the server, set the DEPLOY_HOST_KEY variable to: $(cut -d' ' -f2- ~/.ssh/known_hosts)"
+          fi
+
+      - name: Copy the app to the server
+        if: env.ACTION == 'deploy'
+        run: |
+          rsync -az --delete --exclude docker-compose.override.yml --exclude data/ \
+            --exclude tests/ --exclude .coverage --exclude '__pycache__/' \
+            v2/ server:/opt/officesentry/v2/
+
+      - name: Build and start
+        if: env.ACTION == 'deploy'
+        run: |
+          ssh server bash -s <<'EOF'
+          set -euo pipefail
+          cd /opt/officesentry/v2
+          # Build first so the portal is only down while the containers swap.
+          docker compose --profile https build --pull
+          docker compose --profile https up -d --remove-orphans
+          status=starting
+          for i in $(seq 40); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q web)")
+            [ "$status" = healthy ] && break
+            sleep 5
+          done
+          docker compose --profile https ps
+          if [ "$status" != healthy ]; then
+            docker compose logs --tail 100 web
+            echo "::error::The portal didn't become healthy"
+            exit 1
+          fi
+          docker image prune -f > /dev/null
+          EOF
+
+      - name: Show the first-admin link (until an admin exists)
+        if: env.ACTION == 'deploy' || env.ACTION == 'setup-link'
+        run: ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' || true
+
+      - name: Back up the database
+        if: env.ACTION == 'backup'
+        run: ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup --keep 14'
+
+      - name: Restart
+        if: env.ACTION == 'restart'
+        run: ssh server 'cd /opt/officesentry/v2 && docker compose --profile https restart'
+
+      - name: Status
+        if: env.ACTION == 'status' || env.ACTION == 'restart'
+        run: |
+          ssh server bash -s <<'EOF'
+          cd /opt/officesentry/v2
+          docker compose --profile https ps
+          df -h / | tail -1
+          echo "--- worker"; docker compose logs --tail 40 worker
+          echo "--- web"; docker compose logs --tail 40 web
+          EOF
+
+      - name: Close SSH again
+        if: always() && env.FIREWALL_ID != ''
+        run: |
+          fw=$(curl -fsS -H "Authorization: Bearer $HCLOUD_TOKEN" "$API/firewalls/$FIREWALL_ID" | jq '.firewall')
+          jq --arg rule "$RULE" '{rules: [.rules[] | select(.description != $rule)]
+              | map(with_entries(select(.value != null and .value != []))
+                    | if .direction == "in" then del(.destination_ips) else del(.source_ips) end)}' <<<"$fw" > rules.json
+          curl -fsS -X POST -H "Authorization: Bearer $HCLOUD_TOKEN" -H "Content-Type: application/json" \
+            --data @rules.json "$API/firewalls/$FIREWALL_ID/actions/set_rules" > /dev/null
+          rm -f ~/.ssh/id_deploy
