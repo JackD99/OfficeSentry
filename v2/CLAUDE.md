@@ -83,7 +83,16 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 - Every detail report automatically gets a cross-tenant rollup (`reports/rollups.py`,
   `/across/<key>`) and is compared in the month-over-month change report
   (`reports/month_changes.py`, `/changes`, `/tenants/<id>/changes`). Rollup
-  columns are the report's `tiles`/`highlights`, else a row count per table.
+  columns are the report's `tiles`/`highlights`, else a row count per table;
+  `Rollup.total_row()` sums counts and money only (int or `Money` headlines,
+  not scores or percentages). "Every row" (`/across/<key>/rows/<table slug>`,
+  `rollups.all_rows`) stacks each visible tenant's rows from the same builders
+  under a Tenant column, as one `DataReport`, so `views` filters, sorts, saved
+  views and the CSV/XLSX/PDF downloads work unchanged; it keeps
+  `rollups.MAX_ROWS` per table and says when it cut. `/across/checks`
+  (`rollups.check_matrix`) is every check for every tenant, evaluated from
+  stored data with accepted risks from `findings`; it writes nothing. All
+  `/across` pages are admin and analyst only, over `visible_tenants()`.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change" are ignored as time-driven.

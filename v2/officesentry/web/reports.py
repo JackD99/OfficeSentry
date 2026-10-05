@@ -42,7 +42,9 @@ def _library_href(entry: library.Entry, tenant_id: int | None) -> str:
     if tenant_id is None:  # across every tenant
         if entry.kind == "changes":
             return url_for("across.changes")
-        return url_for("across.rollup", key="review" if entry.kind == "findings" else entry.key)
+        if entry.kind == "findings":
+            return url_for("across.checks")
+        return url_for("across.rollup", key=entry.key)
     return {
         "review": lambda: url_for("reports.tenant_report", tenant_id=tenant_id),
         "evidence": lambda: url_for("reports.evidence_pack", tenant_id=tenant_id),
@@ -68,8 +70,7 @@ def overview():
             area.entries = [e for e in area.entries if use.key in e.uses]
         for e in area.entries:
             e.href = _library_href(e, tenant["id"] if tenant else None) if tenants else ""
-            e.across = url_for("across.rollup", key="review" if e.kind == "findings" else e.key) \
-                if staff and tenant and e.kind != "changes" else (url_for("across.changes") if staff and tenant else "")
+            e.across = _library_href(e, None) if staff and tenant else ""
     saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? ORDER BY report_key, name COLLATE NOCASE",
                          (g.user["id"],)).fetchall()
     titles = {k: v[0] for k, v in data_reports.REPORTS.items()}

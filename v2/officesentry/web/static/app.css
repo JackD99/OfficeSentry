@@ -756,3 +756,23 @@ textarea.copy-text { font-size: .8125rem; resize: vertical; margin: 8px 0; }
   .health-state { min-width: 0; }
   .health-action { flex-basis: 100%; }
 }
+
+/* All tenants: one row per tenant or every row, totals, and the checks matrix */
+.across-mode { margin: -4px 0 16px; }
+.jump a.active { color: var(--text); font-weight: 600; }
+tfoot .total-row th, tfoot .total-row td { border-top: 2px solid var(--border-strong); background: var(--surface-2); font-weight: 600; }
+tfoot .total-row th { text-align: left; }
+.chk { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--sunken); border: 1px solid var(--border-strong); vertical-align: -1px; flex: none; }
+.chk.pass { background: var(--ok); border-color: var(--ok); }
+.chk.fail { background: var(--bad); border-color: var(--bad); }
+.chk.fail.critical { background: var(--sev-critical); border-color: var(--sev-critical); }
+.chk.fail.high { background: var(--sev-high); border-color: var(--sev-high); }
+.chk.fail.medium { background: var(--sev-medium); border-color: var(--sev-medium); }
+.chk.fail.low { background: var(--sev-low); border-color: var(--sev-low); }
+.chk.accepted { background: transparent; border: 2px solid var(--info); }
+.chk.unavailable { background: transparent; border-style: dashed; }
+a.chk:hover, a.chk:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chk-row { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 170px; }
+.chk-legend .chk { width: 10px; height: 10px; }
+.check-matrix th.chk-col { min-width: 110px; white-space: normal; }
+.check-matrix th a { color: inherit; }
