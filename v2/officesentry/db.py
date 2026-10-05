@@ -88,8 +88,26 @@ def latest_version() -> int:
     return files[-1][0] if files else 0
 
 
+def _backup_before_upgrade(conn: sqlite3.Connection, current: int) -> None:
+    """Copy a database that already has a schema before upgrading it (``backups/pre-upgrade-*.db``),
+    so a bad release can be rolled back. A failed copy stops the upgrade."""
+    from . import backups
+
+    db_file = backups.database_file(conn)
+    if db_file is None:
+        return
+    try:
+        backups.before_upgrade(db_file, current, latest_version())
+    except (OSError, sqlite3.Error) as exc:
+        raise RuntimeError(f"Couldn't back up the database before upgrading it, so it wasn't upgraded: {exc}. "
+                           "Free some disk space (or fix the backups folder's permissions) and start again.") from exc
+
+
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations. Returns the resulting schema version.
+
+    A database that already has a schema is copied to ``backups/`` next to it
+    first (see ``backups.before_upgrade``).
 
     Safe to call from several processes at once (gunicorn workers, the
     worker): each migration re-reads ``user_version`` inside its write
@@ -97,6 +115,7 @@ def migrate(conn: sqlite3.Connection) -> int:
     """
     _use_wal(conn)
     current = schema_version(conn)
+    backed_up = current == 0  # a new database has nothing to lose
     for version, path in migration_files():
         if version <= current:
             continue
@@ -104,6 +123,9 @@ def migrate(conn: sqlite3.Connection) -> int:
             current = schema_version(conn)
             if version <= current:
                 continue  # applied by another process since we looked
+            if not backed_up:
+                _backup_before_upgrade(conn, current)
+                backed_up = True
             for stmt in _split_statements(path.read_text(encoding="utf-8")):
                 conn.execute(stmt)
             conn.execute(f"PRAGMA user_version = {int(version)}")

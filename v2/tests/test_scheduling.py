@@ -247,6 +247,8 @@ def test_worker_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, monke
     assert not thread.is_alive()
     assert calls == [False, False]  # retried on the next pass, with the failed transaction rolled back
     assert "Housekeeping failed" in caplog.text
+    # Stopping cleanly clears the heartbeat, so a restore straight after "docker compose stop" isn't refused.
+    assert worker.last_seen(db) is None
 
 
 def test_worker_once_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, monkeypatch):

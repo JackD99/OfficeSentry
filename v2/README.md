@@ -370,6 +370,7 @@ class, so URL and paging bugs are caught.
 officesentry/
   config.py      env config; separate session and encryption keys
   db.py          SQLite (WAL) + transactional migrations (migrations/*.sql)
+  backups.py     backup, restore, and the copy taken before each upgrade
   crypto.py      Fernet vault with key rotation
   certs.py       certificate generation, Entra keyCredential
   entra.py       read-only permission list, app creation, consent URL

@@ -156,6 +156,11 @@ def beat(conn) -> None:
                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (HEARTBEAT_KEY, utcnow()))
 
 
+def clear_heartbeat(conn) -> None:
+    """A worker that stopped cleanly says so at once, rather than looking alive for HEARTBEAT_STALE."""
+    conn.execute("DELETE FROM settings WHERE key = ?", (HEARTBEAT_KEY,))
+
+
 def last_seen(conn) -> datetime | None:
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (HEARTBEAT_KEY,)).fetchone()
     return datetime.fromisoformat(row["value"].replace("Z", "+00:00")) if row else None
@@ -295,12 +300,13 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
 
     stop = stop or threading.Event()
     liveness = Liveness()
+    heartbeat = None
     if not once:
         if threading.current_thread() is threading.main_thread():
             # Finish the current run on "docker stop" rather than leave it half done.
             for sig in (signal.SIGTERM, signal.SIGINT):
                 signal.signal(sig, lambda *_: stop.set())
-        _heartbeat_thread(cfg.db_path, stop, liveness)
+        heartbeat = _heartbeat_thread(cfg.db_path, stop, liveness)
     log.info("Worker started. Collecting on '%s' (%s); next slot %s", cfg.collect_cron, cfg.timezone,
              schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat())
 
@@ -346,4 +352,10 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
             break
         stop.wait(IDLE_WAIT)
     stop.set()
+    if heartbeat is not None:
+        heartbeat.join(timeout=10)
+        try:
+            clear_heartbeat(conn)
+        except sqlite3.Error:
+            log.warning("Could not clear the worker heartbeat", exc_info=True)
     log.info("Worker stopped")

@@ -73,22 +73,86 @@ database while it's running:
 docker compose exec web python -m officesentry backup
 ```
 
-That writes to `/data/backups` inside the volume and keeps the last 7. To get
-it off the server, copy it out:
+That writes to `/data/backups` inside the volume and keeps the last 7
+(`--keep 14` keeps more). Each copy is checked before it's kept.
+
+**Keep backups off the data volume.** A copy in the same volume is lost with
+the volume. Give the portal a second folder on the host (or a mounted network
+share) and back up into it. Create the folder for the container's user
+(uid 10001):
 
 ```bash
-docker compose cp web:/data/backups ./backups
+sudo mkdir -p /srv/officesentry-backups && sudo chown 10001 /srv/officesentry-backups
+```
+
+then add a `docker-compose.override.yml` next to `docker-compose.yml`:
+
+```yaml
+services:
+  web:
+    volumes: ["/srv/officesentry-backups:/backups"]
+```
+
+and run `docker compose up -d`. To back up every night at 03:30, add this
+line with `crontab -e` (change the folder):
+
+```
+30 3 * * * cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup --dir /backups --keep 14
+```
+
+**Keep `secrets.json` too**, somewhere safe and separate from the backups:
+
+```bash
 docker compose cp web:/data/secrets.json ./secrets.json
 ```
 
-Keep `secrets.json` somewhere safe and separate: without it the stored
-certificate can't be decrypted, and with it anyone holding the backup can.
+Without it the stored certificate and mail passwords can't be decrypted; with
+it, anyone holding a backup can. It only changes when you run `rotate-keys
+--new`, so copy it again after that.
 
-To back up every night, add this line with `crontab -e` (change the folder):
+Before every upgrade that changes the database, the portal also saves a copy
+as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db` (the last 3 are
+kept). If it can't (a full disk, say), it doesn't upgrade and says why.
 
-```
-30 3 * * * cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup
-```
+**Deleted tenants stay in backups.** Deleting a tenant removes it from the
+database, not from backups taken before. Nightly backups rotate out after
+`--keep` days, but `pre-upgrade-*` and `pre-restore-*` copies are kept until
+3 newer ones replace them. If a client asks for their data to be erased, also
+delete the older backups (or tell them when they rotate out).
+
+## Restoring a backup
+
+1. Stop the portal and the worker (the restore refuses while the worker is
+   running):
+
+   ```bash
+   docker compose stop web worker
+   ```
+
+2. Restore it, naming a file in the volume (`docker compose run --rm --no-deps
+   web ls /data/backups` lists them):
+
+   ```bash
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db
+   ```
+
+   A backup kept on the host goes in first with
+   `docker compose cp ./officesentry-20261005-033000.db web:/data/restore.db`
+   (then restore `/data/restore.db`), or from the `/backups` folder if you
+   mounted one.
+
+   It checks that the file is a sound Office Sentry database, saves the
+   database it replaces as `/data/backups/pre-restore-<time>.db`, and copies
+   the backup in with SQLite's backup API (no stale `-wal` or `-shm` files are
+   left behind).
+3. Put back the `secrets.json` from the same time as the backup if the keys
+   changed since (`docker compose cp ./secrets.json web:/data/secrets.json`).
+4. Start again: `docker compose up -d`. A backup from an older version is
+   upgraded when the portal starts.
+
+**Moving to a new server** is the same: install as in *First start* (skip
+creating the admin), stop both containers, copy in `secrets.json` and the
+backup, restore, start.
 
 ## Updating
 
@@ -97,8 +161,30 @@ git pull                     # or copy the new v2 folder over the old one
 docker compose --profile https up -d --build
 ```
 
-The portal upgrades the database on start, before the worker starts. Data in
-the volume is kept.
+The portal upgrades the database on start, before the worker starts, after
+saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept.
+
+### Rolling back an update
+
+Database upgrades only go forward, so going back to an older version means
+going back to the database from before the upgrade. Anything collected since
+the upgrade is lost.
+
+1. `docker compose stop web worker`
+2. Go back to the version you had: `git log --oneline` to find it, then
+   `git checkout <commit>` (or copy the old v2 folder back).
+3. `docker compose build`
+4. Restore the copy taken before the upgrade:
+
+   ```bash
+   docker compose run --rm --no-deps web ls /data/backups
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/pre-upgrade-v8-to-v9-20261005-020000.db
+   ```
+
+   Versions from before the `restore` command: stop both containers, copy the
+   backup over `/data/officesentry.db`, and delete `/data/officesentry.db-wal`
+   and `/data/officesentry.db-shm` before starting.
+5. `docker compose up -d`
 
 ## Stopping
 

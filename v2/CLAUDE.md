@@ -217,6 +217,10 @@ ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
+`db.migrate` re-reads `user_version` inside each migration's transaction (two
+processes may start at once) and copies a database that already has a schema
+to `backups/pre-upgrade-*.db` first (`backups.before_upgrade`); restoring that
+copy is the only way back, since migrations only go forward.
 
 ## Commands
 
@@ -234,6 +238,7 @@ Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent copy of the database (keeps 7) |
+| `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
 
