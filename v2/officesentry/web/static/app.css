@@ -477,6 +477,39 @@ details.alert-edit { margin-top: 12px; padding-top: 10px; border-top: 1px solid 
 input[type=color] { height: 40px; padding: 4px; cursor: pointer; }
 svg.brand-preview { display: block; width: 100%; height: auto; margin: 4px 0 12px; }
 
+/* MSP branding in the portal. /brand.css (loaded only once branding is set up, with body.branded)
+   supplies --brand, --on-brand and --brand-ink(-dark); without it nothing here changes the look. */
+.brand .logo-chip { display: inline-flex; align-items: center; background: #fff; border-radius: var(--radius-sm); padding: 5px 8px; max-width: 100%; }
+.brand .logo-chip img { display: block; max-height: 30px; max-width: 180px; width: auto; height: auto; }
+.auth-card .brand .logo-chip { padding: 8px 12px; box-shadow: var(--shadow); }
+.auth-card .brand .logo-chip img { max-height: 48px; max-width: 260px; }
+.mobile-bar .brand .logo-chip img { max-height: 24px; max-width: 150px; }
+body.branded .brand .logo { background: var(--brand); color: var(--on-brand); }
+body.branded .nav a.active { box-shadow: inset 2px 0 0 var(--brand); }
+body.branded .auth-card .card { border-top: 3px solid var(--brand); }
+body.branded .auth-card button.primary, body.branded .auth-card button.primary:hover { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+body.branded .auth-card button.primary:hover { opacity: .9; }
+body.branded .auth-card a { color: var(--brand-ink); }
+@media (prefers-color-scheme: dark) { body.branded .auth-card a { color: var(--brand-ink-dark); } }
+.powered-by { margin: 12px 0 0; font-size: .6875rem; color: var(--sidebar-muted); padding: 0 10px; }
+.auth-card .powered-by { color: var(--muted); text-align: center; padding: 0; }
+
+/* Client home: latest report, open recommendations, who to contact */
+.client-latest { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.client-latest h2 { margin: 0 0 2px; }
+.client-latest .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.client-recs { margin-bottom: 16px; }
+.client-recs ol { list-style: none; margin: 0; padding: 0; }
+.client-recs li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
+.client-recs li:first-child { border-top: 0; }
+.client-recs .rec-body { flex: 1; min-width: 0; }
+.client-recs .rec-title { font-weight: 600; }
+.client-recs .rec-action { color: var(--muted); font-size: .8125rem; }
+.client-recs .pill { flex: none; }
+.client-contact dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+.client-contact dt { color: var(--muted); }
+.client-contact dd { margin: 0; overflow-wrap: anywhere; }
+
 /* -- Detail report headline figures and charts ------------------------------ */
 .tile.tone-bad .value { color: var(--bad); }
 .tile.tone-warn .value { color: var(--warn); }
@@ -582,6 +615,8 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 .person-head .muted { word-break: break-all; }
 .person-head .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .person-head .person-actions { flex: none; align-self: center; }
+.person-actions .leaver-link { display: block; margin-top: 6px; text-align: right; }
+.part-downloads { margin: -4px 0 12px; }
 .card.part .kv { margin-bottom: 4px; }
 .part-sub { font-size: .8125rem; font-weight: 600; color: var(--text-2); margin: 18px 0 4px; display: flex; gap: 8px; align-items: center; }
 .card-head + .scroll-x > .part-table { margin-top: -4px; }
@@ -767,3 +802,56 @@ textarea.copy-text { font-size: .8125rem; resize: vertical; margin: 8px 0; }
   .health-state { min-width: 0; }
   .health-action { flex-basis: 100%; }
 }
+
+/* -- Search across tenants (sidebar box and /search) ------------------------ */
+.nav-search { margin: 0 0 10px; }
+.nav-search label { position: relative; display: block; margin: 0; }
+.nav-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--sidebar-muted); }
+.nav-search input[type=search] { margin: 0; padding: 7px 10px 7px 32px; font-size: .8125rem; background: var(--sidebar-active); border-color: var(--sidebar-active); color: #fff; }
+.nav-search input[type=search]::placeholder { color: var(--sidebar-muted); }
+.nav-search input[type=search]:focus { border-color: #60a5fa; box-shadow: none; }
+.mobile-bar .nav-search { margin: 6px 0 10px; }
+.search-group .card-head h2 a { color: var(--text); }
+.search-group .list > li { align-items: flex-start; }
+.search-group .list .pill { min-width: 120px; justify-content: center; margin-top: 2px; }
+.search-more { margin: 10px 0 0; font-size: .875rem; }
+@media (max-width: 640px) {
+  .search-group .list > li { flex-direction: column; gap: 4px; }
+  .search-group .list .pill { min-width: 0; }
+}
+/* All tenants: one row per tenant or every row, totals, and the checks matrix */
+.across-mode { margin: -4px 0 16px; }
+.jump a.active { color: var(--text); font-weight: 600; }
+tfoot .total-row th, tfoot .total-row td { border-top: 2px solid var(--border-strong); background: var(--surface-2); font-weight: 600; }
+tfoot .total-row th { text-align: left; }
+.chk { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--sunken); border: 1px solid var(--border-strong); vertical-align: -1px; flex: none; }
+.chk.pass { background: var(--ok); border-color: var(--ok); }
+.chk.fail { background: var(--bad); border-color: var(--bad); }
+.chk.fail.critical { background: var(--sev-critical); border-color: var(--sev-critical); }
+.chk.fail.high { background: var(--sev-high); border-color: var(--sev-high); }
+.chk.fail.medium { background: var(--sev-medium); border-color: var(--sev-medium); }
+.chk.fail.low { background: var(--sev-low); border-color: var(--sev-low); }
+.chk.accepted { background: transparent; border: 2px solid var(--info); }
+.chk.unavailable { background: transparent; border-style: dashed; }
+a.chk:hover, a.chk:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chk-row { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 170px; }
+.chk-legend .chk { width: 10px; height: 10px; }
+.check-matrix th.chk-col { min-width: 110px; white-space: normal; }
+.check-matrix th a { color: inherit; }
+/* -- Tenant tabs, their second row, and accessibility -----------------------
+   Seven tenant tabs; Reports and Settings list their pages in .tab-pages. */
+.tab-pages { display: flex; gap: 4px; flex-wrap: wrap; margin: -12px 0 20px; }
+.tab-pages a { padding: 4px 11px; border-radius: 999px; color: var(--muted); font-size: .8125rem; font-weight: 500; border: 1px solid var(--border); background: var(--surface); }
+.tab-pages a:hover { text-decoration: none; color: var(--text); border-color: var(--border-strong); }
+.tab-pages a.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+@media (max-width: 640px) {
+  /* Tab bars wrap onto a second line instead of scrolling sideways. */
+  .tabs { flex-wrap: wrap; overflow: visible; padding-right: 0; -webkit-mask-image: none; mask-image: none; }
+  .tabs a { padding: 8px 9px; }
+}
+/* Links in running text are underlined, not told apart by colour alone. */
+main :is(p, .callout, .footnote, .help) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+/* Skip link: off screen until it gets keyboard focus. */
+.skip-link { position: absolute; left: 12px; top: -48px; z-index: 100; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: var(--shadow); }
+.skip-link:focus { top: 12px; }
+main:focus { outline: none; }

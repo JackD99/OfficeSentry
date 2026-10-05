@@ -34,6 +34,7 @@
   <button type="button" class="button primary" data-print>Print or save as PDF</button>
 </nav>
 {% elif not pdf %}<nav class="toolbar">{% block toolbar %}{% endblock %}</nav>{% endif %}
+<main>
 <article class="{{ 'doc-compact' if compact_cover }}{{ ' document' if document }}{{ ' wide' if wide }}">
 <header class="cover{% if compact_cover %} compact{% endif %}">
   <div class="doc-strings" aria-hidden="true"><span class="t">{% block doc_title %}{% endblock %}</span><span class="c">{% block client %}{% endblock %}</span><span class="f">{% block footer_note %}Prepared for {{ self.client() }}{% endblock %}</span></div>
@@ -57,7 +58,9 @@
 <div class="content">
 {% block body %}{% endblock %}
 </div>
+{% if brand.report_footer %}<footer class="report-footer">{{ brand.report_footer }}</footer>{% endif %}
 </article>
+</main>
 {% if print_view %}<script src="{{ url_for('static', filename='print.js') }}" nonce="{{ csp_nonce }}"></script>{% endif %}
 </body>
 </html>

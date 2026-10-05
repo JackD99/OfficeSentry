@@ -1,0 +1,55 @@
+{#- The leaver checklist (user_profile.leaver_sheet) on one page, for the client to sign off. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+{% set r = sheet.checklist %}
+{% set collected = sheet.sources|map(attribute=1)|select|list %}
+
+{% block doc_title %}Leaver checklist{% endblock %}
+{% block client %}{{ sheet.tenant.name }}{% endblock %}
+{% block cover_subtitle %}<p class="cover-sub">{{ sheet.name }}{% if sheet.upn and sheet.upn != sheet.name %} ({{ sheet.upn }}){% endif %}</p>{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Account', sheet.upn or sheet.name) }}
+  {{ ui.meta('Sign-in', 'Allowed' if sheet.enabled else 'Blocked') }}
+  {{ ui.meta('Date', sheet.generated_at|day) }}
+  {{ ui.meta('Data collected', (collected|max)|when if collected else 'Not collected yet') }}
+{% endblock %}
+
+{% block body %}
+<p class="lede">What is still attached to {{ sheet.name }}'s account, and what to do about each item before the account is deleted.
+{% if r.monthly %}The licences on it cost {{ r.monthly|money(r.currency, 2) }} a month ({{ (r.monthly * 12)|money(r.currency, 2) }} a year){% if r.unpriced %}, not counting {{ r.unpriced|plural('licence') }} with no price yet{% endif %}.{% endif %}</p>
+
+<section class="doc-section">
+  <h2>Before you close this account <span class="count">{{ r.items|length }}</span></h2>
+  {% if r.items %}
+  <div class="table-wrap"><table class="data checklist">
+    <thead><tr><th class="flag">Done</th><th>Area</th><th>What's left</th><th>What to do</th></tr></thead>
+    <tbody>
+    {% for item in r.items %}
+    <tr><td class="flag"><span class="tickbox" aria-label="Not done yet"></span></td><td class="nw">{{ item.area }}</td><td>{{ item.found|breakable }}</td><td>{{ item.todo }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty-note">Nothing is left on this account in the data collected.</p>
+  {% endif %}
+  {% if r.missing %}<p class="section-intro">Not checked because they haven't been collected: {{ r.missing|join(', ') }}.</p>{% endif %}
+</section>
+
+<section class="signoff keep">
+  <h2>Sign-off</h2>
+  <p class="section-intro">Sign below to confirm each item above has been dealt with and the account can be deleted.</p>
+  <div class="signoff-grid">
+    <div><div class="who">For {{ sheet.tenant.name }}</div>
+      <div class="line"><span>Name</span></div><div class="line"><span>Signature</span></div><div class="line"><span>Date</span></div></div>
+    <div><div class="who">For {{ brand.display_name }}</div>
+      <div class="line"><span>Name</span></div><div class="line"><span>Signature</span></div><div class="line"><span>Date</span></div></div>
+  </div>
+</section>
+
+<footer class="about keep">
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Read from Microsoft 365 with read-only access; nothing was changed. Make these changes in the Microsoft 365 admin centre.
+  {{ ui.collected(sheet.sources) }}</p>
+</footer>
+{% endblock %}

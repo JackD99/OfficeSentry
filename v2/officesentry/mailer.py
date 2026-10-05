@@ -107,6 +107,9 @@ def sender_label(settings: dict) -> str:
 def send(conn, vault, email: Email) -> str:
     """Send ``email`` with the configured transport. Returns the transport used."""
     s = mail_settings(conn)
+    if not s.get("msp_name"):  # the sender's name falls back to the company name on the Branding page
+        row = conn.execute("SELECT value FROM settings WHERE key = 'brand_name'").fetchone()
+        s["msp_name"] = row["value"] if row else ""
     if not is_configured(s):
         raise MailNotConfigured("Email isn't set up yet (Settings → Email delivery)")
     if not email.to:

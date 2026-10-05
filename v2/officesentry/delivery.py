@@ -30,7 +30,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import alerts, mailer, schedule, store
+from . import alerts, issued, mailer, schedule, store
 from .db import utcnow
 from .mailer import Email, MailError
 from .reports import branding, data_reports, evidence, export, monthly_review, workbook
@@ -551,11 +551,13 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     default_tz = _cfg(app).timezone
     period, due = schedule_slot(schedule, default_tz, now)
     contacts = recipients(conn, "schedule", schedule["id"])
+    built: list[Built] = []
     if schedule["kind"] == "report":
         tenant = store.get_tenant(conn, schedule["tenant_id"])
 
         def build():
-            return build_report_email(app, conn, schedule, tenant, contacts, now=now)
+            built.append(build_report_email(app, conn, schedule, tenant, contacts, now=now))
+            return built[-1]
         fallback = f"{tenant['name']} security report"
     else:
         def build():
@@ -564,6 +566,8 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     error = _send(conn, vault, build, kind=schedule["kind"], fallback_subject=fallback, trigger=trigger, user=user,
                   schedule_id=schedule["id"], tenant_id=schedule["tenant_id"], period=period)
     ts = now.strftime(ISO)
+    if error is None and built:
+        _archive(conn, schedule, tenant, built[-1].email, period=period, trigger=trigger, user=user, now=ts)
     if trigger == "schedule":
         if error is None:
             conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
@@ -589,6 +593,24 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     else:
         conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
     return error
+
+
+def _archive(conn, schedule, tenant, email: Email, *, period: str, trigger: str, user: str | None,
+             now: str) -> None:
+    """Keep a copy of every file a sent report email attached (``issued.py``). Never fails the send."""
+    try:
+        plan = dict((name, key) for key, name in attachment_plan(
+            tenant, json.loads(schedule["reports"] or "[]"), bool(schedule["include_xlsx"])))
+        known = catalog_map()
+        files = []
+        for filename, content_type, data in email.attachments:
+            key = plan.get(filename, "")
+            files.append(issued.IssuedFile(key, known[key].title if key in known else filename, filename,
+                                           content_type, data))
+        issued.archive(conn, tenant["id"], files, period=period, trigger=trigger, user=user, to=email.to,
+                       bcc=email.bcc, schedule_id=schedule["id"], now=now)
+    except Exception:
+        log.exception("Keeping a copy of the reports sent to tenant %s failed", tenant["id"])
 
 
 def send_alert(app, conn, vault, alert, tenant, items: list[alerts.Item], *, trigger: str = "schedule",
