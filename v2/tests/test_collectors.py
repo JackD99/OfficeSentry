@@ -226,3 +226,36 @@ def test_objects_are_json(db, two_tenants):
     store.add_objects(db, rid, "user", [("u1", {"n": 1})])
     raw = db.execute("SELECT data FROM objects").fetchone()[0]
     assert json.loads(raw) == {"n": 1}
+
+
+@responses.activate
+def test_deleted_items_reads_the_recycle_bin(db, two_tenants, factory):
+    from tests import graphdata as gd
+    alpha, _ = two_tenants
+    responses.get(f"{V1}/directory/deletedItems/microsoft.graph.user", json={"value": gd.DELETED_USERS})
+    responses.get(f"{V1}/directory/deletedItems/microsoft.graph.group", json={"value": gd.DELETED_GROUPS})
+    run_id, status = _run(db, alpha, "deleted_items", factory)
+    assert status == "succeeded"
+    assert all(c.request.method == "GET" for c in responses.calls)
+    assert "deletedDateTime" in responses.calls[0].request.url and "assignedLicenses" in responses.calls[0].request.url
+    users = {u["_id"]: u for u in store.run_objects(db, run_id, "deleted_user")}
+    assert users["du1"]["licenceSkuIds"] == ["sku-bp"] and users["du2"]["userType"] == "Guest"
+    groups = {g["_id"]: g for g in store.run_objects(db, run_id, "deleted_group")}
+    assert groups["dg1"]["isTeam"] and groups["dg2"]["microsoft365"] and not groups["dg2"]["isTeam"]
+    status_row = store.run_objects(db, run_id, "deleted_status")[0]
+    assert status_row["users"] is True and status_row["groups"] is True
+    # Dan (deleted 25 days ago), the guest (26) and the team (28) go within a week.
+    assert _metrics(db, run_id) == {"deleted.users": 3, "deleted.groups": 2, "deleted.expiring_7d": 3}
+
+
+@responses.activate
+def test_deleted_items_warn_when_unreadable(db, two_tenants, factory):
+    alpha, _ = two_tenants
+    responses.get(f"{V1}/directory/deletedItems/microsoft.graph.user", status=403, json={"error": {
+        "code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(f"{V1}/directory/deletedItems/microsoft.graph.group", json={"value": []})
+    run_id, status = _run(db, alpha, "deleted_items", factory)
+    assert status == "partial"
+    assert store.run_objects(db, run_id, "deleted_user") == []
+    assert store.run_objects(db, run_id, "deleted_status")[0]["users"] is False
+    assert _metrics(db, run_id) == {"deleted.groups": 0, "deleted.expiring_7d": 0}

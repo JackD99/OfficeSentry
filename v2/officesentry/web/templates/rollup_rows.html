@@ -1,0 +1,81 @@
+{#- Every row of one detail report table, from every tenant (rollups.all_rows), with a Tenant column
+    first. The table, filters, columns, sort and saved views are the same as on a tenant's report. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, downloads, csrf %}
+{% from "_across.html" import across_head with context %}
+{% from "_report_table.html" import report_table with context %}
+{% set report = data.report %}
+{% block title %}{{ report.title }} · Every row · All tenants · Office Sentry{% endblock %}
+{% macro saved_views() -%}
+{% set current = saved|selectattr('query', 'equalto', view_query)|first if view_query else none %}
+<details class="menu" id="views-menu">
+  <summary class="btn sm{{ ' on' if view_query }}" title="Save the filters, columns and sort you use often">{{ icon('eye') }} {{ current.name if current else ('Custom view' if view_query else 'Views') }}</summary>
+  <div class="menu-panel right">
+    <div class="menu-head"><strong>Saved views</strong>{% if view_query %}<a href="{{ request.path }}" data-view>Reset</a>{% endif %}</div>
+    {% for v in saved %}
+    <div class="view-row{{ ' on' if current and current.id == v.id }}">
+      <a href="{{ request.path }}?{{ v.query }}" data-view>{{ v.name }}</a>
+      <form method="post" action="{{ url_for('views.delete', view_id=v.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="link faint" title="Delete this view" aria-label="Delete {{ v.name }}">×</button></form>
+    </div>
+    {% else %}
+    <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here. It opens on this page and on each tenant's own report.</p>
+    {% endfor %}
+    {% if view_query and not current %}
+    <form method="post" action="{{ url_for('across.save_rows_view', key=key, table=table) }}" class="save-view">{{ csrf() }}
+      <input type="hidden" name="query" value="{{ view_query }}">
+      <label class="small">Save this view as <input name="name" maxlength="80" required placeholder="e.g. Forwarding outside"></label>
+      <button class="sm primary">Save view</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+{%- endmacro %}
+{% block content %}
+{{ across_head(key, main, groups, 'rows') }}
+
+<div class="toolbar report-title">
+  <div>
+    <h2 class="section-title">{{ report.title }}</h2>
+    <p class="muted small m0">Every row from every tenant, with the tenant first. Filter, sort and hide columns as on a tenant's own report; downloads keep the view.</p>
+  </div>
+  {% if tv %}
+  <div class="toolbar-actions">
+    {{ saved_views() }}
+    {% set q = ('?' ~ view_query) if view_query else '' %}
+    {{ downloads([('PDF', url_for('across.rows_pdf', key=key, table=table) ~ q, 'The rows and columns shown, as a PDF'),
+                  ('XLSX', url_for('across.rows_download', key=key, table=table, ext='xlsx') ~ q, 'The rows and columns shown, as a spreadsheet'),
+                  ('CSV', url_for('across.rows_download', key=key, table=table, ext='csv') ~ q, 'The rows and columns shown, as CSV')]) }}
+  </div>
+  {% endif %}
+</div>
+
+{% if not tv %}
+<div class="card empty"><h3>No rows to show</h3><p>{{ report.unavailable or 'This report has no tables yet.' }}</p></div>
+{% else %}
+{% if tables|length > 1 %}
+<nav class="jump" aria-label="Tables in this report">
+  {% for slug, section in tables %}<a href="{{ url_for('across.rows', key=key, table=slug) }}{{ ('?' ~ view_query) if view_query }}"{% if slug == table %} class="active" aria-current="page"{% endif %}>{{ section.title }} <span class="faint">{{ section.rows|length }}</span></a>{% endfor %}
+</nav>
+{% endif %}
+{% if truncated %}
+<div class="callout warn">{{ icon('alert') }}<div><strong>Only the first {{ '{:,}'.format(max_rows) }} of {{ '{:,}'.format(truncated) }} rows are here.</strong>
+  Filters, sorting and downloads cover these rows. Open each tenant's own report for the rest.</div></div>
+{% endif %}
+{% if data.without %}
+<div class="callout">{{ icon('alert') }}<div><strong>{{ data.without|length|plural('tenant') }} without data for this report</strong>
+  {% for t, reason in data.without %}<p class="m0"><a href="{{ url_for('reports.data_report', tenant_id=t.id, key=key) }}">{{ t.name }}</a>: {{ reason }}</p>{% endfor %}</div></div>
+{% endif %}
+{% if not tv.total %}
+<section class="card flush empty-section" id="t-{{ tv.slug }}">
+  <h2>{{ tv.section.title }} <span class="count-badge">0</span></h2>
+  <p>{{ tv.section.empty }}</p>
+</section>
+{% else %}
+{{ report_table(tv) }}
+{% endif %}
+{% endif %}
+<p class="footnote">Built from each tenant's latest collection with the same report as the tenant's own page. Select a tenant's name to open its report.</p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

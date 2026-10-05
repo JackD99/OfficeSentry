@@ -47,6 +47,11 @@ overview and DEPLOY.md for running it on a server.
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
 
+The two SharePoint collectors list sites and OneDrives through
+`collectors/sharepoint_lookup.Lookups`, so the second one each night reuses
+the first one's answers (when they have the fields it asks for) and people
+without a OneDrive aren't asked about for a week.
+
 ## Adding a check or report
 
 - Checks go in `rules.py` with `@rule(...)`, or in a module imported at the
@@ -82,7 +87,16 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 - Every detail report automatically gets a cross-tenant rollup (`reports/rollups.py`,
   `/across/<key>`) and is compared in the month-over-month change report
   (`reports/month_changes.py`, `/changes`, `/tenants/<id>/changes`). Rollup
-  columns are the report's `tiles`/`highlights`, else a row count per table.
+  columns are the report's `tiles`/`highlights`, else a row count per table;
+  `Rollup.total_row()` sums counts and money only (int or `Money` headlines,
+  not scores or percentages). "Every row" (`/across/<key>/rows/<table slug>`,
+  `rollups.all_rows`) stacks each visible tenant's rows from the same builders
+  under a Tenant column, as one `DataReport`, so `views` filters, sorts, saved
+  views and the CSV/XLSX/PDF downloads work unchanged; it keeps
+  `rollups.MAX_ROWS` per table and says when it cut. `/across/checks`
+  (`rollups.check_matrix`) is every check for every tenant, evaluated from
+  stored data with accepted risks from `findings`; it writes nothing. All
+  `/across` pages are admin and analyst only, over `visible_tenants()`.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change" are ignored as time-driven.
@@ -150,6 +164,11 @@ that are exactly an account's sign-in name or address become `UserLink`s in
 `data_reports.build()` (a `str` with `page_href`), so builders don't need to do
 anything to link people; PDFs and spreadsheets show the plain name.
 
+Staff search every visible tenant's latest snapshot from the sidebar box
+(`web/search.py`, `/search`, admin and analyst only); to make something
+searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
+`show` linking the person's page or the detail report filtered to the row.
+
 ## Web UI conventions
 
 - Styles live in `web/static/app.css` (tokens at the top, light and dark).
@@ -157,7 +176,10 @@ anything to link people; PDFs and spreadsheets show the plain name.
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
-  `_macros.html` (import it `with context`). Add new tenant pages as a tab there.
+  `_macros.html` (import it `with context`). There are seven tabs (Overview,
+  Findings, Changes, Reports, Users, Emails, Settings); a page that belongs
+  under one gets its own key, mapped to that tab in `TAB_OF`, and a link in
+  the tab's second row (`.tab-pages`), rather than a new tab.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
   ISO strings. Licence flags go through the `capability` filter.
 - Tables that people read on phones get `class="stack-sm"` and a
@@ -219,6 +241,15 @@ and retries failed alert emails. A report schedule's send time is a cron slot
 show up in the schedule form automatically. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
+
+Reports are built live, so what a client was sent is kept separately:
+after a report email goes out, `delivery.send_schedule` stores each attached
+PDF/XLSX in `issued_reports` (`issued.py`: bytes as a BLOB, period, version,
+recipients, SHA-256). It is never pruned (snapshot pruning doesn't touch it),
+is backed up with the database and goes with the tenant on delete. The
+tenant's Report history page (`/tenants/<id>/report-history`, linked from
+Emailed reports and the client home) lists and downloads them; clients see
+the files but not who they went to. Archiving never fails a send.
 
 ## Client tenant lifecycle
 

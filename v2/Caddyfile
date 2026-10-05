@@ -4,3 +4,9 @@
 	encode gzip
 	reverse_proxy web:8000
 }
+
+# The demo site (docker compose --profile demo). Unused without it.
+{$DEMO_SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy demo-web:8000
+}

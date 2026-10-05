@@ -1,0 +1,105 @@
+{#- Every check for every tenant (rollups.check_matrix). The overview shows one square per check,
+    grouped by category; picking a category shows its checks by name. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, sev_counts, downloads %}
+{% from "_across.html" import across_head with context %}
+{% block title %}Checks · All tenants · Office Sentry{% endblock %}
+{% macro check_href(t, key, c) -%}
+{% if c.status == 'accepted' %}{{ url_for('reports.tenant_findings', tenant_id=t.id, view='accepted') }}#check-{{ key }}
+{%- else %}{{ url_for('reports.tenant_findings', tenant_id=t.id) }}#check-{{ key }}{% endif %}
+{%- endmacro %}
+{% macro square(t, key, title, c) -%}
+{% set tip = title ~ ': ' ~ c.label ~ (' · ' ~ c.summary if c.summary else '') %}
+{% set cls = 'chk ' ~ c.status ~ ((' ' ~ c.severity) if c.severity else '') %}
+{% if c.status in ('fail', 'accepted') %}<a class="{{ cls }}" href="{{ check_href(t, key, c) }}" title="{{ tip }}"><span class="sr-only">{{ tip }}</span></a>
+{%- else %}<span class="{{ cls }}" title="{{ tip }}"><span class="sr-only">{{ tip }}</span></span>{% endif %}
+{%- endmacro %}
+{% macro status(t, key, c) -%}
+{% if c.status == 'fail' %}<a class="figure-link" href="{{ check_href(t, key, c) }}" title="{{ c.summary }}"><span class="chk fail {{ c.severity or '' }}"></span> {% if c.severity %}<span class="sevtext {{ c.severity }}">{{ c.severity }}</span> {{ c.count }}{% else %}Fail{% endif %}</a>
+{%- elif c.status == 'accepted' %}<a class="figure-link" href="{{ check_href(t, key, c) }}" title="{{ c.summary }}"><span class="chk accepted"></span> Accepted</a>
+{%- elif c.status == 'pass' %}<span title="{{ c.summary }}"><span class="chk pass"></span> Pass</span>
+{%- else %}<span class="muted" title="{{ c.summary }}"><span class="chk unavailable"></span> Not checked</span>{% endif %}
+{%- endmacro %}
+{% block content %}
+{{ across_head('checks', main, groups) }}
+
+{% if not matrix.rows %}
+<div class="card empty">
+  <h3>No tenants to show</h3>
+  <p>{% if current_user.role == 'admin' %}Add a tenant to see it here.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
+</div>
+{% else %}
+{% set no_data = matrix.rows|selectattr('note')|list|length %}
+<div class="tiles">
+  <div class="tile"><div class="label">Tenants</div><div class="value">{{ matrix.rows|length }}</div>
+    <div class="foot">that you look after</div></div>
+  <div class="tile{% if matrix.with_failures %} tone-warn{% endif %}"><div class="label">With failing checks</div><div class="value">{{ matrix.with_failures }}</div>
+    <div class="foot">of {{ matrix.checks|length }} checks</div></div>
+  <div class="tile"><div class="label">No data yet</div><div class="value">{{ no_data }}</div>
+    <div class="foot">{% if no_data %}the reason is under each tenant's name{% else %}every tenant has data{% endif %}</div></div>
+</div>
+
+<nav class="subtabs" aria-label="Check category">
+  <a href="{{ url_for('across.checks') }}"{% if not chosen %} class="active" aria-current="page"{% endif %}>Every category</a>
+  {% for name, items in categories %}<a href="{{ url_for('across.checks', category=slugs[name]) }}"{% if chosen and chosen[0] == name %} class="active" aria-current="page"{% endif %}>{{ name }}<span class="faint"> {{ items|length }}</span></a>{% endfor %}
+</nav>
+
+<div class="card flush">
+  <div class="card-head toolbar">
+    <div>
+      <h2>{{ chosen[0] if chosen else 'Every check' }} <span class="count-badge">{{ (chosen[1] if chosen else matrix.checks)|length }}</span></h2>
+      <p class="sev-legend chk-legend">
+        <span><i class="chk pass"></i>Pass</span>
+        {% for s in ('critical', 'high', 'medium', 'low') %}<span><i class="chk fail {{ s }}"></i>Fail: {{ s }}</span>{% endfor %}
+        <span><i class="chk accepted"></i>Accepted risk</span>
+        <span><i class="chk unavailable"></i>Not checked</span>
+      </p>
+    </div>
+    <div class="toolbar-actions">
+      {% if matrix.rows|length > 5 %}<input class="search sm" type="search" data-filter="check-matrix" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
+      {{ downloads([('XLSX', url_for('across.checks_download', ext='xlsx'), 'Every check for every tenant'),
+                    ('CSV', url_for('across.checks_download', ext='csv'), 'Every check for every tenant')]) }}
+    </div>
+  </div>
+  <div class="table-scroll{{ ' tall' if matrix.rows|length > 12 }}">
+  <table class="stack-sm sortable check-matrix" id="check-matrix">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Tenant</button></th>
+      <th class="num" aria-sort="none" title="Failing checks by their worst finding: critical, high, medium and low"><button type="button" class="sort">Failing</button></th>
+      {% if chosen %}
+      {% for key, title, category in chosen[1] %}<th class="chk-col" aria-sort="none"><button type="button" class="sort">{{ title }}</button></th>{% endfor %}
+      {% else %}
+      {% for name, items in categories %}<th title="{{ items|map(attribute=1)|join(', ') }}"><a href="{{ url_for('across.checks', category=slugs[name]) }}">{{ name }}</a></th>{% endfor %}
+      {% endif %}
+    </tr></thead>
+    <tbody>
+    {% for row in matrix.rows %}{% set t = row.tenant %}
+    <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
+      <td class="tenant-col" data-sort="{{ t.name|lower }}"><a class="strong" href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">{{ t.name }}</a>
+        {% if row.note %}<span class="sub muted">{{ row.note }}</span>{% endif %}</td>
+      {% if row.note %}
+      <td colspan="{{ 1 + ((chosen[1] if chosen else categories)|length) }}" class="muted" data-label="Status">Not available</td>
+      {% else %}
+      <td class="num" data-label="Failing" data-sort="{{ row.attention }}">{{ sev_counts(row.severities) }}</td>
+      {% if chosen %}
+      {% for key, title, category in chosen[1] %}{% set c = row.cells.get(key) %}
+      <td data-label="{{ title }}" data-sort="{{ {'fail': 0, 'accepted': 1, 'unavailable': 2, 'pass': 3}.get(c.status, 4) if c else 5 }}">{% if c %}{{ status(t, key, c) }}{% else %}<span class="faint">–</span>{% endif %}</td>
+      {% endfor %}
+      {% else %}
+      {% for name, items in categories %}
+      <td data-label="{{ name }}"><span class="chk-row">{% for key, title, category in items %}{% set c = row.cells.get(key) %}{% if c %}{{ square(t, key, title, c) }}{% endif %}{% endfor %}</span></td>
+      {% endfor %}
+      {% endif %}
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+<p class="footnote">Results come from each tenant's latest collection, with the same checks as the monthly review. A failing or accepted check opens that tenant's findings for it.{% if not chosen %} Pick a category to see its checks by name.{% endif %}</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

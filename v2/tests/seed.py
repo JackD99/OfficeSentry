@@ -114,7 +114,8 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
                 secure_scores=None, per_user=None, usage_kw=None, signins=None, auth_methods_policy=None,
-                subscriptions=None, groups=None, risky_users=None, **phase4):
+                subscriptions=None, groups=None, deleted_users=None, deleted_groups=None, risky_users=None,
+                **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
     rsps.get(f"{V1}/directory/subscriptions",
@@ -152,6 +153,10 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
         return 200, {}, json.dumps({"value": getattr(grp, kind.upper()).get(gid, [])})
     rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/groups/[^/]+/(owners|members)"),
                       callback=people, content_type="application/json")
+    rsps.get(f"{V1}/directory/deletedItems/microsoft.graph.user",
+             json={"value": gd.DELETED_USERS if deleted_users is None else deleted_users})
+    rsps.get(f"{V1}/directory/deletedItems/microsoft.graph.group",
+             json={"value": gd.DELETED_GROUPS if deleted_groups is None else deleted_groups})
     rsps.get(f"{V1}/groupSettings", json={"value": grp.GROUP_SETTINGS})
     rsps.get(f"{V1}/groupLifecyclePolicies", json={"value": grp.LIFECYCLE_POLICIES})
     rsps.get(f"{BETA}/organization", json={"value": [gd.ORGANIZATION]})

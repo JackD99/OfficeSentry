@@ -33,7 +33,7 @@
 <div class="grid-main">
 <div>
   <section class="card flush">
-    <div class="card-head toolbar"><h2>Client report emails</h2><span class="meta">Add one from a tenant's Emailed reports tab</span></div>
+    <div class="card-head toolbar"><h2>Client report emails</h2><span class="meta">Add one from a tenant's Emails tab</span></div>
     {% if schedules %}
     <ul class="list sched-list">{% for s in schedules %}{{ schedule_item(s, True, tenants[s.tenant_id].name) }}{% endfor %}</ul>
     {% else %}

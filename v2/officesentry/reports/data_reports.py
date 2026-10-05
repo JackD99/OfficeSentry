@@ -945,10 +945,11 @@ REPORTS.update(_items[:_at] + list(_MAIL_REPORTS.items()) + _items[_at:])
 GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("identity", "Identity and access",
      ("mfa", "auth-methods", "admins", "conditional-access", "inactive", "sign-ins", "risky-users", "guests",
-      "legacy-auth", "hybrid")),
+      "deleted-items", "legacy-auth", "hybrid")),
     ("email", "Email", ("mailboxes", "inbox-rules", "mailbox-permissions", "shared-mailboxes", "mailbox-size",
                         "mailbox-holds", "domains")),
-    ("files", "Files and Teams", ("sharepoint", "sharepoint-storage", "onedrive", "shared-files", "groups")),
+    ("files", "Files and Teams", ("sharepoint", "sharepoint-storage", "onedrive", "shared-files", "groups",
+                                  "group-membership")),
     ("devices", "Devices and apps", ("devices", "apps")),
     ("tenant", "Tenant and licences", ("secure-score", "subscriptions", "licences", "licence-rightsizing", "usage",
                                        "tenant-settings", "admin-activity")),
