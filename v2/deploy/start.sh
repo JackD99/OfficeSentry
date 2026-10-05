@@ -8,6 +8,10 @@ cd "${OFFICESENTRY_DIR:-/opt/officesentry/v2}"
 # Build first so the portal is only down while the containers swap.
 docker compose build --pull
 docker compose up -d --remove-orphans
+# A part switched off (say the demo) isn't an orphan to compose: remove it.
+if [[ ",${COMPOSE_PROFILES:-$(sed -n 's/^COMPOSE_PROFILES=//p' .env)}," != *,demo,* ]]; then
+  docker compose --profile demo rm -sf demo-web demo-worker
+fi
 
 for service in web demo-web; do
   id=$(docker compose ps -q "$service")

@@ -18,6 +18,7 @@ Development only: it imports the test fixtures, which aren't in the Docker image
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import re
 import secrets
@@ -569,6 +570,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--data-dir", required=True, type=Path, help="a new, empty data directory")
     parser.add_argument("--admin", default="demo", help="admin username to create (default: demo)")
+    parser.add_argument("--password", default=os.environ.get("DEMO_PASSWORD") or None,
+                        help="the admin's password (default: $DEMO_PASSWORD, else a new random one)")
     args = parser.parse_args()
 
     from officesentry.config import load_config
@@ -581,7 +584,7 @@ def main() -> None:
     if db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]:
         sys.exit(f"{args.data_dir} already has tenants; use a new data directory.")
     ids = populate(db, Vault(cfg.encryption_keys))
-    password = secrets.token_urlsafe(12)
+    password = args.password or secrets.token_urlsafe(12)
     db.execute("INSERT INTO users (username, password_hash, role, all_tenants, created_at)"
                " VALUES (?, ?, 'admin', 1, ?)",
                (args.admin, generate_password_hash(password), utcnow()))
