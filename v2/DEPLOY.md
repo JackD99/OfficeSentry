@@ -330,6 +330,17 @@ At your DNS provider add an **A** record for, say, `sentry.yourmsp.com` with
 the server's IPv4 address. Only add an AAAA (IPv6) record if your firewall
 rules list your IPv6 ranges too, or browsers that prefer IPv6 won't get in.
 
+**Domain on Cloudflare?** In the Cloudflare app or dash.cloudflare.com: the
+domain → *DNS → Records → Add record*: type **A**, name `app` (for
+`app.yourmsp.com`, or `@` for the bare domain), IPv4 address the server's,
+and **Proxy status off (grey cloud, "DNS only")**. Add a second one named
+`demo` the same way for the demo site. Keep the proxy off: with the orange
+cloud, every visitor reaches the server from a Cloudflare address, so the
+Hetzner firewall's allow-list would block everyone (or have to let all of
+Cloudflare in), and Caddy can't get its certificate the usual way. Caddy
+makes the HTTPS certificate itself, so nothing needs changing under
+Cloudflare's SSL/TLS settings.
+
 ### 5. Tell GitHub where to deploy
 
 In Hetzner: *Security → API tokens → Generate API token*, **Read & Write**
