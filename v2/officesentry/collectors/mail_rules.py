@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from .. import store
 from ..graph import GraphError, PermissionMissing
+from ..text import plural
+from . import mailbox_window
 from .base import Collector, RunContext, register
 
-PER_MAILBOX_LIMIT = 2000
 MAILBOX_TYPES = {"UserMailbox", "SharedMailbox"}
 
 
@@ -41,10 +42,8 @@ class InboxRules(Collector):
             ctx.log("Tenant has no Exchange Online licence; nothing to collect")
             ctx.objects("inbox_rule", [])
             return
-        targets = _targets(ctx)
-        if len(targets) > PER_MAILBOX_LIMIT:
-            ctx.warn(f"Read inbox rules for the first {PER_MAILBOX_LIMIT} of {len(targets)} mailboxes")
-            targets = targets[:PER_MAILBOX_LIMIT]
+        window = mailbox_window.plan(ctx, self.key, "inbox_rule", _targets(ctx), lambda t: t["id"], "inbox rules")
+        targets = window.mailboxes
 
         rows, failed, denied = [], 0, 0
         for t in targets:
@@ -73,10 +72,13 @@ class InboxRules(Collector):
                                     "Reading inbox rules was refused for every mailbox; check MailboxSettings.Read "
                                     "consent and any Exchange application access policy")
         if denied or failed:
-            ctx.warn(f"Could not read inbox rules for {denied + failed} of {len(targets)} mailbox(es)")
+            ctx.warn(f"Could not read inbox rules for {denied + failed} of {plural(len(targets), 'mailbox')}")
+        rows += window.carried
         ctx.objects("inbox_rule", rows)
+        window.save(ctx)
         ctx.metric("mail.inbox_rules", len(rows))
-        ctx.metric("mail.mailboxes_checked", len(targets) - denied - failed)
+        # Mailboxes the stored rules cover: read this run, or kept from an earlier run.
+        ctx.metric("mail.mailboxes_checked", len(targets) - denied - failed + window.carried_mailboxes)
 
     @staticmethod
     def _folder_name(ctx: RunContext, user_id: str, folder_id: str) -> str | None:

@@ -7,6 +7,12 @@ x-officesentry: &officesentry
   volumes: ["officesentry-data:/data"]
   restart: unless-stopped
   init: true
+  # Nothing in these containers needs root powers or a writable image: data
+  # goes to the volume and temporary files to /tmp.
+  read_only: true
+  tmpfs: ["/tmp"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
 
 services:
   web:

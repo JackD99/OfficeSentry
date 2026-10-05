@@ -1,8 +1,7 @@
 # CLAUDE.md: Office Sentry v2
 
 Read-only Microsoft 365 reporting for MSPs. See README.md for the user-facing
-overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
-(if present) for the plan this follows.
+overview and DEPLOY.md for running it on a server.
 
 ## Rules that must not be broken
 
@@ -117,7 +116,27 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   IDs replaced. When a collector asks Microsoft for something new, re-record it
   with `python -m officesentry live-test --record tests/fixtures/live_tenant.json`
   (needs the `OFFICESENTRY_TEST_*` variables). Scrubbing happens in memory and
-  refuses to write the file if a name or domain survives; still skim the diff.
+  refuses to write the file if a name, domain or phone number survives; still
+  skim the diff. Phone fields are replaced by key (`recording.PHONE_KEYS`)
+  whatever their format; `tests/test_recording.py` covers the scrubber.
+
+## Robustness contract
+
+`tests/test_robustness.py` fuzzes every check in `rules.RULES`, every report in
+`data_reports.REPORTS` and every `changes.*_changes` feed against degraded
+snapshots (a field removed or null, a list where text is expected and the other
+way round, timestamps of `""`, `"0001-01-01T00:00:00Z"`, `"not-a-date"` or
+without their `Z`, no objects at all). The registries are read when the tests
+run, so new checks and reports are fuzzed as soon as they exist.
+
+- Missing fields, nulls, odd timestamps and empty collections happen with real
+  Microsoft data, so every check, report and change feed handles them itself.
+- Wrong types can't come from Graph; for those it's enough that the guards
+  contain the crash: `rules.evaluate()` shows the check as "couldn't run",
+  `data_reports.build()` shows the report as unavailable and
+  `changes.all_changes()` leaves out that feed. Nothing returns a malformed result.
+- Use the shared helpers: `devices.parse_ts` / `devices.parse_day` for any
+  timestamp or date, `coverage.policy_name` for a policy with no name.
 
 ## One page per account
 
@@ -150,15 +169,38 @@ anything to link people; PDFs and spreadsheets show the plain name.
 
 ## Background work
 
-`worker.py` is the only background process: one loop that claims queued runs
-and, once a minute, queues the collection slot (`schedule.py`, cron +
-timezone, skipping collectors fresher than `max_age_hours`) and sends due
-report emails (which first refresh stale collectors). It prunes snapshots once
-a day with `store.prune_snapshots` (latest run per day for 30 days and per
-month for 12; metrics, findings and run rows are never pruned), so code that
-reads an older run must cope with its objects being gone (see
-`changes._baseline_run`). A side thread records the heartbeat that the
-portal banner and `healthcheck worker` read. Don't add Celery or Redis.
+`worker.py` is the only background process (run one): `cfg.worker_concurrency`
+collector threads claim queued runs (`store.claim_next_run`: highest
+`runs.priority` first, then oldest, and never two runs for one tenant at once).
+`execute_run` syncs findings (and alerts) once the tenant has nothing else
+queued or running, so a night's collection is evaluated once. Token providers
+(`msauth.shared_certificate_token_provider`) and each thread's HTTP session are
+reused across runs. Meanwhile the main thread, once a
+minute, queues the collection slot (`schedule.py`, cron + timezone, skipping
+collectors fresher than `max_age_hours`) and sends due report emails (which
+first refresh stale collectors). Every thread opens its own SQLite connection;
+never share one across threads. Manual runs and report refreshes get
+`store.PRIORITY_WAITING`. Once a day it prunes snapshots with
+`store.prune_snapshots` (latest run per day for 30 days and per month for 12;
+metrics, findings and run rows are never pruned), so code that reads an older
+run must cope with its objects being gone (see `changes._baseline_run`), and
+run log info lines older than 90 days (`store.prune_run_logs`; warnings and
+errors stay). A side thread records the heartbeat that the portal banner and
+`healthcheck worker` read, but only while the worker makes progress
+(`worker.Liveness`: the main loop came round in the last 10 minutes and no run
+has gone for 4 hours), so a wedged loop or thread shows as down. A failing
+housekeeping pass (say "database is locked") is logged, rolled back and
+retried the next minute; it never ends the worker. Don't add Celery or Redis.
+
+The dashboard and the All tenants review read each tenant's row from
+`rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
+its `_fingerprint` changes (latest run, findings, prices, currency, app
+connections, the code, the day). If the row comes to depend on something
+else, add it to the fingerprint. The worker rebuilds a tenant's row after its
+last queued run and every row once a day. Runs are read through the indexes in
+`migrations/0016`; check a new query on `runs` with `EXPLAIN QUERY PLAN`, and
+note that most rows are finished, so a filter on `status` alone needs
+`INDEXED BY idx_runs_status`.
 
 To add timed work (emails, digests), register a job in its own module with
 `@schedule.periodic("name")`; it gets a `TickContext` every minute and uses
@@ -171,7 +213,7 @@ decide whether to act. Add the module to `worker.JOB_MODULES`. See
 `delivery.tick()` (the `email_delivery` periodic job) sends scheduled emails
 and retries failed alert emails. A report schedule's send time is a cron slot
 (`delivery.schedule_cron`), and stale collectors are refreshed first. Alert emails are not a separate engine: `alerts.after_sync()`
-(the Teams/Slack/webhook alert event after each collection) calls
+(the Teams/Slack/webhook alert event after each findings sync) calls
 `delivery.after_sync()`, so both go out on the same findings. Schedules store their own timezone and the last period they finished
 ("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
 show up in the schedule form automatically. Email templates live in
@@ -203,11 +245,38 @@ ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
+`db.migrate` re-reads `user_version` inside each migration's transaction (two
+processes may start at once) and copies a database that already has a schema
+to `backups/pre-upgrade-*.db` first (`backups.before_upgrade`); restoring that
+copy is the only way back, since migrations only go forward.
 
 ## Commands
 
-`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,setup-link,create-app,rotate-keys,backup,healthcheck,delete-tenant}`.
+`pytest -n auto` (every core; plain `pytest` for debugging), `ruff check .`,
+and `python -m officesentry <command>`:
+
+| Command | What it does |
+|---|---|
+| `web` | the portal on Werkzeug's server, for development (Docker runs gunicorn) |
+| `serve` | the portal on a production server without Docker: waitress on Windows, gunicorn elsewhere |
+| `worker [--once]` | collections, the schedule, emailed reports and retention |
+| `migrate` | apply database upgrades now (the portal and worker also do it on start) |
+| `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
+| `setup-link` | print the one-time link for creating the first admin in the browser |
+| `create-app` | create the read-only multi-tenant Entra app (device sign-in) |
+| `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
+| `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
+| `backup [--dir] [--keep]` | a consistent copy of the database (keeps 7) |
+| `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
+| `delete-tenant <id>` | delete a tenant and everything stored for it |
+| `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+
 Docker: `docker compose up -d --build` (see DEPLOY.md).
 
 Tests sign in with a password only (`require_mfa="off"` in `conftest.py`);
-`tests/test_login_security.py` covers two-step sign-in.
+`tests/test_login_security.py` covers two-step sign-in. `make_user` stores a
+cheap precomputed hash (scrypt costs ~0.1 s a time); the portal still uses
+scrypt. A slow fixture that tests only read (`seeded`, `wrecked_once`, the
+live replay) is module-scoped with its own database; keep tests that write
+on the per-test `db`. Tests run in parallel in CI (`-n auto`), so never share
+files outside `tmp_path`.

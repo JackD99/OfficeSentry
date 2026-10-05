@@ -2,16 +2,9 @@
 
 Read-only Microsoft 365 reporting for MSPs: nightly snapshots of every client
 tenant, cross-tenant rollups, month-over-month changes and branded client
-reports. This is the rebuild planned in the 2026-10 review; the v1 portal
-remains in `../portal` until v2 replaces it.
-
-**Status: Phase 5.** Tenants are collected nightly; the **Monthly Security &
-Licensing Review** is available per tenant (HTML, PDF, XLSX) with a
-cross-tenant overview, findings history, accepted risks, "since last month"
-changes and monthly emailed reports, plus detail reports on mailboxes, apps,
-Conditional Access coverage, email domains and guests, a cyber-insurance
-evidence pack, prospect assessments and a client view. Next: a UX and design
-pass, and a first run against a real tenant.
+reports. The [root README](../README.md) is the product page with screenshots;
+this page lists every feature in detail and covers setup and development.
+Running it on a server is in [DEPLOY.md](DEPLOY.md).
 
 ## Reports
 
@@ -207,28 +200,24 @@ pass, and a first run against a real tenant.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
-count, guest admins, apps with admin roles, users without MFA, admins
-without a phishing-resistant sign-in method, people whose only second factor
-is a text or call, inactive
-accounts, licences on disabled accounts, unassigned paid licences, external
-forwarding, inbox rules that hide mail, automatic forwarding policy, shared
-mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party app access,
-user consent, app credential expiry, SharePoint anonymous links, guest
-invitations, stale guest invitations, teams and groups without an owner, who
-can create teams and groups, group expiration, device compliance, disk encryption,
-user consent, app credential expiry, users creating tenants, users
-registering apps, guest directory access, joining by email verification,
-admin consent requests, SharePoint anonymous links, guest
-invitations, stale guest invitations, device compliance, disk encryption,
-Windows releases out of support, joined computers not in Intune, devices not
-checking in, stale device records, SharePoint storage nearly full, licence
-assignment errors, and subscriptions about to lapse (trials in use ending
-within 30 days, subscriptions in their grace period, suspended ones still
-assigned).
-For tenants synced from on-premises AD: directory sync running, password
-hash sync on, and admin accounts that are cloud-only.
-checking in, stale device records, domain federation changes, risky sign-ins
-that succeeded (Entra ID P2).
+count, guest admins, apps with admin roles, users without MFA, admins without a
+phishing-resistant sign-in method, people whose only second factor is a text or
+call, inactive accounts, licences on disabled accounts, unassigned paid
+licences, external forwarding, inbox rules that hide mail, automatic forwarding
+policy, shared mailbox sign-in, mailbox auditing, SMTP AUTH, risky third-party
+app access, user consent, app credential expiry, users creating tenants, users
+registering apps, guest directory access, joining by email verification, admin
+consent requests, SharePoint anonymous links, guest invitations, stale guest
+invitations, teams and groups without an owner, who can create teams and
+groups, group expiration, device compliance, disk encryption, Windows releases
+out of support, joined computers not in Intune, devices not checking in, stale
+device records, SharePoint storage nearly full, licence assignment errors,
+domain federation changes, risky sign-ins that succeeded (Entra ID P2), and
+subscriptions about to lapse (trials in use ending within 30 days,
+subscriptions in their grace period, suspended ones still assigned). For
+tenants synced from on-premises AD: directory sync running, password hash sync
+on, and admin accounts that are cloud-only. The [check catalogue](docs/checks.md)
+lists every check with the data it reads and what it needs.
 
 ### Exchange data
 
@@ -381,13 +370,19 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 python -m officesentry worker                                 # second terminal
 ```
 
-On Windows, use `.venv\Scripts\activate` and `set OFFICESENTRY_INSECURE_COOKIES=1`.
-Everything works natively. One-click PDF files come from WeasyPrint, which
-needs the Pango libraries (Docker includes them; WeasyPrint can't install them
-on Windows by itself). Without Pango, every PDF button opens the same report
-as a print-ready page instead and the browser's print window comes up: choose
-**Save as PDF** as the printer to get the same layout. Scheduled emails can
-only attach PDFs when WeasyPrint works.
+`pytest -n auto` runs the tests on every core. `web` is Werkzeug's
+development server; `python -m officesentry serve` runs the portal on a
+production server (gunicorn, or waitress on Windows).
+
+**Windows without Docker** works for development and for a small
+production install (see "Running on Windows without Docker" in
+[DEPLOY.md](DEPLOY.md)): use `.venv\Scripts\activate` and
+`set OFFICESENTRY_INSECURE_COOKIES=1`, and `serve` instead of gunicorn. What
+differs is PDF files: WeasyPrint needs the Pango libraries, which Docker
+includes and Windows doesn't have. Without Pango, every PDF button opens the
+same report as a print-ready page and the browser's print window comes up:
+choose **Save as PDF** as the printer to get the same layout. Scheduled
+emails can only attach PDFs when WeasyPrint works.
 
 Tests mock Microsoft Graph at the HTTP layer (`responses`), not the client
 class, so URL and paging bugs are caught.
@@ -398,6 +393,7 @@ class, so URL and paging bugs are caught.
 officesentry/
   config.py      env config; separate session and encryption keys
   db.py          SQLite (WAL) + transactional migrations (migrations/*.sql)
+  backups.py     backup, restore, and the copy taken before each upgrade
   crypto.py      Fernet vault with key rotation
   certs.py       certificate generation, Entra keyCredential
   entra.py       read-only permission list, app creation, consent URL

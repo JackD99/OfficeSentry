@@ -103,7 +103,7 @@ class Rollup:
 # -- Monthly review ----------------------------------------------------------------
 
 
-def review_rollup(conn, tenants, now: datetime) -> Rollup:
+def review_rollup(conn, tenants, now: datetime, cached: bool = False) -> Rollup:
     columns = [
         Column("open", "Open findings", "sev", hint="Critical, high, medium and low"),
         Column("new", "New in 4 weeks"),
@@ -118,7 +118,7 @@ def review_rollup(conn, tenants, now: datetime) -> Rollup:
     rows = []
     for t in tenants:
         try:
-            data = rollup_row(conn, t, now)
+            data = rollup_row(conn, t, now, cached=cached)
         except Exception as exc:  # one broken tenant mustn't blank the rollup
             logging.getLogger(__name__).exception("Review rollup failed for tenant %s", t["id"])
             rows.append(RollupRow(dict(t), note=f"Couldn't be built: {type(exc).__name__}"))
@@ -274,9 +274,10 @@ def available() -> list[tuple[str, str]]:
 
 
 def build(conn, tenants, key: str, now: datetime | None = None) -> Rollup:
+    live = now is None  # only a rollup of the present can use the cached rows
     now = now or datetime.now(UTC)
     if key == "review":
-        rollup = review_rollup(conn, tenants, now)
+        rollup = review_rollup(conn, tenants, now, cached=live)
     elif key == "evidence":
         rollup = evidence_rollup(conn, tenants, now)
     elif key in data_reports.REPORTS:
