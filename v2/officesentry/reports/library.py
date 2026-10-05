@@ -26,7 +26,7 @@ USES: tuple[Use, ...] = (
     Use("offboarding", "Offboarding check",
         "Someone has left: check their access is gone, their mail isn't forwarded and their licences come back.",
         ("inactive", "licences", "mailboxes", "inbox-rules", "mailbox-permissions", "mailbox-holds", "onedrive",
-         "shared-files", "admins", "devices", "groups", "group-membership")),
+         "shared-files", "admins", "devices", "groups", "group-membership", "deleted-items")),
     Use("quarterly", "Quarterly review",
         "What a client review meeting covers: the summary, what changed, and the trends behind it.",
         ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests")),
@@ -75,6 +75,8 @@ KEYWORDS: dict[str, str] = {
     "conditional-access": "ca policies policy require mfa block",
     "inactive": "stale dormant leavers unused accounts sign-in last login",
     "guests": "external users b2b invitations",
+    "deleted-items": "recycle bin restore undelete recover soft-deleted removed accounts leavers deleted teams "
+                     "deleted mailbox 30 days purge",
     "legacy-auth": "basic auth smtp imap pop old protocols",
     "sign-ins": "sign-in logs login logins failed failures password spray brute force lockout locked "
                 "countries locations risky risk compromised breach hacked single-factor audit",

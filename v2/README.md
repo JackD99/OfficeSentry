@@ -120,6 +120,12 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     expiry).
   - *Guests and sharing*: invitation, consent and SharePoint sharing settings,
     and every guest with invitation state and last sign-in.
+  - *Deleted users and groups*: the Entra ID recycle bin. Every deleted user
+    (member or guest, the licences it held) and deleted team or Microsoft 365
+    group, when it was deleted and the days left before Microsoft removes it
+    for good after 30 days. Licensed members and teams with 7 days or less
+    left are flagged. Restoring is done in the Entra or Microsoft 365 admin
+    centre; Office Sentry only reads the recycle bin.
   - *Groups and Teams*: who can create teams and groups, whether guests are
     allowed and unused groups expire, teams and Microsoft 365 groups with no
     enabled owner or a single one, every team and group with its owners,

@@ -11,6 +11,7 @@ from . import auth_methods  # noqa: F401
 from . import admin_activity  # noqa: F401
 from . import apps, policies  # noqa: F401
 from . import groups  # noqa: F401
+from . import deleted_items  # noqa: F401
 from . import exchange, mail_rules, mail_usage  # noqa: F401, I001  (these reuse the mailbox snapshot)
 from . import sign_ins  # noqa: F401
 from . import domains  # noqa: F401

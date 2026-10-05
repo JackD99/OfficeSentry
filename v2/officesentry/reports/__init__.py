@@ -3,6 +3,7 @@
 from . import (
     auth_methods,
     data_reports,
+    deleted_items,
     group_membership,
     mail_compliance,
     sharepoint,
@@ -41,6 +42,12 @@ _items = list(data_reports.REPORTS.items())
 _at = [k for k, _ in _items].index("licences")
 data_reports.REPORTS.clear()
 data_reports.REPORTS.update(_items[:_at] + list(subscriptions.REPORTS.items()) + _items[_at:])
+
+# Deleted users and groups sits next to Guests and sharing.
+_items = list(data_reports.REPORTS.items())
+_at = [k for k, _ in _items].index("guests") + 1
+data_reports.REPORTS.clear()
+data_reports.REPORTS.update(_items[:_at] + list(deleted_items.REPORTS.items()) + _items[_at:])
 
 # Group membership sits next to Groups and Teams.
 _items = list(data_reports.REPORTS.items())
