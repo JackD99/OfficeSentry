@@ -54,6 +54,7 @@ its licences) and when it will be full at the current rate, where the space goes
 recycle bins, Preservation Hold libraries), every site and library by size, and the largest folders and files,
 files with the most version history, large files nobody has touched for two years and the biggest recycle bin
 items, each with what to do about it. OneDrives that are nearly full get the same treatment.
+See the full 19-page [example PDF](examples/sharepoint-storage.pdf) for a client at 88%.
 
 ![SharePoint storage: 88% used, full in about 3 months, and where the space goes](docs/screenshots/sharepoint-storage.png)
 
@@ -122,8 +123,8 @@ of every detail report.
     <td width="50%"><img src="docs/screenshots/what-changed.png" alt="What changed across all tenants"></td>
   </tr>
   <tr>
-    <td>All tenants: the monthly review's figures for every client</td>
-    <td>What changed in the last 30 days, most important first</td>
+    <td>All tenants: the monthly review's figures for every client (<a href="examples/all-tenants-monthly-review.pdf">PDF</a>)</td>
+    <td>What changed in the last 30 days, most important first (<a href="examples/what-changed-all-tenants.pdf">PDF</a>)</td>
   </tr>
 </table>
 

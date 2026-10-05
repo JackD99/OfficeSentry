@@ -6,7 +6,8 @@ uses Playwright's Chromium to save:
 
 * ``docs/screenshots/*.png``: pages at 1440 px wide (light), two at phone
   width and one in dark mode, plus the first pages of report PDFs;
-* ``examples/*``: real exported PDFs and an XLSX (``--examples``, on by default).
+* ``examples/*``: real exported PDFs and an XLSX, with a README listing them
+  (``--no-examples`` skips them).
 
 Re-run it whenever the UI or the reports change, then look at the images
 before committing them::
@@ -458,7 +459,7 @@ def write_examples(files: dict[str, bytes], out: Path, msp: str, tenants: list[s
              "Regenerate them from `v2/` with `python scripts/screenshots.py` after report changes.", "",
              "| File | What it is |", "|---|---|"]
     lines += [f"| [{name}]({name}) | {EXAMPLES[name][1]} |" for name in EXAMPLES if name in files]
-    (out / "README.md").write_text("\n".join(lines) + "\n")
+    (out / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # -- Main -----------------------------------------------------------------------------------------
