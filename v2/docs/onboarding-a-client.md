@@ -322,6 +322,23 @@ is deleted. Other users keep their accounts and just lose this tenant. The
 activity log keeps an entry saying who deleted the tenant, when, and what was
 removed.
 
+Erasure, for a client's data-protection request:
+
+- **Activity log**: entries about the tenant keep who did what and when, but
+  details that name the client's people (accepted findings, which hold a
+  user's sign-in name; contacts' email addresses; alert errors) are replaced
+  with *(removed when the tenant was deleted)*. Client accounts deleted with
+  the tenant are renamed *deleted client account #N* in the log and their
+  addresses are cleared; the offboarding entry lists their usernames as the
+  record of what was erased.
+- **Database file**: the delete overwrites the removed rows
+  (`secure_delete`), then compacts the file and empties the write-ahead log,
+  so nothing can be read back from free space.
+- **Backups**: copies made by `python -m officesentry backup` before the
+  delete still contain the tenant until they rotate out (the last 7 are
+  kept), and so do any copies you took off the server. Delete those yourself
+  if the client needs erasure sooner.
+
 Whoever runs the server can do the same without the portal (back up first
 with `python -m officesentry backup`):
 

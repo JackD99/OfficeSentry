@@ -372,6 +372,50 @@ def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, 
     assert entry["tenant_id"] == alpha and "Alpha Ltd" in entry["detail"] and "alpha-it" in entry["detail"]
 
 
+def _on_disk(cfg) -> bytes:
+    return b"".join(p.read_bytes() for p in cfg.data_dir.glob("officesentry.db*"))
+
+
+def test_offboarding_erases_client_people_from_the_log_and_the_database_file(app, db, cfg, two_tenants):
+    alpha, bravo = two_tenants
+    person = "dana.erase-me@alpha-client.example"
+    run = store.enqueue_run(db, alpha, "users")
+    db.execute("INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, 'user', 'u1', ?)",
+               (run, json.dumps({"userPrincipalName": person, "pad": "x" * 5000})))
+    make_user(db, "admin")
+    client_user = make_user(db, "it@alpha-client.example", role="client", tenants=[alpha])
+    staff = app.test_client()
+    login(staff, "admin")
+    staff.post(f"/tenants/{alpha}/contacts", data={"name": "Dana", "email": person})
+    audit_rows = [("finding_accepted", f"mfa_registered:{person}"), ("contact_removed", person),
+                  ("alert_failed", f"Alert to {person} failed")]
+    db.executemany("INSERT INTO audit_log (ts, username, action, tenant_id, detail) VALUES (?, 'admin', ?, ?, ?)",
+                   [("2026-01-01T00:00:00Z", a, alpha, d) for a, d in audit_rows])
+    db.execute("INSERT INTO audit_log (ts, username, action, tenant_id, detail) VALUES ('2026-01-01T00:00:00Z',"
+               " 'admin', 'finding_accepted', ?, 'mfa_registered:kept@bravo.example')", (bravo,))
+    login(app.test_client(), "it@alpha-client.example")  # the client's own sign-ins, with their address
+    assert person.encode() in _on_disk(cfg)
+
+    staff.post(f"/tenants/{alpha}/delete", data={"confirm_name": "Alpha Ltd", "delete_users": [str(client_user)]})
+    assert store.get_tenant(db, alpha) is None
+    log = [dict(r) for r in db.execute("SELECT * FROM audit_log ORDER BY id")]
+    assert not any(person in (r["detail"] or "") for r in log)
+    # Who did what, and when, is kept; only the detail naming the client's people goes.
+    accepted = next(r for r in log if r["action"] == "finding_accepted" and r["tenant_id"] == alpha)
+    assert accepted["username"] == "admin" and accepted["ts"] == "2026-01-01T00:00:00Z"
+    assert "removed when the tenant was deleted" in accepted["detail"]
+    # The deleted client account's own activity no longer names them or their address.
+    assert not any(r["username"] == "it@alpha-client.example" for r in log)
+    assert any(r["action"] == "login" and r["username"].startswith("deleted client account") and r["ip"] is None
+               for r in log)
+    # The offboarding record itself stays, and other tenants' rows are untouched.
+    deleted = next(r for r in log if r["action"] == "tenant_deleted")
+    assert deleted["username"] == "admin" and "Alpha Ltd" in deleted["detail"]
+    assert any(r["detail"] == "mfa_registered:kept@bravo.example" for r in log)
+    # Nothing readable is left in the database file or its write-ahead log.
+    assert person.encode() not in _on_disk(cfg)
+
+
 def test_delete_refuses_without_foreign_keys(db, two_tenants):
     alpha, _ = two_tenants
     db.execute("PRAGMA foreign_keys = OFF")

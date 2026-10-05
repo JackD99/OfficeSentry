@@ -25,6 +25,9 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
+    # Zero deleted content when it costs no extra I/O (pruned snapshots, removed people);
+    # tenant deletion turns it fully on (lifecycle.delete_tenant).
+    conn.execute("PRAGMA secure_delete = FAST")
     return conn
 
 

@@ -121,6 +121,11 @@ docker compose cp web:/data/secrets.json ./secrets.json
 Keep `secrets.json` somewhere safe and separate: without it the stored
 certificate can't be decrypted, and with it anyone holding the backup can.
 
+Backups keep everything that was in the database when they were made. After
+you delete a client tenant, its data stays in older backups until they rotate
+out (the last 7 are kept) and in any copies you took off the server; delete
+those too if the client asks for their data to be erased.
+
 To back up every night, add this line with `crontab -e` (change the folder):
 
 ```
