@@ -1,8 +1,7 @@
 # CLAUDE.md: Office Sentry v2
 
 Read-only Microsoft 365 reporting for MSPs. See README.md for the user-facing
-overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
-(if present) for the plan this follows.
+overview and DEPLOY.md for running it on a server.
 
 ## Rules that must not be broken
 
@@ -112,6 +111,24 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   skim the diff. Phone fields are replaced by key (`recording.PHONE_KEYS`)
   whatever their format; `tests/test_recording.py` covers the scrubber.
 
+## Robustness contract
+
+`tests/test_robustness.py` fuzzes every check in `rules.RULES`, every report in
+`data_reports.REPORTS` and every `changes.*_changes` feed against degraded
+snapshots (a field removed or null, a list where text is expected and the other
+way round, timestamps of `""`, `"0001-01-01T00:00:00Z"`, `"not-a-date"` or
+without their `Z`, no objects at all). The registries are read when the tests
+run, so new checks and reports are fuzzed as soon as they exist.
+
+- Missing fields, nulls, odd timestamps and empty collections happen with real
+  Microsoft data, so every check, report and change feed handles them itself.
+- Wrong types can't come from Graph; for those it's enough that the guards
+  contain the crash: `rules.evaluate()` shows the check as "couldn't run",
+  `data_reports.build()` shows the report as unavailable and
+  `changes.all_changes()` leaves out that feed. Nothing returns a malformed result.
+- Use the shared helpers: `devices.parse_ts` / `devices.parse_day` for any
+  timestamp or date, `coverage.policy_name` for a policy with no name.
+
 ## One page per account
 
 `reports/user_profile.py` builds `/tenants/<id>/users/<object id>` (and the
@@ -199,7 +216,23 @@ Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 
 ## Commands
 
-`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,setup-link,create-app,rotate-keys,backup,healthcheck,delete-tenant}`.
+`pytest`, `ruff check .`, and
+`python -m officesentry <command>`:
+
+| Command | What it does |
+|---|---|
+| `web` | the portal on Werkzeug's server, for development (Docker runs gunicorn) |
+| `worker [--once]` | collections, the schedule, emailed reports and retention |
+| `migrate` | apply database upgrades now (the portal and worker also do it on start) |
+| `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
+| `setup-link` | print the one-time link for creating the first admin in the browser |
+| `create-app` | create the read-only multi-tenant Entra app (device sign-in) |
+| `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
+| `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
+| `backup [--dir] [--keep]` | a consistent copy of the database (keeps 7) |
+| `delete-tenant <id>` | delete a tenant and everything stored for it |
+| `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+
 Docker: `docker compose up -d --build` (see DEPLOY.md).
 
 Tests sign in with a password only (`require_mfa="off"` in `conftest.py`);
