@@ -32,6 +32,55 @@ def test_failed_migration_rolls_back(tmp_path, monkeypatch):
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'a'").fetchone() is None
 
 
+def _migrate_at(path, barrier, results):
+    try:
+        barrier.wait(timeout=60)
+        results.put(("ok", dbmod.migrate(dbmod.connect(path))))
+    except Exception as exc:  # reported to the parent
+        results.put(("error", f"{type(exc).__name__}: {exc}"))
+
+
+def _schema(path):
+    conn = dbmod.connect(path)
+    try:
+        return sorted(tuple(r) for r in conn.execute("SELECT type, name, sql FROM sqlite_master"))
+    finally:
+        conn.close()
+
+
+def test_concurrent_first_start_migrates_once(tmp_path):
+    """Two gunicorn workers start on a fresh volume at the same moment: both must
+    come up, and every migration is applied exactly once."""
+    import multiprocessing
+
+    fresh = tmp_path / "fresh.db"
+    expected = dbmod.migrate(dbmod.connect(fresh))
+    ctx = multiprocessing.get_context("spawn")
+    for trial in range(3):
+        path = tmp_path / f"race{trial}.db"
+        barrier, results = ctx.Barrier(2), ctx.Queue()
+        procs = [ctx.Process(target=_migrate_at, args=(path, barrier, results)) for _ in range(2)]
+        for proc in procs:
+            proc.start()
+        outcomes = [results.get(timeout=120) for _ in procs]
+        for proc in procs:
+            proc.join(timeout=60)
+        assert outcomes == [("ok", expected), ("ok", expected)]
+        assert _schema(path) == _schema(fresh)
+
+
+def test_migrate_command(tmp_path, monkeypatch, capsys):
+    from officesentry.__main__ import main
+
+    for var in ("SECRET_KEY", "ENCRYPTION_KEYS"):
+        monkeypatch.delenv("OFFICESENTRY_" + var, raising=False)
+    monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(tmp_path / "data"))
+    main(["migrate"])
+    assert "upgraded from 0" in capsys.readouterr().out
+    main(["migrate"])
+    assert capsys.readouterr().out.strip() == f"Database schema is at version {dbmod.latest_version()}."
+
+
 def test_secrets_file_is_private_and_keys_are_separate(tmp_path, monkeypatch):
     for var in ("SECRET_KEY", "ENCRYPTION_KEYS"):
         monkeypatch.delenv("OFFICESENTRY_" + var, raising=False)

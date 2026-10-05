@@ -17,5 +17,7 @@ USER sentry
 VOLUME /data
 EXPOSE 8000
 # The worker runs the same image with: python -m officesentry worker
-CMD ["gunicorn", "--workers", "2", "--threads", "4", "--bind", "0.0.0.0:8000", "--timeout", "120", \
+# --preload builds the app (and applies database upgrades) once, before the
+# workers fork, so two workers never upgrade the database at the same moment.
+CMD ["gunicorn", "--preload", "--workers", "2", "--threads", "4", "--bind", "0.0.0.0:8000", "--timeout", "120", \
      "--access-logfile", "-", "officesentry.web:create_app()"]

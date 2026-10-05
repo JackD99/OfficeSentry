@@ -8,6 +8,7 @@ so a failure leaves the database at the previous version.
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -62,14 +63,47 @@ def migration_files() -> list[tuple[int, Path]]:
     return files
 
 
+def _use_wal(conn: sqlite3.Connection) -> None:
+    """Switch to WAL once. Changing the journal mode doesn't wait on the busy
+    timeout, so when another process (a second gunicorn worker) is doing the
+    same at that moment, retry for a while rather than fail."""
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            if conn.execute("PRAGMA journal_mode").fetchone()[0].lower() != "wal":
+                conn.execute("PRAGMA journal_mode = WAL")
+            return
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc) or time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
+
+
+def schema_version(conn: sqlite3.Connection) -> int:
+    return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def latest_version() -> int:
+    files = migration_files()
+    return files[-1][0] if files else 0
+
+
 def migrate(conn: sqlite3.Connection) -> int:
-    """Apply pending migrations. Returns the resulting schema version."""
-    conn.execute("PRAGMA journal_mode = WAL")
-    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    """Apply pending migrations. Returns the resulting schema version.
+
+    Safe to call from several processes at once (gunicorn workers, the
+    worker): each migration re-reads ``user_version`` inside its write
+    transaction, so one another process already applied is skipped.
+    """
+    _use_wal(conn)
+    current = schema_version(conn)
     for version, path in migration_files():
         if version <= current:
             continue
         with transaction(conn, immediate=True):
+            current = schema_version(conn)
+            if version <= current:
+                continue  # applied by another process since we looked
             for stmt in _split_statements(path.read_text(encoding="utf-8")):
                 conn.execute(stmt)
             conn.execute(f"PRAGMA user_version = {int(version)}")

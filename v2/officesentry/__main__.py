@@ -31,6 +31,16 @@ def cmd_worker(args, cfg):
     run_worker(cfg, once=args.once)
 
 
+def cmd_migrate(args, cfg):
+    """Apply database upgrades now. The portal and worker also do this when they start."""
+    from .db import schema_version
+
+    conn = connect(cfg.db_path)
+    before = schema_version(conn)
+    after = migrate(conn)
+    print(f"Database schema is at version {after}" + (f" (upgraded from {before})." if after != before else "."))
+
+
 def cmd_create_admin(args, cfg):
     from .web.auth import password_problem
 
@@ -232,6 +242,9 @@ def main(argv=None):
     worker = sub.add_parser("worker", help="run collections, the schedule, emailed reports and retention")
     worker.add_argument("--once", action="store_true", help="drain the queue and exit")
     worker.set_defaults(func=cmd_worker)
+
+    mig = sub.add_parser("migrate", help="apply database upgrades (the portal and worker also do this on start)")
+    mig.set_defaults(func=cmd_migrate)
 
     admin = sub.add_parser("create-admin", help="create an admin user")
     admin.add_argument("username")
