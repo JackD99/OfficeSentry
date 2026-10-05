@@ -144,6 +144,9 @@ anything to link people; PDFs and spreadsheets show the plain name.
 - Tables that people read on phones get `class="stack-sm"` and a
   `data-label` on every cell after the first.
 - Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.
+- The root README's screenshots (`docs/screenshots/`) and `examples/` come from
+  `python scripts/screenshots.py` (demo data from `scripts/demo_data.py`); re-run
+  it when the UI or reports change, and look at the images before committing.
 
 ## Background work
 
