@@ -223,6 +223,67 @@ def test_worker_once_queues_the_slot_and_drains_it(cfg, db, two_tenants, monkeyp
     assert len(calls) == 2 * len(schedule.nightly_collectors())
 
 
+def test_worker_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, monkeypatch, caplog):
+    """"database is locked" in the once-a-minute work is logged and retried, not fatal."""
+    import sqlite3
+    import threading
+
+    calls, stop = [], threading.Event()
+
+    def housekeeping(app, conn, *_a):
+        calls.append(conn.in_transaction)
+        if len(calls) == 1:
+            conn.execute("BEGIN IMMEDIATE")  # left open by the failure, as a half-done write would be
+            raise sqlite3.OperationalError("database is locked")
+        stop.set()
+
+    monkeypatch.setattr(worker, "housekeeping", housekeeping)
+    monkeypatch.setattr(worker, "TICK_EVERY", 0)
+    monkeypatch.setattr(worker, "IDLE_WAIT", 0.01)
+    thread = threading.Thread(target=worker.run_worker, args=(cfg,),
+                              kwargs={"graph_factory": lambda *a: None, "stop": stop})
+    thread.start()
+    thread.join(timeout=30)
+    assert not thread.is_alive()
+    assert calls == [False, False]  # retried on the next pass, with the failed transaction rolled back
+    assert "Housekeeping failed" in caplog.text
+
+
+def test_worker_once_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, monkeypatch):
+    import sqlite3
+
+    def broken(*_a):
+        raise sqlite3.OperationalError("database is locked")
+
+    ran = []
+    monkeypatch.setattr(worker, "housekeeping", broken)
+    monkeypatch.setattr(worker, "execute_run", lambda conn, run, *a: (ran.append(run["id"]),
+                                                                        store.finish_run(conn, run["id"], "failed")))
+    store.enqueue_run(db, two_tenants[0], "users")
+    worker.run_worker(cfg, once=True, graph_factory=lambda *a: None, exchange_factory=lambda *a: None)
+    assert len(ran) == 1
+
+
+def test_a_stuck_main_loop_stops_the_heartbeat(db):
+    now = [0.0]
+    live = worker.Liveness(clock=lambda: now[0])
+    assert worker.heartbeat_step(db, live) and worker.is_alive(db)
+    db.execute("DELETE FROM settings WHERE key = ?", (worker.HEARTBEAT_KEY,))
+    now[0] += worker.LOOP_STALE.total_seconds() + 1
+    assert live.problem() and not worker.heartbeat_step(db, live)
+    assert not worker.is_alive(db)
+    live.tick()
+    assert worker.heartbeat_step(db, live)
+    # A long collection is progress, up to a ceiling.
+    live.start_run(7)
+    now[0] += worker.LOOP_STALE.total_seconds() * 3
+    assert live.problem() is None
+    now[0] += worker.RUN_STALE.total_seconds()
+    assert "run 7" in live.problem()
+    live.end_run()
+    assert live.problem() is None
+
+
 def test_healthcheck_command(cfg, db, monkeypatch):
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
     with pytest.raises(SystemExit) as exc:

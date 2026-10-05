@@ -168,7 +168,11 @@ a day with `store.prune_snapshots` (latest run per day for 30 days and per
 month for 12; metrics, findings and run rows are never pruned), so code that
 reads an older run must cope with its objects being gone (see
 `changes._baseline_run`). A side thread records the heartbeat that the
-portal banner and `healthcheck worker` read. Don't add Celery or Redis.
+portal banner and `healthcheck worker` read, but only while the main loop
+makes progress (`worker.Liveness`: it came round in the last 10 minutes, or
+one run has gone for under 4 hours), so a wedged loop shows as down. A
+failing housekeeping pass (say "database is locked") is logged and retried
+the next minute; it never ends the worker. Don't add Celery or Redis.
 
 To add timed work (emails, digests), register a job in its own module with
 `@schedule.periodic("name")`; it gets a `TickContext` every minute and uses
