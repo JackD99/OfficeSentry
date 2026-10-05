@@ -110,17 +110,29 @@ def test_describe_permissions_treats_guest_logins_as_external():
                                 {"x.com"})["exposure"] is None
 
 
+def _calls(db, alpha, collector: str = "shared_files") -> list[str]:
+    factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        mock_tenant(rsps)
+        store.enqueue_run(db, alpha, collector)
+        assert execute_run(db, store.claim_next_run(db), factory) in ("succeeded", "partial")
+        return [urlsplit(c.request.url).path.removeprefix("/v1.0") for c in rsps.calls]
+
+
+def _age_sharepoint_runs(db, alpha, days: float) -> None:
+    when = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("UPDATE runs SET finished_at = ? WHERE tenant_id = ? AND collector IN"
+               " ('shared_files', 'sharepoint_storage')", (when, alpha))
+    db.execute("UPDATE objects SET data = json_set(data, '$.checked', ?) WHERE kind = 'lookup_onedrive'", (when,))
+
+
 def test_shared_files_skips_onedrives_the_site_listing_gave(db, two_tenants):
     """Ann's OneDrive comes back in the site listing, so it isn't looked up again by user; Bob's doesn't."""
     alpha, _ = two_tenants
     seed_tenant(db, alpha)  # the users snapshot the collector reads
+    _age_sharepoint_runs(db, alpha, 30)  # nothing recent to reuse
     before = {i["_id"]: i for i in _snap(db, alpha).objects("shared_files", "shared_item")}
-    factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
-        mock_tenant(rsps)
-        store.enqueue_run(db, alpha, "shared_files")
-        assert execute_run(db, store.claim_next_run(db), factory) == "succeeded"
-        paths = [urlsplit(c.request.url).path.removeprefix("/v1.0") for c in rsps.calls]
+    paths = _calls(db, alpha)
     assert paths.count("/users/u1/drive") == 0
     assert paths.count("/users/u2/drive") == 1  # not in the listing, so still asked for (404: never opened)
     assert paths.count("/sites/site-ann/drives") == 1 and paths.count("/sites/getAllSites") == 1
@@ -130,7 +142,27 @@ def test_shared_files_skips_onedrives_the_site_listing_gave(db, two_tenants):
     assert snap.objects("shared_files", "scan_status")[0]["drives"] == 2
 
 
-# -- Checks ---------------------------------------------------------------------------
+def test_sharepoint_collectors_share_their_lookups(db, two_tenants):
+    """The second SharePoint collection of the night reuses the first one's lookups."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    _age_sharepoint_runs(db, alpha, 30)
+    first = _calls(db, alpha)
+    assert first.count("/sites/getAllSites") == 1 and first.count("/users/u2/drive") == 1  # 404: no OneDrive
+    storage = _calls(db, alpha, "sharepoint_storage")
+    assert storage.count("/sites/getAllSites") == 0  # shared files asked for every field storage needs
+    assert storage.count("/users/u2/drive") == 0  # and found Bob has no OneDrive
+    assert storage.count("/users/u1/drive") == 1  # shared files didn't need Ann's (the site listing had it)
+    # Storage's site list lacks the fields shared files needs, so it's asked for again; "no OneDrive" isn't.
+    again = _calls(db, alpha)
+    assert again.count("/sites/getAllSites") == 1 and again.count("/users/u2/drive") == 0
+    assert _snap(db, alpha).objects("shared_files", "scan_status")[0]["drives"] == 2
+
+    _age_sharepoint_runs(db, alpha, 1)  # a day later: "no OneDrive" is still remembered
+    assert _calls(db, alpha).count("/users/u2/drive") == 0
+    _age_sharepoint_runs(db, alpha, 8)  # after a week Bob is asked again
+    assert _calls(db, alpha).count("/users/u2/drive") == 1
+
 
 
 def test_checks(db, two_tenants):
