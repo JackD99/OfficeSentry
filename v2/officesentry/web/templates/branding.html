@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Report branding · Office Sentry{% endblock %}
+{% block title %}Branding · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Report branding</h1><div class="sub">Your company name, logo and colour on every report and PDF your clients receive.</div></div>
+<div class="page-head"><div><h1>Branding</h1><div class="sub">Your company name, logo and colour on every report and PDF your clients receive, and on the portal and its sign-in page.</div></div>
   {% if b.is_default %}<span class="pill warn">Not set up</span>{% else %}<span class="pill ok">Set up</span>{% endif %}</div>
 <div class="grid-main">
 <form method="post" class="card" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>Your company</h2>
   <label>Company name <input name="name" value="{{ b.name }}" maxlength="80" placeholder="e.g. Harbour IT Services"></label>
-  <p class="footnote">Shown on report covers as "Prepared by". Leave blank to show Office Sentry.</p>
+  <p class="footnote">Shown on report covers as "Prepared by", in the portal and on the sign-in page, and as the sender's name on emails unless Email delivery sets one. Leave blank to show Office Sentry.</p>
   <label>Contact line <input name="contact" value="{{ b.contact }}" maxlength="160" placeholder="support@harbourit.co.uk · 01234 567890 · harbourit.co.uk"></label>
   <p class="footnote">Printed at the bottom of report covers and on prospect assessments, so readers know how to reach you.</p>
   <div class="form-row">
@@ -17,6 +17,19 @@
   </div>
   <p class="footnote">Use a PNG or JPEG under 512 KB, ideally wide and with a transparent background. If the colour is too light for text, reports darken it automatically so it stays readable. The default is {{ default_accent }}.</p>
   {% if b.logo %}<label class="check-line"><input type="checkbox" name="remove_logo" value="1"> Remove the current logo</label>{% endif %}
+  <p class="footnote">The logo is also the portal's browser tab icon and is shown on the sign-in page.</p>
+
+  <h2>Who clients should contact</h2>
+  <p class="footnote">Shown on the home page of client users, under their reports.</p>
+  <label>Contact name <input name="support_name" value="{{ b.support_name }}" maxlength="80" placeholder="e.g. Harbour IT service desk"></label>
+  <div class="form-row">
+    <label>Email <input type="email" name="support_email" value="{{ b.support_email }}" maxlength="254" placeholder="support@harbourit.co.uk"></label>
+    <label>Phone <input name="support_phone" value="{{ b.support_phone }}" maxlength="40" placeholder="01234 567890"></label>
+  </div>
+
+  <h2>Report footer</h2>
+  <label>Footer note <textarea name="report_footer" rows="3" maxlength="{{ max_footer }}" placeholder="e.g. This report is provided for information only and doesn't replace a full security audit.">{{ b.report_footer }}</textarea></label>
+  <p class="footnote">Printed at the end of every client report and PDF, for a disclaimer or terms. Up to {{ max_footer }} characters.</p>
   <div class="form-actions"><button class="primary">Save</button></div>
 </form>
 <section class="card">

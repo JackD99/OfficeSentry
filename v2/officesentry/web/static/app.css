@@ -466,6 +466,39 @@ details.alert-edit { margin-top: 12px; padding-top: 10px; border-top: 1px solid 
 input[type=color] { height: 40px; padding: 4px; cursor: pointer; }
 svg.brand-preview { display: block; width: 100%; height: auto; margin: 4px 0 12px; }
 
+/* MSP branding in the portal. /brand.css (loaded only once branding is set up, with body.branded)
+   supplies --brand, --on-brand and --brand-ink(-dark); without it nothing here changes the look. */
+.brand .logo-chip { display: inline-flex; align-items: center; background: #fff; border-radius: var(--radius-sm); padding: 5px 8px; max-width: 100%; }
+.brand .logo-chip img { display: block; max-height: 30px; max-width: 180px; width: auto; height: auto; }
+.auth-card .brand .logo-chip { padding: 8px 12px; box-shadow: var(--shadow); }
+.auth-card .brand .logo-chip img { max-height: 48px; max-width: 260px; }
+.mobile-bar .brand .logo-chip img { max-height: 24px; max-width: 150px; }
+body.branded .brand .logo { background: var(--brand); color: var(--on-brand); }
+body.branded .nav a.active { box-shadow: inset 2px 0 0 var(--brand); }
+body.branded .auth-card .card { border-top: 3px solid var(--brand); }
+body.branded .auth-card button.primary, body.branded .auth-card button.primary:hover { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+body.branded .auth-card button.primary:hover { opacity: .9; }
+body.branded .auth-card a { color: var(--brand-ink); }
+@media (prefers-color-scheme: dark) { body.branded .auth-card a { color: var(--brand-ink-dark); } }
+.powered-by { margin: 12px 0 0; font-size: .6875rem; color: var(--sidebar-muted); padding: 0 10px; }
+.auth-card .powered-by { color: var(--muted); text-align: center; padding: 0; }
+
+/* Client home: latest report, open recommendations, who to contact */
+.client-latest { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.client-latest h2 { margin: 0 0 2px; }
+.client-latest .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.client-recs { margin-bottom: 16px; }
+.client-recs ol { list-style: none; margin: 0; padding: 0; }
+.client-recs li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
+.client-recs li:first-child { border-top: 0; }
+.client-recs .rec-body { flex: 1; min-width: 0; }
+.client-recs .rec-title { font-weight: 600; }
+.client-recs .rec-action { color: var(--muted); font-size: .8125rem; }
+.client-recs .pill { flex: none; }
+.client-contact dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+.client-contact dt { color: var(--muted); }
+.client-contact dd { margin: 0; overflow-wrap: anywhere; }
+
 /* -- Detail report headline figures and charts ------------------------------ */
 .tile.tone-bad .value { color: var(--bad); }
 .tile.tone-warn .value { color: var(--warn); }

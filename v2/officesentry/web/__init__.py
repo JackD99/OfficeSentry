@@ -99,7 +99,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if cfg.secure_cookies:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        if request.endpoint != "static":
+        # Static files and the public brand colours and logo may be cached; nothing else is.
+        if request.endpoint not in ("static", "branding.brand_css", "branding.logo"):
             resp.headers["Cache-Control"] = "no-store"
         return resp
 

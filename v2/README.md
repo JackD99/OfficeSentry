@@ -198,8 +198,15 @@ pass, and a first run against a real tenant.
   domain to grade its email security from public DNS and see whether it uses
   Microsoft 365 and how it signs in. No access to the tenant needed; PDF for
   sending to the prospect.
-- **Client view**: client users land on a page with their reports, key
-  numbers and downloads, and don't see collection internals or run logs.
+- **Client view**: client users land on a page that leads with their latest
+  monthly review (page and PDF), then open recommendations with their status,
+  key numbers, the other reports and who to contact at the MSP; they don't see
+  collection internals or run logs.
+- **Branding** (`/admin/branding`): the MSP's name, logo and colour on report
+  covers, the portal, the sign-in page and the browser tab icon ("Powered by
+  Office Sentry" stays small in the footer), the support contact clients see,
+  and an optional note printed at the end of every report. The name is also
+  the email sender's name unless Email delivery sets one.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin

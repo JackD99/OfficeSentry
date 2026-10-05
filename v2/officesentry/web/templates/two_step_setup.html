@@ -25,7 +25,7 @@
 {% endmacro %}
 {% block auth %}
 <h1>Protect your account</h1>
-<p class="sub">Office Sentry asks for a code from your phone as well as your password, so a stolen password isn't enough to get in. This takes about a minute.</p>
+<p class="sub">{{ brand.display_name }} asks for a code from your phone as well as your password, so a stolen password isn't enough to get in. This takes about a minute.</p>
 {{ setup_form() }}
 <p class="footnote center">Setting up for <span class="strong">{{ username }}</span> · <a href="{{ url_for('auth.login') }}">Cancel</a></p>
 {% endblock %}

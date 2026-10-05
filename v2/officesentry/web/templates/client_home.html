@@ -3,10 +3,24 @@
 {% block title %}Your reports · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>{{ rows[0].tenant.name if rows|length == 1 else 'Your Microsoft 365 reports' }}</h1>
-  <div class="sub">Read-only reports on your Microsoft 365 security and licences, updated every night.</div></div></div>
+  <div class="sub">Read-only reports on your Microsoft 365 security and licences{% if brand.name %} from {{ brand.name }}{% endif %}, updated every night.</div></div></div>
 {% for row in rows %}{% set t = row.tenant %}
 <section class="client-tenant">
   {% if rows|length > 1 %}<h2 class="section-title">{{ t.name }}</h2>{% endif %}
+
+  {#- Latest report: the monthly review, first thing a client sees. -#}
+  <div class="card client-latest">
+    <div>
+      <h2>Monthly review</h2>
+      <div class="muted small">Your security and licensing summary, with what to fix first. Based on data collected {{ ts(row.data_as_of) }}.</div>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}">Open report</a>
+      <a class="btn" href="{{ url_for('reports.tenant_report_pdf', tenant_id=t.id) }}">Download PDF</a>
+    </div>
+  </div>
+
+  {#- Headline figures. -#}
   {% set ss = row.kpis['secure_score.pct'] %}{% set mfa = row.kpis['mfa.registered_pct'] %}
   <div class="tiles">
     <div class="tile"><div class="label">Microsoft Secure Score</div><div class="value">{{ '%g%%'|format(ss.value) if ss.value is not none else '–' }}</div>
@@ -17,9 +31,32 @@
       <div class="foot">{% if row.counts.critical or row.counts.high %}<span class="bad-text">{{ row.counts.critical + row.counts.high }} critical or high</span>{% else %}none critical or high{% endif %}</div></div>
     <div class="tile"><div class="label">Fixed in the last 4 weeks</div><div class="value">{{ row.resolved }}</div><div class="foot">&nbsp;</div></div>
   </div>
+
+  {#- Open recommendations (read-only): the failing checks from the report, then accepted risks. -#}
+  <div class="card client-recs">
+    <h2>Recommendations</h2>
+    {% if row.recommendations %}
+    <ol>
+      {% for rec in row.recommendations %}
+      <li>
+        <div class="rec-body">
+          <div class="rec-title">{{ rec.title }}</div>
+          <div class="small">{{ rec.summary }}</div>
+          {% if rec.action %}<div class="rec-action">{{ rec.action }}</div>{% endif %}
+        </div>
+        {% if rec.severity and rec.severity != 'info' %}<span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% endif %}
+        <span class="pill {{ rec.tone }}">{{ rec.status }}</span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% if row.more_recommendations %}<p class="small"><a href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">{{ row.more_recommendations|plural('more recommendation') }} in Findings &rarr;</a></p>{% endif %}
+    {% else %}
+    <p class="muted">Nothing open right now. Every check that could run passed.</p>
+    {% endif %}
+  </div>
+
+  {#- Other reports. -#}
   <div class="report-links">
-    <a class="report-link primary" href="{{ url_for('reports.tenant_report', tenant_id=t.id) }}">
-      <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Your security and licensing summary, with what to fix first.</span></a>
     <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=t.id) }}">
       <span class="title">Insurance evidence {{ icon('arrow') }}</span><span class="desc">Answers to the security questions on cyber insurance forms.</span></a>
     <a class="report-link" href="{{ url_for('reports.tenant_findings', tenant_id=t.id) }}">
@@ -32,6 +69,22 @@
   {% if row.stale_data %}<p class="footnote warn-text">Some of this data is more than a day old.</p>{% endif %}
 </section>
 {% else %}
-<div class="card empty"><h3>No reports yet</h3><p>You haven't been given access to any reports yet. Ask your IT provider to grant access.</p></div>
+<div class="card empty"><h3>No reports yet</h3><p>You haven't been given access to any reports yet. Ask {{ brand.name or 'your IT provider' }} to grant access.</p></div>
 {% endfor %}
+
+{#- Who to contact: the MSP's support details from the Branding page. -#}
+{% if brand.has_support or brand.contact %}
+<section class="card client-contact">
+  <h2>Questions about your reports?</h2>
+  {% if brand.has_support %}
+  <dl>
+    <dt>Contact</dt><dd>{{ brand.support_name or brand.display_name }}</dd>
+    {% if brand.support_email %}<dt>Email</dt><dd><a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a></dd>{% endif %}
+    {% if brand.support_phone %}<dt>Phone</dt><dd><a href="tel:{{ brand.support_phone|replace(' ', '') }}">{{ brand.support_phone }}</a></dd>{% endif %}
+  </dl>
+  {% else %}
+  <p>{{ brand.display_name }} · {{ brand.contact }}</p>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

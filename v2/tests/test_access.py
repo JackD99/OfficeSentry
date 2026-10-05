@@ -6,7 +6,8 @@ from officesentry import store
 from officesentry.config import setup_token
 from tests.conftest import PASSWORD, login, make_user
 
-PUBLIC = {"static", "health", "auth.login", "auth.setup"}
+# The brand colours and logo are public on purpose: the sign-in page shows them (see web/branding.py).
+PUBLIC = {"static", "health", "auth.login", "auth.setup", "branding.brand_css", "branding.logo"}
 
 
 def test_every_page_requires_login(app, client, db, two_tenants):
