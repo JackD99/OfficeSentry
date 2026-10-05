@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+from urllib.request import url2pathname
+
 from ..text import subject_label
 from .monthly_review import Report
 from .workbook import Book, Cover
@@ -15,10 +19,55 @@ def pdf_available() -> bool:
     return True
 
 
+# The only files a PDF may load: the report stylesheet, fonts and icons shipped with the app.
+STATIC_DIR = (Path(__file__).resolve().parent.parent / "web" / "static").resolve()
+
+
+def allowed_url(url: str) -> bool:
+    """True for ``data:`` URIs and files inside STATIC_DIR. Everything else (other files, http(s),
+    ftp, other hosts' file shares) is refused, so a slip that lets tenant data into PDF HTML can't
+    read /data/secrets.json or reach the network from the server."""
+    scheme = url.split(":", 1)[0].lower() if ":" in url else ""
+    if scheme == "data":
+        return True
+    if scheme != "file":
+        return False
+    parts = urlsplit(url)
+    if parts.netloc not in ("", "localhost"):
+        return False
+    try:
+        path = Path(url2pathname(unquote(parts.path))).resolve()
+    except (OSError, ValueError):
+        return False
+    return path.is_relative_to(STATIC_DIR) and path.is_file()
+
+
+def url_fetcher():
+    """A WeasyPrint URL fetcher that only fetches what ``allowed_url`` allows."""
+    from weasyprint import urls
+
+    if hasattr(urls, "URLFetcher"):  # WeasyPrint 65 and later
+        class StaticOnlyFetcher(urls.URLFetcher):
+            def fetch(self, url, headers=None):
+                if not allowed_url(url):
+                    raise ValueError(f"Office Sentry doesn't load {url[:100]} into PDFs")
+                return super().fetch(url, headers)
+
+        return StaticOnlyFetcher(allowed_protocols=("data", "file"), allow_redirects=False)
+
+    def fetch(url, *args, **kwargs):  # older WeasyPrint: a plain function
+        if not allowed_url(url):
+            raise ValueError(f"Office Sentry doesn't load {url[:100]} into PDFs")
+        return urls.default_url_fetcher(url, *args, **kwargs)
+
+    return fetch
+
+
 def to_pdf(html: str, base_url: str) -> bytes:
+    """Every PDF the app makes goes through here (web downloads and emailed reports)."""
     import weasyprint
 
-    return weasyprint.HTML(string=html, base_url=base_url).write_pdf()
+    return weasyprint.HTML(string=html, base_url=base_url, url_fetcher=url_fetcher()).write_pdf()
 
 
 RESULTS = {"pass": "Passed", "fail": "Needs attention", "unavailable": "Not checked", "accepted": "Accepted risk"}

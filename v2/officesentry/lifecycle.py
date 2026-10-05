@@ -16,6 +16,7 @@ is done by the client (see docs/what-office-sentry-reads.md).
 from __future__ import annotations
 
 import json
+import sqlite3
 
 from .db import audit, transaction, utcnow
 from .text import plural
@@ -148,6 +149,53 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
     unknown = set(delete_users) - set(allowed)
     if unknown:
         raise DeleteError("only client accounts with no other tenant can be deleted with it")
+    # Overwrite deleted content in the file instead of leaving it in free pages (see erase_freed_pages).
+    previous = conn.execute("PRAGMA secure_delete").fetchone()[0]
+    conn.execute("PRAGMA secure_delete = ON")
+    try:
+        removed = _delete(conn, tenant, user, delete_users, allowed)
+    finally:
+        conn.execute(f"PRAGMA secure_delete = {('OFF', 'ON', 'FAST')[int(previous)]}")
+    erase_freed_pages(conn)
+    return removed
+
+
+# Audit actions whose detail can name the client's people (UPNs, email addresses, delivery errors).
+PERSONAL_DETAIL = ("finding_accepted", "finding_unaccepted", "contact_added", "contact_removed", "email_retried",
+                   "alert_sent", "alert_failed")
+REDACTED = "(removed when the tenant was deleted)"
+
+
+def _scrub_audit(conn, tenant_id: int, deleted_users: dict[int, str]) -> None:
+    """Keep who did what and when for the deleted tenant, but not the client's people in the detail.
+
+    Rows by client accounts deleted with it lose the account name and address (they are usually
+    the client's own email addresses), and so do admin rows about those accounts.
+    """
+    conn.execute(f"UPDATE audit_log SET detail = ? WHERE tenant_id = ? AND action IN"
+                 f" ({','.join('?' * len(PERSONAL_DETAIL))})", (REDACTED, tenant_id, *PERSONAL_DETAIL))
+    for uid, name in deleted_users.items():
+        conn.execute("UPDATE audit_log SET username = ?, ip = NULL WHERE username = ?",
+                     (f"deleted client account #{uid}", name))
+        # "name", "name (client)", "name: role=..." in user_created, user_updated, user_signed_out...
+        conn.execute("UPDATE audit_log SET detail = ? WHERE substr(action, 1, 5) = 'user_'"
+                     " AND substr(detail, 1, ?) = ? AND substr(detail, ? + 1, 1) IN ('', ' ', ':')",
+                     (f"deleted client account #{uid}", len(name), name, len(name)))
+
+
+def erase_freed_pages(conn) -> bool:
+    """Best effort, after a delete: rebuild the file and empty the write-ahead log, so deleted rows
+    can't be read from free pages or old WAL frames. Backups made before keep the data until they
+    rotate out. Returns False if another connection kept it from finishing (try again later)."""
+    try:
+        conn.execute("VACUUM")
+        busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+    except sqlite3.Error:
+        return False
+    return not busy
+
+
+def _delete(conn, tenant, user: str, delete_users, allowed: dict[int, str]) -> dict:
     with transaction(conn, immediate=True):
         removed = stored(conn, tenant["id"])
         run_ids = [r["id"] for r in conn.execute("SELECT id FROM runs WHERE tenant_id = ?", (tenant["id"],))]
@@ -157,6 +205,7 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
         left = leftovers(conn, tenant["id"], run_ids)
         if left:
             raise DeleteError("these would be left behind: " + ", ".join(f"{t} ({n})" for t, n in left.items()))
+        _scrub_audit(conn, tenant["id"], {uid: allowed[uid] for uid in delete_users})
         names = sorted(allowed[u] for u in delete_users)
         removed["users"] = len(names)
         detail = (f"{tenant['name']} ({tenant['tenant_ref']}): {plural(removed['runs'], 'run')}, "

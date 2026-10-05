@@ -63,10 +63,22 @@ def fetch_mta_sts(domain: str) -> str:
     """
     import requests
 
-    url = f"https://mta-sts.{domain}/.well-known/mta-sts.txt"
-    deadline = time.monotonic() + MTA_STS_TIMEOUT
+    from . import outbound
+
+    host = f"mta-sts.{domain}"
+    url = f"https://{host}/.well-known/mta-sts.txt"
+    # Domains are typed by analysts: same address filter as webhooks, and connect to the vetted address.
     try:
-        with requests.get(url, timeout=MTA_STS_TIMEOUT, allow_redirects=False, stream=True) as resp:
+        address = outbound.public_address(host)
+    except outbound.LookupFailed:
+        raise FetchError(f"couldn't connect to {host}") from None
+    except outbound.NotPublic as exc:
+        raise FetchError(f"{host} resolves to an internal address ({exc.address}), so it wasn't fetched") from None
+    deadline = time.monotonic() + MTA_STS_TIMEOUT
+    http, host_header = outbound.pinned_session(url, address)
+    try:
+        with http, http.get(url, timeout=MTA_STS_TIMEOUT, allow_redirects=False, stream=True,
+                            headers=host_header) as resp:
             if resp.is_redirect:
                 raise FetchError(f"{url} redirects to {resp.headers.get('Location')}, "
                                  "and sending servers don't follow redirects")

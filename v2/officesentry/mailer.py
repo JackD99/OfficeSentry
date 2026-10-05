@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import re
 import smtplib
 import ssl
@@ -140,6 +141,17 @@ def to_mime(email: Email, sender: str) -> EmailMessage:
     return msg
 
 
+def is_loopback(host: str) -> bool:
+    """A mail relay on this same machine, where a password without TLS never crosses a network."""
+    host = (host or "").strip().lower().strip("[]")
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _send_smtp(s: dict, vault, email: Email) -> None:
     sender = s["smtp_from"]
     if s.get("msp_name") and "<" not in sender:
@@ -156,6 +168,9 @@ def _send_smtp(s: dict, vault, email: Email) -> None:
         with server:
             if security == "starttls":
                 server.starttls(context=context)
+            if s.get("smtp_user") and security == "none" and not is_loopback(s["smtp_host"]):
+                raise MailError("Office Sentry won't send the mail server password unencrypted. Choose STARTTLS "
+                                "or SSL/TLS under Email delivery, or remove the username for a relay without sign-in")
             if s.get("smtp_user"):
                 password = vault.decrypt(s["smtp_password_enc"]) if s.get("smtp_password_enc") else ""
                 server.login(s["smtp_user"], password)

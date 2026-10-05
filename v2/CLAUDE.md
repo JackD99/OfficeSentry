@@ -24,7 +24,16 @@ overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
 - **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump
   `users.session_version` or delete their `sessions` rows; never trust anything
   in the cookie except the session token. New encrypted columns go in
-  `ENCRYPTED_COLUMNS` in `__main__.py` so `rotate-keys` re-encrypts them.
+  `ENCRYPTED_COLUMNS` in `__main__.py` so `rotate-keys` re-encrypts them
+  (encrypted settings keys go in a module's `ENCRYPTED_KEYS`, gathered in
+  `ENCRYPTED_SETTINGS`); name them `*_enc`, `test_key_rotation.py` checks.
+- **Audit with `db.audit()`**; it records the visitor's address. Repeated
+  anonymous events go through `db.audit_counted()` (one row per address and
+  hour), and never store what a stranger typed. Sign-in noise is in
+  `db.AUDIT_NOISE` and pruned after 90 days. Admins read it at `/admin/activity`.
+- **Every PDF goes through `reports/export.to_pdf()`**, whose URL fetcher only
+  loads files under `web/static/` and `data:` URIs. Never call WeasyPrint
+  directly, and put fonts and images a PDF needs in `web/static/`.
 
 ## Adding a collector
 

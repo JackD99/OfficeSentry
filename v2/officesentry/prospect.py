@@ -38,6 +38,33 @@ class TenantInfo:
     error: str | None = None
 
 
+def tenant_id_for_domain(domain: str, session: requests.Session | None = None) -> str | None:
+    """The tenant GUID Microsoft publishes for ``domain``, or None when it can't be found out.
+
+    Reads Microsoft's public sign-in metadata (no credentials, nothing from the
+    tenant itself). Used to check that a tenant ID handed back by the consent
+    callback really belongs to the domain an admin added.
+    """
+    if not DOMAIN_RE.match(domain or ""):
+        return None
+    http = session or requests.Session()
+    try:
+        resp = http.get(f"{LOGIN}/{domain}/v2.0/.well-known/openid-configuration", timeout=15,
+                        allow_redirects=False)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+    except (requests.RequestException, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    for key in ("issuer", "token_endpoint"):
+        value = data.get(key)
+        if isinstance(value, str) and value.startswith(LOGIN + "/") and (m := TENANT_GUID.search(value + "/")):
+            return m.group(1)
+    return None
+
+
 def tenant_lookup(domain: str, session: requests.Session | None = None) -> TenantInfo:
     http = session or requests.Session()
     info = TenantInfo()

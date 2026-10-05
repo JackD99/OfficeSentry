@@ -165,8 +165,14 @@ depend on your MSP. Ask them where their server is and who can access it.
   indefinitely.
 - **Findings history** (each issue found, with the account or item it
   concerns, and when it was first seen and fixed) and the **activity log**
-  (who in the MSP did what, including report downloads) are kept until your
-  MSP removes them.
+  (who in the MSP did what, including report downloads, with the address it
+  came from) are kept until your MSP removes them; failed sign-ins in the
+  activity log are removed after 90 days.
+- **When your MSP stops working with you** and deletes your tenant in Office
+  Sentry, everything collected from it is deleted and overwritten in the
+  database; activity log entries keep who did what and when, without your
+  people's names or addresses. The MSP's backups keep a copy until they rotate
+  out (a week by default).
 
 ### Who at your MSP can see it
 
@@ -180,8 +186,9 @@ found".
 | Analyst | Only the tenants an admin has given them, or every tenant if an admin allows that. |
 | Client | Only the tenants an admin has given them, and only the reports and findings (not the collection logs). Your MSP may give you a client account. |
 
-Signed-in sessions expire after 8 hours without use. Report downloads are
-recorded with the user's name.
+Signed-in sessions end after 2 hours without use and 8 hours in total. New
+installs require a code from an authenticator app for everyone who signs in,
+client accounts included. Report downloads are recorded with the user's name.
 
 ## How to remove access
 
