@@ -285,7 +285,9 @@ Please report vulnerabilities privately, as described in [SECURITY.md](SECURITY.
 
 ## Licence
 
-This repository doesn't include a licence file yet.
+Office Sentry is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
+You can use, change and share it; if you run a modified version for others over a network, you must offer them
+its source code under the same licence.
 
 ## The old v1 portal
 
