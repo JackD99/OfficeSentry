@@ -1,17 +1,22 @@
 """Exchange detail reports: inbox rules, mailbox permissions, shared mailboxes, size and legacy sign-ins."""
 
 import copy
+import json
 from io import BytesIO
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
+import responses
 from openpyxl import load_workbook
 
 from officesentry import store
-from officesentry.collectors.mail_usage import summarise_signins
+from officesentry.collectors.mail_usage import LEGACY_CLIENTS, summarise_signins
 from officesentry.exchange import ExchangeClient
+from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.mailflow import size_bytes
 from officesentry.reports.data_reports import REPORTS, build
 from officesentry.snapshot import TenantSnapshot
+from officesentry.worker import execute_run
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -195,3 +200,74 @@ def test_mail_report_pages_tabs_and_xlsx(client, db, tenant):
         assert resp.status_code == 200, key
         assert load_workbook(BytesIO(resp.data)).sheetnames
     assert "bob@x.com" in client.get(f"/tenants/{tenant['id']}/data/mailbox-permissions").get_data(as_text=True)
+
+
+# -- Legacy sign-ins when Microsoft times out -------------------------------------------------
+
+def _legacy_rows():
+    rows = []
+    for i, client in enumerate(LEGACY_CLIENTS):
+        for j in range(3):
+            rows.append({"id": f"l{i}-{j}", "createdDateTime": f"2026-09-{10 + j * 7:02d}T{i:02d}:00:00Z",
+                         "userPrincipalName": ["ann@x.com", "info@x.com"][(i + j) % 2], "clientAppUsed": client,
+                         "ipAddress": f"203.0.113.{i}", "appDisplayName": f"App {j}",
+                         "location": {"countryOrRegion": ["GB", "RU", "FR"][j]},
+                         "status": {"errorCode": 0 if j else 50126}})
+    return rows
+
+
+def _legacy_log(rows, fail):
+    """A fake /v1.0/auditLogs/signIns that filters on clientAppUsed and fails when ``fail(clients)``."""
+    def handler(request):
+        flt = parse_qs(urlsplit(request.url).query)["$filter"][0]
+        clients = [c.split("'")[1] for c in flt.split(" or ")]
+        if fail(clients):
+            return 504, {}, json.dumps({"error": {"code": "GatewayTimeout", "message": "Request timed out"}})
+        match = sorted((r for r in rows if r["clientAppUsed"] in clients), key=lambda r: r["createdDateTime"],
+                       reverse=True)
+        return 200, {}, json.dumps({"value": match})
+    responses.add_callback(responses.GET, f"{GRAPH_ROOT}/v1.0/auditLogs/signIns", callback=handler,
+                           content_type="application/json")
+
+
+def _legacy_run(db, tenant_id):
+    store.enqueue_run(db, tenant_id, "legacy_signins")
+    run = store.claim_next_run(db)
+    status = execute_run(db, run, lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None))
+    return run["id"], status
+
+
+@responses.activate
+def test_legacy_signins_split_a_timed_out_filter_and_get_the_same_rows(db, two_tenants):
+    alpha, bravo = two_tenants
+    rows = _legacy_rows()
+    _legacy_log(rows, fail=lambda clients: False)
+    base_id, status = _legacy_run(db, alpha)
+    assert status == "succeeded" and len(responses.calls) == 1
+    expected = store.run_objects(db, base_id, "legacy_signin")
+
+    # The 13-client OR filter times out; anything over 4 clients does too, so it's split twice.
+    responses.reset()
+    _legacy_log(rows, fail=lambda clients: len(clients) > 4)
+    run_id, status = _legacy_run(db, bravo)
+    assert status == "succeeded"
+    assert store.run_objects(db, run_id, "legacy_signin") == expected
+    assert all(c.request.method == "GET" for c in responses.calls)
+
+
+@responses.activate
+def test_legacy_signins_leave_out_a_client_that_keeps_failing(db, two_tenants):
+    alpha, bravo = two_tenants
+    rows = _legacy_rows()
+    _legacy_log(rows, fail=lambda clients: len(clients) > 1 or clients == ["IMAP4"])
+    run_id, status = _legacy_run(db, alpha)
+    assert status == "partial"
+    clients = {r["client"] for r in store.run_objects(db, run_id, "legacy_signin")}
+    assert clients == set(LEGACY_CLIENTS) - {"IMAP4"}
+    error = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
+    assert "timed out for these clients" in error and "IMAP4" in error
+
+    responses.reset()
+    _legacy_log(rows, fail=lambda clients: True)
+    run_id, status = _legacy_run(db, bravo)
+    assert status == "failed" and store.run_objects(db, run_id, "legacy_signin") == []

@@ -1,5 +1,10 @@
 /* Office Sentry portal design system.
    Tokens first; components below use only tokens. Light and dark share every rule. */
+/* Inter, bundled for the PDFs too, so the portal and client reports share one typeface. */
+@font-face { font-family: "Inter"; font-weight: 400; font-style: normal; font-display: swap; src: url("fonts/Inter-Regular.ttf") format("truetype"); }
+@font-face { font-family: "Inter"; font-weight: 500; font-style: normal; font-display: swap; src: url("fonts/Inter-Medium.ttf") format("truetype"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/Inter-SemiBold.ttf") format("truetype"); }
+@font-face { font-family: "Inter"; font-weight: 700 800; font-style: normal; font-display: swap; src: url("fonts/Inter-Bold.ttf") format("truetype"); }
 :root {
   --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f9fafb; --sunken: #eef0f3;
   --text: #111827; --text-2: #374151; --muted: #6b7280; --faint: #9ca3af;
@@ -11,7 +16,7 @@
   --sidebar: #0f172a; --sidebar-text: #cbd5e1; --sidebar-muted: #64748b; --sidebar-active: #1e293b;
   --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .06);
   --radius: 10px; --radius-sm: 6px;
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light;
 }
@@ -44,6 +49,7 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .muted { color: var(--muted); } .faint { color: var(--faint); }
 .small { font-size: .8125rem; } .tiny { font-size: .75rem; }
 .num, td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.num { white-space: nowrap; }
 .nowrap { white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -102,10 +108,15 @@ main { max-width: 1240px; margin: 0 auto; padding: 28px 32px 64px; }
 
 /* -- Stat tiles ------------------------------------------------------------ */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.tile { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
 .tile .label { color: var(--muted); font-size: .8125rem; }
 .tile .value { font-size: 1.625rem; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.3; }
 .tile .foot { font-size: .75rem; color: var(--muted); }
+/* Each tile spans three shared rows (label, figure, footnote), so figures line up across a row
+   even when one label wraps. */
+@supports (grid-template-rows: subgrid) {
+  .tile, a.tile.link { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 0; align-content: start; }
+}
 .delta.better { color: var(--ok); } .delta.worse { color: var(--bad); } .delta.flat { color: var(--muted); }
 
 /* -- Tables ---------------------------------------------------------------- */
@@ -364,7 +375,7 @@ details.card[open] > summary { margin-bottom: 12px; }
 .footnote.pad { padding: 12px 20px; margin: 0; border-top: 1px solid var(--border); }
 .inline-label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .8125rem; }
 .inline-label select { width: auto; margin: 0; padding: 5px 9px; }
-.sticky-actions { position: sticky; bottom: 0; padding: 12px 0; background: linear-gradient(transparent, var(--bg) 35%); }
+.sticky-actions { position: sticky; bottom: 0; z-index: 3; padding: 12px 0; margin-top: 0; background: var(--bg); border-top: 1px solid var(--border); box-shadow: 0 -8px 12px -10px rgba(16, 24, 40, .18); }
 .form-row > label.grow-2 { flex: 3 1 240px; }
 .page-head > .pill { margin-top: 6px; }
 .hero-form .form-row { align-items: flex-end; }
@@ -580,7 +591,7 @@ input.search.sm { padding: 5px 10px; font-size: .8125rem; width: 220px; }
 
 /* -- Self-review fixes ---------------------------------------------------------------- */
 /* Headline numbers that open their report */
-a.tile.link { display: block; color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s; }
+a.tile.link { color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s; }
 a.tile.link:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(16, 24, 40, .08); }
 a.tile.link .label { display: flex; justify-content: space-between; gap: 6px; }
 a.tile.link .go { width: 14px; height: 14px; color: var(--faint); opacity: 0; transition: opacity .15s, transform .15s; }

@@ -1,7 +1,18 @@
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
+
 import pytest
+import requests
 import responses
 
-from officesentry.graph import GRAPH_ROOT, GraphClient, GraphError, LicenseRequired, PermissionMissing
+from officesentry.graph import (
+    GRAPH_ROOT,
+    GraphClient,
+    GraphError,
+    LicenseRequired,
+    PermissionMissing,
+    is_transient,
+)
 
 
 @pytest.fixture
@@ -11,7 +22,8 @@ def sleeps():
 
 @pytest.fixture
 def graph(sleeps):
-    return GraphClient(lambda: "token", sleep=sleeps.append)
+    # No jitter, so waits are exact; test_backoff_is_jittered covers the spread.
+    return GraphClient(lambda: "token", sleep=sleeps.append, jitter=lambda: 0.0)
 
 
 def test_paths_are_relative_to_the_version():
@@ -65,7 +77,8 @@ def test_throttling_honours_retry_after(graph, sleeps):
     responses.get(url, status=503)
     responses.get(url, json={"value": []})
     assert graph.get("/organization") == {"value": []}
-    assert sleeps == [7.0, 2.0]
+    # Retry-After is honoured exactly; without it, attempt 1 backs off 1-2s.
+    assert sleeps == [7.0, 1.0]
 
 
 @responses.activate
@@ -100,3 +113,58 @@ def test_permission_errors_are_typed(graph):
 def test_client_has_no_write_methods(graph):
     for name in ("post", "patch", "put", "delete"):
         assert not hasattr(graph, name)
+
+
+@responses.activate
+def test_backoff_is_jittered(sleeps):
+    # Equal jitter: each wait is between half and all of 2**attempt, so parallel retries spread out.
+    draws = iter([0.0, 0.5, 1.0, 0.25])
+    graph = GraphClient(lambda: "t", sleep=sleeps.append, jitter=lambda: next(draws))
+    url = f"{GRAPH_ROOT}/v1.0/organization"
+    for _ in range(4):
+        responses.get(url, status=504)
+    responses.get(url, json={"value": []})
+    assert graph.get("/organization") == {"value": []}
+    assert sleeps == [0.5, 1.5, 4.0, 5.0]
+
+
+@responses.activate
+def test_retry_after_gets_a_little_jitter_and_is_capped(sleeps):
+    graph = GraphClient(lambda: "t", sleep=sleeps.append, jitter=lambda: 0.4)
+    url = f"{GRAPH_ROOT}/v1.0/organization"
+    responses.get(url, status=429, headers={"Retry-After": "3"})
+    responses.get(url, status=503, headers={"Retry-After": "86400"})
+    responses.get(url, status=503, headers={"Retry-After": "soon"})  # unreadable: normal backoff
+    responses.get(url, json={"value": []})
+    graph.get("/organization")
+    assert sleeps == [3.4, 300.4, 2.0 + 0.4 * 2.0]
+
+
+@responses.activate
+def test_retry_after_as_an_http_date(sleeps):
+    graph = GraphClient(lambda: "t", sleep=sleeps.append, jitter=lambda: 0.0)
+    url = f"{GRAPH_ROOT}/v1.0/organization"
+    later = format_datetime(datetime.now(UTC) + timedelta(seconds=30), usegmt=True)
+    past = format_datetime(datetime.now(UTC) - timedelta(seconds=30), usegmt=True)
+    responses.get(url, status=503, headers={"Retry-After": later})
+    responses.get(url, status=503, headers={"Retry-After": past})
+    responses.get(url, json={"value": []})
+    graph.get("/organization")
+    assert 25 <= sleeps[0] <= 30 and sleeps[1] == 0.0
+
+
+@responses.activate
+def test_network_errors_back_off_with_jitter_then_are_transient(sleeps):
+    graph = GraphClient(lambda: "t", sleep=sleeps.append, jitter=lambda: 1.0, max_retries=2)
+    responses.get(f"{GRAPH_ROOT}/v1.0/organization", body=requests.ConnectTimeout("slow"))
+    with pytest.raises(GraphError) as exc:
+        graph.get("/organization")
+    assert sleeps == [1.0, 2.0]
+    assert exc.value.status == 0 and is_transient(exc.value)
+
+
+def test_which_failures_are_transient():
+    assert all(is_transient(GraphError(s, "x", "y")) for s in (0, 500, 502, 503, 504))
+    # Throttling isn't helped by more, smaller queries; client errors never are.
+    assert not any(is_transient(GraphError(s, "x", "y")) for s in (400, 403, 404, 429))
+    assert not is_transient(LicenseRequired(403, "x", "y")) and not is_transient(ValueError())

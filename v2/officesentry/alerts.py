@@ -2,7 +2,8 @@
 
 Sent by the worker when:
   * a sync opens findings (new or reopened) at or above the chosen severity,
-    grouped into one message per tenant per sync;
+    grouped into one message per tenant per sync (the worker syncs once a
+    tenant has no more runs queued, so normally once per nightly collection);
   * a collector run fails after its previous run succeeded (state changes only,
     so a tenant that keeps failing doesn't alert every night);
   * optionally, a collector that was failing works again.

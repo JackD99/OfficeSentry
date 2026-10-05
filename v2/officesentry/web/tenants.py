@@ -92,7 +92,7 @@ def dashboard():
         from . import client_home
 
         return client_home.render(tenants)
-    rows = [rollup_row(g.db, t) for t in tenants]
+    rows = [rollup_row(g.db, t, cached=True) for t in tenants]
     for row in rows:
         row["health"] = data_health(row["tenant"], _latest_runs(row["tenant"]["id"]))
     rows.sort(key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["counts"]["medium"],
