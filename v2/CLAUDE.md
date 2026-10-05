@@ -47,6 +47,11 @@ overview and DEPLOY.md for running it on a server.
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
 
+The two SharePoint collectors list sites and OneDrives through
+`collectors/sharepoint_lookup.Lookups`, so the second one each night reuses
+the first one's answers (when they have the fields it asks for) and people
+without a OneDrive aren't asked about for a week.
+
 ## Adding a check or report
 
 - Checks go in `rules.py` with `@rule(...)`, or in a module imported at the

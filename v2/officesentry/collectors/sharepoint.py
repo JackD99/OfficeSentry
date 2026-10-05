@@ -21,6 +21,11 @@ from ..mailflow import is_external, tenant_domains
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
+from .sharepoint_lookup import Lookups
+
+# What this collector asks Microsoft for each site and OneDrive (see sharepoint_lookup).
+SITE_FIELDS = "id,displayName,webUrl,isPersonalSite,root"
+DRIVE_FIELDS = "id,name,webUrl,driveType,owner"
 
 # Microsoft's usage reports. v1.0 only returns CSV; beta returns JSON.
 REPORT_PERIOD = "D30"
@@ -234,8 +239,9 @@ class SharedFiles(Collector):
             ctx.log("Tenant has no SharePoint licence; nothing to scan")
             ctx.objects("scan_status", [("status", {"available": False, "reason": "no_sharepoint"})])
             return
+        catalog = Lookups(ctx, self.key, SITE_FIELDS, DRIVE_FIELDS)
         try:
-            drives = self._drives(ctx)
+            drives = self._drives(ctx, catalog)
         except PermissionMissing as exc:
             ctx.warn("Reading files needs the Sites.Read.All permission. Re-send the consent link from the tenant "
                      f"page to add it. ({exc.message})")
@@ -292,6 +298,7 @@ class SharedFiles(Collector):
             ctx.truncated = True
         if skipped_drives:
             ctx.warn(f"{plural(skipped_drives, 'library')} couldn't be read")
+        catalog.save()
         ctx.objects("shared_item", stored)
         ctx.objects("scan_status", [("status", {
             "available": True, "drives": len(drives), "items": scanned, "lookups": lookups,
@@ -302,12 +309,11 @@ class SharedFiles(Collector):
         ctx.metric("sharing.external_items", sum(bool(r["externalPeople"]) for r in rows))
         ctx.metric("sharing.org_items", sum(r["orgLinks"] > 0 for r in rows))
 
-    def _drives(self, ctx: RunContext) -> list[dict]:
+    def _drives(self, ctx: RunContext, catalog: Lookups) -> list[dict]:
         """Every document library and OneDrive, de-duplicated by drive ID."""
         drives: dict[str, dict] = {}
         owners: set[str] = set()  # IDs and addresses of people whose OneDrive a site listing already gave
-        sites = ctx.paged(ctx.graph.get_all("/sites/getAllSites", {
-            "$select": "id,displayName,webUrl,isPersonalSite,root"}))
+        sites = catalog.sites()
         for site in sites:
             personal = bool(site.get("isPersonalSite")) or "/personal/" in (site.get("webUrl") or "")
             try:
@@ -336,9 +342,8 @@ class SharedFiles(Collector):
             if owners & {(x or "").lower() for x in (user.get("_id"), user.get("userPrincipalName"),
                                                      user.get("mail"))}:
                 continue
-            try:
-                d = ctx.graph.get(f"/users/{user['_id']}/drive", {"$select": "id,name,webUrl,driveType,owner"})
-            except GraphError:
+            d = catalog.onedrive(user)
+            if d is None:
                 continue
             drives.setdefault(d["id"], {
                 "id": d["id"], "name": d.get("name"), "webUrl": d.get("webUrl"),

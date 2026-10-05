@@ -26,6 +26,11 @@ from ..graph import GraphError, PermissionMissing
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
+from .sharepoint_lookup import Lookups
+
+# What this collector asks Microsoft for each site and OneDrive (see sharepoint_lookup).
+SITE_FIELDS = "id,displayName,webUrl,isPersonalSite"
+DRIVE_FIELDS = "id,webUrl,quota"
 
 ITEM_FIELDS = ("FileLeafRef,FileRef,FSObjType,SMTotalSize,SMTotalFileStreamSize,SMTotalFileCount,"
                "_UIVersionString")
@@ -185,9 +190,9 @@ class SharePointStorage(Collector):
             ctx.log("Tenant has no SharePoint licence; nothing to scan")
             ctx.objects("storage_status", [("status", {"available": False, "reason": "no_sharepoint"})])
             return
+        catalog = Lookups(ctx, self.key, SITE_FIELDS, DRIVE_FIELDS)
         try:
-            sites = ctx.paged(ctx.graph.get_all("/sites/getAllSites", {
-                "$select": "id,displayName,webUrl,isPersonalSite"}))
+            sites = catalog.sites()
         except PermissionMissing as exc:
             ctx.warn("Reading storage needs the Sites.Read.All permission. Re-send the consent link from the tenant "
                      f"page to add it. ({exc.message})")
@@ -241,7 +246,8 @@ class SharePointStorage(Collector):
             ctx.warn(f"{plural(skipped, 'site')} couldn't be read")
 
         recycled = self._recycle_bins(ctx, recycle_candidates)
-        onedrives = self._onedrives(ctx, scan)
+        onedrives = self._onedrives(ctx, scan, catalog)
+        catalog.save()
 
         ctx.objects("site_storage", site_rows)
         ctx.objects("library_storage", [(f"{x['siteUrl']}|{x['webUrl']}".lower(), x) for x in libraries])
@@ -283,15 +289,14 @@ class SharePointStorage(Collector):
             stored += [(f"{site['id']}:{i}", r) for i, r in enumerate(top.rows())]
         return stored
 
-    def _onedrives(self, ctx: RunContext, scan: _Scan) -> list[tuple[str, dict]]:
+    def _onedrives(self, ctx: RunContext, scan: _Scan, catalog: Lookups) -> list[tuple[str, dict]]:
         """Each licensed person's OneDrive quota; the nearly full ones are walked like a library."""
         stored = []
         for user in TenantSnapshot(ctx.conn, ctx.tenant).objects("users", "user") or []:
             if user.get("userType") != "Member" or not user.get("licensed"):
                 continue
-            try:
-                drive = ctx.graph.get(f"/users/{user['_id']}/drive", {"$select": "id,webUrl,quota"})
-            except GraphError:
+            drive = catalog.onedrive(user)
+            if drive is None:
                 continue  # never opened, or no OneDrive licence
             q = quota_row(drive)
             upn = user.get("userPrincipalName")
