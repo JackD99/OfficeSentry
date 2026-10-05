@@ -81,8 +81,12 @@ def test_subject_and_message_placeholders(app, db, two_tenants):
     assert "Dear Alpha Ltd" in built.email.text
 
 
-def test_send_on_approval_schedule_does_not_send_on_timer(app, db, two_tenants, vault, cfg):
+def test_send_on_approval_schedule_does_not_send_on_timer(app, db, two_tenants, vault, cfg, monkeypatch):
     alpha, bravo = two_tenants
+    pdf_html = []
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: pdf_html.append(html) or b"%PDF-1.7")
+    # An automatic plan's PDF carries the month's commentary too.
+    month_end.update_review(db, bravo, "2026-10", "admin", commentary="Bravo had a good month.")
     seed_tenant(db, alpha)
     seed_tenant(db, bravo)
     _smtp_ready(db)
@@ -101,6 +105,7 @@ def test_send_on_approval_schedule_does_not_send_on_timer(app, db, two_tenants, 
     assert delivery.tick(app, db, vault, cfg, now) == 1
     (_, _, msg, _), = sends()
     assert msg["To"] == f"it@{bravo}.com"
+    assert len(pdf_html) == 1 and "Bravo had a good month." in pdf_html[0]
     # Its Send now and Retry don't bypass approval either.
     s = db.execute("SELECT * FROM email_schedules WHERE tenant_id = ?", (alpha,)).fetchone()
     assert "approved" in delivery.retry_delivery(app, db, vault, {"schedule_id": s["id"]}, "admin")

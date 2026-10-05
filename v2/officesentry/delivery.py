@@ -399,8 +399,13 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     lines += ["", f"Sent by {msp} with Office Sentry."]
 
     to, bcc = split_recipients(contacts)
-    attachments = _attachments(app, conn, tenant, keys, bool(schedule["include_xlsx"]), now, review) \
-        if attach else []
+    attachments = []
+    if attach:
+        from . import month_end  # imports this module
+        # The month's commentary, recommendations and client-visible notes go in the PDF too.
+        context = month_end.report_context(conn, tenant["id"], f"{local.year}-{local.month:02d}", staff=False)
+        attachments = _attachments(app, conn, tenant, keys, bool(schedule["include_xlsx"]), now, review,
+                                   review_context=context)
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
                        attachments=attachments, inline=inline), [name for _, name in files])
 
