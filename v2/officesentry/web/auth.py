@@ -160,7 +160,7 @@ def _finish_login(user, next_url: str | None = None) -> str:
 
 
 def _needs_enrolment(user) -> bool:
-    return not user["totp_enabled_at"] and _cfg().mfa_required(user["role"])
+    return not user["totp_enabled_at"] and _cfg().mfa_required(user["role"], g.db)
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -401,7 +401,7 @@ def setup():
                 return redirect(url_for("auth.two_step_setup"))
             return redirect(_finish_login(user))
     return render_template("setup.html", need_token=False, min_password=MIN_PASSWORD,
-                           two_step=cfg.mfa_required("admin"))
+                           two_step=cfg.mfa_required("admin", g.db))
 
 
 # -- Account ------------------------------------------------------------------------
@@ -414,7 +414,7 @@ def account():
                               (g.user["id"],)).fetchone()[0]
     return render_template(
         "account.html", min_password=MIN_PASSWORD, sessions=sessions.list_for(g.user["id"]),
-        codes_left=codes_left, two_step_required=_cfg().mfa_required(g.user["role"]),
+        codes_left=codes_left, two_step_required=_cfg().mfa_required(g.user["role"], g.db),
     )
 
 
@@ -448,7 +448,7 @@ def _confirm_password() -> bool:
 @bp.post("/account/two-step/turn-off")
 @login_required
 def two_step_off():
-    if _cfg().mfa_required(g.user["role"]):
+    if _cfg().mfa_required(g.user["role"], g.db):
         flash("Two-step sign-in is required for your account, so it can't be turned off.", "error")
     elif _confirm_password():
         with transaction(g.db):

@@ -60,6 +60,15 @@ wrong passwords come from (15-minute sliding window):
   minutes. Reaching it needs the right password, so if this happens, change
   the password.
 
+**Two-step sign-in** is required for everyone on a new install, client
+accounts included. An install that was already in use before this release
+keeps requiring it for admins and analysts only, so client users aren't
+suddenly asked to enrol; *Settings → Users* shows the current policy. To
+require it for clients too, set `OFFICESENTRY_REQUIRE_MFA=all` in `.env` and
+restart (tell your clients first: they set it up at their next sign-in).
+`staff` and `off` are the other values; the variable always wins over the
+install's default.
+
 Unknown usernames are limited exactly like real ones. An admin can clear an
 account's limits under *Settings → Users → (user) → Unlock now*.
 Attempts are kept for two days (successful ones for 90, to recognise addresses).

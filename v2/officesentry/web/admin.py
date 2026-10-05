@@ -35,7 +35,14 @@ def _user_or_404(user_id: int):
 @roles_required("admin")
 def users():
     rows = g.db.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
-    return render_template("users.html", users=rows, roles=ROLES)
+    cfg = current_app.extensions["officesentry.config"]
+    two_step = {
+        "policy": cfg.mfa_policy(g.db),
+        "from_env": cfg.require_mfa_explicit,
+        "clients_without": sum(1 for u in rows if u["role"] == "client" and not u["totp_enabled_at"]
+                               and not u["disabled"]),
+    }
+    return render_template("users.html", users=rows, roles=ROLES, two_step=two_step)
 
 
 @bp.post("/users")
@@ -109,7 +116,7 @@ def edit_user(user_id: int):
         "user_edit.html", user=user, tenants=tenants, granted=granted, roles=ROLES,
         sessions=sessions.list_for(user_id), locked=_is_locked(user),
         failures=throttle.recent_failures(g.db, user["username"]),
-        two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"]),
+        two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
     )
 
 

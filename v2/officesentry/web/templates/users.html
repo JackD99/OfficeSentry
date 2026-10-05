@@ -20,6 +20,17 @@
   </table>
 </section>
 <section class="card">
+  <h2>Two-step sign-in</h2>
+  {% set p = two_step.policy %}
+  <p>{% if p == 'all' %}Two-step sign-in is required for everyone, client accounts included.
+    {% elif p == 'staff' %}Two-step sign-in is required for admins and analysts. Client accounts can turn it on themselves.
+    {% else %}Two-step sign-in isn't required for anyone.{% endif %}
+    <span class="muted small">{% if two_step.from_env %}Set by <code>OFFICESENTRY_REQUIRE_MFA={{ p }}</code>.{% else %}The default for this install; <code>OFFICESENTRY_REQUIRE_MFA</code> isn't set.{% endif %}</span></p>
+  {% if p != 'all' %}
+  <p class="small"><strong>Recommended: require it for client accounts too.</strong> Clients can see their users' sign-in addresses and locations and every finding, which is useful to someone phishing them. Set <code>OFFICESENTRY_REQUIRE_MFA=all</code> in <code>.env</code> and restart; {% if two_step.clients_without %}{{ two_step.clients_without|plural('client account') }} without two-step will be asked to set it up at {{ 'its' if two_step.clients_without == 1 else 'their' }} next sign-in{% else %}every client account already uses it{% endif %}. Tell them first.</p>
+  {% endif %}
+</section>
+<section class="card">
   <h2>Add a user</h2>
   <form method="post" action="{{ url_for('admin.create_user') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

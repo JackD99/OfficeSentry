@@ -277,8 +277,11 @@ this command; the product signs in with a certificate.
 ## Sign-in security
 
 - **Two-step sign-in** (a 6-digit code from an authenticator app) is required
-  for admins and analysts and optional for client users. Change it with
-  `OFFICESENTRY_REQUIRE_MFA` (`staff`, `all` or `off`). Each user gets ten
+  for everyone on new installs, client accounts included. Installs set up
+  before October 2026 keep requiring it for admins and analysts only, so
+  nobody is surprised after an upgrade; *Settings → Users* shows the policy
+  and recommends extending it to clients. Set it with
+  `OFFICESENTRY_REQUIRE_MFA` (`all`, `staff` or `off`). Each user gets ten
   one-time recovery codes. An admin can reset someone's two-step sign-in from
   their user page if they lose their phone.
 - **Sign-in limits by address, not account lockout:** wrong passwords slow

@@ -49,7 +49,9 @@ class Config:
     keep_monthly: int = 12
     secure_cookies: bool = True
     # Who must use two-step sign-in: "staff" (admins and analysts), "all", or "off".
+    # Without OFFICESENTRY_REQUIRE_MFA, the database's own default applies (mfa_policy).
     require_mfa: str = "staff"
+    require_mfa_explicit: bool = False
     # Reverse proxies in front of the portal whose X-Forwarded-* headers are trusted.
     trusted_proxies: int = 0
     session_idle_minutes: int = 120
@@ -65,10 +67,20 @@ class Config:
     def secrets_path(self) -> Path:
         return self.data_dir / SECRETS_FILE
 
-    def mfa_required(self, role: str) -> bool:
-        if self.require_mfa == "all":
+    def mfa_policy(self, conn=None) -> str:
+        """The two-step policy in force: OFFICESENTRY_REQUIRE_MFA when it is set, else the install's
+        default from the database ("all" for installs set up from 2026-10, see migration 0012),
+        else "staff"."""
+        if self.require_mfa_explicit or conn is None:
+            return self.require_mfa
+        row = conn.execute("SELECT value FROM settings WHERE key = 'require_mfa'").fetchone()
+        return row[0] if row and row[0] in MFA_POLICIES else self.require_mfa
+
+    def mfa_required(self, role: str, conn=None) -> bool:
+        policy = self.mfa_policy(conn)
+        if policy == "all":
             return True
-        return self.require_mfa == "staff" and role in ("admin", "analyst")
+        return policy == "staff" and role in ("admin", "analyst")
 
 
 def tighten(path: Path) -> None:
@@ -154,6 +166,7 @@ def load_config(**overrides) -> Config:
         keep_monthly=int(_env("KEEP_MONTHLY", "12")),
         secure_cookies=_env("INSECURE_COOKIES", "") != "1",
         require_mfa=_env("REQUIRE_MFA", "staff").strip().lower(),
+        require_mfa_explicit=bool(_env("REQUIRE_MFA").strip()) or "require_mfa" in overrides,
         trusted_proxies=int(_env("TRUSTED_PROXIES", "0")),
         session_idle_minutes=int(_env("SESSION_IDLE_MINUTES", "120")),
         session_hours=int(_env("SESSION_HOURS", "8")),
