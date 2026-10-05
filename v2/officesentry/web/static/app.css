@@ -855,3 +855,21 @@ main :is(p, .callout, .footnote, .help) a:not([class]) { text-decoration: underl
 .skip-link { position: absolute; left: 12px; top: -48px; z-index: 100; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: var(--shadow); }
 .skip-link:focus { top: 12px; }
 main:focus { outline: none; }
+
+/* Month-end reporting: queue filters as links, flags, the review screen's editors. */
+.seg a { display: block; padding: 5px 14px; border-radius: 6px; color: var(--muted); font-weight: 500; text-decoration: none; }
+.seg a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.seg a .count { color: var(--faint); font-weight: 400; margin-left: 4px; }
+.flags { display: flex; flex-wrap: wrap; gap: 4px; }
+.month-nav { display: inline-flex; gap: 6px; align-items: center; }
+.review-check { padding: 14px 20px; border-top: 1px solid var(--border); }
+.review-check:first-of-type { border-top: 0; }
+.review-check .note-list { list-style: none; margin: 8px 0; padding: 0; }
+.review-check .note-list li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; margin-bottom: 4px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: .875rem; }
+.review-check details summary { cursor: pointer; font-size: .8125rem; color: var(--accent); }
+.action-row { display: flex; gap: 10px; align-items: flex-start; padding: 12px 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.action-row .grow { flex: 1 1 260px; }
+.action-row form { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0; }
+.action-row select, .action-row input { width: auto; }
+textarea.commentary { width: 100%; min-height: 9em; }
+.coverage-gaps td .btn { white-space: nowrap; }

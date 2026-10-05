@@ -1,0 +1,32 @@
+{# Which clients get a monthly report, and a fix for each gap (month_end.coverage). #}
+{% from "_macros.html" import icon %}
+{% macro coverage_card(cov, admin) -%}
+<section class="card flush" id="coverage">
+  <div class="card-head toolbar"><h2>{{ icon('check') }} Monthly report coverage</h2>
+    {% if admin %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}</div>
+  <p class="intro"><strong>{{ cov.headline }}.</strong>{% if cov.paused %} {{ cov.paused }} paused {{ 'client is' if cov.paused == 1 else 'clients are' }} not counted.{% endif %}</p>
+  {% if cov.gaps %}
+  <table class="stack-sm coverage-gaps">
+    <thead><tr><th>Client</th><th>What's missing</th><th></th></tr></thead>
+    <tbody>
+    {% for r in cov.gaps %}
+    <tr>
+      <td><a href="{{ url_for('email.tenant_emails', tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a>{% if r.plan %}<span class="sub">On “{{ r.plan }}”</span>{% endif %}</td>
+      <td data-label="Missing" class="wrap">
+        {% if 'no_report' in r.gaps %}<span class="pill warn">No monthly report</span>{% endif %}
+        {% if 'no_contacts' in r.gaps %}<span class="pill warn">No contacts</span>{% endif %}
+        {% if 'no_recipients' in r.gaps %}<span class="pill warn">Sends to nobody</span>{% endif %}
+      </td>
+      <td class="num">
+        {% if 'no_contacts' in r.gaps or 'no_recipients' in r.gaps %}<a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=r.tenant.id) }}#contacts">Add a contact</a>{% endif %}
+        {% if 'no_report' in r.gaps %}{% if admin %}<a class="btn sm" href="{{ url_for('reporting.new_plan', tenant=r.tenant.id) }}">Add to a plan</a>{% else %}<a class="btn sm" href="{{ url_for('email.new_schedule', tenant_id=r.tenant.id) }}">Schedule a report</a>{% endif %}{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% elif cov.total %}
+  <div class="empty compact"><p>Every active client has a monthly report going to someone.</p></div>
+  {% endif %}
+</section>
+{%- endmacro %}

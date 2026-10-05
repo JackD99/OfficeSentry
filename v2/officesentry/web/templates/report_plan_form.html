@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% set heading = 'Edit report plan' if p.id else 'New report plan' %}
+{% block title %}{{ heading }} · Office Sentry{% endblock %}
+{% macro choice(o) -%}
+<label class="choice"><input type="checkbox" name="reports" value="{{ o.key }}" {% if o.key in p.reports %}checked{% endif %}>
+  <span class="grow"><span class="choice-title">{{ o.title }}
+    {% if o.pdf and pdf_available %}<span class="fmt">PDF</span>{% endif %}{% if o.xlsx and (not o.pdf or not pdf_available) %}<span class="fmt">XLSX</span>{% endif %}</span>
+    <span class="hint">{{ o.description }}</span></span></label>
+{%- endmacro %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('reporting.plans') }}">Report plans</a></div>
+<div class="page-head">
+  <div><h1>{{ heading }}</h1>
+    <div class="sub">One monthly report for every client you tick. Each gets its own scheduled email, kept in step with this plan.</div></div>
+</div>
+
+<form method="post" class="schedule-form narrow-lg">
+  {{ csrf() }}
+  <section class="card">
+    <h2><span class="step-no">1</span> Plan</h2>
+    <label>Name <input type="text" name="name" value="{{ p.name }}" maxlength="100" required></label>
+    <div class="label-sm">Reports</div>
+    <fieldset class="choices">
+      <legend class="sr-only">Summary reports</legend>
+      {% for o in catalog if not o.key.startswith('data:') %}{{ choice(o) }}{% endfor %}
+    </fieldset>
+    {% set options = {} %}{% for o in catalog %}{% set _ = options.update({o.key: o}) %}{% endfor %}
+    {% for gr in report_groups %}
+    <details class="report-choices"{% for key, title, desc in gr.reports if ('data:' ~ key) in p.reports %}{% if loop.first %} open{% endif %}{% endfor %}>
+      <summary><span class="strong">{{ gr.title }}</span> <span class="muted small">{{ gr.reports|length }} reports</span></summary>
+      <fieldset class="choices"><legend class="sr-only">{{ gr.title }}</legend>
+        {% for key, title, desc in gr.reports if ('data:' ~ key) in options %}{{ choice(options['data:' ~ key]) }}{% endfor %}
+      </fieldset>
+    </details>
+    {% endfor %}
+    {% if pdf_available %}<label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if p.include_xlsx %}checked{% endif %}> Also attach spreadsheet (XLSX) versions of the review and evidence pack</label>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2><span class="step-no">2</span> When</h2>
+    <div class="form-row">
+      <label>Day of the month
+        <select name="day_of_month">{% for d in range(1, 29) %}<option value="{{ d }}" {% if p.day_of_month == d %}selected{% endif %}>{{ ordinal(d) }}</option>{% endfor %}</select></label>
+      <label>Time
+        <select name="hour">{% for h in range(24) %}<option value="{{ h }}" {% if p.hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></label>
+      <label class="grow-2">Timezone
+        <select name="timezone">
+          <option value="" {% if not p.timezone %}selected{% endif %}>{{ default_tz }} (server default)</option>
+          {% for z in zones %}{% if z != default_tz or p.timezone == z %}<option value="{{ z }}" {% if p.timezone == z %}selected{% endif %}>{{ z.replace('_', ' ') }}</option>{% endif %}{% endfor %}
+        </select></label>
+    </div>
+    <fieldset class="choices">
+      <legend class="label-sm">How it goes out</legend>
+      {% for key, label in modes.items() %}
+      <label class="choice"><input type="radio" name="mode" value="{{ key }}" {% if p.mode == key %}checked{% endif %}>
+        <span class="grow"><span class="choice-title">{{ label }}</span>
+        <span class="hint">{% if key == 'auto' %}Sent on the day, as it is. Nobody needs to look first.{% else %}Waits in Month-end until someone reviews it and an admin approves it. Nothing goes out on the timer.{% endif %}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    <fieldset class="choices">
+      <legend class="label-sm">Where it goes</legend>
+      {% for key, label in deliveries.items() %}
+      <label class="choice"><input type="radio" name="delivery" value="{{ key }}" {% if p.delivery == key %}checked{% endif %}>
+        <span class="grow"><span class="choice-title">{{ label }}</span>
+        <span class="hint">{% if key == 'email' %}Every contact on the client's Emails tab gets it.{% else %}No email: approving puts the files in the client's report history in the portal. Always waits for approval.{% endif %}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    <label class="check"><input type="checkbox" name="bcc_team" value="1" {% if p.bcc_team %}checked{% endif %}> Send your team a hidden copy</label>
+  </section>
+
+  <section class="card">
+    <h2><span class="step-no">3</span> The email</h2>
+    <label>Subject <input type="text" name="subject" value="{{ p.subject }}" maxlength="200">
+      <span class="hint">{client} becomes the client's name and {month} the month, like “October 2026”. Leave it empty for the usual subject.</span></label>
+    <label>Message <span class="muted">(optional)</span>
+      <textarea name="message" rows="4" maxlength="1000">{{ p.message }}</textarea>
+      <span class="hint">Shown at the top of the email. {client} and {month} work here too.</span></label>
+  </section>
+
+  <section class="card">
+    <h2><span class="step-no">4</span> Clients</h2>
+    <p class="muted small">Ticked clients get this plan. A client moves here from any other plan it was on.</p>
+    <fieldset class="choices compact">
+      <legend class="sr-only">Clients</legend>
+      {% for t in tenants %}
+      <label class="choice"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in chosen %}checked{% endif %}>
+        <span class="grow"><span class="choice-title">{{ t.name }}</span>
+        <span class="hint">{% if not contacts[t.id] %}No contacts yet{% else %}{{ contacts[t.id]|plural('contact') }}{% endif %}{% if on_plan.get(t.id) %} · on “{{ on_plan[t.id] }}”{% endif %}{% if not t.enabled %} · paused{% endif %}</span></span></label>
+      {% else %}<p class="muted small">No clients yet.</p>{% endfor %}
+    </fieldset>
+  </section>
+
+  <div class="form-actions">
+    <button class="primary">{{ 'Save and apply' if p.id else 'Create and apply' }}</button>
+    <a class="btn" href="{{ url_for('reporting.plans') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

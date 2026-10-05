@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf %}
 {% from "_email.html" import people, schedule_item, deliveries_table, contact_checks, next_tile, busy_script with context %}
+{% from "_coverage.html" import coverage_card with context %}
 {% block title %}Email reports · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -32,6 +33,8 @@
 
 <div class="grid-main">
 <div>
+  {{ coverage_card(coverage, admin) }}
+
   <section class="card flush">
     <div class="card-head toolbar"><h2>Client report emails</h2><span class="meta">Add one from a tenant's Emails tab</span></div>
     {% if schedules %}
