@@ -14,6 +14,8 @@ tidies old data). Everything it stores lives in one Docker volume.
 
 ## First start
 
+On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone).
+
 1. Copy the `v2` folder to the server and open a terminal in it.
 2. Create your settings file: `cp .env.example .env`
 3. Open `.env` in an editor (`nano .env`) and set at least:
@@ -266,6 +268,159 @@ the upgrade is lost.
 `docker compose down` stops everything and keeps your data. A collection in
 progress is given up to two minutes to finish. Never use `down -v` unless you
 mean to delete all data.
+
+## Hetzner, from a phone
+
+Everything here works from a phone browser: the Hetzner Cloud console, GitHub
+(use github.com in the browser for Settings; the GitHub app can run
+workflows) and an SSH app such as Termius to make a key. You never type
+commands on the server. The **Deploy** workflow (`.github/workflows/deploy.yml`)
+copies the app over and starts it, and the server's Hetzner firewall decides
+who can open the portal.
+
+### 1. Make a deploy key
+
+In Termius: *Keychain → + → Generate key*, type **ED25519**, name it
+`officesentry-deploy`, no passphrase. Keep it open: you need the public key in
+step 3 and the private key in step 5.
+
+### 2. Create the firewall
+
+In the [Hetzner Cloud console](https://console.hetzner.cloud), open (or create)
+a project, then *Firewalls → Create firewall*, named `officesentry`, with these
+inbound rules and **no rule for port 22**:
+
+| Protocol | Port | Source | Why |
+|---|---|---|---|
+| TCP | 443 | your office and home addresses, e.g. `203.0.113.10/32` | the portal |
+| TCP | 80 | Any IPv4, Any IPv6 | Let's Encrypt checks here before issuing the HTTPS certificate; Caddy only redirects it to 443 |
+| ICMP | | Any | optional, lets you ping the server |
+
+Port 443 is the allow-list. Anyone else can't even connect. Your address is
+whatever a "what is my IP" search shows on that network. Mobile data changes
+address often, so for a phone away from the office add its current address
+while you need it and remove it after. Client users who sign in to the portal
+need their addresses here too.
+
+SSH stays closed: the Deploy workflow opens port 22 to its own address for the
+length of each run (a rule named `github-actions-deploy (temporary)`) and
+removes it at the end.
+
+### 3. Create the server
+
+*Servers → Add server*:
+
+- **Image** Ubuntu 24.04. **Type** shared vCPU, x86, 2 vCPUs and 4 GB (the
+  smallest is fine to start).
+- **Networking** public IPv4 (and IPv6 if you like).
+- **SSH keys** none needed.
+- **Firewalls** tick `officesentry`.
+- **Backups** worth ticking: Hetzner keeps a copy of the whole server, data
+  and `secrets.json` included, for 7 days, and the server saves a consistent
+  database copy every night at 03:30 for those to hold.
+- **Cloud config** paste [`deploy/cloud-init.yaml`](deploy/cloud-init.yaml),
+  with its `ssh-ed25519 AAAA...` line replaced by your public key (Termius:
+  the key → *Export to clipboard* or copy the public key).
+
+Create it and note its IPv4 address. It takes a few minutes to install Docker.
+
+### 4. Point your domain at it
+
+At your DNS provider add an **A** record for, say, `sentry.yourmsp.com` with
+the server's IPv4 address. Only add an AAAA (IPv6) record if your firewall
+rules list your IPv6 ranges too, or browsers that prefer IPv6 won't get in.
+
+**Domain on Cloudflare?** In the Cloudflare app or dash.cloudflare.com: the
+domain → *DNS → Records → Add record*: type **A**, name `app` (for
+`app.yourmsp.com`, or `@` for the bare domain), IPv4 address the server's,
+and **Proxy status off (grey cloud, "DNS only")**. Add a second one named
+`demo` the same way for the demo site. Keep the proxy off: with the orange
+cloud, every visitor reaches the server from a Cloudflare address, so the
+Hetzner firewall's allow-list would block everyone (or have to let all of
+Cloudflare in), and Caddy can't get its certificate the usual way. Caddy
+makes the HTTPS certificate itself, so nothing needs changing under
+Cloudflare's SSL/TLS settings.
+
+### 5. Tell GitHub where to deploy
+
+In Hetzner: *Security → API tokens → Generate API token*, **Read & Write**
+(the workflow edits the firewall with it).
+
+In GitHub: the repository's *Settings → Secrets and variables → Actions*.
+
+| Secrets | |
+|---|---|
+| `HCLOUD_TOKEN` | the Hetzner API token |
+| `DEPLOY_SSH_KEY` | the deploy key's **private** key, all of it, including the BEGIN and END lines |
+
+| Variables | |
+|---|---|
+| `DEPLOY_HOST` | the server's IPv4 address |
+| `OFFICESENTRY_DOMAIN` | the domain alone, e.g. `sentry.yourmsp.com` |
+| `OFFICESENTRY_TIMEZONE` | e.g. `Europe/London` (default UTC) |
+| `HCLOUD_FIREWALL` | only if the firewall isn't called `officesentry` |
+| `OFFICESENTRY_DEMO_DOMAIN` | optional: the demo site's name (below), e.g. `demo.sentry.yourmsp.com` |
+| `DEMO_ENABLED` | `true` runs the demo site, `false` (or unset) removes it at the next deploy |
+| `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *` |
+| `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass |
+| `DEPLOY_HOST_KEY` | optional: the server's SSH host key, which the first run prints, so later runs refuse a different server |
+
+The workflow writes the server's `.env` from these on every deploy (with
+`OFFICESENTRY_TRUSTED_PROXIES=1` for Caddy), so change settings here, not on
+the server.
+
+### 6. Deploy and create the admin
+
+*Actions → Deploy → Run workflow*, action **deploy**. When it's green, open
+the step **Show the first-admin link**, open that link on your phone and
+create the admin account (with two-step sign-in), as in *First start*. The
+link only works until the first admin exists. Then carry on from step 6 of
+*First start*.
+
+### Everyday jobs
+
+All from *Actions → Deploy → Run workflow*:
+
+| Action | Does |
+|---|---|
+| `deploy` | copies the chosen branch, tag or commit and rebuilds; the portal is only down while the containers swap |
+| `status` | container health, free disk and the last log lines |
+| `backup` | a database copy now, keeping 14 |
+| `restart` | restarts the portal, worker and Caddy |
+| `setup-link` | the first-admin link again |
+
+To go back to an older version, deploy its commit or tag in the `ref` box; if
+the database was upgraded since, restore the `pre-upgrade-*` copy as in
+*Rolling back an update* (that needs a shell, below).
+
+### A demo site to show people
+
+The demo tenants from `scripts/demo_data.py` (three fictional clients with five
+weeks of history, and a made-up MSP's branding) come with every deploy and run
+as a second site on the same server, with its own data, so they never mix with
+real clients. To turn it on:
+
+1. Add an A record for, say, `demo.sentry.yourmsp.com` pointing at the server.
+2. Set the `OFFICESENTRY_DEMO_DOMAIN` variable to that name and `DEMO_ENABLED`
+   to `true`. Optionally add a `DEMO_PASSWORD` secret so the password stays
+   the same.
+3. Deploy. The run's summary shows the sign-in: user `demo` and the password.
+
+Every deploy rebuilds the demo data from the code it deploys, so the demo always
+shows the version that's running, with fresh dates; anything changed on the
+demo site is reset. To turn it off, set `DEMO_ENABLED` to `false` and deploy.
+
+The demo site uses the same firewall, so whoever can open the portal can open
+the demo. Two-step sign-in is off there so colleagues can share the account,
+and it never collects, because the tenants aren't real. Don't press "Run now"
+on a demo tenant; it fails, because there is nothing to connect to.
+
+### If you need a shell
+
+Add an inbound rule for TCP 22 from your current address in the firewall,
+connect in Termius as `deploy@<server IP>` with the deploy key, run
+`cd /opt/officesentry/v2`, and the commands elsewhere in this file work as
+written (`.env` already picks the https and demo parts). Remove the rule afterwards.
 
 ## Running on Windows without Docker
 
