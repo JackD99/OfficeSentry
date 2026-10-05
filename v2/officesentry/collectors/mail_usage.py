@@ -5,7 +5,10 @@ than Graph's mailbox usage report: Microsoft hides names in usage reports by
 default, so that report usually can't be matched to a mailbox.
 
 Legacy sign-ins (SMTP AUTH, IMAP, POP and other basic-auth clients) come from
-the Entra sign-in log, which needs Entra ID P1 and keeps 30 days.
+the Entra sign-in log, which needs Entra ID P1 and keeps 30 days. They are
+asked for in one query filtered on every legacy client; if Microsoft times out
+on that (a long OR filter on a busy tenant), the client list is halved until the
+queries succeed, and the results are merged into the same newest-first list.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 
 from .. import store
 from ..exchange import ExchangeAccessDenied, ExchangeError
-from ..graph import LicenseRequired, PermissionMissing
+from ..graph import GraphError, LicenseRequired, PermissionMissing, is_transient
 from ..mailflow import size_bytes
 from ..text import plural
 from . import mailbox_window
@@ -101,23 +104,66 @@ class LegacySignIns(Collector):
             ctx.objects("legacy_signin_status", [("status", {"available": False})])
             return
         since = (datetime.now(UTC) - timedelta(days=SIGNIN_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        clients = " or ".join(f"clientAppUsed eq '{c}'" for c in LEGACY_CLIENTS)
+        skipped: list[str] = []
         try:
-            result = ctx.graph.get_all("/auditLogs/signIns", params={
-                "$filter": f"createdDateTime ge {since} and ({clients})", "$top": "1000",
-            }, max_pages=SIGNIN_PAGES)
+            items, truncated, split = fetch_legacy_signins(ctx, since, LEGACY_CLIENTS, skipped)
         except (LicenseRequired, PermissionMissing) as exc:
             ctx.warn(f"The sign-in log isn't available: {exc.message}")
             ctx.objects("legacy_signin_status", [("status", {"available": False})])
             return
-        if result.truncated:
+        if split:
+            # Each smaller query is newest first; merge them into one list as the big query would have.
+            items.sort(key=lambda s: str(s.get("createdDateTime") or ""), reverse=True)
+            if len(items) > SIGNIN_PAGES * 1000:
+                del items[SIGNIN_PAGES * 1000:]
+                truncated = True
+        if skipped:
+            ctx.warn("Microsoft's sign-in log timed out for these clients, so they're missing: "
+                     + ", ".join(skipped))
+        if truncated:
             ctx.truncated = True
             ctx.warn(f"More than {SIGNIN_PAGES * 1000} legacy sign-ins; summarised the most recent ones")
         ctx.objects("legacy_signin_status", [("status", {"available": True, "since": since})])
-        rows = summarise_signins(result.items)
+        rows = summarise_signins(items)
         ctx.objects("legacy_signin", rows)
-        ctx.metric("mail.legacy_signins", len(result.items))
+        ctx.metric("mail.legacy_signins", len(items))
         ctx.metric("mail.legacy_signins_succeeded", sum(r["succeeded"] for _, r in rows))
+
+
+def fetch_legacy_signins(ctx: RunContext, since: str, clients: tuple[str, ...] | list[str],
+                         skipped: list[str]) -> tuple[list[dict], bool, bool]:
+    """Sign-ins for ``clients`` since ``since``: (items, truncated, whether the query was split).
+
+    A timeout or server error splits the client list in half and tries each
+    half; a single client that still fails is added to ``skipped``. If every
+    client is skipped the first failure is raised, so a broken log still fails.
+    """
+    def fetch(chunk) -> tuple[list[dict], bool, bool]:
+        flt = " or ".join(f"clientAppUsed eq '{c}'" for c in chunk)
+        try:
+            result = ctx.graph.get_all("/auditLogs/signIns", params={
+                "$filter": f"createdDateTime ge {since} and ({flt})", "$top": "1000",
+            }, max_pages=SIGNIN_PAGES)
+            return result.items, result.truncated, False
+        except GraphError as exc:
+            if not is_transient(exc):
+                raise
+            errors.append(exc)
+            if len(chunk) == 1:
+                ctx.log(f"Legacy sign-ins for {chunk[0]} failed: {exc}")
+                skipped.append(chunk[0])
+                return [], False, True
+            ctx.log(f"Legacy sign-in query for {len(chunk)} clients failed ({exc}); splitting it")
+        mid = len(chunk) // 2
+        a_items, a_trunc, _ = fetch(chunk[:mid])
+        b_items, b_trunc, _ = fetch(chunk[mid:])
+        return a_items + b_items, a_trunc or b_trunc, True
+
+    errors: list[GraphError] = []
+    items, truncated, split = fetch(list(clients))
+    if errors and len(skipped) == len(clients):
+        raise errors[0]
+    return items, truncated, split
 
 
 def summarise_signins(signins: list[dict]) -> list[tuple[str, dict]]:
