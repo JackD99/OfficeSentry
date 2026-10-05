@@ -19,7 +19,7 @@ from .db import utcnow
 
 # Columns for listing: everything but the bytes.
 COLUMNS = ("id, tenant_id, schedule_id, kind, title, period, version, issued_at, issued_by, trigger,"
-           " recipients, bcc, filename, content_type, sha256, size")
+           " recipients, bcc, filename, content_type, sha256, size, approved_by, reason")
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,8 @@ def history(conn, tenant_id: int) -> list[dict]:
         entry = groups.setdefault(key, {"issued_at": r["issued_at"], "issued_by": r["issued_by"],
                                         "trigger": r["trigger"], "period": r["period"],
                                         "period_label": period_label(r["period"]),
-                                        "recipients": r["recipients"], "bcc": r["bcc"], "files": []})
+                                        "recipients": r["recipients"], "bcc": r["bcc"], "reason": r["reason"],
+                                        "files": []})
         entry["files"].append(dict(r, format=r["filename"].rsplit(".", 1)[-1].upper(),
                                    size_label=size_label(r["size"])))
     for entry in groups.values():
