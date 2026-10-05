@@ -17,10 +17,10 @@ from .. import store
 from ..exchange import ExchangeAccessDenied, ExchangeError
 from ..graph import LicenseRequired, PermissionMissing
 from ..mailflow import size_bytes
+from ..text import plural
+from . import mailbox_window
 from .base import Collector, RunContext, register
 from .exchange import SYSTEM_MAILBOX_TYPES
-
-PER_MAILBOX_LIMIT = 2000
 
 # Sign-in log clientAppUsed values for clients that use basic (legacy) authentication.
 LEGACY_CLIENTS = (
@@ -49,11 +49,9 @@ class MailboxUsage(Collector):
                  if m.get("RecipientTypeDetails") not in SYSTEM_MAILBOX_TYPES]
         if not run:
             ctx.warn("Mailboxes haven't been collected yet, so there's nothing to size")
-        if len(boxes) > PER_MAILBOX_LIMIT:
-            ctx.warn(f"Read sizes for the first {PER_MAILBOX_LIMIT} of {len(boxes)} mailboxes")
-            boxes = boxes[:PER_MAILBOX_LIMIT]
+        window = mailbox_window.plan(ctx, self.key, "mailbox_size", boxes, lambda m: m["_id"], "mailbox sizes")
         rows, failed = [], 0
-        for m in boxes:
+        for m in window.mailboxes:
             try:
                 stats = ctx.exchange.invoke("Get-MailboxStatistics", {"Identity": m.get("Guid") or m["_id"]})
             except ExchangeAccessDenied:
@@ -75,8 +73,10 @@ class MailboxUsage(Collector):
                 "litigationHold": m.get("LitigationHoldEnabled"),
             }))
         if failed:
-            ctx.warn(f"Could not read the size of {failed} mailbox(es)")
+            ctx.warn(f"Could not read the size of {plural(failed, 'mailbox')}")
+        rows += window.carried
         ctx.objects("mailbox_size", rows)
+        window.save(ctx)
         data = [r for _, r in rows]
         ctx.metric("mail.storage_bytes", sum(r["totalBytes"] or 0 for r in data))
         ctx.metric("mail.mailboxes_near_quota", sum(_near_quota(r) for r in data))

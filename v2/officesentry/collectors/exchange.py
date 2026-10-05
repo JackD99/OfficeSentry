@@ -6,9 +6,9 @@ Uses the read-only Exchange admin API (see ``officesentry/exchange.py``).
 from __future__ import annotations
 
 from ..exchange import ExchangeAccessDenied, ExchangeError
+from ..text import plural
+from . import mailbox_window
 from .base import Collector, RunContext, register
-
-PER_MAILBOX_LIMIT = 2000
 
 MAILBOX_FIELDS = (
     "ExternalDirectoryObjectId", "Guid", "UserPrincipalName", "PrimarySmtpAddress", "DisplayName",
@@ -74,7 +74,7 @@ class Mailboxes(Collector):
             rows.append((_mailbox_id(m), row))
         ctx.objects("mailbox", rows)
 
-        ctx.objects("mailbox_permission", self._full_access(ctx, [r for _, r in rows]))
+        self._full_access(ctx, [r for _, r in rows])
         send_as = [p for p in exo.invoke("Get-RecipientPermission", {"ResultSize": "Unlimited"})
                    if p.get("Trustee") != SELF and not p.get("IsInherited")
                    and not is_system_entry(p.get("Identity"), p.get("Trustee"))]
@@ -128,15 +128,12 @@ class Mailboxes(Collector):
         return {"PrimarySmtpAddress": r.get("PrimarySmtpAddress"), "RecipientType": r.get("RecipientType"),
                 "ExternalEmailAddress": r.get("ExternalEmailAddress")}
 
-    @staticmethod
-    def _full_access(ctx: RunContext, mailboxes: list[dict]) -> list[tuple[str, dict]]:
-        if len(mailboxes) > PER_MAILBOX_LIMIT:
-            ctx.warn(f"Checked mailbox permissions on the first {PER_MAILBOX_LIMIT} of {len(mailboxes)} mailboxes")
-            mailboxes = mailboxes[:PER_MAILBOX_LIMIT]
+    def _full_access(self, ctx: RunContext, mailboxes: list[dict]) -> None:
+        mailboxes = [m for m in mailboxes if m.get("RecipientTypeDetails") not in SYSTEM_MAILBOX_TYPES]
+        window = mailbox_window.plan(ctx, self.key, "mailbox_permission", mailboxes, _mailbox_id,
+                                     "mailbox permissions")
         rows, failed = [], 0
-        for m in mailboxes:
-            if m.get("RecipientTypeDetails") in SYSTEM_MAILBOX_TYPES:
-                continue
+        for m in window.mailboxes:
             ident = m.get("Guid") or m.get("PrimarySmtpAddress")
             try:
                 perms = ctx.exchange.invoke("Get-MailboxPermission", {"Identity": ident})
@@ -154,5 +151,6 @@ class Mailboxes(Collector):
                     "mailboxType": m.get("RecipientTypeDetails"), "User": user,
                     "AccessRights": p.get("AccessRights") or []}))
         if failed:
-            ctx.warn(f"Could not read permissions on {failed} mailbox(es)")
-        return rows
+            ctx.warn(f"Could not read permissions on {plural(failed, 'mailbox')}")
+        ctx.objects("mailbox_permission", rows + window.carried)
+        window.save(ctx)
