@@ -108,7 +108,9 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   IDs replaced. When a collector asks Microsoft for something new, re-record it
   with `python -m officesentry live-test --record tests/fixtures/live_tenant.json`
   (needs the `OFFICESENTRY_TEST_*` variables). Scrubbing happens in memory and
-  refuses to write the file if a name or domain survives; still skim the diff.
+  refuses to write the file if a name, domain or phone number survives; still
+  skim the diff. Phone fields are replaced by key (`recording.PHONE_KEYS`)
+  whatever their format; `tests/test_recording.py` covers the scrubber.
 
 ## One page per account
 

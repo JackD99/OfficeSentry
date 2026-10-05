@@ -1,0 +1,160 @@
+"""The live-fixture scrubber: nothing that identifies the tenant or its people may survive."""
+
+import json
+import re
+
+import pytest
+
+from officesentry import recording
+from officesentry.recording import find_leaks, phone_leaks, scrub
+
+TENANT = "a1b2c3d4-1111-4222-8333-444455556666"
+CLIENT = "c0ffee00-1111-4222-8333-444455556666"
+JANE = "b0b0b0b0-1111-4222-8333-444455556666"
+GROUP = "d00d0000-1111-4222-8333-444455556666"
+GLOBAL_ADMIN = "62e90394-69f5-4237-9190-012177145e10"  # a role template the code looks for
+
+GRAPH = "https://graph.microsoft.com"
+
+
+def _graph(path, body):
+    return {"api": "graph", "url": f"{GRAPH}{path}", "status": 200, "body": body}
+
+
+def raw_log():
+    jane = {
+        "id": JANE, "displayName": "Jane Smithson", "givenName": "Jane", "surname": "Smithson",
+        "userPrincipalName": "jane.smithson@contoso.com", "mail": "jane.smithson@contoso.com",
+        "mailNickname": "jsmithson", "businessPhones": ["07700 900123"], "mobilePhone": "+44 7700 900456",
+        "faxNumber": "(212) 555-7788", "otherPhones": [], "jobTitle": None,
+    }
+    return [
+        _graph("/v1.0/organization", {"value": [{
+            "id": TENANT, "displayName": "Contoso Widgets",
+            "verifiedDomains": [{"name": "contoso.com"}, {"name": "contosowidgets.onmicrosoft.com"}],
+        }]}),
+        _graph("/v1.0/users?$select=id,displayName", {"value": [jane]}),
+        _graph(f"/v1.0/groups/{GROUP}", {"id": GROUP, "displayName": "Finance Team"}),
+        _graph("/v1.0/auditLogs/signIns", {"value": [{
+            "userId": JANE, "userDisplayName": "Jane Smithson", "userPrincipalName": "jane.smithson@contoso.com",
+            "ipAddress": "81.2.69.160", "clientAppUsed": "Browser",
+        }, {
+            "userId": JANE, "userDisplayName": "Jane Smithson", "userPrincipalName": "jane.smithson@contoso.com",
+            "ipAddress": "2a00:23c5:1234::1",
+        }]}),
+        _graph("/v1.0/directoryRoles", {"value": [{"roleTemplateId": GLOBAL_ADMIN, "members": [{"id": JANE}]}]}),
+        _graph("/v1.0/roleManagement/directory/roleAssignments?$expand=principal", {"value": [{
+            "principal": {**jane, "businessPhones": ["07700900123"]},  # the same number, written differently
+        }]}),
+        _graph("/v1.0/sites", {"value": [{
+            "webUrl": "https://contoso-my.sharepoint.com/personal/jane_smithson_contoso_com/Documents",
+            "description": "Call Jane on 020 7946 0123 or +44 20 7946 0999",
+        }]}),
+        _graph(f"/v1.0/users/{JANE}/authentication/methods", {"value": [{
+            "phoneNumber": "+44 7700 900456", "displayName": "Jane's iPhone", "phoneType": "mobile",
+        }]}),
+        _graph("/v1.0/reports/usage", {"value": [{"mobile": False, "userPrincipalName": "jane.smithson@contoso.com"}]}),
+        {"api": "exchange", "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand", "status": 200,
+         "cmdlet": {"CmdletName": "Get-Mailbox"},
+         "body": {"value": [{"DisplayName": "Jane Smithson", "Alias": "jsmithson", "Name": "Jane Smithson",
+                             "Phone": "07700900789", "PrimarySmtpAddress": "jane.smithson@contoso.com"}]}},
+        {"api": "dns", "name": "contoso.com", "rdtype": "TXT",
+         "answer": ["v=spf1 include:spf.protection.outlook.com -all", "MS=ms12345678"]},
+    ]
+
+
+SENSITIVE = ["Jane", "Smithson", "jsmithson", "contoso", "Contoso Widgets", "Finance Team", TENANT, CLIENT, JANE,
+             GROUP, "81.2.69.160", "2a00:23c5", "7700", "7946", "555-7788", "MS=ms12345678"]
+
+
+@pytest.fixture(scope="module")
+def fixture():
+    return scrub(raw_log(), TENANT, CLIENT)
+
+
+def test_nothing_identifying_survives(fixture):
+    text = json.dumps(fixture)
+    for value in SENSITIVE:
+        assert value.lower() not in text.lower(), value
+
+
+def test_names_emails_and_domains_get_consistent_placeholders(fixture):
+    users = fixture["entries"][1]["body"]["value"][0]
+    sign_in = fixture["entries"][3]["body"]["value"][0]
+    assert users["displayName"] == sign_in["userDisplayName"] == "Test User 1"
+    assert users["userPrincipalName"] == users["mail"] == sign_in["userPrincipalName"]
+    assert re.fullmatch(r"user\d+@sentrytest\d*\.example", users["userPrincipalName"])
+    assert fixture["entries"][0]["body"]["value"][0]["displayName"] == "Sentry Test Ltd"
+    assert fixture["entries"][2]["body"]["displayName"] == "Test Group 1"
+    assert fixture["entries"][-1]["name"] == users["userPrincipalName"].split("@")[1]
+
+
+def test_guids_are_consistent_and_known_ids_are_kept(fixture):
+    user_id = fixture["entries"][1]["body"]["value"][0]["id"]
+    assert re.fullmatch(r"5e[0-9a-f]{6}-0000-4000-8000-[0-9a-f]{12}", user_id)
+    assert fixture["entries"][3]["body"]["value"][0]["userId"] == user_id
+    role = fixture["entries"][4]["body"]["value"][0]
+    assert role["members"][0]["id"] == user_id
+    assert role["roleTemplateId"] == GLOBAL_ADMIN
+    assert fixture["tenant_id"] == fixture["entries"][0]["body"]["value"][0]["id"] != TENANT
+    assert GROUP not in fixture["entries"][2]["url"]
+
+
+def test_phones_are_replaced_by_key_and_by_format(fixture):
+    user = fixture["entries"][1]["body"]["value"][0]
+    fake = re.compile(r"\+1 555 01\d\d")
+    assert all(fake.fullmatch(v) for v in [*user["businessPhones"], user["mobilePhone"], user["faxNumber"]])
+    assert user["otherPhones"] == []
+    # The same number keeps the same placeholder, however it was written.
+    principal = fixture["entries"][5]["body"]["value"][0]["principal"]
+    assert principal["businessPhones"] == user["businessPhones"]
+    description = fixture["entries"][6]["body"]["value"][0]["description"]
+    assert len(fake.findall(description)) == 2
+    assert fixture["entries"][9]["body"]["value"][0]["Phone"].startswith("+1 555 01")
+    # Flags that only share a phone-ish name are left alone.
+    assert fixture["entries"][8]["body"]["value"][0]["mobile"] is False
+    method = fixture["entries"][7]["body"]["value"][0]
+    assert method["phoneNumber"] == method["displayName"] == "redacted"
+    assert method["phoneType"] == "mobile"
+
+
+def test_ips_become_documentation_addresses(fixture):
+    first, second = fixture["entries"][3]["body"]["value"]
+    assert first["ipAddress"].startswith("203.0.113.")
+    assert second["ipAddress"].startswith("2001:db8::")
+
+
+def test_personal_onedrive_urls_and_dns_tokens(fixture):
+    site = fixture["entries"][6]["body"]["value"][0]["webUrl"]
+    assert "/personal/user1_sentrytest_example/" in site
+    assert fixture["entries"][-1]["answer"] == ["v=spf1 include:spf.protection.outlook.com -all"]
+
+
+def test_scrub_refuses_to_write_when_something_survives(monkeypatch):
+    monkeypatch.setattr(recording.Scrubber, "text_only", lambda self, value: value)
+    with pytest.raises(ValueError, match="identifying value") as exc:
+        scrub(raw_log(), TENANT, CLIENT)
+    assert "Smithson" not in str(exc.value)  # the hint never prints the values
+
+
+def test_phone_leak_check():
+    assert phone_leaks({"businessPhones": ["07470699178"]}) == ["07470699178"]
+    assert phone_leaks({"mobilePhone": "+44 7700 900456"}) == ["+44 7700 900456"]
+    assert phone_leaks({"description": "ring 020 7946 0123"}) == ["020 7946 0123"]
+    assert phone_leaks({"businessPhones": ["+1 555 0100"], "mobile": False, "phoneType": "mobile"}) == []
+    # Dates, GUIDs, versions and request URLs aren't phone numbers.
+    clean = {"createdDateTime": "2026-04-01", "id": "00000000-0000-0000-0000-000000000002",
+             "version": "16.0.17126.20132", "url": "https://graph.microsoft.com/v1.0/users/07470699178"}
+    assert phone_leaks(clean) == []
+
+
+def test_find_leaks_matches_whole_words_only():
+    assert find_leaks("Administrator signed in", ["admin"]) == []
+    assert find_leaks("signed in as Jane Smithson", ["Smithson", "abc"]) == ["Smithson"]
+
+
+def test_committed_fixture_has_no_real_phone_numbers():
+    from pathlib import Path
+
+    path = Path(__file__).parent / "fixtures" / "live_tenant.json"
+    assert phone_leaks(json.loads(path.read_text(encoding="utf-8"))) == []
