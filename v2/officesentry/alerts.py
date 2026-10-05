@@ -43,6 +43,8 @@ FORMATS = {"teams": "Microsoft Teams (Workflows)", "slack": "Slack", "generic": 
 ALERT_SEVERITIES = ("critical", "high", "medium", "low")
 DEFAULTS = {"alerts.enabled": "0", "alerts.format": "teams", "alerts.min_severity": "high",
             "alerts.on_failures": "1", "alerts.on_recovery": "0", "alerts.url_enc": "", "alerts.secret_enc": ""}
+# Settings encrypted with the vault; rotate-keys re-encrypts them (__main__.ENCRYPTED_SETTINGS).
+ENCRYPTED_KEYS = ("alerts.url_enc", "alerts.secret_enc")
 MAX_ITEMS = 10          # findings listed in a Teams or Slack message
 MAX_GENERIC_ITEMS = 100  # findings included in a generic payload
 TIMEOUT = 10
