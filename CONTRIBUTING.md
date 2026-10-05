@@ -30,6 +30,10 @@ CI runs the same two commands on every push and pull request.
 
 - Keep changes small and finished end to end; update `v2/CLAUDE.md` and
   `v2/README.md` in the same pull request when behaviour changes.
+- When a page or report looks different, regenerate the README screenshots
+  and the example reports with `python scripts/screenshots.py` (from `v2/`;
+  needs `pip install playwright pillow`, a Chromium for Playwright and
+  `pdftoppm`) and look at them before committing.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class.
 - Never add a write call to a tenant or a non-read-only permission.

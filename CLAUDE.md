@@ -11,7 +11,9 @@ v2/                 the product (Flask web app + worker, SQLite, Docker)
   CLAUDE.md         rules and conventions for working in v2
   README.md         features, setup, development
 .github/workflows/  v2.yml: ruff + pytest on every push and PR
-README.md           landing page pointing at v2/
+README.md           product page: features with screenshots, quick start
+docs/screenshots/   README images, made by v2/scripts/screenshots.py
+examples/           example PDF/XLSX exports from fictional demo data (same script)
 SECURITY.md         vulnerability reporting and security model
 CONTRIBUTING.md     development setup
 ```

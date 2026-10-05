@@ -127,7 +127,7 @@ def test_demo_data_builds_three_tenants_with_history(db, vault):
     assert not report.first_report and report.licences.monthly_waste  # history and priced waste
     users = data_reports.build(db, tenant, "mfa")
     text = str([s.rows for s in users.sections])
-    assert "@northwindtraders.com" in text and "@x.com" not in text  # fixture names swapped out
+    assert "@northwindtraders.example" in text and "@x.com" not in text  # fixture names swapped out
     from tests import graphdata
 
     assert "ann@x.com" in str(graphdata.REGISTRATION_DETAILS)  # fixtures restored for other tests
