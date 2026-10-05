@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from flask import Blueprint, Response, abort, g, render_template
+from flask import Blueprint, Response, abort, g, render_template, request
 
 from ..db import audit
 from ..reports import branding, data_reports, user_profile
@@ -38,7 +38,11 @@ def people(tenant_id: int):
 @bp.get("/tenants/<int:tenant_id>/users/<user_id>")
 @login_required
 def person(tenant_id: int, user_id: str):
-    t, profile = _profile(tenant_id, user_id)
+    t = tenant_or_404(tenant_id)
+    # ?leaver=1 shows the leaver checklist for an account whose sign-in is still allowed.
+    profile = user_profile.build(g.db, t, user_id, leaver=request.args.get("leaver") == "1")
+    if profile is None:
+        abort(404)
     return render_template("user.html", tenant=t, profile=profile)
 
 
@@ -61,3 +65,15 @@ def person_xlsx(tenant_id: int, user_id: str):
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=account-{_slug(profile.upn or profile.name)}.xlsx"},
     )
+
+
+@bp.get("/tenants/<int:tenant_id>/users/<user_id>/leaver.pdf")
+@login_required
+def leaver_pdf(tenant_id: int, user_id: str):
+    """The 'Before you close this account' checklist on one page, for the client to sign off."""
+    t = tenant_or_404(tenant_id)
+    sheet = user_profile.leaver_sheet(g.db, t, user_id)
+    if sheet is None:
+        abort(404)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "leaver.pdf")
+    return pdf_response("reports/leaver.html", f"leaver-checklist-{_slug(sheet.upn or sheet.name)}", sheet=sheet)

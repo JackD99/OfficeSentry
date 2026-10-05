@@ -19,6 +19,9 @@
   <div class="person-actions">
     {{ downloads([('PDF', url_for('people.person_pdf', tenant_id=tenant.id, user_id=profile.user_id), 'This page as a PDF'),
                   ('XLSX', url_for('people.person_xlsx', tenant_id=tenant.id, user_id=profile.user_id), 'Every table, one sheet each')]) }}
+    {% if profile.parts|selectattr('key', 'equalto', 'reclaim')|list|length == 0 %}
+    <a class="small leaver-link" href="{{ url_for('people.person', tenant_id=tenant.id, user_id=profile.user_id, leaver=1) }}#part-reclaim">Leaving? Show what to tidy up</a>
+    {% endif %}
   </div>
 </div>
 
@@ -62,6 +65,9 @@
         <h2>{{ p.title }}</h2>
         {% if p.unavailable %}<span class="pill">Not checked</span>{% elif p.summary %}<span class="pill {{ PILL.get(p.tone, '') }}">{{ p.summary }}</span>{% endif %}
       </div>
+      {% if p.key == 'reclaim' %}
+      <div class="part-downloads">{{ downloads([('PDF', url_for('people.leaver_pdf', tenant_id=tenant.id, user_id=profile.user_id), 'This checklist on one page, with a line for the client to sign')]) }}</div>
+      {% endif %}
       {% if p.unavailable %}
       <p class="muted m0">{{ p.unavailable }}</p>
       {% else %}

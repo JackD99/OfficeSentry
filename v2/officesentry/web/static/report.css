@@ -247,6 +247,15 @@ table.data td.flag:first-child { min-width: 0; }
 table.data td.nw { white-space: nowrap; }
 table.data th.flag, table.data td.flag { width: 1%; white-space: nowrap; }
 .empty-note { color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 10px 14px; margin: 0; }
+/* Leaver checklist (leaver.html): a box to tick per item and lines to sign. */
+.cover-sub { margin: 0; font-size: 1.05em; opacity: .9; }
+.checklist .tickbox { display: inline-block; width: 4mm; height: 4mm; border: 1.5px solid var(--border-strong); border-radius: 1mm; vertical-align: middle; }
+.signoff { margin-top: 28px; }
+.signoff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; }
+.signoff .who { font-weight: 600; margin-bottom: 2mm; }
+.signoff .line { border-bottom: 1px solid var(--text-2); height: 11mm; display: flex; align-items: flex-end; }
+.signoff .line span { color: var(--muted); font-size: .8em; padding-bottom: 1mm; }
+@media screen and (max-width: 640px) { .signoff-grid { grid-template-columns: 1fr; } }
 h2 .pill { font-size: .62rem; vertical-align: 3px; margin-left: 6px; letter-spacing: 0; }
 td .sub { display: block; color: var(--muted); font-size: .86em; }
 .sevbar { display: inline-flex; gap: 3px; white-space: nowrap; }

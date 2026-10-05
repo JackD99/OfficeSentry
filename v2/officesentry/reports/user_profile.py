@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .. import authmethods, devices, signins
 from ..licences import (
@@ -1093,6 +1093,387 @@ def history(snap: TenantSnapshot, uid: str, skus: dict) -> tuple[list[Event], st
     return events[:HISTORY_LIMIT], since
 
 
+# -- Before you close this account (leavers) ----------------------------------------------------
+
+SHARED_MAILBOX_FREE_BYTES = 50 * 1024 ** 3  # shared mailboxes need no licence up to 50 GB
+
+
+@dataclass
+class ReclaimItem:
+    area: str
+    found: str  # what's still there
+    todo: str  # what to do about it, in plain English
+    severity: str | None = None
+
+
+@dataclass
+class Reclaim:
+    """What's still attached to a leaver's account, for the checklist part and its sign-off PDF."""
+    items: list[ReclaimItem] = field(default_factory=list)
+    monthly: float = 0.0  # licence cost a month, where priced
+    currency: str = "GBP"
+    unpriced: int = 0  # licences with no price yet
+    missing: list[str] = field(default_factory=list)  # areas not collected, so not checked
+
+
+def reclaim(p: Person) -> Reclaim:
+    """Licences, mailbox, OneDrive, devices, groups, mailbox access and admin roles still tied to the account."""
+    out = Reclaim(currency=_currency(p.snap))
+    add = out.items.append
+
+    held, _ = _licences(p)
+    paths = assignments(p.user) or {}
+    groups = {g["_id"]: g.get("displayName") for g in p.snap.objects("groups", "group") or []}
+    for sid, name, price in held:
+        a = paths.get(sid)
+        via = [groups.get(g) or "a group" for g in a.groups] if a else []
+        if price is None:
+            out.unpriced += 1
+        else:
+            out.monthly += price
+        cost = "free" if price == 0.0 else ("not priced" if price is None else f"{Money(price, out.currency)} a month")
+        todo = "Remove the licence once the mailbox and files below are dealt with."
+        if via:
+            todo += (f" It comes from {', '.join(via)}, so take them out of "
+                     f"{'that group' if len(via) == 1 else 'those groups'}"
+                     + (" and remove the direct assignment too." if a and a.direct else "."))
+        add(ReclaimItem("Licence", f"{name} ({cost})", todo, None if price == 0.0 else "medium"))
+
+    boxes = p.snap.objects("mailboxes", "mailbox")
+    if boxes is None:
+        out.missing.append("mailboxes")
+    d = _Directory(boxes or [], p.snap.objects("users", "user") or [])
+    box = d.mailbox(p.id) or next((d.mailbox(k) for k in p.keys if d.mailbox(k)), None)
+    if box is not None:
+        _reclaim_mailbox(p, box, held, add)
+    grants = _grants(p.snap, d) if boxes else []
+    into = sorted({g[2] for g in grants if box is not None and g[0] is not None and g[0]["_id"] == box["_id"]},
+                  key=str.lower)
+    if into:
+        add(ReclaimItem("Mailbox access", f"{_plural(len(into), 'person', 'people')} can open or send from this "
+                        f"mailbox: {', '.join(into)}",
+                        "Keep access for whoever takes over the mail and remove it for everyone else.", "low"))
+    out_of = sorted({g[1] for g in grants if ((g[3] or {}).get("_id") == p.id or (g[3] is None and p.named(g[2])))
+                     and not (box is not None and g[0] is not None and g[0]["_id"] == box["_id"])}, key=str.lower)
+    if out_of:
+        add(ReclaimItem("Mailbox access", f"Can open or send from {', '.join(out_of)}",
+                        "Remove this person's access to "
+                        f"{'that mailbox' if len(out_of) == 1 else 'those mailboxes'}.", "medium"))
+
+    drives = p.snap.objects("sharepoint_usage", "onedrive")
+    if drives is None:
+        out.missing.append("OneDrive")
+    drive = next((r for r in drives or [] if not r.get("deleted") and p.named(r.get("ownerPrincipalName"))), None)
+    if drive and (drive.get("storageUsed") or drive.get("files")):
+        add(ReclaimItem("OneDrive", f"{_size_text(drive.get('storageUsed') or 0)} in "
+                        f"{_plural(drive.get('files') or 0, 'file')}",
+                        "Give their manager access or move what's needed elsewhere. Microsoft deletes the OneDrive "
+                        "some time after the account is deleted (30 days unless the tenant has changed it).", "medium"))
+
+    managed = devices.objects(p.snap, "managed_device")
+    if managed is None:
+        out.missing.append("devices")
+    for dev in sorted((x for x in managed or [] if p.named(x.get("userPrincipalName"))),
+                      key=lambda x: (x.get("deviceName") or "").lower()):
+        add(ReclaimItem("Device", f"{dev.get('deviceName') or 'A device'} ({devices.os_label(dev)})",
+                        "Collect it, then wipe or retire it in Intune." if devices.is_computer(dev) else
+                        "Collect it if it's a company device, or retire it in Intune to remove company data.",
+                        "medium"))
+
+    if p.snap.objects("groups", "group") is None:
+        out.missing.append("groups")
+    for g in sorted(p.snap.objects("groups", "group") or [], key=lambda g: (g.get("displayName") or "").lower()):
+        if not g.get("examined") or not any(p.named(o.get("upn")) for o in g.get("owners") or []):
+            continue
+        others = (g.get("enabledOwnerCount") or 0) - (1 if p.enabled else 0)
+        if others <= 0:
+            kind = "team" if g.get("isTeam") else "group"
+            add(ReclaimItem("Group owner", f"Only owner of {g.get('displayName') or 'a group'} ({kind})",
+                            f"Make someone else an owner, or nobody will be able to manage the {kind}.", "medium"))
+
+    roles = p.snap.objects("admin_roles", "role_assignment")
+    if roles is None:
+        out.missing.append("admin roles")
+    names = sorted({(r.get("roleName") or "Unknown role") + ("" if r.get("assignment") == "active" else " (eligible)")
+                    for r in roles or [] if r.get("principalId") == p.id})
+    for name in names:
+        add(ReclaimItem("Admin role", name, "Remove the role. Admin roles left on an unused account are a common "
+                                            "way in for attackers.", "high"))
+    return out
+
+
+def _reclaim_mailbox(p: Person, box: dict, held, add) -> None:
+    kind = box.get("RecipientTypeDetails") or ""
+    sizes = {s.get("mailboxId"): s for s in p.snap.objects("mailbox_usage", "mailbox_size") or []}
+    total = (sizes.get(box["_id"]) or {}).get("totalBytes")
+    found = [f"{_type(kind)} mailbox {box.get('PrimarySmtpAddress') or ''}".strip()]
+    if total is not None:
+        found.append(_size(total))
+    from .. import usage
+
+    row = usage.person(p.snap, p.upn) if p.upn else None
+    received = ((row or {}).get("email") or {}).get("received")
+    if received:
+        days = (usage.status(p.snap) or {}).get("days") or usage.ACTIVE_DAYS
+        found.append(f"still receiving mail ({received:,} in the last {days} days)")
+    elif received == 0:
+        found.append("no mail received recently")
+    target = mailbox_forwarding(box)
+    if target:
+        found.append(f"forwards to {target}")
+    hold = bool(box.get("LitigationHoldEnabled"))
+    if kind == "SharedMailbox":
+        todo = "Already a shared mailbox."
+        if total is not None and total >= SHARED_MAILBOX_FREE_BYTES:
+            todo += " Over 50 GB it still needs a licence, or move older mail to an archive."
+    elif total is not None and total >= SHARED_MAILBOX_FREE_BYTES:
+        todo = (f"At {_size(total)} it's over the 50 GB a shared mailbox can hold without a licence: it needs a "
+                "licence (Exchange Online Plan 2) or an archive for older mail before you remove this licence.")
+    else:
+        todo = ("Convert it to a shared mailbox so colleagues can keep using it, then remove the licence. Shared "
+                "mailboxes under 50 GB need no licence.")
+        if total is None:
+            todo += " Its size hasn't been collected, so check it's under 50 GB first."
+    if hold:
+        todo += " Litigation hold is on, so it still needs a licence that includes hold."
+    if received:
+        todo += " Decide who gets new mail: give someone access, forward it or set an automatic reply."
+    add(ReclaimItem("Mailbox", ", ".join(found), todo, "medium" if held and kind != "SharedMailbox" else None))
+
+
+@part(5)
+def reclaim_part(p: Person) -> Part | None:
+    if p.enabled and not getattr(p, "leaver", False):
+        return None  # only for blocked accounts, or when someone asks for the leaver checklist
+    r = reclaim(p)
+    result = Part("reclaim", "Before you close this account")
+    if not r.items:
+        result.summary, result.tone = "Nothing left", "ok"
+        result.empty = "Nothing is left on this account in the data collected."
+    else:
+        table = Section("Before you close this account", ["Area", "What's left", "What to do"], compare=False)
+        for item in r.items:
+            table.add([item.area, item.found, item.todo], item.severity)
+        result.tables = [table]
+        result.summary = _plural(len(r.items), "thing") + " to do" + (
+            f", {Money(r.monthly, r.currency)} a month" if r.monthly else "")
+        result.tone = "warn"
+        if r.monthly:
+            result.facts = [("Licence cost", f"{Money(r.monthly, r.currency)} a month, "
+                                             f"{Money(r.monthly * 12, r.currency)} a year")]
+    notes = ["Office Sentry only reports; make these changes in the Microsoft 365 admin centre."]
+    if r.unpriced:
+        notes.append(f"{_plural(r.unpriced, 'licence')} {'has' if r.unpriced == 1 else 'have'} no price yet, so "
+                     "the cost leaves them out.")
+    if r.missing:
+        notes.append(f"Not checked because they haven't been collected: {', '.join(r.missing)}.")
+    result.note = " ".join(notes)
+    return result
+
+
+@dataclass
+class LeaverSheet:
+    """The checklist on its own, for the sign-off PDF."""
+    tenant: dict
+    user_id: str
+    name: str
+    upn: str
+    enabled: bool
+    generated_at: datetime
+    checklist: Reclaim
+    sources: list[tuple[str, str | None]] = field(default_factory=list)
+
+
+def leaver_sheet(conn, tenant, user_id: str, now: datetime | None = None) -> LeaverSheet | None:
+    now = now or datetime.now(UTC)
+    snap = TenantSnapshot(conn, tenant)
+    user = find_user(snap, user_id)
+    if user is None:
+        return None
+    p = Person(snap, user, now)
+    from ..collectors import REGISTRY
+    sources = [(REGISTRY[c].title, (snap.runs.get(c) or {"finished_at": None})["finished_at"])
+               for c in ("users", "mailboxes", "mailbox_usage", "sharepoint_usage", "devices", "groups",
+                         "admin_roles") if c in REGISTRY]
+    return LeaverSheet(dict(tenant), user_id, user.get("displayName") or p.label, p.upn, p.enabled, now, reclaim(p),
+                       sources)
+
+
+# -- Timeline (what happened to the account, for a suspected compromise) -------------------------
+
+TIMELINE_DAYS = 90
+TIMELINE_LIMIT = 50
+
+
+def _sightings(conn, tid: int, collector: str, kind: str, where: str = "",
+               params: tuple = ()) -> tuple[dict[str, list[tuple[str, dict, int]]], str | None, int | None]:
+    """Each matching object's copies across retained snapshots ({object id: [(finished_at, data, run ID)]},
+    oldest first), when the oldest retained snapshot finished and the latest run's ID."""
+    oldest, latest = _retained(conn, tid, collector)
+    seen: dict[str, list[tuple[str, dict, int]]] = {}
+    for r in conn.execute(
+            "SELECT o.object_id, r.finished_at, o.run_id, o.data FROM objects o JOIN runs r ON r.id = o.run_id"
+            " WHERE r.tenant_id = ? AND r.collector = ? AND r.status IN ('succeeded', 'partial') AND o.kind = ?"
+            f"{where} ORDER BY r.finished_at, r.id", (tid, collector, kind, *params)):
+        seen.setdefault(r["object_id"], []).append((r["finished_at"], json.loads(r["data"]), r["run_id"]))
+    return seen, oldest, latest
+
+
+def _retained(conn, tid: int, collector: str) -> tuple[str | None, int | None]:
+    """When the collector's oldest snapshot that pruning has left finished, and its latest run's ID."""
+    row = conn.execute(
+        "SELECT MIN(finished_at) AS oldest, MAX(id) AS latest FROM runs r WHERE tenant_id = ? AND collector = ?"
+        " AND status IN ('succeeded', 'partial')"
+        " AND (object_count = 0 OR EXISTS (SELECT 1 FROM objects o WHERE o.run_id = r.id))",
+        (tid, collector)).fetchone()
+    return row["oldest"], row["latest"]
+
+
+@dataclass
+class _Happened:
+    at: str  # ISO date or time, for sorting
+    when: str  # as shown
+    area: str
+    text: str
+    tone: str | None = None
+
+
+def _first_seen(at: str, oldest: str | None) -> str:
+    from ..web.filters import day
+    return f"On or before {day(at)}" if oldest and at <= oldest else day(at)
+
+
+def timeline(p: Person) -> list[_Happened]:
+    """Dated events for the account, newest first: admin changes, sign-in highlights and when inbox rules,
+    forwarding, app consents, MFA methods and admin roles were first collected."""
+    from ..web.filters import when as at_time
+    conn, tid = p.snap.conn, p.snap.tenant["id"]
+    out: list[_Happened] = []
+
+    def timed(value, area, text, tone=None):
+        if isinstance(value, str) and value:
+            out.append(_Happened(value, at_time(value), area, text, tone))
+
+    def first(at, oldest, area, text, tone=None):
+        out.append(_Happened(at, _first_seen(at, oldest), area, text, tone))
+
+    for e in p.snap.objects("admin_activity", "admin_event") or []:
+        by = p.named(e.get("actor"))
+        if not by and not any(p.named(t) for t in e.get("targets") or []):
+            continue
+        detail = f": {e['detail']}" if e.get("detail") else ""
+        text = (f"{e.get('activity')}{detail}" + (f" (by {e.get('actor')})" if not by and e.get("actor") else "")
+                + (f" (to {', '.join(e.get('targets') or [])})" if by and e.get("targets") else ""))
+        timed(e.get("time"), "Admin change" if not by else "Done by this account", text,
+              "warn" if e.get("kind") in ("role_grant", "consent") or e.get("credential_added") else None)
+
+    mine = lambda r: r.get("userId") == p.id or p.named(r.get("user"))  # noqa: E731
+    row = signins.for_account(p.snap, p.id, p.keys) or {}
+    if row.get("lastFailure"):
+        timed(row["lastFailure"], "Sign-in", f"Last of {_plural(_int(row.get('failed')), 'failed sign-in')}: "
+              f"{signins.meaning(row.get('lastFailureCode'), row.get('lastFailureReason'))}",
+              "warn" if _int(row.get("failed")) >= signins.REPEATED_FAILURES else None)
+    for r in p.snap.objects("sign_ins", "risky_sign_in") or []:
+        if mine(r):
+            timed(r.get("time"), "Sign-in", f"{(r.get('level') or 'Risky').capitalize()} risk sign-in from "
+                  f"{signins.country(r.get('country'))} ({r.get('ip') or 'unknown address'})"
+                  + ("" if r.get("succeeded") else ", blocked"), "bad" if r.get("succeeded") else "warn")
+    unusual = signins.unusual_countries(p.snap)
+    for loc in p.snap.objects("sign_ins", "sign_in_location") or []:
+        if mine(loc) and loc.get("country") in unusual and loc.get("lastSuccess"):
+            timed(loc["lastSuccess"], "Sign-in", f"Signed in from {loc['country']}, unusual for this tenant"
+                  + (f" ({', '.join(loc.get('ips') or [])})" if loc.get("ips") else ""), "warn")
+    for s in p.snap.objects("legacy_signins", "legacy_signin") or []:
+        if mine(s):
+            timed(s.get("lastAttempt"), "Sign-in", f"Legacy sign-in with {s.get('client') or 'an old protocol'}: "
+                  f"{s.get('succeeded') or 0} succeeded, {s.get('failed') or 0} failed",
+                  "warn" if s.get("succeeded") else None)
+    places, oldest, _ = _sightings(conn, tid, "sign_ins", "sign_in_location",
+                                   " AND json_extract(o.data, '$.userId') = ?", (p.id,))
+    for copies in places.values():
+        at = copies[0][0]
+        if oldest and at > oldest:  # a country this account hadn't signed in from before
+            first(at, oldest, "Sign-in", f"First sign-in from {signins.country(copies[-1][1].get('country'))} seen",
+                  "warn")
+
+    domains = tenant_domains(p.snap) or set()
+    rules, oldest, latest = _sightings(conn, tid, "inbox_rules", "inbox_rule",
+                                       " AND json_extract(o.data, '$.mailboxId') = ?", (p.id,))
+    for copies in rules.values():
+        data = copies[-1][1]
+        risk = inbox_rule_risk(data, domains)
+        first(copies[0][0], oldest, "Mailbox", f"Inbox rule \"{data.get('displayName')}\" first seen"
+              + ("" if copies[-1][2] == latest else " (since removed)")
+              + (f": {'; '.join(risk.reasons)}" if risk.reasons else ""),
+              {"high": "bad", "medium": "warn"}.get(risk.severity))
+
+    boxes = _object_history(conn, tid, "mailboxes", "mailbox", p.id)
+    box_oldest, _ = _retained(conn, tid, "mailboxes")
+    targets: dict[str, str] = {}
+    for at, data in boxes:
+        target = mailbox_forwarding(data)
+        if target:
+            targets.setdefault(target, at)
+    for target, at in targets.items():
+        first(at, box_oldest, "Mailbox", f"Forwarding to {target} first seen"
+              + (" (outside the organisation)" if is_external(target, domains) else ""),
+              "bad" if is_external(target, domains) else "warn")
+
+    grants, oldest, latest = _sightings(conn, tid, "app_consents", "delegated_grant",
+                                        " AND json_extract(o.data, '$.principalId') = ?", (p.id,))
+    sps = {s["_id"]: s for s in p.snap.objects("app_consents", "service_principal") or []}
+    for copies in grants.values():
+        data = copies[-1][1]
+        if data.get("consentType") != "Principal":
+            continue
+        app = (sps.get(data.get("clientId")) or {}).get("displayName") or "An app"
+        scopes = sorted(s for s in data.get("scopes") or [] if s)
+        first(copies[0][0], oldest, "Apps", f"Allowed {app}" + (f" ({', '.join(scopes)})" if scopes else "")
+              + ("" if copies[-1][2] == latest else " (since removed)"),
+              "warn" if set(scopes) & SENSITIVE_DELEGATED else None)
+
+    mfa = _object_history(conn, tid, "mfa_registration", "mfa_registration", p.id)
+    methods: dict[str, str] = {}
+    for at, data in mfa:
+        for m in _methods(data):
+            methods.setdefault(m, at)
+    oldest, _ = _retained(conn, tid, "mfa_registration")
+    for m, at in methods.items():
+        first(at, oldest, "MFA", f"{m} first seen as an MFA method")
+
+    held: dict[str, str] = {}
+    for at, names in _role_history(conn, tid, p.id):
+        for name in names:
+            held.setdefault(name, at)
+    oldest, _ = _retained(conn, tid, "admin_roles")
+    for name, at in held.items():
+        first(at, oldest, "Admin roles", f"{name} role first seen", "warn")
+
+    cutoff = (p.now - timedelta(days=TIMELINE_DAYS)).strftime("%Y-%m-%d")
+    out = [e for e in out if e.at[:10] >= cutoff]
+    out.sort(key=lambda e: e.at, reverse=True)
+    return out[:TIMELINE_LIMIT]
+
+
+@part(95)
+def timeline_part(p: Person) -> Part:
+    result = Part("timeline", "Timeline")
+    events = timeline(p)
+    if not events:
+        result.summary, result.empty = "Nothing recorded", f"Nothing dated in the last {TIMELINE_DAYS} days."
+    else:
+        table = Section("Timeline", ["When", "Area", "What happened"], compare=False)
+        for e in events:
+            table.add([e.when, e.area, e.text], {"bad": "high", "warn": "medium"}.get(e.tone))
+        result.tables = [table]
+        result.summary = _plural(len(events), "event")
+        result.tone = "bad" if any(e.tone == "bad" for e in events) else None
+    result.note = (f"Newest first, the last {TIMELINE_DAYS} days (up to {TIMELINE_LIMIT} events). Admin changes "
+                   "and sign-ins keep their own time; rules, forwarding, app consents, MFA methods and roles are dated "
+                   "when Office Sentry first collected them, so they were set up on or before that day.")
+    return result
+
+
 # -- The page -----------------------------------------------------------------------------------
 
 
@@ -1151,7 +1532,7 @@ def _account_attention(p: Person) -> None:
             p.flag("low", f"Invited {_day(created)} and never accepted. Remove the invitation if it's not needed.")
 
 
-def build(conn, tenant, user_id: str, now: datetime | None = None) -> Profile | None:
+def build(conn, tenant, user_id: str, now: datetime | None = None, leaver: bool = False) -> Profile | None:
     """The page for one account, or None when the latest Users snapshot doesn't have it."""
     now = now or datetime.now(UTC)
     snap = TenantSnapshot(conn, tenant)
@@ -1159,6 +1540,7 @@ def build(conn, tenant, user_id: str, now: datetime | None = None) -> Profile | 
     if user is None:
         return None
     p = Person(snap, user, now)
+    p.leaver = leaver  # show the leaver checklist even though sign-in is allowed
     profile = Profile(dict(tenant), user_id, user, now, user.get("displayName") or p.label, p.upn)
     _account_attention(p)
     for _, builder in PARTS:
