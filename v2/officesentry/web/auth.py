@@ -63,18 +63,66 @@ def _locked(user, now: datetime | None = None) -> bool:
                 and datetime.fromisoformat(user["locked_until"].replace("Z", "+00:00")) > now)
 
 
-def _record_failure(user, action: str) -> bool:
-    """Count a wrong password or code. Returns True when this locks the account."""
-    failures = user["failed_logins"] + 1
-    until = None
-    if failures >= MAX_FAILURES:
-        until = (datetime.now(UTC) + LOCKOUT).strftime("%Y-%m-%dT%H:%M:%SZ")
-    g.db.execute("UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?",
-                 (0 if until else failures, until, user["id"]))
-    audit(g.db, user["username"], action)
-    if until:
-        audit(g.db, user["username"], "account_locked", detail=f"until {until}")
-    return until is not None
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class Attempt:
+    """One counted password or code attempt (see ``_reserve_attempt``)."""
+
+    def __init__(self, user, number: int, locks_until: str | None):
+        self.user, self.number, self.locks_until = user, number, locks_until
+
+    def succeeded(self) -> None:
+        """The password or code was right: lift the lock this attempt set in advance, if it set one."""
+        if self.locks_until:
+            g.db.execute("UPDATE users SET locked_until = NULL WHERE id = ? AND locked_until = ?",
+                         (self.user["id"], self.locks_until))
+
+    def failed(self, action: str) -> bool:
+        """Audit the wrong password or code. Returns True when this attempt locked the account."""
+        audit(g.db, self.user["username"], action)
+        if self.locks_until:
+            audit(g.db, self.user["username"], "account_locked", detail=f"until {self.locks_until}")
+        return self.locks_until is not None
+
+
+def _reserve_attempt(user) -> Attempt | None:
+    """Count a password or code attempt *before* checking it. None when the account is locked.
+
+    One UPDATE both counts and, at the MAX_FAILURESth attempt, locks: parallel
+    requests each get their own number, so no more than MAX_FAILURES are ever
+    checked per lockout, however many arrive at once. The attempt that sets the
+    lock lifts it again if it turns out to be right (``Attempt.succeeded``).
+    """
+    now = datetime.now(UTC)
+    until = _iso(now + LOCKOUT)
+    # An expired lock starts the count again. SQLite evaluates every SET expression on the old row.
+    row = g.db.execute(
+        "UPDATE users SET"
+        " failed_logins = CASE WHEN locked_until IS NOT NULL THEN 1 ELSE failed_logins + 1 END,"
+        " locked_until = CASE WHEN (CASE WHEN locked_until IS NOT NULL THEN 1 ELSE failed_logins + 1 END) >= ?"
+        "   THEN ? ELSE NULL END"
+        " WHERE id = ? AND (locked_until IS NULL OR locked_until <= ?)"
+        " RETURNING failed_logins, locked_until",
+        (MAX_FAILURES, until, user["id"], _iso(now)),
+    ).fetchone()
+    if row is None:
+        return None
+    return Attempt(user, row["failed_logins"], row["locked_until"])
+
+
+def _use_totp(user, secret: str, value: str) -> bool:
+    """Check an authenticator code and claim its time step, so the same code can't sign in twice.
+
+    The claim is one conditional UPDATE: of two requests carrying the same code,
+    only the first to write gets the step.
+    """
+    step = totp.verify(secret, value, user["totp_last_step"])
+    return step is not None and g.db.execute(
+        "UPDATE users SET totp_last_step = ? WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)",
+        (step, user["id"], step),
+    ).rowcount == 1
 
 
 # -- Pending sign-in (password accepted, two-step still to do) ----------------
@@ -125,10 +173,12 @@ def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     user = g.db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    locked = user is not None and _locked(user)
-    ok = check_password_hash(user["password_hash"] if user else _DUMMY_HASH, password)
+    attempt = _reserve_attempt(user) if user is not None else None
+    # Locked accounts and unknown names still pay for a hash, so timing doesn't tell them apart.
+    ok = check_password_hash(user["password_hash"] if attempt else _DUMMY_HASH, password)
 
-    if user and ok and not locked and not user["disabled"]:
+    if attempt and ok and not user["disabled"]:
+        attempt.succeeded()
         next_url = request.args.get("next")
         if user["totp_enabled_at"]:
             _set_pending(user, enroll=False, next_url=next_url)
@@ -138,8 +188,8 @@ def login():
             return redirect(url_for("auth.two_step_setup"))
         return redirect(_finish_login(user, next_url))
 
-    if user and not locked:
-        _record_failure(user, "login_failed")
+    if attempt:
+        attempt.failed("login_failed")
     else:
         audit(g.db, username[:64], "login_failed")
     flash(_SIGN_IN_FAILED, "error")
@@ -156,24 +206,25 @@ def login_code():
         return redirect(url_for("auth.login"))
 
     if request.method == "POST":
+        attempt = _reserve_attempt(user)
+        if attempt is None:  # locked meanwhile, e.g. by parallel wrong codes
+            session.pop("pending", None)
+            flash(_SIGN_IN_FAILED, "error")
+            return redirect(url_for("auth.login"))
         value = request.form.get("code", "")
         used_recovery = False
         ok = False
         if totp.looks_like_recovery_code(value):
-            row = g.db.execute(
-                "SELECT id FROM user_recovery_codes WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
-                (user["id"], totp.hash_recovery_code(value)),
-            ).fetchone()
-            if row is not None:
-                g.db.execute("UPDATE user_recovery_codes SET used_at = ? WHERE id = ?", (utcnow(), row["id"]))
-                ok = used_recovery = True
+            # Claimed in one statement, so two requests can't both use the same code.
+            ok = used_recovery = g.db.execute(
+                "UPDATE user_recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
+                (utcnow(), user["id"], totp.hash_recovery_code(value)),
+            ).rowcount > 0
         else:
-            step = totp.verify(_vault().decrypt(user["totp_secret_enc"]), value, user["totp_last_step"])
-            if step is not None:
-                g.db.execute("UPDATE users SET totp_last_step = ? WHERE id = ?", (step, user["id"]))
-                ok = True
+            ok = _use_totp(user, _vault().decrypt(user["totp_secret_enc"]), value)
 
         if ok:
+            attempt.succeeded()
             next_url = _finish_login(user)
             if used_recovery:
                 audit(g.db, user["username"], "recovery_code_used")
@@ -183,7 +234,7 @@ def login_code():
                       "sign-in again from your account page.", "warning")
             return redirect(next_url)
 
-        if _record_failure(user, "login_code_failed"):
+        if attempt.failed("login_code_failed"):
             session.pop("pending", None)
             flash(_SIGN_IN_FAILED, "error")
             return redirect(url_for("auth.login"))
@@ -203,17 +254,28 @@ def two_step_setup():
     vault = _vault()
 
     if request.method == "POST" and user["totp_pending_enc"]:
-        secret = vault.decrypt(user["totp_pending_enc"])
-        step = totp.verify(secret, request.form.get("code", ""))
+        attempt = None
+        if not signed_in and (attempt := _reserve_attempt(user)) is None:
+            session.pop("pending", None)
+            flash(_SIGN_IN_FAILED, "error")
+            return redirect(url_for("auth.login"))
+        step = totp.verify(vault.decrypt(user["totp_pending_enc"]), request.form.get("code", ""))
         if step is not None:
             codes = totp.new_recovery_codes()
             with transaction(g.db):
-                g.db.execute(
+                # Only one request turns it on, even if the same code arrives twice at once.
+                enabled = g.db.execute(
                     "UPDATE users SET totp_secret_enc = totp_pending_enc, totp_pending_enc = NULL,"
                     " totp_enabled_at = ?, totp_last_step = ?, session_version = session_version + 1"
-                    " WHERE id = ?", (utcnow(), step, user["id"]))
-                _store_recovery_codes(user["id"], codes)
-                audit(g.db, user["username"], "two_step_enabled")
+                    " WHERE id = ? AND totp_enabled_at IS NULL AND totp_pending_enc = ?",
+                    (utcnow(), step, user["id"], user["totp_pending_enc"])).rowcount == 1
+                if enabled:
+                    _store_recovery_codes(user["id"], codes)
+                    audit(g.db, user["username"], "two_step_enabled")
+            if not enabled:
+                return redirect(url_for("auth.account" if signed_in else "auth.login"))
+            if attempt:
+                attempt.succeeded()
             user = _user(user["id"])
             if signed_in:
                 sessions.keep_current(user["id"], user["session_version"])
@@ -221,7 +283,7 @@ def two_step_setup():
             else:
                 continue_url = _finish_login(user)
             return render_template("recovery_codes.html", codes=codes, continue_url=continue_url, first_time=True)
-        if not signed_in and _record_failure(user, "two_step_setup_failed"):
+        if attempt and attempt.failed("two_step_setup_failed"):
             session.pop("pending", None)
             flash(_SIGN_IN_FAILED, "error")
             return redirect(url_for("auth.login"))
