@@ -18,6 +18,10 @@
   {{ nav_link('tenants.dashboard', 'Your reports', 'doc', ('reports.tenant_report', 'reports.tenant_findings', 'reports.data_report', 'reports.evidence_pack', 'tenants', 'across.tenant_changes')) }}
   {{ nav_link('reports.overview', 'All reports', 'library') }}
   {% else %}
+  <form method="get" action="{{ url_for('search.index') }}" class="nav-search" role="search">
+    <label>{{ icon('search') }}<span class="sr-only">Search all tenants</span>
+      <input type="search" name="q" placeholder="Search all tenants" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
+  </form>
   {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard')) }}
   {{ nav_link('reports.overview', 'Reports', 'library') }}
   {{ nav_link('across.index', 'All tenants', 'grid', ('across.rollup',)) }}

@@ -131,6 +131,11 @@ that are exactly an account's sign-in name or address become `UserLink`s in
 `data_reports.build()` (a `str` with `page_href`), so builders don't need to do
 anything to link people; PDFs and spreadsheets show the plain name.
 
+Staff search every visible tenant's latest snapshot from the sidebar box
+(`web/search.py`, `/search`, admin and analyst only); to make something
+searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
+`show` linking the person's page or the detail report filtered to the row.
+
 ## Web UI conventions
 
 - Styles live in `web/static/app.css` (tokens at the top, light and dark).

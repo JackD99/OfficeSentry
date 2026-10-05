@@ -756,3 +756,20 @@ textarea.copy-text { font-size: .8125rem; resize: vertical; margin: 8px 0; }
   .health-state { min-width: 0; }
   .health-action { flex-basis: 100%; }
 }
+
+/* -- Search across tenants (sidebar box and /search) ------------------------ */
+.nav-search { margin: 0 0 10px; }
+.nav-search label { position: relative; display: block; margin: 0; }
+.nav-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--sidebar-muted); }
+.nav-search input[type=search] { margin: 0; padding: 7px 10px 7px 32px; font-size: .8125rem; background: var(--sidebar-active); border-color: var(--sidebar-active); color: #fff; }
+.nav-search input[type=search]::placeholder { color: var(--sidebar-muted); }
+.nav-search input[type=search]:focus { border-color: #60a5fa; box-shadow: none; }
+.mobile-bar .nav-search { margin: 6px 0 10px; }
+.search-group .card-head h2 a { color: var(--text); }
+.search-group .list > li { align-items: flex-start; }
+.search-group .list .pill { min-width: 120px; justify-content: center; margin-top: 2px; }
+.search-more { margin: 10px 0 0; font-size: .875rem; }
+@media (max-width: 640px) {
+  .search-group .list > li { flex-direction: column; gap: 4px; }
+  .search-group .list .pill { min-width: 0; }
+}
