@@ -305,6 +305,7 @@ class SharedFiles(Collector):
     def _drives(self, ctx: RunContext) -> list[dict]:
         """Every document library and OneDrive, de-duplicated by drive ID."""
         drives: dict[str, dict] = {}
+        owners: set[str] = set()  # IDs and addresses of people whose OneDrive a site listing already gave
         sites = ctx.paged(ctx.graph.get_all("/sites/getAllSites", {
             "$select": "id,displayName,webUrl,isPersonalSite,root"}))
         for site in sites:
@@ -317,6 +318,8 @@ class SharedFiles(Collector):
                 continue
             for d in found:
                 owner = ((d.get("owner") or {}).get("user") or {})
+                if personal or d.get("driveType") == "business":
+                    owners.update(x.lower() for x in (owner.get("id"), owner.get("email")) if x)
                 drives[d["id"]] = {
                     "id": d["id"], "name": d.get("name"), "webUrl": d.get("webUrl"),
                     "site": site.get("displayName") or site.get("webUrl"), "siteUrl": site.get("webUrl"),
@@ -324,9 +327,14 @@ class SharedFiles(Collector):
                     "owner": owner.get("email") or owner.get("displayName"),
                 }
         # Site listings don't always include OneDrives, so ask for each licensed
-        # person's OneDrive too. A 404 means they never opened it.
+        # person's OneDrive too. A 404 means they never opened it. People whose
+        # OneDrive the listing already gave are skipped: asking again returns the
+        # same drive, which the listing's entry would win over anyway.
         for user in TenantSnapshot(ctx.conn, ctx.tenant).objects("users", "user") or []:
             if user.get("userType") != "Member" or not user.get("licensed"):
+                continue
+            if owners & {(x or "").lower() for x in (user.get("_id"), user.get("userPrincipalName"),
+                                                     user.get("mail"))}:
                 continue
             try:
                 d = ctx.graph.get(f"/users/{user['_id']}/drive", {"$select": "id,name,webUrl,driveType,owner"})

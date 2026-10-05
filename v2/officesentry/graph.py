@@ -7,7 +7,10 @@ Design rules (each one fixes a v1 bug):
   requesting ``/v1.0/v1.0/...``. Use ``version="beta"`` for beta endpoints.
 * Absolute URLs (``@odata.nextLink``) must point at graph.microsoft.com, so a
   bearer token is never sent anywhere else.
-* 429 / 503 / 504 are retried, honouring ``Retry-After``.
+* 429 and 5xx are retried, honouring ``Retry-After`` (seconds or an HTTP
+  date); without it the exponential backoff is jittered so retries from
+  parallel callers don't land together. :func:`is_transient` tells callers
+  when a failure (timeout, 5xx) might succeed as a smaller query.
 * Paging never stops silently: ``PagedResult.truncated`` says if it did.
 * Only GET is exposed. Office Sentry never changes a tenant.
 """
@@ -15,9 +18,12 @@ Design rules (each one fixes a v1 bug):
 from __future__ import annotations
 
 import logging
+import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 import requests
 
@@ -26,6 +32,10 @@ log = logging.getLogger(__name__)
 GRAPH_ROOT = "https://graph.microsoft.com"
 VERSIONS = ("v1.0", "beta")
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+# Failures that a smaller or narrower query may avoid: no response (status 0)
+# or a server error. 429 is excluded: more, smaller queries only throttle harder.
+TRANSIENT_STATUSES = {0, 500, 502, 503, 504}
+MAX_RETRY_AFTER = 300
 
 # Error codes Graph returns when a feature needs a licence the tenant lacks
 # (for example signInActivity or sign-in logs without Entra ID P1).
@@ -51,6 +61,11 @@ class LicenseRequired(GraphError):
 
 class PermissionMissing(GraphError):
     """The app lacks a permission, or admin consent was not granted."""
+
+
+def is_transient(exc: Exception) -> bool:
+    """True for a Graph timeout or server error that survived the client's retries."""
+    return isinstance(exc, GraphError) and exc.status in TRANSIENT_STATUSES
 
 
 @dataclass
@@ -87,12 +102,14 @@ class GraphClient:
         max_retries: int = 6,
         timeout: int = 60,
         sleep: Callable[[float], None] = time.sleep,
+        jitter: Callable[[], float] = random.random,
     ):
         self._token_provider = token_provider
         self._session = session or requests.Session()
         self._max_retries = max_retries
         self._timeout = timeout
         self._sleep = sleep
+        self._jitter = jitter
 
     @classmethod
     def from_certificate(cls, tenant_ref: str, client_id: str, key_pem: str,
@@ -140,7 +157,7 @@ class GraphClient:
             except (requests.ConnectionError, requests.Timeout) as exc:
                 if attempt >= self._max_retries:
                     raise GraphError(0, "network_error", str(exc)) from exc
-                self._sleep(min(2 ** attempt, 60))
+                self._sleep(self._backoff(attempt))
                 attempt += 1
                 continue
 
@@ -154,12 +171,25 @@ class GraphClient:
                 raise _parse_error(resp)
             return resp.json()
 
-    @staticmethod
-    def _retry_after(resp: requests.Response, attempt: int) -> float:
-        value = resp.headers.get("Retry-After", "")
+    def _backoff(self, attempt: int) -> float:
+        """Exponential backoff with "equal jitter": between half and all of 2**attempt (max 60s)."""
+        base = float(min(2 ** attempt, 60))
+        return base / 2 + self._jitter() * base / 2
+
+    def _retry_after(self, resp: requests.Response, attempt: int) -> float:
+        """Wait what Microsoft asks (plus up to a second of jitter), else back off."""
+        value = resp.headers.get("Retry-After", "").strip()
+        seconds: float | None = None
         if value.isdigit():
-            return min(float(value), 300)
-        return float(min(2 ** attempt, 60))
+            seconds = float(value)
+        elif value:
+            try:
+                seconds = (parsedate_to_datetime(value) - datetime.now(UTC)).total_seconds()
+            except (TypeError, ValueError, IndexError):
+                seconds = None
+        if seconds is None:
+            return self._backoff(attempt)
+        return min(max(seconds, 0.0), MAX_RETRY_AFTER) + self._jitter()
 
     def get(self, path: str, params: dict | None = None, *, version: str = "v1.0",
             headers: dict | None = None) -> dict:
