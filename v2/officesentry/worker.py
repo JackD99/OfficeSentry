@@ -156,6 +156,11 @@ def beat(conn) -> None:
                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (HEARTBEAT_KEY, utcnow()))
 
 
+def clear_heartbeat(conn) -> None:
+    """A worker that stopped cleanly says so at once, rather than looking alive for HEARTBEAT_STALE."""
+    conn.execute("DELETE FROM settings WHERE key = ?", (HEARTBEAT_KEY,))
+
+
 def last_seen(conn) -> datetime | None:
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (HEARTBEAT_KEY,)).fetchone()
     return datetime.fromisoformat(row["value"].replace("Z", "+00:00")) if row else None
@@ -166,14 +171,71 @@ def is_alive(conn, now: datetime | None = None) -> bool:
     return seen is not None and (now or datetime.now(UTC)) - seen < HEARTBEAT_STALE
 
 
-def _heartbeat_thread(db_path, stop: threading.Event) -> threading.Thread:
+# The main loop counts as stuck when it hasn't come round for this long while
+# idle, or a single collection has run for longer than RUN_STALE.
+LOOP_STALE = timedelta(minutes=10)
+RUN_STALE = timedelta(hours=4)
+
+
+class Liveness:
+    """What the main loop is doing, shared with the heartbeat thread.
+
+    The heartbeat is only written while the main loop makes progress, so a
+    wedged loop (a deadlocked write, a hung request) stops the heartbeat and
+    shows as unhealthy in the portal banner and ``healthcheck worker``.
+    """
+
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.loop_at = clock()
+        self.run_started: float | None = None
+        self.run_id: int | None = None
+        self._lock = threading.Lock()
+
+    def tick(self) -> None:
+        with self._lock:
+            self.loop_at = self.clock()
+
+    def start_run(self, run_id: int) -> None:
+        with self._lock:
+            self.run_id, self.run_started = run_id, self.clock()
+
+    def end_run(self) -> None:
+        with self._lock:
+            self.run_id = self.run_started = None
+            self.loop_at = self.clock()
+
+    def problem(self) -> str | None:
+        """Why the main loop looks stuck, or None while it's making progress."""
+        with self._lock:
+            now = self.clock()
+            if self.run_started is not None:
+                if now - self.run_started > RUN_STALE.total_seconds():
+                    return f"run {self.run_id} has been going for {int((now - self.run_started) // 60)} minutes"
+                return None
+            if now - self.loop_at > LOOP_STALE.total_seconds():
+                return f"the main loop hasn't moved for {int((now - self.loop_at) // 60)} minutes"
+            return None
+
+
+def heartbeat_step(conn, liveness: Liveness | None) -> bool:
+    """Record the heartbeat if the main loop is making progress. Returns whether it did."""
+    problem = liveness.problem() if liveness else None
+    if problem:
+        log.error("Worker looks stuck (%s); not recording a heartbeat", problem)
+        return False
+    beat(conn)
+    return True
+
+
+def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None = None) -> threading.Thread:
     """Report liveness from a side thread, so a long collection doesn't look like a dead worker."""
     def loop():
         conn = connect(db_path)
         try:
             while not stop.is_set():
                 try:
-                    beat(conn)
+                    heartbeat_step(conn, liveness)
                 except sqlite3.Error:
                     log.warning("Could not record worker heartbeat", exc_info=True)
                 stop.wait(HEARTBEAT_EVERY)
@@ -212,7 +274,20 @@ def prune(conn, cfg: Config) -> int:
     return removed
 
 
-def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None) -> None:
+TICK_EVERY = 60  # seconds between housekeeping passes
+IDLE_WAIT = 2  # seconds to wait when the queue is empty
+
+
+def _rollback(conn) -> None:
+    if conn.in_transaction:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            log.warning("Rollback after a failed housekeeping pass failed", exc_info=True)
+
+
+def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None,
+               stop: threading.Event | None = None) -> None:
     conn = connect(cfg.db_path)
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
@@ -226,37 +301,64 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
     if recovered:
         log.warning("Marked %s as failed", plural(recovered, "orphaned run"))
 
-    stop = threading.Event()
+    stop = stop or threading.Event()
+    liveness = Liveness()
+    heartbeat = None
     if not once:
-        # Finish the current run on "docker stop" rather than leave it half done.
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            signal.signal(sig, lambda *_: stop.set())
-        _heartbeat_thread(cfg.db_path, stop)
+        if threading.current_thread() is threading.main_thread():
+            # Finish the current run on "docker stop" rather than leave it half done.
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                signal.signal(sig, lambda *_: stop.set())
+        heartbeat = _heartbeat_thread(cfg.db_path, stop, liveness)
     log.info("Worker started. Collecting on '%s' (%s); next slot %s", cfg.collect_cron, cfg.timezone,
              schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat())
 
     last_tick = None  # tick on the first pass; monotonic() can be under 60s on a freshly booted host
     last_prune_day = None
     while not stop.is_set():
-        if last_tick is None or time.monotonic() - last_tick >= 60:
+        liveness.tick()
+        if last_tick is None or time.monotonic() - last_tick >= TICK_EVERY:
             last_tick = time.monotonic()
-            housekeeping(app, conn, vault, cfg)
+            try:
+                housekeeping(app, conn, vault, cfg)
+            except Exception:  # say "database is locked": try again next minute rather than exit
+                log.exception("Housekeeping failed; trying again in a minute")
+                _rollback(conn)
             today = datetime.now(UTC).date()
             if today != last_prune_day:
                 try:
                     prune(conn, cfg)
                 except sqlite3.Error:
                     log.exception("Pruning old snapshots failed")
+                    _rollback(conn)
                 last_prune_day = today
 
-        run = store.claim_next_run(conn)
+        try:
+            run = store.claim_next_run(conn)
+        except sqlite3.OperationalError:
+            log.exception("Could not claim the next run; trying again shortly")
+            _rollback(conn)
+            run = None
+            if not once:
+                stop.wait(IDLE_WAIT)
+                continue
         if run is not None:
             log.info("Run %s: %s for tenant %s", run["id"], run["collector"], run["tenant_id"])
-            status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
-            alerts.after_run(conn, alerting, run["id"], status)
+            liveness.start_run(run["id"])
+            try:
+                status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
+                alerts.after_run(conn, alerting, run["id"], status)
+            finally:
+                liveness.end_run()
             continue
         if once:
             break
-        stop.wait(2)
+        stop.wait(IDLE_WAIT)
     stop.set()
+    if heartbeat is not None:
+        heartbeat.join(timeout=10)
+        try:
+            clear_heartbeat(conn)
+        except sqlite3.Error:
+            log.warning("Could not clear the worker heartbeat", exc_info=True)
     log.info("Worker stopped")

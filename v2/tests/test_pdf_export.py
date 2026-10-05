@@ -12,6 +12,9 @@ from officesentry.reports import data_reports, export, rollups
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
+# Windows without Docker has WeasyPrint but not Pango, so PDF buttons fall back to print-ready pages there.
+needs_pdf = pytest.mark.skipif(not export.pdf_available(), reason="PDF export needs WeasyPrint with Pango")
+
 
 @pytest.fixture
 def no_weasyprint(monkeypatch):
@@ -87,7 +90,7 @@ def test_every_pdf_download_works_without_weasyprint(client, db, two_tenants, no
     assert "<title>mfa-alpha-ltd</title>" in page
 
 
-@pytest.mark.skipif(not export.pdf_available(), reason="WeasyPrint isn't installed")
+@needs_pdf
 def test_pdf_downloads_render(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
@@ -102,7 +105,7 @@ def test_pdf_downloads_render(client, db, two_tenants):
         "Content-Disposition"]
 
 
-@pytest.mark.skipif(not export.pdf_available(), reason="WeasyPrint isn't installed")
+@needs_pdf
 def test_every_detail_report_renders_as_pdf_with_no_data(client, db, two_tenants):
     """Before any collection every report is 'not available'; its PDF still renders."""
     alpha, _ = two_tenants
