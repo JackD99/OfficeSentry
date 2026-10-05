@@ -11,9 +11,9 @@ on:
         description: What to do
         type: choice
         default: deploy
-        options: [deploy, status, setup-link, backup, restart]
+        options: [deploy, demo-reset, status, setup-link, backup, restart]
       ref:
-        description: Branch, tag or commit to deploy (deploy only)
+        description: Branch, tag or commit to deploy (deploy and demo-reset)
         default: main
   # Deploy main after its tests pass, once AUTO_DEPLOY is set to "true".
   workflow_run:
@@ -39,7 +39,10 @@ jobs:
     timeout-minutes: 30
     env:
       ACTION: ${{ inputs.action || 'deploy' }}
+      # demo-reset deploys the same code first, so the demo database matches it.
+      DEPLOYS: ${{ contains(fromJSON('["deploy", "demo-reset"]'), inputs.action || 'deploy') }}
       HOST: ${{ vars.DEPLOY_HOST }}
+      DEMO_DOMAIN: ${{ vars.OFFICESENTRY_DEMO_DOMAIN }}
       FIREWALL: ${{ vars.HCLOUD_FIREWALL || 'officesentry' }}
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
       API: https://api.hetzner.cloud/v1
@@ -55,19 +58,20 @@ jobs:
           [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (variable)"
           [ -n "$HCLOUD_TOKEN" ] || missing="$missing HCLOUD_TOKEN (secret)"
           [ "$HAS_KEY" = true ] || missing="$missing DEPLOY_SSH_KEY (secret)"
-          if [ "$ACTION" = deploy ] && [ -z "$DOMAIN" ]; then missing="$missing OFFICESENTRY_DOMAIN (variable)"; fi
+          if [ "$DEPLOYS" = true ] && [ -z "$DOMAIN" ]; then missing="$missing OFFICESENTRY_DOMAIN (variable)"; fi
+          if [ "$ACTION" = demo-reset ] && [ -z "$DEMO_DOMAIN" ]; then missing="$missing OFFICESENTRY_DEMO_DOMAIN (variable)"; fi
           if [ -n "$missing" ]; then
             echo "::error::Set these under Settings > Secrets and variables > Actions:$missing"
             exit 1
           fi
 
       - uses: actions/checkout@v5
-        if: env.ACTION == 'deploy'
+        if: env.DEPLOYS == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_sha || inputs.ref || 'main' }}
 
-      - name: Write the server's settings file
-        if: env.ACTION == 'deploy'
+      - name: Write the server's settings files
+        if: env.DEPLOYS == 'true'
         env:
           DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
           TIMEZONE: ${{ vars.OFFICESENTRY_TIMEZONE || 'UTC' }}
@@ -76,18 +80,47 @@ jobs:
           umask 077
           {
             echo "# Written by the Deploy workflow; edit the repository variables instead."
+            # docker compose reads this too: which optional parts run.
+            if [ -n "$DEMO_DOMAIN" ]; then echo "COMPOSE_PROFILES=https,demo"; else echo "COMPOSE_PROFILES=https"; fi
             echo "OFFICESENTRY_DOMAIN=$DOMAIN"
+            echo "OFFICESENTRY_DEMO_DOMAIN=$DEMO_DOMAIN"
             echo "OFFICESENTRY_BASE_URL=https://$DOMAIN"
             echo "OFFICESENTRY_TIMEZONE=$TIMEZONE"
             echo "OFFICESENTRY_TRUSTED_PROXIES=1"
             printf '%s\n' "$EXTRA"
           } > v2/.env
+          # The demo site: fictional tenants that can't be collected, so the
+          # nightly collection runs once a year; no two-step sign-in, so
+          # colleagues can share the demo account.
+          {
+            echo "OFFICESENTRY_BASE_URL=https://$DEMO_DOMAIN"
+            echo "OFFICESENTRY_TIMEZONE=$TIMEZONE"
+            echo "OFFICESENTRY_TRUSTED_PROXIES=1"
+            echo "OFFICESENTRY_REQUIRE_MFA=off"
+            echo "OFFICESENTRY_COLLECT_CRON=0 3 1 1 *"
+          } > v2/.env.demo
+
+      - uses: actions/setup-python@v6
+        if: env.ACTION == 'demo-reset'
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: v2/pyproject.toml
+
+      - name: Make the demo data
+        if: env.ACTION == 'demo-reset'
+        working-directory: v2
+        run: |
+          pip install -q -e '.[dev]'
+          OFFICESENTRY_BASE_URL="https://$DEMO_DOMAIN" python scripts/demo_data.py --data-dir "$RUNNER_TEMP/demo" | tee "$RUNNER_TEMP/demo.log"
+          tar -czf "$RUNNER_TEMP/demo.tgz" -C "$RUNNER_TEMP/demo" .
+          password=$(sed -n 's/^Sign in as demo \/ //p' "$RUNNER_TEMP/demo.log")
+          echo "Demo site: https://$DEMO_DOMAIN, user **demo**, password \`$password\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open SSH to this runner in the Hetzner firewall
         run: |
           ip=$(curl -fsS https://api.ipify.org)
           echo "::add-mask::$ip"
-          echo "RUNNER_IP=$ip" >> "$GITHUB_ENV"
           fw=$(curl -fsS -H "Authorization: Bearer $HCLOUD_TOKEN" "$API/firewalls?name=$FIREWALL" | jq '.firewalls[0]')
           if [ "$fw" = null ]; then
             echo "::error::No Hetzner Cloud Firewall named \"$FIREWALL\" (set HCLOUD_FIREWALL if yours is named differently)"
@@ -112,7 +145,7 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
           printf 'Host server\n  HostName %s\n  User deploy\n  IdentityFile ~/.ssh/id_deploy\n  ServerAliveInterval 30\n' "$HOST" > ~/.ssh/config
           # The firewall change takes a few seconds to reach the server.
-          for i in $(seq 30); do nc -z -w 3 "$HOST" 22 && break; sleep 3; done
+          for _ in $(seq 30); do nc -z -w 3 "$HOST" 22 && break; sleep 3; done
           if [ -n "$HOST_KEY" ]; then
             printf '%s %s\n' "$HOST" "$HOST_KEY" > ~/.ssh/known_hosts
           else
@@ -121,35 +154,24 @@ jobs:
           fi
 
       - name: Copy the app to the server
-        if: env.ACTION == 'deploy'
+        if: env.DEPLOYS == 'true'
         run: |
           rsync -az --delete --exclude docker-compose.override.yml --exclude data/ \
             --exclude tests/ --exclude .coverage --exclude '__pycache__/' \
             v2/ server:/opt/officesentry/v2/
 
       - name: Build and start
-        if: env.ACTION == 'deploy'
+        if: env.DEPLOYS == 'true'
+        run: ssh server 'bash -s' < v2/deploy/start.sh
+
+      - name: Load the demo data
+        if: env.ACTION == 'demo-reset'
         run: |
-          ssh server bash -s <<'EOF'
-          set -euo pipefail
-          cd /opt/officesentry/v2
-          # Build first so the portal is only down while the containers swap.
-          docker compose --profile https build --pull
-          docker compose --profile https up -d --remove-orphans
-          status=starting
-          for i in $(seq 40); do
-            status=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q web)")
-            [ "$status" = healthy ] && break
-            sleep 5
-          done
-          docker compose --profile https ps
-          if [ "$status" != healthy ]; then
-            docker compose logs --tail 100 web
-            echo "::error::The portal didn't become healthy"
-            exit 1
-          fi
-          docker image prune -f > /dev/null
-          EOF
+          ssh server 'cd /opt/officesentry/v2 && docker compose stop demo-web demo-worker \
+            && docker compose run --rm --no-deps -T --entrypoint sh demo-web -c "find /data -mindepth 1 -delete && tar -xz -C /data" \
+            && docker compose up -d demo-web demo-worker' < "$RUNNER_TEMP/demo.tgz"
+          ssh server 'bash -s' < v2/deploy/start.sh
+          echo "Demo data loaded. The sign-in is in this run's summary."
 
       - name: Show the first-admin link (until an admin exists)
         if: env.ACTION == 'deploy' || env.ACTION == 'setup-link'
@@ -161,14 +183,14 @@ jobs:
 
       - name: Restart
         if: env.ACTION == 'restart'
-        run: ssh server 'cd /opt/officesentry/v2 && docker compose --profile https restart'
+        run: ssh server 'cd /opt/officesentry/v2 && docker compose restart'
 
       - name: Status
         if: env.ACTION == 'status' || env.ACTION == 'restart'
         run: |
           ssh server bash -s <<'EOF'
           cd /opt/officesentry/v2
-          docker compose --profile https ps
+          docker compose ps
           df -h / | tail -1
           echo "--- worker"; docker compose logs --tail 40 worker
           echo "--- web"; docker compose logs --tail 40 web

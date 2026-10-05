@@ -348,6 +348,7 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `OFFICESENTRY_DOMAIN` | the domain alone, e.g. `sentry.yourmsp.com` |
 | `OFFICESENTRY_TIMEZONE` | e.g. `Europe/London` (default UTC) |
 | `HCLOUD_FIREWALL` | only if the firewall isn't called `officesentry` |
+| `OFFICESENTRY_DEMO_DOMAIN` | optional: turns on the demo site (below), e.g. `demo.sentry.yourmsp.com` |
 | `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *` |
 | `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass |
 | `DEPLOY_HOST_KEY` | optional: the server's SSH host key, which the first run prints, so later runs refuse a different server |
@@ -370,6 +371,7 @@ All from *Actions → Deploy → Run workflow*:
 
 | Action | Does |
 |---|---|
+| `demo-reset` | deploys, then fills the demo site with fresh demo data; the sign-in is in the run's summary |
 | `deploy` | copies the chosen branch, tag or commit and rebuilds; the portal is only down while the containers swap |
 | `status` | container health, free disk and the last log lines |
 | `backup` | a database copy now, keeping 14 |
@@ -380,12 +382,31 @@ To go back to an older version, deploy its commit or tag in the `ref` box; if
 the database was upgraded since, restore the `pre-upgrade-*` copy as in
 *Rolling back an update* (that needs a shell, below).
 
+### A demo site to show people
+
+The demo tenants from `scripts/demo_data.py` (three fictional clients with five
+weeks of history, and a made-up MSP's branding) can run as a second site on
+the same server, with its own data, so they never mix with real clients:
+
+1. Add an A record for, say, `demo.sentry.yourmsp.com` pointing at the server.
+2. Set the `OFFICESENTRY_DEMO_DOMAIN` variable to that name.
+3. Run the Deploy workflow with action **demo-reset**. Its summary shows the
+   sign-in: user `demo` and a new password.
+
+The demo site uses the same firewall, so whoever can open the portal can open
+the demo. Two-step sign-in is off there so colleagues can share the account,
+and it never collects (the tenants aren't real), so dates in it age:
+**demo-reset** again before a demo for fresh data and a new password. Don't
+press "Run now" on a demo tenant; it fails, because there is nothing to
+connect to. To remove the demo site, delete the variable and deploy; its data
+stays in the `officesentry-demo-data` volume until you remove that.
+
 ### If you need a shell
 
 Add an inbound rule for TCP 22 from your current address in the firewall,
 connect in Termius as `deploy@<server IP>` with the deploy key, run
 `cd /opt/officesentry/v2`, and the commands elsewhere in this file work as
-written (add `--profile https` to `up`). Remove the rule afterwards.
+written (`.env` already picks the https and demo parts). Remove the rule afterwards.
 
 ## Running on Windows without Docker
 
