@@ -2,19 +2,23 @@
 
 import io
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
+import responses
 from openpyxl import load_workbook
 
 from officesentry import store
 from officesentry.collectors.sharepoint import concealed, describe_permissions
+from officesentry.graph import GraphClient
 from officesentry.reports import data_reports
 from officesentry.reports.data_reports import Link
 from officesentry.reports.sharepoint import nice_max, size
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
+from officesentry.worker import execute_run
 from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
-from tests.seed import seed_tenant
+from tests.seed import mock_tenant, seed_tenant
 
 
 def _snap(db, tenant_id):
@@ -104,6 +108,26 @@ def test_describe_permissions_treats_guest_logins_as_external():
     assert describe_permissions([{"roles": ["read"], "link": {"scope": "users"},
                                   "grantedToIdentitiesV2": [{"user": {"email": "bob@x.com"}}]}],
                                 {"x.com"})["exposure"] is None
+
+
+def test_shared_files_skips_onedrives_the_site_listing_gave(db, two_tenants):
+    """Ann's OneDrive comes back in the site listing, so it isn't looked up again by user; Bob's doesn't."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)  # the users snapshot the collector reads
+    before = {i["_id"]: i for i in _snap(db, alpha).objects("shared_files", "shared_item")}
+    factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        mock_tenant(rsps)
+        store.enqueue_run(db, alpha, "shared_files")
+        assert execute_run(db, store.claim_next_run(db), factory) == "succeeded"
+        paths = [urlsplit(c.request.url).path.removeprefix("/v1.0") for c in rsps.calls]
+    assert paths.count("/users/u1/drive") == 0
+    assert paths.count("/users/u2/drive") == 1  # not in the listing, so still asked for (404: never opened)
+    assert paths.count("/sites/site-ann/drives") == 1 and paths.count("/sites/getAllSites") == 1
+    assert len(paths) == 1 + 2 + 1 + 2 + 5  # sites, their drives, Bob's OneDrive, two deltas, five shared items
+    snap = _snap(db, alpha)
+    assert {i["_id"]: i for i in snap.objects("shared_files", "shared_item")} == before
+    assert snap.objects("shared_files", "scan_status")[0]["drives"] == 2
 
 
 # -- Checks ---------------------------------------------------------------------------
