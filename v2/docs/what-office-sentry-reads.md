@@ -163,6 +163,8 @@ depend on your MSP. Ask them where their server is and who can access it.
   recent collection of each kind is always kept, however old.
 - **Numbers** used for trends (counts, scores and percentages) are kept
   indefinitely.
+- **Collection logs** (what each collection did) are kept for 90 days; after
+  that only their warnings and errors are kept.
 - **Findings history** (each issue found, with the account or item it
   concerns, and when it was first seen and fixed) and the **activity log**
   (who in the MSP did what, including report downloads, with the address it
