@@ -1,8 +1,7 @@
 # CLAUDE.md: Office Sentry v2
 
 Read-only Microsoft 365 reporting for MSPs. See README.md for the user-facing
-overview and `/mnt/project-files/officesentry-review/00-recommendation.md`
-(if present) for the plan this follows.
+overview and DEPLOY.md for running it on a server.
 
 ## Rules that must not be broken
 
@@ -126,7 +125,27 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
   IDs replaced. When a collector asks Microsoft for something new, re-record it
   with `python -m officesentry live-test --record tests/fixtures/live_tenant.json`
   (needs the `OFFICESENTRY_TEST_*` variables). Scrubbing happens in memory and
-  refuses to write the file if a name or domain survives; still skim the diff.
+  refuses to write the file if a name, domain or phone number survives; still
+  skim the diff. Phone fields are replaced by key (`recording.PHONE_KEYS`)
+  whatever their format; `tests/test_recording.py` covers the scrubber.
+
+## Robustness contract
+
+`tests/test_robustness.py` fuzzes every check in `rules.RULES`, every report in
+`data_reports.REPORTS` and every `changes.*_changes` feed against degraded
+snapshots (a field removed or null, a list where text is expected and the other
+way round, timestamps of `""`, `"0001-01-01T00:00:00Z"`, `"not-a-date"` or
+without their `Z`, no objects at all). The registries are read when the tests
+run, so new checks and reports are fuzzed as soon as they exist.
+
+- Missing fields, nulls, odd timestamps and empty collections happen with real
+  Microsoft data, so every check, report and change feed handles them itself.
+- Wrong types can't come from Graph; for those it's enough that the guards
+  contain the crash: `rules.evaluate()` shows the check as "couldn't run",
+  `data_reports.build()` shows the report as unavailable and
+  `changes.all_changes()` leaves out that feed. Nothing returns a malformed result.
+- Use the shared helpers: `devices.parse_ts` / `devices.parse_day` for any
+  timestamp or date, `coverage.policy_name` for a policy with no name.
 
 ## One page per account
 
@@ -175,7 +194,11 @@ a day with `store.prune_snapshots` (latest run per day for 30 days and per
 month for 12; metrics, findings and run rows are never pruned), so code that
 reads an older run must cope with its objects being gone (see
 `changes._baseline_run`). A side thread records the heartbeat that the
-portal banner and `healthcheck worker` read. Don't add Celery or Redis.
+portal banner and `healthcheck worker` read, but only while the main loop
+makes progress (`worker.Liveness`: it came round in the last 10 minutes, or
+one run has gone for under 4 hours), so a wedged loop shows as down. A
+failing housekeeping pass (say "database is locked") is logged and retried
+the next minute; it never ends the worker. Don't add Celery or Redis.
 
 To add timed work (emails, digests), register a job in its own module with
 `@schedule.periodic("name")`; it gets a `TickContext` every minute and uses
@@ -229,11 +252,38 @@ the files but not who they went to. Archiving never fails a send.
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
+`db.migrate` re-reads `user_version` inside each migration's transaction (two
+processes may start at once) and copies a database that already has a schema
+to `backups/pre-upgrade-*.db` first (`backups.before_upgrade`); restoring that
+copy is the only way back, since migrations only go forward.
 
 ## Commands
 
-`pytest`, `ruff check .`, `python -m officesentry {web,worker,create-admin,setup-link,create-app,rotate-keys,backup,healthcheck,delete-tenant}`.
+`pytest -n auto` (every core; plain `pytest` for debugging), `ruff check .`,
+and `python -m officesentry <command>`:
+
+| Command | What it does |
+|---|---|
+| `web` | the portal on Werkzeug's server, for development (Docker runs gunicorn) |
+| `serve` | the portal on a production server without Docker: waitress on Windows, gunicorn elsewhere |
+| `worker [--once]` | collections, the schedule, emailed reports and retention |
+| `migrate` | apply database upgrades now (the portal and worker also do it on start) |
+| `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
+| `setup-link` | print the one-time link for creating the first admin in the browser |
+| `create-app` | create the read-only multi-tenant Entra app (device sign-in) |
+| `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
+| `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
+| `backup [--dir] [--keep]` | a consistent copy of the database (keeps 7) |
+| `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
+| `delete-tenant <id>` | delete a tenant and everything stored for it |
+| `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+
 Docker: `docker compose up -d --build` (see DEPLOY.md).
 
 Tests sign in with a password only (`require_mfa="off"` in `conftest.py`);
-`tests/test_login_security.py` covers two-step sign-in.
+`tests/test_login_security.py` covers two-step sign-in. `make_user` stores a
+cheap precomputed hash (scrypt costs ~0.1 s a time); the portal still uses
+scrypt. A slow fixture that tests only read (`seeded`, `wrecked_once`, the
+live replay) is module-scoped with its own database; keep tests that write
+on the per-test `db`. Tests run in parallel in CI (`-n auto`), so never share
+files outside `tmp_path`.

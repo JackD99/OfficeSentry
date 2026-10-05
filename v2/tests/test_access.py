@@ -26,7 +26,9 @@ def test_setup_creates_first_admin_once(client, db, cfg):
     client.get(f"/setup?token={setup_token(cfg.data_dir)}")
     resp = client.post("/setup", data={"username": "owner", "password": PASSWORD, "confirm": PASSWORD})
     assert resp.status_code == 302
-    assert db.execute("SELECT role FROM users").fetchone()["role"] == "admin"
+    owner = db.execute("SELECT role, password_hash FROM users").fetchone()
+    assert owner["role"] == "admin"
+    assert owner["password_hash"].startswith("scrypt:")  # tests' make_user takes a cheap shortcut; the portal doesn't
     client.post("/setup", data={"username": "intruder", "password": PASSWORD, "confirm": PASSWORD})
     assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
 

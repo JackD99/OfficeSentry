@@ -9,6 +9,10 @@ from officesentry.db import connect, migrate, utcnow
 from officesentry.web import create_app
 
 PASSWORD = "correct horse battery"
+# Hashed once, cheaply: the portal's scrypt costs ~0.1 s per hash and per sign-in, hundreds of times a run.
+# Verification reads the method from the hash, so signing in as these users is cheap too. Accounts the
+# portal creates still use scrypt (test_access.py::test_setup_creates_first_admin_once checks).
+PASSWORD_HASH = generate_password_hash(PASSWORD, method="pbkdf2:sha256:1")
 
 
 @pytest.fixture
@@ -47,7 +51,7 @@ def client(app):
 def make_user(db, username, role="admin", all_tenants=False, tenants=()):
     cur = db.execute(
         "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, ?, ?, ?)",
-        (username, generate_password_hash(PASSWORD), role, int(all_tenants), utcnow()),
+        (username, PASSWORD_HASH, role, int(all_tenants), utcnow()),
     )
     for t in tenants:
         db.execute("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", (cur.lastrowid, t))
