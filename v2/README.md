@@ -251,7 +251,7 @@ this command; the product signs in with a certificate.
   data is kept and how to remove access.
 - [Onboarding a client](docs/onboarding-a-client.md): for technicians. Adding
   a tenant, consent, Global Reader, the first collection, connection health,
-  the errors on the Data collection tab, pausing, archiving and offboarding.
+  the errors on the Data collection page, pausing, archiving and offboarding.
 - [Check catalogue](docs/checks.md): every check, data source, detail report
   and permission, generated from the code by `scripts/gen_check_catalogue.py`.
 

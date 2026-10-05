@@ -58,8 +58,9 @@
 {%- endmacro %}
 
 {% if current_user %}
+<a class="skip-link" href="#main">Skip to content</a>
 <div class="app">
-  <aside class="sidebar">
+  <aside class="sidebar" aria-label="Menu and account">
     {{ brand() }}
     {{ navigation() }}
     <div class="spacer"></div>
@@ -71,7 +72,7 @@
       {{ navigation() }}
       {{ account() }}
     </details>
-    <main>
+    <main id="main" tabindex="-1">
       {% if worker_down %}<div class="callout warn" role="status">{{ icon('alert') }}<span><strong>The background worker isn't running.</strong>
         Tenants won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span></div>{% endif %}
       {{ flashes() }}

@@ -756,3 +756,21 @@ textarea.copy-text { font-size: .8125rem; resize: vertical; margin: 8px 0; }
   .health-state { min-width: 0; }
   .health-action { flex-basis: 100%; }
 }
+
+/* -- Tenant tabs, their second row, and accessibility -----------------------
+   Seven tenant tabs; Reports and Settings list their pages in .tab-pages. */
+.tab-pages { display: flex; gap: 4px; flex-wrap: wrap; margin: -12px 0 20px; }
+.tab-pages a { padding: 4px 11px; border-radius: 999px; color: var(--muted); font-size: .8125rem; font-weight: 500; border: 1px solid var(--border); background: var(--surface); }
+.tab-pages a:hover { text-decoration: none; color: var(--text); border-color: var(--border-strong); }
+.tab-pages a.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+@media (max-width: 640px) {
+  /* Tab bars wrap onto a second line instead of scrolling sideways. */
+  .tabs { flex-wrap: wrap; overflow: visible; padding-right: 0; -webkit-mask-image: none; mask-image: none; }
+  .tabs a { padding: 8px 9px; }
+}
+/* Links in running text are underlined, not told apart by colour alone. */
+main :is(p, .callout, .footnote, .help) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+/* Skip link: off screen until it gets keyboard focus. */
+.skip-link { position: absolute; left: 12px; top: -48px; z-index: 100; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: var(--shadow); }
+.skip-link:focus { top: 12px; }
+main:focus { outline: none; }

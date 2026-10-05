@@ -54,13 +54,19 @@
 {%- endmacro %}
 
 {% macro sev_counts(counts, levels=('critical', 'high', 'medium', 'low')) -%}
-<span class="sevbar" aria-label="{% for s in levels %}{{ counts[s] }} {{ s }}{{ ', ' if not loop.last }}{% endfor %}">{% for s in levels %}<span class="sev sev-{{ s }}{{ ' zero' if not counts[s] }}" title="{{ counts[s] }} {{ s }}">{{ counts[s] }}</span>{% endfor %}</span>
+<span class="sevbar" role="img" aria-label="{% for s in levels %}{{ counts[s] }} {{ s }}{{ ', ' if not loop.last }}{% endfor %}">{% for s in levels %}<span class="sev sev-{{ s }}{{ ' zero' if not counts[s] }}" title="{{ counts[s] }} {{ s }}">{{ counts[s] }}</span>{% endfor %}</span>
 {%- endmacro %}
 
 {# Key for the sev_counts bubbles, shown once above a table of them. #}
 {% macro sev_legend(lead='Open findings') -%}
 <p class="sev-legend">{{ lead }}:{% for s in ('critical', 'high', 'medium', 'low') %} <span><i class="sw sev-{{ s }}"></i>{{ s|capitalize }}</span>{% endfor %}</p>
 {%- endmacro %}
+
+{# Tab that each tenant page key highlights. Keys not listed are tabs themselves. #}
+{% set TAB_OF = {
+  'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports',
+  'schedules': 'emails', 'collection': 'settings', 'manage': 'settings',
+} %}
 
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. #}
 {% macro tenant_header(tenant, active, title=None, counts=None) -%}
@@ -75,21 +81,36 @@
     <a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('doc') }} Monthly review</a>
   </div>
 </div>
+{# Seven tabs; older page keys map onto the tab that now holds them (TAB_OF). Reports and
+   Settings group several pages, linked from a second row under the bar. #}
+{% set tab = TAB_OF.get(active, active) %}
 <nav class="tabs" aria-label="{{ tenant.name }}">
   {% set tabs = [] %}
   {% if staff %}{% set _ = tabs.append(('overview', 'Overview', url_for('tenants.tenant', tenant_id=tenant.id))) %}{% endif %}
   {% set _ = tabs.append(('findings', 'Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('changes', 'Changes', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('data', 'Detail reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
+  {% set _ = tabs.append(('reports', 'Reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
   {% set _ = tabs.append(('users', 'Users', url_for('people.people', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('schedules', 'Emailed reports', url_for('email.tenant_emails', tenant_id=tenant.id))) %}
-  {% if staff %}{% set _ = tabs.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}{% endif %}
+  {% set _ = tabs.append(('emails', 'Emails', url_for('email.tenant_emails', tenant_id=tenant.id))) %}
+  {% if staff %}{% set _ = tabs.append(('settings', 'Settings', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
   {% for key, label, href in tabs %}
-  <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}{% if counts and counts.get(key) %}<span class="count">{{ counts[key] }}</span>{% endif %}</a>
+  <a href="{{ href }}"{% if key == tab %} class="active" aria-current="{{ 'page' if key == active else 'true' }}"{% endif %}>{{ label }}{% if counts and counts.get(key) %}<span class="count">{{ counts[key] }}</span>{% endif %}</a>
   {% endfor %}
 </nav>
+{% set pages = [] %}
+{% if tab == 'reports' %}
+  {% set _ = pages.append(('data', 'Detail reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('review', 'Monthly review', url_for('reports.tenant_report', tenant_id=tenant.id))) %}
+{% elif tab == 'settings' and staff %}
+  {% set _ = pages.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
+{% endif %}
+{% if pages %}
+<nav class="tab-pages" aria-label="{{ 'Reports' if tab == 'reports' else 'Settings' }}">
+  {% for key, label, href in pages %}<a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
+{% endif %}
 {%- endmacro %}
 
 
