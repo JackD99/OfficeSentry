@@ -178,6 +178,15 @@ show up in the schedule form automatically. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 
+Reports are built live, so what a client was sent is kept separately:
+after a report email goes out, `delivery.send_schedule` stores each attached
+PDF/XLSX in `issued_reports` (`issued.py`: bytes as a BLOB, period, version,
+recipients, SHA-256). It is never pruned (snapshot pruning doesn't touch it),
+is backed up with the database and goes with the tenant on delete. The
+tenant's Report history page (`/tenants/<id>/report-history`, linked from
+Emailed reports and the client home) lists and downloads them; clients see
+the files but not who they went to. Archiving never fails a send.
+
 ## Client tenant lifecycle
 
 - `tenants.enabled = 0` is **paused** (no scheduled or manual collection, no
