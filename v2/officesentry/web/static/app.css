@@ -604,6 +604,8 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 .person-head .muted { word-break: break-all; }
 .person-head .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .person-head .person-actions { flex: none; align-self: center; }
+.person-actions .leaver-link { display: block; margin-top: 6px; text-align: right; }
+.part-downloads { margin: -4px 0 12px; }
 .card.part .kv { margin-bottom: 4px; }
 .part-sub { font-size: .8125rem; font-weight: 600; color: var(--text-2); margin: 18px 0 4px; display: flex; gap: 8px; align-items: center; }
 .card-head + .scroll-x > .part-table { margin-top: -4px; }
