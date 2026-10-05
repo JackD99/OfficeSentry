@@ -540,6 +540,21 @@ def wrecked(db, connection_id):
     return wreck_tenant(db, connection_id)
 
 
+@pytest.fixture(scope="module")
+def wrecked_once(tmp_path_factory):
+    """One wrecked tenant for the read-only report tests, rather than one per report."""
+    with pytest.MonkeyPatch.context() as mp:
+        for var in ("SECRET_KEY", "ENCRYPTION_KEYS", "DATA_DIR"):
+            mp.delenv("OFFICESENTRY_" + var, raising=False)
+        cfg = load_config(data_dir=tmp_path_factory.mktemp("wrecked"), testing=True, secure_cookies=False)
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    cid = store.create_connection(conn, Vault(cfg.encryption_keys), "Test app", generate_certificate("test"),
+                                  client_id="11111111-2222-3333-4444-555555555555")
+    yield conn, wreck_tenant(conn, cid)
+    conn.close()
+
+
 def test_findings_sync_survives_a_wrecked_tenant(db, wrecked):
     results = evaluate(TenantSnapshot(db, wrecked))
     assert len(results) == len(RULES)
@@ -553,7 +568,8 @@ def test_findings_sync_survives_a_wrecked_tenant(db, wrecked):
 
 
 @pytest.mark.parametrize("key", list(data_reports.REPORTS))
-def test_report_survives_a_wrecked_tenant(db, wrecked, key):
+def test_report_survives_a_wrecked_tenant(wrecked_once, key):
+    db, wrecked = wrecked_once
     report = data_reports.build(db, wrecked, key)
     assert not check_report(report)
     if key == "devices":

@@ -224,8 +224,8 @@ copy is the only way back, since migrations only go forward.
 
 ## Commands
 
-`pytest`, `ruff check .`, and
-`python -m officesentry <command>`:
+`pytest -n auto` (every core; plain `pytest` for debugging), `ruff check .`,
+and `python -m officesentry <command>`:
 
 | Command | What it does |
 |---|---|
@@ -245,4 +245,9 @@ copy is the only way back, since migrations only go forward.
 Docker: `docker compose up -d --build` (see DEPLOY.md).
 
 Tests sign in with a password only (`require_mfa="off"` in `conftest.py`);
-`tests/test_login_security.py` covers two-step sign-in.
+`tests/test_login_security.py` covers two-step sign-in. `make_user` stores a
+cheap precomputed hash (scrypt costs ~0.1 s a time); the portal still uses
+scrypt. A slow fixture that tests only read (`seeded`, `wrecked_once`, the
+live replay) is module-scoped with its own database; keep tests that write
+on the per-test `db`. Tests run in parallel in CI (`-n auto`), so never share
+files outside `tmp_path`.

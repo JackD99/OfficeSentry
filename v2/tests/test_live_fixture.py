@@ -14,6 +14,8 @@ import responses
 
 from officesentry import coverage, store
 from officesentry.collectors import REGISTRY
+from officesentry.config import load_config
+from officesentry.db import connect, migrate
 from officesentry.exchange import ExchangeClient
 from officesentry.graph import GraphClient
 from officesentry.reports import data_reports, evidence, export
@@ -88,7 +90,26 @@ STAND_INS = {
 NEW_FIELDS = frozenset({"/v1.0/domains"})
 
 
-@pytest.fixture
+# Replaying every collector takes a few seconds, and the tests below only read what it stored, so the
+# whole module shares one database (``cfg`` and ``db`` override conftest's per-test ones here).
+@pytest.fixture(scope="module")
+def cfg(tmp_path_factory):
+    with pytest.MonkeyPatch.context() as mp:
+        for var in ("SECRET_KEY", "ENCRYPTION_KEYS", "DATA_DIR"):
+            mp.delenv("OFFICESENTRY_" + var, raising=False)
+        return load_config(data_dir=tmp_path_factory.mktemp("live") / "data", testing=True, secure_cookies=False,
+                           require_mfa="off", extra={"disable_csrf": True})
+
+
+@pytest.fixture(scope="module")
+def db(cfg):
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture(scope="module")
 def live(db):
     tenant_id = store.create_tenant(db, "Live test", FIXTURE["tenant_id"], None)
     db.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)", (FIXTURE["client_id"],))
