@@ -1,7 +1,8 @@
 """Authentication and authorization. Deny by default.
 
 * Every view needs ``@login_required`` or ``@roles_required(...)``; there is
-  no anonymous access except login, first-run setup and /health.
+  no anonymous access except login, first-run setup, /health and the MSP's
+  brand colours and logo (``/brand.css``, ``/brand/logo``) for the sign-in page.
 * Any view that touches a tenant must load it through ``tenant_or_404()``,
   which returns 404 for tenants the user may not see (no existence leak).
 

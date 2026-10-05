@@ -2,6 +2,7 @@
 
 import base64
 import io
+import re
 
 from officesentry import store
 from officesentry.reports import branding, charts, evidence, summary
@@ -84,8 +85,14 @@ def test_reports_carry_the_brand(client, db, two_tenants):
         assert resp.status_code == 200 and resp.data.startswith(b"%PDF")
 
 
-def test_brand_css_needs_login(client):
-    assert client.get("/brand.css").status_code == 302
+def test_brand_css_is_public_but_only_colours(client, db):
+    # The sign-in page is branded, so the stylesheet is served before sign-in. It holds colours and nothing else.
+    db.execute("INSERT INTO settings (key, value) VALUES ('brand_name', 'Harbour IT'), ('brand_contact', 'x@y.z')")
+    resp = client.get("/brand.css")
+    assert resp.status_code == 200 and resp.mimetype == "text/css"
+    css = resp.get_data(as_text=True)
+    assert "Harbour" not in css and "x@y.z" not in css
+    assert set(re.findall(r"--[\w-]+:([^;}]+)", css)) <= set(re.findall(r"#[0-9a-f]{6}", css))
 
 
 def test_monthly_summary_reads_plainly(db, two_tenants):

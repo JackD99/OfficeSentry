@@ -27,7 +27,7 @@
   {% for rule_key, items in groups %}
   {% set title = titles.get(rule_key, rule_key) %}
   {# A search keeps a check's heading while any of its rows match. #}
-  <tr class="group" data-name="{{ (title ~ ' ' ~ items|map(attribute='subject')|join(' ') ~ ' ' ~ items|map(attribute='detail')|join(' ') ~ ' ' ~ items|map(attribute='severity')|join(' '))|lower }}"><td colspan="5">{{ title }} <span class="faint">· {{ items|length }}</span></td></tr>
+  <tr class="group" data-name="{{ (title ~ ' ' ~ items|map(attribute='subject')|join(' ') ~ ' ' ~ items|map(attribute='detail')|join(' ') ~ ' ' ~ items|map(attribute='severity')|join(' '))|lower }}" id="check-{{ rule_key }}"><td colspan="5">{{ title }} <span class="faint">· {{ items|length }}</span></td></tr>
   {% for f in items %}
   <tr data-name="{{ (title ~ ' ' ~ f.subject ~ ' ' ~ f.detail ~ ' ' ~ f.severity)|lower }}">
     {% set person = people.get(f.object_id) or people.get(f.subject|lower) %}

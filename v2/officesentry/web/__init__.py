@@ -27,6 +27,7 @@ from . import (
     prospects,
     reports,
     saved_views,
+    search,
     tenant_admin,
     tenants,
 )
@@ -98,7 +99,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if cfg.secure_cookies:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        if request.endpoint != "static":
+        # Static files and the public brand colours and logo may be cached; nothing else is.
+        if request.endpoint not in ("static", "branding.brand_css", "branding.logo"):
             resp.headers["Cache-Control"] = "no-store"
         return resp
 
@@ -139,4 +141,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
     app.register_blueprint(activity.bp)
+    app.register_blueprint(search.bp)
     return app

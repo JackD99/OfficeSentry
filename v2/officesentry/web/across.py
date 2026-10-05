@@ -9,14 +9,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from flask import Blueprint, Response, abort, g, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
-from ..db import audit
+from ..db import audit, transaction, utcnow
 from ..reports import branding, data_reports, evidence, month_changes, rollups, tables, views, workbook
 from ..reports.monthly_review import build as build_review
 from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .printing import pdf_response
+from .saved_views import MAX_VIEWS
 
 bp = Blueprint("across", __name__)
 
@@ -49,6 +50,8 @@ def _days() -> int:
 @roles_required("admin", "analyst")
 def index():
     key = request.args.get("key", "")
+    if request.args.get("mode") == "rows" and key in data_reports.REPORTS:
+        return redirect(url_for("across.rows_index", key=key))
     return redirect(url_for("across.rollup", key=key if key in dict(rollups.available()) else "review"))
 
 
@@ -58,11 +61,148 @@ def _rollup_or_404(key: str):
     return rollups.build(g.db, visible_tenants(g.db, g.user), key)
 
 
+def _picker() -> dict:
+    """What the All tenants pages share: the summary tabs and the detail report picker."""
+    return {"main": rollups.available()[:2], "groups": data_reports.grouped()}
+
+
 @bp.get("/across/<key>")
 @roles_required("admin", "analyst")
 def rollup(key: str):
     data = _rollup_or_404(key)
-    return render_template("rollup.html", rollup=data, main=rollups.available()[:2], groups=data_reports.grouped())
+    return render_template("rollup.html", rollup=data, key=key, **_picker())
+
+
+# -- Every row of a detail report, across tenants ---------------------------------------
+
+
+def _all_rows(key: str) -> rollups.AllRows:
+    if key not in data_reports.REPORTS:
+        abort(404)
+    return rollups.all_rows(g.db, visible_tenants(g.db, g.user), key,
+                            href=lambda t: url_for("reports.data_report", tenant_id=t["id"], key=key))
+
+
+def _table_or_404(data: rollups.AllRows, table: str) -> int:
+    slugs = views.table_slugs(data.report)
+    if table not in slugs:
+        abort(404)
+    return slugs.index(table)
+
+
+@bp.get("/across/<key>/rows")
+@roles_required("admin", "analyst")
+def rows_index(key: str):
+    """Every row: ``?table=`` (a table slug) or the first table with rows. Keeps the table view."""
+    data = _all_rows(key)
+    slugs = views.table_slugs(data.report)
+    table = request.args.get("table", "")
+    if table not in slugs:
+        table = next((s for s, sec in zip(slugs, data.report.sections, strict=True) if sec.rows),
+                     slugs[0] if slugs else "")
+    if not table:
+        return render_template("rollup_rows.html", data=data, key=key, tv=None, table="", tables=[], saved=[],
+                               view_query="", **_picker())
+    query = views.View.parse(request.args).query()
+    return redirect(url_for("across.rows", key=key, table=table) + (f"?{query}" if query else ""))
+
+
+@bp.get("/across/<key>/rows/<table>")
+@roles_required("admin", "analyst")
+def rows(key: str, table: str):
+    data = _all_rows(key)
+    index = _table_or_404(data, table)
+    view = views.View.parse(request.args)
+    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
+                         (g.user["id"], key)).fetchall()
+    return render_template(
+        "rollup_rows.html", data=data, key=key, table=table,
+        tv=views.table_view(data.report, index, view, request.path),
+        tables=list(zip(views.table_slugs(data.report), data.report.sections, strict=True)),
+        truncated=data.truncated(data.report.sections[index].title), max_rows=rollups.MAX_ROWS,
+        view_query=view.query(), saved=saved, **_picker())
+
+
+def _rows_report(key: str, table: str):
+    data = _all_rows(key)
+    title = data.report.sections[_table_or_404(data, table)].title
+    return rollups.one_table(data, title, views.View.parse(request.args))
+
+
+@bp.get("/across/<key>/rows/<table>.csv", defaults={"ext": "csv"})
+@bp.get("/across/<key>/rows/<table>.xlsx", defaults={"ext": "xlsx"})
+@roles_required("admin", "analyst")
+def rows_download(key: str, table: str, ext: str):
+    report = _rows_report(key, table)
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.{ext}")
+    filename = f"all-tenants-{key}-{table}"
+    if ext == "csv":
+        return _download(tables.to_csv(data_reports.section_table(report.sections[0])), filename, ext)
+    return _download(data_reports.to_xlsx(report, brand=branding.load(g.db)), filename, ext)
+
+
+@bp.get("/across/<key>/rows/<table>.pdf")
+@roles_required("admin", "analyst")
+def rows_pdf(key: str, table: str):
+    report = _rows_report(key, table)
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.pdf")
+    return pdf_response("reports/detail.html", f"all-tenants-{key}-{table}", report=report)
+
+
+@bp.post("/across/<key>/rows/<table>/views")
+@roles_required("admin", "analyst")
+def save_rows_view(key: str, table: str):
+    """Save a view from the every-row page. Views are per report, so it also opens on each tenant's page."""
+    if key not in data_reports.REPORTS:
+        abort(404)
+    page = url_for("across.rows", key=key, table=table)
+    query = views.View.parse(request.form.get("query", "")).query()
+    name = " ".join(request.form.get("name", "").split())[:80]
+    if not query or not name:
+        flash("Filter, sort or hide a column first, then give the view a name.", "error")
+        return redirect(page)
+    count = g.db.execute("SELECT COUNT(*) FROM saved_views WHERE user_id = ?", (g.user["id"],)).fetchone()[0]
+    if count >= MAX_VIEWS:
+        flash(f"You can keep up to {MAX_VIEWS} views. Delete one you don't use first.", "error")
+        return redirect(f"{page}?{query}")
+    with transaction(g.db):
+        g.db.execute(
+            "INSERT INTO saved_views (user_id, report_key, name, query, created_at) VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(user_id, report_key, name) DO UPDATE SET query = excluded.query",
+            (g.user["id"], key, name, query, utcnow()))
+    flash(f"Saved “{name}”. It's under Views on this report, here and for every tenant.", "success")
+    return redirect(f"{page}?{query}")
+
+
+# -- Every check, for every tenant ---------------------------------------------------------
+
+
+def _check_matrix():
+    return rollups.check_matrix(g.db, visible_tenants(g.db, g.user))
+
+
+@bp.get("/across/checks")
+@roles_required("admin", "analyst")
+def checks():
+    matrix = _check_matrix()
+    categories = matrix.categories
+    category = request.args.get("category", "")
+    chosen = next((c for c in categories if views.slug(c[0]) == category), None)
+    return render_template("check_matrix.html", matrix=matrix, categories=categories, chosen=chosen,
+                           slugs={c[0]: views.slug(c[0]) for c in categories}, **_picker())
+
+
+@bp.get("/across/checks.csv", defaults={"ext": "csv"})
+@bp.get("/across/checks.xlsx", defaults={"ext": "xlsx"})
+@roles_required("admin", "analyst")
+def checks_download(ext: str):
+    matrix = _check_matrix()
+    table = matrix.to_table()
+    audit(g.db, g.user["username"], "rollup_downloaded", None, f"checks.{ext}")
+    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
+        "Checks", "All tenants", "Every check's result for every tenant.",
+        facts=[("Tenants", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")]))
+    return _download(body, "all-tenants-checks", ext)
 
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})

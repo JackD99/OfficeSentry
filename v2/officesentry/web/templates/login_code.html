@@ -10,7 +10,7 @@
 </form>
 <details class="help">
   <summary>Lost your phone?</summary>
-  <p class="small muted">Enter one of the recovery codes you saved when you set up two-step sign-in, such as <code>abcde-fghjk</code>. Each code works once. No codes? Ask an Office Sentry admin to reset two-step sign-in for you.</p>
+  <p class="small muted">Enter one of the recovery codes you saved when you set up two-step sign-in, such as <code>abcde-fghjk</code>. Each code works once. No codes? Ask {{ "an admin at " ~ brand.name if brand.name else "an Office Sentry admin" }} to reset two-step sign-in for you.</p>
 </details>
 <p class="footnote center">Signing in as <span class="strong">{{ username }}</span> · <a href="{{ url_for('auth.login') }}">Not you?</a></p>
 {% endblock %}
