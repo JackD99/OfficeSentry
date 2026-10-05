@@ -1,0 +1,36 @@
+{#- The top of every All tenants page: the summary tabs, the detail report picker, and for a detail
+    report the choice between one row per tenant and every row. key is the page's report key. -#}
+{% from "_macros.html" import icon %}
+{% macro across_head(key, main, groups, mode='') -%}
+<div class="page-head">
+  <div>
+    <h1>All tenants</h1>
+    <div class="sub">Compare any report across every tenant you look after.</div>
+  </div>
+  <div class="actions"><a class="btn" href="{{ url_for('across.changes') }}">{{ icon('clock') }} What changed this month</a></div>
+</div>
+
+<div class="report-picker">
+  <nav class="subtabs m0" aria-label="Report">
+    {% for k, title in main %}
+    <a href="{{ url_for('across.rollup', key=k) }}"{% if k == key %} class="active" aria-current="page"{% endif %}>{{ title }}</a>
+    {% endfor %}
+    <a href="{{ url_for('across.checks') }}"{% if key == 'checks' %} class="active" aria-current="page"{% endif %} title="Every check's result for every tenant">Checks</a>
+  </nav>
+  <form method="get" action="{{ url_for('across.index') }}" class="picker-form" id="detail-picker" data-autosubmit>
+    {% if mode == 'rows' %}<input type="hidden" name="mode" value="rows">{% endif %}
+    <label for="detail-key" class="inline-label">Detail report</label>
+    <select id="detail-key" name="key">
+      <option value=""{% if key in ('review', 'evidence', 'checks') %} selected{% endif %} disabled>Choose a report…</option>
+      {% for gr in groups %}<optgroup label="{{ gr.title }}">{% for k, title, desc in gr.reports %}<option value="{{ k }}"{% if k == key %} selected{% endif %}>{{ title }}</option>{% endfor %}</optgroup>{% endfor %}
+    </select>
+    <noscript><button class="btn sm">Show</button></noscript>
+  </form>
+</div>
+{% if mode %}
+<nav class="subtabs across-mode" aria-label="Layout">
+  <a href="{{ url_for('across.rollup', key=key) }}"{% if mode == 'tenants' %} class="active" aria-current="page"{% endif %} title="Headline figures, one row per tenant">One row per tenant</a>
+  <a href="{{ url_for('across.rows_index', key=key) }}"{% if mode == 'rows' %} class="active" aria-current="page"{% endif %} title="Every row of a table from every tenant, to filter and download">Every row</a>
+</nav>
+{% endif %}
+{%- endmacro %}

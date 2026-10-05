@@ -48,6 +48,10 @@
       {% else %}{% for c in rollup.columns %}<td class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}">{{ cell(row, c) }}</td>{% endfor %}{% endif %}</tr>
     {% endfor %}
     </tbody>
+    {% set total = rollup.total_row() %}
+    {% if total %}
+    <tfoot><tr><td><strong>Total</strong></td>{% for c in rollup.columns %}{% set v = total.values.get(c.key) %}<td class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}"><strong>{% if v is none %}<span class="muted">–</span>{% elif c.kind == 'status' %}{{ v }} in place{% elif c.kind == 'num' and v == v|int %}{{ '{:,}'.format(v|int) }}{% else %}{{ cell(total, c) }}{% endif %}</strong></td>{% endfor %}</tr></tfoot>
+    {% endif %}
   </table></div>
   {% if rollup.columns|selectattr('kind', 'equalto', 'sev')|list %}<p class="legend-note">Findings are counted by severity, left to right: <span class="sevbar"><span class="n critical">Critical</span> <span class="n high">High</span> <span class="n medium">Medium</span> <span class="n low">Low</span></span></p>{% endif %}
   {% else %}<p class="empty-note">No tenants to show.</p>{% endif %}
