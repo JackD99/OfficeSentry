@@ -141,6 +141,28 @@ To back up every night, add this line with `crontab -e` (change the folder):
 30 3 * * * cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup
 ```
 
+## Rotating keys
+
+If you think the encryption key may have leaked (a lost backup together with
+`secrets.json`, say), replace it:
+
+```bash
+docker compose exec web python -m officesentry rotate-keys --new
+docker compose restart
+```
+
+That makes a new session key and a new encryption key, re-encrypts every
+stored secret with it (certificate private keys, two-step secrets, the SMTP
+password, the Graph mail secret, and the alert webhook URL and signing
+secret), then drops the old key. Everyone signs in again. If the database
+holds an encrypted value the command doesn't recognise, it stops and changes
+nothing. With keys in environment variables instead, put the new key first in
+`OFFICESENTRY_ENCRYPTION_KEYS`, run `rotate-keys`, then remove the old key.
+
+Ran `rotate-keys --new` before this release? It didn't re-encrypt the alert
+webhook, so enter the webhook URL and secret again under *Settings → Alerts*.
+Old backups are still encrypted with the old key.
+
 ## Updating
 
 ```bash

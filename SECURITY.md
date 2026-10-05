@@ -17,7 +17,8 @@ We aim to acknowledge reports within 48 hours and give an initial assessment wit
 
 Office Sentry reads data from many client tenants, so it is built to do as
 little as possible with that access. Details and code references are in
-[v2/README.md](v2/README.md) and [v2/CLAUDE.md](v2/CLAUDE.md).
+[v2/README.md](v2/README.md), [v2/DEPLOY.md](v2/DEPLOY.md) and
+[v2/CLAUDE.md](v2/CLAUDE.md).
 
 ### Access to Microsoft 365
 
@@ -29,20 +30,39 @@ little as possible with that access. Details and code references are in
   certificate. Its private key is encrypted in the database and is never
   written to disk as a file or sent to the browser. Only the public `.cer`
   can be downloaded, by admins.
-- **Signed consent.** The admin-consent callback is signed, expires, and
-  checks that the returning tenant is the one that was invited.
+- **Bound consent links.** The admin-consent link's signed state carries a
+  one-time nonce, stored server-side with the admin and the signed-in
+  browser that opened it, and expires after an hour. A tenant added by
+  domain only takes the tenant ID that comes back with the consent if
+  Microsoft's public sign-in metadata gives the same ID for that domain; a
+  tenant that already has its ID never changes it on consent.
 
 ### The portal
 
 | Control | Implementation |
 |---|---|
 | Tenant isolation | Deny by default. Users see only tenants granted to them; others return 404. One gate (`web/access.py`) loads every tenant. |
-| Roles | Admin, analyst, client. Clients see only their own reports. |
-| Sessions | 8-hour lifetime, HttpOnly, SameSite=Lax, Secure over HTTPS. Ended on disable, delete, role change or password change. |
-| Login | 5 failed attempts lock the account for 15 minutes. Same-site redirects only. |
+| Roles | Admin, analyst, client. Clients see only their own tenant's reports. |
+| Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs from before October 2026 keep requiring it for admins and analysts until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password. |
+| Passwords | At least 12 characters, Werkzeug's salted hash. A password an admin set (new user or reset) has to be replaced at the next sign-in. |
+| Sign-in limits | Wrong passwords never lock an account. They slow down the address they come from: 5 per username or 20 in all per 15 minutes, counted before the password is checked so parallel requests can't get past them. A spread-out attack on one account slows only addresses that haven't signed in to it before. Five wrong two-step codes lock that step for 15 minutes. The client address comes from `X-Forwarded-For` only behind `OFFICESENTRY_TRUSTED_PROXIES`. |
+| Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total; ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
 | CSRF | Flask-WTF on every form. |
 | Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, `Cache-Control: no-store`. |
-| Secrets | Session key and encryption key are separate. Encryption keys can be rotated (`python -m officesentry rotate-keys`). Generated secrets are written with mode `0600`. |
+| Activity log | Sign-ins and every change, with the client address; admins read, filter and export it under *Settings → Activity log*. Failed sign-ins with unknown usernames are counted per address and hour without storing what was typed, and sign-in noise is removed after 90 days. |
+| Secrets | Session key and encryption key are separate. `python -m officesentry rotate-keys` re-encrypts every encrypted value (certificate keys, two-step secrets, mail credentials, the alert webhook) and refuses if it finds one it doesn't know. Generated secrets are written with mode `0600`. |
+| PDFs | Rendered by WeasyPrint with a URL fetcher that only loads the app's own static files and `data:` URIs: no other files, no network. |
+| Outbound requests | Webhooks and MTA-STS fetches are HTTPS only, refuse internal addresses and connect to the address that was checked (no DNS rebinding). The SMTP password is never sent without TLS, except to a relay on the same machine. |
+
+### Offboarding a client
+
+Deleting a tenant removes everything stored for it in one transaction and
+checks nothing tenant-scoped is left. Activity log entries keep who did what
+and when, but details naming the client's people are removed, and client
+accounts deleted with it are anonymised. Deleted rows are overwritten in the
+database file (`secure_delete`), which is then compacted and its write-ahead
+log emptied. **Backups made before the delete keep the data until they rotate
+out** (the last 7 by default), as do copies taken off the server.
 
 ### What should never be committed
 
@@ -56,14 +76,21 @@ little as possible with that access. Details and code references are in
 
 - Run it with Docker (`v2/docker-compose.yml`) behind a TLS-terminating
   reverse proxy such as Caddy, nginx or Traefik. The compose file only binds
-  to `127.0.0.1`.
+  to `127.0.0.1`. Set `OFFICESENTRY_TRUSTED_PROXIES` to the number of proxies
+  in front (1 for the bundled Caddy) so sign-in limits and the activity log
+  see real client addresses.
 - Only use `OFFICESENTRY_INSECURE_COOKIES=1` for local development over HTTP.
 - Back up the data volume, including `secrets.json`. Losing the encryption
   key means the stored certificate can't be decrypted and must be replaced.
+  Keep `secrets.json` apart from the database backups.
 - Review the Entra app's permissions and sign-in logs in your own tenant
   from time to time.
 
 ## Known limitations
 
 - SQLite suits one server; it isn't built for several web servers sharing a database.
-- Portal sign-in is username and password. There's no MFA or SSO for the portal yet, so keep it behind network controls.
+- Portal sign-in is username, password and two-step code. There's no SSO
+  (Entra ID sign-in) for the portal yet.
+- New users get a password from an admin, shared out of band. Whoever uses it
+  first must replace it, so a leaked one is noticed (the real user can't sign
+  in), but one-time invitation links would be better.
