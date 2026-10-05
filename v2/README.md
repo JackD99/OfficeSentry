@@ -85,6 +85,10 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     Entra ID P2, risky sign-ins too. Reads at most 50,000 sign-ins per run
     (the most recent) and says so if it stops. Each account's page shows its
     own summary.
+  - *Risky users* (Entra ID P2): accounts Entra ID Protection rates at risk
+    or confirmed compromised, with the risk level and why, then the risk
+    remediated, dismissed or confirmed safe in the last 90 days and how. A
+    check fails while any account is at risk, and the account's page flags it.
   - *Admin activity*: security-relevant changes from the Entra ID directory
     audit log over the last 30 days (7 without Entra ID P1, which is all the
     tenant keeps): admin roles granted or removed (including PIM), Conditional

@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from .. import authmethods, devices, signins
+from .. import authmethods, devices, identity_protection, signins
 from ..licences import (
     FREE_SKUS,
     Assignment,
@@ -1002,6 +1002,34 @@ def sign_ins_part(p: Person) -> Part | None:
     result.tone = "bad" if worst else ("warn" if failed >= signins.REPEATED_FAILURES or odd else None)
     result.note = (f"Interactive sign-ins in the last {days} days from the Entra ID sign-in log. MFA and other "
                    "prompts aren't counted as failures.")
+    return result
+
+
+@part(86)
+def risk_part(p: Person) -> Part | None:
+    """Entra ID Protection's user risk for this account; shown only when it's at risk or was resolved recently."""
+    status = identity_protection.status(p.snap)
+    if not status or not status.get("available"):
+        return None
+    row = next((r for r in identity_protection.rows(p.snap) if r.get("userId") == p.id or p.named(r.get("user"))),
+               None)
+    if row is None:
+        return None
+    result = Part("risk", "Identity Protection risk")
+    level, state = identity_protection.level(row), identity_protection.state(row)
+    result.facts += [("Risk level", level), ("Risk state", state)]
+    if identity_protection.detail(row):
+        result.facts.append(("Detail", identity_protection.detail(row)))
+    if row.get("updated"):
+        result.facts.append(("Last updated", _when(row.get("updated"), p.now)))
+    if identity_protection.open_risk(row):
+        severity = identity_protection.severity(row)
+        result.summary, result.tone = f"{level} risk, {state.lower()}", "bad" if severity == "high" else "warn"
+        p.flag(severity, f"Entra ID Protection rates this account {level.lower()} risk ({state.lower()}). Check "
+                         "recent sign-ins with the person; if they don't recognise them, reset the password and sign "
+                         "them out everywhere, then confirm or dismiss the risk.", "risk")
+    else:
+        result.summary, result.tone = state or "Resolved", "ok"
     return result
 
 

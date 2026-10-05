@@ -149,9 +149,9 @@ def _results(db, tenant):
 def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
-    # Entra ID P2, so sign-in risk is hidden.
+    # Entra ID P2, so sign-in risk and risky users are hidden.
     nothing_to_check = {"tls_rpt", "device_compliance", "device_encryption", "supported_windows", "intune_enrolled",
-                        "device_checkin", "risky_sign_ins"}
+                        "device_checkin", "risky_sign_ins", "risky_users"}
     assert {k for k, r in results.items() if r.status == "unavailable"} == nothing_to_check
     assert results["legacy_auth_blocked"].status == "pass"
     assert results["admins_ca_mfa"].status == "pass"
@@ -209,7 +209,10 @@ def test_first_collection_is_a_baseline(db, live):
 @pytest.mark.parametrize("key", list(data_reports.REPORTS))
 def test_detail_reports_and_exports(db, live, key):
     report = data_reports.build(db, live, key, RECORDED)
-    assert report.unavailable is None and report.sections
+    if key == "risky-users":  # the test tenant has no Entra ID P2
+        assert "Entra ID P2" in report.unavailable and not report.sections
+    else:
+        assert report.unavailable is None and report.sections
     assert data_reports.to_xlsx(report)[:2] == b"PK"
 
 
