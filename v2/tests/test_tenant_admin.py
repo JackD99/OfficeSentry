@@ -289,7 +289,16 @@ def test_edit_tenant(client, db, two_tenants, connection_id):
                        follow_redirects=True).get_data(as_text=True)
     assert "can&#39;t change" in page and store.get_tenant(db, bravo)["tenant_ref"] == "bravo.onmicrosoft.com"
     guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-    client.post(f"/tenants/{bravo}/edit", data=form | {"name": "Bravo", "tenant_ref": guid})
+    with responses.RequestsMock() as rsps:
+        rsps.get("https://login.microsoftonline.com/bravo.onmicrosoft.com/v2.0/.well-known/openid-configuration",
+                 json={"issuer": f"https://login.microsoftonline.com/{guid}/v2.0"})
+        # ...and only to the GUID Microsoft publishes for that domain, not another client's.
+        page = client.post(f"/tenants/{bravo}/edit", data=form | {
+            "name": "Bravo", "tenant_ref": "99999999-8888-7777-6666-555555555555"},
+            follow_redirects=True).get_data(as_text=True)
+        assert "isn&#39;t the tenant ID" in page
+        assert store.get_tenant(db, bravo)["tenant_ref"] == "bravo.onmicrosoft.com"
+        client.post(f"/tenants/{bravo}/edit", data=form | {"name": "Bravo", "tenant_ref": guid})
     assert store.get_tenant(db, bravo)["tenant_ref"] == guid and store.get_tenant(db, bravo)["consented_at"]
 
 

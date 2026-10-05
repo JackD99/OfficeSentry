@@ -59,11 +59,19 @@ records the consent and **queues a full collection**: nothing else to press.
 
 Two things decide whether Office Sentry records it:
 
-- **The link works for one hour.** It is regenerated each time the page loads,
-  so reload the page for a fresh one. An older link ends on an error page
-  when it returns.
-- **The return page needs a signed-in Office Sentry admin**, in the same
-  browser.
+- **The link works once, for one hour.** It is regenerated each time the page
+  loads, so reload the page for a fresh one. An older or already used link
+  records nothing when it returns.
+- **The return page needs the same signed-in Office Sentry admin, in the same
+  browser** that opened the link. A link opened from another browser or by
+  another admin records nothing.
+- **When the tenant was added by domain**, Office Sentry asks Microsoft's
+  public sign-in metadata which tenant ID that domain belongs to, and only
+  switches to the tenant ID that comes back with the consent if they match.
+  If Microsoft can't be asked just then, the consent is recorded and the
+  tenant keeps using the domain (which works); you can enter the tenant ID
+  under *Manage → Settings* later. A tenant that already has its tenant ID
+  never changes it on consent.
 
 So the quickest way is to open the link **yourself**, in the browser where you
 are signed in to Office Sentry, and sign in to Microsoft with an account that
@@ -82,7 +90,9 @@ What you see when you come back from the consent page:
 |---|---|
 | *Consent recorded. A first collection has been queued.* | Done. |
 | *Consent was not granted: …* | The admin cancelled, or Microsoft refused; Microsoft's reason follows. |
-| *Consent came from a different tenant than this one.* | Someone approved from another tenant, for example signed in to your own MSP tenant. Sign in to the client's tenant and try again. |
+| *Consent came from a different tenant than this one.* (or *than contoso.com*) | Someone approved from another tenant, for example signed in to your own MSP tenant, or the link was tampered with. Nothing is recorded. Sign in to the client's tenant and try again. |
+| *That consent link has already been used or has expired …* | The link was used before, is over an hour old, or came back to a different browser or admin. Nothing is recorded. Open a fresh link from the page. |
+| *Office Sentry couldn't confirm the tenant ID …* | Consent is recorded, but the tenant keeps its domain because Microsoft's sign-in metadata couldn't be read just then. |
 
 ## 3. Assign Global Reader (for mailbox data)
 
@@ -162,7 +172,8 @@ tab.
 Admins also edit the tenant under *Manage → Settings*: its name, notes for the
 team, its app connection (moving to an app with a different client ID needs
 consent again), and its tenant ID or domain. The tenant ID can't change once
-data has been collected, except from a domain to the tenant ID it stands for:
+data has been collected, except from a domain to the tenant ID it stands for
+(checked against Microsoft's public sign-in metadata for that domain):
 to report on a different tenant, add it as a new one. *Test sign-in* there
 signs in from the portal straight away without checking permissions.
 
