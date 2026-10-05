@@ -246,6 +246,43 @@ tenant's Report history page (`/tenants/<id>/report-history`, linked from
 Emailed reports and the client home) lists and downloads them; clients see
 the files but not who they went to. Archiving never fails a send.
 
+## Month-end reporting
+
+`month_end.py` (pages in `web/reporting.py`, nav "Month-end"). A **report
+plan** (`report_plans`) is one monthly recipe (reports, day, hour, timezone,
+subject and message with `{client}`/`{month}`, `delivery.fill_placeholders`)
+applied to many tenants at once: `apply_plan` creates or updates one ordinary
+`email_schedules` row per tenant (`plan_id`, `subject`, `on_approval`), linked
+in `report_plan_tenants`, so there is no second sender. Mode "send on
+approval" (or delivery "portal only") sets `on_approval`, and
+`delivery._tick_schedule`, Send now and Retry never send those. The Email
+reports and Report plans pages show `month_end.coverage()` (who has a monthly
+report, who has no contacts or recipients) with a fix link per gap.
+
+`/reporting/<yyyy-mm>` is the queue: every visible tenant on a plan, with an
+implicit Draft per month (`report_reviews` only gets a row once someone acts),
+then In review, Approved, Sent. The period is the schedule period the report
+goes out in. Flags: new critical findings since the last issued report, data
+older than 24 h, checks that couldn't run. "Ready" means not yet issued and
+nothing flagged. The review screen (`/reporting/<period>/<tenant>`) edits the
+month's commentary, the tenant's "What we recommend next" items
+(`report_actions`, kept across months, prefilled from
+`getattr(result, "action_client", None) or result.action`) and notes on checks
+(`finding_notes`, client-visible or staff-only). They reach the monthly review
+template as `month_end` from `month_end.report_context()`, passed by the route
+(`web/reporting.report_extras`), not the builder; staff-only notes only ever
+reach staff on the web page, never a client or any PDF.
+
+Approving (`freeze` then `deliver`) renders the plan's files once into
+`issued_reports` (trigger `approval`, `approved_by`/`approved_at`), then emails
+those exact bytes (`delivery.send_frozen`, which marks the schedule's period
+done) or, for portal-only plans or no recipients, leaves them in the report
+history. Approving an issued month again is a re-issue: it needs a reason and
+stores the next version. Roles: admin and analyst review, comment, assign and
+edit recommendations and notes; only admins edit plans and approve, send or
+re-issue. Clients never see the queue, reviewers or staff-only notes. Every
+change is audited; note text is never put in the audit log.
+
 ## Client tenant lifecycle
 
 - `tenants.enabled = 0` is **paused** (no scheduled or manual collection, no
