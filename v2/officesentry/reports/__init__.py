@@ -3,6 +3,7 @@
 from . import (
     auth_methods,
     data_reports,
+    group_membership,
     mail_compliance,
     sharepoint,
     sharepoint_storage,
@@ -40,6 +41,12 @@ _items = list(data_reports.REPORTS.items())
 _at = [k for k, _ in _items].index("licences")
 data_reports.REPORTS.clear()
 data_reports.REPORTS.update(_items[:_at] + list(subscriptions.REPORTS.items()) + _items[_at:])
+
+# Group membership sits next to Groups and Teams.
+_items = list(data_reports.REPORTS.items())
+_at = [k for k, _ in _items].index("groups") + 1
+data_reports.REPORTS.clear()
+data_reports.REPORTS.update(_items[:_at] + list(group_membership.REPORTS.items()) + _items[_at:])
 
 # Mailbox holds and archiving sits after the other Exchange reports.
 _items = list(data_reports.REPORTS.items())
