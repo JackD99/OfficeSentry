@@ -43,3 +43,8 @@ CI runs the same two commands on every push and pull request.
 ## Reporting security issues
 
 See [SECURITY.md](SECURITY.md). Please don't open a public issue.
+
+## Licence
+
+Office Sentry is licensed under the [GNU Affero General Public License v3.0](LICENSE). By contributing, you agree
+that your contributions are licensed under the same terms.
