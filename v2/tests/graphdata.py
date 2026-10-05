@@ -1,5 +1,7 @@
 """Recorded-style Graph payloads shared by collector, rule and report tests."""
 
+from datetime import UTC, datetime, timedelta
+
 GA = "role-ga"
 EXCH = "role-exch"
 READER = "role-reader"
@@ -322,3 +324,30 @@ DNS = {
 
 def fake_dns(name, rdtype):
     return list(DNS.get((name, rdtype), []))
+
+
+def _days_ago(days: float) -> str:
+    return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# The Entra ID recycle bin (/directory/deletedItems), relative to today since Microsoft keeps items for 30
+# days: a licensed leaver with 5 days left to restore, a guest with 4, a recent leaver, a team about to go
+# and a group deleted yesterday.
+DELETED_USERS = [
+    {"id": "du1", "displayName": "Dan Leaver", "userPrincipalName": "du1dan@x.com", "mail": "dan@x.com",
+     "userType": "Member", "deletedDateTime": _days_ago(25), "accountEnabled": False, "jobTitle": "Sales",
+     "department": "Sales", "assignedLicenses": [{"skuId": "sku-bp"}]},
+    {"id": "du2", "displayName": "Old Guest", "userPrincipalName": "du2old_guest#EXT#@x.com", "mail": None,
+     "userType": "Guest", "deletedDateTime": _days_ago(26), "accountEnabled": True, "assignedLicenses": []},
+    {"id": "du3", "displayName": "Eve Recent", "userPrincipalName": "du3eve@x.com", "mail": "eve@x.com",
+     "userType": "Member", "deletedDateTime": _days_ago(3), "accountEnabled": True, "department": "Finance",
+     "assignedLicenses": [{"skuId": "sku-bp"}]},
+]
+DELETED_GROUPS = [
+    {"id": "dg1", "displayName": "Project Falcon", "mail": "falcon@x.com", "groupTypes": ["Unified"],
+     "deletedDateTime": _days_ago(28), "mailEnabled": True, "securityEnabled": False,
+     "resourceProvisioningOptions": ["Team"]},
+    {"id": "dg2", "displayName": "Marketing", "mail": "marketing@x.com", "groupTypes": ["Unified"],
+     "deletedDateTime": _days_ago(1), "mailEnabled": True, "securityEnabled": False,
+     "resourceProvisioningOptions": []},
+]

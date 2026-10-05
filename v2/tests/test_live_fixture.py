@@ -83,6 +83,11 @@ STAND_INS = {
              "id": "X509Certificate", "state": "disabled", "includeTargets": [], "excludeTargets": []},
         ],
     },
+    # The Entra ID recycle bin, empty as in a fresh test tenant.
+    "/v1.0/directory/deletedItems/microsoft.graph.user": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users", "value": []},
+    "/v1.0/directory/deletedItems/microsoft.graph.group": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups", "value": []},
 }
 # Requests whose $select asks for fields added since the recording; the recorded response is served.
 NEW_FIELDS = frozenset({"/v1.0/domains"})
