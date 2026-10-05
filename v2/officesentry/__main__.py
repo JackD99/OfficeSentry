@@ -11,11 +11,10 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from . import store
+from . import alerts, mailer, store
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
-from .mailer import ENCRYPTED_KEYS as ENCRYPTED_SETTINGS
 from .text import plural
 
 
@@ -76,24 +75,47 @@ def cmd_create_app(args, cfg):
     print("Next: add tenants in the portal and send each tenant admin its consent link.")
 
 
-# Every encrypted value at rest, as (table, key column, encrypted column).
+# Every encrypted value at rest, as (table, key column, encrypted column)...
 ENCRYPTED_COLUMNS = (
     ("app_connections", "id", "key_enc"),
     ("users", "id", "totp_secret_enc"),
     ("users", "id", "totp_pending_enc"),
 )
+# ...and every encrypted key in the settings table. Encrypted names end in "_enc";
+# tests/test_key_rotation.py fails if one isn't listed here.
+ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS)
+
+
+def unregistered_encrypted(conn) -> list[str]:
+    """Encrypted-looking columns and settings that rotation doesn't know about."""
+    known = {(t, c) for t, _k, c in ENCRYPTED_COLUMNS}
+    found = []
+    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+        found += [f"{table}.{c['name']}" for c in conn.execute(f"PRAGMA table_info({table})").fetchall()
+                  if c["name"].endswith("_enc") and (table, c["name"]) not in known]
+    found += [f"settings {r[0]}" for r in conn.execute(
+        "SELECT key FROM settings WHERE key LIKE '%\\_enc' ESCAPE '\\' AND value <> ''").fetchall()
+        if r[0] not in ENCRYPTED_SETTINGS]
+    return found
 
 
 def reencrypt_all(conn, vault) -> int:
-    """Re-encrypt every stored secret with the vault's first key. Returns how many values changed."""
+    """Re-encrypt every stored secret with the vault's first key. Returns how many values changed.
+
+    Refuses (changing nothing) if the database holds an encrypted value that isn't
+    registered above, rather than leaving it readable only with the old key.
+    """
     count = 0
     with transaction(conn, immediate=True):
+        if missing := unregistered_encrypted(conn):
+            raise RuntimeError("rotate-keys doesn't know how to re-encrypt " + ", ".join(missing)
+                               + "; add it to ENCRYPTED_COLUMNS or ENCRYPTED_SETTINGS. Nothing was changed.")
         for table, key, column in ENCRYPTED_COLUMNS:
             rows = conn.execute(f"SELECT {key}, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")
             for row in rows.fetchall():
                 conn.execute(f"UPDATE {table} SET {column} = ? WHERE {key} = ?", (vault.rotate(row[1]), row[0]))
                 count += 1
-        # Mail passwords and secrets are encrypted with the same keys.
+        # Mail passwords and secrets, and the alert webhook, are encrypted with the same keys.
         secrets = conn.execute(
             f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(ENCRYPTED_SETTINGS))})"
             " AND value <> ''", ENCRYPTED_SETTINGS).fetchall()
@@ -121,7 +143,10 @@ def cmd_rotate_keys(args, cfg):
                      "old key. Set a new OFFICESENTRY_SECRET_KEY to sign everyone out.")
         fresh = new_secrets()
         keys = fresh["encryption_keys"] + keys
-    count = reencrypt_all(conn, Vault(keys))
+    try:
+        count = reencrypt_all(conn, Vault(keys))
+    except RuntimeError as exc:
+        sys.exit(str(exc))
     if args.new:
         # Only now the data is readable with the new key alone is the old one dropped.
         write_private(cfg.secrets_path, json.dumps({"secret_key": fresh["secret_key"],

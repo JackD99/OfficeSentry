@@ -13,6 +13,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 
 from .. import lifecycle, store, tenant_health
 from ..db import audit
+from ..prospect import tenant_id_for_domain
 from ..text import plural
 from .access import roles_required, tenant_or_404, visible_tenants
 from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, not_connected
@@ -123,6 +124,11 @@ def edit(tenant_id: int):
         if has_data and not (GUID_RE.match(ref) and not GUID_RE.match(t["tenant_ref"])):
             problem = ("Office Sentry has already collected data from this tenant, so its tenant ID can't change. "
                        "To report on a different tenant, add it as a new tenant.")
+        elif has_data and (expected := tenant_id_for_domain(t["tenant_ref"].lower())) != ref:
+            # Data came from the domain's tenant: the GUID must be that same tenant, not another client's.
+            problem = (f"{ref} isn't the tenant ID Microsoft gives for {t['tenant_ref']} ({expected})." if expected
+                       else f"Office Sentry couldn't confirm the tenant ID for {t['tenant_ref']} with Microsoft just "
+                            "now. Try again in a few minutes.")
         elif g.db.execute("SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (ref, t["id"])).fetchone():
             problem = "Another tenant already uses that tenant ID or domain."
     if problem:

@@ -90,14 +90,15 @@ def tenant_or_404(tenant_id: int):
     return tenant
 
 
-def safe_next(target: str | None) -> str:
-    """Only allow same-site, path-only redirects after login.
+def safe_next(target: str | None, fallback: str | None = None) -> str:
+    """Only allow same-site, path-only redirects (after sign-in, and back to the page a form came from).
 
     Browsers drop tabs and newlines from URLs and treat a backslash as a slash,
     so "/\t/evil.example" or "/\\evil.example" would leave the site; any control
-    character, backslash, scheme or host is refused.
+    character, backslash, scheme or host is refused, and ``fallback`` (the
+    dashboard by default) is used instead.
     """
-    fallback = url_for("tenants.dashboard")
+    fallback = fallback or url_for("tenants.dashboard")
     if not target or len(target) > 2000 or not target.startswith("/") or target.startswith("//"):
         return fallback
     if "\\" in target or any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in target):

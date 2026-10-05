@@ -48,7 +48,7 @@ This stops all access straight away. We are deleting everything Office Sentry co
         <li>{{ stored.schedules|plural('emailed report') }}, {{ stored.alerts|plural('alert email') }}, {{ stored.contacts|plural('client contact') }} and {{ stored.deliveries|plural('line') }} of email history</li>
         <li>Access for {{ stored.access|plural('Office Sentry user') }}{% if other_users %}: {% for u in other_users %}{{ u.username }} ({{ u.role }}){{ ', ' if not loop.last }}{% endfor %} lose access to this tenant only{% endif %}</li>
       </ul>
-      <p class="small muted m0">Activity log entries stay, so you can see who offboarded the client and when.</p>
+      <p class="small muted m0">Activity log entries stay, so you can see who offboarded the client and when, but details naming the client's people (accepted findings, contacts, alert errors) and deleted client accounts' names and addresses are removed. Deleted data is overwritten in the database. Backups made before today still hold it until they rotate out (7 backups by default).</p>
     </div>
   </li>
 </ol>

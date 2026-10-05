@@ -7,7 +7,7 @@ import re
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
-from .. import store
+from .. import store, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
@@ -35,7 +35,14 @@ def _user_or_404(user_id: int):
 @roles_required("admin")
 def users():
     rows = g.db.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
-    return render_template("users.html", users=rows, roles=ROLES)
+    cfg = current_app.extensions["officesentry.config"]
+    two_step = {
+        "policy": cfg.mfa_policy(g.db),
+        "from_env": cfg.require_mfa_explicit,
+        "clients_without": sum(1 for u in rows if u["role"] == "client" and not u["totp_enabled_at"]
+                               and not u["disabled"]),
+    }
+    return render_template("users.html", users=rows, roles=ROLES, two_step=two_step)
 
 
 @bp.post("/users")
@@ -55,7 +62,8 @@ def create_user():
         flash(problem, "error")
         return redirect(url_for("admin.users"))
     cur = g.db.execute(
-        "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
+        # The admin chose this password, so they replace it at first sign-in.
+        "INSERT INTO users (username, password_hash, role, created_at, must_change_password) VALUES (?, ?, ?, ?, 1)",
         (username, generate_password_hash(password), role, utcnow()),
     )
     audit(g.db, g.user["username"], "user_created", detail=f"{username} ({role})")
@@ -98,7 +106,7 @@ def edit_user(user_id: int):
                 flash(problem, "error")
             else:
                 g.db.execute("UPDATE users SET password_hash = ?, session_version = session_version + 1,"
-                             " failed_logins = 0, locked_until = NULL WHERE id = ?",
+                             " failed_logins = 0, locked_until = NULL, must_change_password = 1 WHERE id = ?",
                              (generate_password_hash(request.form["password"]), user_id))
                 audit(g.db, g.user["username"], "user_password_reset", detail=user["username"])
         flash("Saved.", "success")
@@ -108,7 +116,8 @@ def edit_user(user_id: int):
     return render_template(
         "user_edit.html", user=user, tenants=tenants, granted=granted, roles=ROLES,
         sessions=sessions.list_for(user_id), locked=_is_locked(user),
-        two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"]),
+        failures=throttle.recent_failures(g.db, user["username"]),
+        two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
     )
 
 
@@ -149,6 +158,7 @@ def sign_out_user(user_id: int):
 def unlock_user(user_id: int):
     user = _user_or_404(user_id)
     g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", (user_id,))
+    throttle.clear(g.db, user["username"])
     audit(g.db, g.user["username"], "user_unlocked", detail=user["username"])
     flash(f"{user['username']} can sign in again.", "success")
     return redirect(url_for("admin.edit_user", user_id=user_id))

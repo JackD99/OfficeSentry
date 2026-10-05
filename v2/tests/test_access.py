@@ -103,8 +103,8 @@ def test_lockout_after_repeated_failures(client, db):
     make_user(db, "admin")
     for _ in range(5):
         login(client, "admin", "wrong password!!")
-    resp = login(client, "admin")  # right password, but locked
-    assert resp.status_code == 200
+    resp = login(client, "admin")  # right password, but this address has to wait
+    assert resp.status_code == 429
     assert client.get("/").status_code == 302
 
 

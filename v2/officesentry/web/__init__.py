@@ -16,6 +16,7 @@ from ..db import connect, migrate
 from . import (
     access,
     across,
+    activity,
     admin,
     alerts,
     auth,
@@ -137,4 +138,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(people.bp)
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
+    app.register_blueprint(activity.bp)
     return app

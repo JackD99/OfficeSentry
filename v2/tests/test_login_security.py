@@ -115,7 +115,7 @@ def test_password_lockout_and_admin_unlock(client, db):
     uid = make_user(db, "analyst", role="analyst")
     for _ in range(5):
         login(client, "analyst", "wrong password!")
-    assert login(client, "analyst").status_code == 200  # locked, so not signed in
+    assert login(client, "analyst").status_code == 429  # this address waits, so not signed in
     make_user(db, "boss")
     other = client.application.test_client()
     login(other, "boss")
@@ -132,12 +132,55 @@ def test_turn_on_and_off_from_account_page(client, db, vault, staff_mfa):
     make_user(db, "client", role="client")
     login(client, "client")
     assert "Two-step sign-in is off" in client.get("/account").get_data(as_text=True)
-    client.get("/two-step/setup")
+    assert 'name="password"' in client.get("/two-step/setup").get_data(as_text=True)
     secret = pending_secret(db, vault, "client")
-    client.post("/two-step/setup", data={"code": totp.code(secret)})
+    # Someone using a stolen session can't add their own authenticator without the password.
+    page = client.post("/two-step/setup", data={"code": totp.code(secret), "password": "not the password"})
+    assert "That password isn&#39;t right" in page.get_data(as_text=True)
+    assert db.execute("SELECT totp_enabled_at FROM users").fetchone()[0] is None
+    client.post("/two-step/setup", data={"code": totp.code(secret), "password": PASSWORD})
+    assert db.execute("SELECT totp_enabled_at FROM users").fetchone()[0]
     assert client.get("/account").status_code == 200  # still signed in on this browser
     client.post("/account/two-step/turn-off", data={"password": PASSWORD})
     assert db.execute("SELECT totp_enabled_at FROM users").fetchone()[0] is None
+
+
+NEW_PASSWORD = "my own long passphrase"
+
+
+def test_a_password_an_admin_chose_is_replaced_before_two_step_setup(app, cfg, db, vault):
+    make_user(db, "boss")
+    boss = app.test_client()
+    login(boss, "boss")
+    boss.post("/admin/users", data={"username": "ana", "role": "analyst", "password": PASSWORD})
+    cfg.require_mfa = "staff"  # analysts must use two-step
+    ana = app.test_client()
+    # Whoever learns the password the admin chose can't go straight to adding their own authenticator...
+    assert login(ana, "ana").headers["Location"].endswith("/login/new-password")
+    assert ana.get("/two-step/setup").headers["Location"].endswith("/login")
+    assert ana.get("/").status_code == 302
+    page = ana.post("/login/new-password", data={"password": PASSWORD, "confirm": PASSWORD})
+    assert "not the one you were given" in page.get_data(as_text=True)
+    # ...the password is replaced first, then two-step is set up, and the given password stops working.
+    resp = ana.post("/login/new-password", data={"password": NEW_PASSWORD, "confirm": NEW_PASSWORD})
+    assert resp.headers["Location"].endswith("/two-step/setup")
+    ana.get("/two-step/setup")
+    ana.post("/two-step/setup", data={"code": totp.code(pending_secret(db, vault, "ana"))})
+    assert ana.get("/").status_code == 200
+    assert db.execute("SELECT must_change_password FROM users WHERE username = 'ana'").fetchone()[0] == 0
+    assert login(app.test_client(), "ana").status_code == 200
+
+
+def test_a_reset_password_is_replaced_after_the_two_step_code(client, db, vault, staff_mfa, app):
+    uid = make_user(db, "ana", role="analyst")
+    secret, _codes = enrol(client, db, vault, "ana")
+    client.post("/logout")
+    db.execute("UPDATE users SET must_change_password = 1 WHERE id = ?", (uid,))  # an admin reset it
+    assert login(client, "ana").headers["Location"].endswith("/login/code")  # the code still comes first
+    resp = client.post("/login/code", data={"code": next_code(secret)})
+    assert resp.headers["Location"].endswith("/login/new-password")
+    resp = client.post("/login/new-password", data={"password": NEW_PASSWORD, "confirm": NEW_PASSWORD})
+    assert resp.headers["Location"] == "/" and client.get("/").status_code == 200
 
 
 def test_admin_can_reset_lost_phone(client, db, vault, staff_mfa):

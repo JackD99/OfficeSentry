@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import ts, downloads %}
+{% block title %}Activity log · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Activity log</h1><div class="sub">Who signed in, and who changed what, newest first.</div></div>
+  {{ downloads([('CSV', url_for('activity.export', **query), 'Everything matching these filters')]) }}
+</div>
+<section class="card">
+  <form method="get" action="{{ url_for('activity.index') }}">
+    <div class="form-row">
+      <label>User <input name="user" value="{{ filters.user }}" list="activity-users" maxlength="64" autocomplete="off"></label>
+      <datalist id="activity-users">{% for u in users %}<option value="{{ u }}">{% endfor %}</datalist>
+      <label>Action <select name="action"><option value="">Any</option>
+        {% for a in actions %}<option value="{{ a }}" {% if a == filters.action %}selected{% endif %}>{{ a|replace('_', ' ')|capitalize }}</option>{% endfor %}
+      </select></label>
+      <label>Tenant <select name="tenant"><option value="">Any</option>
+        {% for tid, name in tenants %}<option value="{{ tid }}" {% if tid == filters.tenant %}selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select></label>
+      <label>From <input type="date" name="from" value="{{ filters['from'] or '' }}"></label>
+      <label>To <input type="date" name="to" value="{{ filters.to or '' }}"></label>
+      <div class="field"><button class="primary">Filter</button> <a class="btn ghost" href="{{ url_for('activity.index') }}">Clear</a></div>
+    </div>
+  </form>
+</section>
+<section class="card flush">
+  {% if rows %}
+  <table class="stack-sm">
+    <thead><tr><th>When</th><th>User</th><th>Action</th><th>Tenant</th><th>Address</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr><td class="nowrap">{{ ts(r.ts) }}</td>
+      <td data-label="User">{{ r.username or '' }}</td>
+      <td data-label="Action">{{ r.action|replace('_', ' ')|capitalize }}</td>
+      <td data-label="Tenant">{{ tenant_label(r.tenant_id, names) }}</td>
+      <td data-label="Address" class="mono small">{{ r.ip or '' }}</td>
+      <td data-label="Detail" class="small">{{ r.detail or '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty compact">Nothing matches these filters.</div>
+  {% endif %}
+</section>
+<div class="toolbar">
+  <span class="muted small">Page {{ page }}</span>
+  <span>
+    {% if page > 1 %}<a class="btn sm" href="{{ url_for('activity.index', page=page - 1, **query) }}">Newer</a>{% endif %}
+    {% if has_next %}<a class="btn sm" href="{{ url_for('activity.index', page=page + 1, **query) }}">Older</a>{% endif %}
+  </span>
+</div>
+<p class="footnote">Failed and slowed-down sign-ins are kept for {{ noise_days }} days; everything else is kept. Failed sign-ins with usernames that don't exist are counted per address and hour without the name that was typed. Addresses are the visitor's as the portal sees it (set <code>OFFICESENTRY_TRUSTED_PROXIES</code> behind a proxy).</p>
+{% endblock %}

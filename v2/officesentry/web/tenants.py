@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
-from datetime import UTC, datetime
+import secrets
+from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -12,6 +14,7 @@ from .. import lifecycle, store, tenant_health
 from ..collectors import REGISTRY
 from ..db import audit, transaction, utcnow
 from ..entra import admin_consent_url
+from ..prospect import tenant_id_for_domain
 from ..text import plural
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 
@@ -129,12 +132,49 @@ def new_tenant():
     return render_template("tenant_new.html", connections=connections)
 
 
+CONSENT_LINK_LIFETIME = timedelta(hours=1)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _nonce_hash(nonce: str) -> str:
+    return hashlib.sha256(nonce.encode()).hexdigest()
+
+
 def _consent_link(t, connection):
-    if g.user["role"] != "admin" or not connection or not connection["client_id"]:
+    """A Microsoft admin-consent link for this tenant, or None if this user can't use one.
+
+    Its signed state carries a random nonce. The callback accepts that nonce once,
+    within the hour, from this admin's signed-in browser (see ``consent_requests``).
+    """
+    if g.user["role"] != "admin" or not connection or not connection["client_id"] or g.get("session_row") is None:
         return None
-    state = _consent_serializer().dumps({"t": t["id"]})
+    nonce = secrets.token_urlsafe(24)
+    now = datetime.now(UTC)
+    g.db.execute("DELETE FROM consent_requests WHERE expires_at < ?", (_iso(now),))
+    g.db.execute(
+        "INSERT INTO consent_requests (nonce_hash, tenant_id, user_id, session_hash, created_at, expires_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (_nonce_hash(nonce), t["id"], g.user["id"], g.session_row["token_hash"], _iso(now),
+         _iso(now + CONSENT_LINK_LIFETIME)),
+    )
+    state = _consent_serializer().dumps({"t": t["id"], "n": nonce})
     return admin_consent_url(connection["client_id"], t["tenant_ref"],
                              _cfg().base_url + url_for("tenants.consent_callback"), state)
+
+
+def _use_consent_nonce(tenant_id: int, nonce) -> bool:
+    """Mark the link's nonce used. False if it isn't this browser's, has expired or was used before."""
+    if not isinstance(nonce, str) or not nonce or g.get("session_row") is None:
+        return False
+    now = _iso(datetime.now(UTC))
+    return g.db.execute(
+        "UPDATE consent_requests SET used_at = ? WHERE nonce_hash = ? AND tenant_id = ? AND user_id = ?"
+        " AND session_hash = ? AND used_at IS NULL AND expires_at > ?",
+        (now, _nonce_hash(nonce), tenant_id, g.user["id"], g.session_row["token_hash"], now),
+    ).rowcount == 1
 
 
 @bp.get("/tenants/<int:tenant_id>")
@@ -246,10 +286,19 @@ def test_connection(tenant_id: int):
 @roles_required("admin")
 def consent_callback():
     try:
-        data = _consent_serializer().loads(request.args.get("state", ""), max_age=3600)
+        data = _consent_serializer().loads(request.args.get("state", ""),
+                                           max_age=int(CONSENT_LINK_LIFETIME.total_seconds()))
     except BadSignature:
         abort(400)
-    t = tenant_or_404(int(data["t"]))
+    if not isinstance(data, dict) or not isinstance(data.get("t"), int):
+        abort(400)
+    t = tenant_or_404(data["t"])
+    if not _use_consent_nonce(t["id"], data.get("n")):
+        audit(g.db, g.user["username"], "consent_link_refused", t["id"],
+              "used before, expired or opened in another browser")
+        flash("That consent link has already been used or has expired, or it was opened in a different browser. "
+              "Nothing was recorded. Open a new consent link from this page.", "error")
+        return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
     if request.args.get("error"):
         from ..connection_check import explain
 
@@ -262,15 +311,34 @@ def consent_callback():
         abort(400)
 
     returned = request.args.get("tenant", "").lower()
+    swap_to, unconfirmed = None, False
+    if GUID_RE.match(returned) and returned != t["tenant_ref"].lower():
+        refused = None
+        if GUID_RE.match(t["tenant_ref"]):  # never re-point a tenant that already has its ID
+            refused = "Consent came from a different tenant than this one."
+        elif (expected := tenant_id_for_domain(t["tenant_ref"].lower())) is None:
+            unconfirmed = True  # record the consent, but keep signing in by domain
+        elif expected != returned:
+            # Anyone holding the link could otherwise point this client at another client's tenant.
+            refused = (f"Consent came from a different tenant than {t['tenant_ref']}, so it wasn't recorded. "
+                       "Open the consent link again and sign in as an administrator of that tenant.")
+        elif g.db.execute("SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (returned, t["id"])).fetchone():
+            refused = "Another tenant in Office Sentry already uses this tenant ID, so consent wasn't recorded here."
+        else:
+            swap_to = returned
+        if refused:
+            audit(g.db, g.user["username"], "consent_refused", t["id"], f"returned {returned}")
+            flash(refused, "error")
+            return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
     with transaction(g.db):
-        if GUID_RE.match(returned) and returned != t["tenant_ref"]:
-            if GUID_RE.match(t["tenant_ref"]):
-                flash("Consent came from a different tenant than this one.", "error")
-                return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
-            # Replace the domain with the stable tenant GUID.
-            g.db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (returned, t["id"]))
+        if swap_to:  # replace the domain with the stable tenant GUID Microsoft confirmed for it
+            g.db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (swap_to, t["id"]))
         g.db.execute("UPDATE tenants SET consented_at = ? WHERE id = ?", (utcnow(), t["id"]))
-        audit(g.db, g.user["username"], "consent_granted", t["id"], returned)
+        audit(g.db, g.user["username"], "consent_granted", t["id"],
+              returned + (" (tenant ID not confirmed, kept the domain)" if unconfirmed else ""))
+    if unconfirmed:
+        flash(f"Office Sentry couldn't confirm the tenant ID for {t['tenant_ref']} with Microsoft just now, so it "
+              "keeps using the domain, which works too. You can enter the tenant ID under Manage later.", "warning")
     if t["enabled"] and not t["archived_at"]:
         for key in REGISTRY:  # tenant_profile is first, so licence-dependent collectors see its result
             store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
