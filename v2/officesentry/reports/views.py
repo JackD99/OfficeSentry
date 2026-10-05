@@ -42,6 +42,7 @@ MAX_PARAMS = 60
 _SLUG = re.compile(r"^[a-z0-9-]{1,80}$")
 _DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 _SIZE = re.compile(r"^([\d.,]+)\s*(bytes|KB|MB|GB|TB)$")
+_PERCENT = re.compile(r"^-?[\d.,]+%$")
 _SIZES = {"bytes": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 ** 4}
 
 Key = tuple[str, str]  # (table slug, column slug)
@@ -234,9 +235,17 @@ def _age_matches(cell, preset: str, today: date) -> bool:
     return days > int(preset[2:])
 
 
+def _is_measure(cell) -> bool:
+    """A number, a size ("105.4 GB") or a percentage ("88%"): right-aligned and largest first."""
+    if _is_number(cell):
+        return True
+    text = str(cell).strip()
+    return bool(_SIZE.match(text) or _PERCENT.match(text))
+
+
 def _kind(cells: list) -> str:
     filled = [c for c in cells if str(c).strip() not in ("", "–")]
-    if filled and all(_is_number(c) for c in filled):
+    if filled and all(_is_measure(c) for c in filled):
         return "num"
     dates = sum(1 for c in filled if as_date(c))
     return "date" if dates and dates * 2 >= len(filled) else "text"
