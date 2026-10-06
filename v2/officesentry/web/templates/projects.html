@@ -1,0 +1,71 @@
+{#- Recommended projects across every tenant (projects.pipeline), for account managers. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, downloads %}
+{% from "_projects.html" import status_pill, status_form with context %}
+{% block title %}Projects · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Recommended projects</h1>
+  <div class="sub">Work each client's Microsoft 365 data shows they need, from the latest collection. A project drops off once the tenant is fixed.</div></div></div>
+
+{% if not data.rows %}
+<div class="card empty">
+  <h3>No tenants to show</h3>
+  <p>{% if current_user.role == 'admin' %}Add a tenant to see it here.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
+</div>
+{% else %}
+<div class="tiles">
+  <div class="tile"><div class="label">Clients with a recommendation</div><div class="value">{{ data.tenants_with }}</div>
+    <div class="foot">of {{ data.rows|length }} tenants</div></div>
+  <div class="tile"><div class="label">Suggested</div><div class="value">{{ data.count(project, 'suggested') }}</div>
+    <div class="foot">not yet put to the client</div></div>
+  <div class="tile"><div class="label">Proposed</div><div class="value">{{ data.count(project, 'proposed') }}</div>
+    <div class="foot">waiting on the client</div></div>
+  <div class="tile"><div class="label">Agreed</div><div class="value">{{ data.count(project, 'agreed') }}</div>
+    <div class="foot">still showing in the data</div></div>
+</div>
+
+<nav class="subtabs" aria-label="Project">
+  <a href="{{ url_for('projects.index', view='declined' if declined else None) }}"{% if not project %} class="active" aria-current="page"{% endif %}>Every project</a>
+  {% for p in catalog %}{% set n = data.count(p.key) %}{% if n or p.key == project %}<a href="{{ url_for('projects.index', project=p.key, view='declined' if declined else None) }}"{% if p.key == project %} class="active" aria-current="page"{% endif %}>{{ p.title }}<span class="faint"> {{ n }}</span></a>{% endif %}{% endfor %}
+</nav>
+
+<div class="card flush">
+  <div class="card-head toolbar">
+    <div><h2>{{ 'Declined' if declined else 'Open' }} <span class="count-badge">{{ items|length }}</span></h2>
+      <p class="muted small">{% if declined %}Projects a client turned down. Set one back to Suggested to bring it back.{% else %}Worst problems first. Open a client to see the findings behind each project and download a proposal.{% endif %}</p></div>
+    <div class="toolbar-actions">
+      <a class="small" href="{{ url_for('projects.index', project=project or None, view=None if declined else 'declined') }}">{{ 'Show open' if declined else 'Show declined (' ~ data.count(project, 'declined') ~ ')' }}</a>
+      {% if items|length > 8 %}<input class="search sm" type="search" data-filter="projects-table" placeholder="Filter…" aria-label="Filter by client or project">{% endif %}
+      {{ downloads([('XLSX', url_for('projects.download', ext='xlsx', project=project or None, view='declined' if declined else None), 'This list, with notes'),
+                    ('CSV', url_for('projects.download', ext='csv', project=project or None, view='declined' if declined else None), 'This list, with notes')]) }}
+    </div>
+  </div>
+  {% if items %}
+  <div class="table-scroll{{ ' tall' if items|length > 15 }}">
+  <table class="stack-sm" id="projects-table">
+    <thead><tr><th>Client</th><th>Project</th><th>Priority</th><th>Why</th><th>Size</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for t, rec in items %}
+    <tr data-name="{{ (t.name ~ ' ' ~ rec.project.title ~ ' ' ~ rec.reasons|map(attribute='summary')|join(' '))|lower }}">
+      <td><a class="strong" href="{{ url_for('projects.tenant', tenant_id=t.id) }}#project-{{ rec.project.key }}">{{ t.name }}</a></td>
+      <td data-label="Project">{{ rec.project.title }}</td>
+      <td data-label="Priority"><span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span></td>
+      <td data-label="Why" class="wrap small">{% for r in rec.reasons[:3] %}{{ r.summary }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if rec.reasons|length > 3 %}<span class="faint"><br>and {{ rec.reasons|length - 3 }} more</span>{% endif %}
+        {% if rec.note %}<span class="sub muted">Note: {{ rec.note }}</span>{% endif %}</td>
+      <td data-label="Size" class="nowrap">{{ rec.size or '–' }}</td>
+      <td data-label="Status">{{ status_form(t, rec, statuses, back='all', project=project, note=False) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<div class="empty compact"><p>{% if declined %}Nothing declined.{% else %}No projects to recommend{% if project %} of this kind{% endif %}. Every tenant passes the checks behind them, or their findings are accepted risks.{% endif %}</p></div>{% endif %}
+  {% set no_data = data.rows|selectattr('note')|list %}
+  {% if no_data %}<p class="footnote pad">Not included: {% for row in no_data %}{{ row.tenant.name }} ({{ row.note|lower|replace('.', '') }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+</div>
+<p class="footnote">Recommendations come from the same checks as the monthly review. Findings accepted as a risk don't count towards them.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

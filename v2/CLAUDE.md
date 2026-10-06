@@ -63,6 +63,13 @@ without a OneDrive aren't asked about for a week.
   is listed, with `RuleResult.action` (the recommendation's first instruction)
   under it. Count things with `text.plural(n, "account")` (the `plural` filter
   in templates), never "account(s)".
+- A check that calls for work an MSP would sell goes in one project's
+  `checks` in `projects.CATALOG` (each check in at most one;
+  `test_projects.py` checks). Recommended projects (`/projects`, per tenant
+  `/tenants/<id>/projects` and its proposal PDF) are worked out from the
+  checks on every view, leaving out accepted risks; only the account
+  manager's status and note are stored (`project_status`). Conditions no
+  check covers (a missing licence) are `signals` on the project.
 - Detail reports are builders in `reports/data_reports.py` returning
   `Section`s of rows; register them in `REPORTS` and they get a page, a tab
   and XLSX, CSV and PDF exports. Add the key to a menu group in

@@ -1,0 +1,39 @@
+{#- One tenant's recommended projects (projects.recommend). Staff only. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header, downloads with context %}
+{% from "_projects.html" import status_pill, status_form with context %}
+{% block title %}Projects · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'projects', title='Recommended projects') }}
+{% set open = recs|rejectattr('status', 'equalto', 'declined')|list %}
+<div class="toolbar">
+  <p class="muted small intro-line">Projects this tenant's latest data calls for, worst problems first. They update after each collection and drop off once the problems are fixed.</p>
+  {% if open %}<div class="toolbar-actions">{{ downloads([('PDF', url_for('projects.pdf', tenant_id=tenant.id), 'A proposal for the client: every project not declined, without the team notes')]) }}</div>{% endif %}
+</div>
+
+{% for rec in recs %}{% set p = rec.project %}
+<section class="card project" id="project-{{ p.key }}">
+  <div class="card-head">
+    <div><h2>{{ p.title }}</h2>
+      <div class="meta"><span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% if rec.size %} · {{ rec.size }}{% endif %} · {{ status_pill(rec) }}</div></div>
+  </div>
+  <p>{{ p.pitch }}</p>
+  <div class="project-cols">
+    <div><h3 class="col-title">What we found</h3>
+      <ul class="list compact">{% for r in rec.reasons %}
+        <li><span class="sevtext {{ r.severity }}">{{ r.severity }}</span><span class="grow">{% if r.check %}<a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}#check-{{ r.check }}">{{ r.summary }}</a>{% else %}{{ r.summary }}{% endif %}
+          <span class="desc">{{ r.title }}</span></span></li>{% endfor %}
+      </ul></div>
+    <div><h3 class="col-title">What the project covers</h3>
+      <ul class="covers">{% for c in p.covers %}<li>{{ c }}</li>{% endfor %}</ul></div>
+  </div>
+  {{ status_form(tenant, rec, statuses) }}
+  {% if rec.updated_by %}<p class="footnote">Last changed by {{ rec.updated_by }}, {{ rec.updated_at|ago }}.</p>{% endif %}
+</section>
+{% else %}
+<div class="card empty">
+  <h3>No projects to recommend</h3>
+  <p>Nothing in this tenant's latest data calls for one{% if not tenant_has_data %}, or no data has been collected yet{% endif %}. Findings accepted as a risk don't count.</p>
+</div>
+{% endfor %}
+{% endblock %}

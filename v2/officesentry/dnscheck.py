@@ -2,8 +2,7 @@
 
 ``lookup`` (DNS) and ``fetch_mta_sts`` (the MTA-STS policy file over HTTPS)
 are the only functions that touch the network; everything else is pure, so
-tests replace them and the same analysis serves both client tenants and
-prospect assessments.
+tests replace them.
 """
 
 from __future__ import annotations
@@ -308,8 +307,7 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
     """What's wrong with a domain's email authentication, most serious first.
 
     With ``transport``, also MTA-STS and TLS-RPT: whether mail sent to the
-    domain has to arrive encrypted. That isn't about spoofing, so prospect
-    grades leave it out.
+    domain has to arrive encrypted.
     """
     out: list[Issue] = []
     if not h.sends_mail:

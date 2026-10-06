@@ -32,7 +32,7 @@ FLAG_FILLS = {"critical": ("FDECEA", "B42318"), "high": ("FDF0E6", "B54708"), "m
 class Cover:
     """What the summary sheet says about the workbook."""
     title: str
-    client: str = ""  # tenant or prospect name, or "All tenants"
+    client: str = ""  # tenant name, or "All tenants"
     generated_at: datetime | None = None
     prepared_by: str = ""
     tenant_ref: str = ""

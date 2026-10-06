@@ -1,0 +1,19 @@
+{#- Shared bits of the project pages. -#}
+{% from "_macros.html" import csrf %}
+{% set STATUS_TONE = {'suggested': '', 'proposed': 'info', 'agreed': 'ok', 'declined': ''} %}
+
+{% macro status_pill(rec) -%}
+<span class="pill {{ STATUS_TONE.get(rec.status, '') }}"{% if rec.updated_by %} title="{{ rec.updated_by }}, {{ rec.updated_at|when }}"{% endif %}>{{ rec.status_label }}</span>
+{%- endmacro %}
+
+{# Status picker. back='all' returns to the All tenants list (keeping its project filter). #}
+{% macro status_form(tenant, rec, statuses, back='tenant', project='', note=True) -%}
+<form method="post" action="{{ url_for('projects.set_status', tenant_id=tenant.id, key=rec.project.key) }}" class="project-status">
+  {{ csrf() }}<input type="hidden" name="back" value="{{ back }}">{% if project %}<input type="hidden" name="project" value="{{ project }}">{% endif %}
+  <label class="inline-label"><span class="sr-only">Status of {{ rec.project.title }} for {{ tenant.name }}</span>
+    <select name="status">{% for key, label in statuses.items() %}<option value="{{ key }}"{% if key == rec.status %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  {% if note %}<label class="grow"><span class="sr-only">Note</span><input name="note" maxlength="500" value="{{ rec.note }}" placeholder="Note for the team (optional)"></label>
+  {% else %}<input type="hidden" name="note" value="{{ rec.note }}">{% endif %}
+  <button class="sm">Save</button>
+</form>
+{%- endmacro %}

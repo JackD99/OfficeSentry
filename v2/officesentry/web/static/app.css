@@ -156,8 +156,6 @@ tr.flag-medium td:first-child { box-shadow: inset 3px 0 0 var(--sev-medium); }
 .sev-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .sev-legend .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .new-tag { font-size: .6875rem; font-weight: 700; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 5px; margin-left: 4px; }
-.grade { display: inline-grid; place-items: center; width: 28px; height: 28px; font-weight: 800; border-radius: 8px; color: #fff; }
-.grade-A { background: var(--ok); } .grade-C { background: var(--sev-medium); } .grade-F { background: var(--bad); }
 
 /* -- Buttons ------------------------------------------------------------- */
 button, .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-weight: 500; line-height: 1.4; cursor: pointer; white-space: nowrap; text-decoration: none; }
@@ -873,3 +871,18 @@ main:focus { outline: none; }
 .action-row select, .action-row input { width: auto; }
 textarea.commentary { width: 100%; min-height: 9em; }
 .coverage-gaps td .btn { white-space: nowrap; }
+
+/* -- Recommended projects ----------------------------------------------------- */
+.project .card-head .meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.project-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 12px 0 16px; }
+.project-cols .col-title { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 4px; }
+.project-cols .list > li { gap: 10px; }
+.project-cols .list .sevtext { flex: none; width: 64px; }
+.covers { margin: 0; padding-left: 18px; color: var(--text-2); }
+.covers li { margin: 4px 0; }
+.project-status { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.project-status .grow { flex: 1; min-width: 180px; margin: 0; }
+.project-status input, .project-status select { margin: 0; }
+@media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
+.project-cols .list .desc { display: block; }
+td .project-status { flex-wrap: nowrap; }
