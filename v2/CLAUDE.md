@@ -18,6 +18,14 @@ overview and DEPLOY.md for running it on a server.
   tenant-scoped loads the tenant with `access.tenant_or_404()`.
   `tests/test_access.py::test_every_page_requires_login` enforces the first.
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
+- **Microsoft hosts come from `clouds.py`** (commercial, GCC High, DoD,
+  China). A tenant (`tenants.cloud`) only signs in with an app connection of
+  the same cloud (`app_connections.cloud`, `worker.connection_cloud`); pass
+  the cloud to `GraphClient`, `ExchangeClient`, `msauth` and
+  `admin_consent_url`, and never spell out a Microsoft host elsewhere. Something
+  Microsoft doesn't offer in a cloud goes in that cloud's `missing` (a
+  collector key or `"<collector>.<part>"`): the worker warns instead of
+  running it, and reports and checks show it as unavailable with that reason.
 - **Credentials never touch disk as files** and are never sent to the browser.
 - **Mock Graph with `responses`, never by replacing `GraphClient`.**
 - **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump

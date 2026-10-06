@@ -5,8 +5,9 @@ Design rules (each one fixes a v1 bug):
 * Paths are relative to the API version, e.g. ``client.get_all("/users")``.
   Passing ``"/v1.0/..."`` or ``"/beta/..."`` raises instead of silently
   requesting ``/v1.0/v1.0/...``. Use ``version="beta"`` for beta endpoints.
-* Absolute URLs (``@odata.nextLink``) must point at graph.microsoft.com, so a
-  bearer token is never sent anywhere else.
+* Absolute URLs (``@odata.nextLink``) must point at the client's own cloud's
+  Graph host (graph.microsoft.com, graph.microsoft.us...; see ``clouds.py``),
+  so a bearer token is never sent anywhere else.
 * 429 and 5xx are retried, honouring ``Retry-After`` (seconds or an HTTP
   date); without it the exponential backoff is jittered so retries from
   parallel callers don't land together. :func:`is_transient` tells callers
@@ -27,9 +28,11 @@ from email.utils import parsedate_to_datetime
 
 import requests
 
+from . import clouds
+
 log = logging.getLogger(__name__)
 
-GRAPH_ROOT = "https://graph.microsoft.com"
+GRAPH_ROOT = clouds.get(clouds.DEFAULT).graph  # commercial; a client for another cloud uses its own
 VERSIONS = ("v1.0", "beta")
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 # Failures that a smaller or narrower query may avoid: no response (status 0)
@@ -103,7 +106,10 @@ class GraphClient:
         timeout: int = 60,
         sleep: Callable[[float], None] = time.sleep,
         jitter: Callable[[], float] = random.random,
+        cloud: str | None = None,
     ):
+        self.cloud = clouds.get(cloud)
+        self.root = self.cloud.graph
         self._token_provider = token_provider
         self._session = session or requests.Session()
         self._max_retries = max_retries
@@ -113,10 +119,11 @@ class GraphClient:
 
     @classmethod
     def from_certificate(cls, tenant_ref: str, client_id: str, key_pem: str,
-                         thumbprint: str, **kwargs) -> GraphClient:
+                         thumbprint: str, cloud: str | None = None, **kwargs) -> GraphClient:
         from .msauth import TokenError, shared_certificate_token_provider
 
-        provider = shared_certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, GRAPH_ROOT)
+        root = clouds.get(cloud).graph
+        provider = shared_certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, root, cloud)
 
         def token() -> str:
             try:
@@ -124,16 +131,17 @@ class GraphClient:
             except TokenError as exc:
                 raise GraphError(401, exc.code, exc.message) from exc
 
-        return cls(token, **kwargs)
+        return cls(token, cloud=cloud, **kwargs)
 
     # -- URL handling ------------------------------------------------------
 
     @staticmethod
-    def build_url(path: str, version: str = "v1.0") -> str:
+    def build_url(path: str, version: str = "v1.0", root: str = GRAPH_ROOT) -> str:
+        """The full URL for a version-relative path, on ``root`` (the client's cloud's Graph host)."""
         if version not in VERSIONS:
             raise ValueError(f"unknown Graph version {version!r}")
         if path.startswith("https://"):
-            if not path.startswith(GRAPH_ROOT + "/"):
+            if not path.startswith(root + "/"):
                 raise ValueError(f"refusing to send a Graph token to {path.split('/')[2]}")
             return path
         if not path.startswith("/"):
@@ -142,7 +150,7 @@ class GraphClient:
             raise ValueError(
                 f"Graph path {path!r} includes the API version; pass version= instead"
             )
-        return f"{GRAPH_ROOT}/{version}{path}"
+        return f"{root}/{version}{path}"
 
     # -- Requests ----------------------------------------------------------
 
@@ -193,20 +201,20 @@ class GraphClient:
 
     def get(self, path: str, params: dict | None = None, *, version: str = "v1.0",
             headers: dict | None = None) -> dict:
-        return self._get(self.build_url(path, version), params, headers)
+        return self._get(self.build_url(path, version, self.root), params, headers)
 
     def get_all(self, path: str, params: dict | None = None, *, version: str = "v1.0",
                 headers: dict | None = None, max_pages: int = 1000) -> PagedResult:
         """Follow ``@odata.nextLink`` and return every item of ``value``."""
         result = PagedResult()
-        url: str | None = self.build_url(path, version)
+        url: str | None = self.build_url(path, version, self.root)
         first = True
         while url:
             if result.pages >= max_pages:
                 result.truncated = True
                 log.warning("Stopped paging %s after %s pages", path, max_pages)
                 break
-            data = self._get(self.build_url(url, version), params if first else None, headers)
+            data = self._get(self.build_url(url, version, self.root), params if first else None, headers)
             first = False
             result.items.extend(data.get("value", []))
             result.pages += 1

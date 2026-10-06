@@ -106,6 +106,12 @@ def create_app(cfg: Config | None = None) -> Flask:
             resp.headers["Cache-Control"] = "no-store"
         return resp
 
+    from .. import clouds
+
+    # National clouds (clouds.py): the choices for tenant and app connection forms, and a label for any key.
+    app.jinja_env.globals.update(cloud_choices=clouds.CHOICES, cloud_label=lambda key: clouds.get(key).label,
+                                 cloud_of=clouds.of)
+
     @app.context_processor
     def _inject():
         user = g.get("user")
