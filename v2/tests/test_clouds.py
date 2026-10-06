@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import responses
 
-from officesentry import clouds, connection_check, msauth, prospect, store
+from officesentry import clouds, connection_check, discovery, msauth, store
 from officesentry.certs import generate_certificate
 from officesentry.entra import admin_consent_url
 from officesentry.exchange import EXCHANGE_ROOT, ExchangeClient
@@ -151,21 +151,11 @@ def test_tenant_id_for_domain_uses_the_clouds_sign_in_host():
     with responses.RequestsMock() as rsps:
         rsps.get("https://login.chinacloudapi.cn/contoso.partner.onmschina.cn/v2.0/.well-known/openid-configuration",
                  json={"issuer": f"https://login.chinacloudapi.cn/{TENANT}/v2.0"})
-        assert prospect.tenant_id_for_domain("contoso.partner.onmschina.cn", cloud="china") == TENANT
+        assert discovery.tenant_id_for_domain("contoso.partner.onmschina.cn", cloud="china") == TENANT
     with responses.RequestsMock() as rsps:  # an answer naming another host isn't believed
         rsps.get("https://login.microsoftonline.us/contoso.onmicrosoft.us/v2.0/.well-known/openid-configuration",
                  json={"issuer": f"https://login.microsoftonline.com/{TENANT}/v2.0"})
-        assert prospect.tenant_id_for_domain("contoso.onmicrosoft.us", cloud="gcc_high") is None
-
-
-def test_prospect_reads_the_cloud_from_discovery():
-    assert prospect.cloud_from_discovery({"cloud_instance_name": "microsoftonline.com"}) == "commercial"
-    assert prospect.cloud_from_discovery({"cloud_instance_name": "microsoftonline.us"}) == "gcc_high"
-    assert prospect.cloud_from_discovery({"cloud_instance_name": "microsoftonline.us",
-                                          "tenant_region_sub_scope": "DOD"}) == "dod"
-    assert prospect.cloud_from_discovery({"cloud_instance_name": "chinacloudapi.cn"}) == "china"
-    assert prospect.cloud_from_discovery({"cloud_instance_name": "partner.microsoftonline.cn"}) == "china"
-    assert prospect.cloud_from_discovery({}) is None
+        assert discovery.tenant_id_for_domain("contoso.onmicrosoft.us", cloud="gcc_high") is None
 
 
 # -- Tenants and app connections ---------------------------------------------------------------

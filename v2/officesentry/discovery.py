@@ -11,18 +11,24 @@ import re
 
 import requests
 
-LOGIN = "https://login.microsoftonline.com"
+from . import clouds
+
 DOMAIN_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 TENANT_GUID = re.compile(r"/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/")
 
 
-def tenant_id_for_domain(domain: str, session: requests.Session | None = None) -> str | None:
-    """The tenant GUID Microsoft publishes for ``domain``, or None when it can't be found out."""
+def tenant_id_for_domain(domain: str, session: requests.Session | None = None,
+                         cloud: str | None = None) -> str | None:
+    """The tenant GUID Microsoft publishes for ``domain``, or None when it can't be found out.
+
+    Asks the sign-in host of ``cloud`` and only believes an answer issued by that host.
+    """
     if not DOMAIN_RE.match(domain or ""):
         return None
+    login = clouds.get(cloud).login
     http = session or requests.Session()
     try:
-        resp = http.get(f"{LOGIN}/{domain}/v2.0/.well-known/openid-configuration", timeout=15,
+        resp = http.get(f"{login}/{domain}/v2.0/.well-known/openid-configuration", timeout=15,
                         allow_redirects=False)
         if resp.status_code != 200:
             return None
@@ -33,6 +39,6 @@ def tenant_id_for_domain(domain: str, session: requests.Session | None = None) -
         return None
     for key in ("issuer", "token_endpoint"):
         value = data.get(key)
-        if isinstance(value, str) and value.startswith(LOGIN + "/") and (m := TENANT_GUID.search(value + "/")):
+        if isinstance(value, str) and value.startswith(login + "/") and (m := TENANT_GUID.search(value + "/")):
             return m.group(1)
     return None
