@@ -12,6 +12,7 @@
   </nav>
   <div class="toolbar-actions">
     {% if rows|length > 8 %}<input class="search sm" type="search" data-filter="findings-table" placeholder="Search findings…" aria-label="Search findings, for example a person or a check">{% endif %}
+    {% if staff %}<a class="small" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">Recommended projects</a>{% endif %}
     <span class="muted small">{{ rows|length }} {{ 'item' if rows|length == 1 else 'items' }}</span>
     {% if view == 'open' and rows %}{{ downloads([('CSV', url_for('across.review_csv', tenant_id=tenant.id), 'Every open finding with its check and recommendation')]) }}{% endif %}
   </div>

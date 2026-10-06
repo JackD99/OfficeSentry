@@ -13,7 +13,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 
 from .. import clouds, lifecycle, store, tenant_health
 from ..db import audit
-from ..prospect import tenant_id_for_domain
+from ..discovery import tenant_id_for_domain
 from ..text import plural
 from .access import roles_required, tenant_or_404, visible_tenants
 from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, cloud_mismatch, not_connected

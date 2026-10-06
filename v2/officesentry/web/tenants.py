@@ -13,8 +13,8 @@ from itsdangerous import BadSignature, URLSafeTimedSerializer
 from .. import clouds, lifecycle, store, tenant_health
 from ..collectors import REGISTRY
 from ..db import audit, transaction, utcnow
+from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
-from ..prospect import tenant_id_for_domain
 from ..text import plural
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 

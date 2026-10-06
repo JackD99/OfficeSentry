@@ -52,6 +52,7 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
     pages = {
         f"/tenants/{alpha}": ("Overview", None),
         f"/tenants/{alpha}/findings": ("Findings", None),
+        f"/tenants/{alpha}/projects": ("Findings", None),
         f"/tenants/{alpha}/changes": ("Changes", None),
         f"/tenants/{alpha}/data/mailboxes": ("Reports", "Detail reports"),
         f"/tenants/{alpha}/evidence": ("Reports", "Insurance evidence"),

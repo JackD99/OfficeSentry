@@ -24,13 +24,13 @@
     <label>{{ icon('search') }}<span class="sr-only">Search all tenants</span>
       <input type="search" name="q" placeholder="Search all tenants" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
   </form>
-  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard')) }}
+  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant')) }}
   {{ nav_link('reports.overview', 'Reports', 'library') }}
   {{ nav_link('across.index', 'All tenants', 'grid', ('across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
   {{ nav_link('across.changes', 'What changed', 'clock') }}
   {{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest')) }}
   {{ nav_link('reporting.index', 'Month-end', 'check', ('reporting',)) }}
-  {{ nav_link('prospects.index', 'Prospects', 'prospects', ('prospects',)) }}
+  {{ nav_link('projects.index', 'Projects', 'projects', ('projects.index',)) }}
   {% endif %}
   {% if current_user.role == 'admin' %}
   <div class="nav-label">Settings</div>

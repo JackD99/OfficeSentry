@@ -146,23 +146,40 @@ logged, failures retry automatically, and you can preview at desktop and phone w
   </tr>
 </table>
 
-### Insurance evidence and prospect assessments
+### Insurance evidence
 
 The **insurance evidence pack** answers the controls cyber-insurance questionnaires ask about (MFA, admin accounts,
 legacy sign-in, email authentication, forwarding, logging, leavers, apps, sharing, devices) with *In place*,
-*Partly* or *Not in place*, from the data, with the gaps listed. **Prospect assessments** grade any domain's email
-security from public DNS, with no access to the tenant, as a PDF to send to a prospect.
+*Partly* or *Not in place*, from the data, with the gaps listed.
 
 <table>
   <tr>
-    <td width="45%"><img src="docs/screenshots/evidence.png" alt="Insurance evidence"></td>
-    <td width="25%"><img src="docs/screenshots/pdf-evidence.png" alt="Insurance evidence PDF"></td>
-    <td width="30%"><img src="docs/screenshots/prospect.png" alt="Prospect email security check"></td>
+    <td width="60%"><img src="docs/screenshots/evidence.png" alt="Insurance evidence"></td>
+    <td width="40%"><img src="docs/screenshots/pdf-evidence.png" alt="Insurance evidence PDF"></td>
   </tr>
   <tr>
     <td>Each control with the evidence and the gaps</td>
     <td>The pack as a PDF (<a href="examples/insurance-evidence-pack.pdf">open it</a>)</td>
-    <td>A prospect's email security grade (<a href="examples/prospect-assessment.pdf">PDF</a>)</td>
+  </tr>
+</table>
+
+### Recommended projects
+
+**Projects** turns each client's findings into the projects an account manager can sell: no Conditional Access
+becomes an *Identity and Conditional Access* project, unencrypted laptops a *Device management* one, missing
+Business Premium features a *Security licence upgrade*, and so on. Every client's recommendations sit in one list,
+worst first, with what was found, how big the job is and where it stands (suggested, proposed, agreed or declined,
+with a note). Each client's page downloads a branded proposal PDF to send them. A project drops off by itself
+once the tenant is fixed.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/projects.png" alt="Recommended projects for every client"></td>
+    <td width="50%"><img src="docs/screenshots/tenant-projects.png" alt="One client's recommended projects"></td>
+  </tr>
+  <tr>
+    <td>Every client's recommended projects, worst first</td>
+    <td>One client's projects with the findings behind them (<a href="examples/recommended-projects.pdf">proposal PDF</a>)</td>
   </tr>
 </table>
 
@@ -205,7 +222,7 @@ everything stored for it, with no SQL.
 [`examples/`](examples/) has real exports from the demo data: the monthly review (PDF and XLSX), the insurance
 evidence pack, SharePoint storage, MFA coverage, mailbox permissions, mail forwarding, licence right-sizing, sign-in
 activity, sign-in methods, subscriptions, Conditional Access, an account page, What changed, All tenants and a
-prospect assessment. All of it is fictional.
+recommended projects proposal. All of it is fictional.
 
 ## Security model
 

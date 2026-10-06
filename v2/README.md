@@ -144,7 +144,7 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     `https://mta-sts.<domain>/.well-known/mta-sts.txt`: mode, mx hosts
     covering the domain's MX, max_age; fetched like sending servers do, with
     no redirects) and TLS-RPT (`_smtp._tls`). MTA-STS and TLS-RPT have their own
-    checks and don't change prospect grades.
+    checks.
   - *Devices*: operating systems with Windows support dates, Intune devices
     that are non-compliant, unencrypted, out of support or not checking in,
     every managed device, and every Entra ID device record by last activity.
@@ -197,10 +197,15 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   email authentication, forwarding, logging, leavers, apps, sharing, devices), each
   answered In place / Partly / Not in place from the checks, with the gaps
   listed. Backups and training are marked "Not assessed".
-- **Prospect assessments** (`/prospects`, admins and analysts): enter any
-  domain to grade its email security from public DNS and see whether it uses
-  Microsoft 365 and how it signs in. No access to the tenant needed; PDF for
-  sending to the prospect.
+- **Recommended projects** (`/projects` and `/tenants/<id>/projects`, admins
+  and analysts): each client's failing checks and missing licences grouped
+  into the projects that fix them (Identity and Conditional Access, Admin
+  account hardening, Device management, Email security, Security licence
+  upgrade and more), worst first, with the findings behind each and the size
+  of the job. Account managers mark each one Proposed, Agreed or Declined with
+  a note (XLSX and CSV of the list), and download a client-facing proposal PDF
+  without the notes. Accepted risks don't count, and a project drops off once
+  the tenant is fixed.
 - **Client view**: client users land on a page that leads with their latest
   monthly review (page and PDF), then open recommendations with their status,
   key numbers, the other reports and who to contact at the MSP; they don't see

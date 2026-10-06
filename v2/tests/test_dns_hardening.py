@@ -10,13 +10,12 @@ import pytest
 import requests
 import responses
 
-from officesentry import dnscheck, prospect, store
+from officesentry import dnscheck, store
 from officesentry.reports.data_reports import build
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
 from tests.seed import seed_tenant
-from tests.test_prospects import mock_login
 
 POLICY = "version: STSv1\r\nmode: enforce\r\nmx: *.mail.protection.outlook.com\r\nmax_age: 604800\r\n"
 POLICY_URL = "https://mta-sts.a.com/.well-known/mta-sts.txt"
@@ -360,17 +359,7 @@ def test_old_snapshot_in_the_database(db, two_tenants):
     assert rows[0][:7] == ["x.com", "Microsoft 365", "Pass", "Weak", "Pass", "Not checked", "Not checked"]
 
 
-def test_old_prospect_assessment_loads(db):
-    data = {"tenant": prospect.TenantInfo(True, "t", "X", "Managed").__dict__, "health": dict(OLD_ROW),
-            "checked_at": "2026-09-01T10:00:00Z"}
-    db.execute("INSERT INTO prospect_assessments (domain, company, data, created_by, created_at) "
-               "VALUES ('a.com', 'A Ltd', ?, 'ann', '2026-09-01T10:00:00Z')", (json.dumps(data),))
-    a = prospect.load(db.execute("SELECT * FROM prospect_assessments").fetchone())
-    assert (a.grade, [i.area for i in a.issues]) == ("C", ["DMARC"])
-    assert a.delivery == {"MTA-STS": "Not checked", "TLS-RPT": "Not checked"}
-
-
-# -- Collector, checks, report and prospects -------------------------------------------------
+# -- Collector, checks and report -----------------------------------------------------------
 
 
 def seeded_dns(changes):
@@ -446,22 +435,20 @@ def test_no_mail_domains(db, two_tenants):
 
 
 @responses.activate
-def test_prospect_grade_ignores_encrypted_delivery():
-    mock_login(responses, domain="a.com")
+def test_encrypted_delivery_is_listed_after_spoofing():
     responses.get(POLICY_URL, body=POLICY.replace("*.mail.protection.outlook.com", "mx.old-host.com"))
-    a = prospect.run("a.com", resolve=resolver())
-    assert [(i.area, i.severity) for i in a.issues] == [("MTA-STS", "medium")]
-    assert a.grade == "A"  # spoofing is prevented; MTA-STS is listed but doesn't change the grade
-    assert a.delivery == {"MTA-STS": "Enforced", "TLS-RPT": "Pass"}
-    a = prospect.run("a.com", resolve=resolver({("_mta-sts.a.com", "TXT"): [],
-                                                ("_dmarc.a.com", "TXT"): ["v=DMARC1; rua=mailto:d@a.com"]}))
-    assert [(i.area, i.severity) for i in a.issues] == [("DMARC", "medium"), ("MTA-STS", "low")]
-    assert a.grade == "C"
+    h = dnscheck.check_domain("a.com", resolver())
+    assert [(i.area, i.severity) for i in dnscheck.issues(h, transport=True)] == [("MTA-STS", "medium")]
+    assert dnscheck.issues(h) == []
+    assert dnscheck.transport_summary(h) == {"MTA-STS": "Enforced", "TLS-RPT": "Pass"}
+    h = dnscheck.check_domain("a.com", resolver({("_mta-sts.a.com", "TXT"): [],
+                                                 ("_dmarc.a.com", "TXT"): ["v=DMARC1; rua=mailto:d@a.com"]}))
+    assert [(i.area, i.severity) for i in dnscheck.issues(h, transport=True)] == [("DMARC", "medium"),
+                                                                                  ("MTA-STS", "low")]
 
 
 @responses.activate
-def test_prospect_with_conflicting_dmarc_records_fails():
-    mock_login(responses, domain="a.com")
+def test_conflicting_dmarc_records_fail():
     responses.get(POLICY_URL, body=POLICY)
-    a = prospect.run("a.com", resolve=resolver({("_dmarc.a.com", "TXT"): ["v=DMARC1; p=reject", "v=DMARC1; p=none"]}))
-    assert a.grade == "F"
+    h = dnscheck.check_domain("a.com", resolver({("_dmarc.a.com", "TXT"): ["v=DMARC1; p=reject", "v=DMARC1; p=none"]}))
+    assert ("DMARC", "high") in [(i.area, i.severity) for i in dnscheck.issues(h)]

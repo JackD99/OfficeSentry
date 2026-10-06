@@ -1,0 +1,51 @@
+{#- Client-facing proposal: the projects we recommend, from their tenant's data. No team notes or statuses. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+
+{% block doc_title %}Recommended projects{% endblock %}
+{% block client %}{{ tenant.name }}{% endblock %}
+{% block toolbar %}
+  <a class="back" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a>
+  <span class="spacer"></span>
+  <a class="button primary" href="{{ url_for('projects.pdf', tenant_id=tenant.id) }}"><span class="wide">Download </span>PDF</a>
+{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', today.day ~ ' ' ~ today.strftime('%B %Y')) }}
+  {{ ui.meta('Based on', 'Your Microsoft 365 settings, read-only') }}
+  {{ ui.meta('Microsoft 365 tenant', tenant.tenant_ref) }}
+{% endblock %}
+{% block contents %}
+  {% for rec in recs %}<li><a href="#project-{{ rec.project.key }}">{{ rec.project.title }}</a></li>{% endfor %}
+{% endblock %}
+
+{% block body %}
+<section class="keep">
+  <h2>Summary</h2>
+  {% if recs %}
+  <p>We reviewed your Microsoft 365 settings and recommend {{ recs|length|plural('project') }}, most urgent first. Each one lists what we found and what the work covers.</p>
+  {% else %}<p>Nothing in your Microsoft 365 settings calls for a project at the moment.</p>{% endif %}
+</section>
+
+{% for rec in recs %}{% set p = rec.project %}
+<section class="control keep" id="project-{{ p.key }}">
+  <div class="check-head"><h3>{{ loop.index }}. {{ p.title }}</h3> {{ ui.sev(rec.severity) }}</div>
+  <p>{{ p.pitch }}</p>
+  <div class="control-cols">
+    <div><div class="col-title">What we found</div>
+      <ul class="evidence">{% for r in rec.reasons %}<li>{{ r.summary }}</li>{% endfor %}</ul></div>
+    <div><div class="col-title">What the project covers</div>
+      <ul class="evidence">{% for c in p.covers %}<li>{{ c }}</li>{% endfor %}</ul>
+      {% if rec.size %}<p class="outside">Scope: {{ rec.size }}</p>{% endif %}</div>
+  </div>
+</section>
+{% endfor %}
+
+{% if recs %}
+<section class="cta keep">
+  <h3>Next steps</h3>
+  <p>We'd be glad to talk through any of these and put together a quote.</p>
+  <p class="contact">{{ brand.display_name }}{% if brand.contact %} · {{ brand.contact }}{% endif %}</p>
+</section>
+{% endif %}
+{% endblock %}

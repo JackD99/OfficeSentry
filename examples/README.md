@@ -23,5 +23,5 @@ Regenerate them from `v2/` with `python scripts/screenshots.py` after report cha
 | [account-page.pdf](account-page.pdf) | Everything about one person's account on one page. |
 | [what-changed-all-tenants.pdf](what-changed-all-tenants.pdf) | Month-over-month changes across every client. |
 | [all-tenants-monthly-review.pdf](all-tenants-monthly-review.pdf) | One row per client: the monthly review's key figures side by side. |
-| [prospect-assessment.pdf](prospect-assessment.pdf) | Email security grade for a prospect, from public DNS only. |
+| [recommended-projects.pdf](recommended-projects.pdf) | The projects a client's tenant calls for, as a proposal to send them. |
 | [monthly-security-licensing-review.xlsx](monthly-security-licensing-review.xlsx) | The monthly review as a spreadsheet: every finding and figure. |

@@ -72,7 +72,7 @@ def seed(db, vault) -> list[int]:
     first = names.get(SHOWCASE, ids[0])
     ids = [first] + [i for i in ids if i != first]
     add_email(db, first)
-    add_prospect(db)
+    add_project_statuses(db, ids)
     # A client part-way through onboarding (consent not given yet), for the Client tenants page and checklist.
     connection = db.execute("SELECT id FROM app_connections ORDER BY id LIMIT 1").fetchone()[0]
     ids.append(store.create_tenant(db, ONBOARDING, "kingsleyoptometry.onmicrosoft.com", connection))
@@ -133,23 +133,15 @@ def add_email(db, tenant_id: int) -> None:
                     iso(now - timedelta(days=days, hours=-8))))
 
 
-def add_prospect(db) -> None:
-    """A prospect assessment of a fictional domain, with DNS and Microsoft's sign-in discovery faked."""
-    import responses
+def add_project_statuses(db, ids: list[int]) -> None:
+    """Where the account managers have got to with a few recommended projects."""
+    from officesentry import projects
 
-    from officesentry import prospect
-
-    domain = "kingsley-optometry.example"
-    records = {(domain, "MX"): ["kingsley-optometry-example.mail.protection.outlook.com"],
-               (domain, "TXT"): ["v=spf1 include:spf.protection.outlook.com include:bulkmail.example ?all"],
-               ("spf.protection.outlook.com", "TXT"): ["v=spf1 ip4:40.92.0.0/15 -all"],
-               (f"_dmarc.{domain}", "TXT"): ["v=DMARC1; p=none"]}
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
-        rsps.get(f"{prospect.LOGIN}/{domain}/v2.0/.well-known/openid-configuration",
-                 json={"issuer": "https://login.microsoftonline.com/7c1e5f0a-3b9d-4e62-9a51-2f6c0d8e4b17/v2.0"})
-        rsps.get(f"{prospect.LOGIN}/getuserrealm.srf", json={"NameSpaceType": "Managed"})
-        assessment = prospect.run(domain, "Kingsley Optometry", resolve=lambda n, t: list(records.get((n, t), [])))
-    prospect.save(db, assessment, ADMIN)
+    for tenant_id, (key, status, note) in zip(ids, [
+            ("identity", "proposed", "Quote sent to the practice manager"),
+            ("email_security", "agreed", "Booked for the first week of next month"),
+            ("device_management", "proposed", "")], strict=False):
+        projects.set_status(db, tenant_id, key, status, note, ADMIN)
 
 
 # -- What to capture ------------------------------------------------------------------------
@@ -192,7 +184,8 @@ SHOTS = [
     Shot("evidence", "/tenants/{t}/evidence", height=1000),
     Shot("emailed-reports", "/tenants/{t}/schedules", height=900),
     Shot("email-schedule-form", "/tenants/{t}/schedules/new", height=1000),
-    Shot("prospect", "/prospects/1", height=950),
+    Shot("projects", "/projects", height=950),
+    Shot("tenant-projects", "/tenants/{t}/projects", height=1100),
     Shot("client-tenants", "/admin/tenants", height=700),
     Shot("manage-tenant", "/tenants/{t}/manage", height=1000),
     Shot("onboarding", "/tenants/{o}", height=900),
@@ -239,8 +232,8 @@ EXAMPLES = {
     "what-changed-all-tenants.pdf": ("/changes.pdf", "Month-over-month changes across every client."),
     "all-tenants-monthly-review.pdf": (
         "/across/review.pdf", "One row per client: the monthly review's key figures side by side."),
-    "prospect-assessment.pdf": (
-        "/prospects/1.pdf", "Email security grade for a prospect, from public DNS only."),
+    "recommended-projects.pdf": (
+        "/tenants/{t}/projects.pdf", "The projects a client's tenant calls for, as a proposal to send them."),
     "monthly-security-licensing-review.xlsx": (
         "/tenants/{t}/report.xlsx", "The monthly review as a spreadsheet: every finding and figure."),
 }

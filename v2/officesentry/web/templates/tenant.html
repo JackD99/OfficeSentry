@@ -106,6 +106,8 @@
       <span class="title">Monthly review {{ icon('arrow') }}</span><span class="desc">Security and licensing summary with recommendations. PDF and XLSX.</span></a>
     <a class="report-link" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">
       <span class="title">Insurance evidence {{ icon('arrow') }}</span><span class="desc">Answers to the controls cyber insurers ask about.</span></a>
+    <a class="report-link" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">
+      <span class="title">Recommended projects {{ icon('arrow') }}</span><span class="desc">Work the findings call for, to propose to the client.</span></a>
   </div>
   <p class="muted small m0 no-match" hidden>No report matches that. Try a word like mailbox, admin or licence.</p>
   <div class="report-directory" id="report-directory">
