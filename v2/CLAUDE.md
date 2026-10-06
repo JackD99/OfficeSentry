@@ -112,6 +112,15 @@ without a OneDrive aren't asked about for a week.
   codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
+- The insurance evidence pack (`reports/evidence.py`) suggests answers to
+  questionnaire questions in `reports/evidence_answers.QUESTIONS` (Yes, Partly,
+  No, Not known, a one-line justification and a source link), built from the
+  snapshot and check results. Enforcement comes first: MFA required by
+  Conditional Access with only a named break-glass exclusion is "Yes" listing
+  it. Admins and analysts can override an answer with a note
+  (`evidence_answer_overrides`, audited, note text never logged); the page,
+  PDF, XLSX and CSV show the override and who set it, and only staff on the
+  page see the suggestion it replaced and the "data changed" hint.
 - Client-facing reports (page + PDF) extend `templates/reports/_layout.html`
   (cover, MSP branding, running headers and page numbers) and build from the
   macros in `reports/_components.html` (verdict, KPI tile, severity bar,
