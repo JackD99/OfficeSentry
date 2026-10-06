@@ -400,6 +400,18 @@ details.control[open] > summary { margin: 0; }
 ul.ticks, .gap-list ul { margin: 0; padding-left: 18px; }
 ul.ticks li { margin: 3px 0; }
 .gap-list { margin-top: 8px; }
+.answer-row { display: flex; gap: 12px; align-items: baseline; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.answer-row:last-child { border-bottom: 0; }
+.answer-row > .answer { flex: none; min-width: 112px; justify-content: center; }
+.answer-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.answer-main .q { font-weight: 500; }
+.answer-main .data-changed { color: var(--warn); }
+.answer-main .data-changed .icon { width: 14px; height: 14px; vertical-align: -2px; }
+.answer-edit form { margin-top: 8px; max-width: 520px; }
+.answer-edit button + button { margin-left: 6px; }
+@media (max-width: 640px) {
+  .answer-row { flex-direction: column; gap: 6px; }
+}
 .gap-list li { margin: 2px 0; }
 .gap-list li.sub { list-style: circle; margin-left: 14px; color: var(--muted); }
 .tile .label .dot { margin-right: 4px; vertical-align: 1px; }

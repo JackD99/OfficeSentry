@@ -21,6 +21,7 @@
 {% block contents %}
   <li><a href="#summary">Summary</a></li>
   {% if es.actions %}<li><a href="#gaps">Gaps to close</a></li>{% endif %}
+  <li><a href="#answers">Questionnaire answers</a></li>
   <li><a href="#controls">Controls, one by one</a></li>
   <li><a href="#about">About this evidence</a></li>
 {% endblock %}
@@ -46,6 +47,24 @@
   {{ ui.actions(es.actions) }}
 </section>
 {% endif %}
+
+<section id="answers" class="page-break">
+  <h2>Questionnaire answers</h2>
+  <p class="section-intro">The questions cyber insurers usually ask, worded as they ask them, answered from the Microsoft 365 data. "Not known" means the data can't show it. Answers marked with a name were set by your technical lead.</p>
+  <table class="answers-table">
+    <thead><tr><th>Question</th><th>Answer</th><th>Why</th></tr></thead>
+    <tbody>
+    {% for a in pack.answers %}
+    <tr id="answer-{{ a.key }}">
+      <td class="q">{{ a.question }}</td>
+      <td><span class="answer answer-{{ a.answer|lower|replace(' ', '-') }}">{{ a.answer }}</span></td>
+      <td>{% if a.override %}{% if a.override.note %}{{ a.override.note }} {% endif %}<span class="set-by">Set by {{ a.override.set_by }} on {{ a.override.set_at|day }}.</span>{% else %}{{ a.why }}{% endif %}
+        {%- if a.source %}<div class="source">Evidence: {{ a.source.label }}{% if a.source.report %} report{% else %}, below{% endif %}</div>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
 
 <section id="controls" class="page-break">
   <h2>Controls, one by one</h2>

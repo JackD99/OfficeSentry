@@ -9,7 +9,7 @@ from flask import Blueprint, Response, abort, flash, g, redirect, render_templat
 from .. import findings, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
-from ..reports import branding, data_reports, evidence, export, library, views
+from ..reports import branding, data_reports, evidence, evidence_answers, export, library, views
 from ..reports.monthly_review import build, setting
 from ..rules import RULES
 from ..snapshot import TenantSnapshot
@@ -21,6 +21,7 @@ RULE_TITLES = {r.key: r.title for r in RULES}
 
 bp = Blueprint("reports", __name__)
 
+STAFF = ("admin", "analyst")  # may override the evidence pack's suggested answers
 CURRENCIES = ("GBP", "USD", "EUR", "AUD", "CAD", "NZD")
 
 
@@ -120,7 +121,30 @@ def _evidence_name(tenant, ext: str) -> str:
 @login_required
 def evidence_pack(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    return render_template("evidence_page.html", pack=evidence.build(g.db, t))
+    return render_template("evidence_page.html", pack=evidence.build(g.db, t), answers=evidence_answers.ANSWERS,
+                           staff=g.user["role"] in STAFF, max_note=evidence_answers.MAX_NOTE)
+
+
+@bp.post("/tenants/<int:tenant_id>/evidence/answers/<key>")
+@roles_required(*STAFF)
+def evidence_answer(tenant_id: int, key: str):
+    """The technical lead's answer to one questionnaire question, in place of the suggested one (or back to it)."""
+    t = tenant_or_404(tenant_id)
+    if key not in evidence_answers.KEYS:
+        abort(404)
+    back = url_for("reports.evidence_pack", tenant_id=t["id"]) + f"#answer-{key}"
+    if request.form.get("action") == "clear":
+        if evidence_answers.clear_override(g.db, t["id"], key, g.user["username"]):
+            flash("Back to the suggested answer.", "success")
+        return redirect(back)
+    answer = request.form.get("answer", "")
+    if answer not in evidence_answers.ANSWERS:
+        abort(400)
+    suggested = next(a.suggested for a in evidence.build(g.db, t).answers if a.key == key)
+    evidence_answers.set_override(g.db, t["id"], key, answer, request.form.get("note", ""), suggested,
+                                  g.user["username"])
+    flash("Answer saved. The pack, its PDF and downloads now show it.", "success")
+    return redirect(back)
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.pdf")

@@ -356,8 +356,10 @@ def review_csv(tenant_id: int):
 def evidence_csv(tenant_id: int):
     t = tenant_or_404(tenant_id)
     pack = evidence.build(g.db, t)
-    table = tables.Table("Controls", ["Question", "Status", "Evidence", "Gaps"], [
-        [c.control.question, c.status, " ".join(c.evidence), " ".join(x.strip() for x in c.gaps)]
+    table = tables.Table("Evidence", ["Section", "Question", "Answer", "Why", "Answered by", "Evidence", "Gaps"], [
+        ["Questionnaire", question, answer, why, by, source, ""]
+        for question, answer, why, by, source in evidence.answer_rows(pack)] + [
+        ["Controls", c.control.question, c.status, "", "", " ".join(c.evidence), " ".join(x.strip() for x in c.gaps)]
         for c in pack.controls])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.csv")
     return _download(tables.to_csv(table), f"security-evidence-{tables.slug(t['name'])}", "csv")
