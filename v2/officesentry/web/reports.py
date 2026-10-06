@@ -15,6 +15,7 @@ from ..rules import RULES
 from ..snapshot import TenantSnapshot
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .printing import pdf_response
+from .reporting import report_extras
 
 RULE_TITLES = {r.key: r.title for r in RULES}
 
@@ -87,7 +88,7 @@ def tenant_report(tenant_id: int):
     t = tenant_or_404(tenant_id)
     report = build(g.db, t)
     return render_template("reports/monthly_review.html", report=report, pdf=False,
-                           css_href=url_for("static", filename="report.css"))
+                           css_href=url_for("static", filename="report.css"), **report_extras(t, page=True))
 
 
 @bp.get("/tenants/<int:tenant_id>/report.pdf")
@@ -95,7 +96,8 @@ def tenant_report(tenant_id: int):
 def tenant_report_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf")
-    return pdf_response("reports/monthly_review.html", _filename(t, "pdf")[:-4], report=build(g.db, t))
+    return pdf_response("reports/monthly_review.html", _filename(t, "pdf")[:-4], report=build(g.db, t),
+                        **report_extras(t, page=False))
 
 
 @bp.get("/tenants/<int:tenant_id>/report.xlsx")

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf %}
+{% set TONES = {'critical': 'bad', 'high': 'warn', 'medium': 'info', 'ok': 'ok'} %}
+{% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
+{% block title %}Month-end · {{ label }} · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Month-end reporting · {{ label }}</h1>
+    <div class="sub">Every client on a report plan. Review, add your commentary, then approve to send.</div></div>
+  <div class="month-nav">
+    <a class="btn sm" href="{{ url_for('reporting.queue', period=prev, show=show) }}" aria-label="Previous month">&larr;</a>
+    {% if period != current %}<a class="btn sm" href="{{ url_for('reporting.queue', period=current) }}">This month</a>{% endif %}
+    <a class="btn sm" href="{{ url_for('reporting.queue', period=next, show=show) }}" aria-label="Next month">&rarr;</a>
+    {% if admin %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}
+  </div>
+</div>
+
+<div class="tiles">
+  {% for key, name in states.items() %}
+  <div class="tile"><div class="label">{{ name }}</div><div class="value">{{ all_rows|selectattr('state', 'equalto', key)|list|length }}</div></div>
+  {% endfor %}
+</div>
+
+<nav class="seg" aria-label="Show">
+  {% for key, name in filters.items() %}<a href="{{ url_for('reporting.queue', period=period, show=key or none) }}"{% if show == key %} aria-current="page"{% endif %}>{{ name }}<span class="count">{{ counts[key] }}</span></a>{% endfor %}
+</nav>
+
+<section class="card flush">
+  {% if rows %}
+  <form method="post" action="{{ url_for('reporting.approve_many', period=period) }}" id="bulk" data-busy="Approving…">
+    {{ csrf() }}<input type="hidden" name="show" value="{{ show }}">
+  </form>
+  <table class="stack-sm">
+    <thead><tr>{% if admin %}<th><span class="sr-only">Select</span></th>{% endif %}<th>Client</th><th>State</th><th>Verdict</th><th class="num">New critical/high</th><th>Needs your eyes</th><th>Reviewer</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+      {% if admin %}<td>{% if r.state in ('draft', 'in_review') and not r.paused %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
+      <td data-label="Client"><a class="strong" href="{{ url_for('reporting.review', period=period, tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a>
+        <span class="sub">{{ r.plan.name }}{% if r.paused %} · paused{% endif %}</span></td>
+      <td data-label="State"><span class="pill {{ STATE_PILLS[r.state] }}">{{ r.state_label }}</span>
+        {% if r.error %}<span class="sub bad-text">Send failed</span>{% elif r.sent_at %}<span class="sub">{{ ts(r.sent_at) }}</span>{% endif %}</td>
+      <td data-label="Verdict"><span class="pill {{ TONES.get(r.verdict.tone, '') }}">{{ r.verdict.label }}</span></td>
+      <td data-label="New critical/high" class="num">{{ r.new_severe or '–' }}</td>
+      <td data-label="Needs your eyes" class="wrap">{% if r.flags and r.state in ('draft', 'in_review') %}<div class="flags">{% for f in r.flags %}<span class="pill warn">{{ f }}</span>{% endfor %}</div>{% elif r.state in ('draft', 'in_review') %}<span class="muted small">Nothing flagged</span>{% endif %}</td>
+      <td data-label="Reviewer">{% if r.reviewer %}{{ r.reviewer }}{% else %}
+        <form method="post" action="{{ url_for('reporting.assign', period=period, tenant_id=r.tenant.id) }}">{{ csrf() }}<input type="hidden" name="reviewer" value="me"><input type="hidden" name="from" value="queue"><input type="hidden" name="show" value="{{ show }}"><button class="sm ghost">Take it</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if admin %}
+  <div class="action-row"><button class="primary" form="bulk">{{ icon('send') }} Approve and send selected</button>
+    <span class="muted small">Each is frozen as it is now and sent, or published to the portal for plans without email.</span></div>
+  {% endif %}
+  {% elif all_rows %}
+  <div class="empty compact"><p>Nothing here with this filter.</p></div>
+  {% else %}
+  <div class="empty"><h3>No clients on a report plan</h3>
+    <p>Put clients on a report plan and each one gets a draft here every month to review and approve.</p>
+    {% if admin %}<a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} Create a plan</a>{% endif %}</div>
+  {% endif %}
+</section>
+{% endblock %}
