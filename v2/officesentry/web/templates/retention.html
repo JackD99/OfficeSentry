@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Data retention · Office Sentry{% endblock %}
+{% macro number(key, value, suggest, forever_label=none) -%}
+{% set low, high = limits[key] %}
+<div class="form-row">
+  <label>Keep for <input type="number" name="{{ key }}" min="{{ low }}" max="{{ high }}" value="{{ value if value is not none else suggest }}" required>
+    <span class="hint">Days, {{ '{:,}'.format(low) }} to {{ '{:,}'.format(high) }}. Default: {{ describe(key, d[key]) }}.</span></label>
+  {% if forever_label %}<label class="check"><input type="checkbox" name="{{ key }}_forever" value="1" {% if value is none %}checked{% endif %}> {{ forever_label }}</label>{% endif %}
+</div>
+{%- endmacro %}
+{% macro next_run(n, noun) -%}
+<p class="footnote">Next daily pass: {% if n %}<strong>about {{ n|plural(noun) }}</strong> would be deleted{% else %}nothing to delete{% endif %} at the saved settings.</p>
+{%- endmacro %}
+{% block content %}
+<div class="page-head"><div><h1>Data retention</h1><div class="sub">How long Office Sentry keeps personal data about your clients' staff and your own team. The worker applies these settings once a day, deleting in small batches. Deleted rows are overwritten in the database file where that costs nothing extra; backups keep them until they rotate.</div></div></div>
+<form method="post" action="{{ url_for('retention.save') }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <h2>Snapshots</h2>
+  <p class="muted small">Everything a collection read: every user, mailbox, device, policy and group, with names and addresses. Reports, the change history and each person's page read them. Trend numbers (counts only) are kept forever.</p>
+  <div class="form-row">
+    <label>Daily snapshots (days) <input type="number" name="keep_daily" min="{{ limits.keep_daily[0] }}" max="{{ limits.keep_daily[1] }}" value="{{ p.keep_daily }}" required>
+      <span class="hint">The last run of each day, per tenant and data source. Default: {{ describe('keep_daily', d.keep_daily) }}.</span></label>
+    <label>Monthly snapshots (months) <input type="number" name="keep_monthly" min="{{ limits.keep_monthly[0] }}" max="{{ limits.keep_monthly[1] }}" value="{{ p.keep_monthly if p.keep_monthly is not none else d.keep_monthly }}" required>
+      <span class="hint">The last run of each month, for month-over-month changes. Default: {{ describe('keep_monthly', d.keep_monthly) }}.</span></label>
+  </div>
+  <label class="check"><input type="checkbox" name="keep_monthly_forever" value="1" {% if p.keep_monthly is none %}checked{% endif %}> Keep a snapshot of every month, forever</label>
+  <p class="footnote">The latest snapshot and anything collected in the last 24 hours are always kept.</p>
+  {{ next_run(counts.snapshots, 'older snapshot') }}
+
+  <h2>Sign-in detail</h2>
+  <p class="muted small">From the Entra sign-in log: who signed in, from which IP addresses, countries and cities, which apps, failed and risky sign-ins, and legacy-protocol sign-ins. By default it's kept as long as the snapshot it's in, which is about 13 months for monthly snapshots.</p>
+  {{ number('signin_days', p.signin_days, 90, 'Keep as long as its snapshot') }}
+  <p class="footnote">At least 30 days, so the sign-in reports always have last night's data. After this, older snapshots still have everything else.</p>
+  {{ next_run(counts.signin_days, 'sign-in row') }}
+
+  <h2>Resolved findings</h2>
+  <p class="muted small">Findings that were fixed: the check, the account or object it named and when it was first seen, last seen and resolved. Open findings and accepted risks are never deleted. Each tenant's findings from its first scan are kept, so alert emails can still tell them apart.</p>
+  {{ number('findings_days', p.findings_days, 365, 'Keep forever') }}
+  <p class="footnote">Counted from the day a finding was resolved. If it comes back after it's been deleted, it shows as new.</p>
+  {{ next_run(counts.findings_days, 'resolved finding') }}
+
+  <h2>Run logs</h2>
+  <p class="muted small">The progress lines of each collection, which can name accounts and sites. Warnings and errors are always kept, so a run's page still says why it failed.</p>
+  {{ number('run_log_days', p.run_log_days, d.run_log_days, 'Keep forever') }}
+  {{ next_run(counts.run_log_days, 'log line') }}
+
+  <h2>Activity log</h2>
+  <p class="muted small">Who signed in to the portal and changed what, with the address they came from. Failed and slowed-down sign-ins are always removed after 90 days.</p>
+  {{ number('audit_days', p.audit_days, 365 * 2, 'Keep forever') }}
+  <p class="footnote">Never less than {{ audit_floor|plural('day') }}: the log is how you find out who changed a setting, opened a client's data or signed in from somewhere unexpected, and security reviews and investigations usually look back at least a year.</p>
+  {{ next_run(counts.audit_days, 'entry') }}
+
+  <h2>Issued reports</h2>
+  <p class="muted small">The exact PDF and spreadsheet files sent or approved for clients (Report history), with their recipients.</p>
+  {{ number('issued_days', p.issued_days, 365 * 3, 'Keep forever') }}
+  <p class="footnote">Never less than {{ issued_floor|plural('day') }}, and the latest file of each report for each tenant is always kept, because month-end reporting compares against it.</p>
+  {{ next_run(counts.issued_days, 'issued report') }}
+
+  <div class="form-actions"><button class="primary">Save</button></div>
+  <p class="footnote">Changes are recorded in the activity log. Shortening a period deletes data at the next daily pass, and it can't be brought back except from a backup.</p>
+</form>
+{% endblock %}

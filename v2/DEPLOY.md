@@ -100,21 +100,37 @@ only, `30 1,13 * * *` twice a day at 01:30 and 13:30.
 
 ## How long data is kept
 
-Trend numbers and findings history are kept forever. Full snapshots (every
-user, policy and mailbox from a run) take the most space, so the worker keeps,
-for each tenant and data source:
+Admins set this under *Settings → Data retention* (`/admin/retention`). The
+page says what each period covers and roughly how much the next pass would
+delete, and every change goes in the activity log. The worker applies it once
+a day, deleting in small batches so the portal stays responsive; deleted rows
+are overwritten in the database file where that costs no extra I/O
+(`secure_delete = FAST`). Backups keep deleted data until they rotate out.
 
-- the last run of each of the last **30 days** (`OFFICESENTRY_KEEP_DAILY`), and
-- the last run of each of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`).
+| Data | Default (today's behaviour) | Can be set to |
+|---|---|---|
+| Snapshots (every user, mailbox, device and policy from a run) | the last run of each of the last **30 days** (`OFFICESENTRY_KEEP_DAILY`) and of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`) | any number of days and months, or every month forever |
+| Sign-in detail (accounts, IP addresses, countries and cities from the sign-in logs) | as long as its snapshot: about 13 months | 30 days or more |
+| Resolved findings | forever | 30 days or more after they were resolved |
+| Run log info lines (warnings and errors always stay) | 90 days | 7 days or more, or forever |
+| Activity log | forever | 365 days or more |
+| Issued reports (files sent or approved for clients) | forever | 365 days or more |
 
-Older snapshots are cleared once a day. Run pages for cleared snapshots still
-show their numbers. Run logs older than 90 days keep only their warnings and
-errors, so a page still says why an old run failed or was partial.
+The settings page overrides the environment variables once saved. Trend
+numbers are counts only, with no names or addresses, and are kept forever, so
+run pages for cleared snapshots still show their numbers. The latest snapshot,
+anything collected in the last day, open findings and accepted risks, each
+tenant's first-scan findings (alert emails compare against them) and each
+tenant's latest file of each issued report (month-end reporting compares
+against it) are never deleted by retention. The activity log can't be set
+under a year because it's the record of who changed what and signed in from
+where, which security reviews and investigations look back over.
 
 The **activity log** (*Settings → Activity log*, admins only) records sign-ins
 and every change, with the address it came from; filter it by user, action,
 tenant and date, and download it as CSV. Failed and slowed-down sign-ins are
-removed after 90 days; everything else is kept. Failed sign-ins with
+removed after 90 days; everything else is kept unless *Data retention* sets
+a period. Failed sign-ins with
 usernames that don't exist are counted per address and hour, without storing
 what was typed.
 

@@ -210,6 +210,10 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   Office Sentry" stays small in the footer), the support contact clients see,
   and an optional note printed at the end of every report. The name is also
   the email sender's name unless Email delivery sets one.
+- **Data retention** (`/admin/retention`): how long snapshots, sign-in detail
+  (IP addresses and locations), resolved findings, run logs, the activity log
+  and issued reports are kept, with a count of what the next daily pass would
+  delete. Defaults keep today's behaviour; see DEPLOY.md.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
@@ -306,7 +310,8 @@ this command; the product signs in with a certificate.
   two-step setting changes.
 - **Activity log:** admins see sign-ins and every change, with the address,
   under *Settings → Activity log* (filters, paging, CSV). Failed sign-ins are
-  kept for 90 days, the rest for good.
+  kept for 90 days, the rest for good unless *Settings → Data retention* sets
+  a period (never under a year).
 - **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
   prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
   real client IP and scheme are used.

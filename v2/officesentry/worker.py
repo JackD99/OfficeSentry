@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import alerts, findings, lifecycle, schedule, store, throttle
+from . import alerts, findings, lifecycle, retention, schedule, store, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -319,15 +319,11 @@ def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> 
 
 
 def prune(conn, cfg: Config) -> int:
-    removed = store.prune_snapshots(conn, cfg.keep_daily, cfg.keep_monthly, cfg.timezone)
-    if removed:
-        log.info("Retention: removed the stored objects of %s", plural(removed, "older run"))
+    """The daily retention pass: the admin's settings (``retention.apply``), then sign-in noise."""
+    removed = retention.apply(conn, cfg)["snapshots"]
     throttle.prune(conn)
     if noise := prune_audit(conn):
         log.info("Retention: removed %s", plural(noise, "old failed sign-in record"))
-    lines = store.prune_run_logs(conn)
-    if lines:
-        log.info("Retention: removed %s", plural(lines, "old run log line"))
     conn.execute("PRAGMA optimize")  # keeps the query planner's statistics current
     return removed
 
