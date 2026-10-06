@@ -205,9 +205,11 @@ def _signin_count(conn, days: int | None, now: datetime | None) -> int:
 
 
 # Each tenant's earliest findings are kept: alert emails leave out a tenant's first scan by
-# comparing with MIN(first_seen) (delivery.alert_items), so that marker mustn't move.
+# comparing with MIN(first_seen) (delivery.alert_items), so that marker mustn't move. Accepted
+# risks are kept too: findings.sync carries an acceptance over when the finding reopens, so
+# deleting one would bring it back unaccepted and alert on it.
 _FINDINGS = (
-    "SELECT id FROM findings WHERE resolved_at IS NOT NULL AND resolved_at < ?"
+    "SELECT id FROM findings WHERE resolved_at IS NOT NULL AND resolved_at < ? AND accepted_at IS NULL"
     " AND first_seen > (SELECT MIN(f.first_seen) FROM findings f WHERE f.tenant_id = findings.tenant_id)"
     " ORDER BY id")
 
@@ -234,11 +236,13 @@ def prune_audit_log(conn, days: int | None, batch: int = 1000, now: datetime | N
             return deleted
 
 
-# The latest file of each report for each tenant is never deleted: month-end reporting reads it
-# ("new findings since the last report", re-issuing the last approved files).
+# Every file of each tenant's latest send of each report is never deleted: month-end reporting
+# reads it ("new findings since the last report", re-issuing the last approved files). One send
+# stores its PDF and XLSX under the same kind and issued_at, so match on the send, not one row.
 _ISSUED = (
-    "SELECT id FROM issued_reports WHERE issued_at < ?"
-    " AND id NOT IN (SELECT MAX(id) FROM issued_reports GROUP BY tenant_id, kind) ORDER BY id")
+    "SELECT id FROM issued_reports r WHERE issued_at < ?"
+    " AND issued_at < (SELECT MAX(l.issued_at) FROM issued_reports l"
+    " WHERE l.tenant_id = r.tenant_id AND l.kind = r.kind) ORDER BY id")
 
 
 def prune_issued(conn, days: int | None, batch: int = 50, now: datetime | None = None) -> int:

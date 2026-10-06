@@ -28,19 +28,19 @@ def kinds_of(db, rid):
     return {r[0] for r in db.execute("SELECT kind FROM objects WHERE run_id = ?", (rid,))}
 
 
-def finding(db, tenant, key, first_seen, resolved_at=None):
+def finding(db, tenant, key, first_seen, resolved_at=None, accepted_at=None):
     return db.execute(
         "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen, last_seen,"
-        " resolved_at) VALUES (?, ?, 'o', 'high', 'someone@alpha', '', ?, ?, ?)",
-        (tenant, key, first_seen, first_seen, resolved_at)).lastrowid
+        " resolved_at, accepted_at) VALUES (?, ?, 'o', 'high', 'someone@alpha', '', ?, ?, ?, ?)",
+        (tenant, key, first_seen, first_seen, resolved_at, accepted_at)).lastrowid
 
 
-def issued(db, tenant, kind, days_ago):
+def issued(db, tenant, kind, days_ago, filename="r.pdf"):
     return db.execute(
         "INSERT INTO issued_reports (tenant_id, kind, title, period, issued_at, trigger, filename, content_type,"
-        " sha256, size, data) VALUES (?, ?, 'Review', '2025-01', ?, 'schedule', 'r.pdf', 'application/pdf', '',"
+        " sha256, size, data) VALUES (?, ?, 'Review', '2025-01', ?, 'schedule', ?, 'application/pdf', '',"
         " 1, x'00')",
-        (tenant, kind, iso(days_ago))).lastrowid
+        (tenant, kind, iso(days_ago), filename)).lastrowid
 
 
 # -- Settings ---------------------------------------------------------------------------------
@@ -156,6 +156,15 @@ def test_resolved_findings_are_pruned_after_their_period(db, two_tenants):
     assert retention.prune_findings(db, None) == 0
 
 
+def test_accepted_risks_are_never_pruned(db, two_tenants):
+    alpha, _ = two_tenants
+    finding(db, alpha, "first", iso(500), resolved_at=iso(400))
+    accepted = finding(db, alpha, "accepted", iso(300), resolved_at=iso(200), accepted_at=iso(250))
+    assert retention.dry_run(db, retention.Policy(findings_days=90))["findings_days"] == 0
+    assert retention.prune_findings(db, 90) == 0
+    assert db.execute("SELECT 1 FROM findings WHERE id = ?", (accepted,)).fetchone()
+
+
 def test_run_logs_follow_their_setting(db, cfg, two_tenants):
     alpha, _ = two_tenants
     rid = store.enqueue_run(db, alpha, "users")
@@ -181,6 +190,16 @@ def test_issued_reports_keep_the_floor_and_the_latest(db, two_tenants):
     assert retention.prune_issued(db, 30) == 1  # 30 days is raised to the 365-day floor
     left = {r[0] for r in db.execute("SELECT id FROM issued_reports")}
     assert old not in left and {within, latest_kind} <= left
+
+
+def test_every_file_of_the_latest_send_is_kept(db, two_tenants):
+    alpha, _ = two_tenants
+    older = [issued(db, alpha, "review", 900, "r.pdf"), issued(db, alpha, "review", 900, "r.xlsx")]
+    latest = [issued(db, alpha, "review", 800, "r.pdf"), issued(db, alpha, "review", 800, "r.xlsx")]
+    assert retention.dry_run(db, retention.Policy(issued_days=400))["issued_days"] == 2
+    assert retention.prune_issued(db, 400) == 2
+    left = {r[0] for r in db.execute("SELECT id FROM issued_reports")}
+    assert left == set(latest) and not left & set(older)
 
 
 def test_snapshot_settings_reach_the_worker(db, cfg, two_tenants):
