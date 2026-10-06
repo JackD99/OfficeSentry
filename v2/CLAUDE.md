@@ -18,6 +18,14 @@ overview and DEPLOY.md for running it on a server.
   tenant-scoped loads the tenant with `access.tenant_or_404()`.
   `tests/test_access.py::test_every_page_requires_login` enforces the first.
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
+- **Microsoft hosts come from `clouds.py`** (commercial, GCC High, DoD,
+  China). A tenant (`tenants.cloud`) only signs in with an app connection of
+  the same cloud (`app_connections.cloud`, `worker.connection_cloud`); pass
+  the cloud to `GraphClient`, `ExchangeClient`, `msauth` and
+  `admin_consent_url`, and never spell out a Microsoft host elsewhere. Something
+  Microsoft doesn't offer in a cloud goes in that cloud's `missing` (a
+  collector key or `"<collector>.<part>"`): the worker warns instead of
+  running it, and reports and checks show it as unavailable with that reason.
 - **Credentials never touch disk as files** and are never sent to the browser.
 - **Mock Graph with `responses`, never by replacing `GraphClient`.**
 - **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump
@@ -119,6 +127,15 @@ without a OneDrive aren't asked about for a week.
   codes); show `usage.label(row)` and `usage.CONCEALED_NOTICE`.
 - `tests/seed.py` runs every collector against `tests/graphdata.py`; use it
   for rule and report tests.
+- The insurance evidence pack (`reports/evidence.py`) suggests answers to
+  questionnaire questions in `reports/evidence_answers.QUESTIONS` (Yes, Partly,
+  No, Not known, a one-line justification and a source link), built from the
+  snapshot and check results. Enforcement comes first: MFA required by
+  Conditional Access with only a named break-glass exclusion is "Yes" listing
+  it. Admins and analysts can override an answer with a note
+  (`evidence_answer_overrides`, audited, note text never logged); the page,
+  PDF, XLSX and CSV show the override and who set it, and only staff on the
+  page see the suggestion it replaced and the "data changed" hint.
 - Client-facing reports (page + PDF) extend `templates/reports/_layout.html`
   (cover, MSP branding, running headers and page numbers) and build from the
   macros in `reports/_components.html` (verdict, KPI tile, severity bar,
@@ -209,12 +226,17 @@ minute, queues the collection slot (`schedule.py`, cron + timezone, skipping
 collectors fresher than `max_age_hours`) and sends due report emails (which
 first refresh stale collectors). Every thread opens its own SQLite connection;
 never share one across threads. Manual runs and report refreshes get
-`store.PRIORITY_WAITING`. Once a day it prunes snapshots with
-`store.prune_snapshots` (latest run per day for 30 days and per month for 12;
-metrics, findings and run rows are never pruned), so code that reads an older
-run must cope with its objects being gone (see `changes._baseline_run`), and
-run log info lines older than 90 days (`store.prune_run_logs`; warnings and
-errors stay). A side thread records the heartbeat that the portal banner and
+`store.PRIORITY_WAITING`. Once a day `retention.apply` prunes under
+the admin's *Data retention* settings (`retention.*` keys in `settings`;
+unset means today's defaults): snapshots with `store.prune_snapshots` (latest
+run per day for 30 days and per month for 12 by default; metrics and run rows
+are never pruned), sign-in detail objects (`retention.SIGNIN_KINDS`) once
+older than their period, resolved findings, run log info lines older than 90
+days (`store.prune_run_logs`; warnings and errors stay), and, when set, the
+activity log and issued reports (each never under 365 days). So code that
+reads an older run must cope with its objects, or just its sign-in kinds,
+being gone (see `changes._baseline_run`). A new store of personal data gets
+a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
 `healthcheck worker` read, but only while the worker makes progress
 (`worker.Liveness`: the main loop came round in the last 10 minutes and no run
 has gone for 4 hours), so a wedged loop or thread shows as down. A failing
@@ -252,8 +274,9 @@ ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 Reports are built live, so what a client was sent is kept separately:
 after a report email goes out, `delivery.send_schedule` stores each attached
 PDF/XLSX in `issued_reports` (`issued.py`: bytes as a BLOB, period, version,
-recipients, SHA-256). It is never pruned (snapshot pruning doesn't touch it),
-is backed up with the database and goes with the tenant on delete. The
+recipients, SHA-256). Snapshot pruning doesn't touch it; it's kept until the
+admin's retention setting says otherwise (never under a year, and never a
+tenant's latest file of each report), is backed up with the database and goes with the tenant on delete. The
 tenant's Report history page (`/tenants/<id>/report-history`, linked from
 Emailed reports and the client home) lists and downloads them; clients see
 the files but not who they went to. Archiving never fails a send.

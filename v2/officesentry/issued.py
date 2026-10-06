@@ -3,9 +3,11 @@
 Reports are built live from snapshots, and snapshots are pruned, so a PDF
 rebuilt today can't show what went out in March. ``delivery.send_schedule``
 calls ``archive()`` after a report email is sent, and every attachment is kept
-in ``issued_reports`` with its period, recipients and SHA-256. Rows are never
-pruned; deleting the tenant deletes them (``ON DELETE CASCADE``), and backups
-copy them with the database.
+in ``issued_reports`` with its period, recipients and SHA-256. Rows are kept
+until the admin's retention setting says otherwise (``retention.prune_issued``,
+never under a year, and never a tenant's latest file of each report); deleting
+the tenant deletes them (``ON DELETE CASCADE``), and backups copy them with the
+database.
 """
 
 from __future__ import annotations

@@ -15,6 +15,8 @@ from .. import coverage
 from ..rules import RuleResult
 from ..snapshot import TenantSnapshot
 from ..text import WHOLE_ORGANISATION
+from . import evidence_answers
+from .evidence_answers import Answer
 from .monthly_review import build as build_review
 from .workbook import Book, Cover
 
@@ -72,6 +74,7 @@ class EvidencePack:
     controls: list[ControlResult]
     secure_score: float | None
     oldest_data: str | None
+    answers: list[Answer] = field(default_factory=list)  # suggested questionnaire answers, with overrides
 
     @property
     def counts(self) -> dict[str, int]:
@@ -155,8 +158,10 @@ def build(conn, tenant, now: datetime | None = None) -> EvidencePack:
         controls.append(ControlResult(c, status, evidence + _extra_evidence(c.key, snap, review.generated_at), gaps))
 
     finished = [r["finished_at"] for r in snap.runs.values() if r["finished_at"]]
+    answers = evidence_answers.apply_overrides(evidence_answers.suggest(snap, by_key),
+                                               evidence_answers.overrides(conn, tenant["id"]))
     return EvidencePack(dict(tenant), review.generated_at, controls, snap.metric("secure_score.pct"),
-                        min(finished) if finished else None)
+                        min(finished) if finished else None, answers)
 
 
 def _sentence(text: str) -> str:
@@ -168,8 +173,28 @@ def _as_pass(r: RuleResult) -> RuleResult:
     return RuleResult(r.key, r.title, r.category, "pass", r.summary, r.recommendation, [])
 
 
+ANSWER_COLUMNS = ["Question", "Answer", "Why", "Answered by", "Evidence"]
+
+
+def answer_rows(pack: EvidencePack) -> list[list[str]]:
+    """The questionnaire answers as exports show them: an override shows its note and who set it, never the
+    suggestion it replaced."""
+    rows = []
+    for a in pack.answers:
+        if a.override:
+            when = datetime.fromisoformat(a.override.set_at.replace("Z", "+00:00"))
+            why, by = a.override.note, f"{a.override.set_by}, {when.day} {when:%b %Y}"
+        else:
+            why, by = a.why, "Suggested from Microsoft 365 data"
+        source = (a.source.label + (" report" if a.source.report else "")) if a.source else ""
+        rows.append([a.question, a.answer, why, by, source])
+    return rows
+
+
 def to_xlsx(pack: EvidencePack, brand=None) -> bytes:
     book = Book(brand.accent if brand else "")
+    book.table("Questionnaire", ANSWER_COLUMNS, answer_rows(pack),
+               description="Answers to the questions cyber insurers ask, worded as they ask them")
     book.table("Controls", ["Question", "Status", "What we found", "Gaps"],
                [[c.control.question, c.status, "\n".join(c.evidence), "\n".join(g.strip() for g in c.gaps)]
                 for c in pack.controls], description="Each control insurers ask about, with the evidence")

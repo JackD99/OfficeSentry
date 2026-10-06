@@ -82,6 +82,22 @@ from the proxy and shares its limits, and the portal logs a warning. Don't set
 it higher than the number of proxies you really have, or visitors could choose
 their own address.
 
+## Clients in GCC High, DoD or China
+
+Nothing on the server changes: the portal and worker reach each tenant's
+cloud from the same install. The server needs outbound HTTPS to that cloud's
+hosts (login.microsoftonline.us, graph.microsoft.us, outlook.office365.us for
+GCC High; login.microsoftonline.us, dod-graph.microsoft.us, webmail.apps.mil
+for DoD; login.chinacloudapi.cn, microsoftgraph.chinacloudapi.cn,
+partner.outlook.cn for China), so allow them if outbound traffic is filtered.
+
+Each of those clouds needs its own app registration, made in that cloud, and
+its own app connection in Office Sentry with the matching cloud: run
+`docker compose run --rm worker python -m officesentry create-app --cloud gcc_high --tenant <your GCC High tenant>`
+(or `dod`, `china`). The [README](README.md#national-clouds-gcc-high-dod-china)
+explains choosing the cloud for a tenant and what Microsoft doesn't offer in
+each cloud.
+
 ## When things run
 
 | Setting in `.env` | Default | What it does |
@@ -100,21 +116,37 @@ only, `30 1,13 * * *` twice a day at 01:30 and 13:30.
 
 ## How long data is kept
 
-Trend numbers and findings history are kept forever. Full snapshots (every
-user, policy and mailbox from a run) take the most space, so the worker keeps,
-for each tenant and data source:
+Admins set this under *Settings → Data retention* (`/admin/retention`). The
+page says what each period covers and roughly how much the next pass would
+delete, and every change goes in the activity log. The worker applies it once
+a day, deleting in small batches so the portal stays responsive; deleted rows
+are overwritten in the database file where that costs no extra I/O
+(`secure_delete = FAST`). Backups keep deleted data until they rotate out.
 
-- the last run of each of the last **30 days** (`OFFICESENTRY_KEEP_DAILY`), and
-- the last run of each of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`).
+| Data | Default (today's behaviour) | Can be set to |
+|---|---|---|
+| Snapshots (every user, mailbox, device and policy from a run) | the last run of each of the last **30 days** (`OFFICESENTRY_KEEP_DAILY`) and of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`) | any number of days and months, or every month forever |
+| Sign-in detail (accounts, IP addresses, countries and cities from the sign-in logs) | as long as its snapshot: about 13 months | 30 days or more |
+| Resolved findings | forever | 30 days or more after they were resolved |
+| Run log info lines (warnings and errors always stay) | 90 days | 7 days or more, or forever |
+| Activity log | forever | 365 days or more |
+| Issued reports (files sent or approved for clients) | forever | 365 days or more |
 
-Older snapshots are cleared once a day. Run pages for cleared snapshots still
-show their numbers. Run logs older than 90 days keep only their warnings and
-errors, so a page still says why an old run failed or was partial.
+The settings page overrides the environment variables once saved. Trend
+numbers are counts only, with no names or addresses, and are kept forever, so
+run pages for cleared snapshots still show their numbers. The latest snapshot,
+anything collected in the last day, open findings and accepted risks, each
+tenant's first-scan findings (alert emails compare against them) and each
+tenant's latest file of each issued report (month-end reporting compares
+against it) are never deleted by retention. The activity log can't be set
+under a year because it's the record of who changed what and signed in from
+where, which security reviews and investigations look back over.
 
 The **activity log** (*Settings → Activity log*, admins only) records sign-ins
 and every change, with the address it came from; filter it by user, action,
 tenant and date, and download it as CSV. Failed and slowed-down sign-ins are
-removed after 90 days; everything else is kept. Failed sign-ins with
+removed after 90 days; everything else is kept unless *Data retention* sets
+a period. Failed sign-ins with
 usernames that don't exist are counted per address and hour, without storing
 what was typed.
 

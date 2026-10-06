@@ -10,6 +10,10 @@
 {% set collected = report.freshness|map(attribute='finished_at')|select|list %}
 {{ tenant_header(tenant, 'overview', counts={'findings': open_total}) }}
 
+{% if cloud_problem %}
+<div class="callout warn" role="status"><div><strong>Set up an app for {{ cloud_of(tenant).label }}.</strong> {{ cloud_problem }}{% if current_user.role == 'admin' %} <a href="{{ url_for('admin.connections') }}">App connection</a>{% endif %}</div></div>
+{% endif %}
+
 {% if setup and not tenant.archived_at %}
 {{ checklist(setup, tenant, consent_link, redirect_uri, setup_can_check) }}
 {% endif %}

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, downloads with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, csrf with context %}
 {% block title %}Insurance evidence · {{ pack.tenant.name }}{% endblock %}
 {% set TONE = {'In place': 'ok', 'Partly in place': 'warn', 'Not in place': 'bad', 'Not assessed': ''} %}
+{% set ANSWER_TONE = {'Yes': 'ok', 'Partly': 'warn', 'No': 'bad', 'Not known': ''} %}
 {% block content %}
 {{ tenant_header(pack.tenant, 'evidence') }}
 <div class="toolbar">
@@ -15,9 +16,42 @@
   <div class="tile"><div class="label"><span class="dot {{ TONE[status] }}"></span> {{ status }}</div><div class="value">{{ n }}</div><div class="foot">of {{ pack.controls|length }} controls</div></div>
   {% endfor %}
 </div>
+<section class="card flush answers" id="answers">
+  <div class="card-head"><h2>Questionnaire answers</h2><span class="muted small">Worded as insurers ask them{% if staff %}. Change any answer you know better; the pack, PDF and downloads show yours{% endif %}</span></div>
+  {% for a in pack.answers %}
+  <div class="answer-row" id="answer-{{ a.key }}">
+    <span class="pill {{ ANSWER_TONE[a.answer] }} answer">{{ a.answer }}</span>
+    <div class="answer-main">
+      <div class="q">{{ a.question }}</div>
+      {% if a.override %}
+      <p class="small m0">{% if a.override.note %}{{ a.override.note }} {% endif %}<span class="muted">Answer set by {{ a.override.set_by }} on {{ a.override.set_at|day }}.</span></p>
+      {% if staff %}<p class="small muted m0">Suggested from the data: <strong>{{ a.suggested }}</strong>. {{ a.why }}</p>{% endif %}
+      {% if staff and a.data_changed %}<p class="small m0 data-changed">{{ icon('alert') }} Data changed since this was set: the suggestion was {{ a.override.suggested }} then and is {{ a.suggested }} now.</p>{% endif %}
+      {% else %}
+      <p class="small m0">{{ a.why }}</p>
+      {% endif %}
+      {% if a.source %}<p class="small m0"><a href="{% if a.source.report %}{{ url_for('reports.data_report', tenant_id=pack.tenant.id, key=a.source.report) }}{% if a.source.anchor %}#{{ a.source.anchor }}{% endif %}{% else %}#control-{{ a.source.control }}{% endif %}">{{ a.source.label }} &rarr;</a></p>{% endif %}
+      {% if staff %}
+      <details class="answer-edit"><summary class="small">{{ 'Change or clear this answer' if a.override else 'Set a different answer' }}</summary>
+        <form method="post" action="{{ url_for('reports.evidence_answer', tenant_id=pack.tenant.id, key=a.key) }}">
+          {{ csrf() }}
+          <div class="form-row">
+            <label>Answer <select name="answer">{% for v in answers %}<option value="{{ v }}"{% if v == a.answer %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+          </div>
+          <label>Note for the client <textarea name="note" rows="2" maxlength="{{ max_note }}">{{ a.override.note if a.override else '' }}</textarea></label>
+          <button class="sm">Save answer</button>
+          {% if a.override %}<button class="sm ghost" name="action" value="clear">Use the suggested answer</button>{% endif %}
+        </form>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
 <section class="card flush">
+  <div class="card-head"><h2>Controls</h2></div>
   {% for c in pack.controls %}
-  <details class="control"{% if c.status in ('Not in place', 'Partly in place') %} open{% endif %}>
+  <details class="control" id="control-{{ c.control.key }}"{% if c.status in ('Not in place', 'Partly in place') %} open{% endif %}>
     <summary>
       <span class="pill {{ TONE[c.status] }} answer">{{ c.status }}</span>
       <span class="q">{{ c.control.question }}</span>

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from .. import clouds
 from .. import identity_protection as ip
 from ..snapshot import TenantSnapshot
 from ..text import plural
@@ -30,6 +31,9 @@ def _utc(value) -> str:
 
 
 def risky_users_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    if why := clouds.missing(clouds.of(snap.tenant), "risky_users"):
+        report.unavailable = why
+        return
     status = ip.status(snap)
     if status is None:
         report.unavailable = NOT_COLLECTED

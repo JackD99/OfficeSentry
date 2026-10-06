@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from .. import clouds
 from ..devices import parse_day
 from ..graph import GraphError, PermissionMissing
 from ..usage import ACTIVE_DAYS, APPS, COLLECTOR, COPILOT, PLATFORMS, SERVICES, concealed, part_for_product
@@ -171,23 +172,32 @@ class Usage(Collector):
             ctx.objects("usage_status", [("status", {"available": False, "reason": "permission"})])
             return
         read = {}
+        cloud = clouds.of(ctx.tenant)
         for name, path, merge in (("apps", APP_USERS, merge_apps), ("activations", ACTIVATIONS, merge_activations),
                                   ("email", EMAIL, merge_email), ("teams", TEAMS, merge_teams)):
+            if why := clouds.missing(cloud, f"usage.{name}"):
+                read[name] = False
+                ctx.warn(why)
+                continue
             try:
                 merge(rows, ctx.paged(ctx.graph.get_all(path, JSON, version="beta")))
                 read[name] = True
             except GraphError as exc:
                 read[name] = False
                 ctx.warn(f"Usage report unavailable ({name}): {exc.message}")
-        try:
-            merge_copilot(rows, ctx.paged(ctx.graph.get_all(COPILOT_USAGE, JSON, version="beta")))
-            read["copilot"] = True
-        except GraphError as exc:
+        if why := clouds.missing(cloud, "usage.copilot"):
             read["copilot"] = False
-            if _has_copilot(rows):  # only matters when someone holds Copilot
-                ctx.warn(f"Copilot usage report unavailable: {exc.message}")
-            else:
-                ctx.log(f"Copilot usage report unavailable: {exc.message}")
+            ctx.log(why)  # nobody there can hold Copilot, so it isn't worth a warning
+        else:
+            try:
+                merge_copilot(rows, ctx.paged(ctx.graph.get_all(COPILOT_USAGE, JSON, version="beta")))
+                read["copilot"] = True
+            except GraphError as exc:
+                read["copilot"] = False
+                if _has_copilot(rows):  # only matters when someone holds Copilot
+                    ctx.warn(f"Copilot usage report unavailable: {exc.message}")
+                else:
+                    ctx.log(f"Copilot usage report unavailable: {exc.message}")
 
         hidden = any(r["concealed"] for r in rows.values())
         report_date = max((r["reportDate"] for r in rows.values() if r["reportDate"]), default=None)

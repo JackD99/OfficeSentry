@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .. import lifecycle, store, tenant_health
+from .. import clouds, lifecycle, store, tenant_health
 from ..collectors import REGISTRY
 from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
@@ -43,14 +43,29 @@ def not_connected(tenant) -> str | None:
     if not tenant["enabled"]:
         return "Collection is paused for this tenant. Resume it under Manage."
     connection = store.get_connection(g.db, tenant["connection_id"]) if tenant["connection_id"] else None
+    cloud = clouds.of(tenant)
     if not connection:
+        if not cloud.is_default and not any(clouds.of(c).key == cloud.key for c in store.list_connections(g.db)):
+            return clouds.app_needed(cloud)
         return "This tenant isn't connected yet: choose its app connection under Manage."
+    if clouds.of(connection).key != cloud.key:
+        return clouds.app_needed(cloud)
     if not connection["client_id"]:
         return ("This tenant isn't connected yet: its app connection has no application (client) ID. "
                 "Add it under App connection first.")
     if not tenant["consented_at"]:
         return "This tenant isn't connected yet: a tenant admin needs to grant consent first."
     return None
+
+
+def cloud_mismatch(cloud_key: str, connection) -> str | None:
+    """Why ``connection`` can't serve a tenant in ``cloud_key``, or None when it can (or there's none)."""
+    if connection is None or clouds.of(connection).key == cloud_key:
+        return None
+    tenant_cloud, app_cloud = clouds.get(cloud_key), clouds.of(connection)
+    return (f"The app connection {connection['name']} is registered in {app_cloud.label}, so it can't sign in to a "
+            f"{tenant_cloud.label} tenant. Choose an app connection set up for {tenant_cloud.label}, or add one "
+            "under App connection.")
 
 
 def data_health(tenant, latest: dict) -> tuple[str, str, str]:
@@ -117,17 +132,29 @@ def new_tenant():
         name = request.form.get("name", "").strip()
         ref = request.form.get("tenant_ref", "").strip().lower()
         conn_id = request.form.get("connection_id", type=int)
+        cloud = request.form.get("cloud", clouds.DEFAULT)
+        if not clouds.valid(cloud):
+            abort(400)
+        connection = store.get_connection(g.db, conn_id) if conn_id is not None else None
         if not name or len(name) > 200:
             flash("Enter a display name.", "error")
         elif not (GUID_RE.match(ref) or DOMAIN_RE.match(ref)):
             flash("Enter the tenant ID (GUID) or its domain, e.g. contoso.onmicrosoft.com.", "error")
-        elif conn_id is not None and store.get_connection(g.db, conn_id) is None:
+        elif conn_id is not None and connection is None:
             abort(400)
         elif g.db.execute("SELECT 1 FROM tenants WHERE tenant_ref = ?", (ref,)).fetchone():
             flash("That tenant is already added.", "error")
         else:
-            tenant_id = store.create_tenant(g.db, name, ref, conn_id)
-            audit(g.db, g.user["username"], "tenant_created", tenant_id, ref)
+            if cloud_mismatch(cloud, connection):
+                # Add it anyway with this cloud's app if there's exactly one, else none: the tenant page then
+                # says to set one up for its cloud.
+                same = [c for c in connections if clouds.of(c).key == cloud]
+                conn_id = same[0]["id"] if len(same) == 1 else None
+                if conn_id is None:
+                    flash(clouds.app_needed(clouds.get(cloud)), "warning")
+            tenant_id = store.create_tenant(g.db, name, ref, conn_id, cloud)
+            audit(g.db, g.user["username"], "tenant_created", tenant_id,
+                  ref + ("" if cloud == clouds.DEFAULT else f" ({cloud})"))
             return redirect(url_for("tenants.tenant", tenant_id=tenant_id))
     return render_template("tenant_new.html", connections=connections)
 
@@ -151,6 +178,8 @@ def _consent_link(t, connection):
     """
     if g.user["role"] != "admin" or not connection or not connection["client_id"] or g.get("session_row") is None:
         return None
+    if cloud_mismatch(clouds.of(t).key, connection):
+        return None  # that app can't be consented to in this tenant's cloud
     nonce = secrets.token_urlsafe(24)
     now = datetime.now(UTC)
     g.db.execute("DELETE FROM consent_requests WHERE expires_at < ?", (_iso(now),))
@@ -162,7 +191,7 @@ def _consent_link(t, connection):
     )
     state = _consent_serializer().dumps({"t": t["id"], "n": nonce})
     return admin_consent_url(connection["client_id"], t["tenant_ref"],
-                             _cfg().base_url + url_for("tenants.consent_callback"), state)
+                             _cfg().base_url + url_for("tenants.consent_callback"), state, clouds.of(t).key)
 
 
 def _use_consent_nonce(tenant_id: int, nonce) -> bool:
@@ -194,11 +223,15 @@ def tenant(tenant_id: int):
     from .tenant_admin import _check_problem
 
     setup = tenant_health.assess(g.db, t)  # the onboarding checklist, until every step is done
+    cloud = clouds.of(t)
+    cloud_problem = None
+    if not cloud.is_default and (connection is None or cloud_mismatch(cloud.key, connection)):
+        cloud_problem = clouds.app_needed(cloud)
     return render_template(
         "tenant.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
         redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"), report=report, attention=attention,
         health=data_health(t, latest), report_groups=grouped(), setup=None if setup.onboarded else setup,
-        setup_can_check=_check_problem(t) is None,
+        setup_can_check=_check_problem(t) is None, cloud_problem=cloud_problem,
     )
 
 
@@ -245,6 +278,9 @@ def set_connection(tenant_id: int):
     conn_id = request.form.get("connection_id", type=int)
     if conn_id is not None and store.get_connection(g.db, conn_id) is None:
         abort(400)
+    if problem := cloud_mismatch(clouds.of(t).key, store.get_connection(g.db, conn_id) if conn_id else None):
+        flash(problem, "error")
+        return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
     from .tenant_admin import _other_app
 
     reset = conn_id != t["connection_id"] and _other_app(t["connection_id"], conn_id)
@@ -262,12 +298,12 @@ def test_connection(tenant_id: int):
 
     t = tenant_or_404(tenant_id)
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
-    if not connection or not connection["client_id"]:
+    if not connection or not connection["client_id"] or cloud_mismatch(clouds.of(t).key, connection):
         flash(not_connected(t), "error")
         return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
     vault = current_app.extensions["officesentry.vault"]
     result = check(t["tenant_ref"], connection["client_id"], vault.decrypt(connection["key_enc"]),
-                   connection["thumbprint"])
+                   connection["thumbprint"], clouds.of(t).key)
     audit(g.db, g.user["username"], "connection_tested", t["id"], "ok" if result.ok else result.title)
     if result.ok:
         g.db.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), t["id"]))
@@ -316,7 +352,7 @@ def consent_callback():
         refused = None
         if GUID_RE.match(t["tenant_ref"]):  # never re-point a tenant that already has its ID
             refused = "Consent came from a different tenant than this one."
-        elif (expected := tenant_id_for_domain(t["tenant_ref"].lower())) is None:
+        elif (expected := tenant_id_for_domain(t["tenant_ref"].lower(), cloud=clouds.of(t).key)) is None:
             unconfirmed = True  # record the consent, but keep signing in by domain
         elif expected != returned:
             # Anyone holding the link could otherwise point this client at another client's tenant.

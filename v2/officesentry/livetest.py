@@ -2,7 +2,8 @@
 
 For development only: the product signs in with a certificate. Reads
 OFFICESENTRY_TEST_TENANT_ID, OFFICESENTRY_TEST_CLIENT_ID and
-OFFICESENTRY_TEST_CLIENT_SECRET, stores the results in the configured
+OFFICESENTRY_TEST_CLIENT_SECRET (and optionally OFFICESENTRY_TEST_CLOUD: commercial,
+gcc_high, dod or china, for a test tenant in a national cloud), stores the results in the configured
 database as tenant "Live test" (so the portal shows them), and prints what
 worked, what failed and the check results. Nothing is written to the tenant.
 """
@@ -13,12 +14,12 @@ import json
 import os
 from pathlib import Path
 
-from . import dnscheck, recording, store
+from . import clouds, dnscheck, recording, store
 from .collectors import REGISTRY
 from .config import Config
 from .db import connect, migrate, utcnow
-from .exchange import EXCHANGE_ROOT, ExchangeClient, ExchangeError
-from .graph import GRAPH_ROOT, GraphClient, GraphError
+from .exchange import ExchangeClient, ExchangeError
+from .graph import GraphClient, GraphError
 from .msauth import TokenError, secret_token_provider
 from .rules import evaluate
 from .snapshot import TenantSnapshot
@@ -44,6 +45,14 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
         print("Missing environment variables: " + ", ".join(missing))
         return 2
     tenant_ref, client_id, secret = (os.environ[k] for k in ENV)
+    cloud_key = os.environ.get("OFFICESENTRY_TEST_CLOUD", "").strip() or clouds.DEFAULT
+    if not clouds.valid(cloud_key):
+        print(f"OFFICESENTRY_TEST_CLOUD must be one of {', '.join(clouds.CLOUDS)}")
+        return 2
+    cloud = clouds.get(cloud_key)
+    if record and not cloud.is_default:
+        print("The recorded fixture replays commercial endpoints; record from a commercial test tenant.")
+        return 2
     conn = connect(cfg.db_path)
     migrate(conn)
     connections = store.list_connections(conn)
@@ -53,7 +62,9 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
     if connection_id is None and len(connections) == 1:
         connection_id = connections[0]["id"]  # so the portal can keep refreshing it with the certificate
     row = conn.execute("SELECT id, connection_id FROM tenants WHERE tenant_ref = ?", (tenant_ref,)).fetchone()
-    tenant_id = row["id"] if row else store.create_tenant(conn, "Live test", tenant_ref, connection_id)
+    if connection_id is not None and clouds.of(store.get_connection(conn, connection_id)).key != cloud.key:
+        connection_id = None  # an app connection from another cloud couldn't refresh this tenant
+    tenant_id = row["id"] if row else store.create_tenant(conn, "Live test", tenant_ref, connection_id, cloud.key)
     if row and connection_id is not None and row["connection_id"] is None:
         conn.execute("UPDATE tenants SET connection_id = ? WHERE id = ?", (connection_id, tenant_id))
     # The test app is Office Sentry's own, so checks shouldn't flag it. Its client ID isn't secret.
@@ -62,10 +73,11 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
 
     log: list = []
     session = recording.RecordingSession(log) if record else None
-    graph = GraphClient(_wrap(secret_token_provider(tenant_ref, client_id, secret, GRAPH_ROOT), GraphError),
-                        session=session)
-    exo = ExchangeClient(tenant_ref, _wrap(secret_token_provider(tenant_ref, client_id, secret, EXCHANGE_ROOT),
-                                           ExchangeError), session=session)
+    graph = GraphClient(_wrap(secret_token_provider(tenant_ref, client_id, secret, cloud.graph, cloud.key),
+                              GraphError), session=session, cloud=cloud.key)
+    exo = ExchangeClient(tenant_ref, _wrap(secret_token_provider(tenant_ref, client_id, secret, cloud.exchange,
+                                                                 cloud.key), ExchangeError),
+                         session=session, cloud=cloud.key)
     real_lookup = dnscheck.lookup
     if record:
         dnscheck.lookup = recording.recording_lookup(log, real_lookup)

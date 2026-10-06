@@ -7,7 +7,7 @@ import re
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
-from .. import store, throttle
+from .. import clouds, store, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
@@ -194,10 +194,13 @@ def connections():
 @roles_required("admin")
 def create_connection():
     name = request.form.get("name", "").strip() or "Office Sentry"
+    cloud = request.form.get("cloud", clouds.DEFAULT)
+    if not clouds.valid(cloud):
+        abort(400)
     cert = generate_certificate(f"Office Sentry - {name}"[:64])
     vault = current_app.extensions["officesentry.vault"]
-    conn_id = store.create_connection(g.db, vault, name[:100], cert)
-    audit(g.db, g.user["username"], "connection_created", detail=f"{name} {cert.thumbprint}")
+    conn_id = store.create_connection(g.db, vault, name[:100], cert, cloud=cloud)
+    audit(g.db, g.user["username"], "connection_created", detail=f"{name} {cert.thumbprint} {cloud}")
     flash("Certificate generated. Upload the .cer to your app registration, then save its client ID.", "success")
     return redirect(url_for("admin.connections") + f"#conn-{conn_id}")
 
@@ -224,7 +227,7 @@ def set_client_id(conn_id: int):
 
             connection = store.get_connection(g.db, conn_id)
             result = check(home, client_id, current_app.extensions["officesentry.vault"].decrypt(
-                connection["key_enc"]), connection["thumbprint"])
+                connection["key_enc"]), connection["thumbprint"], clouds.of(connection).key)
             if result.ok:
                 flash(f"Client ID saved and checked: {result.title} The certificate works.", "success")
             else:

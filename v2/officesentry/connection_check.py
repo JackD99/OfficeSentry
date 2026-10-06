@@ -10,7 +10,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .graph import GRAPH_ROOT, GraphClient, GraphError
+from . import clouds
+from .graph import GraphClient, GraphError
 from .msauth import TokenError, certificate_token_provider
 
 
@@ -46,7 +47,9 @@ KNOWN = {
     "50011": ("The app registration is missing Office Sentry's redirect URI.",
               "In the app registration, open Authentication > Add a platform > Web, and add the redirect URI "
               "shown on the App connection page."),
-    "90002": ("Microsoft can't find this tenant.", "Check the tenant ID or domain on the tenant."),
+    "90002": ("Microsoft can't find this tenant.",
+              "Check the tenant ID or domain on the tenant, and its Microsoft cloud: a GCC High, DoD or China "
+              "tenant can only be reached through that cloud, with an app registered there."),
     "900023": ("Microsoft can't find this tenant.", "Check the tenant ID or domain on the tenant."),
     "53003": ("A Conditional Access policy in this tenant blocks the app.",
               "Ask the tenant's admin to exclude Office Sentry's app from the blocking policy (Conditional Access "
@@ -80,9 +83,11 @@ class CheckResult:
     organisation: str | None = None
 
 
-def check(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str) -> CheckResult:
-    """Sign in as the app and read the tenant's name. Read-only, one Graph call."""
-    provider = certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, GRAPH_ROOT)
+def check(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str,
+          cloud: str | None = None) -> CheckResult:
+    """Sign in as the app and read the tenant's name, in the tenant's cloud. Read-only, one Graph call."""
+    c = clouds.get(cloud)
+    provider = certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, c.graph, c.key)
 
     def token() -> str:
         try:
@@ -91,7 +96,7 @@ def check(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str) -> Che
             raise GraphError(401, exc.code, exc.message) from exc
 
     try:
-        orgs = GraphClient(token, max_retries=1).get("/organization", params={"$select": "displayName"})
+        orgs = GraphClient(token, max_retries=1, cloud=c.key).get("/organization", params={"$select": "displayName"})
     except GraphError as exc:
         problem = explain(exc.message, exc.code)
         if problem:

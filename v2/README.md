@@ -215,6 +215,10 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   Office Sentry" stays small in the footer), the support contact clients see,
   and an optional note printed at the end of every report. The name is also
   the email sender's name unless Email delivery sets one.
+- **Data retention** (`/admin/retention`): how long snapshots, sign-in detail
+  (IP addresses and locations), resolved findings, run logs, the activity log
+  and issued reports are kept, with a count of what the next daily pass would
+  delete. Defaults keep today's behaviour; see DEPLOY.md.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth
 blocked, admins without MFA, admins not covered by an MFA policy, Global Admin
@@ -311,7 +315,8 @@ this command; the product signs in with a certificate.
   two-step setting changes.
 - **Activity log:** admins see sign-ins and every change, with the address,
   under *Settings → Activity log* (filters, paging, CSV). Failed sign-ins are
-  kept for 90 days, the rest for good.
+  kept for 90 days, the rest for good unless *Settings → Data retention* sets
+  a period (never under a year).
 - **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
   prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
   real client IP and scheme are used.
@@ -377,6 +382,49 @@ Then:
   tenant and everything stored for it after you type its name, optionally with
   client accounts that had no other tenant. `python -m officesentry
   delete-tenant <id>` does the same from the server.
+
+## National clouds (GCC High, DoD, China)
+
+Each tenant has a **Microsoft cloud**, chosen when it's added (or later under
+**Manage**):
+
+| Cloud | Sign-in | Microsoft Graph | Exchange admin API |
+|---|---|---|---|
+| Commercial (includes GCC) | login.microsoftonline.com | graph.microsoft.com | outlook.office365.com |
+| US Government GCC High | login.microsoftonline.us | graph.microsoft.us | outlook.office365.us |
+| US Government DoD | login.microsoftonline.us | dod-graph.microsoft.us | webmail.apps.mil |
+| China (operated by 21Vianet) | login.chinacloudapi.cn | microsoftgraph.chinacloudapi.cn | partner.outlook.cn |
+
+GCC (moderate) tenants use the commercial endpoints, so leave them on
+Commercial.
+
+**Each national cloud needs its own app registration.** GCC High, DoD and
+China are separate Entra IDs: an app registered in commercial Entra can't sign
+in to them, and the other way round. For clients in one of those clouds:
+
+1. **App connection → Create another app connection**, with *Microsoft cloud*
+   set to that cloud. This generates a separate certificate.
+2. Register the app in that cloud's own admin centre (entra.microsoft.us for
+   GCC High and DoD, the 21Vianet Azure portal for China), from an account in
+   your tenant *in that cloud*, exactly as for the commercial app; or run
+   `python -m officesentry create-app --cloud gcc_high` (or `dod`, `china`)
+   with `--tenant` set to your tenant in that cloud. Save its client ID.
+3. Add the tenant with the same cloud and that app connection. Its consent
+   link opens on that cloud's sign-in page, and collection signs in to that
+   cloud's Graph and Exchange.
+
+A tenant in a cloud with no app connection for it is added anyway; its page
+says to set up an app for that cloud, and collection doesn't start until there
+is one. An app connection can only be chosen for tenants in its own cloud.
+
+Microsoft doesn't offer everything in every cloud. Where it doesn't (Secure
+Score and Identity Protection's risky users in China; the Microsoft 365 Apps
+and Copilot usage reports in GCC High, DoD and China), the collection is
+marked *partial* with the reason, and the report or check shows it as
+unavailable instead of failing. The list is `missing` in `officesentry/clouds.py`.
+
+Report emails are sent from your own mailbox through the commercial cloud,
+whatever cloud the clients are in.
 
 ## Development
 
