@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import alerts, delivery, issued, mailer, store
+from .. import alerts, delivery, issued, mailer, month_end, store
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
 from ..reports.data_reports import grouped as report_groups
@@ -80,7 +80,8 @@ def _decorate(s) -> dict:
     d["recipients"] = delivery.recipients(g.db, "schedule", s["id"])
     d["describe"] = delivery.describe(s)
     d["tz"] = delivery.schedule_tz(s, _cfg().timezone)
-    d["next"] = delivery.next_send(s, _cfg().timezone)
+    # A plan schedule that waits for approval never sends on its timer (month_end.approve sends it).
+    d["next"] = None if s["on_approval"] else delivery.next_send(s, _cfg().timezone)
     d["titles"] = delivery.report_titles(s["reports"]) if s["kind"] == "report" else ["Tenant digest"]
     d["due_now"] = d["next"] is not None and d["next"] <= datetime.now(UTC)
     return d
@@ -335,6 +336,10 @@ def toggle_schedule(schedule_id: int):
 @roles_required(*STAFF)
 def send_now(schedule_id: int):
     s = _schedule_or_404(schedule_id)
+    if s["on_approval"]:
+        flash("This report goes out when its month-end review is approved.", "error")
+        return redirect(url_for("reporting.review", period=month_end.current_period(_cfg().timezone),
+                                tenant_id=s["tenant_id"]))
     if not delivery.recipients(g.db, "schedule", s["id"]):
         flash("Add someone to send it to first.", "error")
         return _back(s["tenant_id"])
@@ -433,7 +438,9 @@ def _add_contact(tenant_id: int | None):
     if not mailer.valid_email(email):
         flash("Enter a valid email address.", "error")
         return
-    delivery.add_contact(g.db, tenant_id, name, email)
+    contact_id = delivery.add_contact(g.db, tenant_id, name, email)
+    if tenant_id is not None:
+        month_end.contact_added(g.db, tenant_id, contact_id)
     audit(g.db, g.user["username"], "contact_added", tenant_id, email)
     flash(f"Added {name or email}.", "success")
 
@@ -576,7 +583,7 @@ def overview():
         failing=failing, last=_last_errors([s["id"] for s in failing]), upcoming=upcoming[0] if upcoming else None,
         sent=stats["sent"] or 0, failed=stats["failed"] or 0, team=delivery.team_contacts(g.db),
         global_alert=global_alert, tenant_alerts=tenant_alerts, admin=admin,
-        mail_ready=mailer.is_configured(_settings()))
+        mail_ready=mailer.is_configured(_settings()), coverage=month_end.coverage(g.db, tenants.values()))
 
 
 # -- Settings ---------------------------------------------------------------------------------

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% from "_coverage.html" import coverage_card with context %}
+{% block title %}Report plans · Office Sentry{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><span>Report plans</span></div>
+<div class="page-head">
+  <div><h1>Report plans</h1>
+    <div class="sub">Set up the monthly report once and apply it to many clients. Each client gets its own scheduled email.</div></div>
+  <a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} New plan</a>
+</div>
+
+<section class="card flush">
+  <div class="card-head toolbar"><h2>Plans</h2></div>
+  {% if plans %}
+  <table class="stack-sm">
+    <thead><tr><th>Plan</th><th>Reports</th><th>When</th><th>Mode</th><th>Clients</th><th></th></tr></thead>
+    <tbody>
+    {% for p in plans %}
+    <tr>
+      <td><a class="strong" href="{{ url_for('reporting.edit_plan', plan_id=p.id) }}">{{ p.name }}</a>
+        <span class="sub">{{ deliveries[p.delivery] }}</span></td>
+      <td data-label="Reports" class="wrap small">{{ titles(p)|join(' + ') }}</td>
+      <td data-label="When" class="small">{{ describe(p) }}</td>
+      <td data-label="Mode"><span class="pill {{ 'info' if p.mode == 'approval' or p.delivery == 'portal' else '' }}">{{ modes['approval'] if p.delivery == 'portal' else modes[p.mode] }}</span></td>
+      <td data-label="Clients" class="num">{{ p.tenants }}</td>
+      <td class="num"><form method="post" action="{{ url_for('reporting.delete_plan', plan_id=p.id) }}" data-confirm="Remove this plan and its scheduled emails?">{{ csrf() }}<button class="sm ghost danger">Remove</button></form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><h3>No report plans yet</h3>
+    <p>A plan sends the same monthly report to every client you choose, automatically or once you've reviewed and approved it.</p>
+    <a class="btn primary" href="{{ url_for('reporting.new_plan') }}">{{ icon('plus') }} Create a plan</a></div>
+  {% endif %}
+</section>
+
+{{ coverage_card(coverage, True) }}
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf %}
+{% set TONES = {'critical': 'bad', 'high': 'warn', 'medium': 'info', 'ok': 'ok'} %}
+{% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
+{% set editable = state in ('draft', 'in_review') %}
+{% block title %}Review · {{ tenant.name }} · {{ label }} · Office Sentry{% endblock %}
+{% macro month_select(name, value) -%}
+<select name="{{ name }}" aria-label="Target month"><option value="">No target</option>
+  {% for m in months %}<option value="{{ m }}" {% if value == m %}selected{% endif %}>{{ period_label(m) }}</option>{% endfor %}
+  {% if value and value not in months %}<option value="{{ value }}" selected>{{ period_label(value) }}</option>{% endif %}
+</select>
+{%- endmacro %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('reporting.queue', period=period) }}">Month-end · {{ label }}</a><span>/</span><span>{{ tenant.name }}</span></div>
+<div class="page-head">
+  <div><h1>{{ tenant.name }} · {{ label }}</h1>
+    <div class="sub"><span class="pill {{ STATE_PILLS[state] }}">{{ 'Published' if state == 'sent' and plan and plan.delivery == 'portal' else states[state] }}</span>
+      {% if plan %}On “{{ plan.name }}”{% if not emailed %} · approving publishes to the portal only{% endif %}{% else %}Not on a report plan{% endif %}
+      {% if review and review.approved_by %} · approved by {{ review.approved_by }} {{ ts(review.approved_at) }}{% endif %}</div></div>
+  <div class="row-actions">
+    <a class="btn" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('eye') }} See the report</a>
+    <a class="btn" href="{{ url_for('reports.tenant_report_pdf', tenant_id=tenant.id) }}">{{ icon('download') }} PDF</a>
+  </div>
+</div>
+
+{% if review and review.error %}
+<div class="callout bad">{{ icon('alert') }}<div class="grow"><strong>Approved, but the email didn't send.</strong><div class="small">{{ review.error }}</div></div>
+  {% if admin %}<form method="post" action="{{ url_for('reporting.send_again', period=period, tenant_id=tenant.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Send again</button></form>{% endif %}</div>
+{% endif %}
+{% if flags and editable %}
+<div class="callout warn">{{ icon('alert') }}<div><strong>Needs your eyes:</strong> {{ flags|join(', ') }}.</div></div>
+{% endif %}
+
+<div class="grid-main">
+<div>
+  <section class="card" id="commentary">
+    <div class="card-head"><h2>Verdict and commentary</h2><span class="pill {{ TONES.get(verdict.tone, '') }}">{{ verdict.label }}</span></div>
+    <p class="small">{{ verdict.headline }}</p>
+    <form method="post" action="{{ url_for('reporting.save_commentary', period=period, tenant_id=tenant.id) }}">
+      {{ csrf() }}
+      <label>Your commentary <span class="muted">(printed under the verdict on the report and PDF)</span>
+        <textarea class="commentary" name="commentary" maxlength="4000" placeholder="What happened this month and what you'd like the client to know.">{{ review.commentary if review else '' }}</textarea>
+        <span class="hint">Leave a blank line between paragraphs.</span></label>
+      <button class="primary sm">Save commentary</button>
+    </form>
+  </section>
+
+  <section class="card flush" id="actions">
+    <div class="card-head toolbar"><h2>What we recommend next</h2><span class="meta">Kept from month to month</span></div>
+    {% if not actions %}<p class="intro">None yet, so the report suggests its own from the failing checks. Add your own to replace them.</p>{% endif %}
+    {% for a in actions %}
+    <div class="action-row">
+      <div class="grow"><div class="strong">{{ loop.index }}. {{ a.title }}</div>{% if a.detail %}<div class="small muted">{{ a.detail }}</div>{% endif %}</div>
+      <form method="post" action="{{ url_for('reporting.update_action', action_id=a.id) }}">
+        {{ csrf() }}<input type="hidden" name="period" value="{{ period }}">
+        <select name="status" aria-label="Status">{% for k, v in statuses.items() %}<option value="{{ k }}" {% if a.status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+        {{ month_select('target_month', a.target_month) }}
+        <button class="sm" name="op" value="save">Save</button>
+        <button class="sm ghost" name="op" value="up" aria-label="Move up" {% if loop.first %}disabled{% endif %}>&uarr;</button>
+        <button class="sm ghost" name="op" value="down" aria-label="Move down" {% if loop.last %}disabled{% endif %}>&darr;</button>
+        <button class="sm ghost danger" name="op" value="delete">Remove</button>
+      </form>
+    </div>
+    {% endfor %}
+    <div class="action-row">
+      <form method="post" action="{{ url_for('reporting.add_action', tenant_id=tenant.id) }}" class="grow">
+        {{ csrf() }}<input type="hidden" name="period" value="{{ period }}">
+        <input type="text" name="title" maxlength="300" placeholder="A recommendation in your words" aria-label="Recommendation">
+        {{ month_select('target_month', none) }}
+        <button class="sm">{{ icon('plus') }} Add</button>
+      </form>
+    </div>
+    {% if suggestions %}
+    <div class="action-row"><div class="grow">
+      <div class="label-sm">From the failing checks</div>
+      {% for s in suggestions[:8] %}
+      <form method="post" action="{{ url_for('reporting.add_action', tenant_id=tenant.id) }}">
+        {{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="rule_key" value="{{ s.rule_key }}">
+        <button class="sm ghost">{{ icon('plus') }}</button> <span class="small">{{ s.title }}</span>{% if s.severity %} <span class="pill {{ TONES.get(s.severity, '') }}">{{ s.severity }}</span>{% endif %}
+      </form>
+      {% endfor %}
+    </div></div>
+    {% endif %}
+  </section>
+
+  <section class="card flush" id="notes">
+    <div class="card-head toolbar"><h2>Notes on findings</h2><span class="meta">Shown under the check on the report</span></div>
+    {% set failing = report.failing %}
+    {% if not failing %}<p class="intro">No failing checks this month.</p>{% endif %}
+    {% for r in failing %}
+    {% set mine = notes|selectattr('rule_key', 'equalto', r.key)|list %}
+    <div class="review-check" id="check-{{ r.key }}">
+      <div><span class="pill {{ TONES.get(r.severity, '') }}">{{ r.severity }}</span> <span class="strong">{{ r.summary|trim('.') }}</span></div>
+      {% if mine %}<ul class="note-list">{% for n in mine %}<li><span class="pill {{ 'warn' if n.visibility == 'staff' else 'info' }}">{{ visibility[n.visibility] }}</span>
+        <span class="grow">{% if n.subject %}<strong>{{ n.subject }}:</strong> {% endif %}{{ n.body }} <span class="muted small">· {{ n.created_by }}</span></span>
+        <form method="post" action="{{ url_for('reporting.delete_note', note_id=n.id) }}">{{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><button class="sm ghost" aria-label="Remove note">Remove</button></form></li>{% endfor %}</ul>{% endif %}
+      <details><summary>Add a note</summary>
+        <form method="post" action="{{ url_for('reporting.add_note', tenant_id=tenant.id) }}">
+          {{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="rule_key" value="{{ r.key }}">
+          <div class="form-row">
+            <label>About <select name="subject"><option value="">The whole check</option>{% for f in r.findings[:50] %}<option value="{{ f.subject }}">{{ f.subject }}</option>{% endfor %}</select></label>
+            <label>Who sees it <select name="visibility">{% for k, v in visibility.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+          </div>
+          <label>Note <textarea name="body" rows="2" maxlength="2000"></textarea></label>
+          <button class="sm">Add note</button>
+        </form>
+      </details>
+    </div>
+    {% endfor %}
+  </section>
+</div>
+
+<div>
+  <section class="card">
+    <div class="card-head"><h2>Review</h2></div>
+    <form method="post" action="{{ url_for('reporting.assign', period=period, tenant_id=tenant.id) }}">
+      {{ csrf() }}
+      <label>Reviewer <select name="reviewer"><option value="">Nobody yet</option>
+        {% for u in staff_users %}<option value="{{ u }}" {% if review and review.reviewer == u %}selected{% endif %}>{{ u }}</option>{% endfor %}</select></label>
+      <button class="sm">Assign</button>
+    </form>
+    <p class="small">New critical or high since the last report: <strong>{{ severe }}</strong></p>
+    {% if editable %}
+    <form method="post" action="{{ url_for('reporting.set_state', period=period, tenant_id=tenant.id) }}">
+      {{ csrf() }}
+      {% if state == 'draft' %}<input type="hidden" name="state" value="in_review"><button class="sm">Start review</button>
+      {% else %}<input type="hidden" name="state" value="draft"><button class="sm ghost">Back to draft</button>{% endif %}
+    </form>
+    {% endif %}
+  </section>
+
+  {% if plan %}
+  <section class="card">
+    <div class="card-head"><h2>{{ 'Approve and send' if emailed else 'Approve and publish' }}</h2></div>
+    {% if admin %}
+      {% if editable %}
+      <p class="small muted">The report is frozen as it is now, with your commentary, recommendations and client-visible notes, and {{ 'emailed to the client' if emailed else 'published to the client\'s report history' }}.</p>
+      <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Approving…">{{ csrf() }}<button class="primary">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve and publish' }}</button></form>
+      {% else %}
+      <p class="small muted">Already issued. To change what the client has, issue a new version.</p>
+      <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Issuing…">
+        {{ csrf() }}
+        <label>Why it's being issued again <input type="text" name="reason" maxlength="500" required></label>
+        <button>{{ icon('refresh') }} Re-issue</button>
+      </form>
+      {% endif %}
+    {% else %}
+      <p class="small muted">An admin approves and sends it.</p>
+    {% endif %}
+    {% if frozen %}
+    <div class="label-sm">Issued files</div>
+    <ul class="list compact">{% for f in frozen %}<li><a href="{{ url_for('email.issued_report', tenant_id=tenant.id, report_id=f.id) }}">{{ icon('download') }} {{ f.title }} ({{ f.filename.rsplit('.', 1)[-1]|upper }})</a>
+      <span class="sub">Version {{ f.version }}{% if f.reason %} · {{ f.reason }}{% endif %}</span></li>{% endfor %}</ul>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+</div>
+{% endblock %}

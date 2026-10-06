@@ -29,6 +29,7 @@
   {{ nav_link('across.index', 'All tenants', 'grid', ('across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
   {{ nav_link('across.changes', 'What changed', 'clock') }}
   {{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest')) }}
+  {{ nav_link('reporting.index', 'Month-end', 'check', ('reporting',)) }}
   {{ nav_link('prospects.index', 'Prospects', 'prospects', ('prospects',)) }}
   {% endif %}
   {% if current_user.role == 'admin' %}

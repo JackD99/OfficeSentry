@@ -26,6 +26,7 @@
 {# The one status that matters for a schedule, as a pill. #}
 {% macro schedule_status(s) -%}
 {% if not s.enabled %}<span class="pill">Paused</span>
+{% elif s.on_approval %}<span class="pill info" title="Sent from Month-end once approved">Sends on approval</span>
 {% elif not s.recipients %}<span class="pill warn">No recipients</span>
 {% elif s.last_status == 'failed' %}<span class="pill bad">Last send failed</span>
 {% elif s.due_now %}<span class="pill accent">Due now</span>
@@ -48,7 +49,8 @@
     {% if staff %}
     <div class="row-actions sched-actions">
       <a class="btn sm ghost" href="{{ url_for('email.preview_schedule', schedule_id=s.id) }}">{{ icon('eye') }} Preview</a>
-      <form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm ghost">{{ icon('send') }} Send now</button></form>
+      {% if s.on_approval %}<a class="btn sm ghost" href="{{ url_for('reporting.index') }}">{{ icon('check') }} Review</a>
+      {% else %}<form method="post" action="{{ url_for('email.send_now', schedule_id=s.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm ghost">{{ icon('send') }} Send now</button></form>{% endif %}
       <a class="btn sm ghost" href="{{ url_for('email.edit_schedule', schedule_id=s.id) }}">{{ icon('edit') }} Edit</a>
     </div>
     {% endif %}
