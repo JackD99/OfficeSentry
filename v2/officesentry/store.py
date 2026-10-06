@@ -224,23 +224,29 @@ def snapshots_to_keep(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: st
     return keep
 
 
-def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC",
-                    grace_hours: int = 24, batch: int = 200) -> int:
-    """Delete the objects of runs the retention policy doesn't keep. Returns runs pruned.
-
-    Metrics, findings and the run rows are never pruned (run logs are, see
-    ``prune_run_logs``). Runs that
-    finished within ``grace_hours`` are left alone, so today's extra runs stay
-    inspectable until tomorrow. Deletes go in small batches so the portal
-    stays responsive.
-    """
+def snapshots_to_prune(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC",
+                       grace_hours: int = 24) -> list[int]:
+    """Run IDs whose objects ``prune_snapshots`` would delete now (also the settings page's dry run)."""
     keep = snapshots_to_keep(conn, keep_daily, keep_monthly, tz)
     cutoff = (datetime.now(UTC) - timedelta(hours=grace_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    candidates = [r["id"] for r in conn.execute(
+    return [r["id"] for r in conn.execute(
         "SELECT id FROM runs WHERE status IN ('succeeded', 'partial', 'failed') AND finished_at < ?"
         " AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id) ORDER BY id",
         (cutoff,),
     ) if r["id"] not in keep]
+
+
+def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC",
+                    grace_hours: int = 24, batch: int = 200) -> int:
+    """Delete the objects of runs the retention policy doesn't keep. Returns runs pruned.
+
+    Metrics and the run rows are never pruned (run logs are, see
+    ``prune_run_logs``; findings and sign-in detail follow ``retention``). Runs that
+    finished within ``grace_hours`` are left alone, so today's extra runs stay
+    inspectable until tomorrow. Deletes go in small batches so the portal
+    stays responsive.
+    """
+    candidates = snapshots_to_prune(conn, keep_daily, keep_monthly, tz, grace_hours)
     for i in range(0, len(candidates), batch):
         chunk = candidates[i:i + batch]
         with transaction(conn, immediate=True):
@@ -252,6 +258,17 @@ def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str 
 # Run log lines older than this are deleted, except warnings and errors.
 RUN_LOG_DAYS = 90
 RUN_LOG_WATERMARK = "run_log_pruned_to"
+
+
+def run_logs_to_prune(conn, days: int = RUN_LOG_DAYS, now: datetime | None = None) -> int:
+    """How many run log lines ``prune_run_logs`` would delete now (the settings page's dry run)."""
+    cutoff = ((now or datetime.now(UTC)) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mark = conn.execute("SELECT value FROM settings WHERE key = ?", (RUN_LOG_WATERMARK,)).fetchone()
+    start = int(mark["value"]) if mark else 0
+    row = conn.execute("SELECT MAX(id) AS id FROM runs WHERE id > ? AND created_at < ?", (start, cutoff)).fetchone()
+    last = row["id"] if row and row["id"] else start
+    return conn.execute("SELECT COUNT(*) FROM run_events WHERE run_id > ? AND run_id <= ? AND level = 'info'",
+                        (start, last)).fetchone()[0]
 
 
 def prune_run_logs(conn, days: int = RUN_LOG_DAYS, batch: int = 500, now: datetime | None = None) -> int:

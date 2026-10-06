@@ -95,6 +95,14 @@ h3 { font-size: 1rem; font-weight: 600; margin: 0; }
 .sev-medium, .tone-medium .status-pill, .answer-partly-in-place { background: var(--medium-soft); color: var(--medium); }
 .sev-low, .sev-info, .answer-not-assessed { background: var(--low-soft); color: var(--low); }
 .tone-ok .status-pill, .answer-in-place { background: var(--ok-soft); color: var(--ok); }
+.answer-yes { background: var(--ok-soft); color: var(--ok); }
+.answer-partly { background: var(--medium-soft); color: var(--medium); }
+.answer-no { background: var(--critical-soft); color: var(--critical); }
+.answer-not-known { background: var(--low-soft); color: var(--low); }
+.answers-table td.q { font-weight: 600; width: 34%; }
+.answers-table td:nth-child(2) { width: 1%; white-space: nowrap; }
+.answers-table .set-by, .answers-table .source { color: var(--muted); font-size: .9em; }
+.answers-table .source { margin-top: 3px; }
 .verdict .status-pill { background: var(--paper); font-size: .78rem; }
 .new { display: inline-block; font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--brand-ink); background: var(--brand-soft); border-radius: 4px; padding: 0 5px; vertical-align: 1px; margin-left: 4px; }
 .chg { display: inline-block; min-width: 62px; text-align: center; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 1px 6px; margin-right: 8px; background: var(--low-soft); color: var(--low); }

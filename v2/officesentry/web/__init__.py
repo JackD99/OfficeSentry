@@ -21,6 +21,7 @@ from . import (
     alerts,
     auth,
     branding,
+    data_retention,
     email,
     filters,
     people,
@@ -143,6 +144,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(email.bp)
     app.register_blueprint(alerts.bp)
     app.register_blueprint(branding.bp)
+    app.register_blueprint(data_retention.bp)
     app.register_blueprint(across.bp)
     app.register_blueprint(people.bp)
     app.register_blueprint(saved_views.bp)
