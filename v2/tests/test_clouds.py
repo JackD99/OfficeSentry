@@ -164,6 +164,7 @@ def test_prospect_reads_the_cloud_from_discovery():
     assert prospect.cloud_from_discovery({"cloud_instance_name": "microsoftonline.us",
                                           "tenant_region_sub_scope": "DOD"}) == "dod"
     assert prospect.cloud_from_discovery({"cloud_instance_name": "chinacloudapi.cn"}) == "china"
+    assert prospect.cloud_from_discovery({"cloud_instance_name": "partner.microsoftonline.cn"}) == "china"
     assert prospect.cloud_from_discovery({}) is None
 
 

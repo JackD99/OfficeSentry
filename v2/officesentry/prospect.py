@@ -43,7 +43,7 @@ def cloud_from_discovery(data: dict) -> str | None:
     """Which Microsoft cloud a tenant is in, from its public OpenID discovery document."""
     instance = str(data.get("cloud_instance_name") or "").lower()
     sub_scope = str(data.get("tenant_region_sub_scope") or "").upper()
-    if instance.endswith("chinacloudapi.cn"):
+    if instance.endswith(("chinacloudapi.cn", "microsoftonline.cn")):  # e.g. partner.microsoftonline.cn
         return "china"
     if instance.endswith("microsoftonline.us"):
         return "dod" if sub_scope == "DOD" else "gcc_high"
