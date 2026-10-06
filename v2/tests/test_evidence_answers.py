@@ -73,6 +73,25 @@ def test_mfa_not_enforced_and_group_exclusions(db, two_tenants):
     assert b["legacy_auth"].suggested == PARTLY and "SMTP AUTH" in b["legacy_auth"].why
 
 
+def test_mfa_is_partly_when_anyone_but_break_glass_is_excluded(db, two_tenants):
+    """A licensed Global Administrator or a plain user left out of MFA is a gap, not break-glass."""
+    alpha, bravo = two_tenants
+    people = copy.deepcopy(gd.CA_MFA_ALL)
+    people["conditions"]["users"]["excludeUsers"] = ["u1", "u2", "u3"]
+    seed_tenant(db, alpha, ca=[people])
+    a = _answers(db, alpha)
+    assert a["mfa_remote"].suggested == PARTLY and "ann@x.com (break-glass)" not in a["mfa_remote"].why
+    assert a["mfa_privileged"].suggested in (PARTLY, NO)
+
+    roles = copy.deepcopy(gd.CA_MFA_ALL)
+    roles["conditions"]["users"].update(excludeUsers=[], excludeRoles=["role-1"], excludeGuestsOrExternalUsers={
+        "guestOrExternalUserTypes": "b2bCollaborationGuest"})
+    seed_tenant(db, bravo, ca=[roles])
+    b = _answers(db, bravo)
+    assert b["mfa_remote"].suggested == PARTLY
+    assert "(role)" in b["mfa_remote"].why and "Guests and external users" in b["mfa_remote"].why
+
+
 def test_security_defaults_answer_yes(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha, defaults=True)

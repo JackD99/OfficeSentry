@@ -31,7 +31,6 @@ from .views import anchor, slug
 YES, PARTLY, NO, NOT_KNOWN = "Yes", "Partly", "No", "Not known"
 ANSWERS = (YES, PARTLY, NO, NOT_KNOWN)
 MAX_NOTE = 1000
-MAX_NAMED = 3  # more named exclusions than this (that aren't break-glass) and MFA is only partly enforced
 
 log = logging.getLogger(__name__)
 
@@ -117,10 +116,20 @@ def _global_admins(snap: TenantSnapshot) -> set[str]:
             if a.get("assignment") == "active" and a.get("roleName") == "Global Administrator"}
 
 
+def _user_mailboxes(snap: TenantSnapshot) -> set[str]:
+    return {m.get("ExternalDirectoryObjectId") for m in snap.objects("mailboxes", "mailbox") or []
+            if m.get("RecipientTypeDetails") == "UserMailbox"}
+
+
 def _break_glass(uid: str, label: str, snap: TenantSnapshot, users: dict[str, dict]) -> bool:
-    """Named like an emergency account, or a Global Administrator kept out of the MFA policy on purpose."""
-    name = f"{label} {(users.get(uid) or {}).get('displayName') or ''}"
-    return bool(BREAK_GLASS_NAME.search(name)) or uid in _global_admins(snap)
+    """Named like an emergency account, or an unlicensed Global Administrator with no mailbox.
+
+    A Global Administrator someone also uses day to day (licensed, or with a mailbox) isn't
+    break-glass, whatever the policy says: leaving it out of MFA is a gap, not a design."""
+    user = users.get(uid) or {}
+    if BREAK_GLASS_NAME.search(f"{label} {user.get('displayName') or ''}"):
+        return True
+    return uid in _global_admins(snap) and not _licensed(user) and uid not in _user_mailboxes(snap)
 
 
 def _users(snap: TenantSnapshot) -> dict[str, dict]:
@@ -156,16 +165,20 @@ def _mfa_everyone(snap: TenantSnapshot, results: dict[str, RuleResult]):
         for uid in spec.get("excludeUsers") or []:
             people.setdefault(uid, names.get(uid, uid))
         for gid in spec.get("excludeGroups") or []:
-            groups.setdefault(gid, names.get(gid, f"group {gid}"))
+            groups.setdefault(gid, f"{names.get(gid, gid)} (group)")
+        for rid in spec.get("excludeRoles") or []:
+            groups.setdefault(rid, f"{names.get(rid, rid)} (role)")
+        if spec.get("excludeGuestsOrExternalUsers"):
+            groups.setdefault("guests", "Guests and external users")
     by = f"Enforced by Conditional Access ({_quoted(coverage.policy_name(p) for p in covering)})"
     if not people and not groups:
         return YES, f"{by} for all users and apps, with no exclusions."
     glass = {uid: _break_glass(uid, label, snap, users) for uid, label in people.items()}
     listed = [_excluded(label, glass[uid]) for uid, label in sorted(people.items(), key=lambda kv: kv[1].lower())]
-    listed += [f"{label} (group)" for label in sorted(groups.values(), key=str.lower)]
+    listed += sorted(groups.values(), key=str.lower)
     others = sum(1 for g in glass.values() if not g)
     exclusions = plural(len(people) + len(groups), "exclusion")
-    if groups or others > MAX_NAMED:
+    if groups or others:  # Yes only when every exclusion is a break-glass account
         return PARTLY, f"{by}, but with {exclusions} to review: {', '.join(listed)}."
     return YES, f"{by} for everyone except {plural(len(listed), 'named exclusion')}: {', '.join(listed)}."
 
@@ -236,8 +249,7 @@ def _separate_admins(snap: TenantSnapshot, results: dict[str, RuleResult]):
     if admins is None or users is None:
         return NOT_KNOWN, "Admin role and user data haven't been collected yet."
     by_id = {u["_id"]: u for u in users}
-    mailboxes = {m.get("ExternalDirectoryObjectId") for m in snap.objects("mailboxes", "mailbox") or []
-                 if m.get("RecipientTypeDetails") == "UserMailbox"}
+    mailboxes = _user_mailboxes(snap)
     people = {a["principalId"]: a.get("userPrincipalName") or a.get("displayName") or a["principalId"]
               for a in admins if a.get("principalType") == "user" and a.get("accountEnabled") is not False
               and a.get("userType") != "Guest"}
