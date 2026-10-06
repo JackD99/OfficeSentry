@@ -74,6 +74,7 @@ def cmd_setup_link(args, cfg):
 
 def cmd_create_app(args, cfg):
     """Generate a certificate and create the multi-tenant read-only app (device sign-in)."""
+    from . import clouds
     from .certs import generate_certificate
     from .entra import create_app_registration, device_code_token
 
@@ -81,11 +82,12 @@ def cmd_create_app(args, cfg):
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
     cert = generate_certificate(f"Office Sentry - {args.name}"[:64])
-    print("Sign in as an admin of YOUR (the MSP's) tenant who can create app registrations.")
-    token = device_code_token(args.tenant, print)
+    cloud = clouds.get(args.cloud)
+    print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can create app registrations.")
+    token = device_code_token(args.tenant, print, cloud.key)
     redirect_uri = f"{cfg.base_url}/consent/callback"
-    app = create_app_registration(token, cert.cert_pem, redirect_uri, display_name=args.name)
-    conn_id = store.create_connection(conn, vault, args.name, cert, client_id=app["appId"])
+    app = create_app_registration(token, cert.cert_pem, redirect_uri, display_name=args.name, cloud=cloud.key)
+    conn_id = store.create_connection(conn, vault, args.name, cert, client_id=app["appId"], cloud=cloud.key)
     audit(conn, "cli", "connection_created", detail=f"{args.name} {app['appId']}")
     print(f"Created app {app['appId']} and app connection #{conn_id}.")
     print("Next: add tenants in the portal and send each tenant admin its consent link.")
@@ -310,6 +312,8 @@ def main(argv=None):
     app = sub.add_parser("create-app", help="create the read-only multi-tenant Entra app")
     app.add_argument("--name", default="Office Sentry (read-only)")
     app.add_argument("--tenant", default="organizations", help="your tenant ID or domain")
+    app.add_argument("--cloud", default="commercial", choices=["commercial", "gcc_high", "dod", "china"],
+                     help="the Microsoft cloud to register the app in (each national cloud needs its own app)")
     app.set_defaults(func=cmd_create_app)
 
     rotate = sub.add_parser("rotate-keys", help="re-encrypt credentials with the newest key")

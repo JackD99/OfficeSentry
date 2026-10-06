@@ -46,9 +46,14 @@
         <label>App connection
           <select name="connection_id">
             {% if not connection %}<option value="">Choose…</option>{% endif %}
-            {% for c in connections %}<option value="{{ c.id }}"{% if connection and c.id == connection.id %} selected{% endif %}>{{ c.name }}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
+            {% for c in connections %}<option value="{{ c.id }}"{% if connection and c.id == connection.id %} selected{% endif %}>{{ c.name }}{% if not cloud_of(c).is_default %} ({{ cloud_of(c).label }}){% endif %}{% if not c.client_id %} (no client ID yet){% endif %}</option>{% endfor %}
           </select>
           {% if connections|length > 1 %}<span class="hint">Moving to an app with a different client ID needs admin consent again.</span>{% endif %}</label>
+        <label>Microsoft cloud
+          <select name="cloud">
+            {% for key, label in cloud_choices %}<option value="{{ key }}"{% if key == cloud_of(tenant).key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+          <span class="hint">GCC tenants use Commercial. GCC High, DoD and China tenants need an app connection registered in that same cloud: an app from another cloud can't sign in to them.</span></label>
         <label>Notes <span class="faint">(only staff see these)</span>
           <textarea name="notes" rows="3" maxlength="{{ notes_max }}" placeholder="Contacts, contract, anything the team should know">{{ tenant.notes }}</textarea></label>
         <div class="form-actions"><button class="primary">Save</button>
@@ -58,6 +63,7 @@
       <dl class="kv">
         <dt>Tenant ID</dt><dd class="mono">{{ tenant.tenant_ref }}</dd>
         <dt>App</dt><dd>{{ connection.name if connection else 'None assigned' }}</dd>
+        {% if not cloud_of(tenant).is_default %}<dt>Microsoft cloud</dt><dd>{{ cloud_of(tenant).label }}</dd>{% endif %}
         <dt>Added</dt><dd>{{ ts(tenant.created_at) }}</dd>
         {% if tenant.notes %}<dt>Notes</dt><dd class="pre-line">{{ tenant.notes }}</dd>{% endif %}
       </dl>

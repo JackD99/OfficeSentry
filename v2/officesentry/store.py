@@ -13,12 +13,13 @@ from .db import transaction, utcnow
 
 
 def create_connection(conn, vault, name: str, cert, client_id: str | None = None,
-                      multi_tenant: bool = True) -> int:
+                      multi_tenant: bool = True, cloud: str = "commercial") -> int:
+    """An app registration Office Sentry signs in as, in one Microsoft cloud (``clouds.py``)."""
     cur = conn.execute(
         "INSERT INTO app_connections (name, client_id, multi_tenant, cert_pem, key_enc, thumbprint,"
-        " not_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        " not_after, created_at, cloud) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (name, client_id, int(multi_tenant), cert.cert_pem, vault.encrypt(cert.key_pem),
-         cert.thumbprint, cert.not_after.strftime("%Y-%m-%dT%H:%M:%SZ"), utcnow()),
+         cert.thumbprint, cert.not_after.strftime("%Y-%m-%dT%H:%M:%SZ"), utcnow(), cloud),
     )
     return cur.lastrowid
 
@@ -34,10 +35,11 @@ def list_connections(conn):
 # -- Tenants -----------------------------------------------------------------
 
 
-def create_tenant(conn, name: str, tenant_ref: str, connection_id: int | None) -> int:
+def create_tenant(conn, name: str, tenant_ref: str, connection_id: int | None,
+                  cloud: str = "commercial") -> int:
     cur = conn.execute(
-        "INSERT INTO tenants (name, tenant_ref, connection_id, created_at) VALUES (?, ?, ?, ?)",
-        (name, tenant_ref, connection_id, utcnow()),
+        "INSERT INTO tenants (name, tenant_ref, connection_id, created_at, cloud) VALUES (?, ?, ?, ?, ?)",
+        (name, tenant_ref, connection_id, utcnow(), cloud),
     )
     return cur.lastrowid
 

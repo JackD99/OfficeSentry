@@ -3,6 +3,11 @@
 The app is multi-tenant and read-only. Each client tenant is added by an admin
 of that tenant opening the admin-consent link; no per-tenant app is created.
 
+Each national cloud (GCC High, DoD, China; see ``clouds.py``) is a separate
+Entra ID: an app registered in one can't sign in to another, so a tenant in one
+of them needs Office Sentry's app registered in that cloud too. ``create-app
+--cloud gcc_high`` (and so on) creates it there.
+
 Creation signs in with the device-code flow using Microsoft's public
 "Microsoft Graph Command Line Tools" client, so no extra app is needed for it.
 """
@@ -14,6 +19,7 @@ from urllib.parse import urlencode
 
 import requests
 
+from . import clouds
 from .certs import key_credential
 
 GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000"
@@ -48,9 +54,11 @@ EXCHANGE_PERMISSIONS: dict[str, str] = {
 }
 
 
-def admin_consent_url(client_id: str, tenant_ref: str, redirect_uri: str, state: str) -> str:
+def admin_consent_url(client_id: str, tenant_ref: str, redirect_uri: str, state: str,
+                      cloud: str | None = None) -> str:
+    """The admin-consent link, on the sign-in host of the tenant's cloud."""
     query = urlencode({"client_id": client_id, "redirect_uri": redirect_uri, "state": state})
-    return f"https://login.microsoftonline.com/{tenant_ref}/adminconsent?{query}"
+    return f"{clouds.get(cloud).login}/{tenant_ref}/adminconsent?{query}"
 
 
 def _resource(sp: dict, app_id: str, wanted: dict[str, str]) -> dict:
@@ -71,13 +79,12 @@ def required_resource_access(graph_sp: dict, exchange_sp: dict | None = None) ->
     return access
 
 
-def device_code_token(tenant: str, say: Callable[[str], None]) -> str:
+def device_code_token(tenant: str, say: Callable[[str], None], cloud: str | None = None) -> str:
     import msal
 
-    app = msal.PublicClientApplication(
-        GRAPH_CLI_CLIENT_ID, authority=f"https://login.microsoftonline.com/{tenant}",
-    )
-    flow = app.initiate_device_flow(scopes=["https://graph.microsoft.com/Application.ReadWrite.All"])
+    c = clouds.get(cloud)
+    app = msal.PublicClientApplication(GRAPH_CLI_CLIENT_ID, authority=f"{c.login}/{tenant}")
+    flow = app.initiate_device_flow(scopes=[f"{c.graph}/Application.ReadWrite.All"])
     if "user_code" not in flow:
         raise RuntimeError(flow.get("error_description", "could not start device sign-in"))
     say(flow["message"])
@@ -89,11 +96,11 @@ def device_code_token(tenant: str, say: Callable[[str], None]) -> str:
 
 def create_app_registration(token: str, cert_pem: str, redirect_uri: str,
                             display_name: str = "Office Sentry (read-only)",
-                            session: requests.Session | None = None) -> dict:
-    """Create the multi-tenant app in the MSP's own tenant. Returns the application."""
+                            session: requests.Session | None = None, cloud: str | None = None) -> dict:
+    """Create the multi-tenant app in the MSP's own tenant (in ``cloud``). Returns the application."""
     http = session or requests.Session()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    base = "https://graph.microsoft.com/v1.0"
+    base = f"{clouds.get(cloud).graph}/v1.0"
 
     def resource_sp(app_id: str) -> dict:
         resp = http.get(f"{base}/servicePrincipals", headers=headers,

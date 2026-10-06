@@ -82,6 +82,22 @@ from the proxy and shares its limits, and the portal logs a warning. Don't set
 it higher than the number of proxies you really have, or visitors could choose
 their own address.
 
+## Clients in GCC High, DoD or China
+
+Nothing on the server changes: the portal and worker reach each tenant's
+cloud from the same install. The server needs outbound HTTPS to that cloud's
+hosts (login.microsoftonline.us, graph.microsoft.us, outlook.office365.us for
+GCC High; login.microsoftonline.us, dod-graph.microsoft.us, webmail.apps.mil
+for DoD; login.chinacloudapi.cn, microsoftgraph.chinacloudapi.cn,
+partner.outlook.cn for China), so allow them if outbound traffic is filtered.
+
+Each of those clouds needs its own app registration, made in that cloud, and
+its own app connection in Office Sentry with the matching cloud: run
+`docker compose run --rm worker python -m officesentry create-app --cloud gcc_high --tenant <your GCC High tenant>`
+(or `dod`, `china`). The [README](README.md#national-clouds-gcc-high-dod-china)
+explains choosing the cloud for a tenant and what Microsoft doesn't offer in
+each cloud.
+
 ## When things run
 
 | Setting in `.env` | Default | What it does |

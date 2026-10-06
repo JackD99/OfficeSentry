@@ -50,6 +50,7 @@
     <tr><th>Uses Microsoft 365</th><td>Yes{% if a.tenant.brand %} ({{ a.tenant.brand }}){% endif %}</td></tr>
     <tr><th>Sign-in</th><td>{% if a.tenant.sign_in == 'Federated' %}Federated to {{ a.tenant.federation_host or 'another identity provider' }}{% elif a.tenant.sign_in == 'Managed' %}Microsoft Entra ID (cloud or synced passwords){% else %}Unknown{% endif %}</td></tr>
     <tr><th>Tenant ID</th><td>{{ a.tenant.tenant_id }}</td></tr>
+    {% if a.tenant.cloud and a.tenant.cloud != 'commercial' %}<tr><th>Microsoft cloud</th><td>{{ cloud_label(a.tenant.cloud) }}</td></tr>{% endif %}
     {% elif a.tenant.uses_microsoft_365 is none %}
     <tr><th>Uses Microsoft 365</th><td>Couldn't tell{% if a.tenant.error %} ({{ a.tenant.error }}){% endif %}</td></tr>
     {% else %}

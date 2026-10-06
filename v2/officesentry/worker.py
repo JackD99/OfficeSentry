@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import alerts, findings, lifecycle, schedule, store, throttle
+from . import alerts, clouds, findings, lifecycle, schedule, store, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -54,24 +54,38 @@ def _session() -> requests.Session:
     return _local.session
 
 
+def connection_cloud(tenant: dict, connection: dict | None) -> str:
+    """The cloud to sign in to, once the tenant's app connection is known to be usable there.
+
+    An app registration only works in the cloud it was registered in, so a tenant in
+    GCC High, DoD or China needs an app connection set up for that same cloud.
+    """
+    cloud = clouds.of(tenant)
+    if not connection or not connection["client_id"]:
+        if not cloud.is_default:
+            raise NotConnected(clouds.app_needed(cloud))
+        raise NotConnected("tenant has no app connection with a client ID")
+    if clouds.of(connection).key != cloud.key:
+        raise NotConnected(clouds.app_needed(cloud))
+    return cloud.key
+
+
 def default_graph_factory(vault: Vault):
     def factory(tenant: dict, connection: dict | None) -> GraphClient:
-        if not connection or not connection["client_id"]:
-            raise NotConnected("tenant has no app connection with a client ID")
+        cloud = connection_cloud(tenant, connection)
         return GraphClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
-            vault.decrypt(connection["key_enc"]), connection["thumbprint"], session=_session(),
+            vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
         )
     return factory
 
 
 def default_exchange_factory(vault: Vault):
     def factory(tenant: dict, connection: dict | None) -> ExchangeClient:
-        if not connection or not connection["client_id"]:
-            raise NotConnected("tenant has no app connection with a client ID")
+        cloud = connection_cloud(tenant, connection)
         return ExchangeClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
-            vault.decrypt(connection["key_enc"]), connection["thumbprint"], session=_session(),
+            vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
         )
     return factory
 
@@ -128,7 +142,10 @@ def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) 
                          client_id=client_id or (connection["client_id"] if connection else None))
         if exchange_factory is not None:
             ctx.exchange_factory = lambda: exchange_factory(dict(tenant), dict(connection) if connection else None)
-        collector_cls().collect(ctx)
+        if why := clouds.missing(clouds.of(tenant), collector_cls.key):
+            ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
+        else:
+            collector_cls().collect(ctx)
     except (NotConnected, PermissionMissing, LicenseRequired, GraphError, ExchangeError) as exc:
         store.log_event(conn, run_id, "error", str(exc))
         # Sign-in failures get the plain explanation; the raw message stays in the run log.

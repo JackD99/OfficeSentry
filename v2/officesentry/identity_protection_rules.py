@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from . import clouds
 from . import identity_protection as ip
 from .rules import Finding, _unavailable, rule
 from .snapshot import TenantSnapshot
@@ -16,6 +17,8 @@ from .text import plural
       "the account compromised or dismiss the risk in Entra ID Protection. Add a Conditional Access policy that "
       "asks for a secure password change on high user risk. The Risky users report lists each account.")
 def risky_users(snap: TenantSnapshot, now: datetime):
+    if why := clouds.missing(clouds.of(snap.tenant), "risky_users"):
+        return _unavailable(why)
     status = ip.status(snap)
     if status is None:
         return _unavailable("Risky users haven't been collected yet")

@@ -11,12 +11,12 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import lifecycle, store, tenant_health
+from .. import clouds, lifecycle, store, tenant_health
 from ..db import audit
 from ..prospect import tenant_id_for_domain
 from ..text import plural
 from .access import roles_required, tenant_or_404, visible_tenants
-from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, not_connected
+from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, cloud_mismatch, not_connected
 
 bp = Blueprint("tenant_admin", __name__)
 
@@ -81,7 +81,7 @@ def _check_problem(t) -> str | None:
     if not t["enabled"]:
         return "Collection is paused for this tenant. Resume it first."
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
-    if not connection or not connection["client_id"]:
+    if not connection or not connection["client_id"] or cloud_mismatch(clouds.of(t).key, connection):
         return not_connected(t)
     return None
 
@@ -108,8 +108,19 @@ def edit(tenant_id: int):
     ref = request.form.get("tenant_ref", "").strip().lower()
     notes = request.form.get("notes", "").strip()
     conn_id = request.form.get("connection_id", type=int)
-    if conn_id is not None and store.get_connection(g.db, conn_id) is None:
+    cloud = request.form.get("cloud", clouds.of(t).key)
+    if not clouds.valid(cloud):
         abort(400)
+    connection = store.get_connection(g.db, conn_id) if conn_id is not None else None
+    if conn_id is not None and connection is None:
+        abort(400)
+    moved_without_app = False
+    if cloud != clouds.of(t).key and cloud_mismatch(cloud, connection):
+        # Moving to another cloud: use that cloud's app when there's exactly one, else none for now.
+        same = [c for c in store.list_connections(g.db) if clouds.of(c).key == cloud]
+        connection = same[0] if len(same) == 1 else None
+        conn_id = connection["id"] if connection else None
+        moved_without_app = connection is None
     problem = None
     if not name or len(name) > 200:
         problem = "Enter a client name (up to 200 characters)."
@@ -117,6 +128,8 @@ def edit(tenant_id: int):
         problem = "Enter the tenant ID (GUID) or its domain, e.g. contoso.onmicrosoft.com."
     elif len(notes) > NOTES_MAX:
         problem = f"Keep notes under {NOTES_MAX} characters."
+    elif mismatch := cloud_mismatch(cloud, connection):
+        problem = mismatch
     elif ref != t["tenant_ref"].lower():
         has_data = g.db.execute("SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')"
                                 " LIMIT 1", (t["id"],)).fetchone()
@@ -124,7 +137,7 @@ def edit(tenant_id: int):
         if has_data and not (GUID_RE.match(ref) and not GUID_RE.match(t["tenant_ref"])):
             problem = ("Office Sentry has already collected data from this tenant, so its tenant ID can't change. "
                        "To report on a different tenant, add it as a new tenant.")
-        elif has_data and (expected := tenant_id_for_domain(t["tenant_ref"].lower())) != ref:
+        elif has_data and (expected := tenant_id_for_domain(t["tenant_ref"].lower(), cloud=cloud)) != ref:
             # Data came from the domain's tenant: the GUID must be that same tenant, not another client's.
             problem = (f"{ref} isn't the tenant ID Microsoft gives for {t['tenant_ref']} ({expected})." if expected
                        else f"Office Sentry couldn't confirm the tenant ID for {t['tenant_ref']} with Microsoft just "
@@ -147,17 +160,22 @@ def edit(tenant_id: int):
     if conn_id != t["connection_id"]:
         changes.append(f"connection {t['connection_id']} -> {conn_id}")
         reset_consent = reset_consent or _other_app(t["connection_id"], conn_id)
+    if cloud != clouds.of(t).key:
+        changes.append(f"cloud {clouds.of(t).key} -> {cloud}")
+        reset_consent = True  # consent in one cloud says nothing about another
     if notes != (t["notes"] or ""):
         changes.append("notes")
     if not changes:
         flash("Nothing changed.", "success")
         return _manage(t["id"])
-    g.db.execute("UPDATE tenants SET name = ?, tenant_ref = ?, connection_id = ?, notes = ?,"
+    g.db.execute("UPDATE tenants SET name = ?, tenant_ref = ?, connection_id = ?, notes = ?, cloud = ?,"
                  " consented_at = CASE WHEN ? THEN NULL ELSE consented_at END WHERE id = ?",
-                 (name, ref, conn_id, notes, int(reset_consent), t["id"]))
+                 (name, ref, conn_id, notes, cloud, int(reset_consent), t["id"]))
     audit(g.db, g.user["username"], "tenant_updated", t["id"], "; ".join(changes))
     flash("Saved." + (" The tenant now needs admin consent for its new app or ID." if reset_consent else ""),
           "success")
+    if moved_without_app:
+        flash(clouds.app_needed(clouds.get(cloud)), "warning")
     return _manage(t["id"])
 
 

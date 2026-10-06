@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta
 
-from .. import coverage
+from .. import clouds, coverage
 from ..devices import parse_day, parse_ts
 from ..licences import (
     FREE_SKUS,
@@ -697,6 +697,9 @@ def _num(value: float) -> int | float:
 
 
 def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
+    if why := clouds.missing(clouds.of(snap.tenant), "secure_score"):
+        report.unavailable = why
+        return
     daily = snap.objects("secure_score", "secure_score_daily")
     if daily is None:
         report.unavailable = "Secure Score hasn't been collected yet. Refresh Secure Score on the tenant page."

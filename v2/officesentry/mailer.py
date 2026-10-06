@@ -200,8 +200,9 @@ def _graph_token(s: dict, vault) -> str:
     cache_key = hashlib.sha256(f"{s['graph_tenant']}|{s['graph_client_id']}|{secret}".encode()).hexdigest()
     provider = _token_providers.get(cache_key)
     if provider is None:
+        # The MSP's own mailbox, which is in the commercial cloud whatever cloud its clients are in.
         provider = secret_token_provider(s["graph_tenant"], s["graph_client_id"], secret,
-                                         "https://graph.microsoft.com")
+                                         GRAPH_SEND_URL.split("/v1.0/")[0])
         _token_providers[cache_key] = provider
     try:
         return provider()

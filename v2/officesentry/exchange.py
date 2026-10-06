@@ -5,6 +5,8 @@ shared mailboxes, org-wide mail settings) comes from the same REST endpoint
 the ExchangeOnlineManagement module uses:
 
     POST https://outlook.office365.com/adminapi/beta/{tenant}/InvokeCommand
+
+(or the tenant's national cloud's Exchange host, see ``clouds.py``)
     {"CmdletInput": {"CmdletName": "Get-Mailbox", "Parameters": {...}}}
 
 It is a POST, so read-only is enforced here instead: only the cmdlets in
@@ -22,9 +24,11 @@ from collections.abc import Callable
 
 import requests
 
+from . import clouds
+
 log = logging.getLogger(__name__)
 
-EXCHANGE_ROOT = "https://outlook.office365.com"
+EXCHANGE_ROOT = clouds.get(clouds.DEFAULT).exchange  # commercial; a client for another cloud uses its own
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 READ_ONLY_CMDLETS = frozenset({
@@ -82,7 +86,10 @@ class ExchangeClient:
         max_retries: int = 6,
         timeout: int = 120,
         sleep: Callable[[float], None] = time.sleep,
+        cloud: str | None = None,
     ):
+        self.cloud = clouds.get(cloud)
+        self.root = self.cloud.exchange
         self.tenant_id = tenant_id
         self._token_provider = token_provider
         self._session = session or requests.Session()
@@ -92,10 +99,11 @@ class ExchangeClient:
 
     @classmethod
     def from_certificate(cls, tenant_ref: str, client_id: str, key_pem: str,
-                         thumbprint: str, **kwargs) -> ExchangeClient:
+                         thumbprint: str, cloud: str | None = None, **kwargs) -> ExchangeClient:
         from .msauth import TokenError, shared_certificate_token_provider
 
-        provider = shared_certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, EXCHANGE_ROOT)
+        root = clouds.get(cloud).exchange
+        provider = shared_certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, root, cloud)
 
         def token() -> str:
             try:
@@ -103,11 +111,11 @@ class ExchangeClient:
             except TokenError as exc:
                 raise ExchangeError(401, exc.code, exc.message) from exc
 
-        return cls(tenant_ref, token, **kwargs)
+        return cls(tenant_ref, token, cloud=cloud, **kwargs)
 
     @property
     def url(self) -> str:
-        return f"{EXCHANGE_ROOT}/adminapi/beta/{self.tenant_id}/InvokeCommand"
+        return f"{self.root}/adminapi/beta/{self.tenant_id}/InvokeCommand"
 
     def _post(self, url: str, body: dict) -> dict:
         attempt = 0
@@ -147,7 +155,7 @@ class ExchangeClient:
         items: list[dict] = []
         pages = 0
         while url:
-            if not url.startswith(f"{EXCHANGE_ROOT}/adminapi/"):
+            if not url.startswith(f"{self.root}/adminapi/"):
                 raise ValueError(f"refusing to send an Exchange token to {url.split('/')[2]}")
             if pages >= max_pages:
                 raise ExchangeError(0, "too_many_pages", f"{cmdlet} returned more than {max_pages} pages")

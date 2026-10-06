@@ -14,10 +14,10 @@ from datetime import UTC, datetime
 
 import requests
 
-from . import dnscheck
+from . import clouds, dnscheck
 from .db import utcnow
 
-LOGIN = "https://login.microsoftonline.com"
+LOGIN = clouds.get(clouds.DEFAULT).login  # public discovery for prospects; national cloud tenants answer here too
 DOMAIN_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 TENANT_GUID = re.compile(r"/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/")
 
@@ -36,20 +36,37 @@ class TenantInfo:
     sign_in: str | None = None  # Managed | Federated
     federation_host: str | None = None
     error: str | None = None
+    cloud: str | None = None  # clouds.py key, from the discovery document; None when unknown
 
 
-def tenant_id_for_domain(domain: str, session: requests.Session | None = None) -> str | None:
+def cloud_from_discovery(data: dict) -> str | None:
+    """Which Microsoft cloud a tenant is in, from its public OpenID discovery document."""
+    instance = str(data.get("cloud_instance_name") or "").lower()
+    sub_scope = str(data.get("tenant_region_sub_scope") or "").upper()
+    if instance.endswith("chinacloudapi.cn"):
+        return "china"
+    if instance.endswith("microsoftonline.us"):
+        return "dod" if sub_scope == "DOD" else "gcc_high"
+    if instance.endswith("microsoftonline.com"):
+        return "commercial"  # includes GCC (sub scope "GCC"), which uses the commercial endpoints
+    return None
+
+
+def tenant_id_for_domain(domain: str, session: requests.Session | None = None,
+                         cloud: str | None = None) -> str | None:
     """The tenant GUID Microsoft publishes for ``domain``, or None when it can't be found out.
 
     Reads Microsoft's public sign-in metadata (no credentials, nothing from the
-    tenant itself). Used to check that a tenant ID handed back by the consent
-    callback really belongs to the domain an admin added.
+    tenant itself) on the sign-in host of ``cloud``, and only believes an answer
+    issued by that host. Used to check that a tenant ID handed back by the
+    consent callback really belongs to the domain an admin added.
     """
     if not DOMAIN_RE.match(domain or ""):
         return None
+    login = clouds.get(cloud).login
     http = session or requests.Session()
     try:
-        resp = http.get(f"{LOGIN}/{domain}/v2.0/.well-known/openid-configuration", timeout=15,
+        resp = http.get(f"{login}/{domain}/v2.0/.well-known/openid-configuration", timeout=15,
                         allow_redirects=False)
         if resp.status_code != 200:
             return None
@@ -60,7 +77,7 @@ def tenant_id_for_domain(domain: str, session: requests.Session | None = None) -
         return None
     for key in ("issuer", "token_endpoint"):
         value = data.get(key)
-        if isinstance(value, str) and value.startswith(LOGIN + "/") and (m := TENANT_GUID.search(value + "/")):
+        if isinstance(value, str) and value.startswith(login + "/") and (m := TENANT_GUID.search(value + "/")):
             return m.group(1)
     return None
 
@@ -71,8 +88,10 @@ def tenant_lookup(domain: str, session: requests.Session | None = None) -> Tenan
     try:
         resp = http.get(f"{LOGIN}/{domain}/v2.0/.well-known/openid-configuration", timeout=15)
         if resp.status_code == 200:
-            m = TENANT_GUID.search(resp.json().get("issuer", "") + "/")
+            discovery = resp.json()
+            m = TENANT_GUID.search(discovery.get("issuer", "") + "/")
             info.tenant_id = m.group(1) if m else None
+            info.cloud = cloud_from_discovery(discovery) if info.tenant_id else None
             info.uses_microsoft_365 = info.tenant_id is not None
         elif resp.status_code in (400, 404):
             info.uses_microsoft_365 = False

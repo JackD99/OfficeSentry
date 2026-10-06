@@ -4,7 +4,7 @@
 {% block content %}
 {% set ready = connections|selectattr('client_id')|list %}
 <div class="page-head"><div><h1>App connection</h1>
-  <div class="sub">Office Sentry signs in to every client tenant as one multi-tenant, <strong>read-only</strong> Entra app. You set it up once.</div></div></div>
+  <div class="sub">Office Sentry signs in to every client tenant as one multi-tenant, <strong>read-only</strong> Entra app. You set it up once (once per Microsoft cloud, if you have clients in GCC High, DoD or China).</div></div></div>
 
 <ol class="setup-steps card">
   <li class="{{ 'done' if connections else 'current' }}">
@@ -14,6 +14,7 @@
       <form method="post" action="{{ url_for('admin.create_connection') }}" class="form-row step-form">
         {{ csrf() }}
         <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
+        <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
         <button class="primary">Generate certificate</button>
       </form>
       {% endif %}
@@ -48,10 +49,11 @@
 
 {% for c in connections %}
 <section class="card" id="conn-{{ c.id }}">
-  <div class="card-head"><h2>{{ c.name }}</h2>{% if c.client_id %}<span class="pill ok">Ready</span>{% else %}<span class="pill warn">Needs client ID</span>{% endif %}</div>
+  <div class="card-head"><h2>{{ c.name }}{% if not cloud_of(c).is_default %} <span class="pill info">{{ cloud_of(c).label }}</span>{% endif %}</h2>{% if c.client_id %}<span class="pill ok">Ready</span>{% else %}<span class="pill warn">Needs client ID</span>{% endif %}</div>
   <dl class="kv">
     <dt>Certificate</dt><dd><span class="mono small">{{ c.thumbprint }}</span> · <a href="{{ url_for('admin.download_certificate', conn_id=c.id) }}">{{ icon('download') }} Download .cer</a></dd>
     <dt>Expires</dt><dd>{{ c.not_after|day }}</dd>
+    <dt>Microsoft cloud</dt><dd>{{ cloud_of(c).label }}{% if not cloud_of(c).is_default %} · register this app at <span class="mono small">{{ cloud_of(c).admin_centre }}</span>{% endif %}</dd>
   </dl>
   <form method="post" action="{{ url_for('admin.set_client_id', conn_id=c.id) }}" class="form-row step-form">
     {{ csrf() }}
@@ -65,10 +67,11 @@
 {% if connections %}
 <details class="card add-another">
   <summary>{{ icon('plus') }} Create another app connection</summary>
-  <p class="muted small">Only needed if you want separate apps, for example per region. Most MSPs use one.</p>
+  <p class="muted small">Needed for clients in a national cloud (US Government GCC High or DoD, or China operated by 21Vianet): each of those is a separate Entra ID, so an app registered in Commercial can't sign in there. Register the app in that cloud's own admin centre (or run <code>python -m officesentry create-app --cloud gcc_high</code>, <code>dod</code> or <code>china</code>) and choose the same cloud here. GCC tenants use the Commercial app.</p>
   <form method="post" action="{{ url_for('admin.create_connection') }}" class="form-row">
     {{ csrf() }}
     <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
+        <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
     <button>Generate certificate</button>
   </form>
 </details>
