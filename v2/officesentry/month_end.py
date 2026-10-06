@@ -415,12 +415,16 @@ def notes(conn, tenant_id: int, staff: bool) -> list:
                         (tenant_id,)).fetchall()
 
 
-def report_context(conn, tenant_id: int, period: str, *, staff: bool) -> dict:
+def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_only: bool = False) -> dict:
     """What the monthly review template shows on top of the built report, as ``month_end``.
 
     ``staff`` False for anything a client sees: their page and every PDF. Staff-only notes are then left out.
+    ``approved_only`` (a client opening their live report) shows nothing until the month is approved or sent,
+    so work in progress isn't read before it's signed off.
     """
     r = review(conn, tenant_id, period)
+    if approved_only and state_of(conn, tenant_id, period, r) not in ("approved", "sent"):
+        return {"month_end": {"commentary": "", "actions": [], "notes": {}, "staff": False, "period": period}}
     recent = period_start(shift_period(period, -1))
     items = [dict(a, status_label=ACTION_STATUSES[a["status"]],
                   target_label=issued.period_label(a["target_month"]) if a["target_month"] else "")
