@@ -54,6 +54,18 @@ little as possible with that access. Details and code references are in
 | PDFs | Rendered by WeasyPrint with a URL fetcher that only loads the app's own static files and `data:` URIs: no other files, no network. |
 | Outbound requests | Webhooks and MTA-STS fetches are HTTPS only, refuse internal addresses and connect to the address that was checked (no DNS rebinding). The SMTP password is never sent without TLS, except to a relay on the same machine. |
 
+### Data retention
+
+Admins choose how long personal data is kept under *Settings → Data
+retention*: snapshots, sign-in detail (IP addresses and locations), resolved
+findings, run logs, the activity log and issued reports. Defaults keep
+everything as before (sign-in detail lasts as long as monthly snapshots,
+about 13 months; findings, the activity log and issued reports are kept
+forever), so set shorter periods to match your own policy. Neither the
+activity log nor issued reports can be set below 365 days. The
+worker deletes once a day in small batches with `secure_delete`; changes to
+the settings are audited. Details in `v2/DEPLOY.md`.
+
 ### Offboarding a client
 
 Deleting a tenant removes everything stored for it in one transaction and

@@ -202,12 +202,17 @@ minute, queues the collection slot (`schedule.py`, cron + timezone, skipping
 collectors fresher than `max_age_hours`) and sends due report emails (which
 first refresh stale collectors). Every thread opens its own SQLite connection;
 never share one across threads. Manual runs and report refreshes get
-`store.PRIORITY_WAITING`. Once a day it prunes snapshots with
-`store.prune_snapshots` (latest run per day for 30 days and per month for 12;
-metrics, findings and run rows are never pruned), so code that reads an older
-run must cope with its objects being gone (see `changes._baseline_run`), and
-run log info lines older than 90 days (`store.prune_run_logs`; warnings and
-errors stay). A side thread records the heartbeat that the portal banner and
+`store.PRIORITY_WAITING`. Once a day `retention.apply` prunes under
+the admin's *Data retention* settings (`retention.*` keys in `settings`;
+unset means today's defaults): snapshots with `store.prune_snapshots` (latest
+run per day for 30 days and per month for 12 by default; metrics and run rows
+are never pruned), sign-in detail objects (`retention.SIGNIN_KINDS`) once
+older than their period, resolved findings, run log info lines older than 90
+days (`store.prune_run_logs`; warnings and errors stay), and, when set, the
+activity log and issued reports (each never under 365 days). So code that
+reads an older run must cope with its objects, or just its sign-in kinds,
+being gone (see `changes._baseline_run`). A new store of personal data gets
+a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
 `healthcheck worker` read, but only while the worker makes progress
 (`worker.Liveness`: the main loop came round in the last 10 minutes and no run
 has gone for 4 hours), so a wedged loop or thread shows as down. A failing
@@ -245,8 +250,9 @@ ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 Reports are built live, so what a client was sent is kept separately:
 after a report email goes out, `delivery.send_schedule` stores each attached
 PDF/XLSX in `issued_reports` (`issued.py`: bytes as a BLOB, period, version,
-recipients, SHA-256). It is never pruned (snapshot pruning doesn't touch it),
-is backed up with the database and goes with the tenant on delete. The
+recipients, SHA-256). Snapshot pruning doesn't touch it; it's kept until the
+admin's retention setting says otherwise (never under a year, and never a
+tenant's latest file of each report), is backed up with the database and goes with the tenant on delete. The
 tenant's Report history page (`/tenants/<id>/report-history`, linked from
 Emailed reports and the client home) lists and downloads them; clients see
 the files but not who they went to. Archiving never fails a send.
