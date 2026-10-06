@@ -163,6 +163,11 @@ def test_commentary_actions_and_notes_on_report(client, db, two_tenants):
 
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
+    # Clients don't read the month's work in progress until it's approved.
+    page = client.get(f"/tenants/{alpha}/report").get_data(as_text=True)
+    assert "A quiet month overall." not in page and "Client is buying P1" not in page
+    assert "Book a licence review" not in page
+    month_end.update_review(db, alpha, PERIOD, "admin", state="approved")
     page = client.get(f"/tenants/{alpha}/report").get_data(as_text=True)
     assert "A quiet month overall." in page and "Client is buying P1" in page
     assert "Chase Dave internally" not in page and "Review and annotate" not in page

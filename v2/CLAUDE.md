@@ -291,7 +291,8 @@ month's commentary, the tenant's "What we recommend next" items
 (`finding_notes`, client-visible or staff-only). They reach the monthly review
 template as `month_end` from `month_end.report_context()`, passed by the route
 (`web/reporting.report_extras`), not the builder; staff-only notes only ever
-reach staff on the web page, never a client or any PDF.
+reach staff on the web page, never a client or any PDF. A client's live report shows none
+of it until the month is approved or sent (`report_context(..., approved_only=True)`).
 
 Approving (`freeze` then `deliver`) renders the plan's files once into
 `issued_reports` (trigger `approval`, `approved_by`/`approved_at`), then emails
