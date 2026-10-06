@@ -83,11 +83,14 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if status.get("groups"):
         report.tiles.append(Tile("Deleted groups and teams", len(groups.rows), f"{plural(teams, 'team')} among them",
                                  rows=Rows(GROUPS)))
+    # Link to a table that's on the page: the one with accounts ending soon, else whichever was read.
+    target = (USERS if soon_users else GROUPS if soon_groups
+              else USERS if status.get("users") else GROUPS if status.get("groups") else None)
     report.tiles.append(Tile(
         f"Permanently deleted within {EXPIRING_DAYS} days", soon,
         f"{plural(soon_users, 'user')}, {plural(soon_groups, 'group')}",
         ("warn" if users.flagged or groups.flagged else None) if soon else "ok",
-        Rows(USERS if soon_users or not soon_groups else GROUPS, {"Ends within": SOON})))
+        Rows(target, {"Ends within": SOON}) if target else None))
     report.footnote = (f"Microsoft keeps deleted users and Microsoft 365 groups for {RETENTION_DAYS} days, then "
                        "deletes them for good. Restore them in the Microsoft Entra admin center (Users > Deleted "
                        "users, Groups > Deleted groups) or the Microsoft 365 admin center; Office Sentry only reads "

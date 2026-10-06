@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from flask import Blueprint, Response, current_app, flash, g, redirect, render_template, request, url_for
+from markupsafe import escape
 from werkzeug.local import LocalProxy
 
 from ..db import audit, connect, transaction
@@ -55,7 +56,7 @@ def page_title(title: str) -> str:
     name = current_brand().display_name
     title = (title or "").strip()
     if title == branding.DEFAULT_NAME or not title:
-        return name
+        return escape(name)  # a filter block's plain str isn't escaped
     if title.endswith(TITLE_SUFFIX):
         return title[: -len(TITLE_SUFFIX)] + " · " + name
     return title

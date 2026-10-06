@@ -75,7 +75,8 @@ def membership(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             if key is None:
                 key = f"guest:{address.lower()}"
                 people.setdefault(key, _Person(address, "", True, "Not in the user list"))
-                unmatched -= 1  # its object ID was among the unmatched ones
+                if g.get("memberIdsComplete") is not False:
+                    unmatched -= 1  # its object ID was among the unmatched ones
             if key not in keys:
                 keys.append(key)
         # What's left isn't an account: a nested group, a device or a contact.

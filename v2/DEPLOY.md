@@ -362,7 +362,7 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `OFFICESENTRY_DEMO_DOMAIN` | optional: the demo site's name (below), e.g. `demo.sentry.yourmsp.com` |
 | `DEMO_ENABLED` | `true` runs the demo site, `false` (or unset) removes it at the next deploy |
 | `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *` |
-| `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass |
+| `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it) |
 | `DEPLOY_HOST_KEY` | optional: the server's SSH host key, which the first run prints, so later runs refuse a different server |
 
 The workflow writes the server's `.env` from these on every deploy (with
@@ -402,9 +402,10 @@ real clients. To turn it on:
 
 1. Add an A record for, say, `demo.sentry.yourmsp.com` pointing at the server.
 2. Set the `OFFICESENTRY_DEMO_DOMAIN` variable to that name and `DEMO_ENABLED`
-   to `true`. Optionally add a `DEMO_PASSWORD` secret so the password stays
-   the same.
-3. Deploy. The run's summary shows the sign-in: user `demo` and the password.
+   to `true`, and add a `DEMO_PASSWORD` secret with the password the demo
+   account should have (it's required, so the password never appears in a
+   run's log or summary).
+3. Deploy, then sign in as `demo` with that password.
 
 Every deploy rebuilds the demo data from the code it deploys, so the demo always
 shows the version that's running, with fresh dates; anything changed on the

@@ -143,6 +143,7 @@ def issued_report(tenant_id: int, report_id: int):
     r = issued.get(g.db, t["id"], report_id)
     if r is None:
         abort(404)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"issued:{r['filename']}")
     return Response(bytes(r["data"]), mimetype=r["content_type"],
                     headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'})
 
