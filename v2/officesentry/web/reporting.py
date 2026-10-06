@@ -239,10 +239,11 @@ def approve_many(period: str):
 def _approve(tenant, period: str, reason: str | None = None) -> str | None:
     """Approve, freeze and send one client's month. Returns an error to show, or None."""
     user = g.user["username"]
-    if month_end.state_of(g.db, tenant["id"], period) in ("approved", "sent") and not reason:
-        return "It's already been issued. Say why it's being issued again."
     try:
-        with transaction(g.db):
+        # Checked inside the write lock, so a double click or two admins at once approve the month once.
+        with transaction(g.db, immediate=True):
+            if month_end.state_of(g.db, tenant["id"], period) in ("approved", "sent") and not reason:
+                return "It's already been issued. Say why it's being issued again."
             month_end.freeze(current_app, g.db, tenant, period, user, reason=reason)
             audit(g.db, user, "report_reissued" if reason else "report_approved", tenant["id"],
                   f"{period}" + (f": {reason[:200]}" if reason else ""))

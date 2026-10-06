@@ -278,3 +278,83 @@ def test_deleting_a_tenant_deletes_its_month_end_rows(db, two_tenants):
     lifecycle.delete_tenant(db, store.get_tenant(db, alpha), "admin")
     for table in ("report_plan_tenants", "report_reviews", "report_actions", "finding_notes"):
         assert [r[0] for r in db.execute(f"SELECT tenant_id FROM {table}")] == [bravo]
+
+
+def _auto_plan(db, tenant_id, mode="auto", delivery_="email", now=None):
+    plan_id = month_end.save_plan(db, {"name": "P", "reports": ["review"], "include_xlsx": 0, "day_of_month": 1,
+                                       "hour": 0, "timezone": "UTC", "subject": "", "message": "", "mode": mode,
+                                       "delivery": delivery_, "bcc_team": 0}, "admin")
+    month_end.apply_plan(db, month_end.get_plan(db, plan_id), [tenant_id], "admin", "UTC", now=now)
+    return db.execute("SELECT * FROM email_schedules WHERE tenant_id = ?", (tenant_id,)).fetchone()
+
+
+def test_commenting_on_a_month_the_timer_sent_keeps_it_sent(db, two_tenants):
+    alpha, bravo = two_tenants
+    schedule = _auto_plan(db, alpha)
+    pdf = month_end.issued.IssuedFile("review", "Monthly review", "review.pdf", "application/pdf", b"%PDF")
+    month_end.issued.archive(db, alpha, [pdf], period="2026-09", trigger="schedule", user=None,
+                             schedule_id=schedule["id"])
+    # Another schedule's report for the month doesn't make the plan's month Sent.
+    month_end.issued.archive(db, alpha, [pdf], period="2026-08", trigger="manual", user="admin")
+    assert month_end.state_of(db, alpha, "2026-08") == "draft"
+
+    assert month_end.state_of(db, alpha, "2026-09") == "sent"
+    month_end.update_review(db, alpha, "2026-09", "admin", commentary="Late note")
+    month_end.update_review(db, alpha, "2026-09", "admin", reviewer="admin")
+    month_end.start_review(db, alpha, "2026-09", "admin")
+    assert month_end.review(db, alpha, "2026-09")["state"] == "sent"
+    # A month nothing went out for still starts as a draft.
+    month_end.update_review(db, alpha, "2026-10", "admin", commentary="x")
+    assert month_end.review(db, alpha, "2026-10")["state"] == "draft"
+    month_end.update_review(db, bravo, "2026-09", "admin", commentary="x")
+    assert month_end.review(db, bravo, "2026-09")["state"] == "draft"
+
+
+def test_issuing_an_earlier_month_never_moves_the_schedule_back(app, db, two_tenants, vault, cfg, monkeypatch):
+    alpha, bravo = two_tenants
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    seed_tenant(db, alpha)
+    seed_tenant(db, bravo)
+    _smtp_ready(db)
+    delivery.add_contact(db, alpha, "", "it@alpha.com")
+    oct5 = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
+    email_schedule = _auto_plan(db, alpha, now=oct5)
+    portal_schedule = _auto_plan(db, bravo, delivery_="portal", now=oct5)
+    assert email_schedule["last_period"] == portal_schedule["last_period"] == "2026-10"
+    for tenant_id in (alpha, bravo):
+        tenant = store.get_tenant(db, tenant_id)
+        month_end.freeze(app, db, tenant, "2026-09", "admin", now=oct5)
+        assert month_end.deliver(app, db, vault, tenant, "2026-09", "admin", now=oct5) is None
+    assert len(sends()) == 1
+    assert [r[0] for r in db.execute("SELECT last_period FROM email_schedules ORDER BY tenant_id")] == [
+        "2026-10", "2026-10"]
+    db.execute("UPDATE runs SET finished_at = ?", (oct5.strftime("%Y-%m-%dT%H:%M:%SZ"),))
+    assert delivery.tick(app, db, vault, cfg, oct5) == 0  # October isn't sent again
+
+    # A month approved ahead of its send time counts as done when the slot comes round.
+    db.execute("UPDATE email_schedules SET day_of_month = 28")
+    month_end.freeze(app, db, store.get_tenant(db, alpha), "2026-10", "admin", now=oct5)
+    month_end.deliver(app, db, vault, store.get_tenant(db, alpha), "2026-10", "admin", now=oct5)
+    assert len(sends()) == 2
+    assert delivery.tick(app, db, vault, cfg, datetime(2026, 10, 28, 1, 0, tzinfo=UTC)) == 0
+    assert delivery.period_done("2026-11", "2026-10") and not delivery.period_done("2026-09", "2026-10")
+    assert not delivery.period_done("2026-W41", "2026-10") and not delivery.period_done(None, "2026-10")
+
+
+def test_switching_a_plan_to_automatic_does_not_email_an_unapproved_month(app, db, two_tenants, vault, cfg,
+                                                                            monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    seed_tenant(db, alpha)
+    _smtp_ready(db)
+    delivery.add_contact(db, alpha, "", "it@alpha.com")
+    schedule = _auto_plan(db, alpha, mode="approval", now=datetime(2026, 9, 15, tzinfo=UTC))
+    assert schedule["last_period"] == "2026-09"
+    oct5 = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)  # October's month-end is waiting for approval
+    plan = month_end.get_plan(db, schedule["plan_id"])
+    db.execute("UPDATE report_plans SET mode = 'auto' WHERE id = ?", (plan["id"],))
+    month_end.apply_plan(db, month_end.get_plan(db, plan["id"]), [alpha], "admin", "UTC", now=oct5)
+    s = db.execute("SELECT * FROM email_schedules").fetchone()
+    assert s["on_approval"] == 0 and s["last_period"] == "2026-10"
+    db.execute("UPDATE runs SET finished_at = ?", (oct5.strftime("%Y-%m-%dT%H:%M:%SZ"),))
+    assert delivery.tick(app, db, vault, cfg, oct5) == 0 and sends() == []

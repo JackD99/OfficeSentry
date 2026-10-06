@@ -141,9 +141,13 @@ def apply_plan(conn, plan, tenant_ids: list[int], user: str, default_tz: str, no
             schedule_id = schedule["id"]
             conn.execute(f"UPDATE email_schedules SET {', '.join(c + ' = ?' for c in cols)} WHERE id = ?",
                          (*cols.values(), schedule_id))
-            if any(schedule[k] != cols[k] for k in timing) or schedule["frequency"] != "monthly":
+            # Re-timed, or switched between automatic and send on approval: start counting from now, so
+            # a month nobody approved isn't emailed by the timer. Never move back past a period already done.
+            if (any(schedule[k] != cols[k] for k in timing) or schedule["frequency"] != "monthly"
+                    or schedule["on_approval"] != cols["on_approval"]):
+                start = fresh if schedule["frequency"] != "monthly" else max(fresh, schedule["last_period"] or "")
                 conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL"
-                             " WHERE id = ?", (fresh, schedule_id))
+                             " WHERE id = ?", (start, schedule_id))
         delivery.set_recipients(conn, "schedule", schedule_id, _plan_recipients(conn, plan, tenant_id))
         conn.execute(
             "INSERT INTO report_plan_tenants (tenant_id, plan_id, schedule_id, added_by, added_at)"
@@ -257,9 +261,12 @@ def review(conn, tenant_id: int, period: str):
 
 
 def update_review(conn, tenant_id: int, period: str, user: str | None, **fields) -> None:
-    """Create the month's review row if it's still an implicit draft, then set ``fields``."""
-    conn.execute("INSERT INTO report_reviews (tenant_id, period, updated_by, updated_at) VALUES (?, ?, ?, ?)"
-                 " ON CONFLICT(tenant_id, period) DO NOTHING", (tenant_id, period, user, utcnow()))
+    """Create the month's review row if it's still implicit (Draft, or Sent by an automatic plan), keeping
+    that state, then set ``fields``."""
+    if review(conn, tenant_id, period) is None:
+        conn.execute("INSERT INTO report_reviews (tenant_id, period, state, updated_by, updated_at)"
+                     " VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant_id, period) DO NOTHING",
+                     (tenant_id, period, state_of(conn, tenant_id, period), user, utcnow()))
     if fields:
         conn.execute(f"UPDATE report_reviews SET {', '.join(k + ' = ?' for k in fields)}, updated_by = ?,"
                      " updated_at = ? WHERE tenant_id = ? AND period = ?",
@@ -270,9 +277,11 @@ def state_of(conn, tenant_id: int, period: str, row=None) -> str:
     row = row if row is not None else review(conn, tenant_id, period)
     if row is not None:
         return row["state"]
-    # An automatic plan that already went out on its timer.
-    sent = conn.execute("SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? LIMIT 1",
-                        (tenant_id, period)).fetchone()
+    # An automatic plan that already went out on its timer (another schedule's report doesn't count).
+    sent = conn.execute(
+        "SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? AND (trigger = 'approval' OR schedule_id ="
+        " (SELECT schedule_id FROM report_plan_tenants WHERE tenant_id = ?)) LIMIT 1",
+        (tenant_id, period, tenant_id)).fetchone()
     return "sent" if sent else "draft"
 
 
@@ -484,8 +493,8 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
                      (", ".join(to), ", ".join(bcc), *[r["id"] for r in rows]))
     elif schedule is not None:
         # Published only: the period is done, so an automatic schedule doesn't send it again.
-        conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                     (period, schedule["id"]))
+        conn.execute(f"UPDATE email_schedules SET last_period = {delivery.LATER_PERIOD}, attempts = 0,"
+                     " retry_at = NULL WHERE id = ?", (period, period, schedule["id"]))
     update_review(conn, tenant["id"], period, user, state="sent", sent_at=now.strftime(ISO), error=None)
     return None
 

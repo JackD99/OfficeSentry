@@ -171,6 +171,16 @@ def slot(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str
     return period_key(frequency, due.astimezone(ZoneInfo(tz)).date()), due
 
 
+def period_done(last: str | None, period: str) -> bool:
+    """Whether a schedule whose last finished period is ``last`` has done ``period``. Keys of one frequency
+    sort in time order, so a period that was sent ahead of its slot (approved early) counts as done too."""
+    if not last:
+        return False
+    def kind(key: str) -> str:  # "2026-10" monthly, "2026-W41" weekly, "2026-Q4" quarterly
+        return "M" if key[5:6].isdigit() else key[5:6]
+    return last == period or (kind(last) == kind(period) and last > period)
+
+
 def schedule_slot(s, default_tz: str, now: datetime) -> tuple[str, datetime]:
     return slot(s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], schedule_tz(s, default_tz), now)
 
@@ -188,7 +198,7 @@ def next_send(s, default_tz: str, now: datetime | None = None) -> datetime | Non
     now = now or datetime.now(UTC)
     tz = schedule_tz(s, default_tz)
     key, due = schedule_slot(s, default_tz, now)
-    if s["last_period"] != key:  # due now, or waiting for a retry
+    if not period_done(s["last_period"], key):  # due now, or waiting for a retry
         if s["retry_at"]:
             due = datetime.fromisoformat(s["retry_at"].replace("Z", "+00:00"))
         return due.astimezone(ZoneInfo(tz))
@@ -616,6 +626,10 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     return error
 
 
+# SQL for "the later of last_period and ?" (twice the same parameter), for a monthly report plan schedule.
+LATER_PERIOD = "CASE WHEN last_period IS NULL OR last_period < ? THEN ? ELSE last_period END"
+
+
 def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tuple[str, str, bytes]], *,
                 user: str | None, now: datetime | None = None) -> str | None:
     """Email a report schedule's recipients the files approved for ``period`` (``month_end.approve``), exactly
@@ -630,9 +644,10 @@ def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tup
     error = _send(conn, vault, build, kind="report", fallback_subject=f"{tenant['name']} security report",
                   trigger="manual", user=user, schedule_id=schedule["id"], tenant_id=tenant["id"], period=period)
     if error is None:
-        conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
+        # Re-issuing an earlier month never moves the schedule back, or the next tick sends again.
+        conn.execute(f"UPDATE email_schedules SET last_period = {LATER_PERIOD}, attempts = 0, retry_at = NULL,"
                      " last_status = 'sent', last_sent_at = ? WHERE id = ?",
-                     (period, now.strftime(ISO), schedule["id"]))
+                     (period, period, now.strftime(ISO), schedule["id"]))
     else:
         conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
     return error
@@ -730,7 +745,7 @@ def _tick_schedule(app, conn, vault, s, cfg, now: datetime) -> bool:
     if _field(s, "on_approval", 0):
         return False  # a report plan that waits for approval: month_end.approve sends it
     period, due = schedule_slot(s, cfg.timezone, now)
-    if s["last_period"] == period:
+    if period_done(s["last_period"], period):
         return False
     if s["retry_at"] and now.strftime(ISO) < s["retry_at"]:
         return False
