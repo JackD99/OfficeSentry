@@ -31,6 +31,9 @@ def risky_users(snap: TenantSnapshot, now: datetime):
         user = r.get("user") if isinstance(r.get("user"), str) else "Unknown account"
         findings.append(Finding(ip.severity(r), user, detail, r.get("userId") or user))
     if not findings:
+        if status.get("truncated"):
+            # The list stopped at the page cap, so an account at risk may be past it.
+            return _unavailable("Too many risk records to read them all, so this can't confirm none are at risk")
         return ("pass", "No accounts are at risk", [])
     high = sum(f.severity == "high" for f in findings)
     return ("fail", f"{plural(len(findings), 'account')} at risk in Entra ID Protection"

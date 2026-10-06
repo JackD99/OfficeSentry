@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-54 checks, 26 data sources (collectors) and 30 detail reports.
+54 checks, 27 data sources (collectors) and 33 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -145,6 +145,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `auth_methods_policy` | Sign-in methods policy | Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA. | `Policy.Read.All`, `Directory.Read.All` |
 | `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
 | `connection` | Connection and permissions | Whether the app's permissions are granted in this tenant and it holds the Global Reader role. | `Application.Read.All`, `RoleManagement.Read.Directory` |
+| `deleted_items` | Deleted users and groups | Users and Microsoft 365 groups in the Entra ID recycle bin, and how many days are left to restore each before Microsoft deletes it for good. | `Directory.Read.All` |
 | `devices` | Devices | Devices registered or joined to Entra ID, and Intune compliance, encryption and check-in for managed devices (needs Intune). | `Directory.Read.All`, `DeviceManagementManagedDevices.Read.All` |
 | `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in and how often its passwords expire. | `Organization.Read.All`, `Directory.Read.All` |
 | `domain_health` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS. | none |
@@ -177,8 +178,10 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `apps` | Apps and consents | Third-party apps with access to the tenant, and app credential expiry. | `app_consents` |
 | `auth-methods` | Passwords and sign-in methods | How people sign in and how strong that is: methods by strength, admins without phishing-resistant MFA, the methods policy, and password age and expiry. | `admin_roles`, `auth_methods_policy`, `conditional_access`, `directory_sync`, `mfa_registration`, `users` |
 | `conditional-access` | Conditional Access coverage | Every policy in plain words, and which accounts each one actually covers. | `admin_roles`, `conditional_access`, `users` |
+| `deleted-items` | Deleted users and groups | Users, teams and Microsoft 365 groups in the recycle bin, with the licences they held and the days left to restore each before Microsoft deletes it for good after 30 days. | `deleted_items`, `tenant_profile` |
 | `devices` | Devices | Intune compliance, encryption and Windows support, and every Entra ID device record. | `devices` |
 | `domains` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from public DNS. | `domain_health` |
+| `group-membership` | Group membership | Who is in which team and Microsoft 365 group: each person's teams and groups, each group's members, and every membership in one table. | `groups`, `users` |
 | `groups` | Groups and Teams | Who can create teams and groups, which have no owner, and the guests in each. | `groups` |
 | `guests` | Guests and sharing | Who can invite and share externally, and every guest account. | `tenant_policies`, `users` |
 | `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
@@ -187,6 +190,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `tenant_profile`, `users` |
+| `mailbox-holds` | Mailbox holds and archiving | Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't held, and large mailboxes that need an archive. | `mailbox_usage`, `mailboxes`, `users` |
 | `mailbox-permissions` | Mailbox permissions | Who can open, send as or send on behalf of each mailbox, by person and by mailbox. | `mailboxes`, `users` |
 | `mailbox-size` | Mailbox size | Every mailbox's size against its quota, largest share of quota first. | `mailbox_usage` |
 | `mailboxes` | Mail forwarding | Every mailbox that sends mail on automatically, and the settings that allow it. | `inbox_rules`, `mailboxes` |
@@ -212,7 +216,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
-| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `devices`, `directory_sync`, `groups`, `tenant_profile` |
+| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `groups`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `mailbox_usage`, `mailboxes` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `inbox_rules` |

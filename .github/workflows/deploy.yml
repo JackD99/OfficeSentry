@@ -30,11 +30,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # An automatic deploy only goes ahead for main's newest commit, so re-running
+  # an older run of the tests can't put older code on a newer database.
+  latest:
+    if: github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$main" = "$SHA" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Not deploying $SHA: main has moved on to $main."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
   server:
+    needs: latest
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      always() && (github.event_name == 'workflow_dispatch' ||
       (vars.AUTO_DEPLOY == 'true' && github.event.workflow_run.conclusion == 'success'
-       && github.event.workflow_run.event == 'push')
+       && github.event.workflow_run.event == 'push' && needs.latest.outputs.ok == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -54,6 +77,7 @@ jobs:
       - name: Check the settings
         env:
           HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+          HAS_DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD != '' }}
           DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
         run: |
           missing=""
@@ -62,6 +86,7 @@ jobs:
           [ "$HAS_KEY" = true ] || missing="$missing DEPLOY_SSH_KEY (secret)"
           if [ "$DEPLOYS" = true ] && [ -z "$DOMAIN" ]; then missing="$missing OFFICESENTRY_DOMAIN (variable)"; fi
           if [ "$DEMO" = true ] && [ -z "$DEMO_DOMAIN" ]; then missing="$missing OFFICESENTRY_DEMO_DOMAIN (variable)"; fi
+          if [ "$DEMO" = true ] && [ "$HAS_DEMO_PASSWORD" != true ]; then missing="$missing DEMO_PASSWORD (secret)"; fi
           if [ -n "$missing" ]; then
             echo "::error::Set these under Settings > Secrets and variables > Actions:$missing"
             exit 1
@@ -113,18 +138,14 @@ jobs:
         if: env.DEMO == 'true'
         working-directory: v2
         env:
-          # Optional; without it each deploy makes a new password.
+          # Required while the demo is on, so its admin password never has to
+          # appear in a run's log or summary.
           DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
         run: |
           pip install -q -e '.[dev]'
           OFFICESENTRY_BASE_URL="https://$DEMO_DOMAIN" python scripts/demo_data.py --data-dir "$RUNNER_TEMP/demo" > "$RUNNER_TEMP/demo.log"
           tar -czf "$RUNNER_TEMP/demo.tgz" -C "$RUNNER_TEMP/demo" .
-          password=$(sed -n 's/^Sign in as demo \/ //p' "$RUNNER_TEMP/demo.log")
-          if [ -n "$DEMO_PASSWORD" ]; then
-            echo "Demo site: https://$DEMO_DOMAIN, user **demo**, the DEMO_PASSWORD secret" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Demo site: https://$DEMO_DOMAIN, user **demo**, password \`$password\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "Demo site: https://$DEMO_DOMAIN, user **demo**, the DEMO_PASSWORD secret" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open SSH to this runner in the Hetzner firewall
         run: |

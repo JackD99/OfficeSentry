@@ -34,7 +34,7 @@ from .tables import Table
 
 SEVERITIES = ("critical", "high", "medium", "low")
 # Headline figures that are counted per tenant but mean nothing added up across tenants.
-NO_TOTAL = ("score", "countr", "largest", "average", "median", "rate", "share", "%")
+NO_TOTAL = ("score", "points", "countr", "largest", "average", "median", "rate", "share", "%")
 
 
 @dataclass

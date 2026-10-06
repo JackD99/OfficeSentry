@@ -150,6 +150,18 @@ def test_check_passes_when_nobody_is_at_risk(db, two_tenants):
     assert tiles["At risk"].value == 0 and tiles["At risk"].tone == "ok"
 
 
+@responses.activate
+def test_check_is_unavailable_when_the_list_was_cut_short(db, two_tenants):
+    alpha, _ = two_tenants
+    calm = [u for u in gd.RISKY_USERS if u["riskState"] not in ("atRisk", "confirmedCompromised")]
+    tenant = _seed(db, alpha, skus=P2_SKUS, risky_users=calm)
+    # An account at risk could be past the page cap, so finding none proves nothing.
+    db.execute("UPDATE objects SET data = json_set(data, '$.truncated', json('true')) "
+               "WHERE kind = 'risky_user_status'")
+    result = {r.key: r for r in evaluate(TenantSnapshot(db, tenant))}["risky_users"]
+    assert result.status == "unavailable"
+
+
 def test_listed_with_identity_reports_and_found_by_search():
     group = next(g for g in data_reports.grouped() if g.key == "identity")
     assert "risky-users" in [k for k, _, _ in group.reports]
