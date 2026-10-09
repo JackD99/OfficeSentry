@@ -26,11 +26,7 @@ from ..graph import GraphError, PermissionMissing
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
-from .sharepoint_lookup import Lookups
-
-# What this collector asks Microsoft for each site and OneDrive (see sharepoint_lookup).
-SITE_FIELDS = "id,displayName,webUrl,isPersonalSite"
-DRIVE_FIELDS = "id,webUrl,quota"
+from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
 
 ITEM_FIELDS = ("FileLeafRef,FileRef,FSObjType,SMTotalSize,SMTotalFileStreamSize,SMTotalFileCount,"
                "_UIVersionString")

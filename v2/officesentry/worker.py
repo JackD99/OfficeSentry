@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import alerts, clouds, findings, lifecycle, retention, schedule, store, throttle
+from . import alerts, clouds, findings, lifecycle, ratelimit, retention, schedule, store, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -76,6 +76,7 @@ def default_graph_factory(vault: Vault):
         return GraphClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
             vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
+            limiter=ratelimit.LIMITER,
         )
     return factory
 
@@ -86,6 +87,7 @@ def default_exchange_factory(vault: Vault):
         return ExchangeClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
             vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
+            limiter=ratelimit.LIMITER,
         )
     return factory
 
@@ -126,6 +128,19 @@ def _sync(conn, tenant, run_id: int, alerting: alerts.Alerting | None) -> None:
 
 
 def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) -> str:
+    """Run the collector, then store how many requests it made to Microsoft (whatever the outcome)."""
+    telemetry = ratelimit.Telemetry()
+    try:
+        return _run_collector(conn, run, graph_factory, exchange_factory, client_id, telemetry)
+    finally:
+        try:
+            ratelimit.save(conn, run["id"], telemetry)
+        except Exception:  # counting must never fail a collection
+            log.exception("Storing request telemetry for run %s failed", run["id"])
+
+
+def _run_collector(conn, run, graph_factory, exchange_factory, client_id: str | None,
+                   telemetry: ratelimit.Telemetry) -> str:
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
     collector_cls = REGISTRY.get(run["collector"])
@@ -137,11 +152,16 @@ def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) 
     store.log_event(conn, run_id, "info", f"Starting {collector_cls.title} for {tenant['name']}")
     try:
         graph = graph_factory(dict(tenant), dict(connection) if connection else None)
+        graph.telemetry = telemetry
         ctx = RunContext(conn=conn, run_id=run_id, tenant=dict(tenant), graph=graph,
                          capabilities=store.tenant_capabilities(tenant),
                          client_id=client_id or (connection["client_id"] if connection else None))
         if exchange_factory is not None:
-            ctx.exchange_factory = lambda: exchange_factory(dict(tenant), dict(connection) if connection else None)
+            def exchange() -> ExchangeClient:
+                client = exchange_factory(dict(tenant), dict(connection) if connection else None)
+                client.telemetry = telemetry
+                return client
+            ctx.exchange_factory = exchange
         if why := clouds.missing(clouds.of(tenant), collector_cls.key):
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
         else:

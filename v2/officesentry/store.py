@@ -272,7 +272,8 @@ def run_logs_to_prune(conn, days: int = RUN_LOG_DAYS, now: datetime | None = Non
 
 
 def prune_run_logs(conn, days: int = RUN_LOG_DAYS, batch: int = 500, now: datetime | None = None) -> int:
-    """Delete the info lines of run logs older than ``days``. Returns lines deleted.
+    """Delete the info lines of run logs, and per-endpoint request counts, older than ``days``.
+    Returns log lines deleted.
 
     Warnings and errors stay, so a run's page still says why it failed or was
     partial. Works through runs in id order from where the last prune stopped
@@ -290,6 +291,7 @@ def prune_run_logs(conn, days: int = RUN_LOG_DAYS, batch: int = 500, now: dateti
         with transaction(conn, immediate=True):
             deleted += conn.execute("DELETE FROM run_events WHERE run_id > ? AND run_id <= ? AND level = 'info'",
                                     (start, end)).rowcount
+            conn.execute("DELETE FROM run_requests WHERE run_id > ? AND run_id <= ?", (start, end))
             conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
                          " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (RUN_LOG_WATERMARK, str(end)))
         start = end
