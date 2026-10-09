@@ -1,0 +1,223 @@
+name: release
+# Publishes a release of v2. Jack starts it: Actions -> release -> Run workflow on main with the version
+# (2.1.0, or 2.1.0-rc.1 for a release candidate), or by pushing a tag such as v2.1.0. In order:
+#   1. the version must match officesentry.__version__ and have a CHANGELOG.md section
+#      (scripts/release_notes.py), and the commit must have passed the full v2 run on main (lint, every
+#      Python, Windows, Docker, audit), which this workflow reuses rather than repeats;
+#   2. the amd64 image is built with an SBOM and build provenance and pushed to GHCR by digest only, so
+#      nothing can pull it by name yet, then started once to check it reports its version;
+#   3. it is scanned for known vulnerabilities that have a fix (high or critical stops the release);
+#   4. only then does it get its version tags (2.1.0, 2.1, 2 and latest; a candidate gets only its own);
+#   5. the GitHub release is created, with the tag (when it doesn't exist yet), the changelog section and the
+#      files needed to install it (a candidate is a pre-release), and images older than the last three
+#      releases are removed from GHCR.
+# About 8 billed minutes a run: GitHub Free gives a private repository 2,000 a month. arm64 images wait for
+# the repository to go public, when GitHub's Arm runners are free; under emulation they cost too many minutes.
+# CONTRIBUTING.md, "Releases", has the steps for a person.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release from main, such as 2.1.0 (or 2.1.0-rc.1 to try a release candidate)
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/jackd99/officesentry
+
+jobs:
+  check:
+    name: Check the version, changelog and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      prerelease: ${{ steps.notes.outputs.prerelease }}
+      python_version: ${{ steps.notes.outputs.python_version }}
+    steps:
+      - id: tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "::error::Releases are made from main; choose main under \"Use workflow from\"."
+              exit 1
+            fi
+            echo "tag=v${VERSION#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - id: notes
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "::error::$TAG already exists. Releasing it again isn't possible; release the next version instead."
+            exit 1
+          fi
+          python3 v2/scripts/release_notes.py "$TAG" >> "$GITHUB_STEP_SUMMARY"
+      - name: Check main's full test run passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/v2.yml/runs?head_sha=$GITHUB_SHA&event=push&branch=main&status=success" --jq .total_count)
+          if [ "$passed" -lt 1 ]; then
+            echo "::error::Commit $GITHUB_SHA has no passing v2 run on main. Release a commit that is on main once its v2 run has finished green."
+            exit 1
+          fi
+
+  image:
+    name: Build, scan and publish the image
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      # Signed build provenance (attest-build-provenance).
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      # A candidate cut from the development version (2.1.0.dev0) reports its own version (2.1.0rc1).
+      - name: Stamp the version into the code
+        env:
+          PY_VERSION: ${{ needs.check.outputs.python_version }}
+        run: |
+          sed -i "s/^__version__ = .*/__version__ = \"$PY_VERSION\"/" v2/officesentry/__init__.py
+          grep -qx "__version__ = \"$PY_VERSION\"" v2/officesentry/__init__.py
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          # A candidate (v2.1.0-rc.1) only gets its own tag: {{major}}.{{minor}}, {{major}} and latest skip
+          # pre-releases.
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.check.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.check.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ needs.check.outputs.tag }}
+          flavor: latest=auto
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: v2
+          platforms: linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          # Pushed by digest only; the version tags are added once the checks below have passed.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          sbom: true
+          provenance: mode=max
+      - name: Start the image and check its version
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PY_VERSION: ${{ needs.check.outputs.python_version }}
+        run: |
+          docker run -d --name portal -e OFFICESENTRY_BASE_URL=https://sentry.example "$IMAGE@$DIGEST"
+          for _ in $(seq 30); do docker exec portal python -m officesentry healthcheck web && break; sleep 2; done
+          docker exec portal python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/health')))" \
+            | tee /dev/stderr | grep -q "'version': '$PY_VERSION'"
+          docker rm -f portal
+      - name: Scan for known vulnerabilities with a fix
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439  # v7.4.2
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table
+      # GitHub's docs don't say whether a private repository on GitHub Free may sign attestations. While it is
+      # private a refusal doesn't stop the release (the image still carries BuildKit's SBOM and provenance);
+      # once it is public a failure here does.
+      - name: Sign the build provenance
+        continue-on-error: ${{ github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Add the version tags
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mapfile -t tags < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          [ "${#tags[@]}" -gt 0 ] || { echo "::error::No image tags were worked out"; exit 1; }
+          docker buildx imagetools create "${tags[@]/#/--tag=}" "$IMAGE@$DIGEST"
+          {
+            echo "### Published"
+            for tag in "${tags[@]}"; do echo "- \`$tag\`"; done
+            echo "- digest \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Create the GitHub release
+    needs: [check, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      packages: write
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+      VERSION: ${{ needs.image.outputs.version }}
+      DIGEST: ${{ needs.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Write the notes and the install files
+        run: |
+          python3 v2/scripts/release_notes.py "$TAG" > "$RUNNER_TEMP/notes.md"
+          {
+            echo
+            echo "### Install or update"
+            echo
+            echo "Image: \`$IMAGE:$VERSION\` (\`$DIGEST\`), for amd64 (Intel and AMD) servers."
+            echo
+            echo "Download \`docker-compose.yml\`, \`Caddyfile\` and \`.env.example\` below (they run this version"
+            echo "unless \`OFFICESENTRY_VERSION\` in \`.env\` says otherwise), then follow"
+            echo "[DEPLOY.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/v2/DEPLOY.md)."
+          } >> "$RUNNER_TEMP/notes.md"
+          mkdir "$RUNNER_TEMP/files"
+          # The compose file runs this release when .env doesn't choose one.
+          sed 's/\${OFFICESENTRY_VERSION:-2}/${OFFICESENTRY_VERSION:-'"$VERSION"'}/' v2/docker-compose.yml \
+            > "$RUNNER_TEMP/files/docker-compose.yml"
+          grep -q "OFFICESENTRY_VERSION:-$VERSION}" "$RUNNER_TEMP/files/docker-compose.yml"
+          # So does the settings file, which a new install copies to .env.
+          sed 's/^# OFFICESENTRY_VERSION=.*/OFFICESENTRY_VERSION='"$VERSION"'/' v2/.env.example \
+            > "$RUNNER_TEMP/files/.env.example"
+          grep -qx "OFFICESENTRY_VERSION=$VERSION" "$RUNNER_TEMP/files/.env.example"
+          cp v2/Caddyfile "$RUNNER_TEMP/files/Caddyfile"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          # A pushed tag already exists; from "Run workflow", the release creates it on the commit just checked.
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Office Sentry $VERSION" \
+            --prerelease="$PRERELEASE" --notes-file "$RUNNER_TEMP/notes.md" \
+            "$RUNNER_TEMP/files/docker-compose.yml" "$RUNNER_TEMP/files/Caddyfile" "$RUNNER_TEMP/files/.env.example"
+      # The private package counts against GitHub Free's 500 MB. Tidying never fails a release.
+      - name: Keep the last three releases' images
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 v2/scripts/prune_images.py "$GITHUB_REPOSITORY_OWNER" officesentry --keep 3
