@@ -336,6 +336,13 @@ def inbox_rules(users: list[dict]) -> dict:
     return rules
 
 
+def folders(rules: dict) -> dict:
+    """Get-InboxRule's answer for the rules that move mail, which is where folder names come from."""
+    names = {"fid-rss": "RSS Feeds", "fid-news": "Newsletters"}
+    return {uid: [{"Name": r["displayName"], "RuleIdentity": i, "MoveToFolder": names[r["actions"]["moveToFolder"]]}
+                  for i, r in enumerate(rs) if r["actions"].get("moveToFolder")] for uid, rs in rules.items()}
+
+
 def devices(users: list[dict], rng: random.Random) -> tuple[list[dict], list[dict]]:
     """A Windows PC per person: mostly current builds, a few on Windows 10, some not checking in or unencrypted."""
     entra, managed = list(devicedata.ENTRA_DEVICES), list(devicedata.MANAGED_DEVICES)
@@ -500,8 +507,8 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
         tenant_skus = skus(t, bp, basic)
         rng = random.Random(t["name"] + "extras")  # noqa: S311
         entra, managed = devices(everyone, rng)
-        extras = {graphdata: {"EXCHANGE": exchange(t, everyone, first, rng),
-                              "FOLDERS": {**graphdata.FOLDERS, "fid-news": {"displayName": "Newsletters"}}},
+        rules = inbox_rules(everyone)
+        extras = {graphdata: {"EXCHANGE": {**exchange(t, everyone, first, rng), "Get-InboxRule": folders(rules)}},
                   devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed},
                   sharepoint_data: sharepoint(t, everyone, tenant_skus, now, first, rng)}
         with Swapped(extras):
@@ -510,7 +517,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
                         secure_scores=secure_scores(t["score"][0] - 4, t["score"][0], now) if first
                         else secure_scores(t["score"][0] - 4, t["score"][1], now, 105),
                         usage_kw={"active": usagedata.ACTIVE_USERS + active, "apps": usagedata.APP_USERS + apps},
-                        inbox_rules=inbox_rules(everyone))
+                        inbox_rules=rules)
 
 
 def activity_history(db, tenant_id: int, t: dict, now: datetime, days: int = 120) -> None:

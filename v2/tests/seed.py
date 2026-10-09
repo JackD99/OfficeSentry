@@ -32,8 +32,10 @@ def exchange_callback(data):
         body = json.loads(request.body)["CmdletInput"]
         name, params = body["CmdletName"], body.get("Parameters") or {}
         result = data.get(name, [])
-        if isinstance(result, dict):  # keyed by Identity
-            result = result.get(params.get("Identity"), [])
+        if isinstance(result, tuple):  # (status, error body)
+            return result[0], {}, json.dumps(result[1])
+        if isinstance(result, dict):  # keyed by Identity (or Mailbox)
+            result = result.get(params.get("Identity") or params.get("Mailbox"), [])
         return 200, {}, json.dumps({"value": result})
     return callback
 
@@ -101,12 +103,6 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
         return 200, {}, json.dumps({"value": rules.get(uid, [])})
     rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/inbox/messageRules"),
                       callback=messages, content_type="application/json")
-
-    def folder(request):
-        fid = request.path_url.split("?")[0].split("/")[5]
-        return 200, {}, json.dumps(gd.FOLDERS.get(fid, {"displayName": fid}))
-    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/(?!inbox)[^/?]+"),
-                      callback=folder, content_type="application/json")
     rsps.get(f"{V1}/auditLogs/signIns", json={"value": gd.LEGACY_SIGNINS})
     if exchange is not False:
         mock_exchange(rsps, exchange)

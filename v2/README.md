@@ -296,6 +296,13 @@ These areas have no real recording and are tested with simulated data only:
   device compliance and encryption checks have nothing to read.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
   them; the endpoints come from Microsoft's documentation.
+- **Risky sharing**: the tenant's shared file is shared with one person in the
+  organisation, so anyone links and sharing outside the organisation are
+  simulated.
+- **Forwarding to someone in the directory**: the tenant forwards to an email
+  address, so resolving a forwarding recipient (`Get-Recipient`) is simulated.
+- **SharePoint recycle bin items**: Microsoft answered the recycle bin request
+  with an empty list, though the site's storage figures count a deleted file.
 
 ## Documentation
 

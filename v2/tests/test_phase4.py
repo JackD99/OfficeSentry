@@ -112,6 +112,28 @@ def test_collectors_store_phase4_data(seeded):
     assert groups == []  # the default policies name no groups
 
 
+def test_inbox_rule_folders_come_from_exchange(db, two_tenants):
+    # Graph refuses to name a folder without mail access, so Get-InboxRule does. Graph's rule ID is Exchange's
+    # RuleIdentity in base64 with - for / (as on the real test tenant), so it's found even when renamed.
+    alpha, beta = two_tenants
+    rule = {"id": "AQAAAIPT-P8=", "displayName": "Tidy", "isEnabled": True, "sequence": 1,
+            "conditions": {"subjectContains": ["invoice"]}, "actions": {"moveToFolder": "AAMkAD1", "markAsRead": True}}
+    moved = {"Name": "Tidy (renamed)", "RuleIdentity": 18445850733396885505,
+             "MoveToFolder": "ann@x.com:\\Deleted Items"}
+    exchange = dict(gd.EXCHANGE, **{"Get-InboxRule": {"u1": [moved]}})
+    seed_tenant(db, alpha, inbox_rules={"u1": [rule]}, exchange=exchange)
+    snap = TenantSnapshot(db, store.get_tenant(db, alpha))
+    assert [r["moveToFolderName"] for r in snap.objects("inbox_rules", "inbox_rule")] == ["Deleted Items"]
+    assert {r.key: r for r in evaluate(snap)}["suspicious_inbox_rules"].status == "fail"
+
+    # Without an Exchange role the rules are still read, just without folder names.
+    refused = dict(gd.EXCHANGE, **{"Get-InboxRule": (403, {"error": {"code": "Forbidden", "message": "No"}})})
+    seed_tenant(db, beta, inbox_rules={"u1": [rule]}, exchange=refused)
+    snap = TenantSnapshot(db, store.get_tenant(db, beta))
+    assert snap.runs["inbox_rules"]["status"] == "succeeded"
+    assert [r["moveToFolderName"] for r in snap.objects("inbox_rules", "inbox_rule")] == [None]
+
+
 def test_email_checks(seeded):
     _, r = seeded
     fwd = r["external_forwarding"]
