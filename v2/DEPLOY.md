@@ -235,6 +235,9 @@ are overwritten in the database file where that costs no extra I/O
 |---|---|---|
 | Snapshots (every user, mailbox, device and policy from a run) | the last run of each of the last **30 days** (`OFFICESENTRY_KEEP_DAILY`) and of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`) | any number of days and months, or every month forever |
 | Sign-in detail (accounts, IP addresses, countries and cities from the sign-in logs) | as long as its snapshot: about 13 months | 30 days or more |
+| Activity history: every sign-in | **180 days** | 30 days to 10 years |
+| Activity history: daily sign-in summaries | **25 months** | 1 to 120 months, or forever |
+| Activity history: directory audit events | **7 years** | 1 year or more, or forever |
 | Resolved findings | forever | 30 days or more after they were resolved |
 | Run log info lines (warnings and errors always stay) | 90 days | 7 days or more, or forever |
 | Activity log | forever | 365 days or more |
@@ -249,6 +252,12 @@ tenant's latest file of each issued report (month-end reporting compares
 against it) are never deleted by retention. The activity log can't be set
 under a year because it's the record of who changed what and signed in from
 where, which security reviews and investigations look back over.
+
+The **activity history** is each tenant's sign-in and directory audit logs,
+kept beyond the 30 days Microsoft keeps them (7 days for audit events without
+Entra ID P1). It lives in monthly files in `/data/events`, outside the
+database, and a month older than its period is deleted as a whole file.
+Deleting a tenant deletes its rows from every file.
 
 The **activity log** (*Settings → Activity log*, admins only) records sign-ins
 and every change, with the address it came from; filter it by user, action,
@@ -273,6 +282,13 @@ That writes to `/data/backups` inside the volume and keeps the last 7
 it's being made, the uncompressed copy needs room next to it: the backup
 stops with a plain message if the disk is short of about one and a half
 times the database's size.
+
+Each run also brings an `events` folder next to the copies up to date: a
+compressed copy of each activity history file (`/data/events`), copied again
+only when it changed, so a month that's over is copied once. `restore` puts
+back any history file the data folder is missing from the `events` folder next
+to the backup it restores. If you back up the volume some other way, include
+`/data/events`.
 
 **Keep backups off the data volume.** A copy in the same volume is lost with
 the volume. Give the portal a second folder on the host (or a mounted network

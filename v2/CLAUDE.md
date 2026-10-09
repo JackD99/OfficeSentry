@@ -275,7 +275,8 @@ run per day for 30 days and per month for 12 by default; metrics and run rows
 are never pruned), sign-in detail objects (`retention.SIGNIN_KINDS`) once
 older than their period, resolved findings, run log info lines older than 90
 days (`store.prune_run_logs`; warnings and errors stay), and, when set, the
-activity log and issued reports (each never under 365 days). So code that
+activity log and issued reports (each never under 365 days); the activity history
+too (`retention.prune_history`, see "Activity history"). So code that
 reads an older run must cope with its objects, or just its sign-in kinds,
 being gone (see `changes._baseline_run`). A new store of personal data gets
 a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
@@ -518,6 +519,32 @@ the worker (the `compact` command does it all and shrinks the file). So:
   account page is identical from packed and unpacked rows.
 - `scripts/scale_data.py` builds N tenants with two years of history for
   sizing and timing (`--plain --compact` measures before and after).
+
+## Activity history
+
+`events.py` (schema in `migrations/0031`) keeps every sign-in and directory audit event beyond the 30 days
+Microsoft keeps them, in monthly SQLite files beside the database: `<data dir>/events/<store>/<YYYY-MM>.db`,
+stores `signins`, `daily` (one row per person, day, app and country) and `audits` (Graph's JSON,
+compressed). Rows carry the tenant's key from `event_tenants` (never reused), not `tenants.id`, and are
+deduplicated on (tenant, time, id), so reading an event twice stores it once.
+
+- Collect with `events.ingest(ctx, events.SIGNIN_LOG | AUDIT_LOG, keep_days, budget)`. Each tenant's
+  cursor (`event_cursors`, `events.Coverage`) says what's been read: each run adds `[read_to - 6 hours,
+  now]` and reads the gaps newest first, saving the cursor after every page, so a crash, a timeout (one-day
+  slices, then the 10-minute give-up) or the page budget loses nothing and the next run carries on. Ranges
+  Microsoft dropped before they were read go in `lost`. Warn with what `coverage.missing()` returns rather
+  than truncating quietly. `tests/test_events.py` replays overlapping and crashing runs.
+- Read through `events` (`signins_between`, `audits_between`, `daily_between`, `daily_for`, `totals`),
+  never the files. Pages that read it say where it starts ("detailed from <date>",
+  `Coverage.detailed_from`). Readers today: the Sign-ins, legacy sign-in and Admin activity collectors, the
+  Admin activity report (12 months), `changes.audit_changes`, each person's page and the tenant's Activity
+  history page (`/tenants/<id>/activity`, staff only, under the Changes tab).
+- Retention: `retention.Policy.history_*` (D18 defaults: sign-ins 180 days, daily summaries 25 months,
+  audits 7 years); whole months go as files (`events.prune`). `lifecycle.delete_tenant` deletes the
+  tenant's rows from every file after the database delete, and the daily pass sweeps rows whose key is
+  gone (`events.sweep`). `backup` mirrors the folder (`backups.mirror_events`) and `restore` puts back
+  missing files.
+- Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
 ## Schema changes
 

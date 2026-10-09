@@ -512,6 +512,53 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
                         inbox_rules=inbox_rules(everyone))
 
 
+def activity_history(db, tenant_id: int, t: dict, now: datetime, days: int = 120) -> None:
+    """Four months of sign-ins and a few admin changes in the activity history, so its page, each person's
+    sign-ins by month and the Admin activity report have something to show (the fixtures hold a few days)."""
+    from officesentry import events
+    from officesentry.snapshot import TenantSnapshot
+
+    rng = random.Random(t["name"] + "history")  # noqa: S311 (demo data, not security)
+    snap = TenantSnapshot(db, store.get_tenant(db, tenant_id))
+    people = [u for u in snap.objects("users", "user") or []
+              if u.get("accountEnabled") is not False and u.get("userType") != "Guest" and u.get("userPrincipalName")]
+    mfa_share = t["mfa"][0]
+    rows = []
+    for back in range(days, 0, -1):
+        day = (now - timedelta(days=back)).replace(hour=0, minute=0, second=0, microsecond=0)
+        weekend = day.weekday() >= 5
+        for i, person in enumerate(people):
+            if rng.random() > (0.12 if weekend else 0.85):
+                continue
+            uid = person.get("id") or person["_id"]
+            for _ in range(rng.randint(1, 4)):
+                when = day + timedelta(hours=rng.randint(7, 18), minutes=rng.randint(0, 59))
+                code = rng.choices([0, 50074, 50126, 50140], [86, 7, 4, 3])[0]
+                country = "GB" if rng.random() > 0.03 else rng.choice(["FR", "IE", "US"])
+                rows.append(graphdata._signin(len(rows), _iso(when), person["userPrincipalName"], uid, code,
+                                              app=rng.choice(["Microsoft Teams", "Office 365 Exchange Online",
+                                                              "Office 365 SharePoint Online", "Microsoft Office"]),
+                                              ip=f"203.0.113.{10 + i % 40}", country=country,
+                                              mfa=rng.random() < mfa_share))
+    for n, row in enumerate(rows):
+        row["id"] = f"demo-{tenant_id}-{n}"
+    base, key = events.root(db), events.tenant_key(db, tenant_id, create=True)
+    events.add_signins(base, key, rows)
+    events.rebuild_daily(base, key, {r["createdDateTime"][:10] for r in rows})
+    with Renamed(renamer(t)):
+        older = ((adminactivitydata.GLOBAL_ADMIN_GRANT, 64), (adminactivitydata.CA_DISABLED, 41),
+                 (adminactivitydata.SECRET_ADDED, 12), (adminactivitydata.CA_ADDED, 90))
+        events.add_audits(base, key, [{**event, "id": f"demo-audit-{tenant_id}-{n}",
+                                       "activityDateTime": _iso(now - timedelta(days=back))}
+                                      for n, (event, back) in enumerate(older)])
+    start = int((now - timedelta(days=days)).timestamp())
+    for source in ("signins", "audits"):
+        cov = events.coverage(db, tenant_id, source)
+        cov.since = min(cov.since or start, start)
+        cov.read_to = cov.read_to or int(now.timestamp())
+        events.save_coverage(db, tenant_id, cov)
+
+
 def backdate(db, tenant_id: int, days: int) -> None:
     for table, cols in (("runs", ("created_at", "started_at", "finished_at")), ("metrics", ("captured_at",)),
                         ("findings", ("first_seen", "last_seen"))):
@@ -553,6 +600,7 @@ def populate(db, vault, *, msp: str = "Harbour IT", accent: str = "#0d7a5f",
         db.execute("UPDATE tenants SET consented_at = ? WHERE id = ?", (utcnow(), tid))
         collect(db, tid, t, now, first=True)
         backdate(db, tid, 35)
+        activity_history(db, tid, t, now)
         collect(db, tid, t, now, first=False)
         ids.append(tid)
     for part, price in PRICES.items():

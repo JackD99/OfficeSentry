@@ -244,6 +244,8 @@ def cmd_restore(args, cfg):
     if result["saved"]:
         print(f"The database it replaced is saved as {result['saved']}.")
     print(f"Restored {args.file} (database version {result['version']}).")
+    if result.get("events"):
+        print(f"Put back {plural(result['events'], 'missing activity history file')} from the backup folder.")
     if result["version"] < latest_version():
         print(f"It's upgraded to version {latest_version()} when the portal starts.")
     print("Put back the secrets.json (or OFFICESENTRY_ENCRYPTION_KEYS) from the same time as the backup, "
