@@ -1,0 +1,42 @@
+# The public server's two sites (docker-compose.yml here). Caddy gets and renews their certificates itself.
+(headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+# The website: plain files, no scripts from anywhere else.
+{$SITE_DOMAIN} {
+	import headers
+	header {
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+		X-Frame-Options DENY
+		Cache-Control "public, max-age=300"
+	}
+	@assets path /assets/* /screenshots/* /examples/*
+	header @assets Cache-Control "public, max-age=86400"
+	root * /srv/site
+	encode zstd gzip
+	try_files {path} {path}/ {path}.html
+	file_server
+	handle_errors 404 {
+		root * /srv/site
+		rewrite * /404.html
+		file_server
+	}
+}
+
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
+# The demo: the portal sets its own security headers.
+demo.{$SITE_DOMAIN} {
+	import headers
+	encode zstd gzip
+	reverse_proxy demo:8000
+}

@@ -1,0 +1,18 @@
+{#- The docs menu: search, then every section and page. -#}
+<aside class="docs-nav" aria-label="Documentation">
+  <div class="search" data-search>
+    <label for="docs-search" class="sr-only">Search the docs</label>
+    <input id="docs-search" type="search" placeholder="Search the docs" autocomplete="off" maxlength="100">
+    <ol class="search-results" hidden></ol>
+  </div>
+  <details class="docs-menu" open>
+    <summary>Contents</summary>
+    {% for name, docs in sections %}
+    <h2>{{ name }}</h2>
+    <ul>
+      {% for d in docs %}<li><a href="{{ d.url }}"{% if path == d.url %} aria-current="page"{% endif %}>{{ d.title }}</a></li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  </details>
+</aside>

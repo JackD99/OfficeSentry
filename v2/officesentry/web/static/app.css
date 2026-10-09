@@ -75,6 +75,10 @@ td.num { white-space: nowrap; }
 .account a, .account button.link { color: var(--sidebar-text); }
 .mobile-bar { display: none; }
 .content { min-width: 0; }
+/* The public demo site's bar (web/public_demo.py): what this is, and where to get it. */
+.demo-bar { display: flex; gap: 12px; align-items: center; padding: 10px 32px; background: var(--accent-soft); color: var(--text-2); border-bottom: 1px solid var(--border); font-size: .875rem; }
+.demo-bar strong { color: var(--text); }
+.demo-bar .btn { flex: none; }
 main { max-width: 1240px; margin: 0 auto; padding: 28px 32px 64px; }
 
 /* -- Page header, breadcrumbs, tabs --------------------------------------- */
@@ -318,6 +322,7 @@ a.preparing { cursor: progress; opacity: .7; }
   .mobile-bar[open] > summary { margin: 0; border-bottom: 1px solid #1e293b; }
   .mobile-bar .nav, .mobile-bar .account { padding: 6px 12px 12px; }
   main { padding: 20px 16px 48px; }
+  .demo-bar { padding: 10px 16px; flex-wrap: wrap; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {

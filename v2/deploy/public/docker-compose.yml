@@ -1,0 +1,48 @@
+# The public server (README.md here): the product website at SITE_DOMAIN and the read-only demo at
+# demo.SITE_DOMAIN. It runs nothing else and holds no client data or secrets: the demo's tenants are fictional
+# and made afresh every day, and the website is plain files. start.sh builds the images and starts this.
+name: officesentry-public
+
+services:
+  demo:
+    image: officesentry-demo:local
+    environment:
+      OFFICESENTRY_PUBLIC_DEMO: "1"
+      OFFICESENTRY_PUBLIC_DEMO_LINK: https://${SITE_DOMAIN:?set SITE_DOMAIN in .env}
+      OFFICESENTRY_BASE_URL: https://demo.${SITE_DOMAIN}
+      OFFICESENTRY_TIMEZONE: Europe/London
+      OFFICESENTRY_REQUIRE_MFA: "off"
+      OFFICESENTRY_TRUSTED_PROXIES: "1"
+    # Everything lives in memory and goes with every restart (demo.sh restarts it at 04:00 UTC).
+    tmpfs: ["/data:uid=10001,gid=10001,mode=0700,size=128m", "/tmp"]
+    restart: always
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # A busy demo slows itself down, not the website.
+    cpus: 1.5
+    mem_limit: 1500m
+    healthcheck:
+      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "web"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+
+  caddy:
+    image: caddy:2@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The website, built by the Deploy workflow (website/README.md) and copied here.
+      - /opt/officesentry/site:/srv/site:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [demo]
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

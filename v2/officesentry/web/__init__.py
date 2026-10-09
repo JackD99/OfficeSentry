@@ -26,6 +26,7 @@ from . import (
     filters,
     people,
     projects,
+    public_demo,
     reporting,
     reports,
     saved_views,
@@ -79,6 +80,10 @@ def create_app(cfg: Config | None = None) -> Flask:
         g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
 
+    # On the public demo site, nothing but reading (after load_user, which sets g.public_demo).
+    app.before_request(public_demo.refuse_changes)
+    app.after_request(public_demo.add_headers)
+
     @app.teardown_request
     def _close_db(_exc):
         db = g.pop("db", None)
@@ -124,7 +129,9 @@ def create_app(cfg: Config | None = None) -> Flask:
         here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
         return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down,
-                "expiring_certificates": certificates, "app_version": __version__}
+                "expiring_certificates": certificates, "app_version": __version__,
+                "public_demo": bool(g.get("public_demo")),
+                "public_demo_link": public_demo.link() if g.get("public_demo") else ""}
 
     @app.errorhandler(403)
     def _forbidden(_e):
