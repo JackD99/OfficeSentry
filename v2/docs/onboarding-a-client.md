@@ -7,7 +7,9 @@ getting the first data in, keeping its connection healthy, reading what the
 Office Sentry itself must already be installed and running: see the
 [README](../README.md) for installation. For what the client is approving, send
 them [What Office Sentry reads](what-office-sentry-reads.md). Every check, data
-source and permission is listed in the [check catalogue](checks.md).
+source and permission is listed in the [check catalogue](checks.md). If
+something goes wrong, [Troubleshooting](troubleshooting.md) has the common
+errors and their fixes.
 
 ## Before you start
 
@@ -334,17 +336,20 @@ Erasure, for a client's data-protection request:
 - **Database file**: the delete overwrites the removed rows
   (`secure_delete`), then compacts the file and empties the write-ahead log,
   so nothing can be read back from free space.
-- **Backups**: copies made by `python -m officesentry backup` before the
+- **Backups**: copies made by the `backup` command before the
   delete still contain the tenant until they rotate out (the last 7 are
   kept), and so do any copies you took off the server. Delete those yourself
   if the client needs erasure sooner.
 
-Whoever runs the server can do the same without the portal (back up first
-with `python -m officesentry backup`):
+Whoever runs the server can do the same without the portal. With Docker, from
+the `v2` folder on the server (back up first):
 
 ```bash
-python -m officesentry delete-tenant <number>            # asks you to type the tenant's name
-python -m officesentry delete-tenant <number> --delete-client-users
+docker compose exec web python -m officesentry backup
+docker compose exec web python -m officesentry delete-tenant <number>   # asks you to type the tenant's name
+docker compose exec web python -m officesentry delete-tenant <number> --delete-client-users
 ```
 
-The number is the one in the tenant's address (`/tenants/<number>`).
+Without Docker, run the same `python -m officesentry ...` commands in the
+virtual environment. The number is the one in the tenant's address
+(`/tenants/<number>`).
