@@ -34,6 +34,7 @@ METHODS: dict[str, tuple[str, str]] = {
     "passkeydeviceboundauthenticator": ("Passkey in Authenticator", PHISHING_RESISTANT),
     "passkeydeviceboundwindowshello": ("Passkey in Windows Hello", PHISHING_RESISTANT),
     "passkey": ("Passkey", PHISHING_RESISTANT),
+    "passkeysynced": ("Synced passkey", PHISHING_RESISTANT),  # in a password manager; seen on the test tenant
     "windowshelloforbusiness": ("Windows Hello for Business", PHISHING_RESISTANT),
     "x509certificatemultifactor": ("Certificate", PHISHING_RESISTANT),
     "x509certificate": ("Certificate", PHISHING_RESISTANT),

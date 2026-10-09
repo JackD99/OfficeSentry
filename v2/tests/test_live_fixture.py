@@ -1,9 +1,11 @@
 """Every collector, check and report against responses recorded from a real tenant.
 
 ``tests/fixtures/live_tenant.json`` comes from ``python -m officesentry live-test --record``
-against a Business Premium test tenant (Entra ID P1, no P2) with 11 Conditional Access
-policies. Names, emails, phone numbers, domains and IDs are replaced; the response
-shapes are Microsoft's. Re-record when a collector starts asking for something new.
+against a Business Premium (no Teams) test tenant (Entra ID P1, no P2, synced from
+on-premises AD) with 11 Conditional Access policies, last on 9 Oct 2026. Names, emails,
+phone numbers, domains and IDs are replaced; the response shapes are Microsoft's.
+Re-record when a collector starts asking for something new (DNS too: run it with
+``--dns-over-https`` where plain DNS is blocked).
 """
 
 from datetime import UTC, datetime
@@ -102,10 +104,12 @@ def test_own_and_microsoft_apps_are_not_flagged(db, live):
     assert "Microsoft Graph Command Line Tools" not in names
 
 
-def test_empty_registration_report_falls_back_to_per_user_methods(db, live):
-    # On a newly licensed tenant userRegistrationDetails returns [], as recorded.
+def test_registration_report_on_real_data(db, live):
+    # The registration report now has a row per user (on 3 Oct it was still empty on this newly licensed
+    # tenant; the per-user fallback for that is covered with simulated data in test_identity_collectors.py).
     rows = TenantSnapshot(db, live).objects("mfa_registration", "mfa_registration")
-    assert rows and {r["source"] for r in rows} == {"per_user_methods"}
+    assert rows and {r["source"] for r in rows} == {"registration_report"}
+    assert sum(r["isMfaRegistered"] for r in rows) == 2
     results = _results(db, live)
     assert results["admin_mfa"].status == "pass"
     assert results["users_mfa_registered"].status == "fail"
@@ -185,22 +189,23 @@ def test_pages_and_downloads(client, db, live):
 
 
 def test_usage_reports_on_real_data(db, live):
-    # The recording's usage reports have one Business Standard user who only receives mail.
+    # One Business Premium user who receives mail and uses Excel and PowerPoint on Windows, and one with only
+    # Power Automate Free: nobody to move to a cheaper licence.
     snap = TenantSnapshot(db, live)
     people = [r for r in snap.objects("m365_usage", "user_usage") if r["products"]]
     assert len(people) == 2 and all(r["platforms"] is not None for r in people)
     report = data_reports.build(db, live, "licence-rightsizing", RECORDED)
-    [move] = report.sections[0].rows
-    assert move[1] == "Microsoft 365 Business Standard" and move[3] == "Convert to a shared mailbox"
+    assert not report.unavailable and report.sections[0].rows == []
     usage = data_reports.build(db, live, "usage", RECORDED)
     assert not usage.unavailable and usage.sections[0].rows[0][:2] == ["Email", 1]
+    office = next(s for s in usage.sections if s.title == "Office apps by platform")
+    assert {r[0] for r in office.rows} == {"Excel", "PowerPoint"}
 
 
 def test_sign_in_methods_on_real_data(db, live):
-    # The registration report was empty, so methods were read one person at a time.
     report = data_reports.build(db, live, "auth-methods", RECORDED)
     sections = {s.title: s for s in report.sections}
-    assert any("one person at a time" in n for n in report.notes)
+    assert not any("one person at a time" in n for n in report.notes)  # the registration report had everyone
     strongest = {row[0]: row[1] for row in sections["Strongest method"].rows}
     assert strongest["Phishing-resistant"] == 1 and strongest["None"] == 3
     strengths = {row[0][:5]: row[3] for row in sections["Authentication strengths in Conditional Access"].rows}
@@ -212,8 +217,7 @@ def test_sign_in_methods_on_real_data(db, live):
 
 
 def test_subscriptions_on_real_data(db, live):
-    # Business Premium (no Teams), Power Automate Free and a lapsed Business Standard trial. The subscriptions
-    # behind them and the users' licence assignment states were added by hand (see those entries' "note").
+    # Business Premium (no Teams), Power Automate Free and a suspended Business Standard trial.
     report = data_reports.build(db, live, "subscriptions", RECORDED)
     renewals = next(s for s in report.sections if s.title == "Renewals and expiry")
     assert (str(renewals.rows[0][0]), renewals.rows[0][1]) == ("Microsoft 365 Business Standard", "Suspended")

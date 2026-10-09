@@ -270,6 +270,8 @@ These areas have no real recording and are tested with simulated data only:
   has no P2; Microsoft answers "not licensed").
 - **Per-user MFA states**: Office Sentry only reads them on tenants without
   Entra ID P1.
+- **Sign-in methods read one person at a time**: only used when Microsoft's
+  registration report comes back empty, as it does on a newly licensed tenant.
 - **Intune device details**: the tenant has no enrolled devices, so the
   device compliance and encryption checks have nothing to read.
 - **National clouds** (GCC High, DoD, China): there's no test tenant in
