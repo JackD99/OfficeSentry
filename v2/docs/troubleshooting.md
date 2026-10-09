@@ -22,7 +22,7 @@ in plain words what's wrong with its connection and where to fix it.
 
 - [The first-admin link doesn't work](#the-first-admin-link-doesnt-work)
 - [Signing in fails with "The CSRF session token is missing"](#signing-in-fails-with-the-csrf-session-token-is-missing)
-- [create-app fails](#create-app-fails)
+- [Creating the app fails](#creating-the-app-fails)
 - [Two app connections, one marked "Needs client ID"](#two-app-connections-one-marked-needs-client-id)
 - [AADSTS50011 on the consent page](#aadsts50011-on-the-consent-page)
 - [Consent was granted but Office Sentry didn't record it](#consent-was-granted-but-office-sentry-didnt-record-it)
@@ -57,14 +57,17 @@ Quick start, or your own reverse proxy). For a test on your own computer only,
 `OFFICESENTRY_INSECURE_COOKIES=1` turns the *Secure* flag off; never set it on
 a server other people reach.
 
-## create-app fails
+## Creating the app fails
 
-`create-app` signs you in with a code (device sign-in) through Microsoft's
-own *Microsoft Graph Command Line Tools* app, then registers Office Sentry's
-app in **your own** (MSP) tenant.
+*Sign in to Microsoft* on the App connection page, and the `create-app`
+command, both sign you in with a code (device sign-in) through Microsoft's
+own *Microsoft Graph Command Line Tools* app, then register Office Sentry's
+app in **your own** (MSP) tenant. The page says what went wrong in plain
+words; these are the usual causes.
 
-- **Sign in to your own tenant, not a client's.** Pass it with `--tenant`, as
-  a domain (`yourmsp.onmicrosoft.com`) or tenant ID.
+- **Sign in to your own tenant, not a client's.** If your account is a guest
+  in your tenant, enter the tenant under *More options* (or `--tenant` for the
+  command), as a domain (`yourmsp.onmicrosoft.com`) or tenant ID.
 - **The account needs to be able to create app registrations and approve
   the sign-in tool's access**: Application Administrator, Cloud Application
   Administrator or Global Administrator. Without one of these, Microsoft
@@ -74,25 +77,31 @@ app in **your own** (MSP) tenant.
   the `Application.ReadWrite.All` permission. That's the sign-in tool, not
   Office Sentry. If your account can't approve it, ask a Global
   Administrator of your tenant to sign in instead.
-- **The device code expires after about 15 minutes.** Run the command again
-  for a new one.
+- **The device code expires after about 15 minutes.** Press *Sign in to
+  Microsoft* again (or run the command again) for a new one.
+- **"Your Conditional Access policies block this kind of sign-in"** (AADSTS53003):
+  many tenants block device code sign-in, as Microsoft recommends. Ask
+  whoever manages Conditional Access to let your account use it for a few
+  minutes, or create the app by hand.
+- **"Setup was interrupted while the app was being created"**: the portal
+  restarted in the middle. Look in the Entra admin centre under *App
+  registrations* for an "Office Sentry (read-only)" app that no connection on
+  the App connection page has the client ID of, delete it, and start again.
 
-If `create-app` can't work in your tenant (for example because device sign-in
-is blocked by Conditional Access), create the app by hand: **Settings → App
-connection → Generate certificate**, then follow the page.
+To create the app by hand (for example because device sign-in is blocked by
+Conditional Access): **Settings → App connection → Other ways to create the
+app**, generate a certificate, then follow the steps shown there.
 
 ## Two app connections, one marked "Needs client ID"
 
-This happens when you press **Generate certificate** on the App connection
-page and then also run `create-app`. `create-app` makes its own certificate
-and connection, so the first one is left without a client ID.
+Older versions made a second connection when you pressed **Generate
+certificate** and then also ran `create-app`. Now *Sign in to Microsoft* and
+`create-app` both use a certificate you already generated for that cloud, so
+this only happens if you generate two certificates by hand.
 
 It does no harm. When you add a tenant and Office Sentry asks which app
-connection to use, choose the one marked **Ready** (the one `create-app`
-made). Picking the other one makes consent fail.
-
-Next time, use one route only: `create-app` on its own, or *Generate
-certificate* and create the app by hand.
+connection to use, choose the one marked **Ready**. Picking the other one
+makes consent fail.
 
 ## AADSTS50011 on the consent page
 
@@ -108,7 +117,8 @@ one of the app registration's redirect URIs, exactly.
 3. Open a fresh consent link (reload the tenant's page first).
 
 It usually means `OFFICESENTRY_BASE_URL` was different when the app was
-created (`create-app` uses it for the redirect URI), or the app was created
+created (*Sign in to Microsoft* and `create-app` use it for the redirect URI;
+the App connection page warns when you open it at a different address), or the app was created
 by hand with a different address. If `OFFICESENTRY_BASE_URL` itself is wrong,
 fix it in `.env`, run `docker compose up -d`, and then update the redirect URI.
 

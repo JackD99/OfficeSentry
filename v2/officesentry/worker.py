@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import alerts, clouds, findings, lifecycle, ratelimit, retention, schedule, store, tasks, throttle
+from . import alerts, app_setup, clouds, findings, lifecycle, ratelimit, retention, schedule, store, tasks, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -406,6 +406,7 @@ def prune(conn, cfg: Config) -> int:
     removed = retention.apply(conn, cfg)["snapshots"]
     throttle.prune(conn)
     tasks.prune(conn)
+    app_setup.prune(conn)
     if noise := prune_audit(conn):
         log.info("Retention: removed %s", plural(noise, "old failed sign-in record"))
     conn.execute("PRAGMA optimize")  # keeps the query planner's statistics current

@@ -425,6 +425,16 @@ change is audited; note text is never put in the audit log.
   the new .cer next to the old, `test` signs in with it, `switch` swaps it
   in and remembers `old_thumbprint` until `forget_old`. `switch` refuses
   until a test worked. The runbook is in the root `SECURITY.md`.
+- Creating the app (`app_setup.py`): the App connection page's wizard starts
+  Microsoft's device-code sign-in (`entra.start_device_sign_in`) and the page
+  checks back every few seconds (`app_setup.check`, one token request per
+  Microsoft interval, claimed with a conditional `UPDATE` because the next
+  check may reach another portal process). The access token lives only in
+  the request that receives it and creates the app; only the device code is
+  stored, encrypted (`setup_sign_ins.device_code_enc`), until it's used,
+  fails or is cancelled. The wizard and `create-app` both finish with
+  `register_app`, which asks for exactly `entra.setup_scope` and reuses a
+  connection still waiting for its client ID in that cloud.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
 
@@ -478,7 +488,7 @@ and `python -m officesentry <command>`:
 | `migrate` | apply database upgrades now (the portal and worker also do it on start) |
 | `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
 | `setup-link` | print the one-time link for creating the first admin in the browser |
-| `create-app` | create the read-only multi-tenant Entra app (device sign-in) |
+| `create-app` | create the read-only multi-tenant Entra app (device sign-in); the App connection page's wizard does the same |
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
