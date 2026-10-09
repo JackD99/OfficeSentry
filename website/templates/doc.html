@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block body_class %}docs{% endblock %}
+{% block description %}{{ doc.blurb or (doc.title ~ ' · Office Sentry documentation') }}{% endblock %}
+{% block main %}
+<div class="wrap docs-layout">
+  {% include "_docs_nav.html" %}
+  <article class="doc">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/docs/">Docs</a></nav>
+    <h1>{{ doc.title }}</h1>
+    {% if doc.toc|length > 2 %}
+    <details class="toc-inline">
+      <summary>On this page</summary>
+      <ul>{% for h in doc.toc %}<li class="l{{ h.level }}"><a href="#{{ h.id }}">{{ h.text }}</a></li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+    <div class="prose">
+{{ doc.html|safe }}
+    </div>
+    <footer class="doc-foot">
+      {% if source_public %}<a href="{{ edit }}">Edit this page on GitHub</a>{% endif %}
+      <a href="#main">Back to top</a>
+    </footer>
+  </article>
+  {% if doc.toc|length > 2 %}
+  <nav class="toc" aria-label="On this page">
+    <h2>On this page</h2>
+    <ul>{% for h in doc.toc %}<li class="l{{ h.level }}"><a href="#{{ h.id }}">{{ h.text }}</a></li>{% endfor %}</ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

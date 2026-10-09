@@ -542,8 +542,7 @@ rules list your IPv6 ranges too, or browsers that prefer IPv6 won't get in.
 **Domain on Cloudflare?** In the Cloudflare app or dash.cloudflare.com: the
 domain → *DNS → Records → Add record*: type **A**, name `app` (for
 `app.yourmsp.com`, or `@` for the bare domain), IPv4 address the server's,
-and **Proxy status off (grey cloud, "DNS only")**. Add a second one named
-`demo` the same way for the demo site. Keep the proxy off: with the orange
+and **Proxy status off (grey cloud, "DNS only")**. Keep the proxy off: with the orange
 cloud, every visitor reaches the server from a Cloudflare address, so the
 Hetzner firewall's allow-list would block everyone (or have to let all of
 Cloudflare in), and Caddy can't get its certificate the usual way. Caddy
@@ -562,6 +561,7 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `HCLOUD_TOKEN` | the Hetzner API token |
 | `DEPLOY_SSH_KEY` | the deploy key's **private** key, all of it, including the BEGIN and END lines |
 | `DEPLOY_HOST_KEY` | the server's own SSH key, one line starting `ssh-ed25519 AAAA` (below). Required: the workflow only talks to the server that has this key |
+| `PORTAL_ALLOWED_IPS` | only when the server also runs a public site (below): the addresses that may open the portal, separated by commas |
 | `SETUP_CODE` | only while there is no admin yet: a long random password (20 characters or more) to use as the first-admin code in step 6. Delete it afterwards |
 
 | Variables | |
@@ -570,8 +570,7 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `OFFICESENTRY_DOMAIN` | the domain alone, e.g. `sentry.yourmsp.com` |
 | `OFFICESENTRY_TIMEZONE` | e.g. `Europe/London` (default UTC) |
 | `HCLOUD_FIREWALL` | only if the firewall isn't called `officesentry` |
-| `OFFICESENTRY_DEMO_DOMAIN` | optional: the demo site's name (below), e.g. `demo.sentry.yourmsp.com` |
-| `DEMO_ENABLED` | `true` runs the demo site, `false` (or unset) removes it at the next deploy |
+| `OFFICESENTRY_WEBSITE_DOMAIN`, `OFFICESENTRY_DEMO_DOMAIN`, `DEMO_ENABLED` | only for the project's own website and public demo (below) |
 | `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *`. Variables show in run logs, so never put a password or key here |
 | `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it). Anything else, or no variable, means you deploy by hand ([below](#automatic-deploys-off-and-on)) |
 
@@ -614,6 +613,7 @@ All from *Actions → Deploy → Run workflow*:
 | Action | Does |
 |---|---|
 | `deploy` | copies the chosen branch, tag or commit and rebuilds; the portal is only down while the containers swap |
+| `website-and-demo` | only with the website or public demo on (below): updates them from `main` (they also update by themselves after every merge), without touching the portal |
 | `status` | container health, free disk, whether the worker checked in, and how many errors the portal and worker logged in the last 24 hours |
 | `backup` | a database copy now, keeping 14 |
 | `restart` | restarts the portal, worker and Caddy |
@@ -641,7 +641,8 @@ choose when to deploy:
 3. Open the **Variables** tab. Next to `AUTO_DEPLOY`, press the pencil.
 4. Change the value to `false` and press **Update variable**.
 
-Nothing deploys by itself from then on. To turn it back on, do the same and
+The portal doesn't update by itself from then on (the project's website and
+public demo, [below](#the-website-and-public-demo), still follow `main`). To turn it back on, do the same and
 set the value to `true`. Merges keep running their tests either way.
 
 ### Deploying by hand
@@ -667,28 +668,15 @@ become public with the repository. Before making it public, open
 *Actions → Deploy*, and for each run older than this change press **⋯** and
 **Delete workflow run** (or wait until they are 90 days old).
 
-### A demo site to show people
+### The website and public demo
 
-The demo tenants from `scripts/demo_data.py` (three fictional clients with five
-weeks of history, and a made-up MSP's branding) come with every deploy and run
-as a second site on the same server, with its own data, so they never mix with
-real clients. To turn it on:
-
-1. Add an A record for, say, `demo.sentry.yourmsp.com` pointing at the server.
-2. Set the `OFFICESENTRY_DEMO_DOMAIN` variable to that name and `DEMO_ENABLED`
-   to `true`, and add a `DEMO_PASSWORD` secret with the password the demo
-   account should have (it's required, so the password never appears in a
-   run's log or summary).
-3. Deploy, then sign in as `demo` with that password.
-
-Every deploy rebuilds the demo data from the code it deploys, so the demo always
-shows the version that's running, with fresh dates; anything changed on the
-demo site is reset. To turn it off, set `DEMO_ENABLED` to `false` and deploy.
-
-The demo site uses the same firewall, so whoever can open the portal can open
-the demo. Two-step sign-in is off there so colleagues can share the account,
-and it never collects, because the tenants aren't real. Don't press "Run now"
-on a demo tenant; it fails, because there is nothing to connect to.
+The project's own server also runs the website (officesentry.co.uk) and a
+public, read-only demo with fictional clients, next to its private portal.
+That's how the project shows itself, and nothing an MSP running Office Sentry
+needs; it moves the portal's allow-list from the Hetzner firewall to Caddy (the
+`PORTAL_ALLOWED_IPS` secret), because the public sites need port 443 open to
+everyone. How it's kept apart from the portal, and how to turn it on:
+[`deploy/public/README.md`](deploy/public/README.md).
 
 ### If you need a shell
 

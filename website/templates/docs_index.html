@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body_class %}docs{% endblock %}
+{% block description %}How to install, run and use Office Sentry, and what it reads from your clients' tenants.{% endblock %}
+{% block main %}
+<div class="wrap docs-layout no-toc">
+  {% include "_docs_nav.html" %}
+  <article class="doc">
+    <h1>Documentation</h1>
+    <p class="lead">Everything about installing Office Sentry, adding clients and reading its reports. New here? Start with the <a href="/docs/quick-start/">quick start</a>, or <a href="{{ demo_url }}">look around the demo</a> first.</p>
+    {% for name, docs in sections %}
+    <section class="doc-group">
+      <h2>{{ name }}</h2>
+      <ul class="doc-cards">
+        {% for d in docs %}<li><a href="{{ d.url }}"><strong>{{ d.title }}</strong>{% if d.blurb %}<span>{{ d.blurb }}</span>{% endif %}</a></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  </article>
+</div>
+{% endblock %}

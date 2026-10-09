@@ -49,6 +49,13 @@
 </nav>
 {%- endmacro %}
 {% macro account() -%}
+{% if public_demo %}
+<div class="account">
+  <span class="name">Demo visitor</span>
+  <span class="role">guest</span>
+  {% if public_demo_link %}<div class="links"><a href="{{ public_demo_link }}">Back to the website</a></div>{% endif %}
+</div>
+{% else %}
 <div class="account">
   <span class="name">{{ current_user.username }}</span>
   <span class="role">{{ current_user.role }}</span>
@@ -57,6 +64,7 @@
     <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="link">Sign out</button></form>
   </div>
 </div>
+{% endif %}
 {%- endmacro %}
 {% macro flashes() -%}
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -92,6 +100,9 @@
       {{ account() }}
       {{ powered_by(version=true) }}
     </details>
+    {% if public_demo %}<div class="demo-bar" role="note"><span class="grow"><strong>You're in the demo.</strong>
+      Three fictional clients with made-up people. Look around freely: nothing can be changed, and it all resets every night.</span>
+      {%- if public_demo_link %}<a class="btn sm primary" href="{{ public_demo_link }}">Get Office Sentry</a>{% endif %}</div>{% endif %}
     <main id="main" tabindex="-1">
       {% if worker_down and request.endpoint != 'system.status' %}<div class="callout warn" role="status">{{ icon('alert') }}<span class="grow"><strong>The background worker isn't running.</strong>
         Tenants won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span><a class="btn sm" href="{{ url_for('system.status') }}">System status</a></div>{% endif %}
