@@ -34,9 +34,10 @@ ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
 
-CI runs the same on Python 3.11 and 3.12 for every pull request and push to
-main, plus a subset on Windows, a Docker image build and a dependency audit
-(`pip-audit`).
+CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request and
+push to main, plus a subset on Windows, a Docker image build and a dependency
+audit (`pip-audit`). The Python 3.12 run measures coverage and fails under
+90%; `pytest -n auto --cov=officesentry` shows it locally.
 
 - Keep changes small and finished end to end; update `v2/CLAUDE.md` and
   `v2/README.md` in the same pull request when behaviour changes.
