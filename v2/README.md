@@ -282,6 +282,14 @@ this command; the product signs in with a certificate.
   consent link to add their tenant. No per-tenant app or device-code step.
 - **No credential files.** The certificate's private key is encrypted in the
   database. Only the public `.cer` can be downloaded, by admins.
+- **Certificates don't expire by surprise.** Admins see a banner, and the
+  team gets an email and an alert, 60, 30 and 7 days before an app
+  certificate (or the mail app's) expires. *App connection → Replace
+  certificate* adds a new one next to the old, tests it and switches without
+  stopping collection. `SECURITY.md` has the steps for a leaked key.
+- **Extra access is flagged.** A tenant that gave the app more than the
+  read-only permissions, or any admin role besides Global Reader, shows as
+  needing attention on its Manage page and on Client tenants.
 - **Deny-by-default access.** Users see only tenants granted to them (admins
   and "all tenants" analysts excepted). Hidden tenants return 404.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
@@ -470,6 +478,7 @@ officesentry/
   backups.py     backup, restore, and the copy taken before each upgrade
   crypto.py      Fernet vault with key rotation
   certs.py       certificate generation, Entra keyCredential
+  cert_lifecycle.py  certificate expiry warnings and replacing one without a gap
   entra.py       read-only permission list, app creation, consent URL
   graph.py       Graph client: retries, Retry-After, paging, typed errors
   store.py       tenants, connections, runs, objects, metrics, pruning
