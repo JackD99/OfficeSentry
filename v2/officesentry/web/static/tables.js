@@ -119,7 +119,8 @@
   function capRows(root) {
     if (!phone.matches) return;
     root.querySelectorAll('table.stack-sm').forEach(function (table) {
-      if (!table.tBodies[0] || table.hasAttribute('data-cap')) return;
+      // Grouped tables (several bodies) fold their groups instead.
+      if (table.tBodies.length !== 1 || table.classList.contains('grouped') || table.hasAttribute('data-cap')) return;
       var n = rows(table).length;
       if (n <= CAP + 5) return;  // hiding a handful saves nothing
       table.setAttribute('data-cap', '');

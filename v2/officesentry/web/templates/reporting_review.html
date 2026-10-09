@@ -161,7 +161,7 @@
 </div>
 {#- Phones: the right-hand column comes after every note form, so the main action also sits in a bar
     that stays on screen. It submits the same form as the Approve card. -#}
-{% if plan and admin and editable %}
+{% if plan and admin and editable and not approving %}
 <div class="approve-bar">
   <span class="small">{{ states[state] }} · <a href="#approve">Details</a></span>
   <button class="primary" form="approve-form">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve and publish' }}</button>

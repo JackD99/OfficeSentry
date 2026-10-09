@@ -258,6 +258,55 @@ details.help > summary { font-size: .875rem; }
 .client-tenant .tiles { margin-bottom: 14px; }
 .footnote { color: var(--muted); font-size: .8125rem; margin-top: 8px; }
 
+/* -- Settings: one sidebar entry, and this row on top of every settings page ------------------------ */
+.settings-nav { display: flex; gap: 4px; margin: -8px 0 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.settings-nav a { padding: 5px 11px; border-radius: 999px; color: var(--muted); font-weight: 500; font-size: .8125rem; white-space: nowrap; }
+.settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
+.settings-nav a.active { background: var(--text); color: var(--surface); }
+
+/* -- Month-end review: suggestions from the failing checks, and the approve bar on phones ----------- */
+.action-row.suggestions { display: block; }
+.action-row.suggestions .label-sm { margin-top: 0; }
+.suggest-list { list-style: none; margin: 0; padding: 0; }
+.suggest-list li { border-top: 1px solid var(--border); }
+.suggest-list li:first-child { border-top: 0; }
+.action-row .suggest-list form { display: flex; gap: 10px; align-items: center; padding: 7px 0; flex-wrap: nowrap; }
+.suggest-list .grow { flex: 1; min-width: 0; font-size: .875rem; }
+.suggest-list .pill, .suggest-list button { flex: none; }
+.approve-bar { display: none; }
+@media (max-width: 960px) {
+  .approve-bar { display: flex; position: sticky; bottom: 0; z-index: 5; gap: 12px; align-items: center; justify-content: space-between; margin: 0 -16px -48px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -8px 12px -10px rgba(16, 24, 40, .25); }
+}
+
+/* -- Long tables on phones (tables.js): the first 20 rows, then "Show all" ------------------------- */
+.show-all { display: none; }
+@media (max-width: 640px) {
+  table.capped:not(.searching) tr.over-cap { display: none; }
+  .show-all { display: flex; width: calc(100% - 32px); margin: 8px 16px 16px; }
+}
+
+/* -- Changes tab: one collapsible list per area --------------------------------------------------- */
+details.change-area > summary { display: grid; gap: 4px; padding: 16px 20px; color: var(--text); }
+details.change-area > summary:hover { background: var(--surface-2); }
+details.change-area > summary h2 { margin: 0; display: flex; gap: 8px; align-items: center; }
+details.change-area > summary h2::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; margin-right: 2px; }
+details.change-area[open] > summary h2::before { transform: rotate(45deg); }
+details.change-area > summary .meta { color: var(--muted); font-size: .8125rem; font-weight: 400; padding-left: 19px; }
+details.change-area[open] > summary { margin: 0; border-bottom: 1px solid var(--border); }
+.change-report + .change-report { border-top: 1px solid var(--border); }
+.change-report > .toolbar { padding: 14px 20px 4px; margin: 0; }
+.change-report h3 { display: flex; gap: 8px; align-items: center; }
+h2.changes-heading { margin-top: 28px; }
+
+/* -- PDF links: "Preparing your PDF…" while it builds (app.js) ------------------------------------ */
+a.preparing { cursor: progress; opacity: .7; }
+.pdf-status { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--text); color: var(--surface); font-weight: 500; box-shadow: 0 6px 20px rgba(16, 24, 40, .25); }
+.pdf-status::before { content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+.pdf-status.done::before { content: "\2713"; border: 0; animation: none; width: auto; height: auto; line-height: 1; }
+.pdf-status[hidden] { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pdf-status::before { animation-duration: 2.4s; } }
+
 /* -- Responsive -------------------------------------------------------------- */
 @media (max-width: 960px) {
   .app { grid-template-columns: 1fr; }
@@ -907,51 +956,3 @@ textarea.commentary { width: 100%; min-height: 9em; }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
 
-/* -- Settings: one sidebar entry, and this row on top of every settings page ------------------------ */
-.settings-nav { display: flex; gap: 4px; margin: -8px 0 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
-.settings-nav a { padding: 5px 11px; border-radius: 999px; color: var(--muted); font-weight: 500; font-size: .8125rem; white-space: nowrap; }
-.settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
-.settings-nav a.active { background: var(--text); color: var(--surface); }
-
-/* -- Month-end review: suggestions from the failing checks, and the approve bar on phones ----------- */
-.action-row.suggestions { display: block; }
-.action-row.suggestions .label-sm { margin-top: 0; }
-.suggest-list { list-style: none; margin: 0; padding: 0; }
-.suggest-list li { border-top: 1px solid var(--border); }
-.suggest-list li:first-child { border-top: 0; }
-.action-row .suggest-list form { display: flex; gap: 10px; align-items: center; padding: 7px 0; flex-wrap: nowrap; }
-.suggest-list .grow { flex: 1; min-width: 0; font-size: .875rem; }
-.suggest-list .pill, .suggest-list button { flex: none; }
-.approve-bar { display: none; }
-@media (max-width: 960px) {
-  .approve-bar { display: flex; position: sticky; bottom: 0; z-index: 5; gap: 12px; align-items: center; justify-content: space-between; margin: 0 -16px -48px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -8px 12px -10px rgba(16, 24, 40, .25); }
-}
-
-/* -- Long tables on phones (tables.js): the first 20 rows, then "Show all" ------------------------- */
-.show-all { display: none; }
-@media (max-width: 640px) {
-  table.capped:not(.searching) tr.over-cap { display: none; }
-  .show-all { display: flex; width: calc(100% - 32px); margin: 8px 16px 16px; }
-}
-
-/* -- Changes tab: one collapsible list per area --------------------------------------------------- */
-details.change-area > summary { display: grid; gap: 4px; padding: 16px 20px; color: var(--text); }
-details.change-area > summary:hover { background: var(--surface-2); }
-details.change-area > summary h2 { margin: 0; display: flex; gap: 8px; align-items: center; }
-details.change-area > summary h2::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; margin-right: 2px; }
-details.change-area[open] > summary h2::before { transform: rotate(45deg); }
-details.change-area > summary .meta { color: var(--muted); font-size: .8125rem; font-weight: 400; padding-left: 19px; }
-details.change-area[open] > summary { margin: 0; border-bottom: 1px solid var(--border); }
-.change-report + .change-report { border-top: 1px solid var(--border); }
-.change-report > .toolbar { padding: 14px 20px 4px; margin: 0; }
-.change-report h3 { display: flex; gap: 8px; align-items: center; }
-h2.changes-heading { margin-top: 28px; }
-
-/* -- PDF links: "Preparing your PDF…" while it builds (app.js) ------------------------------------ */
-a.preparing { cursor: progress; opacity: .7; }
-.pdf-status { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 999px; background: var(--text); color: var(--surface); font-weight: 500; box-shadow: 0 6px 20px rgba(16, 24, 40, .25); }
-.pdf-status::before { content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
-.pdf-status.done::before { content: "\2713"; border: 0; animation: none; width: auto; height: auto; line-height: 1; }
-.pdf-status[hidden] { display: none; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .pdf-status::before { animation-duration: 2.4s; } }
