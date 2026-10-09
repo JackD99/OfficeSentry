@@ -21,11 +21,7 @@ from ..mailflow import is_external, tenant_domains
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
-from .sharepoint_lookup import Lookups
-
-# What this collector asks Microsoft for each site and OneDrive (see sharepoint_lookup).
-SITE_FIELDS = "id,displayName,webUrl,isPersonalSite,root"
-DRIVE_FIELDS = "id,name,webUrl,driveType,owner"
+from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
 
 # Microsoft's usage reports. v1.0 only returns CSV; beta returns JSON.
 REPORT_PERIOD = "D30"

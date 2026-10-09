@@ -1092,9 +1092,9 @@
      }
     ]
    },
-   "note": "Edited by hand for the licences and subscriptions report: added licenseAssignmentStates and usageLocation. Derived from the recording; replaced when the fixture is next re-recorded.",
+   "note": "Edited by hand for the licences and subscriptions report: added licenseAssignmentStates and usageLocation; $top is 500, Microsoft's maximum with signInActivity. Derived from the recording; replaced when the fixture is next re-recorded.",
    "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/users?%24select=id%2CdisplayName%2CuserPrincipalName%2Cmail%2CuserType%2CaccountEnabled%2CcreatedDateTime%2CassignedLicenses%2ClastPasswordChangeDateTime%2ConPremisesSyncEnabled%2CpasswordPolicies%2CexternalUserState%2ClicenseAssignmentStates%2CusageLocation%2CsignInActivity&%24top=999"
+   "url": "https://graph.microsoft.com/v1.0/users?%24select=id%2CdisplayName%2CuserPrincipalName%2Cmail%2CuserType%2CaccountEnabled%2CcreatedDateTime%2CassignedLicenses%2ClastPasswordChangeDateTime%2ConPremisesSyncEnabled%2CpasswordPolicies%2CexternalUserState%2ClicenseAssignmentStates%2CusageLocation%2CsignInActivity&%24top=500"
   },
   {
    "api": "graph",
@@ -68243,6 +68243,7 @@
      }
     ]
    },
+   "note": "Edited by hand for the shared rate limiter work: the two SharePoint collectors' recorded answers merged into one for the union $select both now send. Derived from the recording; replaced when the fixture is next re-recorded.",
    "status": 200,
    "url": "https://graph.microsoft.com/v1.0/sites/getAllSites?%24select=id%2CdisplayName%2CwebUrl%2CisPersonalSite%2Croot"
   },
@@ -68348,7 +68349,7 @@
   {
    "api": "graph",
    "body": {
-    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives(id,name,webUrl,driveType,owner)/$entity",
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives(id,name,webUrl,driveType,owner,quota)/$entity",
     "driveType": "business",
     "id": "b!rqFB_N3EeE2hwnTg3sOLXHUUh_LPtPNNknMn9ITsw-zFYQVWXOShRo59s79woJUR",
     "name": "OneDrive",
@@ -68359,15 +68360,23 @@
       "id": "5e00004f-0000-4000-8000-00000000004f"
      }
     },
+    "quota": {
+     "deleted": 0,
+     "remaining": 1099511517766,
+     "state": "normal",
+     "total": 1099511627776,
+     "used": 110010
+    },
     "webUrl": "https://sentrytest2-my.sharepoint.com/personal/user2_sentrytest_example/Documents"
    },
+   "note": "Edited by hand for the shared rate limiter work: the two SharePoint collectors' recorded answers merged into one for the union $select both now send. Derived from the recording; replaced when the fixture is next re-recorded.",
    "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/users/5e00004f-0000-4000-8000-00000000004f/drive?%24select=id%2Cname%2CwebUrl%2CdriveType%2Cowner"
+   "url": "https://graph.microsoft.com/v1.0/users/5e00004f-0000-4000-8000-00000000004f/drive?%24select=id%2Cname%2CwebUrl%2CdriveType%2Cowner%2Cquota"
   },
   {
    "api": "graph",
    "body": {
-    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives(id,name,webUrl,driveType,owner)/$entity",
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives(id,name,webUrl,driveType,owner,quota)/$entity",
     "driveType": "business",
     "id": "b!6G6BPkjE4UKcaLuoyFPxED9q0sRfVZlEuiPJ-8qxrjr6gvUI46l5Q4RKgqr3Rhp0",
     "name": "OneDrive",
@@ -68378,10 +68387,18 @@
       "id": "5e000055-0000-4000-8000-000000000055"
      }
     },
+    "quota": {
+     "deleted": 0,
+     "remaining": 1099511518196,
+     "state": "normal",
+     "total": 1099511627776,
+     "used": 109580
+    },
     "webUrl": "https://sentrytest2-my.sharepoint.com/personal/user1_sentrytest_example/Documents"
    },
+   "note": "Edited by hand for the shared rate limiter work: the two SharePoint collectors' recorded answers merged into one for the union $select both now send. Derived from the recording; replaced when the fixture is next re-recorded.",
    "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/users/5e000055-0000-4000-8000-000000000055/drive?%24select=id%2Cname%2CwebUrl%2CdriveType%2Cowner"
+   "url": "https://graph.microsoft.com/v1.0/users/5e000055-0000-4000-8000-000000000055/drive?%24select=id%2Cname%2CwebUrl%2CdriveType%2Cowner%2Cquota"
   },
   {
    "api": "graph",
@@ -68574,45 +68591,6 @@
    },
    "status": 200,
    "url": "https://graph.microsoft.com/v1.0/drives/b!BBOBKkLQJkGZuJykiNW7dj8WycRXaxJJmUiPqBNkk9Cwep5btTrRSLk6YJ5dld7f/root/delta?%24select=id%2Cname%2CwebUrl%2CparentReference%2Cshared%2Cfile%2Cfolder%2Csize%2ClastModifiedDateTime%2Cdeleted%2Croot"
-  },
-  {
-   "api": "graph",
-   "body": {
-    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites(id,displayName,webUrl,isPersonalSite)",
-    "value": [
-     {
-      "displayName": "Test User 4",
-      "id": "sentrytest2-my.sharepoint.com,5e0007ed-0000-4000-8000-0000000007ed,5e000849-0000-4000-8000-000000000849",
-      "isPersonalSite": true,
-      "webUrl": "https://sentrytest2-my.sharepoint.com/personal/user1_sentrytest_example"
-     },
-     {
-      "displayName": "Test User 1",
-      "id": "sentrytest2-my.sharepoint.com,5e00084a-0000-4000-8000-00000000084a,5e00084b-0000-4000-8000-00000000084b",
-      "isPersonalSite": true,
-      "webUrl": "https://sentrytest2-my.sharepoint.com/personal/user2_sentrytest_example"
-     },
-     {
-      "displayName": "Team Site",
-      "id": "sentrytest2.sharepoint.com,5e000811-0000-4000-8000-000000000811,5e00084c-0000-4000-8000-00000000084c",
-      "isPersonalSite": false,
-      "webUrl": "https://sentrytest2.sharepoint.com/sites/contentTypeHub"
-     },
-     {
-      "id": "sentrytest2.sharepoint.com,5e000810-0000-4000-8000-000000000810,5e00084d-0000-4000-8000-00000000084d",
-      "isPersonalSite": false,
-      "webUrl": "https://sentrytest2.sharepoint.com/search"
-     },
-     {
-      "displayName": "Communication site",
-      "id": "sentrytest2.sharepoint.com,5e00080e-0000-4000-8000-00000000080e,5e00084e-0000-4000-8000-00000000084e",
-      "isPersonalSite": false,
-      "webUrl": "https://sentrytest2.sharepoint.com/"
-     }
-    ]
-   },
-   "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/sites/getAllSites?%24select=id%2CdisplayName%2CwebUrl%2CisPersonalSite"
   },
   {
    "api": "graph",
@@ -69688,40 +69666,6 @@
    },
    "status": 200,
    "url": "https://graph.microsoft.com/v1.0/sites/sentrytest2.sharepoint.com,5e00080e-0000-4000-8000-00000000080e,5e00084e-0000-4000-8000-00000000084e/lists/5e00088f-0000-4000-8000-00000000088f/items?%24top=999&%24select=id%2CwebUrl%2ClastModifiedDateTime%2ClastModifiedBy&%24expand=fields%28%24select%3DFileLeafRef%2CFileRef%2CFSObjType%2CSMTotalSize%2CSMTotalFileStreamSize%2CSMTotalFileCount%2C_UIVersionString%29"
-  },
-  {
-   "api": "graph",
-   "body": {
-    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives(id,webUrl,quota)/$entity",
-    "id": "b!rqFB_N3EeE2hwnTg3sOLXHUUh_LPtPNNknMn9ITsw-zFYQVWXOShRo59s79woJUR",
-    "quota": {
-     "deleted": 0,
-     "remaining": 1099511517766,
-     "state": "normal",
-     "total": 1099511627776,
-     "used": 110010
-    },
-    "webUrl": "https://sentrytest2-my.sharepoint.com/personal/user2_sentrytest_example/Documents"
-   },
-   "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/users/5e00004f-0000-4000-8000-00000000004f/drive?%24select=id%2CwebUrl%2Cquota"
-  },
-  {
-   "api": "graph",
-   "body": {
-    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives(id,webUrl,quota)/$entity",
-    "id": "b!6G6BPkjE4UKcaLuoyFPxED9q0sRfVZlEuiPJ-8qxrjr6gvUI46l5Q4RKgqr3Rhp0",
-    "quota": {
-     "deleted": 0,
-     "remaining": 1099511518196,
-     "state": "normal",
-     "total": 1099511627776,
-     "used": 109580
-    },
-    "webUrl": "https://sentrytest2-my.sharepoint.com/personal/user1_sentrytest_example/Documents"
-   },
-   "status": 200,
-   "url": "https://graph.microsoft.com/v1.0/users/5e000055-0000-4000-8000-000000000055/drive?%24select=id%2CwebUrl%2Cquota"
   },
   {
    "api": "graph",
