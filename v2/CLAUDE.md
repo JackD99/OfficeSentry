@@ -86,12 +86,19 @@ needing goes in those lists.
   under it. Count things with `text.plural(n, "account")` (the `plural` filter
   in templates), never "account(s)".
 - A check that calls for work an MSP would sell goes in one project's
-  `checks` in `projects.CATALOG` (each check in at most one;
-  `test_projects.py` checks). Recommended projects (`/projects`, per tenant
-  `/tenants/<id>/projects` and its proposal PDF) are worked out from the
-  checks on every view, leaving out accepted risks; only the account
-  manager's status and note are stored (`project_status`). Conditions no
-  check covers (a missing licence) are `signals` on the project.
+  `checks` in `projects.CATALOG` with a rough `Effort` in hours (each check
+  in at most one; `test_projects.py` checks). A project is half a day or more
+  (`projects.MIN_HOURS`, counting `OVERHEAD`); `projects.assess` turns the rest
+  into quick fixes, and a small critical fix is always a quick fix so it isn't
+  held for a sale. Failing checks in no project are quick fixes too.
+  Recommended projects (`/projects`, per tenant `/tenants/<id>/projects` with
+  its quick fixes, and the proposal PDF, which never shows estimates) and the
+  month-end review's suggestions (`month_end.suggestions`: projects, then
+  quick fixes) are worked out from the checks on every view, leaving out
+  accepted risks; only the account manager's status and note are stored
+  (`project_status`). Conditions no check covers (a missing licence) are
+  `signals` on the project. Merging a project away needs a migration for its
+  statuses and an entry in `projects.MERGED`.
 - Detail reports are builders in `reports/data_reports.py` returning
   `Section`s of rows; register them in `REPORTS` and they get a page, a tab
   and XLSX, CSV and PDF exports. Add the key to a menu group in

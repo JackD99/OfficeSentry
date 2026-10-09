@@ -325,7 +325,7 @@ def review(period: str, tenant_id: int):
         "reporting_review.html", tenant=t, plan=plan, period=period, label=month_end.issued.period_label(period),
         report=report, verdict=summary.monthly(report).verdict, review=r, state=state, states=month_end.STATES,
         severe=severe, flags=flags, actions=month_end.actions(g.db, t["id"]), statuses=month_end.ACTION_STATUSES,
-        suggestions=[s for s in month_end.suggestions(report) if s["rule_key"] not in taken],
+        suggestions=[s for s in month_end.suggestions(g.db, t) if s["rule_key"] not in taken],
         notes=month_end.notes(g.db, t["id"], staff=True), visibility=month_end.VISIBILITY,
         frozen=month_end.frozen_files(g.db, t["id"], period), staff_users=staff_users,
         task=month_end.approval_task(g.db, t["id"], period), task_text=_task_text, pending=tasks.PENDING,
@@ -436,9 +436,8 @@ def add_action(tenant_id: int):
     title = request.form.get("title", "").strip()[:300]
     detail = request.form.get("detail", "").strip()[:1000]
     rule_key = request.form.get("rule_key", "").strip()[:100] or None
-    if rule_key and not title:  # picked from the failing checks: their wording
-        report = monthly_review.build(g.db, t)
-        found = next((s for s in month_end.suggestions(report) if s["rule_key"] == rule_key), None)
+    if rule_key and not title:  # picked from the suggested projects and quick fixes: their wording
+        found = next((s for s in month_end.suggestions(g.db, t) if s["rule_key"] == rule_key), None)
         if found is None:
             abort(400)
         title, detail = found["title"], detail or found["detail"]
