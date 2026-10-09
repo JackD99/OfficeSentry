@@ -202,7 +202,8 @@ class GraphClient:
                 continue
 
             throttled = resp.status_code == 429
-            retry = resp.status_code in RETRY_STATUSES and attempt < self._max_retries and (throttled or failures < limit)
+            retry = resp.status_code in RETRY_STATUSES and attempt < self._max_retries and \
+                (throttled or failures < limit)
             delay = self._retry_after(resp, attempt) if retry else 0.0
             self.telemetry.request(key, endpoint, status=resp.status_code, limiter_wait=waited, retry_wait=delay,
                                    headers=resp.headers)
