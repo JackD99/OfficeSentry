@@ -1,0 +1,49 @@
+name: Check request
+description: Suggest a new security or configuration check, or a change to one.
+title: "Check: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Issues are public. Don't paste client data.** Replace tenant names and IDs, domains, user names and
+        email addresses (UPNs), policy names that identify a client, and IP addresses with made-up ones first.
+
+        The [check catalogue](https://github.com/JackD99/OfficeSentry/blob/main/v2/docs/checks.md) lists every
+        check that exists today. Checks only read data; they never change a tenant.
+  - type: input
+    id: goal
+    attributes:
+      label: What the check should confirm
+      description: Written as a goal, like the existing check titles. For example "Guests can't invite other guests".
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: The risk it reduces, and a source if there is one (CIS benchmark, Microsoft guidance, a cyber-insurance questionnaire).
+    validations:
+      required: true
+  - type: textarea
+    id: rule
+    attributes:
+      label: When it passes and when it fails
+      description: What setting or data decides it, and any exceptions (break-glass accounts, service accounts).
+  - type: textarea
+    id: source
+    attributes:
+      label: Where the data comes from, if you know
+      description: A Microsoft Graph endpoint, an Exchange `Get-` cmdlet, and any licence it needs (Entra ID P1 or P2, Intune, Defender).
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: What to recommend when it fails
+      description: The first thing an MSP technician should do to fix it.
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Before you post
+      options:
+        - label: Nothing above identifies a client, a tenant or a person.
+          required: true
