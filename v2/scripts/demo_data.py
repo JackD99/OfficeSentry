@@ -10,7 +10,8 @@ people ("Ann", "bob@x.com") and domains swapped for each tenant's own, and
 extra staff added so tables are a realistic length. Each tenant is collected
 twice, five weeks apart, so "What changed" and the trends have history. MSP
 branding (name, colour, contact and, with Pillow installed, a logo) and an
-admin account are set up; the admin password is printed.
+admin account are set up; the admin password is printed. With ``--public`` there is no admin, only the
+read-only account every visitor of the public demo site becomes (``deploy/public/``).
 
 Development only: it imports the test fixtures, which aren't in the Docker image.
 """
@@ -572,6 +573,9 @@ def main() -> None:
     parser.add_argument("--admin", default="demo", help="admin username to create (default: demo)")
     parser.add_argument("--password", default=os.environ.get("DEMO_PASSWORD") or None,
                         help="the admin's password (default: $DEMO_PASSWORD, else a new random one)")
+    parser.add_argument("--public", action="store_true",
+                        help="for the public demo site: no admin, just the read-only analyst every visitor becomes "
+                             "(with OFFICESENTRY_PUBLIC_DEMO=1; see officesentry/web/public_demo.py)")
     args = parser.parse_args()
 
     from officesentry.config import load_config
@@ -584,6 +588,16 @@ def main() -> None:
     if db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]:
         sys.exit(f"{args.data_dir} already has tenants; use a new data directory.")
     ids = populate(db, Vault(cfg.encryption_keys))
+    if args.public:
+        from officesentry.web import public_demo
+
+        # Nobody signs in with a password: visitors are this account without one (public_demo.py).
+        db.execute("INSERT INTO users (username, password_hash, role, all_tenants, created_at)"
+                   " VALUES (?, ?, 'analyst', 1, ?)",
+                   (public_demo.USERNAME, generate_password_hash(secrets.token_urlsafe(32)), utcnow()))
+        db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
+        print(f"Added {len(ids)} demo tenants to {cfg.db_path} for the public demo site")
+        return
     password = args.password or secrets.token_urlsafe(12)
     db.execute("INSERT INTO users (username, password_hash, role, all_tenants, created_at)"
                " VALUES (?, ?, 'admin', 1, ?)",

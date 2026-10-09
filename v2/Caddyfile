@@ -1,12 +1,8 @@
 # Used by the "https" profile in docker-compose.yml. Caddy gets and renews the
-# certificate for OFFICESENTRY_DOMAIN automatically.
+# certificate for OFFICESENTRY_DOMAIN automatically. (The project's own server adds the
+# website and the public demo with deploy/public/compose.yml, which uses its own Caddyfile.)
 {$SITE_ADDRESS} {
 	encode gzip
 	reverse_proxy web:8000
 }
 
-# The demo site (docker compose --profile demo). Unused without it.
-{$DEMO_SITE_ADDRESS} {
-	encode gzip
-	reverse_proxy demo-web:8000
-}

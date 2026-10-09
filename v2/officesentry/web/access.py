@@ -3,6 +3,8 @@
 * Every view needs ``@login_required`` or ``@roles_required(...)``; there is
   no anonymous access except login, first-run setup, /health and the MSP's
   brand colours and logo (``/brand.css``, ``/brand/logo``) for the sign-in page.
+  On the public demo site (``public_demo.py``) every visitor is the read-only
+  demo user, which is never an admin.
 * Any view that touches a tenant must load it through ``tenant_or_404()``,
   which returns 404 for tenants the user may not see (no existence leak).
 
@@ -23,7 +25,7 @@ from urllib.parse import urlsplit
 
 from flask import abort, g, redirect, request, url_for
 
-from . import sessions
+from . import public_demo, sessions
 
 ROLES = ("admin", "analyst", "client")
 
@@ -32,6 +34,7 @@ def load_user() -> None:
     # Sessions live server-side (see sessions.py): a deleted or disabled user, a
     # password, role or two-step change, sign-out and idle time all end them.
     g.session_row, g.user = sessions.current()
+    public_demo.sign_in_visitor()
 
 
 def login_required(view):
