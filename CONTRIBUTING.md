@@ -154,7 +154,7 @@ does the work. To make a release:
    `2` and `latest`), creates the `v2.1.0` tag and the GitHub release with
    the notes and install files, and removes images older than the last three
    releases. Nothing is published until the checks and the scan have passed.
-   A run costs about 8 of GitHub Free's 2,000 private Actions minutes a
+   A run costs about 5 of GitHub Free's 2,000 private Actions minutes a
    month; arm64 images come when the repository is public.
 4. Open a pull request that moves `__version__` on to the next development
    version (`2.2.0.dev0`) and adds a `## 2.2.0 (unreleased)` section.

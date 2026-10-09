@@ -10,7 +10,11 @@ Entra ID P2 (Identity Protection). Without P2 Microsoft hides sign-in risk.
 Microsoft's sign-in log can time out on busy tenants. When the one big query
 fails with a timeout or server error (after the Graph client's retries), the
 collector carries on from the oldest sign-in it already has, one day at a time,
-so the summary is the same as the big query would have given.
+so the summary is the same as the big query would have given. Each query gets one
+retry on a timeout (the smaller ones are the fallback), and the fallback stops
+after ``FALLBACK_SECONDS``: when the log is down for the whole tenant, every
+window times out, and without a limit the run would hold a worker thread for
+hours.
 
 Legacy-protocol sign-ins keep their own 30-day query in ``mail_usage.py``; this
 one covers every client for a shorter window, so the two don't share a fetch.
@@ -18,6 +22,7 @@ one covers every client for a shorter window, so the two don't share a fetch.
 
 from __future__ import annotations
 
+import time
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
@@ -31,6 +36,15 @@ SIGNIN_PAGES = 50  # 50,000 sign-ins; the most recent come first
 FAILURE_IP_LIMIT = 200
 RISKY_LIMIT = 500
 FALLBACK_WINDOW = timedelta(days=1)
+QUERY_RETRIES = 1  # retries per sign-in log request on a timeout or server error (throttling gets the usual)
+FALLBACK_SECONDS = 600  # how long to keep trying smaller queries once the big one has failed
+clock = time.monotonic
+
+
+def deadline(seconds: float = FALLBACK_SECONDS):
+    """A function that says whether ``seconds`` have passed since this was called."""
+    end = clock() + seconds
+    return lambda: clock() >= end
 
 
 def _text(value) -> str:
@@ -271,7 +285,7 @@ class Reader:
             if self.pages >= SIGNIN_PAGES:
                 self.truncated = True
                 return
-            data = self.ctx.graph.get(url, params, version="beta")
+            data = self.ctx.graph.get(url, params, version="beta", transient_retries=QUERY_RETRIES)
             params = None
             self.pages += 1
             for s in data.get("value") or []:
@@ -293,9 +307,11 @@ class Reader:
     def read_by_day(self, since: datetime, failure: GraphError) -> None:
         """Read from the oldest sign-in so far back to ``since`` in one-day windows, newest first.
 
-        A window that still times out is skipped with a warning; if every one
-        does and nothing was read at all, the original failure is raised.
+        A window that still times out is skipped with a warning, and so is every
+        window left once ``FALLBACK_SECONDS`` have gone; if nothing was read at
+        all, the original failure is raised.
         """
+        expired = deadline()
         end, upper = datetime.now(UTC), ""
         if self.oldest:
             try:
@@ -303,10 +319,14 @@ class Reader:
                 upper = f" and createdDateTime le {self.oldest}"
             except ValueError:
                 pass
-        windows = failed = 0
+        failed = 0
         while end > since and not self.truncated:
+            if expired():
+                self.ctx.log(f"Gave up on the sign-in log after {FALLBACK_SECONDS // 60} minutes")
+                self.ctx.warn(f"Microsoft's sign-in log was too slow to answer; sign-ins before {_iso(end)} "
+                              "are missing from the summary")
+                break
             start = max(end - FALLBACK_WINDOW, since)
-            windows += 1
             try:
                 self.read(f"createdDateTime ge {_iso(start)}{upper}")
             except GraphError as exc:
@@ -316,7 +336,7 @@ class Reader:
                 self.ctx.log(f"Sign-ins from {_iso(start)} to {_iso(end)} failed too: {exc}")
             upper = f" and createdDateTime lt {_iso(start)}"
             end = start
-        if failed and failed == windows and not self.pages:
+        if not self.pages:
             raise failure
         if failed:
             self.ctx.warn(f"Microsoft's sign-in log timed out for {plural(failed, 'one-day window')}; "

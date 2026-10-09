@@ -20,7 +20,7 @@
 </div>
 <div class="page-head">
   <div><h1>{{ heading }}</h1>
-    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every tenant.{% elif digest %}One email to your team summarising every tenant.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
+    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every tenant.{% elif digest %}One email to your team summarising every tenant, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
 </div>
 
 <form method="post" class="schedule-form narrow-lg" id="schedule-form">
@@ -32,6 +32,14 @@
     <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every item</label>
     {% elif digest %}
     <p class="muted small">Which tenants need attention, what's new and what's been fixed, with each tenant's Secure Score. Worst tenants first.</p>
+    {% if groups %}
+    <label>Tenants
+      <select name="group_id">
+        <option value="">Every tenant</option>
+        {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('tenant') }})</option>{% endfor %}
+      </select>
+      <span class="hint">One digest per group lets each account manager get just their own clients.</span></label>
+    {% endif %}
     <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every tenant's numbers</label>
     {% else %}
     {% set options = {} %}{% for o in catalog %}{% set _ = options.update({o.key: o}) %}{% endfor %}

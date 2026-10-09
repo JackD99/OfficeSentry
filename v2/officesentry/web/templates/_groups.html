@@ -1,0 +1,39 @@
+{#- Tenant groups on staff pages (web/groups.py). Import with context: the picker reads group_scope,
+    which group-aware views set. Nothing shows until a group holds a tenant the person sees. -#}
+{% from "_macros.html" import icon %}
+
+{#- The query string of this page with ``group`` set, other arguments kept. -#}
+{% macro _with_group(value) -%}
+{{ request.path }}?group={{ value }}{% for k, v in request.args.items(multi=True) if k != 'group' %}&amp;{{ k|urlencode }}={{ v|urlencode }}{% endfor %}
+{%- endmacro %}
+
+{% macro group_picker() -%}
+{% set s = group_scope %}
+{% if s and s.options %}
+{% set cats = s.by_category %}
+<form method="get" action="{{ request.path }}" class="group-picker{{ ' on' if s.group }}" data-autosubmit>
+  {% for k, v in request.args.items(multi=True) if k != 'group' %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <label for="group-pick">{{ icon('tenants') }}<span>Group</span></label>
+  <select id="group-pick" name="group" title="Show one group of tenants">
+    <option value="all">All tenants ({{ s.visible }})</option>
+    {% for cat, opts in cats %}
+    {% if cat or cats|length > 1 %}<optgroup label="{{ cat or 'Other groups' }}">{% endif %}
+      {% for o in opts %}<option value="{{ o.id }}"{% if s.group and s.group.id == o.id %} selected{% endif %}>{{ o.name }} ({{ o.tenants }})</option>{% endfor %}
+    {% if cat or cats|length > 1 %}</optgroup>{% endif %}
+    {% endfor %}
+  </select>
+  <noscript><button class="btn sm">Show</button></noscript>
+  {% if s.group %}<a class="clear" href="{{ _with_group('all') }}" title="Show every tenant again" aria-label="Show all tenants">&times;</a>{% endif %}
+</form>
+{% endif %}
+{%- endmacro %}
+
+{#- "in Gold" after a sentence about tenants, when a group is chosen. -#}
+{% macro in_group() -%}
+{% if group_scope and group_scope.group %} in {{ group_scope.group.name }}{% endif %}
+{%- endmacro %}
+
+{#- Small chips naming a tenant's groups. -#}
+{% macro group_chips(groups) -%}
+{% if groups %}<span class="group-chips">{% for gr in groups %}<span class="chip" title="{{ gr.category ~ ': ' if gr.category }}{{ gr.name }}">{{ gr.name }}</span>{% endfor %}</span>{% endif %}
+{%- endmacro %}

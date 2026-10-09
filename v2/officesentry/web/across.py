@@ -15,7 +15,8 @@ from ..db import audit, transaction, utcnow
 from ..reports import branding, data_reports, evidence, month_changes, rollups, tables, views, workbook
 from ..reports.monthly_review import build as build_review
 from ..rules import RULES
-from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .access import login_required, roles_required, tenant_or_404
+from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
 from .saved_views import MAX_VIEWS
 
@@ -58,7 +59,7 @@ def index():
 def _rollup_or_404(key: str):
     if key not in dict(rollups.available()):
         abort(404)
-    return rollups.build(g.db, visible_tenants(g.db, g.user), key)
+    return rollups.build(g.db, scoped_tenants(), key)
 
 
 def _picker() -> dict:
@@ -68,6 +69,7 @@ def _picker() -> dict:
 
 @bp.get("/across/<key>")
 @roles_required("admin", "analyst")
+@group_aware
 def rollup(key: str):
     data = _rollup_or_404(key)
     return render_template("rollup.html", rollup=data, key=key, **_picker())
@@ -79,8 +81,9 @@ def rollup(key: str):
 def _all_rows(key: str) -> rollups.AllRows:
     if key not in data_reports.REPORTS:
         abort(404)
-    return rollups.all_rows(g.db, visible_tenants(g.db, g.user), key,
-                            href=lambda t: url_for("reports.data_report", tenant_id=t["id"], key=key))
+    return rollups.all_rows(g.db, scoped_tenants(), key,
+                            href=lambda t: url_for("reports.data_report", tenant_id=t["id"], key=key),
+                            label=scope().label)
 
 
 def _table_or_404(data: rollups.AllRows, table: str) -> int:
@@ -92,6 +95,7 @@ def _table_or_404(data: rollups.AllRows, table: str) -> int:
 
 @bp.get("/across/<key>/rows")
 @roles_required("admin", "analyst")
+@group_aware
 def rows_index(key: str):
     """Every row: ``?table=`` (a table slug) or the first table with rows. Keeps the table view."""
     data = _all_rows(key)
@@ -109,6 +113,7 @@ def rows_index(key: str):
 
 @bp.get("/across/<key>/rows/<table>")
 @roles_required("admin", "analyst")
+@group_aware
 def rows(key: str, table: str):
     data = _all_rows(key)
     index = _table_or_404(data, table)
@@ -132,6 +137,7 @@ def _rows_report(key: str, table: str):
 @bp.get("/across/<key>/rows/<table>.csv", defaults={"ext": "csv"})
 @bp.get("/across/<key>/rows/<table>.xlsx", defaults={"ext": "xlsx"})
 @roles_required("admin", "analyst")
+@group_aware
 def rows_download(key: str, table: str, ext: str):
     report = _rows_report(key, table)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.{ext}")
@@ -143,6 +149,7 @@ def rows_download(key: str, table: str, ext: str):
 
 @bp.get("/across/<key>/rows/<table>.pdf")
 @roles_required("admin", "analyst")
+@group_aware
 def rows_pdf(key: str, table: str):
     report = _rows_report(key, table)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}-rows-{table}.pdf")
@@ -178,11 +185,12 @@ def save_rows_view(key: str, table: str):
 
 
 def _check_matrix():
-    return rollups.check_matrix(g.db, visible_tenants(g.db, g.user))
+    return rollups.check_matrix(g.db, scoped_tenants())
 
 
 @bp.get("/across/checks")
 @roles_required("admin", "analyst")
+@group_aware
 def checks():
     matrix = _check_matrix()
     categories = matrix.categories
@@ -195,12 +203,13 @@ def checks():
 @bp.get("/across/checks.csv", defaults={"ext": "csv"})
 @bp.get("/across/checks.xlsx", defaults={"ext": "xlsx"})
 @roles_required("admin", "analyst")
+@group_aware
 def checks_download(ext: str):
     matrix = _check_matrix()
     table = matrix.to_table()
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"checks.{ext}")
     body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
-        "Checks", "All tenants", "Every check's result for every tenant.",
+        "Checks", scope().label, "Every check's result for every tenant.",
         facts=[("Tenants", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")]))
     return _download(body, "all-tenants-checks", ext)
 
@@ -208,12 +217,13 @@ def checks_download(ext: str):
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
 @bp.get("/across/<key>.xlsx", defaults={"ext": "xlsx"})
 @roles_required("admin", "analyst")
+@group_aware
 def rollup_download(key: str, ext: str):
     data = _rollup_or_404(key)
     table = data.to_table()
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}.{ext}")
     body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
-        data.title, "All tenants", data.description,
+        data.title, scope().label, data.description,
         facts=[("Tenants", len(data.rows), ""), ("Need attention", data.with_attention, ""),
                ("No data for this report", data.without_data, "")]))
     return _download(body, f"all-tenants-{tables.slug(data.title)}", ext)
@@ -221,6 +231,7 @@ def rollup_download(key: str, ext: str):
 
 @bp.get("/across/<key>.pdf")
 @roles_required("admin", "analyst")
+@group_aware
 def rollup_pdf(key: str):
     data = _rollup_or_404(key)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}.pdf")
@@ -231,7 +242,7 @@ def rollup_pdf(key: str):
 
 
 def _across_changes(days: int):
-    summaries = month_changes.across(g.db, visible_tenants(g.db, g.user), days)
+    summaries = month_changes.across(g.db, scoped_tenants(), days)
     scored = [s.figures["secure_score.pct"].delta for s in summaries
               if "secure_score.pct" in s.figures and s.figures["secure_score.pct"].delta is not None]
     totals = {
@@ -247,6 +258,7 @@ def _across_changes(days: int):
 
 @bp.get("/changes")
 @roles_required("admin", "analyst")
+@group_aware
 def changes():
     days = _days()
     summaries, totals = _across_changes(days)
@@ -256,6 +268,7 @@ def changes():
 
 @bp.get("/changes.pdf")
 @roles_required("admin", "analyst")
+@group_aware
 def changes_pdf():
     days = _days()
     summaries, totals = _across_changes(days)
@@ -267,12 +280,13 @@ def changes_pdf():
 @bp.get("/changes.csv", defaults={"ext": "csv"})
 @bp.get("/changes.xlsx", defaults={"ext": "xlsx"})
 @roles_required("admin", "analyst")
+@group_aware
 def changes_download(ext: str):
     days = _days()
-    table = month_changes.across_table(month_changes.across(g.db, visible_tenants(g.db, g.user), days), days)
+    table = month_changes.across_table(month_changes.across(g.db, scoped_tenants(), days), days)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.{ext}")
     body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
-        f"What changed in the last {days} days", "All tenants",
+        f"What changed in the last {days} days", scope().label,
         f"Changes in every tenant over the last {days} days, most important first."))
     return _download(body, f"all-tenants-changes-{days}-days", ext)
 

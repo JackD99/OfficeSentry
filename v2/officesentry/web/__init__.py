@@ -24,6 +24,7 @@ from . import (
     data_retention,
     email,
     filters,
+    groups,
     people,
     projects,
     reporting,
@@ -129,7 +130,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
         return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down,
-                "expiring_certificates": certificates, "app_version": __version__}
+                "expiring_certificates": certificates, "app_version": __version__,
+                "group_scope": g.get("group_scope")}
 
     @app.errorhandler(403)
     def _forbidden(_e):
@@ -175,6 +177,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(activity.bp)
     app.register_blueprint(search.bp)
     app.register_blueprint(reporting.bp)
+    app.register_blueprint(groups.bp)
     app.register_blueprint(upcoming.bp)
     app.register_blueprint(system.bp)
     app.register_blueprint(styleguide.bp)

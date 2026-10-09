@@ -17,8 +17,8 @@
 {%- endmacro %}
 
 {% block doc_title %}{{ rollup.title }}{% endblock %}
-{% block client %}All tenants{% endblock %}
-{% block footer_note %}{{ brand.display_name }} internal: every tenant{% endblock %}
+{% block client %}{{ group_scope.label if group_scope else 'All tenants' }}{% endblock %}
+{% block footer_note %}{{ brand.display_name }} internal: {{ ('tenants in ' ~ group_scope.group.name) if group_scope and group_scope.group else 'every tenant' }}{% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}
   {{ ui.meta('Date', rollup.generated_at|day) }}

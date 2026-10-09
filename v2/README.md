@@ -271,6 +271,24 @@ and `OFFICESENTRY_TEST_CLIENT_SECRET`, stores the result as tenant "Live test"
 and prints each collector's outcome and every check. The secret is only for
 this command; the product signs in with a certificate.
 
+With `--record tests/fixtures/live_tenant.json` it also saves Microsoft's
+responses, with names, addresses, phone numbers, domains and IDs replaced, and
+the test suite replays them, so every collector, check and report runs on real
+Microsoft responses in CI. The recording comes from one Microsoft 365 Business
+Premium tenant (Entra ID P1, synced from on-premises AD, no Intune devices).
+These areas have no real recording and are tested with simulated data only:
+
+- **Entra ID P2 features**: risky users and sign-in risk (the test tenant
+  has no P2; Microsoft answers "not licensed").
+- **Per-user MFA states**: Office Sentry only reads them on tenants without
+  Entra ID P1.
+- **Sign-in methods read one person at a time**: only used when Microsoft's
+  registration report comes back empty, as it does on a newly licensed tenant.
+- **Intune device details**: the tenant has no enrolled devices, so the
+  device compliance and encryption checks have nothing to read.
+- **National clouds** (GCC High, DoD, China): there's no test tenant in
+  them; the endpoints come from Microsoft's documentation.
+
 ## Documentation
 
 - [What Office Sentry reads](docs/what-office-sentry-reads.md): for clients
@@ -413,6 +431,14 @@ Then:
   collected) or app connection, keep notes, **pause** it (no collection,
   emailed reports or alert emails; data stays) and **archive** it (also hidden
   from lists, dashboards, rollups, digests and its client users; restorable).
+- **Tenant groups** (*Settings*, *Tenant groups*) sort clients by tier, region,
+  service level or anything else; a tenant can be in several. Pick a group at
+  the top of the Tenants dashboard, All tenants, What changed, Month-end or
+  Client tenants to see only those clients, with downloads to match, and give
+  a digest one group instead of every tenant. Groups never show anyone more:
+  the only way a group grants access is an admin ticking it for an analyst on
+  their user page, which then covers every tenant in it, including ones added
+  later. Client accounts are never given tenants through a group.
 - **Offboard** walks through a final export, the client's side (remove Global
   Reader, delete the enterprise app) and what will be deleted, then deletes the
   tenant and everything stored for it after you type its name, optionally with

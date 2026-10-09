@@ -351,3 +351,50 @@ def test_live_test_command_runs_every_collector(cfg, db, monkeypatch, capsys):
         assert livetest.run(cfg) == 0
     out = capsys.readouterr().out
     assert "Mailboxes" in out and "0 collectors failed" in out
+
+
+def test_live_test_runs_only_the_collectors_asked_for_on_a_new_tenant(cfg, db, monkeypatch, capsys):
+    # A first success on an unconsented tenant queues every other collector; the live test mustn't run those.
+    from unittest.mock import patch
+
+    from officesentry import livetest
+    from tests.seed import mock_tenant
+
+    for k in livetest.ENV:
+        monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")
+    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: (lambda: "tok"))
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
+            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+        mock_tenant(rsps)
+        assert livetest.run(cfg, ["users", "groups"]) == 0
+    ran = [r["collector"] for r in db.execute("SELECT collector FROM runs ORDER BY id")]
+    assert ran == ["users", "groups"]
+    assert db.execute("SELECT consented_at FROM tenants").fetchone()[0]
+    assert "Groups and Teams" in capsys.readouterr().out
+
+
+@responses.activate
+def test_live_test_can_look_dns_up_over_https():
+    # For machines whose DNS is blocked: the same answers dnscheck.lookup gives, from DNS-over-HTTPS JSON.
+    import pytest
+
+    from officesentry import dnscheck
+    from officesentry.livetest import DOH_URL, doh_lookup
+
+    def answer(rdtype, *data, status=0):
+        responses.get(DOH_URL, match=[responses.matchers.query_param_matcher(
+            {"name": "x.example", "type": rdtype})], json={"Status": status, "Answer": [
+                {"name": "x.example.", "type": {"TXT": 16, "MX": 15, "CNAME": 5}[rdtype], "data": d} for d in data]})
+    answer("MX", "20 backup.example.", "10 X-Example.mail.protection.outlook.com.")
+    answer("TXT", '"v=spf1 include:spf.protection.outlook.com" " -all"', '"say \\"hi\\""')
+    answer("CNAME", "selector1-x._domainkey.contoso.onmicrosoft.com.")
+    assert doh_lookup("x.example", "MX") == ["x-example.mail.protection.outlook.com", "backup.example"]
+    assert doh_lookup("x.example", "TXT") == ["v=spf1 include:spf.protection.outlook.com -all", 'say "hi"']
+    assert doh_lookup("x.example", "CNAME") == ["selector1-x._domainkey.contoso.onmicrosoft.com"]
+    responses.reset()
+    answer("TXT", status=3)  # NXDOMAIN
+    assert doh_lookup("x.example", "TXT") == []
+    responses.reset()
+    answer("TXT", status=2)  # SERVFAIL is an error, not "no records"
+    with pytest.raises(dnscheck.DnsError):
+        doh_lookup("x.example", "TXT")
