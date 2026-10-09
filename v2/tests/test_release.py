@@ -103,7 +103,7 @@ def test_the_lock_files_pin_every_dependency_with_hashes():
 
 def test_images_are_pinned():
     dockerfile = (V2 / "Dockerfile").read_text(encoding="utf-8")
-    assert re.search(r"^FROM python:3\.12-slim@sha256:[0-9a-f]{64}$", dockerfile, re.M)
+    assert re.search(r"^FROM public\.ecr\.aws/docker/library/python:3\.12-slim@sha256:[0-9a-f]{64}$", dockerfile, re.M)
     compose = (V2 / "docker-compose.yml").read_text(encoding="utf-8")
     assert "image: ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}" in compose
     assert "build:" not in compose  # building is docker-compose.build.yml's job

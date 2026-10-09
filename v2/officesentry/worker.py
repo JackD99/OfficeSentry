@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import alerts, clouds, findings, lifecycle, ratelimit, retention, schedule, store, tasks, throttle
+from . import alerts, app_setup, clouds, findings, lifecycle, ratelimit, retention, schedule, store, tasks, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -381,7 +381,8 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
 
 
 # Modules that register ``schedule.periodic`` jobs, and ``tasks.handler`` kinds. Add yours here.
-JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing")
+JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing",
+               "officesentry.system_alerts")
 TASK_MODULES = ("officesentry.delivery", "officesentry.month_end")
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
@@ -406,6 +407,7 @@ def prune(conn, cfg: Config) -> int:
     removed = retention.apply(conn, cfg)["snapshots"]
     throttle.prune(conn)
     tasks.prune(conn)
+    app_setup.prune(conn)
     if noise := prune_audit(conn):
         log.info("Retention: removed %s", plural(noise, "old failed sign-in record"))
     conn.execute("PRAGMA optimize")  # keeps the query planner's statistics current

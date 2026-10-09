@@ -1,7 +1,9 @@
 # One image for both the portal ("web") and the background worker.
 # The base is pinned by digest, so a rebuild of the same commit starts from the same bytes; Dependabot
-# moves the digest (and patch releases of Python) in its weekly Docker pull request.
-FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+# moves the digest (and patch releases of Python) in its weekly Docker pull request. It comes from AWS's
+# mirror of Docker Hub's official images (same image, same digest), since CI's anonymous pulls from Docker
+# Hub hit its rate limit.
+FROM public.ecr.aws/docker/library/python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     OFFICESENTRY_DATA_DIR=/data

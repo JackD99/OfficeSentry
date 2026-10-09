@@ -43,7 +43,9 @@ log = logging.getLogger(__name__)
 FORMATS = {"teams": "Microsoft Teams (Workflows)", "slack": "Slack", "generic": "Generic JSON webhook"}
 ALERT_SEVERITIES = ("critical", "high", "medium", "low")
 DEFAULTS = {"alerts.enabled": "0", "alerts.format": "teams", "alerts.min_severity": "high",
-            "alerts.on_failures": "1", "alerts.on_recovery": "0", "alerts.url_enc": "", "alerts.secret_enc": ""}
+            "alerts.on_failures": "1", "alerts.on_recovery": "0", "alerts.url_enc": "", "alerts.secret_enc": "",
+            # Problems with Office Sentry itself (system_alerts.py), by email to the team contacts and here.
+            "alerts.system": "1"}
 # Settings encrypted with the vault; rotate-keys re-encrypts them (__main__.ENCRYPTED_SETTINGS).
 ENCRYPTED_KEYS = ("alerts.url_enc", "alerts.secret_enc")
 MAX_ITEMS = 10          # findings listed in a Teams or Slack message
@@ -76,7 +78,7 @@ class Item:
 
 @dataclass
 class Message:
-    event: str  # findings.new | collection.failed | collection.recovered | certificate.expiry | test
+    event: str  # findings.new | collection.failed | collection.recovered | certificate.expiry | system.* | test
     title: str
     text: str
     link: str

@@ -39,6 +39,10 @@ first, then upgrades it on start. New installs start with an empty database.
 ### Added
 
 - Client-ready monthly reviews, insurance evidence packs and recommended projects, as pages and branded PDFs.
+- Recommended projects are only work of half a day or more, with a rough estimate; smaller jobs are quick
+  fixes on each client's page and in the month-end review. Admin account hardening is now part of Identity
+  and Conditional Access, and Teams and groups governance part of Sharing, guests and Teams governance;
+  their Proposed, Agreed or Declined status and notes move with them.
 - Detail reports for identity, Exchange, SharePoint, OneDrive, Teams, devices and licences, each with
   filters, saved views and PDF, XLSX and CSV downloads.
 - History for every tenant: what changed month over month, per tenant and across all tenants.
@@ -47,6 +51,10 @@ first, then upgrades it on start. New installs start with an empty database.
 - Tenant pause, archive and delete; connection health with plain-English fixes; national clouds (GCC High,
   DoD and China).
 - Two-step sign-in, server-side sessions, an activity log, backups and a `restore` command.
+- System status (Settings → System status) and system alerts: the team is emailed and the alert webhook posted
+  when the worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect.
+  `/health/ready` answers 503 for uptime monitors when the portal can't do its job, with every check as JSON
+  for a monitor holding the monitoring token ([v2/DEPLOY.md, "Is it working?"](v2/DEPLOY.md#is-it-working)).
 - Releases: a versioned image on GHCR for amd64 servers with an SBOM, build provenance and a
   vulnerability scan; the version shows at the foot of the menu and on `/health`.
 
