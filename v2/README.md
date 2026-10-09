@@ -269,6 +269,9 @@ this command; the product signs in with a certificate.
   the errors on the Data collection page, pausing, archiving and offboarding.
 - [Check catalogue](docs/checks.md): every check, data source, detail report
   and permission, generated from the code by `scripts/gen_check_catalogue.py`.
+- [Troubleshooting](docs/troubleshooting.md): the common setup errors
+  (`AADSTS50011`, `create-app`, Global Reader, the worker not running) and
+  their fixes.
 
 ## What it does differently from v1
 
@@ -346,14 +349,17 @@ Create the first admin:
 
 Then:
 
-1. **App connections → Generate certificate.**
-2. Create the app: `docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>`
-   (device sign-in as an admin of *your* tenant), or create it by hand as the
-   App connections page describes and paste its client ID. By hand, make the
-   app multi-tenant, upload the certificate (a client secret won't work) and
-   add the redirect URI `https://<your portal>/consent/callback` as a Web
-   platform. Enter your Directory (tenant) ID with the client ID to check the
-   certificate straight away.
+1. Create the app: `docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>`
+   (device sign-in as an admin of *your* tenant). It generates the
+   certificate, registers the app and saves the connection with its client
+   ID, so don't press *Generate certificate* as well: that would leave a
+   second connection marked *Needs client ID*.
+2. Or create it by hand: **App connection → Generate certificate**, then
+   follow the page. Make the app multi-tenant, upload the certificate (a
+   client secret won't work), add the redirect URI
+   `https://<your portal>/consent/callback` as a Web platform and paste its
+   client ID. Enter your Directory (tenant) ID with the client ID to check
+   the certificate straight away.
 3. **Add tenant**. The tenant's page shows a setup checklist that ticks itself
    off: grant admin consent (a Global Administrator of the tenant opens the
    link; a full collection is queued on return), assign Global Reader, first
@@ -406,9 +412,11 @@ in to them, and the other way round. For clients in one of those clouds:
    set to that cloud. This generates a separate certificate.
 2. Register the app in that cloud's own admin centre (entra.microsoft.us for
    GCC High and DoD, the 21Vianet Azure portal for China), from an account in
-   your tenant *in that cloud*, exactly as for the commercial app; or run
-   `python -m officesentry create-app --cloud gcc_high` (or `dod`, `china`)
-   with `--tenant` set to your tenant in that cloud. Save its client ID.
+   your tenant *in that cloud*, exactly as for the commercial app, and save
+   its client ID. Or skip step 1 and run `docker compose run --rm worker
+   python -m officesentry create-app --cloud gcc_high` (or `dod`, `china`)
+   with `--tenant` set to your tenant in that cloud: it creates the
+   certificate and the connection itself.
 3. Add the tenant with the same cloud and that app connection. Its consent
    link opens on that cloud's sign-in page, and collection signs in to that
    cloud's Graph and Exchange.
