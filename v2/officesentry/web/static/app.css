@@ -264,7 +264,7 @@ details.help > summary { font-size: .875rem; }
 .settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
 .settings-nav a.active { background: var(--text); color: var(--surface); }
 
-/* -- Month-end review: suggestions from the failing checks, and the approve bar on phones ----------- */
+/* -- Month-end review: suggested projects and quick fixes, and the approve bar on phones ------------ */
 .action-row.suggestions { display: block; }
 .action-row.suggestions .label-sm { margin-top: 0; }
 .suggest-list { list-style: none; margin: 0; padding: 0; }
@@ -273,6 +273,7 @@ details.help > summary { font-size: .875rem; }
 .action-row .suggest-list form { display: flex; gap: 10px; align-items: center; padding: 7px 0; flex-wrap: nowrap; }
 .suggest-list .grow { flex: 1; min-width: 0; font-size: .875rem; }
 .suggest-list .pill, .suggest-list button { flex: none; }
+.suggest-list .effort { display: block; color: var(--muted); font-size: .8125rem; }
 .approve-bar { display: none; }
 @media (max-width: 960px) {
   .approve-bar { display: flex; position: sticky; bottom: 0; z-index: 5; gap: 12px; align-items: center; justify-content: space-between; margin: 0 -16px -48px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -8px 12px -10px rgba(16, 24, 40, .25); }

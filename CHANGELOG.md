@@ -33,6 +33,10 @@ first, then upgrades it on start. New installs start with an empty database.
 ### Added
 
 - Client-ready monthly reviews, insurance evidence packs and recommended projects, as pages and branded PDFs.
+- Recommended projects are only work of half a day or more, with a rough estimate; smaller jobs are quick
+  fixes on each client's page and in the month-end review. Admin account hardening is now part of Identity
+  and Conditional Access, and Teams and groups governance part of Sharing, guests and Teams governance;
+  their Proposed, Agreed or Declined status and notes move with them.
 - Detail reports for identity, Exchange, SharePoint, OneDrive, Teams, devices and licences, each with
   filters, saved views and PDF, XLSX and CSV downloads.
 - History for every tenant: what changed month over month, per tenant and across all tenants.

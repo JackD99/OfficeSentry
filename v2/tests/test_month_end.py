@@ -144,6 +144,36 @@ def test_queue_lists_planned_tenants_with_states_and_flags(client, db, two_tenan
     assert client.get("/reporting/2026-13").status_code == 404
 
 
+def test_review_suggests_projects_then_quick_fixes(client, db, two_tenants):
+    """Projects are half a day or more; smaller fixes are offered separately, and nothing is offered twice."""
+    from officesentry import projects
+
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "analyst", role="analyst", all_tenants=True)
+    login(client, "analyst")
+    offered = month_end.suggestions(db, store.get_tenant(db, alpha))
+    assert [s["rule_key"] for s in offered if s["kind"] == "project"] == ["project:identity", "project:email_security"]
+    quick = [s for s in offered if s["kind"] == "quick"]
+    assert quick[0]["rule_key"] == "admin_mfa" and quick[0]["severity"] == "critical"
+    assert "legacy_auth_blocked" not in {s["rule_key"] for s in quick}  # part of the identity project
+    review = client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    assert review.index("Projects to propose") < review.index("Identity and Conditional Access project") \
+        < review.index("Quick fixes") < review.index("Have each listed admin register a strong method")
+    client.post(f"/tenants/{alpha}/report-actions", data={"rule_key": "project:identity", "period": PERIOD})
+    action = month_end.actions(db, alpha)[0]
+    assert action["title"] == "Identity and Conditional Access project"
+    assert action["detail"] == projects.PROJECTS["identity"].pitch and action["rule_key"] == "project:identity"
+    review = client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    assert 'value="project:identity"' not in review and 'value="project:email_security"' in review
+    # A declined project isn't offered.
+    projects.set_status(db, alpha, "email_security", "declined", "", "ann")
+    offered = month_end.suggestions(db, store.get_tenant(db, alpha))
+    assert "project:email_security" not in {s["rule_key"] for s in offered}
+    assert client.post(f"/tenants/{alpha}/report-actions", data={"rule_key": "project:nope", "period": PERIOD}
+                       ).status_code == 400
+
+
 def test_commentary_actions_and_notes_on_report(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)

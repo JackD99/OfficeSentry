@@ -167,10 +167,11 @@ legacy sign-in, email authentication, forwarding, logging, leavers, apps, sharin
 
 **Projects** turns each client's findings into the projects an account manager can sell: no Conditional Access
 becomes an *Identity and Conditional Access* project, unencrypted laptops a *Device management* one, missing
-Business Premium features a *Security licence upgrade*, and so on. Every client's recommendations sit in one list,
-worst first, with what was found, how big the job is and where it stands (suggested, proposed, agreed or declined,
-with a note). Each client's page downloads a branded proposal PDF to send them. A project drops off by itself
-once the tenant is fixed.
+Business Premium features a *Security licence upgrade*, and so on. A project is half a day's work or more; anything
+smaller, like registering MFA for one admin, is a quick fix the team just does, listed on the client's page. Every
+client's recommendations sit in one list, worst first, with what was found, how big the job is, a rough estimate
+and where it stands (suggested, proposed, agreed or declined, with a note). Each client's page downloads a branded
+proposal PDF to send them. A project drops off by itself once the tenant is fixed.
 
 <table>
   <tr>
