@@ -38,6 +38,7 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       prerelease: ${{ steps.notes.outputs.prerelease }}
+      python_version: ${{ steps.notes.outputs.python_version }}
     steps:
       - id: tag
         env:
@@ -86,6 +87,13 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      # A candidate cut from the development version (2.1.0.dev0) reports its own version (2.1.0rc1).
+      - name: Stamp the version into the code
+        env:
+          PY_VERSION: ${{ needs.notes.outputs.python_version }}
+        run: |
+          sed -i "s/^__version__ = .*/__version__ = \"$PY_VERSION\"/" v2/officesentry/__init__.py
+          grep -qx "__version__ = \"$PY_VERSION\"" v2/officesentry/__init__.py
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
         with:
           platforms: arm64

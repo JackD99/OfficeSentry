@@ -114,10 +114,11 @@ does the work. To make a release:
 4. Open a pull request that moves `__version__` on to the next development
    version (`2.2.0.dev0`) and adds a `## 2.2.0 (unreleased)` section.
 
-To try the pipeline without releasing, run a release candidate: set
-`__version__` to `2.1.0rc1` and run the workflow with `2.1.0-rc.1`. It gets
-only its own image tag, is marked as a pre-release, and its changelog section
-may still say "unreleased".
+To try the pipeline without releasing, run a release candidate: run the
+workflow with `2.1.0-rc.1`. It can come straight from the development version
+(`2.1.0.dev0`; the image then reports `2.1.0rc1`), gets only its own image
+tag, is marked as a pre-release, and its changelog section may still say
+"unreleased".
 
 If the scan fails, there is no release and no version tag on the image (it
 stays in the registry under its digest only). Fix the cause, usually by

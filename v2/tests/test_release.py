@@ -132,8 +132,13 @@ def test_release_notes_refuse_a_tag_that_doesnt_fit():
         notes.notes("v2.1", changelog, "2.1")
     with pytest.raises(notes.ReleaseError, match="still calls 2.1.0 unreleased"):
         notes.notes("v2.1.0", changelog, "2.1.0")
-    # A release candidate may come before the date is known.
+    # A release candidate may come before the date is known, and from the development version.
     assert notes.notes("v2.1.0-rc.1", changelog, "2.1.0rc1")[0] == "- Things.\n"
+    assert notes.notes("v2.1.0-rc.1", changelog, "2.1.0.dev0") == ("- Things.\n", True)
+    with pytest.raises(notes.ReleaseError, match="needs the code's version"):
+        notes.notes("v2.1.0-rc.1", changelog, "2.0.0.dev0")
+    with pytest.raises(notes.ReleaseError, match="needs the code's version"):
+        notes.notes("v2.1.0", "## 2.1.0 (2026-11-02)\n\n- Things.\n", "2.1.0.dev0")
     with pytest.raises(notes.ReleaseError, match="no '## 2.2.0' section"):
         notes.notes("v2.2.0", changelog, "2.2.0")
 

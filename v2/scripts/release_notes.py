@@ -4,11 +4,14 @@
 
 The release workflow (.github/workflows/release.yml) runs this before it builds anything. It fails when:
 - the tag isn't a version (``v2.1.0``, ``v2.1.0-rc.1``) or differs from ``officesentry.__version__``
-  (``2.1.0``, ``2.1.0rc1``), so the image never reports a version other than its tag;
+  (``2.1.0``, ``2.1.0rc1``), so the image never reports a version other than its tag. A candidate may also
+  come from the development version before its release (``2.1.0.dev0``); the workflow then writes the
+  candidate's version into the image;
 - CHANGELOG.md has no ``## 2.1.0`` section, or a final release's section still says "unreleased".
 
 A pre-release (``-rc.1``) uses the section of the release it leads up to, so the notes can be drafted
-before the final tag. It prints ``prerelease=true|false`` to $GITHUB_OUTPUT when that is set.
+before the final tag. It writes ``prerelease=true|false`` and ``python_version=`` (``2.1.0rc1``) to
+$GITHUB_OUTPUT when that is set.
 """
 
 from __future__ import annotations
@@ -66,10 +69,13 @@ def section(changelog: str, release: str, prerelease: bool) -> str:
 
 def notes(tag: str, changelog: str, version_in_code: str) -> tuple[str, bool]:
     release, python_version = parse_tag(tag)
-    if python_version != version_in_code:
+    prerelease = python_version != release
+    # A candidate can be cut from the development version leading to it (2.1.0.dev0 for v2.1.0-rc.1): the
+    # workflow stamps the candidate's version into the image, so trying the pipeline needs no version PR.
+    candidate_of_dev = prerelease and re.fullmatch(rf"{re.escape(release)}\.dev\d+", version_in_code)
+    if python_version != version_in_code and not candidate_of_dev:
         raise ReleaseError(f"The tag {tag} needs the code's version (officesentry/__init__.py) to be "
                            f"{python_version}, but it is {version_in_code}.")
-    prerelease = python_version != release
     return section(changelog, release, prerelease), prerelease
 
 
@@ -85,7 +91,7 @@ def main(argv: list[str]) -> int:
     sys.stdout.write(text)
     if output := os.environ.get("GITHUB_OUTPUT"):
         with open(output, "a", encoding="utf-8") as fh:
-            fh.write(f"prerelease={str(prerelease).lower()}\n")
+            fh.write(f"prerelease={str(prerelease).lower()}\npython_version={parse_tag(argv[0])[1]}\n")
     return 0
 
 
