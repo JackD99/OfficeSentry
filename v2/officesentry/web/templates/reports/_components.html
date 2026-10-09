@@ -79,7 +79,7 @@
 {% set flagged = section.flags|select|list %}
 {% set numeric = [] %}{% for c in section.columns %}{% set vals = section.rows|map(attribute=loop.index0)|reject('none')|list %}{% if vals and vals|select('number')|list|length == vals|length %}{% set _ = numeric.append(loop.index0) %}{% endif %}{% endfor %}
 <div class="table-wrap{{ " keep" if section.rows|length <= 8 }}"><table class="data">
-  <thead><tr>{% if flagged %}<th class="flag">Flag</th>{% endif %}{% for c in section.columns %}<th{% if loop.index0 in numeric %} class="num"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+  <thead><tr>{% if flagged %}<th class="flag">{{ section.flag_name or 'Flag' }}</th>{% endif %}{% for c in section.columns %}<th{% if loop.index0 in numeric %} class="num"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
   <tbody>
   {% for row in section.rows %}{% set flag = section.flags[loop.index0] if section.flags|length > loop.index0 else none %}
   <tr>{% if flagged %}<td class="flag">{% if flag %}{{ sev(flag) }}{% endif %}</td>{% endif %}
