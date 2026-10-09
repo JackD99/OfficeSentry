@@ -4,6 +4,8 @@
  * Report pickers: <form data-autosubmit> submits when its <select> changes.
  * Report search: <input data-report-search="list-id"> filters the list's [data-name] items, hiding empty
  *   .report-group blocks; a group marked data-search-only shows only while searching.
+ * Row groups: <button data-group> in a <tbody class="group"> heading folds that group's rows;
+ *   <button data-groups="table-id"> folds or opens every group in the table.
  * Views: <a data-view> links (filters, columns, sort on detail reports) load the next page in place,
  *   keeping the scroll position, open menus and anything typed in a row search. Plain links without JS. */
 (function () {
@@ -97,8 +99,37 @@
       form.querySelector('select').addEventListener('change', function () { form.submit(); });
     });
   }
-  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); }
+  function foldOnPhones(root) {
+    // A long grouped table opens folded on a phone, as a list of headings; a linked group stays open.
+    if (!window.matchMedia || !window.matchMedia('(max-width: 640px)').matches) return;
+    root.querySelectorAll('table.grouped').forEach(function (table) {
+      if (table.querySelectorAll('tbody.group tr:not(.group-head)').length <= 20) return;
+      table.querySelectorAll('tbody.group').forEach(function (body) {
+        if ('#' + body.id !== window.location.hash) fold(body, true);
+      });
+      var all = document.querySelector('button[data-groups="' + table.id + '"]');
+      if (all) { all.setAttribute('aria-expanded', 'false'); all.querySelector('span').textContent = 'Expand all'; }
+    });
+  }
+  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); foldOnPhones(root); }
   init(document);
+
+  /* Row groups fold to their heading. Delegated, so groups loaded in place by a view work too. */
+  function fold(body, folded) {
+    body.classList.toggle('folded', folded);
+    body.querySelector('[data-group]').setAttribute('aria-expanded', folded ? 'false' : 'true');
+  }
+  document.addEventListener('click', function (e) {
+    var one = e.target.closest && e.target.closest('button[data-group]');
+    if (one) { var body = one.closest('tbody'); fold(body, !body.classList.contains('folded')); return; }
+    var all = e.target.closest && e.target.closest('button[data-groups]');
+    if (!all) return;
+    var table = document.getElementById(all.getAttribute('data-groups'));
+    var folded = all.getAttribute('aria-expanded') === 'true';
+    if (table) table.querySelectorAll('tbody.group').forEach(function (b) { fold(b, folded); });
+    all.setAttribute('aria-expanded', folded ? 'false' : 'true');
+    all.querySelector('span').textContent = folded ? 'Expand all' : 'Collapse all';
+  });
 
   /* Menus (<details class="menu">) close on Escape or a click outside. */
   document.addEventListener('click', function (e) {

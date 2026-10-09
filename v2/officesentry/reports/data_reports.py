@@ -42,10 +42,21 @@ class Section:
     empty: str = "Nothing to show."
     # False for event logs (e.g. admin activity), which the change report shouldn't diff like state.
     compare: bool = True
+    # Page-only extras, used by the Findings page: what the flag column is called, a column whose
+    # value groups rows under collapsible headings (with an anchor id per value), columns that always
+    # get a value filter however many values they have, and an id per row for row actions.
+    flag_name: str = "Flag"
+    group: str = ""
+    group_ids: dict[str, str] = field(default_factory=dict)
+    filter_columns: tuple[str, ...] = ()
+    keys: list = field(default_factory=list)
+    review: bool = True  # False: rows already dealt with (accepted, resolved), so no "<n> to review"
 
-    def add(self, row: list, flag: str | None = None) -> None:
+    def add(self, row: list, flag: str | None = None, key=None) -> None:
         self.rows.append([_cell(v) for v in row])
         self.flags.append(flag)
+        if key is not None:
+            self.keys.append(key)
 
     @property
     def flagged(self) -> int:
@@ -1002,7 +1013,7 @@ def section_table(section: Section) -> Table:
     flagged = any(section.flags)
     rows = [[str(v) if isinstance(v, Link) else v for v in row] + ([flag or ""] if flagged else [])
             for row, flag in zip(section.rows, section.flags or [None] * len(section.rows), strict=False)]
-    return Table(section.title, section.columns + (["Flag"] if flagged else []), rows)
+    return Table(section.title, section.columns + ([section.flag_name] if flagged else []), rows)
 
 
 def to_tables(report: DataReport) -> list[Table]:
@@ -1039,5 +1050,5 @@ def to_xlsx(report: DataReport, brand=None) -> bytes:
                  if isinstance(v, Link) and v.safe_href}
         rows = [[str(v) if isinstance(v, Link) else v for v in row] for row in section.rows]
         book.table(section.title, section.columns, rows, flags=section.flags, links=links,
-                   description=section.intro)
+                   description=section.intro, flag_name=section.flag_name)
     return book.save(xlsx_cover(report, brand))

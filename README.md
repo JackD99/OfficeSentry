@@ -268,11 +268,21 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
 
 1. Run `docker compose logs web` and open the link on the line starting **No admin account yet** to create the
    first admin (with two-step sign-in).
-2. **App connection → Generate certificate**, then create the multi-tenant app with
-   `docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>` (or by hand, as the
-   page describes).
+2. Create the multi-tenant, read-only app in your own Entra tenant:
+
+   ```bash
+   docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>.onmicrosoft.com
+   ```
+
+   It prints a code: open the link it shows, enter the code and sign in as an admin of **your own** (MSP) tenant
+   who can create app registrations. It makes the certificate, registers the app and saves both, so **App
+   connection** then shows one connection marked *Ready*. Don't press *Generate certificate* first; that is only
+   for creating the app by hand, as the page describes.
 3. **Add tenant** and follow its checklist: a Global Administrator of the client's tenant grants consent, you
    assign Global Reader, and the first collection runs.
+
+Stuck? [Troubleshooting](v2/docs/troubleshooting.md) covers the common errors, such as `AADSTS50011` on the
+consent page, mailboxes failing without Global Reader and the worker not running.
 
 [v2/DEPLOY.md](v2/DEPLOY.md) covers HTTPS, the collection schedule, retention, backups and updating.
 
@@ -284,6 +294,7 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
   health and offboarding
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
+- [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Example reports](examples/)
 
 ## Development

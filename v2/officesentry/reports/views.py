@@ -26,7 +26,7 @@ from .data_reports import FLAG_ORDER, DataReport, Many, Rows, Section
 
 PARAMS = ("f", "age", "hide", "sort")
 FLAG = "flag"
-FLAGS = {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low", "none": "No flag"}
+FLAGS = {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low", "info": "Info", "none": "No flag"}
 REVIEW = ("critical", "high", "medium")  # what "to review" counts
 AGES = {
     "lt30": "In the last 30 days",
@@ -298,7 +298,7 @@ def describe(report: DataReport, view: View) -> list[str]:
         if table not in view.tables():
             continue
         names = dict(zip(column_slugs(section), section.columns, strict=True))
-        names[FLAG] = "Flag"
+        names[FLAG] = section.flag_name
         parts = []
         for (t, c), values in view.filters.items():
             if t == table and c in names:
@@ -332,7 +332,9 @@ def apply(report: DataReport, view: View) -> DataReport:
             section.title, [section.columns[i] for i in cols],
             rows=[[section.rows[r][i] for i in cols] for r in rows], flags=[flags[r] for r in rows],
             intro=section.intro, empty="No rows match the filters." if section.rows else section.empty,
-            compare=section.compare))
+            compare=section.compare, flag_name=section.flag_name, group=section.group,
+            group_ids=section.group_ids, filter_columns=section.filter_columns,
+            keys=[section.keys[r] for r in rows] if section.keys else [], review=section.review))
     out.filtered = describe(report, view)
     return out
 
@@ -369,6 +371,24 @@ class Chip:
 
 
 @dataclass
+class Group:
+    """Rows that share a value of the section's ``group`` column, under one collapsible heading."""
+    label: str
+    anchor: str
+    rows: list[tuple[list, str | None, object]]  # (cells of the shown columns, flag, row key)
+
+    @property
+    def flag(self) -> str | None:
+        """The worst flag in the group."""
+        return min((f for _, f, _ in self.rows), key=lambda f: FLAG_ORDER.get(f, 5), default=None)
+
+    @property
+    def words(self) -> str:
+        """Every row's text, so a row search keeps the heading while any of its rows match."""
+        return " ".join([self.label] + [" ".join(map(str, cells)) + f" {flag or ''}" for cells, flag, _ in self.rows])
+
+
+@dataclass
 class TableView:
     section: Section
     slug: str
@@ -378,10 +398,20 @@ class TableView:
     chips: list[Chip]
     clear_href: str
     show_all_href: str
+    keys: list = field(default_factory=list)  # each shown row's key (Section.keys), for row actions
+    # Rows under collapsible headings when the section has a group column and the table isn't sorted;
+    # the group column is then left out of the rows, since the heading says it.
+    groups: list[Group] = field(default_factory=list)
+    group_column: Column | None = None
 
     @property
     def visible(self) -> list[Column]:
         return [c for c in self.columns if not c.hidden]
+
+    @property
+    def shown(self) -> list[Column]:
+        """The columns each row draws: the visible ones, less the group column while grouped."""
+        return [c for c in self.visible if not (self.groups and c is self.group_column)]
 
     @property
     def filters(self) -> list[Column]:
@@ -410,7 +440,8 @@ def anchor(table: str) -> str:
     return f"t-{table}"
 
 
-def _options(cells: list, key: Key, view: View, path: str, table: str, kind: str, today: date) -> list[Option]:
+def _options(cells: list, key: Key, view: View, path: str, table: str, kind: str, today: date,
+             always: bool = False) -> list[Option]:
     if kind == "date":
         counts = {p: sum(1 for c in cells if _age_matches(c, p, today)) for p in AGES}
         active = view.ages.get(key)
@@ -418,7 +449,8 @@ def _options(cells: list, key: Key, view: View, path: str, table: str, kind: str
                 for p, label in AGES.items() if counts[p] or active == p]
     counts: Counter = Counter(v for c in cells for v in values_of(c))
     wanted = view.filters.get(key, [])
-    if not wanted and not (2 <= len(counts) <= MAX_VALUES and len(counts) < len(cells)):
+    if not wanted and not (2 <= len(counts) <= MAX_VALUES and len(counts) < len(cells)) \
+            and not (always and len(counts) >= 2):
         return []
     values = sorted(counts, key=lambda v: (v == "", sort_key(v) is None, str(sort_key(v) or "")))
     values += [v for v in wanted if v not in counts]
@@ -445,14 +477,14 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
         # First click: text A to Z, numbers largest first; then flip.
         descending = col.sort == "asc" if col.sort else (kind == "num" and i > 0)
         col.sort_href = link(path, view.sorted_by(table, s, descending), anchor(table))
-        col.options = _options(cells, key, view, path, table, kind, today)
+        col.options = _options(cells, key, view, path, table, kind, today, always=name in section.filter_columns)
         columns.append(col)
     flag = None
     if any(section.flags):
         key = (table, FLAG)
         counts = Counter(f or "none" for f in section.flags)
         wanted = view.filters.get(key, [])
-        flag = Column("Flag", FLAG, -1, "flag", filtered=key in view.filters)
+        flag = Column(section.flag_name, FLAG, -1, "flag", filtered=key in view.filters)
         flag.sort = ("desc" if sort[1] else "asc") if sort and sort[0] == FLAG else None
         flag.sort_href = link(path, view.sorted_by(table, FLAG, flag.sort == "asc"), anchor(table))
         review = [f for f in REVIEW if counts[f]] if len(counts) > 1 or wanted else []
@@ -464,7 +496,7 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
                                        link(path, target, anchor(table))))
         flag.options += [Option(label, counts[f], f in wanted, link(path, view.toggle_value(key, f), anchor(table)))
                          for f, label in FLAGS.items() if (counts[f] and len(counts) > 1) or f in wanted]
-    names = {c.slug: c.name for c in columns} | {FLAG: "Flag"}
+    names = {c.slug: c.name for c in columns} | {FLAG: section.flag_name}
     chips = []
     for (t, c), values in view.filters.items():
         if t == table and c in names:
@@ -476,11 +508,24 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
             chips.append(Chip(f"{names[c]}: {AGES[preset].lower()}", link(path, view.without((t, c)), anchor(table))))
     flags = section.flags or [None] * len(section.rows)
     visible = [i for i in range(len(section.columns)) if i in shown]
-    return TableView(
+    keys = [section.keys[r] for r in rows] if len(section.keys) == len(section.rows) else []
+    tv = TableView(
         section, table, columns, flag,
         rows=[([section.rows[r][i] for i in visible], flags[r]) for r in rows],
         chips=chips, clear_href=link(path, view.without_filters(table), anchor(table)),
-        show_all_href=link(path, view.showing_all(table), anchor(table)))
+        show_all_href=link(path, view.showing_all(table), anchor(table)), keys=keys)
+    if section.group in section.columns and table not in view.sorts:
+        at = section.columns.index(section.group)
+        tv.group_column = columns[at]
+        cells_of = [i for i in visible if i != at]
+        groups: dict[str, Group] = {}
+        for n, r in enumerate(rows):  # in row order, so the builder's order of groups holds
+            label = str(section.rows[r][at])
+            if label not in groups:
+                groups[label] = Group(label, section.group_ids.get(label) or f"{table}-g-{slug(label)}", [])
+            groups[label].rows.append(([section.rows[r][i] for i in cells_of], flags[r], keys[n] if keys else None))
+        tv.groups = list(groups.values())
+    return tv
 
 
 def table_views(report: DataReport, view: View, path: str) -> list[TableView]:
@@ -499,6 +544,8 @@ def rows_view(report: DataReport, rows: Rows) -> tuple[View, str]:
     index = titles.index(rows.table)
     table, section = slugs[index], report.sections[index]
     names = dict(zip(section.columns, column_slugs(section), strict=True))
+    if any(section.flags):  # the flag column by its name ("Severity" on Findings), values as flags
+        names.setdefault(section.flag_name, FLAG)
     view = View()
     for column, value in rows.where.items():
         if column in names:
