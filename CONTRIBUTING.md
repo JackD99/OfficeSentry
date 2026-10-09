@@ -34,9 +34,10 @@ ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
 
-CI runs the same on Python 3.11 and 3.12 for every pull request and push to
-main, plus a subset on Windows, a Docker image build and a dependency audit
-(`pip-audit`).
+CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request and
+push to main, plus a subset on Windows, a Docker image build and a dependency
+audit (`pip-audit`). The Python 3.12 run measures coverage and fails under
+90%; `pytest -n auto --cov=officesentry` shows it locally.
 
 - Keep changes small and finished end to end; update `v2/CLAUDE.md` and
   `v2/README.md` in the same pull request when behaviour changes.
@@ -49,6 +50,38 @@ main, plus a subset on Windows, a Docker image build and a dependency audit
 - Never add a write call to a tenant or a non-read-only permission.
 - Every route needs a login check, and tenant pages go through the access
   gate in `web/access.py`.
+
+## How changes are checked
+
+The same gates apply to every change, whoever wrote it:
+
+- Every change is a pull request against `main`; nothing is pushed to `main`
+  directly.
+- CI runs `ruff` and the full test suite on Python 3.11, 3.12 and 3.13
+  (with a 90% coverage floor), a Windows subset, a Docker build and
+  `pip-audit`, and a pull request isn't merged until it's green. The pull
+  request template's checklist covers migrations, new permissions, the
+  access gate and read-only access.
+- Tests simulate Microsoft Graph and Exchange at the HTTP level, and
+  `tests/test_live_fixture.py` replays responses recorded from a real
+  Microsoft 365 Business Premium test tenant (names, emails, domains and IDs
+  scrubbed), so collectors are checked against what Microsoft actually
+  returns.
+- Rules that matter for safety are enforced by tests, not just by review:
+  every page requires a login, tenant pages go through the access gate,
+  and the Graph client has no write methods.
+- Pages and reports that change are checked in a real browser, with
+  screenshots, before they're merged.
+
+The project's direction, scope and releases are decided by its maintainer,
+[@JackD99](https://github.com/JackD99).
+
+## Issues and conduct
+
+Use the issue forms for bugs, report requests and check requests. Issues are
+public: remove tenant names and IDs, domains, user names and email
+addresses, and IP addresses from anything you paste. Everyone taking part
+agrees to the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Reporting security issues
 

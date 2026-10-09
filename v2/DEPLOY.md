@@ -282,7 +282,9 @@ saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept.
 
 Database upgrades only go forward, so going back to an older version means
 going back to the database from before the upgrade. Anything collected since
-the upgrade is lost.
+the upgrade is lost. An older version started on the upgraded database
+refuses to start, and its log (`docker compose logs web`) names the copy to
+restore.
 
 1. `docker compose stop web worker`
 2. Go back to the version you had: `git log --oneline` to find it, then
