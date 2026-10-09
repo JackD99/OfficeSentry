@@ -995,3 +995,12 @@ td.row-action { min-width: 150px; }
 .progress-box progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; transition: width .4s ease; }
 .progress-box progress::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
 .progress-box .failures { margin: 4px 0 0; padding-left: 18px; }
+
+/* System status (system_status.html) */
+.callout.ok { background: var(--ok-soft); }
+.system-attention .callout .fix { display: block; margin-top: 2px; }
+.tile .value .unit { font-size: .875rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.recent-system-alerts { padding: 0 20px 8px; }
+.recent-system-alerts > li { flex-wrap: wrap; gap: 4px 10px; }
+#monitoring .secret { text-align: left; font-size: .8125rem; }
+#monitoring .form-actions form { display: inline; }

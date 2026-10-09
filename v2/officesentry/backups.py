@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import errno
 import gzip
+import json
 import logging
 import os
 import re
@@ -132,6 +133,64 @@ def backup(db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
     finally:
         src.close()
     return dest, rotate(folder, BACKUP_PREFIX, keep)
+
+
+# -- Backup status --------------------------------------------------------------
+#
+# Every backup job records how it went in ``<data dir>/backup-status.json``, one entry per job, so the
+# health check and the "backup failed" system alert (``system_health``, ``system_alerts``) can see it
+# whatever folder or target the copies go to. The ``backup`` command writes the "local" entry; an
+# off-site job (restic, say) writes its own key in the same shape:
+#
+#   {"local": {"last_attempt_at": "2026-10-09T03:30:02Z", "last_success_at": "2026-10-09T03:30:02Z",
+#              "ok": true, "error": null, "file": "officesentry-20261009-033000.db.gz", "bytes": 12345678}}
+#
+# Times are UTC ISO 8601 with a Z. ``ok`` is the last attempt's outcome and ``error`` its message for people.
+
+STATUS_FILE = "backup-status.json"
+STATUS_KEYS = ("last_attempt_at", "last_success_at", "ok", "error", "file", "bytes")
+
+
+def read_status(data_dir: Path) -> dict[str, dict]:
+    """Every job's last outcome from ``backup-status.json`` ({} when there is none or it can't be read)."""
+    try:
+        raw = json.loads((Path(data_dir) / STATUS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): {f: v.get(f) for f in STATUS_KEYS} for k, v in raw.items() if isinstance(v, dict)}
+
+
+def record_status(data_dir: Path, job: str, ok: bool, error: str | None = None, file: Path | None = None,
+                  now: datetime | None = None) -> None:
+    """Record one attempt of ``job``. Never raises: a backup's outcome matters more than its record."""
+    stamp = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path = Path(data_dir) / STATUS_FILE
+    try:
+        status = read_status(data_dir)
+        entry = status.get(job) or {}
+        entry.update(last_attempt_at=stamp, ok=bool(ok), error=(error or None) and str(error)[:500])
+        if ok:
+            entry.update(last_success_at=stamp, error=None)
+            if file is not None:
+                entry.update(file=file.name, bytes=file.stat().st_size)
+        status[job] = entry
+        part = path.with_name(path.name + ".part")
+        _private(part)
+        part.write_text(json.dumps(status, indent=2), encoding="utf-8")
+        os.replace(part, path)
+    except OSError:
+        log.warning("Could not record the backup's outcome in %s", path, exc_info=True)
+
+
+def newest_backup(folder: Path) -> Path | None:
+    """The newest ``backup`` copy in ``folder``, for installs whose backups ran before the status file existed."""
+    try:
+        found = backup_files(Path(folder), BACKUP_PREFIX)
+    except OSError:
+        return None
+    return found[-1] if found else None
 
 
 def database_file(conn: sqlite3.Connection) -> Path | None:
