@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}Tenant groups · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Tenant groups</h1>
+  <div class="sub">Group your clients by tier, region or service level, then look at one group at a time.</div></div></div>
+
+<div class="grid-main">
+<div>
+  {% if groups %}
+  <div class="tiles">
+    <div class="tile"><div class="label">Groups</div><div class="value">{{ groups|length }}</div>
+      <div class="foot">{{ by_category|selectattr(0)|list|length|plural('category', 'categories') }}</div></div>
+    <div class="tile"><div class="label">Tenants</div><div class="value">{{ tenant_count }}</div><div class="foot">not archived</div></div>
+    <div class="tile{{ ' tone-warn' if ungrouped and groups }}"><div class="label">Not in any group</div><div class="value">{{ ungrouped }}</div>
+      <div class="foot">{{ 'every tenant is in a group' if not ungrouped else 'add them where they belong' }}</div></div>
+  </div>
+  <section class="card flush group-list">
+    <table class="stack-sm">
+      <thead><tr><th>Group</th><th class="num">Tenants</th><th>About</th></tr></thead>
+      {% for category, rows in by_category %}
+      <tbody>
+        {% if by_category|length > 1 or category %}<tr class="group"><td colspan="3">{{ category or 'Other groups' }}</td></tr>{% endif %}
+        {% for gr in rows %}
+        <tr><td><a class="strong" href="{{ url_for('groups.edit', group_id=gr.id) }}">{{ gr.name }}</a></td>
+          <td class="num" data-label="Tenants">{{ gr.tenants }}</td>
+          <td data-label="About" class="muted">{{ gr.description or '' }}</td></tr>
+        {% endfor %}
+      </tbody>
+      {% endfor %}
+    </table>
+  </section>
+  {% else %}
+  <section class="card empty">
+    <h3>No groups yet</h3>
+    <p>Groups let you look at one slice of your clients at a time, such as your Gold tier, a region, or everyone on a managed security plan.
+      Make your first one on the right.</p>
+  </section>
+  {% endif %}
+</div>
+
+<div>
+  <section class="card">
+    <h2>New group</h2>
+    <form method="post" action="{{ url_for('groups.create') }}">
+      {{ csrf() }}
+      <label>Name <input name="name" maxlength="80" required placeholder="Gold, North, Managed security…" autocomplete="off"></label>
+      <label>Category <span class="faint">(optional)</span>
+        <input name="category" maxlength="40" list="group-categories" placeholder="Tier, Region, Service level…" autocomplete="off">
+        <span class="hint">Groups with the same category are listed together in the group picker.</span></label>
+      <datalist id="group-categories">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
+      <label>Description <span class="faint">(optional)</span><input name="description" maxlength="300" autocomplete="off"></label>
+      <div class="form-actions"><button class="primary">{{ icon('plus') }} Create and choose tenants</button></div>
+    </form>
+  </section>
+  <section class="card">
+    <h2>How groups work</h2>
+    <ul class="group-help small">
+      <li>A tenant can be in as many groups as you like.</li>
+      <li>Pick a group at the top of the dashboard, All tenants, What changed, Month-end and Client tenants to see only those clients. Downloads follow the group you picked.</li>
+      <li>A digest can cover one group instead of every tenant.</li>
+      <li>Groups never show anyone a tenant they can't already see. To let an analyst see a whole group, including tenants added to it later, tick the group on their page under <a href="{{ url_for('admin.users') }}">Users</a>.</li>
+    </ul>
+  </section>
+</div>
+</div>
+{% endblock %}

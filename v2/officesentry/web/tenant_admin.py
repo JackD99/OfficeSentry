@@ -11,11 +11,12 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import clouds, lifecycle, store, tenant_health
+from .. import clouds, lifecycle, store, tenant_groups, tenant_health
 from ..db import audit
 from ..discovery import tenant_id_for_domain
 from ..text import plural
 from .access import roles_required, tenant_or_404, visible_tenants
+from .groups import group_aware, scope
 from .tenants import DOMAIN_RE, GUID_RE, _cfg, _consent_link, cloud_mismatch, not_connected
 
 bp = Blueprint("tenant_admin", __name__)
@@ -44,9 +45,11 @@ def _back(tenant_id: int):
 
 @bp.get("/admin/tenants")
 @roles_required("admin", "analyst")
+@group_aware
 def clients():
     admin = g.user["role"] == "admin"
-    tenants = visible_tenants(g.db, g.user, archived=admin)
+    group = scope().group
+    tenants = tenant_groups.only(g.db, visible_tenants(g.db, g.user, archived=admin), group.id if group else None)
     archived = [t for t in tenants if t["archived_at"]]
     show_archived = admin and request.args.get("show") == "archived"
     rows = [tenant_health.assess(g.db, t) for t in (archived if show_archived else
@@ -55,7 +58,8 @@ def clients():
     totals = {s: sum(1 for h in rows if h.status == s) for s in STATUS_ORDER}
     return render_template("tenants_admin.html", rows=rows, totals=totals, archived_count=len(archived),
                            show_archived=show_archived, describe=tenant_health.describe,
-                           cells=tenant_health.counts)
+                           cells=tenant_health.counts,
+                           groups_of=tenant_groups.of_tenants(g.db, [h.tenant["id"] for h in rows]))
 
 
 # -- One tenant ---------------------------------------------------------------------------------
@@ -71,6 +75,7 @@ def manage(tenant_id: int):
         connections=store.list_connections(g.db), consent_link=_consent_link(t, connection),
         redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"),
         can_check=_check_problem(t) is None, check_problem=_check_problem(t), notes_max=NOTES_MAX,
+        groups=tenant_groups.all_groups(g.db), in_groups=tenant_groups.of_tenants(g.db, [t["id"]])[t["id"]],
     )
 
 
@@ -84,6 +89,19 @@ def _check_problem(t) -> str | None:
     if not connection or not connection["client_id"] or cloud_mismatch(clouds.of(t).key, connection):
         return not_connected(t)
     return None
+
+
+@bp.post("/tenants/<int:tenant_id>/groups")
+@roles_required("admin")
+def set_groups(tenant_id: int):
+    t = tenant_or_404(tenant_id)
+    chosen = {int(x) for x in request.form.getlist("groups") if x.isdigit()}
+    added, removed = tenant_groups.set_tenant_groups(g.db, t["id"], chosen)
+    if added or removed:
+        names = [gr["name"] for gr in tenant_groups.of_tenants(g.db, [t["id"]])[t["id"]]]
+        audit(g.db, g.user["username"], "tenant_groups_changed", t["id"], ", ".join(names) or "no groups")
+    flash("Groups saved.", "success")
+    return _manage(t["id"])
 
 
 @bp.post("/tenants/<int:tenant_id>/check-connection")

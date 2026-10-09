@@ -10,13 +10,14 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .. import clouds, endpoints, lifecycle, store, tenant_health
+from .. import clouds, endpoints, lifecycle, store, tenant_groups, tenant_health
 from ..collectors import REGISTRY
 from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
 from ..text import plural
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .groups import group_aware, scoped_tenants
 
 bp = Blueprint("tenants", __name__)
 
@@ -99,15 +100,15 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
 
 @bp.get("/")
 @login_required
+@group_aware
 def dashboard():
     from ..reports.monthly_review import rollup_row, setting
 
-    tenants = visible_tenants(g.db, g.user)
     if g.user["role"] == "client":
         from . import client_home
 
-        return client_home.render(tenants)
-    rows = [rollup_row(g.db, t, cached=True) for t in tenants]
+        return client_home.render(visible_tenants(g.db, g.user))
+    rows = [rollup_row(g.db, t, cached=True) for t in scoped_tenants()]
     for row in rows:
         row["health"] = data_health(row["tenant"], _latest_runs(row["tenant"]["id"]))
     rows.sort(key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["counts"]["medium"],
@@ -153,10 +154,12 @@ def new_tenant():
                 if conn_id is None:
                     flash(clouds.app_needed(clouds.get(cloud)), "warning")
             tenant_id = store.create_tenant(g.db, name, ref, conn_id, cloud)
+            tenant_groups.set_tenant_groups(g.db, tenant_id,
+                                            {int(x) for x in request.form.getlist("groups") if x.isdigit()})
             audit(g.db, g.user["username"], "tenant_created", tenant_id,
                   ref + ("" if cloud == clouds.DEFAULT else f" ({cloud})"))
             return redirect(url_for("tenants.tenant", tenant_id=tenant_id))
-    return render_template("tenant_new.html", connections=connections)
+    return render_template("tenant_new.html", connections=connections, groups=tenant_groups.all_groups(g.db))
 
 
 CONSENT_LINK_LIFETIME = timedelta(hours=1)

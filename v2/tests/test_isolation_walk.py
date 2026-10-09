@@ -2,10 +2,13 @@
 
 Two tenants are seeded with full snapshots, and tenant B gets one of everything
 a URL can point at (a run, finding, schedule, alert, contact, delivery, issued
-report, recommendation and note). Signed in as an analyst and as a client who
-were each granted only tenant A, every route in the URL map that names a tenant
+report, recommendation and note). Each is in its own tenant group. Signed in as
+an analyst and as a client who were each granted only tenant A (the analyst
+directly or through A's group; the client also holds a grant of B's group,
+which must count for nothing), every route in the URL map that names a tenant
 or one of its objects is opened with B's IDs, by GET and POST, and must be
-refused. List and cross-tenant pages must never mention B.
+refused. List and cross-tenant pages must never mention B, whichever group
+picker choice is asked for.
 
 The routes are read from the app when the test runs, so a route added later is
 walked too. A new kind of URL argument fails ``test_every_route_argument_is_classified``
@@ -17,7 +20,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from officesentry import delivery, issued, store
+from officesentry import delivery, issued, store, tenant_groups
 from officesentry.db import utcnow
 from officesentry.projects import CATALOG
 from officesentry.reports.data_reports import REPORTS
@@ -31,10 +34,12 @@ TENANT_ARGS = {"tenant_id", "run_id", "finding_id", "schedule_id", "alert_id", "
                "report_id", "action_id", "note_id"}
 # URL arguments that don't: names (report keys, table slugs, a month, a file extension, a static file),
 # a person's account inside a tenant (only ever with tenant_id), and objects that belong to Office Sentry
-# itself (portal users, app connections, report plans, sign-in sessions, someone's own saved views), and
-# flags a route sets itself (``resolved`` on the findings downloads).
+# itself (portal users, app connections, report plans, sign-in sessions, someone's own saved views, tenant
+# groups, which are admin-only), and flags a route sets itself (``resolved`` on the findings downloads).
 OTHER_ARGS = {"key", "table", "ext", "filename", "period", "user_id", "conn_id", "plan_id", "session_id", "view_id",
-              "resolved"}
+              "resolved", "group_id"}
+# Who is signed in for the walk. Each sees only tenant A.
+ROLES = ["analyst", "client", "analyst-by-group", "client-with-group"]
 REFUSED = (400, 403, 404)
 B_NAMES = (b"Bravo Inc", b"bravo.onmicrosoft.com")
 SKIP_LISTS = {"auth.logout", "auth.end_session", "static", "health"}
@@ -68,7 +73,25 @@ def world(app, db, connection_id):
                                   " VALUES (?, 'Bravo action', ?, ?)", (bravo, now, now)).lastrowid
     ids["note_id"] = db.execute("INSERT INTO finding_notes (tenant_id, rule_key, body, visibility, created_at)"
                                 " VALUES (?, 'admin_mfa', 'Bravo note', 'staff', ?)", (bravo, now)).lastrowid
+    for name, tenant in (("Alpha group", alpha), ("Bravo group", bravo)):
+        group = tenant_groups.create(db, {"name": name, "category": "", "description": ""}, "test")
+        tenant_groups.set_members(db, group, [tenant])
+        ids[name] = group
     return alpha, bravo, ids
+
+
+def _sign_in(client, db, role: str, alpha: int, ids: dict) -> None:
+    """Someone who may see tenant A only, however ``role`` grants it."""
+    if role == "analyst-by-group":
+        user = make_user(db, "someone", role="analyst")
+        tenant_groups.set_user_groups(db, user, [ids["Alpha group"]])
+    elif role == "client-with-group":
+        # Group grants are for analysts only: a client holding one (say, after a role change) gets nothing from it.
+        user = make_user(db, "someone", role="client", tenants=[alpha])
+        tenant_groups.set_user_groups(db, user, [ids["Bravo group"]])
+    else:
+        make_user(db, "someone", role=role, tenants=[alpha])
+    login(client, "someone")
 
 
 def _url(rule, ids: dict) -> str:
@@ -115,11 +138,10 @@ def test_the_walk_opens_real_pages(app, client, db, world):
     assert opened >= 35
 
 
-@pytest.mark.parametrize("role", ["analyst", "client"])
+@pytest.mark.parametrize("role", ROLES)
 def test_ungranted_tenant_is_refused_on_every_route(app, client, db, world, role):
     alpha, bravo, ids = world
-    make_user(db, "someone", role=role, tenants=[alpha])
-    login(client, "someone")
+    _sign_in(client, db, role, alpha, ids)
     before = _row_counts(db)
     walked = 0
     for rule in _tenant_rules(app):
@@ -135,11 +157,13 @@ def test_ungranted_tenant_is_refused_on_every_route(app, client, db, world, role
     assert _row_counts(db) == before  # nothing of B's was changed, added or removed
 
 
-@pytest.mark.parametrize("role", ["analyst", "client"])
-def test_lists_and_rollups_never_mention_an_ungranted_tenant(app, client, db, world, role):
-    alpha, _, _ = world
-    make_user(db, "someone", role=role, tenants=[alpha])
-    login(client, "someone")
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize("pick", [None, "Alpha group", "Bravo group"])
+def test_lists_and_rollups_never_mention_an_ungranted_tenant(app, client, db, world, role, pick):
+    alpha, _, ids = world
+    _sign_in(client, db, role, alpha, ids)
+    if pick:  # the group picker remembers a choice; asking for B's group must not bring B in
+        client.get(f"/?group={ids[pick]}")
     period = datetime.now(UTC).strftime("%Y-%m")
     urls = [r.rule for r in app.url_map.iter_rules()
             if not r.arguments and "GET" in r.methods and r.endpoint not in SKIP_LISTS]
@@ -151,9 +175,23 @@ def test_lists_and_rollups_never_mention_an_ungranted_tenant(app, client, db, wo
         if resp.status_code != 200:
             continue
         body = resp.data
-        assert not any(name in body for name in B_NAMES), (role, url)
+        assert not any(name in body for name in B_NAMES), (role, pick, url)
+        assert b"Bravo group" not in body, (role, pick, url)  # nor the name of a group holding only B
         seen += 1
-    assert seen > (40 if role == "analyst" else 3)
+    assert seen > (40 if role.startswith("analyst") else 3)
+
+
+@pytest.mark.parametrize("role", ["analyst-by-group"])
+def test_a_group_grant_opens_the_groups_tenants(app, client, db, world, role):
+    """The other side of the walk: an analyst granted A's group really can open A's pages, and stops when
+    A leaves the group."""
+    alpha, _, ids = world
+    _sign_in(client, db, role, alpha, ids)
+    assert client.get(f"/tenants/{alpha}").status_code == 200
+    assert b"Alpha Ltd" in client.get("/").data
+    tenant_groups.set_members(db, ids["Alpha group"], [])
+    assert client.get(f"/tenants/{alpha}").status_code == 404
+    assert b"Alpha Ltd" not in client.get("/").data
 
 
 def _row_counts(db) -> dict:

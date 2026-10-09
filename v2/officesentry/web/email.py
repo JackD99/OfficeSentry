@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import alerts, clouds, delivery, issued, mailer, month_end, store
+from .. import alerts, clouds, delivery, issued, mailer, month_end, store, tenant_groups
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
@@ -84,7 +84,9 @@ def _decorate(s) -> dict:
     d["tz"] = delivery.schedule_tz(s, _cfg().timezone)
     # A plan schedule that waits for approval never sends on its timer (month_end.approve sends it).
     d["next"] = None if s["on_approval"] else delivery.next_send(s, _cfg().timezone)
-    d["titles"] = delivery.report_titles(s["reports"]) if s["kind"] == "report" else ["Tenant digest"]
+    group = tenant_groups.get(g.db, s["group_id"]) if s["kind"] == "digest" else None
+    d["titles"] = delivery.report_titles(s["reports"]) if s["kind"] == "report" else \
+        [f"Tenant digest · {group['name']}" if group else "Tenant digest · every tenant"]
     d["due_now"] = d["next"] is not None and d["next"] <= datetime.now(UTC)
     return d
 
@@ -161,7 +163,7 @@ def _days_ago(days: int) -> str:
 def _blank(kind: str) -> dict:
     return {"id": None, "kind": kind, "reports": ["review"] if kind == "report" else [], "include_xlsx": 1,
             "frequency": "monthly", "day_of_week": 0, "day_of_month": 1, "hour": 8, "timezone": "",
-            "message": "", "enabled": 1}
+            "message": "", "enabled": 1, "group_id": None}
 
 
 def _form_values(kind: str) -> dict:
@@ -178,7 +180,11 @@ def _form_values(kind: str) -> dict:
         "timezone": f.get("timezone", "").strip(),
         "message": f.get("message", "").strip()[:1000],
         "enabled": 1 if f.get("enabled", "1") == "1" else 0,
+        # A digest can cover one tenant group (tenant_groups.py); report emails are one tenant's already.
+        "group_id": f.get("group_id", type=int) if kind == "digest" else None,
     }
+    if values["group_id"] is not None and tenant_groups.get(g.db, values["group_id"]) is None:
+        abort(400)
     if values["frequency"] not in delivery.FREQUENCIES or not 0 <= values["day_of_week"] <= 6 \
             or not 1 <= values["day_of_month"] <= 28 or not 0 <= values["hour"] <= 23:
         abort(400)
@@ -217,7 +223,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [], team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES, days=delivery.DAYS, zones=zones, default_tz=cfg.timezone,
         ordinal=delivery.ordinal, pdf_available=delivery.export.pdf_available(),
-        recipients_limit=mailer.MAX_RECIPIENTS)
+        recipients_limit=mailer.MAX_RECIPIENTS, groups=tenant_groups.all_groups(g.db) if not tenant else [])
 
 
 def _save_schedule(tenant, existing=None):
@@ -245,9 +251,9 @@ def _save_schedule(tenant, existing=None):
         now = datetime.now(UTC)
         fresh_period = delivery.initial_period(values["frequency"], values["day_of_week"], values["day_of_month"],
                                                values["hour"], tz, now)
-        cols = ("reports", "include_xlsx", "message", "enabled", *timing)
+        cols = ("reports", "include_xlsx", "message", "enabled", "group_id", *timing)
         params = [json.dumps(values["reports"]), values["include_xlsx"], values["message"], values["enabled"],
-                  *(values[k] for k in timing)]
+                  values["group_id"], *(values[k] for k in timing)]
         if existing is None:
             schedule_id = g.db.execute(
                 f"INSERT INTO email_schedules (kind, tenant_id, {', '.join(cols)}, last_period, created_by,"

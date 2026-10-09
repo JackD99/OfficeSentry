@@ -428,6 +428,28 @@ change is audited; note text is never put in the audit log.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
 
+## Tenant groups
+
+`tenant_groups.py` (schema in `migrations/0027`, admin page `/admin/groups` in
+`web/groups.py`). A group is a name, an optional category (Tier, Region, ...)
+and its tenants (`tenant_group_members`); a tenant is in any number. Groups
+only ever narrow lists of tenants someone already sees (`tenant_groups.only`
+over `visible_tenants()`). The one grant is an admin ticking a group for an
+analyst (`user_tenant_groups`): `access._GRANTED` adds its tenants, now and
+later, and ignores it for every other role. Never read group grants anywhere
+else.
+
+Staff pages that list tenants are `@group_aware` (under `@roles_required`)
+and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
+`/across/*` (and their downloads), `/changes*`, the month-end queue and
+Client tenants. The choice is kept on the sign-in (`sessions.group_id`); a GET
+with `?group=<id>` or `?group=all` picks and redirects to the plain URL. The
+picker (`_groups.html`, `group_picker()`) only offers groups holding a
+tenant the person sees, and downloads say which group they cover
+(`scope().label`). A digest covers one group when `email_schedules.group_id`
+is set (`delivery.digest_data(..., group_id)`); deleting the group sets it
+back to every tenant.
+
 ## Snapshot storage
 
 Collected objects are stored compressed (`store.py`, "Snapshot data"): an

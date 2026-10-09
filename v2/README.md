@@ -393,6 +393,14 @@ Then:
   collected) or app connection, keep notes, **pause** it (no collection,
   emailed reports or alert emails; data stays) and **archive** it (also hidden
   from lists, dashboards, rollups, digests and its client users; restorable).
+- **Tenant groups** (*Settings*, *Tenant groups*) sort clients by tier, region,
+  service level or anything else; a tenant can be in several. Pick a group at
+  the top of the Tenants dashboard, All tenants, What changed, Month-end or
+  Client tenants to see only those clients, with downloads to match, and give
+  a digest one group instead of every tenant. Groups never show anyone more:
+  the only way a group grants access is an admin ticking it for an analyst on
+  their user page, which then covers every tenant in it, including ones added
+  later. Client accounts are never given tenants through a group.
 - **Offboard** walks through a final export, the client's side (remove Global
   Reader, delete the enterprise app) and what will be deleted, then deletes the
   tenant and everything stored for it after you type its name, optionally with
