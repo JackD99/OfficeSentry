@@ -339,6 +339,19 @@ show up in the schedule form automatically. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 
+**Coming up** (`upcoming.py`, page `/upcoming` in `web/upcoming.py`, admin and analyst) lists what falls
+due in the next 90 days across the visible, active tenants: subscription renewals and trials (lapsing ones
+need attention now), client app secrets and certificates (and expired in the last 30 days), mailboxes at
+90% of their send limit or forecast to fill from a collection two to eight weeks old, DMARC still at
+`p=none` (no date) and accepted risks whose review date comes up. Office Sentry's own certificates are
+added for admins and the email only. `upcoming.collect()` returns `Item`s sorted into windows (Now, 30,
+60, 90, No date); `upcoming.report()` puts them on the shared report table, so filters and downloads
+work. A part that fails on one tenant's data is left out for that tenant and named on the page. The
+weekly email is a digest schedule whose `reports` is `["upcoming"]` (`delivery.is_upcoming`,
+`build_upcoming_email`, `emails/upcoming.html`), so it uses the digest's sender, retries and history and
+goes to the team only. A new kind of item is a function in `upcoming.PARTS` with a test in
+`tests/test_upcoming.py`.
+
 Reports are built live, so what a client was sent is kept separately:
 after a report email goes out, `delivery.send_schedule` stores each attached
 PDF/XLSX in `issued_reports` (`issued.py`: bytes as a BLOB, period, version,

@@ -995,3 +995,14 @@ td.row-action { min-width: 150px; }
 .progress-box progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; transition: width .4s ease; }
 .progress-box progress::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
 .progress-box .failures { margin: 4px 0 0; padding-left: 18px; }
+
+/* -- Coming up (upcoming.html) ---------------------------------------------------- */
+.callout.ok { background: var(--ok-soft); }
+.callout.ok > .icon { color: var(--ok); }
+.callout.lead-answer { font-size: .9375rem; padding: 14px 16px; }
+.callout.lead-answer.bad > .icon { color: var(--bad); }
+.callout.lead-answer.warn > .icon { color: var(--warn); }
+.callout.lead-answer .small { margin-top: 4px; color: var(--text-2); }
+.type-counts { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: -8px 0 16px; }
+.type-counts .pill { font-weight: 500; padding: 3px 10px; }
+.type-counts a.pill:hover { background: var(--accent-soft); color: var(--accent); text-decoration: none; }
