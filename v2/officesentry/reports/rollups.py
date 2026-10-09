@@ -30,6 +30,7 @@ from . import data_reports, evidence, views
 from .data_reports import DataReport, Section, UserLink
 from .identity_reports import Money
 from .monthly_review import rollup_row, setting
+from .precomputed import Rows
 from .tables import Table
 
 SEVERITIES = ("critical", "high", "medium", "low")
@@ -476,28 +477,40 @@ class CheckMatrix:
         return Table("Checks", header, rows)
 
 
-def check_matrix(conn, tenants, now: datetime | None = None) -> CheckMatrix:
+def check_matrix(conn, tenants, now: datetime | None = None, rebuild: bool = False) -> CheckMatrix:
     """Every check for every tenant, from the latest stored data and the findings' accepted risks.
 
-    The same evaluation and accepted-risk handling as the monthly review; nothing is written.
+    The same evaluation and accepted-risk handling as the monthly review; nothing is written but
+    the stored rows. Without ``now`` (the page, which shows the present), each tenant's row comes
+    from ``precomputed`` while that's current, and is built and stored when it isn't (always, with
+    ``rebuild``).
     """
+    live = now is None
     now = now or datetime.now(UTC)
+    stored = Rows(conn, "checks", tenants, now, rebuild) if live else None
     checks = [(r.key, r.title, r.category) for r in RULES]
-    rows = []
-    for t in tenants:
-        row = CheckRow(dict(t))
-        rows.append(row)
-        try:
-            snap = TenantSnapshot(conn, t)
-            if not snap.runs:
-                row.note = "No data collected yet."
-                continue
+    rows = [_check_row(conn, t, now, stored) for t in tenants]
+    rows.sort(key=lambda r: (bool(r.note), -r.attention, -r.count("fail"), r.tenant["name"].lower()))
+    return CheckMatrix(checks, rows, now)
+
+
+def _check_row(conn, tenant, now: datetime, stored: Rows | None) -> CheckRow:
+    fingerprint = stored.fingerprint(tenant) if stored else ""
+    if stored and (data := stored.get(tenant, fingerprint)) is not None:
+        return CheckRow(dict(tenant), {k: CheckCell(*cell) for k, cell in data["cells"].items()}, data["note"])
+    row = CheckRow(dict(tenant))
+    try:
+        snap = TenantSnapshot(conn, tenant)
+        if not snap.runs:
+            row.note = "No data collected yet."
+        else:
             results = evaluate(snap, now)
-            life = lifecycle_map(conn, t["id"], now)
-        except Exception as exc:  # one broken tenant mustn't blank the page
-            logging.getLogger(__name__).exception("Check matrix failed for tenant %s", t["id"])
-            row.note = f"Couldn't be built: {type(exc).__name__}"
-            continue
+            life = lifecycle_map(conn, tenant["id"], now)
+    except Exception as exc:  # one broken tenant mustn't blank the page
+        logging.getLogger(__name__).exception("Check matrix failed for tenant %s", tenant["id"])
+        row.note = f"Couldn't be built: {type(exc).__name__}"
+        return row  # not stored: the next view tries again
+    if not row.note:
         for r in results:
             active = [f for f in r.findings
                       if not ((lc := life.get((r.key, finding_key(f)))) and lc.accepted)]
@@ -506,8 +519,10 @@ def check_matrix(conn, tenants, now: datetime | None = None) -> CheckMatrix:
                 row.cells[r.key] = CheckCell("fail", r.summary, worst, len(active))
             else:
                 row.cells[r.key] = CheckCell("accepted" if r.status == "fail" else r.status, r.summary)
-    rows.sort(key=lambda r: (bool(r.note), -r.attention, -r.count("fail"), r.tenant["name"].lower()))
-    return CheckMatrix(checks, rows, now)
+    if stored:
+        stored.save(tenant, fingerprint, {"note": row.note, "cells": {
+            k: [c.status, c.summary, c.severity, c.count] for k, c in row.cells.items()}})
+    return row
 
 
 # -- Registry --------------------------------------------------------------------------

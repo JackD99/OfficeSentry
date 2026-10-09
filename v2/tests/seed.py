@@ -178,7 +178,10 @@ def exchange_factory(tenant, connection):
     return ExchangeClient(tenant["tenant_ref"], lambda: "t", sleep=lambda s: None)
 
 
-def seed_tenant(db, tenant_id, dns=None, **kwargs):
+def seed_tenant(db, tenant_id, dns=None, precompute=False, **kwargs):
+    """Collect every source for the tenant from ``graphdata``, as the worker would. The collection
+    queues the tenant's precomputed rows; they're dropped unless ``precompute``, so tests of other
+    background tasks see only their own."""
     factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
             patch("officesentry.dnscheck.lookup", dns or gd.fake_dns):
@@ -187,3 +190,5 @@ def seed_tenant(db, tenant_id, dns=None, **kwargs):
             store.enqueue_run(db, tenant_id, key)
         while (run := store.claim_next_run(db)) is not None:
             assert execute_run(db, run, factory, exchange_factory) in ("succeeded", "partial"), run["collector"]
+    if not precompute:
+        db.execute("DELETE FROM tasks WHERE kind = 'precompute' AND status = 'queued'")

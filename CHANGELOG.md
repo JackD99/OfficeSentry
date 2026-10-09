@@ -34,7 +34,9 @@ None. The sign-in and directory audit logs were already read; they're now read i
 ### Database upgrade
 
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
-have been read up to. The portal saves a `pre-upgrade-*` copy first, as always.
+have been read up to, and migration 0031 adds `summary_cache` for the precomputed rows under Changed. The
+portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
+tenant; until then the pages build them as before.
 
 ### Added
 
@@ -54,6 +56,12 @@ have been read up to. The portal saves a `pre-upgrade-*` copy first, as always.
   changes worth a second look.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
+
+### Changed
+
+- What changed across all tenants and the All tenants check matrix open in a fraction of a second at 200
+  tenants (What changed took about 30 seconds). The worker works out each tenant's line after its
+  collection and once a day; the pages read those lines, and rebuild any line whose data has changed since.
 
 ### Security
 
