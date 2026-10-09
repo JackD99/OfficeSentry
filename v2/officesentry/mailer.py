@@ -8,6 +8,13 @@ own tenant with the ``Mail.Send`` application permission. It is never the
 multi-tenant read-only app, so client tenants are never asked to consent to
 mail permissions, and it is the only Graph call in Office Sentry that is not a
 GET.
+
+The mail app signs in with a certificate Office Sentry makes (recommended: the
+private key never leaves it) or a client secret. ``Mail.Send`` lets an app send
+as *anyone* in the tenant until Exchange limits it to one mailbox, so the
+settings page treats that limit as a setup step the admin confirms
+(``graph_scoped_at``) rather than a footnote. The mail app is in the MSP's own
+Microsoft cloud (``graph_cloud``), which needn't be its clients'.
 """
 
 from __future__ import annotations
@@ -24,6 +31,7 @@ from email.utils import formataddr, parseaddr
 
 import requests
 
+from . import clouds
 from .text import nouns
 
 EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
@@ -31,12 +39,16 @@ MAX_RECIPIENTS = 20
 GUID_RE = re.compile(r"^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 
 TRANSPORTS = {"smtp": "SMTP server", "graph": "Microsoft 365 (Graph)"}
+GRAPH_AUTH = {"certificate": "Certificate", "secret": "Client secret"}
 SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_security", "smtp_user", "smtp_password_enc", "smtp_from")
 GRAPH_KEYS = ("graph_tenant", "graph_client_id", "graph_secret_enc", "graph_sender")
-SETTING_KEYS = ("mail_transport", "msp_name", *SMTP_KEYS, *GRAPH_KEYS)
-ENCRYPTED_KEYS = ("smtp_password_enc", "graph_secret_enc")
+# The mail app's certificate (made by Office Sentry; only the public part is ever downloaded), its cloud,
+# when the admin confirmed it's limited to one mailbox, and the last expiry warning sent for it.
+GRAPH_CERT_KEYS = ("graph_auth", "graph_cert_pem", "graph_key_enc", "graph_thumbprint", "graph_cert_not_after",
+                   "graph_cloud", "graph_scoped_at", "graph_scoped_by", "graph_cert_warned")
+SETTING_KEYS = ("mail_transport", "msp_name", *SMTP_KEYS, *GRAPH_KEYS, *GRAPH_CERT_KEYS)
+ENCRYPTED_KEYS = ("smtp_password_enc", "graph_secret_enc", "graph_key_enc")
 
-GRAPH_SEND_URL = "https://graph.microsoft.com/v1.0/users/{sender}/sendMail"
 # Graph rejects JSON requests over 4 MB; attachments grow by a third as base64.
 GRAPH_MAX_ATTACHMENT_BYTES = 2_900_000
 
@@ -91,10 +103,31 @@ def transport(settings: dict) -> str:
     return settings.get("mail_transport") or "smtp"
 
 
+def graph_auth(settings: dict) -> str:
+    """How the mail app signs in. Installs set up before certificates were offered use a secret."""
+    return settings.get("graph_auth") or "secret"
+
+
+def graph_cloud(settings: dict) -> clouds.Cloud:
+    return clouds.get(settings.get("graph_cloud"))
+
+
 def is_configured(settings: dict) -> bool:
     if transport(settings) == "graph":
-        return all(settings.get(k) for k in GRAPH_KEYS)
+        credential = ("graph_key_enc", "graph_thumbprint") if graph_auth(settings) == "certificate" \
+            else ("graph_secret_enc",)
+        return all(settings.get(k) for k in ("graph_tenant", "graph_client_id", "graph_sender", *credential))
     return bool(settings.get("smtp_host") and settings.get("smtp_from"))
+
+
+def scoped(settings: dict) -> bool:
+    """Whether the admin confirmed the mail app can only send as the one mailbox."""
+    return bool(settings.get("graph_scoped_at"))
+
+
+def send_url(settings: dict) -> str:
+    sender = requests.utils.quote(settings["graph_sender"], safe="@")
+    return f"{graph_cloud(settings).graph}/v1.0/users/{sender}/sendMail"
 
 
 def sender_label(settings: dict) -> str:
@@ -194,21 +227,33 @@ _token_providers: dict[str, object] = {}
 
 def _graph_token(s: dict, vault) -> str:
     """App-only token for the MSP's mail app. MSAL keeps it cached until it expires."""
-    from .msauth import TokenError, secret_token_provider
+    from .msauth import TokenError, certificate_token_provider, secret_token_provider
 
-    secret = vault.decrypt(s["graph_secret_enc"])
-    cache_key = hashlib.sha256(f"{s['graph_tenant']}|{s['graph_client_id']}|{secret}".encode()).hexdigest()
+    cloud = graph_cloud(s)
+    if graph_auth(s) == "certificate":
+        key_pem = vault.decrypt(s["graph_key_enc"])
+        credential = f"cert|{s['graph_thumbprint']}|{key_pem}"
+    else:
+        secret = vault.decrypt(s["graph_secret_enc"])
+        credential = f"secret|{secret}"
+    cache_key = hashlib.sha256(f"{cloud.key}|{s['graph_tenant']}|{s['graph_client_id']}|{credential}".encode()
+                               ).hexdigest()
     provider = _token_providers.get(cache_key)
     if provider is None:
-        # The MSP's own mailbox, which is in the commercial cloud whatever cloud its clients are in.
-        provider = secret_token_provider(s["graph_tenant"], s["graph_client_id"], secret,
-                                         GRAPH_SEND_URL.split("/v1.0/")[0])
+        if graph_auth(s) == "certificate":
+            provider = certificate_token_provider(s["graph_tenant"], s["graph_client_id"], key_pem,
+                                                  s["graph_thumbprint"], cloud.graph, cloud.key)
+        else:
+            provider = secret_token_provider(s["graph_tenant"], s["graph_client_id"], secret, cloud.graph,
+                                             cloud.key)
         _token_providers[cache_key] = provider
     try:
         return provider()
     except TokenError as exc:
+        what = "certificate (upload the .cer from Email delivery to the mail app)" \
+            if graph_auth(s) == "certificate" else "client secret"
         raise MailError(f"Couldn't sign in to Microsoft 365 to send mail ({exc.code}). "
-                        "Check the tenant ID, client ID and client secret.") from exc
+                        f"Check the tenant ID, client ID and {what}.") from exc
 
 
 def graph_payload(email: Email) -> dict:
@@ -242,7 +287,7 @@ def graph_payload(email: Email) -> dict:
 def _send_graph(s: dict, vault, email: Email) -> None:
     payload = graph_payload(email)
     token = _graph_token(s, vault)
-    url = GRAPH_SEND_URL.format(sender=requests.utils.quote(s["graph_sender"], safe="@"))
+    url = send_url(s)
     try:
         resp = requests.post(url, json=payload, headers={"Authorization": f"Bearer {token}"}, timeout=60)
     except requests.RequestException as exc:

@@ -29,7 +29,26 @@ little as possible with that access. Details and code references are in
 - **Certificate sign-in, no stored user passwords.** The app signs in with a
   certificate. Its private key is encrypted in the database and is never
   written to disk as a file or sent to the browser. Only the public `.cer`
-  can be downloaded, by admins.
+  can be downloaded, by admins. Certificates last two years; admins are
+  warned on every page, and the MSP's team by email and the alert webhook,
+  60, 30 and 7 days before one expires, and it can be replaced without a gap
+  (see [If a certificate leaks](#if-a-certificate-or-key-leaks)).
+- **Extra access is shown, not hidden.** Each tenant's connection check
+  lists any permission the tenant granted beyond the read-only set, and any
+  admin role besides Global Reader. Both are warnings on the tenant's Manage
+  page and the Client tenants list.
+- **Tested both ways.** `tests/test_no_writes.py` fails if an HTTP call
+  other than GET appears outside a short list of named exceptions (the mail
+  app, Exchange's `Get-` cmdlets, creating the app in the MSP's own tenant,
+  and alert webhooks), and runs a full collection to check every request is
+  a read. `tests/test_isolation_walk.py` opens every tenant-scoped route with
+  another tenant's IDs, as an analyst and as a client, and expects a refusal.
+- **The mail app is separate and can be fenced in.** Email through
+  Microsoft 365 uses its own single-tenant app with `Mail.Send` in the MSP's
+  tenant, signing in with a certificate (or a client secret). The settings
+  page asks the admin to limit it to the one sending mailbox and shows a
+  warning until they confirm it, because without that limit a leaked
+  credential could send as anyone in the MSP's company.
 - **Bound consent links.** The admin-consent link's signed state carries a
   one-time nonce, stored server-side with the admin and the signed-in
   browser that opened it, and expires after an hour. A tenant added by
@@ -83,6 +102,41 @@ out** (the last 7 by default), as do copies taken off the server.
 - The data directory (`data/`, or the `/data` Docker volume): it holds the
   database, encrypted keys and tenant snapshots
 - Report exports: `*.csv`, `*.xlsx`
+
+## If a certificate or key leaks
+
+One certificate signs in to every client tenant of its cloud, so treat a
+leak of its private key as urgent. It can leak with the database together
+with `secrets.json` (a lost backup, say), or with access to the server.
+Rotating the encryption key alone (`rotate-keys --new`) does **not** help:
+whoever has the key can still sign in as the app until Entra stops trusting
+the certificate.
+
+1. **Make a new certificate.** *Settings → App connection*, open the
+   connection and press *Replace certificate*. Download the new `.cer`.
+2. **Add it to the app registration.** In your own tenant's Entra admin
+   centre: *App registrations →* the Office Sentry app *→ Certificates &
+   secrets → Certificates → Upload certificate*. Collection keeps working on
+   the old certificate meanwhile.
+3. **Test it and switch.** Back in Office Sentry press *Test new certificate*
+   (it signs in and reads the tenant's name, nothing else), then *Switch to
+   the new certificate*.
+4. **Delete the old certificate from the app registration**, straight away.
+   Its thumbprint is shown on the App connection page until you confirm with
+   *I've removed it*. From this moment the leaked key can't sign in.
+5. **Look for misuse.** In each client tenant's Entra sign-in logs, filter
+   *Service principal sign-ins* by the app's ID for sign-ins from addresses
+   other than your server's. The app is read-only, so the risk is data being
+   read, not changed; tell affected clients if you find any.
+6. **Then rotate the encryption key** if the database or a backup leaked:
+   `rotate-keys --new` (see `v2/DEPLOY.md`), and treat the mail app's
+   certificate or secret and the alert webhook URL as leaked too (make a new
+   mail certificate under *Settings → Email delivery*, and a new webhook URL
+   in Teams or Slack).
+
+If you can't wait for the steps above, delete the certificate from the app
+registration first: collection stops for every client until a new one is in
+place, but nobody can sign in with the old one.
 
 ## Deployment
 

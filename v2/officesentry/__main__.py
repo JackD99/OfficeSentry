@@ -96,6 +96,7 @@ def cmd_create_app(args, cfg):
 # Every encrypted value at rest, as (table, key column, encrypted column)...
 ENCRYPTED_COLUMNS = (
     ("app_connections", "id", "key_enc"),
+    ("app_connections", "id", "next_key_enc"),  # a replacement certificate's key, during rollover
     ("users", "id", "totp_secret_enc"),
     ("users", "id", "totp_pending_enc"),
 )

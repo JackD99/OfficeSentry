@@ -5,6 +5,16 @@
 <div class="page-head"><div><h1>Email delivery</h1><div class="sub">How Office Sentry sends scheduled reports, digests and alerts.</div></div>
   {% if ready %}<span class="pill ok">{{ icon('check') }} Set up</span>{% else %}<span class="pill warn">Not set up</span>{% endif %}</div>
 
+{% set app_id = s.graph_client_id or '<client ID>' %}{% set mailbox = s.graph_sender or 'reports@msp.com' %}
+{% if transport == 'graph' and ready and not scoped %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div class="grow"><strong>Limit the mail app to {{ s.graph_sender }}.</strong>
+  Until you do, anyone who gets hold of its {{ 'certificate' if auth == 'certificate' else 'client secret' }} can send email as anyone in your company, to your clients too. <a href="#scope-step">Step 5</a> shows how; it takes one command.</div></div>
+{% endif %}
+{% if transport == 'graph' and auth == 'certificate' and certificate and certificate.level %}
+<div class="callout {{ certificate.tone }}" role="status">{{ icon('alert') }}<div class="grow"><strong>The mail app's certificate {{ certificate.when }}.</strong> {{ certificate.consequence }} Make a new one below and upload it to the mail app.</div></div>
+{% endif %}
+
+<form method="post" id="mail-cert-form">{{ csrf() }}<input type="hidden" name="action" value="mail_certificate"></form>
 <div class="grid-main">
 <form method="post" class="card" id="mail-form">
   {{ csrf() }}
@@ -27,8 +37,37 @@
       <label>Your tenant ID <input name="graph_tenant" value="{{ s.graph_tenant or '' }}" placeholder="msp.onmicrosoft.com" autocomplete="off"></label>
       <label>Mail app client ID <input name="graph_client_id" value="{{ s.graph_client_id or '' }}" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
     </div>
-    <label>Client secret <input type="password" name="graph_secret" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if has_secret else '' }}">
-      <span class="hint">Changing the tenant or client ID clears the saved secret, so it's only ever used for the app it was made for.</span></label>
+    <label>Microsoft cloud <select name="graph_cloud">{% for key, label in cloud_choices %}<option value="{{ key }}" {% if key == cloud.key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <span class="hint">Where your own tenant is, which may differ from your clients'.</span></label>
+
+    <fieldset class="choices">
+      <legend>The mail app signs in with</legend>
+      <label class="choice"><input type="radio" name="graph_auth" value="certificate" {% if auth == 'certificate' %}checked{% endif %}>
+        <span><span class="choice-title">A certificate (recommended)</span><span class="hint">Office Sentry makes it and keeps the private key, so there's no password to copy, and it lasts two years. You're warned before it expires.</span></span></label>
+      <label class="choice"><input type="radio" name="graph_auth" value="secret" {% if auth == 'secret' %}checked{% endif %}>
+        <span><span class="choice-title">A client secret</span><span class="hint">A password you copy from Entra. It expires (often within a year) without a warning here.</span></span></label>
+    </fieldset>
+
+    <div data-auth="certificate" id="mail-certificate">
+      {% if certificate %}
+      <dl class="kv">
+        <dt>Certificate</dt><dd><span class="mono small">{{ certificate.thumbprint }}</span> · <a href="{{ url_for('email.mail_certificate') }}">{{ icon('download') }} Download .cer</a></dd>
+        <dt>Expires</dt><dd>{{ certificate.not_after|day }} <span class="muted">({{ certificate.relative }})</span></dd>
+      </dl>
+      <div class="form-actions"><button class="sm" form="mail-cert-form">{{ icon('refresh') }} Make a new certificate</button>
+        <span class="hint">Have Entra open first: email fails until the new .cer is uploaded to the mail app.</span></div>
+      {% else %}
+      <p class="muted small">No certificate yet. Make one, then upload its .cer to the mail app (step 4).</p>
+      <div class="form-actions"><button class="sm" form="mail-cert-form">{{ icon('plus') }} Make certificate</button></div>
+      {% endif %}
+    </div>
+    <div data-auth="secret">
+      <label>Client secret <input type="password" name="graph_secret" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if has_secret else '' }}">
+        <span class="hint">Changing the tenant or client ID clears the saved secret, so it's only ever used for the app it was made for.</span></label>
+    </div>
+
+    <label class="check scope-check"><input type="checkbox" name="graph_scoped" value="1" {% if scoped %}checked{% endif %}>
+      <span>I've limited the mail app to this one mailbox (<a href="#scope-step">step 5</a>){% if scoped %} <span class="muted small">· confirmed by {{ s.graph_scoped_by }} {{ s.graph_scoped_at|ago }}</span>{% endif %}</span></label>
   </div>
 
   <div data-transport="smtp">
@@ -71,9 +110,14 @@
       <li>Open <strong>entra.microsoft.com</strong> signed in to your own tenant, then go to <strong>App registrations → New registration</strong>. Name it “Office Sentry mail”, keep “Single tenant”, and select <strong>Register</strong>.</li>
       <li>Copy the <strong>Application (client) ID</strong> and <strong>Directory (tenant) ID</strong> into the boxes on the left.</li>
       <li>Go to <strong>API permissions → Add a permission → Microsoft Graph → Application permissions</strong>, tick <strong>Mail.Send</strong>, select <strong>Add</strong>, then <strong>Grant admin consent</strong>.</li>
-      <li>Go to <strong>Certificates &amp; secrets → New client secret</strong>. Copy the <strong>Value</strong> (not the ID) into “Client secret”. Note its expiry date so you can renew it.</li>
-      <li>Recommended: limit the app to the one mailbox. In Exchange Online PowerShell run:
-        <pre class="log">New-ApplicationAccessPolicy -AppId &lt;client ID&gt; -PolicyScopeGroupId reports@msp.com -AccessRight RestrictAccess -Description "Office Sentry mail"</pre></li>
+      <li>Make the certificate on the left and select <strong>Download .cer</strong>. In the app go to <strong>Certificates &amp; secrets → Certificates → Upload certificate</strong> and choose that file. (Using a client secret instead: <strong>Client secrets → New client secret</strong>, and copy the <strong>Value</strong>, not the ID.)</li>
+      <li id="scope-step"><strong>Limit the app to the one mailbox.</strong> Mail.Send on its own lets the app send as <em>anyone</em> in your tenant. In Exchange Online PowerShell (<code>Connect-ExchangeOnline</code>) run:
+        <pre class="log">New-ApplicationAccessPolicy -AppId {{ app_id }} -PolicyScopeGroupId {{ mailbox }} -AccessRight RestrictAccess -Description "Office Sentry mail"</pre>
+        Check it with a different mailbox, which should say <em>Denied</em>:
+        <pre class="log">Test-ApplicationAccessPolicy -Identity someone.else@{{ mailbox.split('@')[-1] }} -AppId {{ app_id }}</pre>
+        Then tick <em>I've limited the mail app to this one mailbox</em> on the left and save. It can take up to an hour to apply.
+        <details class="by-hand"><summary>Using RBAC for Applications instead</summary>
+          <p>Exchange's newer way does the same: assign the app the <em>Application Mail.Send</em> role with a management scope that only covers {{ mailbox }}. If you do, also remove Mail.Send from the app's API permissions in Entra, or the app can still send as anyone.</p></details></li>
       <li>Save, then send yourself a test.</li>
     </ol>
   </section>
@@ -89,6 +133,12 @@
   }
   document.querySelectorAll('input[name=mail_transport]').forEach(function (r) { r.addEventListener('change', update); });
   update();
+  function updateAuth() {
+    var a = document.querySelector('input[name=graph_auth]:checked').value;
+    document.querySelectorAll('[data-auth]').forEach(function (el) { el.hidden = el.dataset.auth !== a; });
+  }
+  document.querySelectorAll('input[name=graph_auth]').forEach(function (r) { r.addEventListener('change', updateAuth); });
+  updateAuth();
 })();
 </script>
 {% endblock %}

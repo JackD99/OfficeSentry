@@ -76,7 +76,7 @@ class Item:
 
 @dataclass
 class Message:
-    event: str  # findings.new | collection.failed | collection.recovered | test
+    event: str  # findings.new | collection.failed | collection.recovered | certificate.expiry | test
     title: str
     text: str
     link: str

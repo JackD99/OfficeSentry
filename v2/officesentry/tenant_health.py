@@ -292,19 +292,30 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
                             "permission at once. Then press Check connection now.", "consent"))
     else:
         checks.append(Check("permissions", "Permissions", "ok", f"All {ALL_PERMISSIONS} granted."))
+    extra = extra_permissions(result)
+    if extra:
+        checks.append(Check(
+            "extra_permissions", "Extra permissions", "warn",
+            f"The app has {plural(len(extra), 'permission')} Office Sentry doesn't ask for: {', '.join(extra)}.",
+            "Office Sentry only needs the read-only permissions listed on its App connection page, so a stolen "
+            "key shouldn't be able to do more. Remove the others from the app registration's API permissions in "
+            f"your own tenant, then in {name}: Microsoft Entra admin centre → Enterprise applications → {app} → "
+            "Permissions, revoke them. Then press Check connection now.", "check"))
 
     if not result.get("roles_checked"):
         checks.append(Check("global_reader", "Global Reader role", "warn", "Couldn't read the app's admin roles.",
                             "Re-grant admin consent (RoleManagement.Read.Directory lets Office Sentry check this).",
                             "consent"))
     elif result.get("global_reader"):
-        extra = result.get("too_powerful") or []
+        extra = extra_roles(result)
         if extra:
             roles = " and ".join(extra)
             checks.append(Check("global_reader", "Global Reader role", "warn",
                                 f"Assigned, but the app also holds {roles}.",
-                                f"Global Reader is all Office Sentry needs. In {name}: Microsoft Entra admin centre "
-                                f"→ Roles and admins → {extra[0]} → select {app} → Remove assignments."))
+                                f"Global Reader is all Office Sentry needs, and it can't change anything. In {name}: "
+                                f"Microsoft Entra admin centre → Roles and admins → {extra[0]} → select {app} → "
+                                "Remove assignments" + (", and the same for the others." if len(extra) > 1 else ".")
+                                + " Then press Check connection now.", "check"))
         else:
             checks.append(Check("global_reader", "Global Reader role", "ok", "Assigned."))
     else:
@@ -320,6 +331,23 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
     return checks
 
 
+# Granted alongside what Office Sentry asks for but no more access: Exchange's newer name for
+# Exchange.ManageAsApp, which is still limited to what the app's admin role (Global Reader) allows.
+NOT_EXTRA = {"Exchange.ManageAsAppV2"}
+
+
+def extra_permissions(result: dict | None) -> list[str]:
+    """Permissions the tenant granted the app beyond what Office Sentry asks for."""
+    r = result or {}
+    return sorted(set(r.get("other") or []) - NOT_EXTRA) if r.get("permissions_checked") else []
+
+
+def extra_roles(result: dict | None) -> list[str]:
+    """Admin roles the app holds besides Global Reader (the only one it needs, and read-only)."""
+    r = result or {}
+    return [role for role in r.get("roles") or [] if role != "Global Reader"] if r.get("roles_checked") else []
+
+
 def counts(health: Health) -> dict:
     """Short cell texts for the all-tenants admin table."""
     r = health.result or {}
@@ -327,7 +355,9 @@ def counts(health: Health) -> dict:
     return {
         "consent": bool(health.tenant["consented_at"]),
         "missing": missing if r.get("permissions_checked") else None,
+        "extra_permissions": extra_permissions(r),
         "global_reader": r.get("global_reader") if r.get("roles_checked") else None,
+        "extra_roles": extra_roles(r),
         "failing": health.failing,
     }
 

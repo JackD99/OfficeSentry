@@ -259,6 +259,11 @@ holds an encrypted value the command doesn't recognise, it stops and changes
 nothing. With keys in environment variables instead, put the new key first in
 `OFFICESENTRY_ENCRYPTION_KEYS`, run `rotate-keys`, then remove the old key.
 
+Rotating keys doesn't stop a leaked *certificate* signing in: anyone holding
+its private key can until it's deleted from the app registration in Entra.
+Replace it too, as described under *If a certificate or key leaks* in
+`SECURITY.md` (*Settings → App connection → Replace certificate*).
+
 Ran `rotate-keys --new` before this release? It didn't re-encrypt the alert
 webhook, so enter the webhook URL and secret again under *Settings → Alerts*.
 Old backups are still encrypted with the old key.

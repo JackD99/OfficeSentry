@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, csrf %}
+{% from "_macros.html" import icon, csrf, ts %}
 {% block title %}App connection · Office Sentry{% endblock %}
 {% block content %}
 {% set ready = connections|selectattr('client_id')|list %}
@@ -47,20 +47,70 @@
   </li>
 </ol>
 
-{% for c in connections %}
+{% for c in connections %}{% set e = expiry[c.id] %}
 <section class="card" id="conn-{{ c.id }}">
-  <div class="card-head"><h2>{{ c.name }}{% if not cloud_of(c).is_default %} <span class="pill info">{{ cloud_of(c).label }}</span>{% endif %}</h2>{% if c.client_id %}<span class="pill ok">Ready</span>{% else %}<span class="pill warn">Needs client ID</span>{% endif %}</div>
+  <div class="card-head"><h2>{{ c.name }}{% if not cloud_of(c).is_default %} <span class="pill info">{{ cloud_of(c).label }}</span>{% endif %}</h2>
+    <div class="row-actions">{% if e and e.level %}<span class="pill {{ e.tone }}">{{ 'Certificate expired' if e.level == 'expired' else 'Certificate expires soon' }}</span>{% endif %}
+    {% if c.client_id %}<span class="pill ok">Ready</span>{% else %}<span class="pill warn">Needs client ID</span>{% endif %}</div></div>
+
+  {% if e and e.level and c.client_id and not c.next_thumbprint %}
+  <div class="callout {{ e.tone }}" role="status">{{ icon('alert') }}<div class="grow"><strong>This certificate {{ e.when }}.</strong>
+    {{ e.consequence }} Replacing it takes a few minutes and nothing stops while you do it.</div>
+    <form method="post" action="{{ url_for('admin.start_rollover', conn_id=c.id) }}">{{ csrf() }}<button class="primary sm">{{ icon('refresh') }} Replace certificate</button></form></div>
+  {% endif %}
+
+  {% if c.old_thumbprint and not c.next_thumbprint %}
+  <div class="callout" role="status">{{ icon('shield') }}<div class="grow"><strong>Last step: remove the old certificate from Entra.</strong>
+    Collection has used the new certificate since {{ ts(c.switched_at) }}. Until the old one is deleted from the app registration, its key can still sign in as the app.
+    In the Entra admin centre: <em>App registrations → {{ c.name }} → Certificates &amp; secrets → Certificates</em>, delete the one with thumbprint <span class="mono small">{{ c.old_thumbprint }}</span>.</div>
+    <form method="post" action="{{ url_for('admin.old_certificate_removed', conn_id=c.id) }}">{{ csrf() }}<button class="sm">I've removed it</button></form></div>
+  {% endif %}
+
   <dl class="kv">
     <dt>Certificate</dt><dd><span class="mono small">{{ c.thumbprint }}</span> · <a href="{{ url_for('admin.download_certificate', conn_id=c.id) }}">{{ icon('download') }} Download .cer</a></dd>
-    <dt>Expires</dt><dd>{{ c.not_after|day }}</dd>
+    <dt>Expires</dt><dd>{{ c.not_after|day }}{% if e %} <span class="muted">({{ e.relative }})</span>{% endif %}</dd>
     <dt>Microsoft cloud</dt><dd>{{ cloud_of(c).label }}{% if not cloud_of(c).is_default %} · register this app at <span class="mono small">{{ cloud_of(c).admin_centre }}</span>{% endif %}</dd>
   </dl>
+
+  {% if c.next_thumbprint %}{% set tested = c.next_checked_at %}
+  <div class="rollover">
+    <h3>Replacing the certificate</h3>
+    <p class="muted small">Collection keeps using the current certificate until you switch, so nothing stops in between.</p>
+    <ol class="setup-steps flush-steps">
+      <li class="done"><div class="step-title">New certificate made</div>
+        <div class="step-body"><span class="mono small">{{ c.next_thumbprint }}</span>, valid until {{ c.next_not_after|day }}.</div></li>
+      <li class="{{ 'done' if tested else 'current' }}"><div class="step-title">Add it to the app registration, next to the old one</div>
+        <div class="step-body">In the Entra admin centre{% if not cloud_of(c).is_default %} (<span class="mono small">{{ cloud_of(c).admin_centre }}</span>){% endif %}: <em>App registrations → {{ c.name }} → Certificates &amp; secrets → Certificates → Upload certificate</em>, and choose the new .cer. Leave the old certificate there for now.
+          <div class="step-action"><a class="btn sm" href="{{ url_for('admin.download_certificate', conn_id=c.id, which='next') }}">{{ icon('download') }} Download new .cer</a></div></div></li>
+      <li class="{{ 'done' if tested else '' }}"><div class="step-title">Test it</div>
+        <div class="step-body">{% if tested %}Signed in with the new certificate {{ ts(c.next_checked_at) }}.{% else %}Office Sentry signs in with the new certificate and reads the tenant's name. Nothing is changed. A newly uploaded certificate can take 5 to 10 minutes to work.{% endif %}
+          <form method="post" action="{{ url_for('admin.test_rollover', conn_id=c.id) }}" class="form-row step-form">{{ csrf() }}
+            <label>Tenant to sign in to <input name="tenant_ref" value="{{ test_tenant.get(c.id) or '' }}" placeholder="Your Directory (tenant) ID" class="mono" autocomplete="off" required></label>
+            <button class="{{ '' if tested else 'primary' }}">{{ 'Test again' if tested else 'Test new certificate' }}</button></form></div></li>
+      <li class="{{ 'current' if tested else '' }}"><div class="step-title">Switch to it</div>
+        <div class="step-body">Collection signs in with the new certificate from then on. Afterwards you delete the old one from the app registration.
+          <div class="step-action">
+            <form method="post" action="{{ url_for('admin.switch_rollover', conn_id=c.id) }}" class="inline">{{ csrf() }}<button class="primary"{% if not tested %} disabled title="Test the new certificate first"{% endif %}>Switch to the new certificate</button></form>
+            <form method="post" action="{{ url_for('admin.cancel_rollover', conn_id=c.id) }}" class="inline">{{ csrf() }}<button class="ghost sm">Cancel replacement</button></form>
+          </div></div></li>
+    </ol>
+  </div>
+  {% endif %}
+
   <form method="post" action="{{ url_for('admin.set_client_id', conn_id=c.id) }}" class="form-row step-form">
     {{ csrf() }}
     <label>Application (client) ID <input name="client_id" value="{{ c.client_id or '' }}" placeholder="00000000-0000-0000-0000-000000000000" required class="mono" autocomplete="off"></label>
     <label>Directory (tenant) ID <input name="home_tenant" placeholder="Optional: tests the certificate" class="mono" autocomplete="off"></label>
     <button>{{ 'Update' if c.client_id else 'Save' }}</button>
   </form>
+
+  {% if c.client_id and not c.next_thumbprint and not (e and e.level) %}
+  <details class="by-hand small">
+    <summary>Replace this certificate</summary>
+    <p class="muted">Do this before it expires, or straight away if the private key may have leaked (see <em>Certificate leaked</em> in SECURITY.md). You add the new certificate next to the old one, test it and switch, so collection doesn't stop.</p>
+    <form method="post" action="{{ url_for('admin.start_rollover', conn_id=c.id) }}">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Replace certificate</button></form>
+  </details>
+  {% endif %}
 </section>
 {% endfor %}
 
