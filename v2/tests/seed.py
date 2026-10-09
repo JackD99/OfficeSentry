@@ -32,8 +32,10 @@ def exchange_callback(data):
         body = json.loads(request.body)["CmdletInput"]
         name, params = body["CmdletName"], body.get("Parameters") or {}
         result = data.get(name, [])
-        if isinstance(result, dict):  # keyed by Identity
-            result = result.get(params.get("Identity"), [])
+        if isinstance(result, tuple):  # (status, error body)
+            return result[0], {}, json.dumps(result[1])
+        if isinstance(result, dict):  # keyed by Identity (or Mailbox)
+            result = result.get(params.get("Identity") or params.get("Mailbox"), [])
         return 200, {}, json.dumps({"value": result})
     return callback
 
@@ -101,12 +103,6 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
         return 200, {}, json.dumps({"value": rules.get(uid, [])})
     rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/inbox/messageRules"),
                       callback=messages, content_type="application/json")
-
-    def folder(request):
-        fid = request.path_url.split("?")[0].split("/")[5]
-        return 200, {}, json.dumps(gd.FOLDERS.get(fid, {"displayName": fid}))
-    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/(?!inbox)[^/?]+"),
-                      callback=folder, content_type="application/json")
     rsps.get(f"{V1}/auditLogs/signIns", json={"value": gd.LEGACY_SIGNINS})
     if exchange is not False:
         mock_exchange(rsps, exchange)
@@ -163,7 +159,10 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
     rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
-    rsps.get(f"{BETA}/auditLogs/signIns", json={"value": gd.SIGNINS if signins is None else signins})
+    # The whole sign-in log, legacy clients included: the legacy sign-in collector reads them from the stored
+    # log once it covers 30 days (the /v1.0 query above is its fallback until then).
+    rsps.get(f"{BETA}/auditLogs/signIns",
+             json={"value": [*gd.SIGNINS, *gd.LEGACY_SIGNINS] if signins is None else signins})
     rsps.get(f"{V1}/identityProtection/riskyUsers",
              json={"value": gd.RISKY_USERS if risky_users is None else risky_users})
     mock_phase4(rsps, **phase4)
@@ -175,7 +174,10 @@ def exchange_factory(tenant, connection):
     return ExchangeClient(tenant["tenant_ref"], lambda: "t", sleep=lambda s: None)
 
 
-def seed_tenant(db, tenant_id, dns=None, **kwargs):
+def seed_tenant(db, tenant_id, dns=None, precompute=False, **kwargs):
+    """Collect every source for the tenant from ``graphdata``, as the worker would. The collection
+    queues the tenant's precomputed rows; they're dropped unless ``precompute``, so tests of other
+    background tasks see only their own."""
     factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
             patch("officesentry.dnscheck.lookup", dns or gd.fake_dns):
@@ -184,3 +186,5 @@ def seed_tenant(db, tenant_id, dns=None, **kwargs):
             store.enqueue_run(db, tenant_id, key)
         while (run := store.claim_next_run(db)) is not None:
             assert execute_run(db, run, factory, exchange_factory) in ("succeeded", "partial"), run["collector"]
+    if not precompute:
+        db.execute("DELETE FROM tasks WHERE kind = 'precompute' AND status = 'queued'")

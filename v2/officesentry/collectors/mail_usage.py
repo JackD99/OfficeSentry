@@ -5,7 +5,10 @@ than Graph's mailbox usage report: Microsoft hides names in usage reports by
 default, so that report usually can't be matched to a mailbox.
 
 Legacy sign-ins (SMTP AUTH, IMAP, POP and other basic-auth clients) come from
-the Entra sign-in log, which needs Entra ID P1 and keeps 30 days. They are
+the Entra sign-in log, which needs Entra ID P1 and keeps 30 days. Once the
+activity history (``events.py``, filled by ``sign_ins.read_log``, which this
+collector also calls) holds every sign-in of those 30 days, they come from
+there with no query of their own. Until then they are
 asked for in one query filtered on every legacy client; if Microsoft times out
 on that, the 30 days are halved (newest first) until the queries succeed, then
 the client list for a day that still fails, and the results are merged into the
@@ -17,7 +20,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from .. import store
+from .. import events, store
 from ..exchange import ExchangeAccessDenied, ExchangeError
 from ..graph import GraphError, LicenseRequired, PermissionMissing, is_transient
 from ..mailflow import size_bytes
@@ -105,20 +108,30 @@ class LegacySignIns(Collector):
             ctx.log("Tenant has no Entra ID P1; the sign-in log isn't available")
             ctx.objects("legacy_signin_status", [("status", {"available": False})])
             return
-        since = (datetime.now(UTC) - timedelta(days=SIGNIN_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        skipped: list[str] = []
+        now = events.clock().replace(microsecond=0)
+        start = now - timedelta(days=SIGNIN_DAYS)
+        since = _iso(start)
         try:
-            items, truncated, split = fetch_legacy_signins(ctx, since, LEGACY_CLIENTS, skipped)
+            got = sign_ins.read_log(ctx)
         except (LicenseRequired, PermissionMissing) as exc:
             ctx.warn(f"The sign-in log isn't available: {exc.message}")
             ctx.objects("legacy_signin_status", [("status", {"available": False})])
             return
-        if split:
-            # Each smaller query is newest first; merge them into one list as the big query would have.
-            items.sort(key=lambda s: str(s.get("createdDateTime") or ""), reverse=True)
-            if len(items) > SIGNIN_PAGES * 1000:
-                del items[SIGNIN_PAGES * 1000:]
-                truncated = True
+        except GraphError as exc:
+            if not is_transient(exc):
+                raise
+            got = None
+            ctx.log(f"Couldn't bring the stored sign-ins up to date ({exc}); asking for legacy sign-ins directly")
+        if got and not got.coverage.missing(int(start.timestamp()), int(now.timestamp())):
+            # The activity history holds every sign-in of the 30 days: no query of its own needed.
+            items = [s for s in events.signins_between(ctx.conn, ctx.tenant["id"], start, now)
+                     if s.get("clientAppUsed") in LEGACY_CLIENTS]
+            ctx.log(f"Found {plural(len(items), 'legacy sign-in')} in the stored sign-in log")
+            truncated, skipped = False, []
+        else:
+            items, truncated, skipped = self._query(ctx, since)
+            if items is None:
+                return
         if skipped:
             ctx.warn("Microsoft's sign-in log timed out for these clients, so some or all of their sign-ins are "
                      "missing: " + ", ".join(skipped))
@@ -130,6 +143,24 @@ class LegacySignIns(Collector):
         ctx.objects("legacy_signin", rows)
         ctx.metric("mail.legacy_signins", len(items))
         ctx.metric("mail.legacy_signins_succeeded", sum(r["succeeded"] for _, r in rows))
+
+    @staticmethod
+    def _query(ctx: RunContext, since: str) -> tuple[list[dict] | None, bool, list[str]]:
+        """Legacy sign-ins asked for directly, while the stored history doesn't cover the 30 days yet."""
+        skipped: list[str] = []
+        try:
+            items, truncated, split = fetch_legacy_signins(ctx, since, LEGACY_CLIENTS, skipped)
+        except (LicenseRequired, PermissionMissing) as exc:
+            ctx.warn(f"The sign-in log isn't available: {exc.message}")
+            ctx.objects("legacy_signin_status", [("status", {"available": False})])
+            return None, False, []
+        if split:
+            # Each smaller query is newest first; merge them into one list as the big query would have.
+            items.sort(key=lambda s: str(s.get("createdDateTime") or ""), reverse=True)
+            if len(items) > SIGNIN_PAGES * 1000:
+                del items[SIGNIN_PAGES * 1000:]
+                truncated = True
+        return items, truncated, skipped
 
 
 def fetch_legacy_signins(ctx: RunContext, since: str, clients: tuple[str, ...] | list[str],

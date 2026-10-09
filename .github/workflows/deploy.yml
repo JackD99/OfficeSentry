@@ -8,6 +8,11 @@ name: Deploy
 # pass updates them (a change to the docs alone, the website straight away), while the portal only updates
 # when someone runs "deploy", or on every merge too once AUTO_DEPLOY is "true".
 #
+# With the PRODUCTION_FROM_TAGS variable set to "true", the portal only takes release tags (v2.1.0), as the
+# published image pinned by its digest, and merges never deploy it, whatever AUTO_DEPLOY says. The website
+# and demo still follow main. Unset, a deploy builds the chosen ref on the server (v2/DEPLOY.md, "Production
+# from releases").
+#
 # Run logs will be public once the repository is, so nothing here prints the
 # first-admin link, the portal's logs or a secret: the status action reports
 # health and error counts only.
@@ -18,9 +23,9 @@ on:
         description: What to do
         type: choice
         default: deploy
-        options: [deploy, website-and-demo, status, setup-link, backup, restart]
+        options: [deploy, website-and-demo, status, setup-link, backup, restore-drill, restart]
       ref:
-        description: Branch, tag or commit to deploy (deploy and website-and-demo)
+        description: Branch, tag or commit to deploy (deploy and website-and-demo; a release tag such as v2.1.0 for the portal when PRODUCTION_FROM_TAGS is on)
         default: main
   # Deploy main after its tests pass, once AUTO_DEPLOY is set to "true".
   workflow_run:
@@ -73,21 +78,29 @@ jobs:
       (github.event_name == 'push' && vars.OFFICESENTRY_WEBSITE_DOMAIN != '') ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
        && needs.latest.outputs.ok == 'true'
-       && (vars.AUTO_DEPLOY == 'true' || vars.DEMO_ENABLED == 'true' || vars.OFFICESENTRY_WEBSITE_DOMAIN != '')))
+       && ((vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true') || vars.DEMO_ENABLED == 'true' || vars.OFFICESENTRY_WEBSITE_DOMAIN != '')))
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      # Only to read the release image's digest and pull it (PRODUCTION_FROM_TAGS).
+      packages: read
     env:
-      # A merge whose tests pass: the portal too with AUTO_DEPLOY on, otherwise just the website and demo.
-      ACTION: ${{ inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo' }}
-      DEPLOYS: ${{ (inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo') == 'deploy' }}
+      # A merge whose tests pass: the portal too with AUTO_DEPLOY on (and PRODUCTION_FROM_TAGS off), otherwise
+      # just the website and demo.
+      ACTION: ${{ inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo' }}
+      DEPLOYS: ${{ (inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') == 'deploy' }}
+      REF: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
+      RELEASES_ONLY: ${{ vars.PRODUCTION_FROM_TAGS == 'true' }}
+      IMAGE: ghcr.io/jackd99/officesentry
       HOST: ${{ vars.DEPLOY_HOST }}
       # The public demo (v2/deploy/public/) runs while DEMO_ENABLED is "true". Deploys and website-and-demo
       # runs rebuild it from their code (a docs-only change leaves it), and it starts afresh every night by itself.
       DEMO_DOMAIN: ${{ vars.DEMO_ENABLED == 'true' && vars.OFFICESENTRY_DEMO_DOMAIN || '' }}
-      DEMO: ${{ vars.DEMO_ENABLED == 'true' && github.event_name != 'push' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo') }}
+      DEMO: ${{ vars.DEMO_ENABLED == 'true' && github.event_name != 'push' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') }}
       # The website (website/) is built and copied over by the same runs while this is set.
       WEBSITE_DOMAIN: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
-      SITE: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN != '' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo') }}
+      SITE: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN != '' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') }}
       FIREWALL: ${{ vars.HCLOUD_FIREWALL || 'officesentry' }}
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
       API: https://api.hetzner.cloud/v1
@@ -99,6 +112,10 @@ jobs:
           HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
           SETUP_CODE: ${{ secrets.SETUP_CODE }}
           DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
+          BACKUP_REPOSITORY: ${{ vars.BACKUP_REPOSITORY }}
+          HAS_BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD != '' }}
+          HAS_BACKUP_KEY_ID: ${{ secrets.BACKUP_KEY_ID != '' }}
+          HAS_BACKUP_SECRET_KEY: ${{ secrets.BACKUP_SECRET_KEY != '' }}
         run: |
           missing=""
           [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (variable)"
@@ -116,15 +133,44 @@ jobs:
             echo "::error::There's no website or public demo to update: set OFFICESENTRY_WEBSITE_DOMAIN, or OFFICESENTRY_DEMO_DOMAIN and DEMO_ENABLED (v2/deploy/public/README.md)."
             exit 1
           fi
+          # Off-site backups are optional, but half set up they'd fail every night.
+          if [ "$DEPLOYS" = true ] && [ -n "$BACKUP_REPOSITORY" ]; then
+            [ "$HAS_BACKUP_PASSWORD" = true ] || missing="$missing BACKUP_PASSWORD (secret)"
+            [ "$HAS_BACKUP_KEY_ID" = true ] || missing="$missing BACKUP_KEY_ID (secret)"
+            [ "$HAS_BACKUP_SECRET_KEY" = true ] || missing="$missing BACKUP_SECRET_KEY (secret)"
+          fi
           if [ -n "$missing" ]; then
             echo "::error::Set these under Settings > Secrets and variables > Actions:$missing"
             exit 1
           fi
 
+      # With PRODUCTION_FROM_TAGS on, the portal only takes a release tag, as the image the release workflow
+      # published, pinned by digest, so what runs is exactly what was built, scanned and tagged.
+      - name: Find the release image
+        if: env.DEPLOYS == 'true' && env.RELEASES_ONLY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$REF" > /dev/null 2>&1; then
+            echo "::error::The portal only takes release tags while PRODUCTION_FROM_TAGS is on. Type a release tag such as v2.1.0 in the ref box (the Releases page lists them); for the website and demo, run website-and-demo instead. v2/DEPLOY.md, \"Production from releases\", has the steps."
+            exit 1
+          fi
+          version=${REF#v}
+          token=$(curl -fsS -u "$GITHUB_ACTOR:$GH_TOKEN" "https://ghcr.io/token?service=ghcr.io&scope=repository:${IMAGE#ghcr.io/}:pull" | jq -r .token || true)
+          digest=$(curl -fsS -o /dev/null -D - -H "Authorization: Bearer $token" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/$version" | tr -d '\r' | sed -n 's/^docker-content-digest: *//Ip' || true)
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::There's no published image for $REF. Make the release first (Actions > release > Run workflow; CONTRIBUTING.md, \"Releases\"), then deploy it."
+            exit 1
+          fi
+          echo "RELEASE_DIGEST=$digest" >> "$GITHUB_ENV"
+          echo "Deploying release $REF to the portal: \`$IMAGE:$version@$digest\`" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@v7
         if: env.DEPLOYS == 'true' || env.SITE == 'true' || env.DEMO == 'true'
         with:
-          ref: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
+          ref: ${{ env.REF }}
 
       - name: Write the server's settings files
         if: env.DEPLOYS == 'true'
@@ -134,17 +180,33 @@ jobs:
           EXTRA: ${{ vars.OFFICESENTRY_SETTINGS }}
           # A secret, so the addresses stay out of the run logs, which will be public with the repository.
           PORTAL_IPS: ${{ secrets.PORTAL_ALLOWED_IPS }}
+          BACKUP_REPOSITORY: ${{ vars.BACKUP_REPOSITORY }}
+          BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+          BACKUP_KEY_ID: ${{ secrets.BACKUP_KEY_ID }}
+          BACKUP_SECRET_KEY: ${{ secrets.BACKUP_SECRET_KEY }}
+          BACKUP_PING_URL: ${{ secrets.BACKUP_PING_URL }}
+          UPTIME_PING_URL: ${{ secrets.UPTIME_PING_URL }}
         run: |
           umask 077
-          files=docker-compose.yml:docker-compose.build.yml
+          # The backup settings are written single-quoted, so docker compose takes $ and # in them literally.
+          for name in BACKUP_REPOSITORY BACKUP_PASSWORD BACKUP_KEY_ID BACKUP_SECRET_KEY BACKUP_PING_URL UPTIME_PING_URL; do
+            if [[ "${!name}" == *"'"* || "${!name}" == *$'\n'* ]]; then
+              echo "::error::$name can't contain a single quote (') or a line break. Make a new one without, then run this again."
+              exit 1
+            fi
+          done
+          # A release runs its published image; anything else is built on the server from the deployed commit.
+          if [ -n "${RELEASE_DIGEST:-}" ]; then files=docker-compose.yml; else files=docker-compose.yml:docker-compose.build.yml; fi
           # The website and public demo (deploy/public/) share Caddy with the portal; older commits don't have them.
           if [ -n "$DEMO_DOMAIN$WEBSITE_DOMAIN" ] && [ -f v2/deploy/public/compose.yml ]; then files="$files:deploy/public/compose.yml"; fi
           {
             echo "# Written by the Deploy workflow; edit the repository variables instead."
             # docker compose reads this too: which optional parts run.
             if [ -n "$DEMO_DOMAIN" ]; then echo "COMPOSE_PROFILES=https,demo"; else echo "COMPOSE_PROFILES=https"; fi
-            # And which files: this server builds the deployed commit itself rather than pulling a release.
+            # And which files: the release's image, or a build of the deployed commit.
             echo "COMPOSE_FILE=$files"
+            # The published image by digest (the version in front is only for people reading it).
+            if [ -n "${RELEASE_DIGEST:-}" ]; then echo "OFFICESENTRY_VERSION=${REF#v}@$RELEASE_DIGEST"; fi
             echo "OFFICESENTRY_DOMAIN=$DOMAIN"
             echo "OFFICESENTRY_DEMO_DOMAIN=$DEMO_DOMAIN"
             echo "OFFICESENTRY_WEBSITE_DOMAIN=$WEBSITE_DOMAIN"
@@ -154,6 +216,22 @@ jobs:
             echo "OFFICESENTRY_TRUSTED_PROXIES=1"
             printf '%s\n' "$EXTRA"
           } > v2/.env
+          # Off-site backups (v2/DEPLOY.md, "Off-site backups"): restic's settings, read only by its own
+          # container and deploy/jobs.sh, never by the portal. Empty when they aren't set up.
+          {
+            echo "# Written by the Deploy workflow; edit the repository variables and secrets instead."
+            if [ -n "$BACKUP_REPOSITORY" ]; then
+              echo "RESTIC_REPOSITORY='$BACKUP_REPOSITORY'"
+              echo "RESTIC_PASSWORD='$BACKUP_PASSWORD'"
+              echo "AWS_ACCESS_KEY_ID='$BACKUP_KEY_ID'"
+              echo "AWS_SECRET_ACCESS_KEY='$BACKUP_SECRET_KEY'"
+            fi
+            if [ -n "$BACKUP_PING_URL" ]; then echo "BACKUP_PING_URL='$BACKUP_PING_URL'"; fi
+          } > v2/.env.backup
+          {
+            echo "# Written by the Deploy workflow; edit the repository secrets instead."
+            if [ -n "$UPTIME_PING_URL" ]; then echo "UPTIME_PING_URL='$UPTIME_PING_URL'"; fi
+          } > v2/.env.uptime
 
       - uses: actions/setup-python@v7
         if: env.SITE == 'true'
@@ -252,6 +330,16 @@ jobs:
             v2/ server:/opt/officesentry/demo-src/
           ssh server 'bash /opt/officesentry/demo-src/deploy/public/build-demo.sh'
 
+      # The run's own token, good for this job only, pulls the private image; the server forgets it again
+      # straight after.
+      - name: Pull the release image
+        if: env.DEPLOYS == 'true' && env.RELEASES_ONLY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | ssh server "docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin" > /dev/null
+          ssh server "docker pull -q '$IMAGE@$RELEASE_DIGEST'; status=\$?; docker logout ghcr.io > /dev/null; exit \$status"
+
       - name: Build and start
         if: env.DEPLOYS == 'true'
         run: |
@@ -293,9 +381,17 @@ jobs:
           printf '%s' "$SETUP_CODE" | ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web sh -c "umask 077 && cat > /data/setup-token"'
           echo "Open https://$DOMAIN/setup and enter your SETUP_CODE secret as the setup code." | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Back up the database
-        if: env.ACTION == 'backup'
-        run: ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup --keep 14'
+      # backup: a database copy now, then the off-site copy when it's set up.
+      # restore-drill: restore the newest off-site copy to a scratch volume and check it.
+      - name: Back up, or run the restore drill
+        if: env.ACTION == 'backup' || env.ACTION == 'restore-drill'
+        run: |
+          if ! ssh server 'test -f /opt/officesentry/v2/deploy/jobs.sh'; then
+            echo "::error::The server's code is from before off-site backups. Deploy once, then run this again."
+            exit 1
+          fi
+          if [ "$ACTION" = backup ]; then job=now; else job=drill; fi
+          ssh server "cd /opt/officesentry/v2 && bash deploy/jobs.sh $job"
 
       - name: Restart
         if: env.ACTION == 'restart'
@@ -311,6 +407,7 @@ jobs:
           docker compose ps --format 'table {{.Service}}\t{{.Status}}'
           df -h / | awk 'NR == 2 {print "Disk: " $5 " used, " $4 " free"}'
           docker compose exec -T worker python -m officesentry healthcheck worker 2>&1 && echo "Worker: checked in recently"
+          docker compose exec -T web python -m officesentry backup-status 2>/dev/null || true
           for service in web worker; do
             n=$(docker compose logs --since 24h --no-log-prefix "$service" 2>/dev/null | grep -cE ' (ERROR|CRITICAL) |\[(ERROR|CRITICAL)\]' || true)
             echo "Errors logged by $service in the last 24 hours: $n"

@@ -18,7 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from .. import authmethods, devices, identity_protection, signins, store
+from .. import adminactivity, authmethods, devices, identity_protection, signins, store
+from .. import events as events_store
 from ..licences import (
     FREE_SKUS,
     Assignment,
@@ -63,6 +64,7 @@ from .monthly_review import setting
 SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 INACTIVE_DAYS = 90
 HISTORY_LIMIT = 60
+SIGNIN_HISTORY_DAYS = 365  # months shown under Sign-in history
 
 
 @dataclass
@@ -183,6 +185,27 @@ class Person:
 
     def named(self, value) -> bool:
         return isinstance(value, str) and value.lower() in self.keys
+
+    @property
+    def end(self) -> datetime:
+        """Where the activity history is read up to: the snapshot's date, or now."""
+        return devices.parse_ts(self.snap.as_of) or self.now
+
+    def admin_history(self) -> tuple[list[dict], str] | None:
+        """Admin changes by or to this account from the activity history (newest first) and the period they
+        cover in words; None when the tenant's audit log has never been read into it."""
+        if not hasattr(self, "_admin_history"):
+            found = adminactivity.from_history(self.snap.conn, self.snap.tenant["id"],
+                                               self.end - timedelta(days=adminactivity.HISTORY_DAYS), self.end)
+            if found is None:
+                self._admin_history = None
+            else:
+                mine = [e for e in found[0]
+                        if self.named(e.get("actor")) or any(self.named(t) for t in e.get("targets") or [])]
+                span = (self.end - datetime.fromtimestamp(found[1].detailed_from, UTC)).days
+                self._admin_history = (mine, "the last 12 months" if span >= adminactivity.HISTORY_DAYS
+                                       else f"the last {max(span, 1)} days")
+        return self._admin_history
 
 
 Builder = Callable[[Person], Part | None]
@@ -870,23 +893,29 @@ def activity_part(p: Person) -> Part:
         result.facts.append(("Legacy sign-ins (30 days)", "None"))
 
     window = (p.snap.objects("admin_activity", "audit_window") or [None])[0]
+    history = p.admin_history()
+    period = history[1] if history else "the last 30 days"
     events = []
-    for e in p.snap.objects("admin_activity", "admin_event") or []:
+    for e in history[0] if history else p.snap.objects("admin_activity", "admin_event") or []:
         by = p.named(e.get("actor"))
         to = any(p.named(t) for t in e.get("targets") or [])
         if by or to:
             events.append((e, by))
     if events:
-        table = Section("Admin changes in the last 30 days", ["When (UTC)", "Change", "By", "Target", "Detail"],
+        table = Section(f"Admin changes in {period}", ["When (UTC)", "Change", "By", "Target", "Detail"],
                         compare=False)
         for e, by in sorted(events, key=lambda x: x[0].get("time") or "", reverse=True):
             table.add([(e.get("time") or "")[:16].replace("T", " "), e.get("activity"), e.get("actor"),
                        ", ".join(e.get("targets") or []), e.get("detail")],
                       "medium" if e.get("kind") in ("role_grant",) and not by else None)
         result.tables.append(table)
-    elif window and window.get("available"):
-        result.facts.append(("Admin changes (30 days)", "None by or to this account"))
-    result.note = ("Office Sentry doesn't keep the full sign-in log; the last week is summarised under Recent "
+    elif history or (window and window.get("available")):
+        result.facts.append((f"Admin changes ({period.removeprefix('the ')})", "None by or to this account"))
+    kept = events_store.coverage(p.snap.conn, p.snap.tenant["id"], "signins").detailed_from
+    result.note = (f"Office Sentry keeps this tenant's sign-in log from {datetime.fromtimestamp(kept, UTC):%-d %b %Y}: "
+                   "each day is under Sign-in history, and the last week in detail under Recent sign-ins. Legacy "
+                   "sign-ins and the last sign-in dates show here." if kept is not None else
+                   "Office Sentry doesn't keep the full sign-in log; the last week is summarised under Recent "
                    "sign-ins, and legacy sign-ins and the last sign-in dates show here.")
     return result
 
@@ -1001,6 +1030,52 @@ def sign_ins_part(p: Person) -> Part | None:
     result.tone = "bad" if worst else ("warn" if failed >= signins.REPEATED_FAILURES or odd else None)
     result.note = (f"Interactive sign-ins in the last {days} days from the Entra ID sign-in log. MFA and other "
                    "prompts aren't counted as failures.")
+    return result
+
+
+@part(87)
+def sign_in_history_part(p: Person) -> Part | None:
+    """Month by month from the activity history's daily sign-in summaries, back as far as they're kept."""
+    first = events_store.coverage(p.snap.conn, p.snap.tenant["id"], "signins").detailed_from
+    if first is None:
+        return None
+    kept = datetime.fromtimestamp(first, UTC)
+    start = max(kept, p.end - timedelta(days=SIGNIN_HISTORY_DAYS))
+    rows = events_store.daily_for(p.snap.conn, p.snap.tenant["id"], {p.id, *p.keys},
+                                  f"{start:%Y-%m-%d}", f"{p.end:%Y-%m-%d}")
+    result = Part("signin_history", "Sign-in history")
+    result.note = (f"Every interactive sign-in since {kept:%-d %b %Y}, from the activity history's daily "
+                   "summaries, kept as long as Data retention says (25 months by default).")
+    if not rows:
+        result.summary, result.empty = "None", f"No interactive sign-ins since {start:%-d %b %Y}."
+        return result
+    recent = f"{p.end - timedelta(days=30):%Y-%m-%d}"
+    days_30 = {r.day for r in rows if r.day > recent}
+    result.summary = f"Signed in on {_plural(len(days_30), 'day')} of the last 30"
+    result.facts.append(("History from", f"{kept:%-d %b %Y}"))
+    result.facts.append(("Last sign-in", _when(max(r.last for r in rows), p.now)))
+    countries = sorted({r.country for r in rows if r.country})
+    if countries:
+        result.facts.append(("Countries", ", ".join(countries)))
+    months: dict[str, dict] = {}
+    for r in rows:
+        m = months.setdefault(r.day[:7], {"days": set(), "ok": 0, "failed": 0, "mfa": 0, "single": 0,
+                                          "countries": set()})
+        m["days"].add(r.day)
+        m["ok"] += r.succeeded
+        m["failed"] += r.failed
+        m["mfa"] += r.mfa
+        m["single"] += r.single_factor
+        if r.country:
+            m["countries"].add(r.country)
+    table = Section("Sign-ins by month", ["Month", "Days", "Successful", "Failed", "With MFA", "Password only",
+                                          "Countries"], compare=False)
+    for month in sorted(months, reverse=True):
+        m = months[month]
+        table.add([f"{datetime.strptime(month, '%Y-%m'):%b %Y}", len(m["days"]), m["ok"], m["failed"], m["mfa"],
+                   m["single"], sorted(m["countries"])],
+                  "low" if m["single"] and (p.admin or not m["mfa"]) else None)
+    result.tables.append(table)
     return result
 
 
@@ -1375,7 +1450,8 @@ def timeline(p: Person) -> list[_Happened]:
     def first(at, oldest, area, text, tone=None):
         out.append(_Happened(at, _first_seen(at, oldest), area, text, tone))
 
-    for e in p.snap.objects("admin_activity", "admin_event") or []:
+    history = p.admin_history()
+    for e in history[0] if history else p.snap.objects("admin_activity", "admin_event") or []:
         by = p.named(e.get("actor"))
         if not by and not any(p.named(t) for t in e.get("targets") or []):
             continue
@@ -1406,12 +1482,24 @@ def timeline(p: Person) -> list[_Happened]:
             timed(s.get("lastAttempt"), "Sign-in", f"Legacy sign-in with {s.get('client') or 'an old protocol'}: "
                   f"{s.get('succeeded') or 0} succeeded, {s.get('failed') or 0} failed",
                   "warn" if s.get("succeeded") else None)
-    places, oldest, _ = _sightings(conn, tid, "sign_ins", "sign_in_location", "userId", p.id)
-    for copies in places.values():
-        at = copies[0][0]
-        if oldest and at > oldest:  # a country this account hadn't signed in from before
-            first(at, oldest, "Sign-in", f"First sign-in from {signins.country(copies[-1][1].get('country'))} seen",
-                  "warn")
+    kept = events_store.coverage(conn, tid, "signins").detailed_from
+    if kept is not None:
+        # The activity history has every day: the first day each country shows up, exactly.
+        start = datetime.fromtimestamp(kept, UTC)
+        firsts: dict[str, str] = {}
+        for r in events_store.daily_for(conn, tid, {p.id, *p.keys}, f"{start:%Y-%m-%d}", f"{p.end:%Y-%m-%d}"):
+            if r.country and r.succeeded and r.country not in firsts:
+                firsts[r.country] = r.first
+        for country, at in firsts.items():
+            if at[:10] > f"{start + timedelta(days=1):%Y-%m-%d}":  # not just where the history starts
+                timed(at, "Sign-in", f"First sign-in from {signins.country(country)}", "warn")
+    else:
+        places, oldest, _ = _sightings(conn, tid, "sign_ins", "sign_in_location", "userId", p.id)
+        for copies in places.values():
+            at = copies[0][0]
+            if oldest and at > oldest:  # a country this account hadn't signed in from before
+                first(at, oldest, "Sign-in", f"First sign-in from {signins.country(copies[-1][1].get('country'))} "
+                      "seen", "warn")
 
     domains = tenant_domains(p.snap) or set()
     rules, oldest, latest = _sightings(conn, tid, "inbox_rules", "inbox_rule", "mailboxId", p.id)

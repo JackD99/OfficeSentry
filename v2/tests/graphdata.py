@@ -231,9 +231,10 @@ INBOX_RULES = {
          "actions": {"redirectTo": [{"emailAddress": {"address": "boss@x.com"}}]}},
     ],
 }
-FOLDERS = {"fid-rss": {"displayName": "RSS Feeds"}}
 
 EXCHANGE = {
+    # Graph's rule IDs here aren't real ones, so the rule's name finds its folder.
+    "Get-InboxRule": {"u1": [{"Name": ".", "RuleIdentity": 1, "MoveToFolder": "RSS Feeds"}]},
     "Get-AcceptedDomain": [{"DomainName": "x.com", "DomainType": "Authoritative", "Default": True}],
     "Get-Mailbox": [
         {"ExternalDirectoryObjectId": "u1", "Guid": "g-u1", "UserPrincipalName": "ann@x.com",
@@ -257,11 +258,21 @@ EXCHANGE = {
     "Get-RemoteDomain": [{"Name": "Default", "DomainName": "*", "AutoForwardEnabled": True}],
     "Get-Recipient": [],
 }
+# Sign-ins happen in the last few days, whenever the tests run: the activity history keeps the
+# sign-in log by date, and the summaries cover the last week of it.
+SIGNIN_BASE = (datetime.now(UTC) - timedelta(days=1)).date()
+
+
+def _on(days_back: int, hhmm: str) -> str:
+    """A sign-in time ``days_back`` days before yesterday."""
+    return f"{SIGNIN_BASE - timedelta(days=days_back)}T{hhmm}:00Z"
+
+
 LEGACY_SIGNINS = [
-    {"createdDateTime": "2026-09-30T10:00:00Z", "userPrincipalName": "info@x.com", "userId": "u7",
+    {"id": "legacy-1", "createdDateTime": _on(2, "10:00"), "userPrincipalName": "info@x.com", "userId": "u7",
      "clientAppUsed": "Authenticated SMTP", "appDisplayName": "Office 365 Exchange Online", "ipAddress": "203.0.113.5",
      "location": {"countryOrRegion": "GB"}, "status": {"errorCode": 0}},
-    {"createdDateTime": "2026-09-29T03:00:00Z", "userPrincipalName": "ann@x.com", "userId": "u1",
+    {"id": "legacy-2", "createdDateTime": _on(3, "03:00"), "userPrincipalName": "ann@x.com", "userId": "u1",
      "clientAppUsed": "IMAP4", "ipAddress": "198.51.100.9", "location": {"countryOrRegion": "RU"},
      "status": {"errorCode": 50126, "failureReason": "Invalid username or password."}},
 ]
@@ -287,26 +298,26 @@ def _signin(n, when, upn, uid, code=0, *, app="Office 365 Exchange Online", ip="
 # medium risk where the tenant has P2), Bob's disabled account is being guessed from one address,
 # another address sprays five accounts, and the shared info@ mailbox signs in with only a password.
 SIGNINS = (
-    [_signin(i, f"2026-10-0{1 + i % 2}T{8 + i % 9:02d}:15:00Z", "ann@x.com", "u1",
+    [_signin(i, _on(1 - i % 2, f"{8 + i % 9:02d}:15"), "ann@x.com", "u1",
              app="Microsoft Teams" if i % 3 else "Office 365 Exchange Online") for i in range(25)]
-    + [_signin(30, "2026-10-01T07:00:00Z", "ann@x.com", "u1", mfa=False, app="Azure Portal"),
-       _signin(31, "2026-10-01T07:01:00Z", "ann@x.com", "u1", 50074),
-       _signin(32, "2026-10-01T07:02:00Z", "ann@x.com", "u1", 50140),
-       _signin(33, "2026-09-30T21:40:00Z", "ann@x.com", "u1", ip="198.51.100.40", country="FR", city="Paris",
+    + [_signin(30, _on(1, "07:00"), "ann@x.com", "u1", mfa=False, app="Azure Portal"),
+       _signin(31, _on(1, "07:01"), "ann@x.com", "u1", 50074),
+       _signin(32, _on(1, "07:02"), "ann@x.com", "u1", 50140),
+       _signin(33, _on(2, "21:40"), "ann@x.com", "u1", ip="198.51.100.40", country="FR", city="Paris",
                app="Office 365 SharePoint Online", risk="medium", state="atRisk")]
-    + [_signin(40 + i, f"2026-09-29T02:{10 + i:02d}:00Z", "bob@x.com", "u2", 50126, ip="198.51.100.7",
+    + [_signin(40 + i, _on(3, f"02:{10 + i:02d}"), "bob@x.com", "u2", 50126, ip="198.51.100.7",
                country="RU", city="Moscow", reason="Invalid username or password or Invalid on-premise "
                "username or password.") for i in range(6)]
-    + [_signin(47, "2026-09-29T02:20:00Z", "bob@x.com", "u2", 50053, ip="198.51.100.7", country="RU", city="Moscow"),
-       _signin(48, "2026-09-30T09:00:00Z", "bob@x.com", "u2", 50057, reason="User account is disabled.")]
-    + [_signin(50 + i, f"2026-09-28T23:{i:02d}:00Z", upn, uid, code, ip="203.0.113.66", country="BR",
+    + [_signin(47, _on(3, "02:20"), "bob@x.com", "u2", 50053, ip="198.51.100.7", country="RU", city="Moscow"),
+       _signin(48, _on(2, "09:00"), "bob@x.com", "u2", 50057, reason="User account is disabled.")]
+    + [_signin(50 + i, _on(4, f"23:{i:02d}"), upn, uid, code, ip="203.0.113.66", country="BR",
                city="Sao Paulo")
        for i, (upn, uid, code) in enumerate([("ann@x.com", "u1", 50126), ("bob@x.com", "u2", 50126),
                                              ("info@x.com", "u7", 50126), ("g#EXT#@x.com", "u3", 50126),
                                              ("nobody@x.com", None, 50034)])]
-    + [_signin(60, "2026-10-02T11:00:00Z", "info@x.com", "u7", mfa=False),
-       _signin(61, "2026-10-02T12:00:00Z", "info@x.com", "u7", mfa=False),
-       _signin(62, "2026-10-01T16:00:00Z", "g#EXT#@x.com", "u3", 53003, ip="192.0.2.99", country="US",
+    + [_signin(60, _on(0, "11:00"), "info@x.com", "u7", mfa=False),
+       _signin(61, _on(0, "12:00"), "info@x.com", "u7", mfa=False),
+       _signin(62, _on(1, "16:00"), "g#EXT#@x.com", "u3", 53003, ip="192.0.2.99", country="US",
                city="Seattle", app="Microsoft Teams", reason="Access has been blocked by Conditional Access policies.")]
 )
 

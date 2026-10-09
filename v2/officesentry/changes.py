@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from . import store
+from . import adminactivity, store
 from .devices import clean as clean_device
+from .devices import parse_ts
 
 
 @dataclass
@@ -198,10 +200,31 @@ def group_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return out
 
 
+def audit_changes(conn, tenant_id: int, before: str) -> list[Change]:
+    """Admin changes worth a second look since ``before``, each with its own date, from the activity history
+    (snapshot comparisons only see what differs between two collections)."""
+    since = parse_ts(before)
+    if since is None:
+        return []
+    history = adminactivity.from_history(conn, tenant_id, since, datetime.now(UTC))
+    if history is None:
+        return []
+    out = []
+    for e in sorted(history[0], key=lambda e: e.get("time") or ""):
+        flag = adminactivity.review(e)
+        if not flag:
+            continue
+        targets = ", ".join(e.get("targets") or []) or "the tenant"
+        detail = f"{e.get('activity')} by {e.get('actor') or 'someone'} on {(e.get('time') or '')[:10]}"
+        out.append(Change("Admin activity", "changed", targets, detail + (f": {e['detail']}" if e.get("detail")
+                                                                          else "")))
+    return out
+
+
 def all_changes(conn, tenant_id: int, before: str) -> list[Change]:
     out: list[Change] = []
     for feed in (admin_changes, ca_changes, user_changes, forwarding_changes, app_changes, device_changes,
-                 group_changes):
+                 group_changes, audit_changes):
         try:
             out += feed(conn, tenant_id, before)
         except Exception:  # one unreadable feed mustn't take the monthly review down

@@ -2,7 +2,9 @@
 
 Office Sentry runs as two containers from one image: the **portal** (the
 website) and the **worker** (collects from tenants, sends scheduled emails,
-tidies old data). Everything it stores lives in one Docker volume.
+tidies old data). Everything it stores lives in one Docker volume, and the
+keys that decrypt its stored certificates and passwords in a second one
+([Where the keys are](#where-the-keys-are)).
 
 ## What you need
 
@@ -235,6 +237,9 @@ are overwritten in the database file where that costs no extra I/O
 |---|---|---|
 | Snapshots (every user, mailbox, device and policy from a run) | the last run of each of the last **30 days** (`OFFICESENTRY_KEEP_DAILY`) and of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`) | any number of days and months, or every month forever |
 | Sign-in detail (accounts, IP addresses, countries and cities from the sign-in logs) | as long as its snapshot: about 13 months | 30 days or more |
+| Activity history: every sign-in | **180 days** | 30 days to 10 years |
+| Activity history: daily sign-in summaries | **25 months** | 1 to 120 months, or forever |
+| Activity history: directory audit events | **7 years** | 1 year or more, or forever |
 | Resolved findings | forever | 30 days or more after they were resolved |
 | Run log info lines (warnings and errors always stay) | 90 days | 7 days or more, or forever |
 | Activity log | forever | 365 days or more |
@@ -249,6 +254,12 @@ tenant's latest file of each issued report (month-end reporting compares
 against it) are never deleted by retention. The activity log can't be set
 under a year because it's the record of who changed what and signed in from
 where, which security reviews and investigations look back over.
+
+The **activity history** is each tenant's sign-in and directory audit logs,
+kept beyond the 30 days Microsoft keeps them (7 days for audit events without
+Entra ID P1). It lives in monthly files in `/data/events`, outside the
+database, and a month older than its period is deleted as a whole file.
+Deleting a tenant deletes its rows from every file.
 
 The **activity log** (*Settings → Activity log*, admins only) records sign-ins
 and every change, with the address it came from; filter it by user, action,
@@ -273,6 +284,13 @@ That writes to `/data/backups` inside the volume and keeps the last 7
 it's being made, the uncompressed copy needs room next to it: the backup
 stops with a plain message if the disk is short of about one and a half
 times the database's size.
+
+Each run also brings an `events` folder next to the copies up to date: a
+compressed copy of each activity history file (`/data/events`), copied again
+only when it changed, so a month that's over is copied once. `restore` puts
+back any history file the data folder is missing from the `events` folder next
+to the backup it restores. If you back up the volume some other way, include
+`/data/events`.
 
 **Keep backups off the data volume.** A copy in the same volume is lost with
 the volume. Give the portal a second folder on the host (or a mounted network
@@ -300,8 +318,8 @@ line with `crontab -e` (change the folder):
 
 Each run writes how it went to `/data/backup-status.json`, wherever the copy
 goes. *Settings → System status* shows it, and the team gets a system alert
-when a backup fails or is overdue. Other backup jobs (an off-site copy, a
-restore check) record themselves in the same file under their own names:
+when a backup fails or is overdue. The [off-site copy](#off-site-backups) and
+the [restore drill](#restore-drill) record themselves in the same file:
 
 ```json
 {"local":         {"ok": true,  "last_attempt": "2026-10-09T03:45:02Z", "last_success": "2026-10-09T03:45:02Z",
@@ -316,15 +334,131 @@ A nightly copy (`local`, `offsite`) counts as overdue after 26 hours and the
 weekly restore check after 8 days. A job that has never run isn't listed and
 isn't alerted on.
 
-**Keep `secrets.json` too**, somewhere safe and separate from the backups:
+### Where the keys are
+
+`secrets.json` holds the keys that decrypt the stored certificates, two-step
+secrets and mail passwords. Docker keeps it in a volume of its own,
+`officesentry-keys` (`/keys/secrets.json`), so the data volume and every
+backup made from it hold no key: someone who gets a backup can't read the
+certificates in it. An install from before October 2026 kept it in the data
+volume; the portal moves it to `/keys` the first time it starts on this
+version and logs **Moved the key file**.
+
+**Keep a copy somewhere safe and separate from the backups**, such as your
+password manager. Print it with:
 
 ```bash
-docker compose cp web:/data/secrets.json ./secrets.json
+docker compose exec web cat /keys/secrets.json
 ```
 
-Without it the stored certificate and mail passwords can't be decrypted; with
-it, anyone holding a backup can. It only changes when you run `rotate-keys
---new`, so copy it again after that.
+and save the line it prints. Without it the stored certificates and mail
+passwords can't be decrypted after losing the server; with it, anyone holding
+a backup can. It only changes when you run `rotate-keys --new`, so save it
+again after that. Running without Docker, it stays in the data folder unless
+`OFFICESENTRY_SECRETS_FILE` names another place.
+
+### Off-site backups
+
+The nightly copies are on the same server as the data. To keep encrypted
+copies somewhere else, Office Sentry uses [restic](https://restic.net) with
+any S3-compatible storage: Backblaze B2, Wasabi, Cloudflare R2, Hetzner Object
+Storage, AWS S3 or MinIO. Pick a provider other than the one that runs your
+server, so one account problem can't take both. restic encrypts everything
+before it leaves the server with a password you choose; the storage provider
+only ever sees scrambled data.
+
+Every night at 03:45 (server time) `deploy/jobs.sh` makes the database copy
+(or takes the one made in the last hour), then sends the backups folder to the
+storage. It keeps one copy a day for two weeks, one a week for two months and
+one a month for a year. Only the backups folder goes: never the live
+database, and never `secrets.json`, which lives in its own volume.
+
+Costs are small: each night sends only what's new, the night's compressed
+copy (see [How much disk](#how-much-disk)). With 200 tenants the copies kept
+come to about 40 GB, well under a dollar a month at B2's published price.
+
+**On the Hetzner deploy**, from your phone:
+
+1. Make the storage. On Backblaze B2 (backblaze.com, free to sign up): *B2
+   Cloud Storage → Buckets → Create a Bucket*, a name such as
+   `yourmsp-officesentry-backups`, **Private**, encryption off (restic
+   encrypts already). Note the **Endpoint** shown on the bucket, such as
+   `s3.eu-central-003.backblazeb2.com`.
+2. Make a key for it: *Application Keys → Add a New Application Key*, name
+   `officesentry`, **allow access to** that bucket only, **Read and Write**.
+   Copy the **keyID** and **applicationKey**; B2 shows the second only once.
+3. Make the backup password: a long random one from your password manager (no
+   `'` in it). **Save it in the password manager, next to the copy of
+   `secrets.json`.** Without it the off-site copies can't be read by anyone,
+   you included.
+4. In GitHub: the repository's *Settings → Secrets and variables → Actions*.
+   Add a variable and three secrets:
+
+   | | Name | Value |
+   |---|---|---|
+   | Variable | `BACKUP_REPOSITORY` | `s3:https://` + the endpoint + `/` + the bucket name + `/officesentry`, e.g. `s3:https://s3.eu-central-003.backblazeb2.com/yourmsp-officesentry-backups/officesentry` |
+   | Secret | `BACKUP_PASSWORD` | the password from step 3 |
+   | Secret | `BACKUP_KEY_ID` | the keyID |
+   | Secret | `BACKUP_SECRET_KEY` | the applicationKey |
+
+5. *Actions → Deploy → Run workflow*, action **deploy**, to put the settings
+   on the server. Then run it again with action **backup**: the first run
+   sets up the storage, and the log ends with a line like
+   `snapshot 1a2b3c4d saved`.
+6. Run it once more with action **restore-drill** ([below](#restore-drill)).
+   When it's green, the backup is proven to restore.
+
+Then run **status** whenever you like: its last lines say when the database
+copy, the off-site copy and the restore check last worked. *Settings → System
+status* in the portal shows the same, and the team gets a system alert when
+one fails or is overdue.
+
+To hear about a failed backup even when the whole server is down, add a free
+check at [Healthchecks.io](https://healthchecks.io) (period 1 day, grace 2
+hours), and add its ping address as the secret `BACKUP_PING_URL`, then deploy.
+Every nightly run pings it, or its `/fail` address when something failed.
+
+**Elsewhere**, put the same four settings in a file named `.env.backup` next to
+`docker-compose.yml`, readable only by you (`chmod 600 .env.backup`), each
+value in single quotes:
+
+```
+RESTIC_REPOSITORY='s3:https://s3.eu-central-003.backblazeb2.com/yourmsp-officesentry-backups/officesentry'
+RESTIC_PASSWORD='the password'
+AWS_ACCESS_KEY_ID='the key ID'
+AWS_SECRET_ACCESS_KEY='the secret key'
+```
+
+copy `deploy/jobs.sh` from the release's source next to it as
+`deploy/jobs.sh`, then run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule`
+in that folder (as a user who can run `docker`) to add the nightly and weekly
+lines to your crontab. `bash deploy/jobs.sh now` backs up straight away.
+
+The password and storage keys are only in `.env.backup`, which only restic's
+own container reads; the portal never sees them.
+
+### Restore drill
+
+A backup is only proven once it has been restored. Every Sunday at 04:30
+(server time) `deploy/jobs.sh drill` checks the off-site storage, restores the
+newest database copy from it into a scratch volume, and has Office Sentry open
+it read-only, run SQLite's integrity check and count the tenants. It never
+touches the live database, and deletes the scratch volume afterwards. The
+result is the **Restore check** line in `status` and on *System status*.
+
+To run it now: *Actions → Deploy → Run workflow*, action **restore-drill**
+(or `bash deploy/jobs.sh drill` in a shell on the server). A green run ends
+with a line like:
+
+```
+OK: officesentry-20261009-034500.db.gz opens and passes SQLite's integrity check; database version 26, 12 tenants, newest collection 2026-10-09 02:14
+```
+
+Read the tenant count and the newest collection date: they should match what
+the portal shows.
+
+Once a year, rehearse the whole recovery below on a scratch server, so the
+steps are known before they're needed.
 
 Before every upgrade that changes the database, the portal also saves a copy
 as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>-from-<release>.db`, where
@@ -369,18 +503,62 @@ client asks for their data to be erased.
    the backup in with SQLite's backup API (no stale `-wal` or `-shm` files are
    left behind).
 3. Put back the `secrets.json` from the same time as the backup if the keys
-   changed since (`docker compose cp ./secrets.json web:/data/secrets.json`).
+   changed since: with `secrets.json` in the current folder,
+
+   ```bash
+   docker compose run --rm --no-deps -T --entrypoint sh web -c 'umask 077 && cat > /keys/secrets.json' < secrets.json
+   ```
+
 4. Start again: `docker compose up -d`. A backup from an older version is
    upgraded when the portal starts.
 
 **Moving to a new server** is the same: install as in *First start* (skip
-creating the admin), stop both containers, copy in `secrets.json` and the
-backup, restore, start.
+creating the admin), stop both containers, put back `secrets.json` as in step
+3, copy in the backup, restore, start.
+
+### Restoring from the off-site copy
+
+When the server is lost. You need the backup password and the saved
+`secrets.json` from your password manager. Tested on a fresh server with
+Office Sentry's own scripts.
+
+1. Make a new server and deploy as in [Hetzner, from a phone](#hetzner-from-a-phone),
+   steps 2 to 6 but without creating an admin (with the same repository
+   variables and secrets, the off-site settings included). Elsewhere: *First
+   start* steps 1 to 4, plus `.env.backup` and `deploy/jobs.sh` as in
+   *Off-site backups*.
+2. Open a shell on it ([If you need a shell](#if-you-need-a-shell)) and
+   `cd /opt/officesentry/v2`.
+3. Put back `secrets.json`: `nano secrets.json`, paste the saved line, save
+   (Ctrl+O, Enter, Ctrl+X), then:
+
+   ```bash
+   docker compose stop web worker
+   docker compose run --rm --no-deps -T --entrypoint sh web -c 'umask 077 && cat > /keys/secrets.json' < secrets.json
+   rm secrets.json
+   ```
+
+4. Restore the newest off-site copy and start again:
+
+   ```bash
+   bash deploy/jobs.sh restore
+   ```
+
+   It fetches the newest database copy from the storage, stops the portal and
+   worker, restores it (keeping the empty database it replaces as
+   `pre-restore-*`) and starts them. Sign in with your usual account.
+5. Point your domain at the new server (step 4 of the Hetzner steps), if
+   you haven't yet.
+
+The off-site copies hold every database copy of the last nights too. To
+restore an older one, ask restic for a list in step 4 instead:
+`docker compose --profile offsite run --rm offsite snapshots`.
 
 ## Rotating keys
 
 If you think the encryption key may have leaked (a lost backup together with
-`secrets.json`, say), replace it:
+`secrets.json`, say), replace it, then save the new `secrets.json` as in
+[Where the keys are](#where-the-keys-are):
 
 ```bash
 docker compose exec web python -m officesentry rotate-keys --new
@@ -451,7 +629,11 @@ restore.
    Versions from before the `restore` command: stop both containers, copy the
    backup over `/data/officesentry.db`, and delete `/data/officesentry.db-wal`
    and `/data/officesentry.db-shm` before starting.
-4. `docker compose up -d`
+4. Going back to a version from before the keys moved to their own volume
+   (October 2026)? It looks for `secrets.json` in the data volume, so copy it
+   back first:
+   `docker compose run --rm --no-deps -T --entrypoint sh web -c 'cp -p /keys/secrets.json /data/secrets.json'`.
+5. `docker compose up -d`
 
 ## Stopping
 
@@ -509,8 +691,9 @@ removes it at the end.
 - **SSH keys** none needed.
 - **Firewalls** tick `officesentry`.
 - **Backups** worth ticking: Hetzner keeps a copy of the whole server, data
-  and `secrets.json` included, for 7 days, and the server saves a consistent
-  database copy every night at 03:30 for those to hold.
+  and keys included, for 7 days, and the server saves a consistent database
+  copy every night at 03:45 for those to hold. They're with the same
+  provider, so add [Off-site backups](#off-site-backups) too.
 - **Cloud config** paste [`deploy/cloud-init.yaml`](deploy/cloud-init.yaml),
   with its `ssh-ed25519 AAAA...` line replaced by your public key (Termius:
   the key → *Export to clipboard* or copy the public key).
@@ -557,6 +740,8 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `OFFICESENTRY_WEBSITE_DOMAIN`, `OFFICESENTRY_WEBSITE_CONTACT`, `OFFICESENTRY_DEMO_DOMAIN`, `DEMO_ENABLED` | only for the project's own website and public demo (below) |
 | `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *`. Variables show in run logs, so never put a password or key here |
 | `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it). Anything else, or no variable, means you deploy by hand ([below](#automatic-deploys-off-and-on)) |
+| `PRODUCTION_FROM_TAGS` | `true` makes the portal take release tags only, and merges never deploy it ([below](#production-from-releases)). Unset or anything else: a deploy builds the chosen code, as today |
+| `BACKUP_REPOSITORY` | optional: where the off-site copies go ([Off-site backups](#off-site-backups)), with the secrets `BACKUP_PASSWORD`, `BACKUP_KEY_ID`, `BACKUP_SECRET_KEY`, and optionally `BACKUP_PING_URL` and `UPTIME_PING_URL` |
 
 The workflow writes the server's `.env` from these on every deploy (with
 `OFFICESENTRY_TRUSTED_PROXIES=1` for Caddy), so change settings here, not on
@@ -598,8 +783,9 @@ All from *Actions → Deploy → Run workflow*:
 |---|---|
 | `deploy` | copies the chosen branch, tag or commit and rebuilds; the portal is only down while the containers swap |
 | `website-and-demo` | only with the website or public demo on (below): updates them from `main` (they also update by themselves after every merge), without touching the portal |
-| `status` | container health, free disk, whether the worker checked in, and how many errors the portal and worker logged in the last 24 hours |
-| `backup` | a database copy now, keeping 14 |
+| `status` | container health, free disk, whether the worker checked in, how many errors the portal and worker logged in the last 24 hours, and when each backup job last worked |
+| `backup` | a database copy now, keeping 14, then the off-site copy when it's set up |
+| `restore-drill` | restores the newest off-site copy into a scratch volume and checks it opens ([Restore drill](#restore-drill)) |
 | `restart` | restarts the portal, worker and Caddy |
 | `setup-link` | makes your `SETUP_CODE` secret the first-admin code (step 6); does nothing once an admin exists |
 
@@ -644,6 +830,61 @@ To see what a deploy will bring, look at the **Pull requests** tab, filter
 *Closed*, and read what merged since your last deploy (the Deploy run list
 shows when that was).
 
+Every deploy also (re)installs the server's scheduled jobs in the `deploy`
+user's crontab: the nightly backup at 03:45, the restore drill on Sundays at
+04:30 and, when set up, the uptime ping. Their output goes to
+`/opt/officesentry/jobs.log`.
+
+### Production from releases
+
+Off until you turn it on. Today every deploy builds the chosen code on the
+server and runs it in production. With the `PRODUCTION_FROM_TAGS` variable set
+to `true`:
+
+- **The portal only takes releases.** Deploy with a release tag such as
+  `v2.1.0` in the `ref` box. The server runs the image the release workflow
+  built, scanned and published, pinned by its digest, so it runs exactly what
+  was tested and nothing else, even if someone later moved the tag. Deploying
+  anything else stops with a message saying so.
+- **Merges never deploy the portal**, whatever `AUTO_DEPLOY` says. The
+  [website and public demo](#the-website-and-public-demo) still follow `main`
+  by themselves, so you can try what's coming on the demo before releasing it.
+
+To turn it on:
+
+1. Make a release first, if there isn't one yet (CONTRIBUTING.md, "Releases").
+2. *Settings → Secrets and variables → Actions → Variables → New repository
+   variable*: name `PRODUCTION_FROM_TAGS`, value `true`.
+3. Deploy that release: *Actions → Deploy → Run workflow*, action **deploy**,
+   `ref` the release tag (the *Releases* page lists them, e.g. `v2.1.0`).
+
+**Deploying a release from your phone:** open the repository in the GitHub
+app, *Actions → Deploy → Run workflow*, leave *Use workflow from* on `main`,
+action **deploy**, type the tag (`v2.1.0`) in `ref`, then *Run workflow*. The
+run's summary names the release and image it deployed. Going back to an older
+release is the same with its tag (and the `pre-upgrade-*` copy if the database
+was upgraded since, as in *Rolling back an update*).
+
+To turn it off, delete the variable or set it to `false`; the next deploy
+builds from the code again.
+
+### Uptime monitor
+
+The firewall only lets your own addresses reach the portal, so an outside
+monitor can't open it. Instead the server tells a monitor every 5 minutes that
+the portal answers, and the monitor emails you when the pings stop (the
+server, Docker or the portal is down):
+
+1. Sign up at [Healthchecks.io](https://healthchecks.io) (free for 20 checks).
+2. *Add Check*: name `Office Sentry portal`, period **5 minutes**, grace
+   **10 minutes**. Copy its ping address (`https://hc-ping.com/...`).
+3. In GitHub, add it as the repository secret `UPTIME_PING_URL`, then deploy.
+4. Within 5 minutes the check turns green. Healthchecks.io emails you when it
+   stops; its app can notify your phone too.
+
+Use a second check, with period **1 day**, for `BACKUP_PING_URL` ([Off-site
+backups](#off-site-backups)).
+
 ### When the repository goes public
 
 Runs before this change printed the portal's log in `status` and `restart`
@@ -651,6 +892,27 @@ runs, and the first-admin link. GitHub keeps run logs for 90 days, and they
 become public with the repository. Before making it public, open
 *Actions → Deploy*, and for each run older than this change press **⋯** and
 **Delete workflow run** (or wait until they are 90 days old).
+
+Once it is public, GitHub Free also allows a **`production` environment that
+needs your approval** before any deploy reaches the server, holding the deploy
+secrets so nothing else in the repository can read them. Set it up straight
+after making it public:
+
+1. *Settings → Environments → New environment*, named `production`.
+2. Tick **Required reviewers** and add yourself. Under *Deployment branches
+   and tags*, choose **Selected branches and tags** and add the rule `main`
+   and the tag rule `v*`.
+3. Under **Environment secrets**, add `HCLOUD_TOKEN`, `DEPLOY_SSH_KEY`,
+   `DEPLOY_HOST_KEY` and the `BACKUP_*` and `*_PING_URL` secrets again, with
+   the same values as the repository secrets.
+4. Ask for the Deploy workflow's `server` job to name `environment:
+   production` (a one-line change in `.github/workflows/deploy.yml`). Once
+   that has merged and a deploy has worked, delete those secrets from
+   *Settings → Secrets and variables → Actions* so only the environment holds
+   them.
+
+From then on every deploy waits on the run's page for you to press
+**Review deployments → Approve**.
 
 ### The website and public demo
 
@@ -689,8 +951,10 @@ available on Windows.
 3. Set the settings from `.env.example` as system environment variables
    (System Properties → Environment Variables), at least
    `OFFICESENTRY_BASE_URL`, `OFFICESENTRY_TIMEZONE` and
-   `OFFICESENTRY_DATA_DIR` (say `C:\OfficeSentry\data`; only the service
-   account should be able to read it, since `secrets.json` lives there).
+   `OFFICESENTRY_DATA_DIR` (say `C:\OfficeSentry\data`), and
+   `OFFICESENTRY_SECRETS_FILE` (say `C:\OfficeSentry\keys\secrets.json`) so
+   the keys stay out of the data folder and its backups. Only the service
+   account should be able to read either folder.
 4. Run two services that start at boot, for example with
    [NSSM](https://nssm.cc/) or Task Scheduler ("At startup", "Run whether
    user is logged on or not"):
