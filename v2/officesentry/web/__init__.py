@@ -120,7 +120,9 @@ def create_app(cfg: Config | None = None) -> Flask:
         admin = bool(user and user["role"] == "admin" and "db" in g)
         worker_down = admin and not worker.is_alive(g.db)
         # ...and when a certificate Office Sentry signs in with is within 60 days of expiring.
-        certificates = cert_lifecycle.expiring(g.db) if admin else []
+        # Not on the page that already says so in full.
+        here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
+        certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
         return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down,
                 "expiring_certificates": certificates}
 
