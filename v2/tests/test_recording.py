@@ -130,6 +130,33 @@ def test_personal_onedrive_urls_and_dns_tokens(fixture):
     assert fixture["entries"][-1]["answer"] == ["v=spf1 include:spf.protection.outlook.com -all"]
 
 
+def test_sharepoint_drive_ids_have_their_guids_replaced():
+    # A drive ID is "b!" and the site, web and list GUIDs in base64url: the plain GUID pattern can't see them.
+    import base64
+    import uuid
+
+    site, web, lst = "a5e1e000-1111-4222-8333-444455556666", "3eb00000-1111-4222-8333-444455556666", \
+        "11570000-1111-4222-8333-444455556666"
+    drive = "b!" + base64.urlsafe_b64encode(b"".join(uuid.UUID(g).bytes_le for g in (site, web, lst))).decode()
+    log = [
+        _graph("/v1.0/organization", {"value": [{"id": TENANT, "verifiedDomains": [{"name": "contoso.com"}]}]}),
+        _graph(f"/v1.0/sites/contoso.sharepoint.com,{site},{web}/drives", {"value": [{"id": drive}]}),
+        _graph(f"/v1.0/drives/{drive}/root/delta", {"@odata.deltaLink": f"{GRAPH}/v1.0/drives/{drive}/root/delta"
+                                                   "?token=x", "value": []}),
+    ]
+    fixture = scrub(log, TENANT, CLIENT)
+    text = json.dumps(fixture)
+    assert drive[2:] not in text and site not in text and web not in text
+    fake = fixture["entries"][1]["body"]["value"][0]["id"]
+    assert fake.startswith("b!") and len(fake) == len(drive)
+    fake_site, fake_web, _ = (str(uuid.UUID(bytes_le=base64.urlsafe_b64decode(fake[2:])[i:i + 16]))
+                              for i in (0, 16, 32))
+    # The same placeholders as the plain GUIDs in the site's address, so replayed requests still match.
+    assert f",{fake_site},{fake_web}/drives" in fixture["entries"][1]["url"]
+    assert fixture["entries"][2]["url"] == f"{GRAPH}/v1.0/drives/{fake}/root/delta"
+    assert fixture["entries"][2]["body"]["@odata.deltaLink"].startswith(f"{GRAPH}/v1.0/drives/{fake}/")
+
+
 def test_scrub_refuses_to_write_when_something_survives(monkeypatch):
     monkeypatch.setattr(recording.Scrubber, "text_only", lambda self, value: value)
     with pytest.raises(ValueError, match="identifying value") as exc:

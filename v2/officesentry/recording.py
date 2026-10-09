@@ -13,8 +13,10 @@ The raw responses are never written to disk.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
+import uuid
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
@@ -27,6 +29,8 @@ from .graph import GRAPH_ROOT
 from .text import plural
 
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+# SharePoint drive IDs are "b!" and the site, web and list GUIDs (48 bytes) in base64url, so GUID never sees them.
+DRIVE_ID = re.compile(r"b(?:!|%21)([A-Za-z0-9_-]{64})(?![A-Za-z0-9_-])")
 EMAIL = re.compile(r"[A-Za-z0-9._%+'{}#-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
 PHONE = re.compile(r"\+\d[\d ()-]{6,}\d")
 # National formats: UK and similar (07700 900123, 020 7946 0000) and North American ((555) 010-0199).
@@ -133,6 +137,7 @@ class Scrubber:
         self.strings.update({k: v for k, v in names.items() if len(k) >= 3 and k.lower() not in taken})
         self.personal_sites: dict[str, str] = {}
         self.phones: dict[str, str] = {}
+        self.drive_ids: set[str] = set()
 
     def phone(self, value: str) -> str:
         key = re.sub(r"\D", "", value)
@@ -150,6 +155,19 @@ class Scrubber:
             n = len(self.guids) + 1
             self.guids[low] = f"5e{n:06x}-0000-4000-8000-{n:012x}"
         return self.guids[low]
+
+    def drive_id(self, match: re.Match) -> str:
+        """The same drive ID with each of its three GUIDs replaced as anywhere else."""
+        try:
+            raw = base64.urlsafe_b64decode(match.group(1) + "==")
+        except ValueError:
+            return match.group(0)
+        if len(raw) != 48:
+            return match.group(0)
+        self.drive_ids.add(match.group(1))
+        fake = b"".join(uuid.UUID(self.guid(str(uuid.UUID(bytes_le=raw[i:i + 16])))).bytes_le
+                        for i in range(0, 48, 16))
+        return match.group(0)[:-64] + base64.urlsafe_b64encode(fake).decode().rstrip("=")
 
     def email(self, match: re.Match) -> str:
         value = match.group(0)
@@ -179,6 +197,7 @@ class Scrubber:
     def text(self, value: str) -> str:
         value = PERSONAL.sub(self.personal_site, value)
         value = EMAIL.sub(self.email, value)
+        value = DRIVE_ID.sub(self.drive_id, value)
         value = GUID.sub(lambda m: self.guid(m.group(0)), value)
         if value.startswith("https://"):
             # Request and paging URLs carry IDs and domains, not names; a person called "admin"
@@ -340,7 +359,8 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     # URLs are checked for IDs and domains only: a person named "admin" isn't leaked by /admin/sharepoint.
     text = "\n".join(v for v in _strings(fixture) if not v.startswith("https://"))
     leaks = find_leaks(text, [*names, *personal])
-    leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites])
+    leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites,
+                                              *s.drive_ids])
     leaks += phone_leaks(fixture)
     if leaks:
         hints = ", ".join(f"{v[0]}… ({len(v)} chars)" for v in leaks)  # never print the values themselves
