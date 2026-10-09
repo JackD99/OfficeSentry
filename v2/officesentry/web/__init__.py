@@ -32,6 +32,7 @@ from . import (
     search,
     tenant_admin,
     tenants,
+    upcoming,
 )
 
 csrf = CSRFProtect()
@@ -159,4 +160,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(activity.bp)
     app.register_blueprint(search.bp)
     app.register_blueprint(reporting.bp)
+    app.register_blueprint(upcoming.bp)
     return app

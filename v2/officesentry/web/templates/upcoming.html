@@ -1,0 +1,75 @@
+{#- Coming up (upcoming.py): what falls due in the next 90 days across the tenants this person can see, the
+    answer first (what needs attention now, what's next), then every item on the shared report table. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, downloads %}
+{% from "_report_table.html" import report_table with context %}
+{% block title %}Coming up · Office Sentry{% endblock %}
+{% block content %}
+{% set q = ('?' ~ view_query) if view_query else '' %}
+<div class="page-head">
+  <div>
+    <h1>Coming up</h1>
+    <div class="sub">What falls due in the next 90 days across {{ up.tenants|plural('tenant') }}, soonest first.</div>
+  </div>
+  {% if up.items %}
+  <div class="actions">
+    {{ downloads([('PDF', url_for('upcoming.download', ext='pdf') ~ q, 'The rows and columns shown, as a PDF'),
+                  ('XLSX', url_for('upcoming.download', ext='xlsx') ~ q, 'The rows and columns shown, as a spreadsheet'),
+                  ('CSV', url_for('upcoming.download', ext='csv') ~ q, 'The rows and columns shown, as CSV')]) }}
+  </div>
+  {% endif %}
+</div>
+
+{% if not up.tenants %}
+<div class="card empty"><h3>No tenants to show</h3>
+  <p>{% if current_user.role == 'admin' %}Add a client tenant and its renewals, expiring credentials and full mailboxes show here after the first collection.{% else %}You haven't been given access to any active tenants yet. Ask an admin to grant access.{% endif %}</p></div>
+{% else %}
+{% set first = up.soonest %}
+{% set now_n = counts[w.NOW] %}
+{% if first %}
+<div class="callout lead-answer {{ 'bad' if first.window == w.NOW else ('warn' if first.window == w.DAYS_30 else '') }}">{{ icon('calendar') }}
+  <div>
+    <strong>{% if now_n %}{{ now_n|plural('item') }} {{ 'needs' if now_n == 1 else 'need' }} attention now.{% else %}Next up {{ first.when }}, on {{ first.due.isoformat()|day }}.{% endif %}</strong>
+    {% if first.href %}<a href="{{ first.href }}">{{ first.tenant_name }}: {{ first.title }}</a>{% else %}{{ first.tenant_name }}: {{ first.title }}{% endif %}{% if now_n and first.due %} ({{ first.when }}){% endif %}.
+    <div class="small">{{ first.detail }}</div>
+  </div>
+</div>
+{% else %}
+<div class="callout ok">{{ icon('check') }}<div><strong>Nothing is due in the next 90 days.</strong>
+  {% if counts[w.NO_DATE] %}{{ counts[w.NO_DATE]|plural('domain') }} still {{ 'has' if counts[w.NO_DATE] == 1 else 'have' }} DMARC at p=none, listed below.{% else %}No renewals, expiring credentials, full mailboxes or accepted risks to review.{% endif %}</div></div>
+{% endif %}
+
+<div class="tiles">
+  {% for t in report.tiles %}{% set href = links.tiles[loop.index0] %}
+  <{{ 'a' if href else 'div' }} class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view title="Show these items"{% endif %}>
+    <div class="label">{{ t.label }}{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
+    <div class="value">{{ t.value }}</div>
+    <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
+  </{{ 'a' if href else 'div' }}>
+  {% endfor %}
+</div>
+
+{% if types %}
+<nav class="type-counts" aria-label="Show one kind of item">
+  {% for label, n, href in types %}<a class="pill" href="{{ href }}" data-view>{{ label }} <span class="faint">{{ n }}</span></a>{% endfor %}
+</nav>
+{% endif %}
+
+{% for note in report.notes %}<div class="callout warn">{{ icon('alert') }}<div>{{ note }}</div></div>{% endfor %}
+
+{% for tv in tables %}
+{% if not tv.total %}
+<section class="card flush empty-section" id="t-{{ tv.slug }}">
+  <h2>{{ tv.section.title }} <span class="count-badge">0</span></h2>
+  <p>{{ tv.section.empty }}</p>
+</section>
+{% else %}
+{{ report_table(tv, url_for('upcoming.download', ext='csv') ~ q) }}
+{% endif %}
+{% endfor %}
+<p class="footnote">Built from each tenant's latest collection; paused tenants are left out. Renewal dates come from Microsoft, which doesn't say whether a paid subscription renews automatically. Mailboxes are forecast from their growth since a collection two to eight weeks earlier. {% if current_user.role == 'admin' %}Office Sentry's own certificates are listed too. {% endif %}{% if current_user.role == 'admin' %}<a href="{{ url_for('email.overview') }}#coming-up">Email this to your team every week</a>.{% endif %}</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

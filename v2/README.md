@@ -42,6 +42,8 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
   - A cross-tenant **digest** for your team, worst tenants first.
+  - A weekly **Coming up** email (and page) for your team: renewals and trials, expiring app secrets and
+    certificates, mailboxes filling up, DMARC still at p=none and accepted risks due in the next 90 days.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one tenant or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A tenant's first scan never emails.
