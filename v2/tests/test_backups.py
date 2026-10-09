@@ -37,7 +37,7 @@ def _tenants(path):
         conn.close()
 
 
-def test_upgrading_a_database_backs_it_up_first(cfg, monkeypatch, tmp_path):
+def test_upgrading_a_database_backs_it_up_first(cfg, monkeypatch):
     every = db_module.migration_files()
     monkeypatch.setattr(db_module, "migration_files", lambda: [m for m in every if m[0] <= 4])
     conn = connect(cfg.db_path)
@@ -45,17 +45,18 @@ def test_upgrading_a_database_backs_it_up_first(cfg, monkeypatch, tmp_path):
     conn.execute("INSERT INTO tenants (name, tenant_ref, created_at) VALUES ('Old', 'old.onmicrosoft.com', 'x')")
     monkeypatch.setattr(db_module, "migration_files", lambda: every)
     assert migrate(conn) == every[-1][0]
-    saved = sorted((cfg.data_dir / "backups").glob("pre-upgrade-*"))
+    saved = sorted((cfg.data_dir / "backups").glob("pre-upgrade-*.db"))
     assert len(saved) == 1 and saved[0].name.startswith(f"pre-upgrade-v4-to-v{every[-1][0]}-")
-    assert saved[0].name.endswith(".db.gz")
-    copy = connect(_unzip(saved[0], tmp_path))
+    # Not compressed: the older release a rollback goes back to restores it, and may not read gzip.
+    assert saved[0].name.endswith(".db") and saved[0].read_bytes()[:6] == b"SQLite"
+    copy = connect(saved[0])
     assert copy.execute("PRAGMA user_version").fetchone()[0] == 4
     assert copy.execute("SELECT name FROM tenants").fetchone()[0] == "Old"
     if os.name != "nt":
         assert oct(saved[0].stat().st_mode & 0o777) == "0o600"
     # Nothing to upgrade, nothing copied.
     migrate(conn)
-    assert len(list((cfg.data_dir / "backups").glob("pre-upgrade-*"))) == 1
+    assert len(list((cfg.data_dir / "backups").glob("pre-upgrade-*.db"))) == 1
 
 
 def test_a_fresh_database_is_not_backed_up(cfg):
@@ -75,7 +76,7 @@ def test_only_the_newest_pre_upgrade_backups_are_kept(cfg, monkeypatch):
     migrate(conn)
     monkeypatch.setattr(db_module, "migration_files", lambda: every)
     migrate(conn)
-    kept = sorted(p.name for p in folder.glob("pre-upgrade-*"))
+    kept = sorted(p.name for p in folder.glob("pre-upgrade-*.db"))
     assert len(kept) == backups.KEEP_PRE_UPGRADE and kept[-1].startswith(f"pre-upgrade-v{every[-2][0]}-")
     assert (folder / "officesentry-20260101-000000.db").exists()
 

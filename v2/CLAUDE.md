@@ -366,10 +366,17 @@ the worker (the `compact` command does it all and shrinks the file). So:
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 `db.migrate` re-reads `user_version` inside each migration's transaction (two
 processes may start at once) and, before taking the write lock, copies a
-database that already has a schema to `backups/pre-upgrade-*.db.gz`
+database that already has a schema to `backups/pre-upgrade-*.db`
 (`backups.before_upgrade`); restoring that copy is the only way back, since
-migrations only go forward. Every backup is gzipped after SQLite's backup API
-and checks free disk first; `restore` takes `.db.gz` and plain `.db`.
+migrations only go forward. Copies check free disk first. Backups and
+pre-restore copies are gzipped after SQLite's backup API (`restore` takes
+`.db.gz` and plain `.db`); pre-upgrade copies stay plain, since an older
+release (whose `restore` may not read gzip) restores them. Code
+older than the database refuses to start (`db.DatabaseTooNew`, naming the copy
+to restore), and two files with one number stop the upgrade, since the second
+would otherwise be skipped for good. Several branches add migrations at once:
+take the next free number above `main`'s highest when you merge `main` in
+(`tests/test_migrations.py` fails on a clash).
 
 ## Commands
 

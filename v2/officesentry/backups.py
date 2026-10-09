@@ -2,10 +2,11 @@
 copy taken before a database upgrade.
 
 Copies always go through SQLite's online backup API, so they're consistent
-while the portal and worker are running, are checked, gzipped (``.db.gz``;
-``restore`` takes both) and written 0600. Each copy first checks there's room
-for it: the uncompressed copy is written next to the backup before it's
-compressed.
+while the portal and worker are running, are checked and written 0600. Each
+copy first checks there's room for it. Backups and pre-restore copies are
+gzipped (``.db.gz``; ``restore`` takes both). Pre-upgrade copies stay plain
+``.db``: they're restored after going back to an older release, whose
+``restore`` may not read gzip.
 """
 
 from __future__ import annotations
@@ -148,7 +149,7 @@ def before_upgrade(db_file: Path, current: int, target: int) -> Path | None:
         return None
     src = sqlite3.connect(db_file, timeout=30)
     try:
-        dest = copy_database(src, folder / f"{name}{_stamp()}.db{COMPRESSED}")
+        dest = copy_database(src, folder / f"{name}{_stamp()}.db")
     finally:
         src.close()
     rotate(folder, PRE_UPGRADE_PREFIX, KEEP_PRE_UPGRADE)

@@ -233,9 +233,10 @@ it, anyone holding a backup can. It only changes when you run `rotate-keys
 --new`, so copy it again after that.
 
 Before every upgrade that changes the database, the portal also saves a copy
-as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db.gz` (the last 3
-are kept). It's made before the upgrade starts, so the portal keeps working
-while a large database is copied. If it can't (a full disk, say), it doesn't
+as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db` (the last 3 are
+kept). It's made before the upgrade starts, so the portal keeps working while
+a large database is copied. It isn't compressed, so the older version you'd
+go back to can always restore it. If it can't (a full disk, say), it doesn't
 upgrade and says why.
 
 **Deleted tenants stay in backups.** Backups keep everything that was in the
@@ -265,6 +266,8 @@ client asks for their data to be erased.
    `docker compose cp ./officesentry-20261005-033000.db.gz web:/data/restore.db.gz`
    (then restore `/data/restore.db.gz`), or from the `/backups` folder if you
    mounted one. Older, uncompressed `.db` backups restore the same way.
+   Versions of Office Sentry from before October 2026 can't read `.db.gz`
+   files: unpack one first with `gunzip -k <file>` and restore the `.db`.
 
    It checks that the file is a sound Office Sentry database, saves the
    database it replaces as `/data/backups/pre-restore-<time>.db.gz`, and copies
@@ -315,7 +318,9 @@ saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept.
 
 Database upgrades only go forward, so going back to an older version means
 going back to the database from before the upgrade. Anything collected since
-the upgrade is lost.
+the upgrade is lost. An older version started on the upgraded database
+refuses to start, and its log (`docker compose logs web`) names the copy to
+restore.
 
 1. `docker compose stop web worker`
 2. Go back to the version you had: `git log --oneline` to find it, then
@@ -325,7 +330,7 @@ the upgrade is lost.
 
    ```bash
    docker compose run --rm --no-deps web ls /data/backups
-   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/pre-upgrade-v8-to-v9-20261005-020000.db.gz
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/pre-upgrade-v8-to-v9-20261005-020000.db
    ```
 
    Versions from before the `restore` command: stop both containers, copy the
