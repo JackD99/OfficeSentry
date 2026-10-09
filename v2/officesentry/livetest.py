@@ -89,7 +89,7 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
         # The connection check looks up the app that actually signs in: the test app, not the tenant's connection.
         status = execute_run(conn, run_row, lambda t, c: graph, lambda t, c: exo, client_id=client_id)
         finished = conn.execute("SELECT * FROM runs WHERE id = ?", (run_row["id"],)).fetchone()
-        count = conn.execute("SELECT COUNT(*) FROM objects WHERE run_id = ?", (run_row["id"],)).fetchone()[0]
+        count = finished["object_count"]
         print(f"{REGISTRY[key].title:32} {status:10} {count:6} objects  {finished['error'] or ''}")
         failures += status == "failed"
     dnscheck.lookup = real_lookup

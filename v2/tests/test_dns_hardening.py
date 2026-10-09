@@ -16,6 +16,7 @@ from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
 from tests.seed import seed_tenant
+from tests.stored import unpack
 
 POLICY = "version: STSv1\r\nmode: enforce\r\nmx: *.mail.protection.outlook.com\r\nmax_age: 604800\r\n"
 POLICY_URL = "https://mta-sts.a.com/.well-known/mta-sts.txt"
@@ -348,6 +349,7 @@ def test_old_snapshot_in_the_database(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     run = store.latest_run(db, alpha, "domain_health")
+    unpack(db)
     db.execute("UPDATE objects SET data = ? WHERE run_id = ? AND kind = 'domain' AND object_id = 'x.com'",
                (json.dumps(dict(OLD_ROW, domain="x.com")), run["id"]))
     tenant = store.get_tenant(db, alpha)

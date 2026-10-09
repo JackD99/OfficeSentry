@@ -160,7 +160,11 @@ docker compose exec web python -m officesentry backup
 ```
 
 That writes to `/data/backups` inside the volume and keeps the last 7
-(`--keep 14` keeps more). Each copy is checked before it's kept.
+(`--keep 14` keeps more). Each copy is checked, then compressed
+(`officesentry-<time>.db.gz`, about a tenth of the database's size). While
+it's being made, the uncompressed copy needs room next to it: the backup
+stops with a plain message if the disk is short of about one and a half
+times the database's size.
 
 **Keep backups off the data volume.** A copy in the same volume is lost with
 the volume. Give the portal a second folder on the host (or a mounted network
@@ -197,8 +201,10 @@ it, anyone holding a backup can. It only changes when you run `rotate-keys
 --new`, so copy it again after that.
 
 Before every upgrade that changes the database, the portal also saves a copy
-as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db` (the last 3 are
-kept). If it can't (a full disk, say), it doesn't upgrade and says why.
+as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db.gz` (the last 3
+are kept). It's made before the upgrade starts, so the portal keeps working
+while a large database is copied. If it can't (a full disk, say), it doesn't
+upgrade and says why.
 
 **Deleted tenants stay in backups.** Backups keep everything that was in the
 database when they were made. After you delete a client tenant, its data stays
@@ -220,16 +226,16 @@ client asks for their data to be erased.
    web ls /data/backups` lists them):
 
    ```bash
-   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db.gz
    ```
 
    A backup kept on the host goes in first with
-   `docker compose cp ./officesentry-20261005-033000.db web:/data/restore.db`
-   (then restore `/data/restore.db`), or from the `/backups` folder if you
-   mounted one.
+   `docker compose cp ./officesentry-20261005-033000.db.gz web:/data/restore.db.gz`
+   (then restore `/data/restore.db.gz`), or from the `/backups` folder if you
+   mounted one. Older, uncompressed `.db` backups restore the same way.
 
    It checks that the file is a sound Office Sentry database, saves the
-   database it replaces as `/data/backups/pre-restore-<time>.db`, and copies
+   database it replaces as `/data/backups/pre-restore-<time>.db.gz`, and copies
    the backup in with SQLite's backup API (no stale `-wal` or `-shm` files are
    left behind).
 3. Put back the `secrets.json` from the same time as the backup if the keys
@@ -287,7 +293,7 @@ the upgrade is lost.
 
    ```bash
    docker compose run --rm --no-deps web ls /data/backups
-   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/pre-upgrade-v8-to-v9-20261005-020000.db
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/pre-upgrade-v8-to-v9-20261005-020000.db.gz
    ```
 
    Versions from before the `restore` command: stop both containers, copy the

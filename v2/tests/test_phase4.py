@@ -13,6 +13,7 @@ from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
 from tests.seed import seed_tenant
+from tests.stored import unpack
 from tests.test_collectors import USERS
 
 URL = f"{EXCHANGE_ROOT}/adminapi/beta/tid/InvokeCommand"
@@ -308,6 +309,7 @@ def test_changes_include_new_forwarding_and_app_permissions(db, two_tenants):
                                                  for m in gd.EXCHANGE["Get-Mailbox"]]})
     seed_tenant(db, alpha, exchange=quiet)
     old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    unpack(db)
     db.execute("DELETE FROM objects WHERE kind = 'app_permission' AND object_id = 'ara1'")
     db.execute("UPDATE runs SET finished_at = ?", (old,))
     seed_tenant(db, alpha)

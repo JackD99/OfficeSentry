@@ -201,7 +201,10 @@ def cmd_backup(args, cfg):
 
     from .backups import backup
 
-    dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
+    try:
+        dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
+    except OSError as exc:
+        sys.exit(f"No backup made: {exc.strerror or exc}.")
     print(f"Saved {dest}" + (f" (removed {plural(len(old), 'older backup')})" if old else ""))
     print("Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
           " without it the stored certificates can't be decrypted.")
@@ -236,6 +239,20 @@ def cmd_restore(args, cfg):
         print(f"It's upgraded to version {latest_version()} when the portal starts.")
     print("Put back the secrets.json (or OFFICESENTRY_ENCRYPTION_KEYS) from the same time as the backup, "
           "then start the portal and the worker.")
+
+
+def cmd_compact(args, cfg):
+    """Compress every snapshot stored before compression now, then shrink the database file."""
+    from .packing import compact
+
+    conn = connect(cfg.db_path)
+    try:
+        migrate(conn)
+        compact(conn)
+    except RuntimeError as exc:
+        sys.exit(str(exc))
+    finally:
+        conn.close()
 
 
 def cmd_delete_tenant(args, cfg):
@@ -335,9 +352,13 @@ def main(argv=None):
     backup.set_defaults(func=cmd_backup)
 
     restore = sub.add_parser("restore", help="replace the database with a backup (stop the portal and worker first)")
-    restore.add_argument("file", help="the backup to restore, e.g. /data/backups/officesentry-20261005-033000.db")
+    restore.add_argument("file", help="the backup to restore, e.g. /data/backups/officesentry-20261005-033000.db.gz")
     restore.add_argument("--force", action="store_true", help="restore even if the worker seems to be running")
     restore.set_defaults(func=cmd_restore)
+
+    compact = sub.add_parser("compact", help="compress old snapshot data now and shrink the database file "
+                                             "(the worker compresses it gradually anyway)")
+    compact.set_defaults(func=cmd_compact)
 
     delete = sub.add_parser("delete-tenant", help="delete a client tenant and everything stored for it")
     delete.add_argument("tenant_id", type=int, help="the number in the tenant's address, /tenants/<id>")

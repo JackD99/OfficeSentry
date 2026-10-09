@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import zlib
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -122,7 +123,7 @@ def claim_next_run(conn):
 def finish_run(conn, run_id: int, status: str, error: str | None = None) -> None:
     conn.execute(
         "UPDATE runs SET status = ?, error = ?, finished_at = ?,"
-        " object_count = (SELECT COUNT(*) FROM objects WHERE run_id = ?) WHERE id = ?",
+        " object_count = (SELECT COALESCE(SUM(items), 0) FROM objects WHERE run_id = ?) WHERE id = ?",
         (status, error, utcnow(), run_id, run_id),
     )
 
@@ -152,27 +153,162 @@ def latest_run(conn, tenant_id: int, collector: str, successful: bool = True):
 
 
 # -- Snapshot data -----------------------------------------------------------
+#
+# A run's objects are stored compressed. Each ``objects`` row whose ``data`` is a
+# BLOB is a pack: consecutive objects of one run and kind, in object id order,
+# keyed by its first object's id, with ``items`` saying how many it holds. Inside,
+# each object is one line of ``json.dumps([object_id, data], sort_keys=True)``,
+# and the lines are compressed together, which shrinks a night's JSON about
+# eight times where one row per object barely shrank. Rows written before packing
+# hold one object as JSON text (``items`` 1); every reader here takes both, and
+# ``packing.py`` converts old rows in the background.
+#
+# Read objects through these functions, never ``objects.data`` directly, and count
+# them with SUM(items) rather than COUNT(*).
+
+PACK_ZLIB = b"\x01"  # the format byte every pack starts with: zlib-compressed lines
+PACK_BYTES = 256 * 1024  # uncompressed bytes per pack, so finding one object reads a small pack
+PACK_LEVEL = 6
 
 
-def add_objects(conn, run_id: int, kind: str, items: list[tuple[str, dict]]) -> None:
+def _line(object_id: str, data) -> bytes:
+    return json.dumps([object_id, data], sort_keys=True).encode()
+
+
+def _pack_rows(lines: dict[str, bytes]) -> list[tuple[str, int, bytes]]:
+    """(first object id, objects, compressed blob) for each pack of ``lines`` ({object id: line})."""
+    packs, chunk, size = [], [], 0
+    for object_id in sorted(lines):
+        chunk.append((object_id, lines[object_id]))
+        size += len(lines[object_id]) + 1
+        if size >= PACK_BYTES:
+            packs.append(chunk)
+            chunk, size = [], 0
+    if chunk:
+        packs.append(chunk)
+    return [(c[0][0], len(c), PACK_ZLIB + zlib.compress(b"\n".join(line for _, line in c), PACK_LEVEL))
+            for c in packs]
+
+
+def pack_lines(blob: bytes) -> list[bytes]:
+    """The object lines in a pack."""
+    if blob[:1] != PACK_ZLIB:
+        raise ValueError(f"unknown object pack format {blob[:1]!r}")
+    return zlib.decompress(blob[1:]).split(b"\n")
+
+
+def _row_lines(row) -> list[bytes]:
+    """A stored row as object lines: a pack's lines, or an unpacked row's one object."""
+    if isinstance(row["data"], bytes):
+        return pack_lines(row["data"])
+    return [_line(row["object_id"], json.loads(row["data"]))]
+
+
+def write_packs(conn, run_id: int, kind: str, lines: dict[str, bytes]) -> None:
+    """Replace everything stored for the run and kind with packs of ``lines`` ({object id: line})."""
+    conn.execute("DELETE FROM objects WHERE run_id = ? AND kind = ?", (run_id, kind))
     conn.executemany(
-        "INSERT OR REPLACE INTO objects (run_id, kind, object_id, data) VALUES (?, ?, ?, ?)",
-        [(run_id, kind, str(obj_id), json.dumps(data, sort_keys=True)) for obj_id, data in items],
+        "INSERT INTO objects (run_id, kind, object_id, data, items) VALUES (?, ?, ?, ?, ?)",
+        [(run_id, kind, first, blob, n) for first, n, blob in _pack_rows(lines)],
     )
 
 
+def stored_lines(conn, run_id: int, kind: str) -> dict[str, bytes]:
+    """{object id: line} of everything stored for the run and kind, packed or not."""
+    lines: dict[str, bytes] = {}
+    for row in conn.execute("SELECT object_id, data FROM objects WHERE run_id = ? AND kind = ? ORDER BY object_id",
+                            (run_id, kind)):
+        for line in _row_lines(row):
+            lines[json.loads(line)[0]] = line
+    return lines
+
+
+def add_objects(conn, run_id: int, kind: str, items: list[tuple[str, dict]]) -> None:
+    """Store objects for a run, compressed. An id stored before for the run and kind is replaced."""
+    if not items:
+        return
+    lines = {}
+    if conn.execute("SELECT 1 FROM objects WHERE run_id = ? AND kind = ? LIMIT 1", (run_id, kind)).fetchone():
+        lines = stored_lines(conn, run_id, kind)  # a second batch of the same kind: repack them together
+    for obj_id, data in items:
+        lines[str(obj_id)] = _line(str(obj_id), data)
+    write_packs(conn, run_id, kind, lines)
+
+
+def _objects_in(rows, needle: bytes | None = None):
+    """(kind, object id, data) for each object in stored rows, in stored order. With ``needle``, only objects
+    whose JSON contains it are parsed (a cheap first filter)."""
+    for row in rows:
+        if isinstance(row["data"], bytes):
+            for line in pack_lines(row["data"]):
+                if needle is None or needle in line:
+                    object_id, data = json.loads(line)
+                    yield row["kind"], object_id, data
+        elif needle is None or needle in row["data"].encode():
+            yield row["kind"], row["object_id"], json.loads(row["data"])
+
+
 def run_objects(conn, run_id: int, kind: str | None = None, limit: int | None = None) -> list[dict]:
+    """A run's objects (of one kind), each with ``_kind`` and ``_id``, ordered by kind then object id."""
     sql = "SELECT kind, object_id, data FROM objects WHERE run_id = ?"
     args: list = [run_id]
     if kind:
         sql += " AND kind = ?"
         args.append(kind)
-    sql += " ORDER BY kind, object_id"
-    if limit:
-        sql += " LIMIT ?"
-        args.append(limit)
-    return [dict(json.loads(r["data"]), _kind=r["kind"], _id=r["object_id"])
-            for r in conn.execute(sql, args)]
+    out = []
+    for obj_kind, object_id, data in _objects_in(conn.execute(sql + " ORDER BY kind, object_id", args)):
+        out.append(dict(data, _kind=obj_kind, _id=object_id))
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def find_object(conn, run_id: int, kind: str, object_id: str):
+    """One object of a run by its id, or None. Reads only the pack that would hold it."""
+    row = conn.execute(
+        "SELECT kind, object_id, data FROM objects WHERE run_id = ? AND kind = ? AND object_id <= ?"
+        " ORDER BY object_id DESC LIMIT 1", (run_id, kind, object_id)).fetchone()
+    if row is None:
+        return None
+    if not isinstance(row["data"], bytes):
+        return json.loads(row["data"]) if row["object_id"] == object_id else None
+    start = _line(object_id, None)[:-len(b"null]")]  # '["<id>", '
+    for line in pack_lines(row["data"]):
+        if line.startswith(start):
+            return json.loads(line)[1]
+    return None
+
+
+def _snapshot_runs(conn, tenant_id: int, collector: str):
+    return conn.execute(
+        "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
+        " ORDER BY finished_at, id", (tenant_id, collector)).fetchall()
+
+
+def object_copies(conn, tenant_id: int, collector: str, kind: str, object_id: str) -> list[tuple[str, dict]]:
+    """(finished at, data) of one object in each of the collector's successful runs that still holds it,
+    oldest first."""
+    out = []
+    for run in _snapshot_runs(conn, tenant_id, collector):
+        data = find_object(conn, run["id"], kind, object_id)
+        if data is not None:
+            out.append((run["finished_at"], data))
+    return out
+
+
+def matching_objects(conn, tenant_id: int, collector: str, kind: str, field: str,
+                     value: str) -> list[tuple[str, str, int, dict]]:
+    """(object id, finished at, run ID, data) of every object of the kind whose ``field`` is ``value``, across
+    the collector's successful runs that still hold objects, oldest run first, then by object id."""
+    needle = json.dumps(value).encode() if isinstance(value, str) else None
+    out = []
+    for run in _snapshot_runs(conn, tenant_id, collector):
+        rows = conn.execute("SELECT kind, object_id, data FROM objects WHERE run_id = ? AND kind = ?"
+                            " ORDER BY object_id", (run["id"], kind))
+        for _, object_id, data in _objects_in(rows, needle):
+            if isinstance(data, dict) and data.get(field) == value:
+                out.append((object_id, run["finished_at"], run["id"], data))
+    return out
 
 
 def add_metric(conn, run_id: int, tenant_id: int, key: str, value: float) -> None:
