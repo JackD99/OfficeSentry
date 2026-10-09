@@ -1,6 +1,7 @@
 [project]
 name = "officesentry"
-version = "2.0.0.dev0"
+# The version is officesentry.__version__; CONTRIBUTING.md, "Releases", says when to change it.
+dynamic = ["version"]
 description = "Read-only Microsoft 365 reporting for MSPs"
 requires-python = ">=3.11"
 license = "AGPL-3.0-only"
@@ -29,6 +30,9 @@ dev = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.6", "responses>=0.25", "ru
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "officesentry.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["officesentry*"]

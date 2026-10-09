@@ -15,6 +15,7 @@ import errno
 import gzip
 import logging
 import os
+import re
 import shutil
 import sqlite3
 from collections.abc import Iterator
@@ -102,9 +103,15 @@ def copy_database(src: sqlite3.Connection, dest: Path) -> Path:
     return dest
 
 
+def _taken_at(path: Path) -> str:
+    """The time in a backup's name; it sorts by age, which the whole name doesn't once a pre-upgrade copy's
+    database version reaches two digits (``v9-to-v10`` sorts after ``v10-to-v11``)."""
+    return m[0] if (m := re.search(r"\d{8}-\d{6}", path.name)) else path.name
+
+
 def backup_files(folder: Path, prefix: str) -> list[Path]:
-    """Backups named ``<prefix>*.db`` or ``<prefix>*.db.gz``, oldest first (names carry the time)."""
-    return sorted([*folder.glob(f"{prefix}*.db"), *folder.glob(f"{prefix}*.db{COMPRESSED}")], key=lambda p: p.name)
+    """Backups named ``<prefix>*.db`` or ``<prefix>*.db.gz``, oldest first (by the time in their names)."""
+    return sorted([*folder.glob(f"{prefix}*.db"), *folder.glob(f"{prefix}*.db{COMPRESSED}")], key=_taken_at)
 
 
 def rotate(folder: Path, prefix: str, keep: int) -> list[Path]:
@@ -135,8 +142,10 @@ def database_file(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
-def before_upgrade(db_file: Path, current: int, target: int) -> Path | None:
-    """Copy the database before migrations change it, into ``<data dir>/backups``.
+def before_upgrade(db_file: Path, current: int, target: int, release: str | None = None) -> Path | None:
+    """Copy the database before migrations change it, into ``<data dir>/backups``, named
+    ``pre-upgrade-v<old>-to-v<new>-<time>[-from-<release>].db``: the database versions, and the Office Sentry
+    release to go back to with this copy, when the database knows it (``db.stored_app_version``).
 
     ``db.migrate`` calls this before it takes the write lock, so the portal and worker keep working while a
     large database is copied. Two processes starting at once would both copy, so a copy of the same upgrade
@@ -147,9 +156,10 @@ def before_upgrade(db_file: Path, current: int, target: int) -> Path | None:
     recent = datetime.now(UTC).timestamp() - 3600
     if folder.is_dir() and any(p.stat().st_mtime > recent for p in backup_files(folder, name)):
         return None
+    suffix = f"-from-{tag}" if release and (tag := re.sub(r"[^0-9A-Za-z.+-]", "", release)[:40]) else ""
     src = sqlite3.connect(db_file, timeout=30)
     try:
-        dest = copy_database(src, folder / f"{name}{_stamp()}.db")
+        dest = copy_database(src, folder / f"{name}{_stamp()}{suffix}.db")
     finally:
         src.close()
     rotate(folder, PRE_UPGRADE_PREFIX, KEEP_PRE_UPGRADE)
