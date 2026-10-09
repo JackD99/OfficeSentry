@@ -372,7 +372,12 @@ Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 `db.migrate` re-reads `user_version` inside each migration's transaction (two
 processes may start at once) and copies a database that already has a schema
 to `backups/pre-upgrade-*.db` first (`backups.before_upgrade`); restoring that
-copy is the only way back, since migrations only go forward.
+copy is the only way back, since migrations only go forward. Code older than
+the database refuses to start (`db.DatabaseTooNew`, naming the copy to
+restore), and two files with one number stop the upgrade, since the second
+would otherwise be skipped for good. Several branches add migrations at once:
+take the next free number above `main`'s highest when you merge `main` in
+(`tests/test_migrations.py` fails on a clash).
 
 ## Commands
 
