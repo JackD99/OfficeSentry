@@ -88,6 +88,68 @@ worker stops, admins see a yellow notice at the top of every page.
 
 To see what the worker is doing: `docker compose logs -f worker`
 
+**Settings → System status** shows the whole picture, problems first: the
+worker, the last collection, the last backup, disk space, the database and the
+app certificates, each with what to do about it.
+
+### Hear about problems without signing in
+
+Office Sentry tells your team itself when the worker stops, a backup fails,
+the disk is over 85% full or most tenants fail to collect: an email to the
+people under *Email reports → Your team* (once *Email delivery* is set up) and
+a post to the Teams, Slack or webhook alert (once *Alerts* is set up). Each
+problem is sent once when it starts, again every day it lasts, and once when
+it's fixed. Turn them off under *Settings → Alerts*, "Problems with Office
+Sentry".
+
+Nothing on the server can tell you the server itself is down, so add a free
+uptime monitor too. It checks this address every few minutes:
+
+```
+https://<your domain>/health/ready
+```
+
+It answers **200** while Office Sentry works and **503** when the database,
+the worker or the disk has a problem. Anyone can read that much, so it's safe
+to give to an outside service; it never names a tenant.
+
+**Uptime Kuma** (self-hosted, on a different machine) or **UptimeRobot** /
+**Better Stack** (free accounts):
+
+1. Add a new monitor of type **HTTP(s)**.
+2. URL: `https://<your domain>/health/ready`. Interval: 5 minutes.
+3. Leave "accepted status codes" at 200-299, so a 503 alerts you.
+4. Choose how it tells you (email, phone app) and save.
+
+To let the monitor see *why* it failed, make a monitoring token on
+*Settings → System status* ("Create monitoring token"). The page shows the
+link with the token once; copy it into the monitor's URL. With the token the
+address returns every check as JSON:
+
+```json
+{"ok": true, "status": "warn", "version": "2.0.0", "checked_at": "2026-10-09T17:40:00Z",
+ "checks": {"worker": {"status": "ok", "summary": "Checked in 20 seconds ago", "age_seconds": 20, ...},
+            "backup": {"status": "warn", "summary": "No backup for 40 hours", ...}, ...}}
+```
+
+`status` is `ok`, `warn` (needs attention; still 200) or `fail` (503). In
+Uptime Kuma, the **HTTP(s) - Json Query** type with the query `status` and
+expected value `ok` alerts on warnings too. A monitor that can send headers
+can send `Authorization: Bearer <token>` instead of putting the token in the
+address (addresses end up in logs). Replace or remove the token on the same
+page.
+
+**Healthchecks.io** works the other way round: something on the server pings
+it, and it alerts when the pings stop. Add a check with a 5-minute period,
+then add this line with `crontab -e` on the server (your check's ping URL):
+
+```
+*/5 * * * * curl -fsS -m 10 http://127.0.0.1:8000/health/ready >/dev/null && curl -fsS -m 10 https://hc-ping.com/<your-check-id> >/dev/null
+```
+
+It pings only while Office Sentry is ready, so you hear when the server, the
+portal or the worker stops.
+
 ## Sign-in protection
 
 Wrong passwords never lock an account, so nobody can keep you out just by
@@ -235,6 +297,24 @@ line with `crontab -e` (change the folder):
 ```
 30 3 * * * cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup --dir /backups --keep 14
 ```
+
+Each run writes how it went to `/data/backup-status.json`, wherever the copy
+goes. *Settings → System status* shows it, and the team gets a system alert
+when a backup fails or is overdue. Other backup jobs (an off-site copy, a
+restore check) record themselves in the same file under their own names:
+
+```json
+{"local":         {"ok": true,  "last_attempt": "2026-10-09T03:45:02Z", "last_success": "2026-10-09T03:45:02Z",
+                   "detail": "officesentry-20261009-034500.db.gz, 412 MB", "error": ""},
+ "offsite":       {"ok": false, "last_attempt": "2026-10-09T03:46:10Z", "last_success": "2026-10-08T03:46:01Z",
+                   "detail": "", "error": "restic couldn't reach the bucket"},
+ "restore_check": {"ok": true,  "last_attempt": "2026-10-05T04:30:00Z", "last_success": "2026-10-05T04:30:00Z",
+                   "detail": "the latest off-site copy restores and opens", "error": ""}}
+```
+
+A nightly copy (`local`, `offsite`) counts as overdue after 26 hours and the
+weekly restore check after 8 days. A job that has never run isn't listed and
+isn't alerted on.
 
 **Keep `secrets.json` too**, somewhere safe and separate from the backups:
 

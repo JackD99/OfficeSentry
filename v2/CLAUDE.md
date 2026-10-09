@@ -285,6 +285,25 @@ has gone for 4 hours and no task for 1), so a wedged loop or thread shows as dow
 housekeeping pass (say "database is locked") is logged, rolled back and
 retried the next minute; it never ends the worker. Don't add Celery or Redis.
 
+Office Sentry's own health is `system_health.assess()` (database, schema
+version, worker heartbeat, last collection and whether most tenants failed
+the last scheduled slot, backups from `<data dir>/backup-status.json`
+(`backups.record_status`; `local` from the `backup` command, `offsite` and
+`restore_check` from the deployment's restic jobs, in one shared format;
+nightly copies overdue after 26 hours, the restore check after 8 days), disk
+and certificates, from stored state only. Each check is `ok`, `warn` or
+`fail`; `/health/ready` answers 503 on any `fail` and shows
+only `{"ok": ...}` unless the caller has the monitoring token (hash in
+`settings`, made on `/admin/status`) or is a signed-in admin, and never names
+a tenant or carries Microsoft's error text. `system_alerts.py` turns the same
+checks into emails to the team contacts and webhook posts (`alerts.system`):
+the worker checks backup, disk and collection as the `system_alerts`
+periodic job, and since a stopped worker can't say so, each web process runs
+a watchdog thread (started on its first request, not under `cfg.testing`) for
+the worker. Alert state is a `system_alert.<key>` settings row changed in a
+write transaction before sending, so two processes never both send. Tests
+see a 40%-full disk (`conftest._roomy_disk`).
+
 Microsoft's limits are per app, not per thread, so every Graph and Exchange
 call in the worker goes through one process-wide limiter
 (`ratelimit.LIMITER`, passed by `worker.default_graph_factory` and

@@ -61,3 +61,12 @@ def every(n: int, noun: str, many: str | None = None, start: bool = False) -> st
     """"all 4 domains", or "the 1 domain" when there's only one. ``start`` capitalises it to open a sentence."""
     text = f"the 1 {noun}" if n == 1 else f"all {n} {nouns(n, noun, many)}"
     return text[0].upper() + text[1:] if start else text
+
+
+def duration(seconds: float) -> str:
+    """How long, roughly, for text people read: "40 seconds", "12 minutes", "5 hours", "3 days"."""
+    seconds = max(0, int(seconds))
+    for unit, size, below in (("second", 1, 60), ("minute", 60, 3600), ("hour", 3600, 2 * 86400)):
+        if seconds < below:
+            return plural(seconds // size, unit)
+    return plural(seconds // 86400, "day")
