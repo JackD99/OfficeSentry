@@ -252,6 +252,54 @@ def cmd_restore(args, cfg):
           "then start the portal and the worker.")
 
 
+def cmd_backup_status(args, cfg):
+    """Show what each backup job last did, or record a job's result (deploy/jobs.sh does, for the off-site
+    copy)."""
+    from .backups import read_status, record_status
+
+    if args.record:
+        if args.ok == args.failed:
+            sys.exit("Say --ok or --failed with --record.")
+        record_status(cfg.data_dir, args.record, args.ok, args.error or None, detail=args.detail or None)
+        return
+    jobs = read_status(cfg.data_dir)
+    if args.json:
+        print(json.dumps(jobs, indent=2))
+        return
+    if not jobs:
+        print("No backup has been recorded yet.")
+    for name, job in sorted(jobs.items()):
+        label = {"local": "Database copy", "offsite": "Off-site copy", "restore_check": "Restore check"}.get(name, name)
+        if job.get("ok"):
+            print(f"{label}: OK at {job.get('last_attempt')}" + (f" ({job['detail']})" if job.get("detail") else ""))
+        else:
+            print(f"{label}: FAILED at {job.get('last_attempt')} "
+                  f"(last worked {job.get('last_success') or 'never'}): {job.get('error') or 'no details'}")
+
+
+def cmd_check_backup(args, cfg):
+    """Check a backup is sound and say what's in it, without restoring it: the restore drill's last step."""
+    import sqlite3
+    from pathlib import Path
+
+    from .backups import RestoreError, inspect, record_status
+
+    source = Path(args.file)
+    try:
+        found = inspect(source)
+    except (RestoreError, OSError, sqlite3.Error) as exc:
+        if args.record:
+            record_status(cfg.data_dir, "restore_check", False, f"{source.name}: {exc}")
+        sys.exit(f"Check failed: {exc}")
+    newest = (found["newest_run"] or "none")[:16].replace("T", " ")
+    summary = (f"database version {found['version']}, {plural(found['tenants'], 'tenant')}, "
+               f"newest collection {newest}")
+    if args.record:
+        record_status(cfg.data_dir, "restore_check", True, detail=f"{source.name}: {summary}")
+    print(f"OK: {source.name} opens and passes SQLite's integrity check; {summary}, "
+          f"{found['bytes'] / 2**20:,.1f} MB unpacked.")
+
+
 def cmd_compact(args, cfg):
     """Compress every snapshot stored before compression now, then shrink the database file."""
     from .packing import compact
@@ -361,6 +409,21 @@ def main(argv=None):
     backup.add_argument("--dir", help="folder for backups (default: <data dir>/backups)")
     backup.add_argument("--keep", type=int, default=7, help="how many backups to keep (0 = all)")
     backup.set_defaults(func=cmd_backup)
+
+    status = sub.add_parser("backup-status", help="show what each backup job last did")
+    status.add_argument("--json", action="store_true", help="print backup-status.json")
+    status.add_argument("--record", choices=["offsite", "restore_check"],
+                        help="record a backup job's result (for deploy/jobs.sh)")
+    status.add_argument("--ok", action="store_true")
+    status.add_argument("--failed", action="store_true")
+    status.add_argument("--detail", default="", help="what it did, in a few words")
+    status.add_argument("--error", default="", help="why it failed, in a few words")
+    status.set_defaults(func=cmd_backup_status)
+
+    check = sub.add_parser("check-backup", help="check a backup is sound and say what's in it, without restoring it")
+    check.add_argument("file", help="the backup to check (.db or .db.gz)")
+    check.add_argument("--record", action="store_true", help="record the result as the restore check")
+    check.set_defaults(func=cmd_check_backup)
 
     restore = sub.add_parser("restore", help="replace the database with a backup (stop the portal and worker first)")
     restore.add_argument("file", help="the backup to restore, e.g. /data/backups/officesentry-20261005-033000.db.gz")

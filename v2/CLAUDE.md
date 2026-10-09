@@ -599,10 +599,18 @@ and `python -m officesentry <command>`:
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
+| `backup-status [--json]` | what each backup job last did (`backup-status.json`); `--record` is for `deploy/jobs.sh` |
+| `check-backup FILE [--record]` | check a backup opens and passes SQLite's integrity check, without restoring it (the restore drill) |
 | `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+
+Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own
+volume), else in the data folder; `config.move_secrets` moves one left in the data folder on start. Never
+put it, or anything that decrypts, in the data volume or a backup. The server's own jobs (nightly backup,
+restic off-site copy, Sunday restore drill, uptime ping) are `deploy/jobs.sh`, scheduled by every deploy;
+restic's settings are in `.env.backup`, read only by the `offsite` service, never by the portal.
 
 Docker: `docker-compose.yml` runs the published image
 (`ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION}`); add

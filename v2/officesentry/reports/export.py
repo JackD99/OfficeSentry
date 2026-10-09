@@ -26,7 +26,7 @@ STATIC_DIR = (Path(__file__).resolve().parent.parent / "web" / "static").resolve
 def allowed_url(url: str) -> bool:
     """True for ``data:`` URIs and files inside STATIC_DIR. Everything else (other files, http(s),
     ftp, other hosts' file shares) is refused, so a slip that lets tenant data into PDF HTML can't
-    read /data/secrets.json or reach the network from the server."""
+    read /keys/secrets.json or reach the network from the server."""
     scheme = url.split(":", 1)[0].lower() if ":" in url else ""
     if scheme == "data":
         return True

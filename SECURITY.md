@@ -146,9 +146,13 @@ place, but nobody can sign in with the old one.
   in front (1 for the bundled Caddy) so sign-in limits and the activity log
   see real client addresses.
 - Only use `OFFICESENTRY_INSECURE_COOKIES=1` for local development over HTTP.
-- Back up the data volume, including `secrets.json`. Losing the encryption
-  key means the stored certificate can't be decrypted and must be replaced.
-  Keep `secrets.json` apart from the database backups.
+- Back up the database, ideally encrypted and off the server (restic to
+  S3-compatible storage, `v2/DEPLOY.md`, "Off-site backups"), and run the
+  restore drill. Keep a copy of `secrets.json` apart from the backups, in a
+  password manager say: losing the encryption key means the stored
+  certificate can't be decrypted and must be replaced. The Docker setup keeps
+  `secrets.json` in its own volume (`/keys`), so the data volume and its
+  backups never hold it.
 - Review the Entra app's permissions and sign-in logs in your own tenant
   from time to time.
 
