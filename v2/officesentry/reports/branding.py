@@ -109,16 +109,18 @@ class Brand:
     @property
     def css(self) -> str:
         """CSS variables for report.css. Only validated hex colours go in, so it's safe inline."""
-        light_ink = readable_on("#ffffff", self.accent)
-        dark_ink = readable_on("#181e27", self.accent)
+        # The ink is readable on its soft background (tags like "New" sit on it), so on plain paper too.
+        light_soft, dark_soft = mix(self.accent, "#ffffff", 0.92), mix(self.accent, "#181e27", 0.82)
+        light_ink = readable_on(light_soft, self.accent)
+        dark_ink = readable_on(dark_soft, self.accent)
         return (
             ":root{"
             f"--brand:{self.accent};--brand-ink:{light_ink};--on-brand:{self.on_accent};"
-            f"--brand-soft:{mix(self.accent, '#ffffff', 0.92)};--brand-line:{mix(self.accent, '#ffffff', 0.7)};"
+            f"--brand-soft:{light_soft};--brand-line:{mix(self.accent, '#ffffff', 0.7)};"
             f"--brand-cover-2:{mix(self.accent, '#000000', 0.25)};--brand-ink-dark:{dark_ink};"
             "}"
             "@media (prefers-color-scheme: dark){body.report:not(.pdf){"
-            f"--brand-ink:{dark_ink};--brand-soft:{mix(self.accent, '#181e27', 0.82)};"
+            f"--brand-ink:{dark_ink};--brand-soft:{dark_soft};"
             f"--brand-line:{mix(self.accent, '#181e27', 0.55)};"
             "}}"
         )
