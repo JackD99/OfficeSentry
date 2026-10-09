@@ -7,7 +7,7 @@ clients, and what changed since last month. It never changes anything in a clien
 
 [![v2](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
 
-[Example reports (PDF)](examples/) · [Quick start](#quick-start) · [What it reads](v2/docs/what-office-sentry-reads.md) ·
+[Website](https://officesentry.co.uk) · [Live demo](https://demo.officesentry.co.uk) · [Example reports (PDF)](examples/) · [Quick start](#quick-start) · [What it reads](v2/docs/what-office-sentry-reads.md) ·
 [Security model](#security-model) · [Technical reference](v2/README.md)
 
 ![A client's overview: key figures, what needs attention and what changed since last month](docs/screenshots/tenant-overview.png)
@@ -253,11 +253,11 @@ kept and how to remove access. Send it with the consent link.
 Office Sentry runs as two containers (the portal and a worker) from one image, with everything stored in one
 Docker volume.
 
-Download `docker-compose.yml`, `Caddyfile` and `.env.example` from the newest
+Download `docker-compose.yml`, `Caddyfile` and `env.example` from the newest
 [release](https://github.com/JackD99/OfficeSentry/releases) into a folder on a Linux server with Docker, then:
 
 ```bash
-cp .env.example .env          # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
+cp env.example .env           # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
 docker compose --profile https up -d
 ```
 

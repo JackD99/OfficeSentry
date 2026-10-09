@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf, tenant_header with context %}
 {% from "_tenant_health.html" import check_list, checklist, check_button, status_pill with context %}
+{% from "_groups.html" import group_chips with context %}
 {% block title %}Manage · {{ tenant.name }}{% endblock %}
 {% block content %}
 {% set admin = current_user.role == 'admin' %}
@@ -81,6 +82,23 @@
         <a class="btn sm" href="{{ consent_link }}" rel="noopener">Open consent page</a>
       </details>
       {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Groups</h2>{% if admin %}<a class="small" href="{{ url_for('groups.index') }}">Manage groups</a>{% endif %}</div>
+      {% if admin and groups %}
+      {% set mine = in_groups|map(attribute='id')|list %}
+      <form method="post" action="{{ url_for('tenant_admin.set_groups', tenant_id=tenant.id) }}">
+        {{ csrf() }}
+        <div class="check-grid">
+        {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}"{% if gr.id in mine %} checked{% endif %}> {{ gr.name }}{% if gr.category %} <span class="faint small">{{ gr.category }}</span>{% endif %}</label>{% endfor %}
+        </div>
+        <div class="form-actions"><button class="sm">Save groups</button></div>
+      </form>
+      {% elif admin %}
+      <p class="small muted m0">No groups yet. <a href="{{ url_for('groups.index') }}">Create groups</a> to sort clients by tier, region or service level.</p>
+      {% elif in_groups %}{{ group_chips(in_groups) }}
+      {% else %}<p class="small muted m0">Not in any group.</p>{% endif %}
     </section>
 
     {% if admin %}

@@ -94,9 +94,9 @@ def test_compose_keeps_the_keys_out_of_the_data_volume():
     for name in ("web", "worker"):
         assert "officesentry-keys:/keys" in services[name]["volumes"]
         assert services[name]["environment"]["OFFICESENTRY_SECRETS_FILE"] == "/keys/secrets.json"
-    # The demo's made-up keys travel with its data; the off-site copy reads the data volume only.
-    for name in ("demo-web", "demo-worker"):
-        assert services[name]["volumes"] == ["officesentry-demo-data:/data"]
+    # The public demo's made-up keys stay in its own memory; the off-site copy reads the data volume only.
+    demo = yaml.safe_load((V2 / "deploy" / "public" / "compose.yml").read_text(encoding="utf-8"))["services"]["demo"]
+    assert "volumes" not in demo and "OFFICESENTRY_SECRETS_FILE" not in demo["environment"]
     assert services["offsite"]["volumes"] == ["officesentry-data:/data:ro", "restic-cache:/cache"]
     assert services["offsite"]["profiles"] == ["offsite"]
     assert re.fullmatch(r"restic/restic:[0-9.]+@sha256:[0-9a-f]{64}", services["offsite"]["image"])

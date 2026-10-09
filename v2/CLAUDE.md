@@ -41,6 +41,14 @@ overview and DEPLOY.md for running it on a server.
   `ENCRYPTED_COLUMNS` in `__main__.py` so `rotate-keys` re-encrypts them
   (encrypted settings keys go in a module's `ENCRYPTED_KEYS`, gathered in
   `ENCRYPTED_SETTINGS`); name them `*_enc`, `test_key_rotation.py` checks.
+- **The public demo** (`web/public_demo.py`, `deploy/public/`) signs every
+  visitor in as the `demo` analyst and refuses anything but GET, HEAD and
+  OPTIONS. It needs both `OFFICESENTRY_PUBLIC_DEMO=1` and the `public_demo`
+  setting that only `scripts/demo_data.py --public` writes, and the visitor is
+  never an admin; keep it that way. It runs on fictional data in its
+  own container, network and memory-only folder, never with the portal's
+  `.env`, data or secrets. A new POST route is refused there automatically;
+  `tests/test_public_demo.py` opens every page as the visitor.
 - **Audit with `db.audit()`**; it records the visitor's address. Repeated
   anonymous events go through `db.audit_counted()` (one row per address and
   hour), and never store what a stranger typed. Sign-in noise is in
@@ -476,6 +484,28 @@ change is audited; note text is never put in the audit log.
   connection still waiting for its client ID in that cloud.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
+
+## Tenant groups
+
+`tenant_groups.py` (schema in `migrations/0029`, admin page `/admin/groups` in
+`web/groups.py`). A group is a name, an optional category (Tier, Region, ...)
+and its tenants (`tenant_group_members`); a tenant is in any number. Groups
+only ever narrow lists of tenants someone already sees (`tenant_groups.only`
+over `visible_tenants()`). The one grant is an admin ticking a group for an
+analyst (`user_tenant_groups`): `access._GRANTED` adds its tenants, now and
+later, and ignores it for every other role. Never read group grants anywhere
+else.
+
+Staff pages that list tenants are `@group_aware` (under `@roles_required`)
+and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
+`/across/*` (and their downloads), `/changes*`, the month-end queue and
+Client tenants. The choice is kept on the sign-in (`sessions.group_id`); a GET
+with `?group=<id>` or `?group=all` picks and redirects to the plain URL. The
+picker (`_groups.html`, `group_picker()`) only offers groups holding a
+tenant the person sees, and downloads say which group they cover
+(`scope().label`). A digest covers one group when `email_schedules.group_id`
+is set (`delivery.digest_data(..., group_id)`); deleting the group sets it
+back to every tenant.
 
 ## Snapshot storage
 

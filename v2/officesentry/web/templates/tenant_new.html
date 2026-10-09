@@ -28,6 +28,15 @@
     </select>
   </label>
   {% else %}<input type="hidden" name="connection_id" value="{{ connections[0].id }}">{% endif %}
+  {% if groups %}
+  <fieldset>
+    <legend>Groups <span class="faint">(optional)</span></legend>
+    {% set picked = request.form.getlist('groups') %}
+    <div class="check-grid">
+    {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}"{% if gr.id|string in picked %} checked{% endif %}> {{ gr.name }}{% if gr.category %} <span class="faint small">{{ gr.category }}</span>{% endif %}</label>{% endfor %}
+    </div>
+  </fieldset>
+  {% endif %}
   <div class="form-actions"><button class="primary">Add tenant</button><a class="btn ghost" href="{{ url_for('tenants.dashboard') }}">Cancel</a></div>
   <p class="footnote m0">The tenant's page then shows a checklist: a Global Administrator of the client's tenant grants admin consent (read-only), assigns Global Reader for mailbox reports, and the first collection runs on its own.</p>
 </form>

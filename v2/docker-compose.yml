@@ -52,37 +52,6 @@ services:
       timeout: 10s
       start_period: 2m
 
-  # Optional demo site: fictional tenants from scripts/demo_data.py on their own
-  # volume (keys included), beside the real portal and never mixed with it.
-  # Every deploy fills it; DEPLOY.md has the steps. OFFICESENTRY_DEMO_IMAGE lets
-  # it run another build than the portal (the Deploy workflow's release mode).
-  demo-web:
-    <<: *officesentry
-    image: ${OFFICESENTRY_DEMO_IMAGE:-ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}}
-    profiles: ["demo"]
-    env_file: .env.demo
-    volumes: ["officesentry-demo-data:/data"]
-    healthcheck:
-      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "web"]
-      interval: 30s
-      timeout: 10s
-      start_period: 30s
-
-  demo-worker:
-    <<: *officesentry
-    image: ${OFFICESENTRY_DEMO_IMAGE:-ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}}
-    profiles: ["demo"]
-    env_file: .env.demo
-    volumes: ["officesentry-demo-data:/data"]
-    command: ["python", "-m", "officesentry", "worker"]
-    depends_on:
-      demo-web: {condition: service_healthy}
-    healthcheck:
-      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "worker"]
-      interval: 1m
-      timeout: 10s
-      start_period: 2m
-
   # Optional automatic HTTPS: set OFFICESENTRY_DOMAIN in .env, point the
   # domain's DNS at this server, then: docker compose --profile https up -d
   caddy:
@@ -90,8 +59,6 @@ services:
     profiles: ["https"]
     environment:
       SITE_ADDRESS: ${OFFICESENTRY_DOMAIN:-localhost}
-      # The demo site's domain, when the "demo" profile runs too.
-      DEMO_SITE_ADDRESS: ${OFFICESENTRY_DEMO_DOMAIN:-demo.localhost}
     ports: ["80:80", "443:443"]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -121,7 +88,6 @@ services:
 volumes:
   officesentry-data:
   officesentry-keys:
-  officesentry-demo-data:
   caddy-data:
   caddy-config:
   restic-cache:

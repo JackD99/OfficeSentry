@@ -62,6 +62,10 @@ class Config:
     trusted_proxies: int = 0
     session_idle_minutes: int = 120
     session_hours: int = 8
+    # The public demo site (web/public_demo.py): every visitor is the read-only demo user. Only takes effect on a
+    # database made by ``scripts/demo_data.py --public``. The link is where its banner sends people.
+    public_demo: bool = False
+    public_demo_link: str = ""
     testing: bool = False
     extra: dict = field(default_factory=dict)
     # Where secrets.json is kept, when not in the data folder (OFFICESENTRY_SECRETS_FILE).
@@ -220,6 +224,8 @@ def load_config(**overrides) -> Config:
         trusted_proxies=int(_env("TRUSTED_PROXIES", "0")),
         session_idle_minutes=int(_env("SESSION_IDLE_MINUTES", "120")),
         session_hours=int(_env("SESSION_HOURS", "8")),
+        public_demo=_env("PUBLIC_DEMO", "") == "1",
+        public_demo_link=_env("PUBLIC_DEMO_LINK", "").strip(),
         secrets_file=secrets_file,
     )
     if cfg.require_mfa not in MFA_POLICIES:

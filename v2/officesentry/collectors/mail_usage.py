@@ -7,8 +7,9 @@ default, so that report usually can't be matched to a mailbox.
 Legacy sign-ins (SMTP AUTH, IMAP, POP and other basic-auth clients) come from
 the Entra sign-in log, which needs Entra ID P1 and keeps 30 days. They are
 asked for in one query filtered on every legacy client; if Microsoft times out
-on that (a long OR filter on a busy tenant), the client list is halved until the
-queries succeed, and the results are merged into the same newest-first list.
+on that, the 30 days are halved (newest first) until the queries succeed, then
+the client list for a day that still fails, and the results are merged into the
+same newest-first list.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from ..exchange import ExchangeAccessDenied, ExchangeError
 from ..graph import GraphError, LicenseRequired, PermissionMissing, is_transient
 from ..mailflow import size_bytes
 from ..text import plural
-from . import mailbox_window
+from . import mailbox_window, sign_ins
 from .base import Collector, RunContext, register
 from .exchange import SYSTEM_MAILBOX_TYPES
 
@@ -33,6 +34,7 @@ LEGACY_CLIENTS = (
 )
 SIGNIN_DAYS = 30
 SIGNIN_PAGES = 50
+MIN_RANGE = timedelta(days=1)  # a timed-out query shorter than this splits its clients, not its time range
 
 
 @register
@@ -118,8 +120,8 @@ class LegacySignIns(Collector):
                 del items[SIGNIN_PAGES * 1000:]
                 truncated = True
         if skipped:
-            ctx.warn("Microsoft's sign-in log timed out for these clients, so they're missing: "
-                     + ", ".join(skipped))
+            ctx.warn("Microsoft's sign-in log timed out for these clients, so some or all of their sign-ins are "
+                     "missing: " + ", ".join(skipped))
         if truncated:
             ctx.truncated = True
             ctx.warn(f"More than {SIGNIN_PAGES * 1000} legacy sign-ins; summarised the most recent ones")
@@ -134,36 +136,68 @@ def fetch_legacy_signins(ctx: RunContext, since: str, clients: tuple[str, ...] |
                          skipped: list[str]) -> tuple[list[dict], bool, bool]:
     """Sign-ins for ``clients`` since ``since``: (items, truncated, whether the query was split).
 
-    A timeout or server error splits the client list in half and tries each
-    half; a single client that still fails is added to ``skipped``. If every
-    client is skipped the first failure is raised, so a broken log still fails.
+    A timeout or server error splits the time range in half and tries each half,
+    newest first, down to ``MIN_RANGE``; a range that short that still fails
+    splits the client list in half instead. A single client that still fails is
+    added to ``skipped``, as is everything not yet read once the splitting has
+    taken ``sign_ins.FALLBACK_SECONDS`` (a log that is down for the whole tenant
+    would otherwise take hours). If no query succeeded the first failure is
+    raised, so a broken log still fails.
     """
-    def fetch(chunk) -> tuple[list[dict], bool, bool]:
+    def skip(chunk) -> None:
+        skipped.extend(c for c in chunk if c not in skipped)
+
+    def fetch(start: datetime, end: datetime | None, chunk) -> tuple[list[dict], bool]:
+        nonlocal expired, answered
+        if expired is not None and expired():
+            ctx.log(f"Gave up on legacy sign-ins for {', '.join(chunk)} before {_iso(end or now)}: "
+                    "the sign-in log is too slow")
+            skip(chunk)
+            return [], False
         flt = " or ".join(f"clientAppUsed eq '{c}'" for c in chunk)
+        upper = f" and createdDateTime lt {_iso(end)}" if end else ""
         try:
             result = ctx.graph.get_all("/auditLogs/signIns", params={
-                "$filter": f"createdDateTime ge {since} and ({flt})", "$top": "1000",
-            }, max_pages=SIGNIN_PAGES)
-            return result.items, result.truncated, False
+                "$filter": f"createdDateTime ge {_iso(start)}{upper} and ({flt})", "$top": "1000",
+            }, max_pages=SIGNIN_PAGES, transient_retries=sign_ins.QUERY_RETRIES)
+            answered += 1
+            return result.items, result.truncated
         except GraphError as exc:
             if not is_transient(exc):
                 raise
             errors.append(exc)
-            if len(chunk) == 1:
-                ctx.log(f"Legacy sign-ins for {chunk[0]} failed: {exc}")
-                skipped.append(chunk[0])
-                return [], False, True
-            ctx.log(f"Legacy sign-in query for {len(chunk)} clients failed ({exc}); splitting it")
-        mid = len(chunk) // 2
-        a_items, a_trunc, _ = fetch(chunk[:mid])
-        b_items, b_trunc, _ = fetch(chunk[mid:])
-        return a_items + b_items, a_trunc or b_trunc, True
+            expired = expired or sign_ins.deadline()
+        stop = end or now
+        if stop - start > MIN_RANGE:
+            # A long range is what times out (seen on the test tenant: 30 days 504s, a week answers).
+            ctx.log(f"Legacy sign-ins from {_iso(start)} failed; splitting the time range")
+            mid = start + (stop - start) / 2
+            newer, a_trunc = fetch(mid, end, chunk)
+            older, b_trunc = fetch(start, mid, chunk)
+            return newer + older, a_trunc or b_trunc
+        if len(chunk) == 1:
+            ctx.log(f"Legacy sign-ins for {chunk[0]} from {_iso(start)} failed")
+            skip(chunk)
+            return [], False
+        ctx.log(f"Legacy sign-in query for {len(chunk)} clients from {_iso(start)} failed; splitting the clients")
+        half = len(chunk) // 2
+        a_items, a_trunc = fetch(start, end, chunk[:half])
+        b_items, b_trunc = fetch(start, end, chunk[half:])
+        return a_items + b_items, a_trunc or b_trunc
 
     errors: list[GraphError] = []
-    items, truncated, split = fetch(list(clients))
-    if errors and len(skipped) == len(clients):
+    expired = None  # starts when the first query fails
+    answered = 0
+    now = datetime.now(UTC).replace(microsecond=0)
+    start = datetime.fromisoformat(since.replace("Z", "+00:00"))
+    items, truncated = fetch(start, None, list(clients))
+    if errors and not answered:
         raise errors[0]
-    return items, truncated, split
+    return items, truncated, bool(errors)
+
+
+def _iso(value: datetime) -> str:
+    return value.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def summarise_signins(signins: list[dict]) -> list[tuple[str, dict]]:

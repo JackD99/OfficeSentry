@@ -211,6 +211,8 @@ def test_converter_runs_from_the_worker_every_minute(db, two_tenants):
 
 def test_compact_packs_everything_and_shrinks_the_file(cfg, db, two_tenants, monkeypatch, capsys):
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    schema = cfg.db_path.stat().st_size  # every table's empty pages, which compression can't shrink
     _legacy(db, two_tenants[0], runs=6, users=2000)
     db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     before = cfg.db_path.stat().st_size
@@ -218,7 +220,8 @@ def test_compact_packs_everything_and_shrinks_the_file(cfg, db, two_tenants, mon
     out = capsys.readouterr().out
     assert "Compressed 12006 snapshot objects" in out
     assert "Shrank the database file" in out
-    assert cfg.db_path.stat().st_size < before / 3
+    # The snapshot data shrinks about 16 times; new tables in later migrations don't change that.
+    assert cfg.db_path.stat().st_size - schema < (before - schema) / 10
     assert packing.unpacked_objects(db) == 0
     assert not list(cfg.data_dir.glob("etilqs_*"))  # VACUUM's temporary file went next to the database, then away
 

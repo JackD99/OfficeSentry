@@ -50,7 +50,7 @@ def test_products_with_cost_and_what_needs_action_first(db, two_tenants):
     rows, flags = _table(report, "Subscriptions")
     by_name = {r[0]: (r, f) for r, f in zip(rows, flags, strict=True)}
     # Lapsing and trials first, free products last.
-    assert [r[0] for r in rows][-2:] == ["Microsoft 365 Business Premium", "FLOW_FREE"]
+    assert [r[0] for r in rows][-2:] == ["Microsoft 365 Business Premium", "Power Automate Free"]
     visio, flag = by_name["Visio Plan 2"]
     assert (visio[1], visio[5], visio[4], flag) == ("Grace period", "3", "0", "high")
     exo, flag = by_name["Exchange Online (Plan 1)"]
@@ -59,7 +59,7 @@ def test_products_with_cost_and_what_needs_action_first(db, two_tenants):
     assert (copilot[1], copilot[10], flag) == ("Trial", "Yes", "medium")
     bp, _ = by_name["Microsoft 365 Business Premium"]
     assert bp[2:5] == ["10", "10", "0"] and "181" in bp[8]  # 10 x 18.10 a month
-    assert by_name["FLOW_FREE"][0][7] == "Free"
+    assert by_name["Power Automate Free"][0][7] == "Free"
     figures = {h.label: h for h in report.highlights}
     assert float(figures["Monthly cost"].value) == round(10 * 18.10 + 5 * 25.0, 2)
     assert figures["Monthly cost"].foot == "Licences bought, at your prices"  # lapsed Visio isn't bought any more
@@ -75,7 +75,7 @@ def test_renewals_list_trials_grace_and_suspended_first(db, two_tenants):
         ("Visio Plan 2", "Grace period", "30 days"),
         ("Exchange Online (Plan 1)", "Suspended", "90 days"),
         ("Microsoft 365 Business Premium", "Active", "Later"),
-        ("FLOW_FREE", "Active", ""),
+        ("Power Automate Free", "Active", ""),
     ]
     assert flags[:4] == ["medium", "high", "high", None]
     assert rows[0][7] == "c-s-copilot" and "trial ends" in rows[0][6]
@@ -265,3 +265,21 @@ def test_subscription_dates_count_from_now(db, two_tenants):
     later = datetime.now(UTC) + timedelta(days=20)  # the Copilot trial has ended by then
     rows, _ = _table(data_reports.build(db, tenant, "subscriptions", now=later), "Renewals and expiry")
     assert rows[0][:2] == ["Microsoft 365 Copilot", "Trial"] and rows[0][5] == "Passed"
+
+
+def test_an_active_state_for_a_licence_no_longer_assigned_is_left_out():
+    # Recorded from the test tenant: assignedLicenses has one SKU, licenseAssignmentStates an extra "Active" one
+    # for a SKU the tenant no longer has. It isn't held, so it isn't listed as an "Unknown licence".
+    from officesentry import licences
+
+    def state(sku, state="Active", group=None):
+        return {"skuId": sku, "state": state, "group": group}
+
+    user = {"skuIds": ["flow"], "licenceStates": [state("flow"), state("gone")]}
+    assert set(licences.assignments(user)) == {"flow"}
+    # A group licence that failed to assign, or a direct one with an error, still shows.
+    user = {"skuIds": [], "licenceStates": [state("e3", "Error", "g1"), {**state("e5", "Error"), "error": "x"}]}
+    assert set(licences.assignments(user)) == {"e3", "e5"}
+    no_teams = "Microsoft_365_ Business_ Premium_(no Teams)"  # Microsoft's own part number, spaces included
+    assert licences.sku_name(no_teams) == "Microsoft 365 Business Premium (no Teams)"
+    assert licences.sku_name("FLOW_FREE") == "Power Automate Free"

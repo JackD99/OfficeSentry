@@ -21,6 +21,7 @@ from ..reports import monthly_review, summary
 from ..reports.data_reports import grouped as report_groups
 from ..text import plural
 from .access import roles_required, tenant_or_404, visible_tenants
+from .groups import group_aware, scoped_tenants
 
 bp = Blueprint("reporting", __name__)
 
@@ -191,12 +192,13 @@ def index():
 
 @bp.get("/reporting/<period>")
 @roles_required(*STAFF)
+@group_aware
 def queue(period: str):
     period = _period_or_404(period)
     show = request.args.get("show", "")
     if show not in FILTERS:
         show = ""
-    rows = month_end.queue(g.db, visible_tenants(g.db, g.user), period)
+    rows = month_end.queue(g.db, scoped_tenants(), period)
     counts = {"": len(rows), "mine": sum(r.reviewer == g.user["username"] for r in rows),
               "review": sum(r.state in ("draft", "in_review") for r in rows), "ready": sum(r.ready for r in rows)}
     shown = [r for r in rows if show == "" or (show == "mine" and r.reviewer == g.user["username"])

@@ -54,6 +54,10 @@ def test_error_codes_in_plain_english():
     assert signins.meaning(50057) == "Account is disabled"
     assert signins.meaning(99999, "Something Microsoft said.") == "Something Microsoft said."
     assert signins.meaning(99999, "Other.") == "Error 99999"
+    # Seen on the test tenant: Microsoft's text with its placeholders unfilled.
+    template = "The {redirectTerm} '{replyAddress}' specified in the request does not match. {detail}"
+    assert signins.meaning(99999, template) == "Error 99999"
+    assert "isn't set up with" in signins.meaning(50011, template)
     assert signins.meaning(None) == "Signed in"
     assert [signins.outcome(c) for c in (0, 50074, 50076, 50140, 50126, 53003)] == \
         ["success", "interrupted", "interrupted", "interrupted", "failure", "failure"]
@@ -430,3 +434,33 @@ def test_a_day_that_still_times_out_is_left_out_with_a_warning(db, two_tenants):
     run_id, status = _run(db, bravo)
     assert status == "failed"
     assert store.run_objects(db, run_id, "sign_in_status") == []
+
+
+@responses.activate
+def test_a_sign_in_log_that_is_down_gives_up_instead_of_holding_the_worker(db, two_tenants, monkeypatch):
+    # Seen on the test tenant: every sign-in log query, however small, timed out after two minutes, and
+    # the run retried each one six times and then tried every day: over an hour on one collector.
+    alpha, bravo = two_tenants
+    _signin_log(_recent_signins(), fail=lambda flt, skip: True)
+    run_id, status = _run(db, alpha)
+    assert status == "failed"
+    # One retry for the week, then one for each one-day window (the last can be a sliver): not seven each.
+    assert len(responses.calls) <= 2 * (2 + signins.WINDOW_DAYS)
+
+    # When even the fallback runs out of time, the windows left are not asked for.
+    now = [0.0]
+
+    def clock():
+        now[0] += sign_ins.FALLBACK_SECONDS / 3
+        return now[0]
+    monkeypatch.setattr(sign_ins, "clock", clock)
+    responses.reset()
+    _signin_log(_recent_signins(), fail=lambda flt, skip: _is_week_query(flt))
+    run_id, status = _run(db, bravo)
+    assert status == "partial"
+    [st] = store.run_objects(db, run_id, "sign_in_status")
+    assert st["available"] and 0 < st["signIns"] < len(_recent_signins())
+    error = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
+    assert "too slow to answer" in error
+    filters = {parse_qs(urlsplit(c.request.url).query)["$filter"][0] for c in responses.calls}
+    assert len(filters) == 1 + 2  # the week, then two days
