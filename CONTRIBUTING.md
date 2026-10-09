@@ -35,8 +35,8 @@ pytest -n auto      # plain `pytest` runs one test at a time, easier for debuggi
 ```
 
 CI runs the same on Python 3.12 for every pull request, with a Docker image
-build and a dependency audit (`pip-audit`); pushes to main and a weekly run
-add Python 3.11 and 3.13 and a subset on Windows. Changes that only touch
+build and a dependency audit (`pip-audit`); pushes to main add Python 3.11
+and 3.13, and a weekly run adds a subset on Windows. Changes that only touch
 Markdown, `docs/` or `examples/` skip CI. The Python 3.12 run measures
 coverage and fails under 90%; `pytest -n auto --cov=officesentry` shows it
 locally.
@@ -62,7 +62,7 @@ The same gates apply to every change, whoever wrote it:
 - CI runs `ruff`, the full test suite on Python 3.12 (with a 90% coverage
   floor), a Docker build and `pip-audit` on every pull request, and a pull
   request isn't merged until it's green. After merging, `main` also runs
-  the suite on Python 3.11 and 3.13 and a Windows subset. The pull request
+  the suite on Python 3.11 and 3.13, and a weekly run a Windows subset. The pull request
   template's checklist covers migrations, new permissions, the access gate
   and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and

@@ -1,10 +1,10 @@
 name: v2
 # v2 is the whole product. The repo is private on GitHub Free (2,000 Actions minutes a month, Windows
 # minutes counting double), so pull requests run lint, the dependency audit, the Docker build and the
-# tests on Python 3.12 with coverage. Pushes to main, the weekly run and manual runs add Python 3.11 and
-# 3.13 and the Windows job; a failure there is fixed on main straight away. The weekly run also catches
-# newly published vulnerabilities in the dependencies. When the repo goes public (standard runners are
-# free there), put the full matrix back on pull requests.
+# tests on Python 3.12 with coverage. Pushes to main add Python 3.11 and 3.13, and the weekly and
+# manual runs add the Windows job too; a failure there is fixed on main straight away. The weekly run
+# also catches newly published vulnerabilities in the dependencies. When the repo goes public
+# (standard runners are free there), put the full matrix back on pull requests.
 #
 # Changes that only touch Markdown, docs/ or examples/ don't run CI. If checks become required (at
 # go-public), add a job that always runs and passes for those, or such PRs can't merge.
@@ -92,9 +92,9 @@ jobs:
     # Windows without Docker: no Pango, so PDF buttons fall back to print-ready pages and the tests that
     # need real PDF rendering skip themselves. The files below cover the parts that differ on Windows
     # (file modes, paths, SQLite files, the waitress server). Not required until it has a run of passes.
-    # Not on pull requests: Windows minutes count double against GitHub Free's allowance.
+    # Only on the weekly and manual runs: Windows minutes count double against GitHub Free's allowance.
     name: test (Windows, no Pango)
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 25
     continue-on-error: true
