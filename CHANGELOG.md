@@ -6,7 +6,7 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-10-09)
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1
 portal. Everything below is new compared with v1.

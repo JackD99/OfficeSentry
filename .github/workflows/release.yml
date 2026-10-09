@@ -11,8 +11,9 @@ name: release
 #   5. the GitHub release is created, with the tag (when it doesn't exist yet), the changelog section and the
 #      files needed to install it (a candidate is a pre-release), and images older than the last three
 #      releases are removed from GHCR.
-# About 8 billed minutes a run: GitHub Free gives a private repository 2,000 a month. arm64 images wait for
-# the repository to go public, when GitHub's Arm runners are free; under emulation they cost too many minutes.
+# About 5 billed minutes a run (2.0.0-rc.1 took 5): GitHub Free gives a private repository 2,000 a month.
+# arm64 images wait for the repository to go public, when GitHub's Arm runners are free; under emulation
+# they cost too many minutes.
 # CONTRIBUTING.md, "Releases", has the steps for a person.
 on:
   push:
