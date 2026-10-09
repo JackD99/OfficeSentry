@@ -5,10 +5,10 @@
  * Report search: <input data-report-search="list-id"> filters the list's [data-name] items, hiding empty
  *   .report-group blocks; a group marked data-search-only shows only while searching.
  * Views: <a data-view> links (filters, columns, sort on detail reports) load the next page in place,
- *   keeping the scroll position, open menus and anything typed in a row search. Plain links without JS.
- * Long tables on phones: a stacked table (table.stack-sm) shows its first 20 rows, with "Show all" under it.
- * Every page loads this file (base.html); a page that also loads it gets one copy. */
+ *   keeping the scroll position, open menus and anything typed in a row search. Plain links without JS. */
 (function () {
+  /* Every page loads this file (base.html); a page that also loads it gets one copy.
+   * Long tables on phones: a stacked table (table.stack-sm) shows its first 20 rows, with "Show all" under it. */
   if (window.officeSentryTables) return;
   window.officeSentryTables = true;
   var CAP = 20;
@@ -105,6 +105,19 @@
       form.querySelector('select').addEventListener('change', function () { form.submit(); });
     });
   }
+  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); }
+  init(document);
+
+  /* Menus (<details class="menu">) close on Escape or a click outside. */
+  document.addEventListener('click', function (e) {
+    document.querySelectorAll('details.menu[open]').forEach(function (d) { if (!d.contains(e.target)) d.open = false; });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('details.menu[open]').forEach(function (d) { d.open = false; d.querySelector('summary').focus(); });
+  });
+
+  /* Long tables on phones: the first CAP rows of a stacked table, then a "Show all" button. */
   function rows(table) {
     return Array.prototype.filter.call(table.tBodies[0].rows, function (r) { return !r.classList.contains('group'); });
   }
@@ -139,17 +152,7 @@
       after.parentNode.insertBefore(button, after.nextSibling);
     });
   }
-  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); capRows(root); }
-  init(document);
-
-  /* Menus (<details class="menu">) close on Escape or a click outside. */
-  document.addEventListener('click', function (e) {
-    document.querySelectorAll('details.menu[open]').forEach(function (d) { if (!d.contains(e.target)) d.open = false; });
-  });
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    document.querySelectorAll('details.menu[open]').forEach(function (d) { d.open = false; d.querySelector('summary').focus(); });
-  });
+  capRows(document);
 
   /* In-place views: fetch the linked page and swap <main>, keeping where the person was. */
   var main = document.querySelector('main');
@@ -189,6 +192,7 @@
         document.title = doc.title;
         if (push) history.pushState({ view: true }, '', href);
         init(main);
+        capRows(main);
         if (before) restore(before);
         main.removeAttribute('aria-busy');
       })
