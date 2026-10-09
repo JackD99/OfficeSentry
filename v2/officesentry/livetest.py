@@ -82,6 +82,10 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
     if record:
         dnscheck.lookup = recording.recording_lookup(log, real_lookup)
     keys = [k for k in REGISTRY if not only or k in only]
+    # Count the test app as consented while collecting: a first success on an unconsented tenant queues every
+    # other collector (worker.execute_run), which would run collectors that weren't asked for, in another order.
+    consented = store.get_tenant(conn, tenant_id)["consented_at"]
+    conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), tenant_id))
     failures = 0
     for key in keys:
         store.enqueue_run(conn, tenant_id, key, trigger="manual")
@@ -93,10 +97,9 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
         print(f"{REGISTRY[key].title:32} {status:10} {count:6} objects  {finished['error'] or ''}")
         failures += status == "failed"
     dnscheck.lookup = real_lookup
-    if failures < len(keys):
-        # Data came back, so admin consent exists; without this the portal says "Awaiting consent".
-        conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
-                     (utcnow(), tenant_id))
+    if failures == len(keys) and consented is None:
+        # Nothing came back, so there may be no admin consent yet; the portal says "Awaiting consent".
+        conn.execute("UPDATE tenants SET consented_at = NULL WHERE id = ?", (tenant_id,))
 
     if record:
         fixture = recording.scrub(log, tenant_ref, client_id)

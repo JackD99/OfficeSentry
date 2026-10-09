@@ -271,3 +271,32 @@ def test_legacy_signins_leave_out_a_client_that_keeps_failing(db, two_tenants):
     _legacy_log(rows, fail=lambda clients: True)
     run_id, status = _legacy_run(db, bravo)
     assert status == "failed" and store.run_objects(db, run_id, "legacy_signin") == []
+
+
+@responses.activate
+def test_legacy_signins_stop_splitting_when_the_log_is_too_slow(db, two_tenants, monkeypatch):
+    from officesentry.collectors import sign_ins
+
+    alpha, bravo = two_tenants
+    rows = _legacy_rows()
+    _legacy_log(rows, fail=lambda clients: True)
+    run_id, status = _legacy_run(db, alpha)
+    assert status == "failed"
+    # Each query is tried twice (one retry), not seven times.
+    assert len(responses.calls) == 2 * (2 * len(LEGACY_CLIENTS) - 1)
+
+    # The time limit starts at the first failure; once it's gone, the clients left aren't asked about.
+    now = [0.0]
+
+    def clock():
+        now[0] += sign_ins.FALLBACK_SECONDS / 4
+        return now[0]
+    monkeypatch.setattr(sign_ins, "clock", clock)
+    responses.reset()
+    _legacy_log(rows, fail=lambda clients: len(clients) > 4)
+    run_id, status = _legacy_run(db, bravo)
+    assert status == "partial"
+    found = {r["client"] for r in store.run_objects(db, run_id, "legacy_signin")}
+    assert found and found < set(LEGACY_CLIENTS)
+    error = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
+    assert "timed out for these clients" in error

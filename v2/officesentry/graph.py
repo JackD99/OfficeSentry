@@ -47,6 +47,9 @@ LICENSE_ERROR_CODES = {
     "Authentication_RequestFromUnsupportedUserRole",
     "AadPremiumLicenseRequired",
 }
+# Messages that say the same with a generic code: Identity Protection on a tenant without Entra ID P2 answers
+# 403 "Forbidden" with "Your tenant is not licensed for this feature." (seen on the test tenant).
+LICENSE_ERROR_MESSAGES = ("premium license", "not licensed for this feature")
 
 
 class GraphError(Exception):
@@ -87,7 +90,7 @@ def _parse_error(resp: requests.Response) -> GraphError:
         request_id = (err.get("innerError") or {}).get("request-id", "")
     except ValueError:
         pass
-    if code in LICENSE_ERROR_CODES or "premium license" in message.lower():
+    if code in LICENSE_ERROR_CODES or any(m in str(message).lower() for m in LICENSE_ERROR_MESSAGES):
         cls = LicenseRequired
     elif resp.status_code == 403 or code == "Authorization_RequestDenied":
         cls = PermissionMissing
@@ -154,8 +157,12 @@ class GraphClient:
 
     # -- Requests ----------------------------------------------------------
 
-    def _get(self, url: str, params: dict | None, headers: dict | None) -> dict:
-        attempt = 0
+    def _get(self, url: str, params: dict | None, headers: dict | None,
+             transient_retries: int | None = None) -> dict:
+        # Timeouts and server errors get ``transient_retries`` (when a caller has a cheaper fallback, such as
+        # asking for less); throttling (429) always gets the full count, since asking again sooner won't help.
+        limit = self._max_retries if transient_retries is None else min(transient_retries, self._max_retries)
+        attempt = failures = 0
         while True:
             hdrs = {"Authorization": f"Bearer {self._token_provider()}", "Accept": "application/json"}
             if headers:
@@ -163,13 +170,16 @@ class GraphClient:
             try:
                 resp = self._session.get(url, params=params, headers=hdrs, timeout=self._timeout)
             except (requests.ConnectionError, requests.Timeout) as exc:
-                if attempt >= self._max_retries:
+                if attempt >= self._max_retries or failures >= limit:
                     raise GraphError(0, "network_error", str(exc)) from exc
                 self._sleep(self._backoff(attempt))
                 attempt += 1
+                failures += 1
                 continue
 
-            if resp.status_code in RETRY_STATUSES and attempt < self._max_retries:
+            throttled = resp.status_code == 429
+            if resp.status_code in RETRY_STATUSES and attempt < self._max_retries and (throttled or failures < limit):
+                failures += not throttled
                 delay = self._retry_after(resp, attempt)
                 log.info("Graph %s on %s; retrying in %ss", resp.status_code, url, delay)
                 self._sleep(delay)
@@ -200,11 +210,12 @@ class GraphClient:
         return min(max(seconds, 0.0), MAX_RETRY_AFTER) + self._jitter()
 
     def get(self, path: str, params: dict | None = None, *, version: str = "v1.0",
-            headers: dict | None = None) -> dict:
-        return self._get(self.build_url(path, version, self.root), params, headers)
+            headers: dict | None = None, transient_retries: int | None = None) -> dict:
+        return self._get(self.build_url(path, version, self.root), params, headers, transient_retries)
 
     def get_all(self, path: str, params: dict | None = None, *, version: str = "v1.0",
-                headers: dict | None = None, max_pages: int = 1000) -> PagedResult:
+                headers: dict | None = None, max_pages: int = 1000,
+                transient_retries: int | None = None) -> PagedResult:
         """Follow ``@odata.nextLink`` and return every item of ``value``."""
         result = PagedResult()
         url: str | None = self.build_url(path, version, self.root)
@@ -214,7 +225,8 @@ class GraphClient:
                 result.truncated = True
                 log.warning("Stopped paging %s after %s pages", path, max_pages)
                 break
-            data = self._get(self.build_url(url, version, self.root), params if first else None, headers)
+            data = self._get(self.build_url(url, version, self.root), params if first else None, headers,
+                             transient_retries)
             first = False
             result.items.extend(data.get("value", []))
             result.pages += 1

@@ -21,7 +21,7 @@ from ..exchange import ExchangeAccessDenied, ExchangeError
 from ..graph import GraphError, LicenseRequired, PermissionMissing, is_transient
 from ..mailflow import size_bytes
 from ..text import plural
-from . import mailbox_window
+from . import mailbox_window, sign_ins
 from .base import Collector, RunContext, register
 from .exchange import SYSTEM_MAILBOX_TYPES
 
@@ -135,20 +135,28 @@ def fetch_legacy_signins(ctx: RunContext, since: str, clients: tuple[str, ...] |
     """Sign-ins for ``clients`` since ``since``: (items, truncated, whether the query was split).
 
     A timeout or server error splits the client list in half and tries each
-    half; a single client that still fails is added to ``skipped``. If every
-    client is skipped the first failure is raised, so a broken log still fails.
+    half; a single client that still fails is added to ``skipped``, as is every
+    client not yet read once the split has taken ``sign_ins.FALLBACK_SECONDS``
+    (a log that is down for the whole tenant would otherwise take hours). If
+    every client is skipped the first failure is raised, so a broken log still fails.
     """
     def fetch(chunk) -> tuple[list[dict], bool, bool]:
+        nonlocal expired
+        if expired is not None and expired():
+            ctx.log(f"Gave up on legacy sign-ins for {', '.join(chunk)}: the sign-in log is too slow")
+            skipped.extend(chunk)
+            return [], False, True
         flt = " or ".join(f"clientAppUsed eq '{c}'" for c in chunk)
         try:
             result = ctx.graph.get_all("/auditLogs/signIns", params={
                 "$filter": f"createdDateTime ge {since} and ({flt})", "$top": "1000",
-            }, max_pages=SIGNIN_PAGES)
+            }, max_pages=SIGNIN_PAGES, transient_retries=sign_ins.QUERY_RETRIES)
             return result.items, result.truncated, False
         except GraphError as exc:
             if not is_transient(exc):
                 raise
             errors.append(exc)
+            expired = expired or sign_ins.deadline()
             if len(chunk) == 1:
                 ctx.log(f"Legacy sign-ins for {chunk[0]} failed: {exc}")
                 skipped.append(chunk[0])
@@ -160,6 +168,7 @@ def fetch_legacy_signins(ctx: RunContext, since: str, clients: tuple[str, ...] |
         return a_items + b_items, a_trunc or b_trunc, True
 
     errors: list[GraphError] = []
+    expired = None  # starts when the first query fails
     items, truncated, split = fetch(list(clients))
     if errors and len(skipped) == len(clients):
         raise errors[0]

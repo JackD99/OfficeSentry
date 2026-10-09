@@ -349,3 +349,23 @@ def test_live_test_command_runs_every_collector(cfg, db, monkeypatch, capsys):
         assert livetest.run(cfg) == 0
     out = capsys.readouterr().out
     assert "Mailboxes" in out and "0 collectors failed" in out
+
+
+def test_live_test_runs_only_the_collectors_asked_for_on_a_new_tenant(cfg, db, monkeypatch, capsys):
+    # A first success on an unconsented tenant queues every other collector; the live test mustn't run those.
+    from unittest.mock import patch
+
+    from officesentry import livetest
+    from tests.seed import mock_tenant
+
+    for k in livetest.ENV:
+        monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")
+    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: (lambda: "tok"))
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
+            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+        mock_tenant(rsps)
+        assert livetest.run(cfg, ["users", "groups"]) == 0
+    ran = [r["collector"] for r in db.execute("SELECT collector FROM runs ORDER BY id")]
+    assert ran == ["users", "groups"]
+    assert db.execute("SELECT consented_at FROM tenants").fetchone()[0]
+    assert "Groups and Teams" in capsys.readouterr().out
