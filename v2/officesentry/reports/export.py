@@ -63,11 +63,17 @@ def url_fetcher():
     return fetch
 
 
+# Tagged PDF/UA: headings, tables and reading order are marked up for screen readers, and the
+# document's language and title are set, which insurers and public-sector clients increasingly ask for.
+PDF_VARIANT = "pdf/ua-1"
+
+
 def to_pdf(html: str, base_url: str) -> bytes:
     """Every PDF the app makes goes through here (web downloads and emailed reports)."""
     import weasyprint
 
-    return weasyprint.HTML(string=html, base_url=base_url, url_fetcher=url_fetcher()).write_pdf()
+    return weasyprint.HTML(string=html, base_url=base_url, url_fetcher=url_fetcher()).write_pdf(
+        pdf_variant=PDF_VARIANT)
 
 
 RESULTS = {"pass": "Passed", "fail": "Needs attention", "unavailable": "Not checked", "accepted": "Accepted risk"}

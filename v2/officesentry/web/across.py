@@ -280,7 +280,17 @@ def changes_download(ext: str):
 def _tenant_changes(t, days: int) -> dict:
     report = month_changes.build(g.db, t, days)
     unchanged = [r for r in report.reports if not r.count and not r.note]
-    return {"report": report, "days": days, "unchanged": unchanged, "titles": RULE_TITLES}
+    return {"report": report, "days": days, "unchanged": unchanged, "titles": RULE_TITLES,
+            "areas": _change_areas(report)}
+
+
+def _change_areas(report) -> list[tuple[str, list]]:
+    """The reports with changes, under their menu group (Identity and access, Email, ...), in menu order."""
+    order = {key: (i, group.title) for i, group in enumerate(data_reports.grouped()) for key, _, _ in group.reports}
+    areas: dict[str, list] = {}
+    for r in sorted((r for r in report.reports if r.count), key=lambda r: order.get(r.key, (len(order), ""))[0]):
+        areas.setdefault(order.get(r.key, (0, "More reports"))[1], []).append(r)
+    return list(areas.items())
 
 
 @bp.get("/tenants/<int:tenant_id>/changes")
