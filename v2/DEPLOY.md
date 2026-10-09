@@ -8,9 +8,41 @@ tidies old data). Everything it stores lives in one Docker volume.
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
   installed. A small VM (2 CPUs, 2 GB RAM) is a reasonable start; disk use
-  grows with the number of tenants and users.
+  grows with the number of tenants and users (see [How much disk](#how-much-disk)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
+
+### How much disk
+
+Measured with `scripts/scale_data.py`: 200 client tenants of about 110
+accounts each, after two years of nightly collection with the default *Data
+retention* settings.
+
+| Tenants | Database | One nightly backup | Disk to plan for |
+|---|---|---|---|
+| 50 | about 1 GB | about 0.3 GB | 20 GB |
+| 200 | 4.0 GB | 1.2 GB (under 2 minutes) | 40 GB |
+| 500 | about 10 GB | about 3 GB | 80 GB |
+
+The 50 and 500 rows are scaled from the 200-tenant measurement. A tenant with
+twice the accounts takes about twice the room. "Disk to plan for" covers the
+operating system and Docker, the database, 7 nightly backups and the room a
+backup needs while it's being made (about the database's size again). Of the
+4.0 GB, collected data is 0.8 GB (stored compressed); the rest is run history
+and trend figures, which grow by about 0.7 MB per tenant a month.
+
+Before collected data was compressed the same database was 13.8 GB and 7
+backups took about 97 GB. An existing install compresses its older data a few
+seconds a minute in the background after updating; the file then stops
+growing for a long while but doesn't shrink by itself. To get the space back
+at once, run this at a quiet time (it pauses collections while it runs; on a
+large database expect several minutes):
+
+```bash
+docker compose stop worker
+docker compose run --rm --no-deps worker python -m officesentry compact
+docker compose start worker
+```
 
 ## First start
 
@@ -161,7 +193,7 @@ docker compose exec web python -m officesentry backup
 
 That writes to `/data/backups` inside the volume and keeps the last 7
 (`--keep 14` keeps more). Each copy is checked, then compressed
-(`officesentry-<time>.db.gz`, about a tenth of the database's size). While
+(`officesentry-<time>.db.gz`, about a third of the database's size). While
 it's being made, the uncompressed copy needs room next to it: the backup
 stops with a plain message if the disk is short of about one and a half
 times the database's size.
@@ -349,7 +381,8 @@ removes it at the end.
 *Servers → Add server*:
 
 - **Image** Ubuntu 24.04. **Type** shared vCPU, x86, 2 vCPUs and 4 GB (the
-  smallest is fine to start).
+  smallest is fine to start). Check its disk against
+  [How much disk](#how-much-disk); a bigger type can be chosen later.
 - **Networking** public IPv4 (and IPv6 if you like).
 - **SSH keys** none needed.
 - **Firewalls** tick `officesentry`.

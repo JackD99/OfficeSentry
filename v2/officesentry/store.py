@@ -158,8 +158,9 @@ def latest_run(conn, tenant_id: int, collector: str, successful: bool = True):
 # BLOB is a pack: consecutive objects of one run and kind, in object id order,
 # keyed by its first object's id, with ``items`` saying how many it holds. Inside,
 # each object is one line of ``json.dumps([object_id, data], sort_keys=True)``,
-# and the lines are compressed together, which shrinks a night's JSON about
-# eight times where one row per object barely shrank. Rows written before packing
+# and the lines are compressed together: collected data takes about a
+# thirteenth of the room it took as one row per object (scripts/scale_data.py,
+# 200 tenants: 10.4 GB to 0.8 GB). Rows written before packing
 # hold one object as JSON text (``items`` 1); every reader here takes both, and
 # ``packing.py`` converts old rows in the background.
 #
@@ -197,13 +198,6 @@ def pack_lines(blob: bytes) -> list[bytes]:
     return zlib.decompress(blob[1:]).split(b"\n")
 
 
-def _row_lines(row) -> list[bytes]:
-    """A stored row as object lines: a pack's lines, or an unpacked row's one object."""
-    if isinstance(row["data"], bytes):
-        return pack_lines(row["data"])
-    return [_line(row["object_id"], json.loads(row["data"]))]
-
-
 def write_packs(conn, run_id: int, kind: str, lines: dict[str, bytes]) -> None:
     """Replace everything stored for the run and kind with packs of ``lines`` ({object id: line})."""
     conn.execute("DELETE FROM objects WHERE run_id = ? AND kind = ?", (run_id, kind))
@@ -218,8 +212,10 @@ def stored_lines(conn, run_id: int, kind: str) -> dict[str, bytes]:
     lines: dict[str, bytes] = {}
     for row in conn.execute("SELECT object_id, data FROM objects WHERE run_id = ? AND kind = ? ORDER BY object_id",
                             (run_id, kind)):
-        for line in _row_lines(row):
-            lines[json.loads(line)[0]] = line
+        if isinstance(row["data"], bytes):
+            lines.update((json.loads(line)[0], line) for line in pack_lines(row["data"]))
+        else:  # the stored JSON as it is, so it reads back exactly as before
+            lines[row["object_id"]] = b"[%s, %s]" % (json.dumps(row["object_id"]).encode(), row["data"].encode())
     return lines
 
 

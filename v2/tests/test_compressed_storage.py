@@ -157,6 +157,49 @@ def test_converter_packs_old_rows_a_little_at_a_time_and_resumes(db, two_tenants
     assert [r["object_count"] for r in db.execute("SELECT object_count FROM runs ORDER BY id")] == [41, 41, 41]
 
 
+def test_a_conversion_stopped_part_way_loses_nothing_and_resumes(db, two_tenants, monkeypatch):
+    ids = _legacy(db, two_tenants[0])
+    before = {rid: store.run_objects(db, rid) for rid in ids}
+    real = store.write_packs
+    calls = []
+
+    def dies_on_the_third_kind(conn, run_id, kind, lines):
+        calls.append(kind)
+        if len(calls) == 3:  # the worker stopped (or the disk filled) half way through writing a kind
+            conn.execute("DELETE FROM objects WHERE run_id = ? AND kind = ?", (run_id, kind))
+            raise sqlite3.OperationalError("database or disk is full")
+        real(conn, run_id, kind, lines)
+
+    monkeypatch.setattr(store, "write_packs", dies_on_the_third_kind)
+    with pytest.raises(sqlite3.OperationalError):
+        packing.pack_some(db, seconds=None)
+    # The kind being written was rolled back whole: every run still reads exactly as before.
+    assert {rid: store.run_objects(db, rid) for rid in ids} == before
+    assert db.execute("SELECT value FROM settings WHERE key = ?", (packing.PROGRESS_KEY,)).fetchone()[0] == str(ids[0])
+    monkeypatch.setattr(store, "write_packs", real)
+    assert packing.pack_some(db, seconds=None) == (82, True)  # carries on from the run it stopped in
+    assert {rid: store.run_objects(db, rid) for rid in ids} == before
+    assert packing.unpacked_objects(db) == 0
+
+
+def test_the_upgrade_itself_is_instant_and_changes_no_rows(cfg, monkeypatch):
+    from officesentry import db as db_module
+
+    every = db_module.migration_files()
+    monkeypatch.setattr(db_module, "migration_files", lambda: every[:-1])
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    tid = store.create_tenant(conn, "Old", "old.onmicrosoft.com", None)
+    rid = store.enqueue_run(conn, tid, "users")
+    conn.execute("INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, 'user', 'u1', '{\"n\": 1}')",
+                 (rid,))
+    monkeypatch.setattr(db_module, "migration_files", lambda: every)
+    migrate(conn)
+    row = conn.execute("SELECT data, items FROM objects").fetchone()
+    assert (row["data"], row["items"]) == ('{"n": 1}', 1)  # left as it was, and counted as one object
+    assert store.run_objects(conn, rid) == [{"n": 1, "_kind": "user", "_id": "u1"}]
+
+
 def test_converter_runs_from_the_worker_every_minute(db, two_tenants):
     for module in worker.JOB_MODULES:
         __import__(module)
