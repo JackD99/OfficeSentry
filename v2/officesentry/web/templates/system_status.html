@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf, ts %}
+{% block title %}System status · Office Sentry{% endblock %}
+{% set TONE = {'ok': 'ok', 'warn': 'warn', 'fail': 'bad'} %}
+{% set WORD = {'ok': 'Working', 'warn': 'Needs attention', 'fail': 'Not working'} %}
+{% block content %}
+<div class="page-head"><div><h1>System status</h1>
+  <div class="sub">Whether Office Sentry itself is working: the worker, collection, backups and disk. Checked {{ ts(health.checked_at.strftime('%Y-%m-%dT%H:%M:%SZ')) }}.</div></div>
+  <span class="pill {{ TONE[health.status] }}">{{ WORD[health.status] }}</span></div>
+
+{% if health.attention %}
+<section class="system-attention" aria-labelledby="attention-title">
+  <h2 id="attention-title" class="sr-only">Needs attention</h2>
+  {% for c in health.attention %}
+  <div class="callout {{ TONE[c.status] }}" role="status">{{ icon('alert') }}<span class="grow"><strong>{{ c.label }}: {{ c.summary }}{{ '' if c.summary.endswith('.') else '.' }}</strong>
+    {% if c.fix %}<span class="fix">{{ c.fix }}</span>{% endif %}</span>
+    {% if c.key in fix_links %}<a class="btn sm" href="{{ url_for(fix_links[c.key][0]) }}">{{ fix_links[c.key][1] }}</a>{% endif %}</div>
+  {% endfor %}
+</section>
+{% else %}
+<div class="callout ok" role="status">{{ icon('check') }}<span><strong>Everything is working.</strong> The worker is running, data is being collected, backups are recent and there's room on the disk.</span></div>
+{% endif %}
+
+{% set w, col, bak, disk = checks.get('worker'), checks.get('collection'), checks.get('backup'), checks.get('disk') %}
+<div class="tiles">
+  {% if w %}<div class="tile tone-{{ TONE[w.status] }}"><div class="label"><span class="dot {{ TONE[w.status] }}"></span>Background worker</div>
+    <div class="value">{{ 'Running' if w.status == 'ok' else 'Stopped' }}</div>
+    <div class="foot">{% if w.data.last_seen %}Checked in {{ ts(w.data.last_seen) }}{% else %}Has never checked in{% endif %}</div></div>{% endif %}
+  {% if col %}<div class="tile tone-{{ TONE[col.status] }}"><div class="label"><span class="dot {{ TONE[col.status] }}"></span>Last collection</div>
+    <div class="value small-value">{% if col.data.last_success %}{{ col.data.last_success|ago }}{% else %}Not yet{% endif %}</div>
+    <div class="foot">{{ col.data.tenants|plural('tenant') }} on the schedule</div></div>{% endif %}
+  {% if bak %}<div class="tile tone-{{ TONE[bak.status] }}"><div class="label"><span class="dot {{ TONE[bak.status] }}"></span>Last backup</div>
+    {% set newest = bak.data.jobs.values()|map(attribute='last_success')|select|sort|last if bak.data.jobs else none %}
+    <div class="value small-value">{% if newest %}{{ newest|ago }}{% else %}None yet{% endif %}</div>
+    <div class="foot">{% if newest %}{{ newest|when }}{% else %}{{ bak.summary }}{% endif %}</div></div>{% endif %}
+  {% if disk %}<div class="tile tone-{{ TONE[disk.status] }}"><div class="label"><span class="dot {{ TONE[disk.status] }}"></span>Disk space</div>
+    <div class="value">{{ '%.0f'|format(disk.data.used_percent or 0) }}% <span class="unit">used</span></div>
+    <div class="foot">{% if disk.data.free_bytes is not none %}{{ size(disk.data.free_bytes) }} free of {{ size(disk.data.total_bytes) }}{% endif %}</div></div>{% endif %}
+</div>
+
+<div class="grid-main">
+<section class="card flush">
+  <div class="card-head"><h2>Every check</h2><a class="meta" href="{{ url_for('health_ready') }}">As JSON</a></div>
+  <table class="stack-sm system-checks">
+    <thead><tr><th>Check</th><th>Status</th><th>What we found</th></tr></thead>
+    <tbody>
+    {% for c in health.checks %}
+    <tr><td>{{ c.label }}</td>
+      <td data-label="Status"><span class="pill {{ TONE[c.status] }}">{{ WORD[c.status] if c.status != 'ok' else 'OK' }}</span></td>
+      <td data-label="What we found">{{ c.summary }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="stack">
+<section class="card">
+  <div class="card-head"><h2>{{ icon('bell') }} System alerts</h2>{% if system_on %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
+  {% if not system_on %}
+  <p class="muted small">Turned off. Nobody hears about these problems unless they open this page.</p>
+  {% elif not channels.email and not channels.webhook %}
+  <div class="callout warn">{{ icon('alert') }}<span><strong>Nowhere to send them yet.</strong> Add your team under <a href="{{ url_for('email.overview') }}#team">Email reports</a> (with <a href="{{ url_for('email.settings') }}">Email delivery</a> set up), or set up a webhook under <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</span></div>
+  {% else %}
+  <p class="muted small">When the worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect, Office Sentry tells
+    {% if channels.email %}{{ channels.email|plural('team contact') }} by email{% endif %}{% if channels.email and channels.webhook %} and {% endif %}{% if channels.webhook %}your {{ channels.webhook }} webhook{% endif %}: once when it starts, daily while it lasts, and when it's fixed.</p>
+  {% endif %}
+  {% if tracked %}
+  <ul class="list compact">
+    {% for key, st in tracked.items() %}<li><span class="dot warn"></span> {{ labels.get(key, key) }} <span class="muted small">since {{ ts(st.since) }}{% if not st.sent_at %}, not sent yet{% endif %}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  <div class="form-actions"><a class="btn sm" href="{{ url_for('alerts.settings') }}">Alert settings</a></div>
+</section>
+
+<section class="card" id="monitoring">
+  <h2>{{ icon('connection') }} Uptime monitoring</h2>
+  <p class="muted small">So you hear when the server itself is down, point a free uptime monitor (Uptime Kuma, UptimeRobot, Better Stack) at this address. It answers <strong>200</strong> while Office Sentry works and <strong>503</strong> when the database, the worker or the disk has a problem.</p>
+  <p class="secret">{{ ready_url }}</p>
+  {% if new_token %}
+  <div class="callout warn"><span><strong>Copy this link now: it isn't shown again.</strong> With the token, the address also returns every check as JSON. A monitor can send it as an <span class="mono">Authorization: Bearer</span> header instead.</span></div>
+  <p class="secret">{{ ready_url }}?token={{ new_token }}</p>
+  {% elif has_token %}
+  <p class="muted small">A monitoring token is set: monitors that send it also get every check as JSON.</p>
+  <div class="form-actions">
+    <form method="post" action="{{ url_for('system.create_token') }}" data-confirm="Make a new token? Monitors using the old one only see whether Office Sentry is ready until you update them.">{{ csrf() }}<button class="sm">Replace token</button></form>
+    <form method="post" action="{{ url_for('system.remove_token') }}" data-confirm="Remove the monitoring token?">{{ csrf() }}<button class="sm ghost danger">Remove</button></form>
+  </div>
+  {% else %}
+  <p class="muted small">The details stay private. To let a monitor read them too, make a monitoring token.</p>
+  <form method="post" action="{{ url_for('system.create_token') }}" class="form-actions">{{ csrf() }}<button class="sm">Create monitoring token</button></form>
+  {% endif %}
+</section>
+
+<section class="card flush">
+  <div class="card-head"><h2>Recent system alerts</h2></div>
+  {% if recent %}
+  <ul class="list compact recent-system-alerts">
+    {% for a in recent %}<li><span class="muted small nowrap">{{ ts(a.ts) }}</span> <span class="small">{{ a.detail }}</span></li>{% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty compact"><p>None sent yet.</p></div>
+  {% endif %}
+</section>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+});
+</script>
+{% endblock %}

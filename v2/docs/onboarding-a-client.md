@@ -22,7 +22,8 @@ errors and their fixes.
   differ, Microsoft shows error `AADSTS50011` on the consent page.
 - **The app connection is ready.** *Settings → App connection* shows the
   connection as *Ready* once it has a certificate and the app's client ID.
-  You set this up once for all clients.
+  You set this up once for all clients: press *Sign in to Microsoft* there and
+  Office Sentry creates the app, then offers to add your first tenant.
 - **You are an Office Sentry admin.** Only admins can add tenants, see consent
   links and change or delete tenants. Analysts can see connection health and
   press *Check connection now*.
@@ -272,9 +273,10 @@ are partial). *Settings → Client tenants* shows which tenants still miss it.
 1. **Add the permission to the app registration** in your own (MSP) tenant:
    *App registrations → (the app) → API permissions → Add a permission*,
    application permissions. *Settings → App connection → Permissions the app
-   asks for* lists what this version of Office Sentry expects. Don't run
-   `create-app` again: it creates a second app, and existing tenants stay on
-   the first.
+   asks for* lists what this version of Office Sentry expects. Don't create
+   the app again (with *Sign in to Microsoft* or `create-app`): that makes a
+   second app, and existing tenants stay on the first. Office Sentry refuses
+   a second app for a cloud that already has one from the App connection page.
 2. **Re-consent each tenant**: on the **Manage** page, open *Re-grant consent
    (after new permissions)* under Settings, or *Open consent link* next to
    *Permissions*, the same way as step 2.

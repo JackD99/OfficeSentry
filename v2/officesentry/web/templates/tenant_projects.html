@@ -7,7 +7,8 @@
 {{ tenant_header(tenant, 'projects', title='Recommended projects') }}
 {% set open = recs|rejectattr('status', 'equalto', 'declined')|list %}
 <div class="toolbar">
-  <p class="muted small intro-line">Projects this tenant's latest data calls for, worst problems first. They update after each collection and drop off once the problems are fixed.</p>
+  <p class="muted small intro-line">{% if recs or quick %}<strong>{{ open|length|plural('project') }} worth proposing{% if quick %}, and {{ quick|length|plural('quick fix', 'quick fixes') }} to just do{% endif %}.</strong>
+    {% endif %}A project is half a day or more of work ({{ min_hours }} hours or more); anything smaller is a quick fix. Both update after each collection and drop off once fixed.</p>
   {% if open %}<div class="toolbar-actions">{{ downloads([('PDF', url_for('projects.pdf', tenant_id=tenant.id), 'A proposal for the client: every project not declined, without the team notes')]) }}</div>{% endif %}
 </div>
 
@@ -15,7 +16,7 @@
 <section class="card project" id="project-{{ p.key }}">
   <div class="card-head">
     <div><h2>{{ p.title }}</h2>
-      <div class="meta"><span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% if rec.size %} · {{ rec.size }}{% endif %} · {{ status_pill(rec) }}</div></div>
+      <div class="meta"><span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span>{% if rec.size %} · {{ rec.size }}{% endif %} · <span title="A rough estimate from what needs fixing, including planning and handover">{{ rec.effort }}</span> · {{ status_pill(rec) }}</div></div>
   </div>
   <p>{{ p.pitch }}</p>
   <div class="project-cols">
@@ -33,7 +34,29 @@
 {% else %}
 <div class="card empty">
   <h3>No projects to recommend</h3>
-  <p>Nothing in this tenant's latest data calls for one{% if not tenant_has_data %}, or no data has been collected yet{% endif %}. Findings accepted as a risk don't count.</p>
+  <p>{% if not tenant_has_data %}No data has been collected yet.{% elif quick %}Nothing in this tenant's latest data adds up to a project; the quick fixes below cover what's left.{% else %}Nothing in this tenant's latest data calls for one.{% endif %} Findings accepted as a risk don't count.</p>
 </div>
 {% endfor %}
+
+{% if quick %}
+<section class="card flush" id="quick-fixes">
+  <div class="card-head toolbar"><div><h2>Quick fixes <span class="count-badge">{{ quick|length }}</span></h2>
+    <p class="muted small">Smaller jobs to just do, worst first ({{ quick_hours|lower }} in all). Critical ones are here even when a project covers the rest, so they don't wait on a sale.</p></div></div>
+  <div class="table-scroll">
+  <table class="stack-sm">
+    <thead><tr><th>What we found</th><th>Priority</th><th>What to do</th><th>Estimate</th></tr></thead>
+    <tbody>
+    {% for r in quick %}
+    <tr>
+      <td>{% if r.check %}<a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}#check-{{ r.check }}">{{ r.summary }}</a>{% else %}{{ r.summary }}{% endif %}<span class="sub muted">{{ r.title }}</span></td>
+      <td data-label="Priority"><span class="sevtext {{ r.severity }}">{{ r.severity }}</span></td>
+      <td data-label="What to do" class="wrap small">{{ r.action }}</td>
+      <td data-label="Estimate" class="nowrap small">{{ r.effort }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
 {% endblock %}

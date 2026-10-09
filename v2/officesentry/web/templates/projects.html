@@ -5,7 +5,7 @@
 {% block title %}Projects · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Recommended projects</h1>
-  <div class="sub">Work each client's Microsoft 365 data shows they need, from the latest collection. A project drops off once the tenant is fixed.</div></div></div>
+  <div class="sub">Work each client's Microsoft 365 data shows they need, from the latest collection: half a day or more each. Smaller jobs are quick fixes on each client's page. A project drops off once the tenant is fixed.</div></div></div>
 
 {% if not data.rows %}
 <div class="card empty">
@@ -22,6 +22,8 @@
     <div class="foot">waiting on the client</div></div>
   <div class="tile"><div class="label">Agreed</div><div class="value">{{ data.count(project, 'agreed') }}</div>
     <div class="foot">still showing in the data</div></div>
+  <div class="tile"><div class="label">Quick fixes</div><div class="value">{{ data.quick_fixes }}</div>
+    <div class="foot">too small for a project</div></div>
 </div>
 
 <nav class="subtabs" aria-label="Project">
@@ -52,7 +54,7 @@
       <td data-label="Priority"><span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span></td>
       <td data-label="Why" class="wrap small">{% for r in rec.reasons[:3] %}{{ r.summary }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if rec.reasons|length > 3 %}<span class="faint"><br>and {{ rec.reasons|length - 3 }} more</span>{% endif %}
         {% if rec.note %}<span class="sub muted">Note: {{ rec.note }}</span>{% endif %}</td>
-      <td data-label="Size" class="nowrap">{{ rec.size or '–' }}</td>
+      <td data-label="Size" class="nowrap">{{ rec.size or '–' }}<span class="sub muted">{{ rec.effort }}</span></td>
       <td data-label="Status">{{ status_form(t, rec, statuses, back='all', project=project, note=False) }}</td>
     </tr>
     {% endfor %}
