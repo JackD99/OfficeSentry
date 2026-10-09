@@ -41,6 +41,14 @@ overview and DEPLOY.md for running it on a server.
   `ENCRYPTED_COLUMNS` in `__main__.py` so `rotate-keys` re-encrypts them
   (encrypted settings keys go in a module's `ENCRYPTED_KEYS`, gathered in
   `ENCRYPTED_SETTINGS`); name them `*_enc`, `test_key_rotation.py` checks.
+- **The public demo** (`web/public_demo.py`, `deploy/public/`) signs every
+  visitor in as the `demo` analyst and refuses anything but GET, HEAD and
+  OPTIONS. It needs both `OFFICESENTRY_PUBLIC_DEMO=1` and the `public_demo`
+  setting that only `scripts/demo_data.py --public` writes, and the visitor is
+  never an admin; keep it that way. It runs on fictional data in its
+  own container, network and memory-only folder, never with the portal's
+  `.env`, data or secrets. A new POST route is refused there automatically;
+  `tests/test_public_demo.py` opens every page as the visitor.
 - **Audit with `db.audit()`**; it records the visitor's address. Repeated
   anonymous events go through `db.audit_counted()` (one row per address and
   hour), and never store what a stranger typed. Sign-in noise is in

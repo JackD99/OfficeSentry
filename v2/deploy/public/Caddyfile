@@ -1,4 +1,5 @@
-# The public server's two sites (docker-compose.yml here). Caddy gets and renews their certificates itself.
+# The project's own server (compose.yml here): the private portal, the website and the public demo.
+# Caddy gets and renews every certificate itself.
 (headers) {
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -9,8 +10,19 @@
 	}
 }
 
+# The private portal, for the addresses in OFFICESENTRY_PORTAL_IPS only (the server's firewall lets everyone
+# in, for the website and demo). Anyone else gets a plain "not found".
+{$SITE_ADDRESS} {
+	@outside not remote_ip {$PORTAL_ALLOWED_IPS}
+	respond @outside "Not found" 404 {
+		close
+	}
+	encode gzip
+	reverse_proxy web:8000
+}
+
 # The website: plain files, no scripts from anywhere else.
-{$SITE_DOMAIN} {
+{$WEBSITE_ADDRESS} {
 	import headers
 	header {
 		Content-Security-Policy "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
@@ -19,23 +31,22 @@
 	}
 	@assets path /assets/* /screenshots/* /examples/*
 	header @assets Cache-Control "public, max-age=86400"
-	root * /srv/site
+	root * /srv/website
 	encode zstd gzip
-	try_files {path} {path}/ {path}.html
 	file_server
 	handle_errors 404 {
-		root * /srv/site
+		root * /srv/website
 		rewrite * /404.html
 		file_server
 	}
 }
 
-www.{$SITE_DOMAIN} {
-	redir https://{$SITE_DOMAIN}{uri} permanent
+www.{$WEBSITE_ADDRESS} {
+	redir https://{$WEBSITE_ADDRESS}{uri} permanent
 }
 
-# The demo: the portal sets its own security headers.
-demo.{$SITE_DOMAIN} {
+# The demo. The portal sets its own security headers.
+{$DEMO_SITE_ADDRESS} {
 	import headers
 	encode zstd gzip
 	reverse_proxy demo:8000

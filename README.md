@@ -7,7 +7,7 @@ clients, and what changed since last month. It never changes anything in a clien
 
 [![v2](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
 
-[Example reports (PDF)](examples/) · [Quick start](#quick-start) · [What it reads](v2/docs/what-office-sentry-reads.md) ·
+[Website](https://officesentry.co.uk) · [Live demo](https://demo.officesentry.co.uk) · [Example reports (PDF)](examples/) · [Quick start](#quick-start) · [What it reads](v2/docs/what-office-sentry-reads.md) ·
 [Security model](#security-model) · [Technical reference](v2/README.md)
 
 ![A client's overview: key figures, what needs attention and what changed since last month](docs/screenshots/tenant-overview.png)

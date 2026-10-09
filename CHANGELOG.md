@@ -17,6 +17,12 @@ portal. Everything below is new compared with v1.
   the published image, `ghcr.io/jackd99/officesentry`, instead of building the folder. Add
   `OFFICESENTRY_VERSION=2.0.0` to `.env`, then `docker compose pull && docker compose up -d`. To keep
   building from the folder instead, add `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` to `.env`.
+- **Servers deployed with the Deploy workflow that ran the demo site** (`DEMO_ENABLED`): the password-protected
+  demo is replaced by a public, read-only one that resets every night, meant for the project's own server
+  ([v2/deploy/public/README.md](v2/deploy/public/README.md)). Delete the `DEMO_PASSWORD` secret. To keep a
+  demo, follow that README (it opens port 443 to everyone, so the portal's allow-list moves to the
+  `PORTAL_ALLOWED_IPS` secret); otherwise set `DEMO_ENABLED` to `false`. The old demo's data can go with
+  `docker volume rm v2_officesentry-demo-data` in a shell.
 - While the repository is private, the image is too: a server pulling it needs `docker login ghcr.io`
   with a GitHub token that can read packages.
 
@@ -41,6 +47,8 @@ first, then upgrades it on start. New installs start with an empty database.
 - Tenant pause, archive and delete; connection health with plain-English fixes; national clouds (GCC High,
   DoD and China).
 - Two-step sign-in, server-side sessions, an activity log, backups and a `restore` command.
+- The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
+  pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Releases: a versioned image on GHCR for amd64 servers with an SBOM, build provenance and a
   vulnerability scan; the version shows at the foot of the menu and on `/health`.
 

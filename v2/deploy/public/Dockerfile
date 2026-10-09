@@ -1,8 +1,7 @@
 # The public demo (README.md here): the portal's own image plus the fictional data generator, which needs the
-# test fixtures and their tools. start.sh builds the portal image first and passes it in as BASE, from a
-# build folder holding just tests/, scripts/, requirements-dev.txt and demo.sh (v2/.dockerignore keeps tests
-# out of the portal's own image).
-ARG BASE=officesentry-app:local
+# test fixtures and their tools. build-demo.sh passes the portal's image in as BASE and builds from a folder
+# holding just tests/, scripts/, requirements-dev.txt and demo.sh.
+ARG BASE=officesentry:local
 FROM ${BASE}
 USER root
 COPY requirements-dev.txt /tmp/

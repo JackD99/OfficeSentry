@@ -3,7 +3,8 @@ name: Deploy
 # from GitHub (the mobile app's "Run workflow" button works). The server's
 # Hetzner Cloud Firewall keeps SSH closed: each run opens port 22 to this
 # runner's address only, and closes it again at the end, even if a step fails.
-# Setup is in v2/DEPLOY.md ("Hetzner, from a phone").
+# Setup is in v2/DEPLOY.md ("Hetzner, from a phone"). The same server can also run the project's website
+# and public demo (v2/deploy/public/README.md); a change to the docs alone updates the website.
 #
 # Run logs will be public once the repository is, so nothing here prints the
 # first-admin link, the portal's logs or a secret: the status action reports
@@ -15,7 +16,7 @@ on:
         description: What to do
         type: choice
         default: deploy
-        options: [deploy, status, setup-link, backup, restart]
+        options: [deploy, website, status, setup-link, backup, restart]
       ref:
         description: Branch, tag or commit to deploy (deploy only)
         default: main
@@ -24,11 +25,17 @@ on:
     workflows: [v2]
     types: [completed]
     branches: [main]
+  # The website shows the docs, which the v2 workflow doesn't test, so their changes update it straight away
+  # (the "website" action: build the site and copy it over, nothing else).
+  push:
+    branches: [main]
+    paths: ['**.md', 'docs/**', 'examples/**', 'website/**']
 
 permissions:
   contents: read
 
-# One run at a time, and never cancel a deploy half way.
+# One run at a time, and never cancel a deploy half way. (A docs change while one deploy runs and another
+# waits replaces the waiting one, as GitHub keeps one waiting run per group; the next merge deploys again.)
 concurrency:
   group: deploy
   cancel-in-progress: false
@@ -60,18 +67,21 @@ jobs:
     needs: latest
     if: >-
       always() && (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && vars.OFFICESENTRY_WEBSITE_DOMAIN != '') ||
       (vars.AUTO_DEPLOY == 'true' && github.event.workflow_run.conclusion == 'success'
        && github.event.workflow_run.event == 'push' && needs.latest.outputs.ok == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ACTION: ${{ inputs.action || 'deploy' }}
-      DEPLOYS: ${{ (inputs.action || 'deploy') == 'deploy' }}
+      ACTION: ${{ inputs.action || (github.event_name == 'push' && 'website') || 'deploy' }}
+      DEPLOYS: ${{ (inputs.action || (github.event_name == 'push' && 'website') || 'deploy') == 'deploy' }}
       HOST: ${{ vars.DEPLOY_HOST }}
-      # The demo site is on while DEMO_ENABLED is "true"; every deploy then
-      # rebuilds its data from the code being deployed.
-      DEMO: ${{ vars.DEMO_ENABLED == 'true' && (inputs.action || 'deploy') == 'deploy' }}
+      # The public demo (v2/deploy/public/) runs while DEMO_ENABLED is "true", built from the code being
+      # deployed, and starts afresh every night by itself.
+      DEMO: ${{ vars.DEMO_ENABLED == 'true' && github.event_name != 'push' && (inputs.action || 'deploy') == 'deploy' }}
       DEMO_DOMAIN: ${{ vars.DEMO_ENABLED == 'true' && vars.OFFICESENTRY_DEMO_DOMAIN || '' }}
+      # The website (website/) is built and copied over by every deploy and website run while this is set.
+      WEBSITE_DOMAIN: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
       FIREWALL: ${{ vars.HCLOUD_FIREWALL || 'officesentry' }}
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
       API: https://api.hetzner.cloud/v1
@@ -81,7 +91,6 @@ jobs:
       - name: Check the settings
         env:
           HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
-          HAS_DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD != '' }}
           SETUP_CODE: ${{ secrets.SETUP_CODE }}
           DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
         run: |
@@ -97,16 +106,16 @@ jobs:
             exit 1
           fi
           if [ "$DEMO" = true ] && [ -z "$DEMO_DOMAIN" ]; then missing="$missing OFFICESENTRY_DEMO_DOMAIN (variable)"; fi
-          if [ "$DEMO" = true ] && [ "$HAS_DEMO_PASSWORD" != true ]; then missing="$missing DEMO_PASSWORD (secret)"; fi
+          if [ "$ACTION" = website ] && [ -z "$WEBSITE_DOMAIN" ]; then missing="$missing OFFICESENTRY_WEBSITE_DOMAIN (variable)"; fi
           if [ -n "$missing" ]; then
             echo "::error::Set these under Settings > Secrets and variables > Actions:$missing"
             exit 1
           fi
 
       - uses: actions/checkout@v7
-        if: env.DEPLOYS == 'true'
+        if: env.DEPLOYS == 'true' || env.ACTION == 'website'
         with:
-          ref: ${{ github.event.workflow_run.head_sha || inputs.ref || 'main' }}
+          ref: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
 
       - name: Write the server's settings files
         if: env.DEPLOYS == 'true'
@@ -114,52 +123,47 @@ jobs:
           DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
           TIMEZONE: ${{ vars.OFFICESENTRY_TIMEZONE || 'UTC' }}
           EXTRA: ${{ vars.OFFICESENTRY_SETTINGS }}
+          # A secret, so the addresses stay out of the run logs, which will be public with the repository.
+          PORTAL_IPS: ${{ secrets.PORTAL_ALLOWED_IPS }}
         run: |
           umask 077
+          files=docker-compose.yml:docker-compose.build.yml
+          # The website and public demo (deploy/public/) share Caddy with the portal; older commits don't have them.
+          if [ -n "$DEMO_DOMAIN$WEBSITE_DOMAIN" ] && [ -f v2/deploy/public/compose.yml ]; then files="$files:deploy/public/compose.yml"; fi
           {
             echo "# Written by the Deploy workflow; edit the repository variables instead."
             # docker compose reads this too: which optional parts run.
             if [ -n "$DEMO_DOMAIN" ]; then echo "COMPOSE_PROFILES=https,demo"; else echo "COMPOSE_PROFILES=https"; fi
-            # And which files: this server builds the deployed commit itself rather than pulling a release
-            # (commits from before releases existed always build).
-            if [ -f v2/docker-compose.build.yml ]; then echo "COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml"; fi
+            # And which files: this server builds the deployed commit itself rather than pulling a release.
+            echo "COMPOSE_FILE=$files"
             echo "OFFICESENTRY_DOMAIN=$DOMAIN"
             echo "OFFICESENTRY_DEMO_DOMAIN=$DEMO_DOMAIN"
+            echo "OFFICESENTRY_WEBSITE_DOMAIN=$WEBSITE_DOMAIN"
+            echo "OFFICESENTRY_PORTAL_IPS=$(tr ',\n' '  ' <<<"$PORTAL_IPS" | xargs)"
             echo "OFFICESENTRY_BASE_URL=https://$DOMAIN"
             echo "OFFICESENTRY_TIMEZONE=$TIMEZONE"
             echo "OFFICESENTRY_TRUSTED_PROXIES=1"
             printf '%s\n' "$EXTRA"
           } > v2/.env
-          # The demo site: fictional tenants that can't be collected, so the
-          # nightly collection runs once a year; no two-step sign-in, so
-          # colleagues can share the demo account.
-          {
-            echo "OFFICESENTRY_BASE_URL=https://$DEMO_DOMAIN"
-            echo "OFFICESENTRY_TIMEZONE=$TIMEZONE"
-            echo "OFFICESENTRY_TRUSTED_PROXIES=1"
-            echo "OFFICESENTRY_REQUIRE_MFA=off"
-            echo "OFFICESENTRY_COLLECT_CRON=0 3 1 1 *"
-          } > v2/.env.demo
 
       - uses: actions/setup-python@v7
-        if: env.DEMO == 'true'
+        if: env.WEBSITE_DOMAIN != '' && (env.DEPLOYS == 'true' || env.ACTION == 'website')
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: v2/pyproject.toml
+          cache-dependency-path: website/requirements.txt
 
-      - name: Make the demo data
-        if: env.DEMO == 'true'
-        working-directory: v2
+      # The product page and the repository's docs as web pages (website/README.md). It holds nothing that
+      # isn't in the repository already.
+      - name: Build the website
+        if: env.WEBSITE_DOMAIN != '' && (env.DEPLOYS == 'true' || env.ACTION == 'website')
         env:
-          # Required while the demo is on, so its admin password never has to
-          # appear in a run's log or summary.
-          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
+          SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
+          SITE_SOURCE_PUBLIC: ${{ !github.event.repository.private }}
         run: |
-          pip install -q -e '.[dev]'
-          OFFICESENTRY_BASE_URL="https://$DEMO_DOMAIN" python scripts/demo_data.py --data-dir "$RUNNER_TEMP/demo" > "$RUNNER_TEMP/demo.log"
-          tar -czf "$RUNNER_TEMP/demo.tgz" -C "$RUNNER_TEMP/demo" .
-          echo "Demo site: https://$DEMO_DOMAIN, user **demo**, the DEMO_PASSWORD secret" >> "$GITHUB_STEP_SUMMARY"
+          pip install -q --require-hashes -r website/requirements.txt
+          python website/build.py
 
       - name: Open SSH to this runner in the Hetzner firewall
         run: |
@@ -182,7 +186,7 @@ jobs:
 
       # SSH only talks to a server whose host key matches the DEPLOY_HOST_KEY
       # secret, so a server swapped in at the same address gets nothing: not
-      # the code, the settings or the demo password.
+      # the code or the settings.
       - name: Prepare SSH and check the server's key
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -220,18 +224,19 @@ jobs:
             --exclude tests/ --exclude .coverage --exclude '__pycache__/' \
             v2/ server:/opt/officesentry/v2/
 
+      # Before the containers start, so Caddy finds the site's folder. Caddy serves the files as they are, so a
+      # website run needs nothing restarted.
+      - name: Copy the website to the server
+        if: env.WEBSITE_DOMAIN != '' && (env.DEPLOYS == 'true' || env.ACTION == 'website')
+        run: |
+          rsync -az --delete website/_site/ server:/opt/officesentry/website/
+          echo "Website: https://$WEBSITE_DOMAIN" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build and start
         if: env.DEPLOYS == 'true'
-        run: ssh server 'bash -s' < v2/deploy/start.sh
-
-      - name: Load the demo data
-        if: env.DEMO == 'true'
         run: |
-          ssh server 'cd /opt/officesentry/v2 && docker compose stop demo-web demo-worker \
-            && docker compose run --rm --no-deps -T --entrypoint sh demo-web -c "find /data -mindepth 1 -delete && tar -xz -C /data" \
-            && docker compose up -d demo-web demo-worker' < "$RUNNER_TEMP/demo.tgz"
           ssh server 'bash -s' < v2/deploy/start.sh
-          echo "Demo data loaded. The sign-in is in this run's summary."
+          if [ -n "$DEMO_DOMAIN" ]; then echo "Public demo: https://$DEMO_DOMAIN" >> "$GITHUB_STEP_SUMMARY"; fi
 
       # The setup link would let whoever reads this log create the first admin,
       # so it never appears here. A deploy only says whether one is needed.

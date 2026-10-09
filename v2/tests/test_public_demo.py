@@ -1,7 +1,7 @@
 """The public demo site (web/public_demo.py): visitors are the read-only demo user and can't change anything."""
 
+import importlib.util
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -114,10 +114,13 @@ def test_real_portals_are_unaffected(app, client, db, two_tenants):
     assert "You're in the demo" not in client.get("/").get_data(as_text=True)
 
 
-def test_demo_data_public_makes_no_admin(tmp_path):
-    out = subprocess.run([sys.executable, "scripts/demo_data.py", "--data-dir", str(tmp_path), "--public"],
-                         cwd=V2, capture_output=True, text=True, check=True)
-    assert "Sign in as" not in out.stdout
+def test_demo_data_public_makes_no_admin(tmp_path, monkeypatch, capsys):
+    spec = importlib.util.spec_from_file_location("demo_data", V2 / "scripts" / "demo_data.py")
+    demo_data = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(demo_data)
+    monkeypatch.setattr(sys, "argv", ["demo_data.py", "--data-dir", str(tmp_path), "--public"])
+    demo_data.main()
+    assert "Sign in as" not in capsys.readouterr().out
     db = connect(load_config(data_dir=tmp_path).db_path)
     assert [tuple(r) for r in db.execute("SELECT username, role FROM users")] == [("demo", "analyst")]
     assert db.execute("SELECT value FROM settings WHERE key = ?", (public_demo.MARKER,)).fetchone()[0] == "1"

@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # Builds and (re)starts Office Sentry on the server, then waits until the
-# portal (and the demo site, when it runs) reports healthy. The Deploy
+# portal (and the public demo, when it runs) reports healthy. The Deploy
 # workflow runs it over SSH; .env's COMPOSE_PROFILES says which parts run.
 set -euo pipefail
 cd "${OFFICESENTRY_DIR:-/opt/officesentry/v2}"
 
-# Build first so the portal is only down while the containers swap.
+profiles=",${COMPOSE_PROFILES:-$(sed -n 's/^COMPOSE_PROFILES=//p' .env)},"
+# Build first so the portal is only down while the containers swap. The public demo (deploy/public/) is
+# built on top of the portal's image.
 docker compose build --pull
+if [[ $profiles == *,demo,* ]]; then
+  deploy/public/build-demo.sh
+fi
 docker compose up -d --remove-orphans
 # A part switched off (say the demo) isn't an orphan to compose: remove it.
-if [[ ",${COMPOSE_PROFILES:-$(sed -n 's/^COMPOSE_PROFILES=//p' .env)}," != *,demo,* ]]; then
-  docker compose --profile demo rm -sf demo-web demo-worker
+if [[ $profiles != *,demo,* ]] && docker compose --profile demo config --services 2>/dev/null | grep -qx demo; then
+  docker compose --profile demo rm -sf demo
 fi
 
-for service in web demo-web; do
+for service in web demo; do
   id=$(docker compose ps -q "$service")
   [ -n "$id" ] || continue
   status=starting
