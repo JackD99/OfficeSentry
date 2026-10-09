@@ -541,7 +541,7 @@ the worker (the `compact` command does it all and shrinks the file). So:
 
 ## Activity history
 
-`events.py` (schema in `migrations/0031`) keeps every sign-in and directory audit event beyond the 30 days
+`events.py` (schema in `migrations/0030`) keeps every sign-in and directory audit event beyond the 30 days
 Microsoft keeps them, in monthly SQLite files beside the database: `<data dir>/events/<store>/<YYYY-MM>.db`,
 stores `signins`, `daily` (one row per person, day, app and country) and `audits` (Graph's JSON,
 compressed). Rows carry the tenant's key from `event_tenants` (never reused), not `tenants.id`, and are

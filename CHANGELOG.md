@@ -6,7 +6,7 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
-## Unreleased
+## 2.1.0 (unreleased)
 
 ### Action required
 
@@ -21,7 +21,7 @@ None. The sign-in and directory audit logs were already read; they're now read i
 
 ### Database upgrade
 
-Yes: migration 0031 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
+Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
 have been read up to. The portal saves a `pre-upgrade-*` copy first, as always.
 
 ### Added
