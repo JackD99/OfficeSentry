@@ -13,7 +13,12 @@ isn't set means today's behaviour, so nothing changes on upgrade:
 * activity log: forever, and never less than ``AUDIT_FLOOR_DAYS``;
 * issued reports (what clients were sent): forever, never less than
   ``ISSUED_FLOOR_DAYS``, and each tenant's latest file of each report is
-  always kept, since month-end reporting compares against it.
+  always kept, since month-end reporting compares against it;
+* activity history (``events.py``, the monthly event files): raw sign-ins
+  180 days, daily sign-in summaries 25 months and directory audit events
+  7 years. These are the plan's recommended defaults (decision D18), so they
+  apply from the upgrade on; a month older than its period is deleted as a
+  file, and rows of a tenant that no longer exists are swept away.
 
 Metrics hold counts only (no names or addresses), so they're kept forever.
 Every prune deletes in small batches, each in its own short transaction, so
@@ -24,11 +29,12 @@ when that costs no extra I/O.
 
 from __future__ import annotations
 
+import calendar
 import logging
 from dataclasses import asdict, dataclass, fields
 from datetime import UTC, datetime, timedelta
 
-from . import store
+from . import events, store
 from .db import transaction
 from .text import plural
 
@@ -59,9 +65,13 @@ LIMITS = {
     "run_log_days": (7, 3650),
     "audit_days": (AUDIT_FLOOR_DAYS, 36500),
     "issued_days": (ISSUED_FLOOR_DAYS, 36500),
+    "history_signin_days": (30, 3650),
+    "history_daily_months": (1, 120),
+    "history_audit_years": (1, 100),
 }
 # Which settings may be "keep forever" (or, for sign-in detail, "as long as the snapshot").
-OPEN_ENDED = {"keep_monthly", "signin_days", "findings_days", "run_log_days", "audit_days", "issued_days"}
+OPEN_ENDED = {"keep_monthly", "signin_days", "findings_days", "run_log_days", "audit_days", "issued_days",
+              "history_daily_months", "history_audit_years"}
 FOREVER_MONTHS = 10**6  # snapshots_to_keep's limit for "every month"
 
 
@@ -74,6 +84,10 @@ class Policy:
     run_log_days: int | None = store.RUN_LOG_DAYS  # None: info lines kept forever
     audit_days: int | None = None      # None: activity log kept forever
     issued_days: int | None = None     # None: issued reports kept forever
+    # Activity history: the plan's recommended defaults (D18). Raw sign-ins can't be kept forever.
+    history_signin_days: int = 180
+    history_daily_months: int | None = 25  # None: daily sign-in summaries kept forever
+    history_audit_years: int | None = 7    # None: directory audit events kept forever
 
 
 def defaults(cfg) -> Policy:
@@ -138,8 +152,12 @@ LABELS = {
     "run_log_days": "Run logs",
     "audit_days": "Activity log",
     "issued_days": "Issued reports",
+    "history_signin_days": "Sign-in history",
+    "history_daily_months": "Daily sign-in summaries",
+    "history_audit_years": "Directory audit history",
 }
-UNITS = {"keep_daily": "day", "keep_monthly": "month"}
+UNITS = {"keep_daily": "day", "keep_monthly": "month", "history_daily_months": "month",
+         "history_audit_years": "year"}
 
 
 def describe(key: str, value) -> str:
@@ -254,6 +272,36 @@ def prune_issued(conn, days: int | None, batch: int = 50, now: datetime | None =
     return _delete_ids(conn, "issued_reports", [r["id"] for r in conn.execute(_ISSUED, (cutoff,))], batch)
 
 
+def _months_ago(now: datetime, months: int) -> datetime:
+    index = now.year * 12 + now.month - 1 - months
+    year, month = divmod(index, 12)
+    return now.replace(year=year, month=month + 1, day=min(now.day, calendar.monthrange(year, month + 1)[1]))
+
+
+def history_cutoffs(policy: Policy, now: datetime | None = None) -> dict[str, datetime | None]:
+    """Per activity history store, the time before which its rows go (None: kept forever)."""
+    now = now or datetime.now(UTC)
+    return {
+        "history_signin_days": now - timedelta(days=policy.history_signin_days),
+        "history_daily_months": None if policy.history_daily_months is None
+        else _months_ago(now, policy.history_daily_months),
+        "history_audit_years": None if policy.history_audit_years is None
+        else _months_ago(now, 12 * policy.history_audit_years),
+    }
+
+
+HISTORY_STORES = {"history_signin_days": "signins", "history_daily_months": "daily",
+                  "history_audit_years": "audits"}
+
+
+def prune_history(conn, policy: Policy, now: datetime | None = None, dry_run: bool = False) -> dict[str, int]:
+    """Delete (or count) activity history older than its period, per setting."""
+    out = {}
+    for key, cutoff in history_cutoffs(policy, now).items():
+        out[key] = 0 if cutoff is None else events.prune(conn, HISTORY_STORES[key], cutoff, dry_run=dry_run)
+    return out
+
+
 def dry_run(conn, policy: Policy, tz: str = "UTC", now: datetime | None = None) -> dict[str, int]:
     """Roughly what the next daily prune would delete under ``policy``, per setting. Deletes nothing."""
     snapshots = len(store.snapshots_to_prune(conn, policy.keep_daily, _months(policy), tz))
@@ -262,6 +310,7 @@ def dry_run(conn, policy: Policy, tz: str = "UTC", now: datetime | None = None) 
         "signin_days": _signin_count(conn, policy.signin_days, now),
         "findings_days": 0, "audit_days": 0, "issued_days": 0,
         "run_log_days": 0 if policy.run_log_days is None else store.run_logs_to_prune(conn, policy.run_log_days, now),
+        **prune_history(conn, policy, now, dry_run=True),
     }
     if policy.findings_days is not None:
         count["findings_days"] = conn.execute(f"SELECT COUNT(*) FROM ({_FINDINGS})",
@@ -293,4 +342,12 @@ def apply(conn, cfg, now: datetime | None = None) -> dict[str, int]:
         done[key] = step()
         if done[key]:
             log.info("Retention: removed %s", plural(done[key], noun))
+    for key, n in prune_history(conn, policy, now).items():
+        done[key] = n
+        if n:
+            log.info("Retention: removed %s from the activity history (%s)", plural(n, "row"), LABELS[key].lower())
+    done["history_orphans"] = events.sweep(conn)
+    if done["history_orphans"]:
+        log.info("Retention: removed %s of deleted tenants from the activity history",
+                 plural(done["history_orphans"], "row"))
     return done

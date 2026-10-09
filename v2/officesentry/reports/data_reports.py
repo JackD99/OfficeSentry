@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
 from .. import adminactivity, coverage, devices, dnscheck, hybrid
@@ -374,6 +374,18 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         report.unavailable = f"The tenant's directory audit log couldn't be read: {window.get('reason') or ''}"
         return
     covered = adminactivity.window_text(window)
+    end = devices.parse_ts(snap.as_of) or now
+    history = adminactivity.from_history(snap.conn, snap.tenant["id"],
+                                         end - timedelta(days=adminactivity.HISTORY_DAYS), end)
+    if history is not None:
+        # The activity history goes back further than the snapshot's 30 days once it has been kept a while.
+        events, cov = history
+        start = datetime.fromtimestamp(cov.detailed_from, UTC)
+        span = (end - start).days
+        if span > adminactivity.covered_days(window) + 1:
+            covered = ("the last 12 months" if span >= adminactivity.HISTORY_DAYS else
+                       f"the {span} days since {start:%d %b %Y}, when Office Sentry started keeping this "
+                       "tenant's audit log")
     events = sorted(events, key=lambda e: e.get("time") or "", reverse=True)
 
     review = Section("Changes to review", ["When (UTC)", "Change", "By", "Target", "Detail", "Why it matters"],

@@ -91,22 +91,30 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     countries the tenant rarely uses, successful sign-ins that needed only a
     password, failure reasons in plain English (MFA and other prompts counted
     apart from failures), and sign-ins by country, app and account. With
-    Entra ID P2, risky sign-ins too. Reads at most 50,000 sign-ins per run
-    (the most recent) and says so if it stops. Each account's page shows its
-    own summary.
+    Entra ID P2, risky sign-ins too. Each run reads on from where the last
+    one stopped, into the activity history below, and says which part is
+    still to read if it stops. Each account's page shows its own summary.
   - *Risky users* (Entra ID P2): accounts Entra ID Protection rates at risk
     or confirmed compromised, with the risk level and why, then the risk
     remediated, dismissed or confirmed safe in the last 90 days and how. A
     check fails while any account is at risk, and the account's page flags it.
   - *Admin activity*: security-relevant changes from the Entra ID directory
-    audit log over the last 30 days (7 without Entra ID P1, which is all the
-    tenant keeps): admin roles granted or removed (including PIM), Conditional
+    audit log over the last 12 months of the activity history (Microsoft keeps
+    30 days, or 7 without Entra ID P1, so the history starts when Office Sentry
+    first read the tenant): admin roles granted or removed (including PIM), Conditional
     Access policies added, changed or deleted, consents and app permissions,
     secrets and certificates added to apps, domain and federation changes,
     admin password resets, deleted users and security info changed by admins.
     Federation changes, new app credentials, role grants and Conditional Access
     policies deleted or switched off are listed first, then every change and
-    who made them. Reads at most 10,000 events per run and says so if it stops.
+    who made them.
+  - *Activity history* (Changes → Activity history, staff only): every
+    sign-in and directory audit event Office Sentry has read, kept beyond the
+    30 days Microsoft keeps them (sign-ins 180 days, daily summaries 25
+    months, audit events 7 years by default): how far back each is detailed,
+    the last 30 days, sign-ins per day, each month with a CSV of every
+    sign-in, and admin changes worth a second look. Each person's page shows
+    their sign-ins by month from it.
   - *Apps and consents*: third-party apps with what they were granted
     (application permissions, tenant-wide and per-user consent), and app
     registration secrets or certificates expiring.
@@ -228,8 +236,8 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   and an optional note printed at the end of every report. The name is also
   the email sender's name unless Email delivery sets one.
 - **Data retention** (`/admin/retention`): how long snapshots, sign-in detail
-  (IP addresses and locations), resolved findings, run logs, the activity log
-  and issued reports are kept, with a count of what the next daily pass would
+  (IP addresses and locations), the activity history, resolved findings, run
+  logs, the activity log and issued reports are kept, with a count of what the next daily pass would
   delete. Defaults keep today's behaviour; see DEPLOY.md.
 
 Checks: MFA enforced (CA or Security Defaults, with exclusions), legacy auth

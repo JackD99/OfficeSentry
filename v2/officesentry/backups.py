@@ -126,13 +126,99 @@ def rotate(folder: Path, prefix: str, keep: int) -> list[Path]:
 
 
 def backup(db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
-    """The ``backup`` command: a timestamped copy, keeping the newest ``keep``."""
+    """The ``backup`` command: a timestamped copy, keeping the newest ``keep``, and the activity history
+    brought up to date in ``<folder>/events``."""
     src = connect(db_path)
     try:
         dest = copy_database(src, folder / f"{BACKUP_PREFIX}{_stamp()}.db{COMPRESSED}")
     finally:
         src.close()
+    mirror_events(db_path.parent / EVENTS, folder / EVENTS)
     return dest, rotate(folder, BACKUP_PREFIX, keep)
+
+
+# -- Activity history -----------------------------------------------------------------------------
+#
+# The activity history (events.py) is a folder of monthly SQLite files beside the database. A closed month
+# never changes, so it isn't copied every night like the database: <backups>/events/ holds one gzipped copy
+# of each file, made again only when the file changed (manifest.json remembers each file's size and time),
+# and a file that retention or a tenant deletion removed loses its copy too. Restoring the database puts
+# back any month file that's missing; the cursors then re-read whatever the copy is short of.
+
+EVENTS = "events"
+MANIFEST = "manifest.json"
+
+
+def _stamp_of(path: Path) -> list:
+    wal = path.with_name(path.name + "-wal")
+    return [path.stat().st_size, path.stat().st_mtime_ns,
+            wal.stat().st_size if wal.exists() else 0, wal.stat().st_mtime_ns if wal.exists() else 0]
+
+
+def _event_files(folder: Path) -> dict[str, Path]:
+    return {f"{p.parent.name}/{p.name}": p for p in sorted(folder.glob("*/*.db"))} if folder.is_dir() else {}
+
+
+def mirror_events(source: Path, dest: Path) -> tuple[int, int]:
+    """Bring the backup copy of the activity history up to date. Returns (files copied, copies removed)."""
+    files = _event_files(source)
+    if not files and not dest.exists():
+        return 0, 0
+    dest.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        manifest = json.loads((dest / MANIFEST).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        manifest = {}
+    copied = removed = 0
+    for rel, path in files.items():
+        target = dest / f"{rel}{COMPRESSED}"
+        if manifest.get(rel) == _stamp_of(path) and target.exists():
+            continue
+        src = connect(path)
+        try:
+            copy_database(src, target)
+        finally:
+            src.close()
+        manifest[rel] = _stamp_of(path)  # after closing: the last connection to close may checkpoint the file
+        _write_manifest(dest, manifest)
+        copied += 1
+    for rel in sorted(set(manifest) - set(files)):
+        (dest / f"{rel}{COMPRESSED}").unlink(missing_ok=True)
+        del manifest[rel]
+        removed += 1
+    for stray in dest.glob(f"*/*.db{COMPRESSED}"):
+        if f"{stray.parent.name}/{stray.name[:-len(COMPRESSED)]}" not in files:
+            stray.unlink()
+    _write_manifest(dest, manifest)
+    return copied, removed
+
+
+def _write_manifest(dest: Path, manifest: dict) -> None:
+    part = dest / f"{MANIFEST}.part"
+    part.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    os.replace(part, dest / MANIFEST)
+
+
+def restore_events(copies: Path, folder: Path) -> int:
+    """Put back each activity history file the data folder is missing from a backup copy. Returns how many."""
+    restored = 0
+    for packed in sorted(copies.glob(f"*/*.db{COMPRESSED}")) if copies.is_dir() else []:
+        target = folder / packed.parent.name / packed.name[:-len(COMPRESSED)]
+        if target.exists():
+            continue
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        part = target.with_name(target.name + ".part")
+        try:
+            _private(part)
+            with gzip.open(packed, "rb") as zipped, open(part, "r+b") as out:
+                shutil.copyfileobj(zipped, out, 2**20)
+            os.replace(part, target)
+        except (OSError, EOFError) as exc:
+            part.unlink(missing_ok=True)
+            log.warning("Couldn't restore %s: %s", packed, exc)
+            continue
+        restored += 1
+    return restored
 
 
 # -- Backup status --------------------------------------------------------------
@@ -345,7 +431,8 @@ def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, for
         dest.close()
     if problem != "ok":
         raise RestoreError(f"The restored database failed its check ({problem}). The previous one is in {saved}.")
-    return {"version": version, "saved": saved}
+    events = restore_events(source.parent / EVENTS, db_path.parent / EVENTS)
+    return {"version": version, "saved": saved, "events": events}
 
 
 def inspect(source: Path) -> dict:

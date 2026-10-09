@@ -22,6 +22,19 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   save a copy of `/keys/secrets.json` in your password manager ([v2/DEPLOY.md, "Where the keys
   are"](v2/DEPLOY.md#where-the-keys-are)). Going back to an older release afterwards: copy it back to
   `/data` first (v2/DEPLOY.md, "Rolling back an update").
+- Activity history lives in a new folder beside the database, `/data/events` (monthly files of sign-ins and
+  directory audit events). The `backup` command copies it into an `events` folder next to the database
+  copies, and `restore` puts back any file that's missing. If you back up the data volume some other way,
+  include `/data/events` ([v2/DEPLOY.md, "Backups"](v2/DEPLOY.md#backups)).
+
+### New Microsoft permissions
+
+None. The sign-in and directory audit logs were already read; they're now read incrementally and kept.
+
+### Database upgrade
+
+Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
+have been read up to. The portal saves a `pre-upgrade-*` copy first, as always.
 
 ### Added
 
@@ -30,6 +43,17 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 - Deploy workflow: a `restore-drill` action, backup status in `status`, and a `PRODUCTION_FROM_TAGS`
   variable that makes the portal take release tags only, as the published image pinned by digest
   ([v2/DEPLOY.md, "Production from releases"](v2/DEPLOY.md#production-from-releases)).
+- Activity history: every sign-in and directory audit event is kept beyond the 30 days Microsoft keeps them.
+  Each collection reads on from where the last one stopped, so a run that times out, hits its page limit or
+  is interrupted carries on next time with nothing lost or counted twice, and a busy tenant's sign-in log is
+  no longer cut off at 50,000 rows without saying so. Defaults: every sign-in for 180 days, daily sign-in
+  summaries for 25 months and directory audit events for 7 years (Settings → Data retention, "Activity
+  history"). Deleting a tenant deletes its history.
+- A tenant's Activity history page (Changes → Activity history, staff only): how far back each log is
+  detailed from, the last 30 days, sign-ins per day, each month with a CSV of every sign-in, and admin
+  changes worth a second look.
+- The Admin activity report covers the last 12 months of kept history, each person's page shows their
+  sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
 
 ### Security
 

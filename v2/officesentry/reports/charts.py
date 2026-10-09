@@ -115,3 +115,67 @@ def meter(value: float | None, *, maximum: float = 100, color: str = "#2a78d6", 
     return (f'<svg class="meter" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true" '
             f'xmlns="http://www.w3.org/2000/svg"><rect class="track" x="0" y="0" width="{width}" height="{height}" '
             f'rx="{r}" fill="{TRACK}"/>{fill}</svg>')
+
+
+def _nice(value: float) -> float:
+    """The smallest 1, 2 or 5 times a power of ten at or above ``value``."""
+    if value <= 0:
+        return 1
+    step = 10 ** (len(str(int(value))) - 1)
+    for m in (1, 2, 5, 10):
+        if value <= m * step:
+            return m * step
+    return 10 * step
+
+
+def daily_bars(days: list[tuple[date, int | None, int | None, str]], *, label: str, width: int = 720,
+               height: int = 180) -> str:
+    """A column per day, stacked: ``(day, good, bad, hover text)``, oldest first. ``None`` marks a day there's
+    no data for, drawn as a faint track so it doesn't read as zero.
+
+    Two series (good in the accent colour at the base, bad in the failure colour on top) with a 2px gap
+    between them and between days. The caller prints the legend as text. Each day's hover text is a
+    <title> on a full-height target, wider than the bars.
+    """
+    if not days:
+        return ""
+    pad_l, pad_r, pad_t, pad_b = 44, 8, 10, 24
+    w, h = width - pad_l - pad_r, height - pad_t - pad_b
+    top = _nice(max(((a or 0) + (b or 0) for _, a, b, _ in days), default=0))
+    slot = w / len(days)
+    bar = max(slot - 2, 1)
+
+    def py(v):
+        return pad_t + h - h * v / top
+
+    parts = [f'<svg class="chart bars" viewBox="0 0 {width} {height}" role="img" '
+             f'aria-label="{escape(label)}" xmlns="http://www.w3.org/2000/svg">']
+    for frac in (0, 0.5, 1):
+        y = py(top * frac)
+        parts.append(f'<line class="grid" x1="{pad_l}" x2="{pad_l + w}" y1="{y:.1f}" y2="{y:.1f}" {GRID}/>')
+        parts.append(f'<text class="axis" x="{pad_l - 6}" y="{y + 4:.1f}" text-anchor="end" {AXIS}>'
+                     f'{top * frac:,.0f}</text>')
+    for i, anchor in ((0, "start"), (len(days) // 2, "middle"), (len(days) - 1, "end")):
+        d = days[i][0]
+        x = pad_l + slot * i + (slot / 2 if anchor == "middle" else (0 if anchor == "start" else slot))
+        parts.append(f'<text class="axis" x="{x:.1f}" y="{height - 6}" text-anchor="{anchor}" {AXIS}>'
+                     f'{d.day} {d:%b}</text>')
+    base = py(0)
+    for i, (_, good, bad, text) in enumerate(days):
+        x = pad_l + slot * i + 1
+        if good is None and bad is None:
+            parts.append(f'<rect class="nodata" x="{x:.1f}" y="{base - 3:.1f}" width="{bar:.1f}" height="3" '
+                         f'fill="{TRACK}"/>')
+        else:
+            y = base
+            for value, cls, fill in ((good or 0, "good", "#2a78d6"), (bad or 0, "bad", STATUS_FILL["critical"])):
+                if not value:
+                    continue
+                size = max(h * value / top, 2)
+                parts.append(f'<rect class="{cls}" x="{x:.1f}" y="{y - size:.1f}" width="{bar:.1f}" '
+                             f'height="{size:.1f}" rx="{min(1.5, bar / 4):.1f}" fill="{fill}"/>')
+                y -= size + 2
+        parts.append(f'<rect class="hit" x="{pad_l + slot * i:.1f}" y="{pad_t}" width="{slot:.1f}" height="{h}" '
+                     f'fill="#000" fill-opacity="0"><title>{escape(text)}</title></rect>')
+    parts.append("</svg>")
+    return "".join(parts)
