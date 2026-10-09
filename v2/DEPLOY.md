@@ -297,15 +297,21 @@ line with `crontab -e` (change the folder):
 
 Each run writes how it went to `/data/backup-status.json`, wherever the copy
 goes. *Settings → System status* shows it, and the team gets a system alert
-when a backup fails or none has worked for 36 hours. Another backup job (an
-off-site copy, say) can record itself in the same file under its own name:
+when a backup fails or is overdue. Other backup jobs (an off-site copy, a
+restore check) record themselves in the same file under their own names:
 
 ```json
-{"local": {"last_attempt_at": "2026-10-09T03:30:02Z", "last_success_at": "2026-10-09T03:30:02Z",
-           "ok": true, "error": null, "file": "officesentry-20261009-033000.db.gz", "bytes": 12345678},
- "offsite": {"last_attempt_at": "2026-10-09T04:00:10Z", "last_success_at": "2026-10-08T04:00:09Z",
-             "ok": false, "error": "repository is locked"}}
+{"local":         {"ok": true,  "last_attempt": "2026-10-09T03:45:02Z", "last_success": "2026-10-09T03:45:02Z",
+                   "detail": "officesentry-20261009-034500.db.gz, 412 MB", "error": ""},
+ "offsite":       {"ok": false, "last_attempt": "2026-10-09T03:46:10Z", "last_success": "2026-10-08T03:46:01Z",
+                   "detail": "", "error": "restic couldn't reach the bucket"},
+ "restore_check": {"ok": true,  "last_attempt": "2026-10-05T04:30:00Z", "last_success": "2026-10-05T04:30:00Z",
+                   "detail": "the latest off-site copy restores and opens", "error": ""}}
 ```
+
+A nightly copy (`local`, `offsite`) counts as overdue after 26 hours and the
+weekly restore check after 8 days. A job that has never run isn't listed and
+isn't alerted on.
 
 **Keep `secrets.json` too**, somewhere safe and separate from the backups:
 

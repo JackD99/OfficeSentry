@@ -281,8 +281,8 @@ retried the next minute; it never ends the worker. Don't add Celery or Redis.
 Office Sentry's own health is `system_health.assess()` (database, schema
 version, worker heartbeat, last collection and whether most tenants failed
 the last scheduled slot, backups from `<data dir>/backup-status.json`
-(`backups.record_status`, written by the `backup` command; another backup job
-adds its own key), disk, certificates), from stored state only. Each check is
+(`backups.record_status`; `local` from the `backup` command, `offsite` and
+`restore_check` from the deployment's restic jobs, in one shared format), disk, certificates), from stored state only. Each check is
 `ok`, `warn` or `fail`; `/health/ready` answers 503 on any `fail` and shows
 only `{"ok": ...}` unless the caller has the monitoring token (hash in
 `settings`, made on `/admin/status`) or is a signed-in admin, and never names

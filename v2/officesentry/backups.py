@@ -137,44 +137,55 @@ def backup(db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
 
 # -- Backup status --------------------------------------------------------------
 #
-# Every backup job records how it went in ``<data dir>/backup-status.json``, one entry per job, so the
-# health check and the "backup failed" system alert (``system_health``, ``system_alerts``) can see it
-# whatever folder or target the copies go to. The ``backup`` command writes the "local" entry; an
-# off-site job (restic, say) writes its own key in the same shape:
+# Every backup job records how it went in ``<data dir>/backup-status.json`` (``/data`` in Docker), one
+# entry per job, so the health check and the "backup failed" system alert (``system_health``,
+# ``system_alerts``) see it whatever folder or target the copies go to. This is the format the
+# deployment work (WS12) writes too: "local" is the nightly copy (the ``backup`` command), "offsite" the
+# restic copy and "restore_check" the weekly restore drill. Each key is optional; absent means never
+# run or not set up.
 #
-#   {"local": {"last_attempt_at": "2026-10-09T03:30:02Z", "last_success_at": "2026-10-09T03:30:02Z",
-#              "ok": true, "error": null, "file": "officesentry-20261009-033000.db.gz", "bytes": 12345678}}
+#   {"local": {"ok": true, "last_attempt": "2026-10-09T03:45:02Z", "last_success": "2026-10-09T03:45:02Z",
+#              "detail": "officesentry-20261009-034500.db.gz, 412 MB", "error": ""},
+#    "offsite": {"ok": false, "last_attempt": "2026-10-09T03:46:10Z", "last_success": "2026-10-08T03:46:01Z",
+#                "detail": "", "error": "restic couldn't reach the bucket"}}
 #
-# Times are UTC ISO 8601 with a Z. ``ok`` is the last attempt's outcome and ``error`` its message for people.
+# ``ok`` is the last attempt's outcome; ``last_success`` is null until one works. Times are UTC ISO 8601
+# with a Z. ``detail`` and ``error`` are short plain words with no secrets.
 
 STATUS_FILE = "backup-status.json"
-STATUS_KEYS = ("last_attempt_at", "last_success_at", "ok", "error", "file", "bytes")
+STATUS_KEYS = ("ok", "last_attempt", "last_success", "detail", "error")
 
 
-def read_status(data_dir: Path) -> dict[str, dict]:
-    """Every job's last outcome from ``backup-status.json`` ({} when there is none or it can't be read)."""
+def _raw_status(data_dir: Path) -> dict:
     try:
         raw = json.loads((Path(data_dir) / STATUS_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    if not isinstance(raw, dict):
-        return {}
-    return {str(k): {f: v.get(f) for f in STATUS_KEYS} for k, v in raw.items() if isinstance(v, dict)}
+    return raw if isinstance(raw, dict) else {}
+
+
+def read_status(data_dir: Path) -> dict[str, dict]:
+    """Every job's last outcome from ``backup-status.json`` ({} when there is none or it can't be read)."""
+    return {str(k): {f: v.get(f) for f in STATUS_KEYS} for k, v in _raw_status(data_dir).items()
+            if isinstance(v, dict)}
 
 
 def record_status(data_dir: Path, job: str, ok: bool, error: str | None = None, file: Path | None = None,
                   now: datetime | None = None) -> None:
-    """Record one attempt of ``job``. Never raises: a backup's outcome matters more than its record."""
+    """Record one attempt of ``job``, keeping the other jobs' entries. Never raises: a backup's outcome
+    matters more than its record."""
     stamp = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
     path = Path(data_dir) / STATUS_FILE
     try:
-        status = read_status(data_dir)
-        entry = status.get(job) or {}
-        entry.update(last_attempt_at=stamp, ok=bool(ok), error=(error or None) and str(error)[:500])
+        status = _raw_status(data_dir)
+        entry = status.get(job) if isinstance(status.get(job), dict) else {}
+        entry.update(ok=bool(ok), last_attempt=stamp, error="" if ok else str(error or "")[:500])
+        entry.setdefault("last_success", None)
+        entry.setdefault("detail", "")
         if ok:
-            entry.update(last_success_at=stamp, error=None)
+            entry["last_success"] = stamp
             if file is not None:
-                entry.update(file=file.name, bytes=file.stat().st_size)
+                entry["detail"] = f"{file.name}, {max(1, round(file.stat().st_size / 2**20)):,} MB"
         status[job] = entry
         part = path.with_name(path.name + ".part")
         _private(part)

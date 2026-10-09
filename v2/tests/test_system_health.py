@@ -155,10 +155,24 @@ def test_backup_status(cfg, db):
     # Another job (an off-site copy, say) writes its own entry in the same file.
     backups.record_status(cfg.data_dir, "local", True, now=NOW)
     status = json.loads((cfg.data_dir / backups.STATUS_FILE).read_text(encoding="utf-8"))
-    status["offsite"] = {"last_attempt_at": _iso(NOW), "last_success_at": None, "ok": False, "error": "403"}
+    status["offsite"] = {"ok": False, "last_attempt": _iso(NOW), "last_success": None, "detail": "", "error": "403"}
     (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
     check = system_health.check_backup(db, cfg, NOW)
-    assert check.summary == "The last off-site backup failed" and check.fix.startswith("403")
+    assert check.summary == "The last off-site backup failed" and check.fix.startswith("403.")
+    assert status["local"]["detail"] == "" and status["local"]["error"] == ""  # the deployment format (WS12)
+
+    # The weekly restore drill may be 8 days old; a nightly copy only 26 hours.
+    status["offsite"] = {"ok": True, "last_attempt": _iso(NOW), "last_success": _iso(NOW), "detail": "", "error": ""}
+    status["restore_check"] = {"ok": True, "last_attempt": _iso(NOW - timedelta(days=6)),
+                               "last_success": _iso(NOW - timedelta(days=6)), "detail": "", "error": ""}
+    (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
+    assert system_health.check_backup(db, cfg, NOW).summary == "Last backup 0 seconds ago"
+    assert system_health.check_backup(db, cfg, NOW + timedelta(hours=27)).summary == "No backup for 27 hours"
+    status["local"]["last_success"] = status["offsite"]["last_success"] = _iso(NOW + timedelta(days=3))
+    (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
+    check = system_health.check_backup(db, cfg, NOW + timedelta(days=3))
+    assert check.summary == "No restore check for 9 days"
+    assert backups.read_status(cfg.data_dir)["restore_check"]["ok"] is True
 
 
 def test_backups_from_before_the_status_file_count(cfg, db):
@@ -173,7 +187,8 @@ def test_the_backup_command_records_its_outcome(cfg, db, monkeypatch, capsys):
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
     main(["backup"])
     local = backups.read_status(cfg.data_dir)["local"]
-    assert local["ok"] is True and local["file"].startswith("officesentry-") and local["bytes"] > 0
+    assert local["ok"] is True and local["detail"].startswith("officesentry-") and local["detail"].endswith(" MB")
+    assert local["error"] == "" and local["last_success"] == local["last_attempt"]
     assert oct((cfg.data_dir / backups.STATUS_FILE).stat().st_mode & 0o777) == "0o600"
 
     def full(*a, **k):
@@ -182,7 +197,7 @@ def test_the_backup_command_records_its_outcome(cfg, db, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         main(["backup"])
     local = backups.read_status(cfg.data_dir)["local"]
-    assert local["ok"] is False and "No space left" in local["error"] and local["last_success_at"]
+    assert local["ok"] is False and "No space left" in local["error"] and local["last_success"]
 
 
 def test_a_damaged_status_file_reads_as_none(cfg, db):

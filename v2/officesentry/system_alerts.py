@@ -7,8 +7,8 @@ for these problems found by ``system_health``:
 * **worker**: the background worker has stopped (down for ``WORKER_GRACE``, so a restart
   during an update doesn't alert). The worker can't report its own absence, so the
   portal watches it: ``start_watchdog`` runs a thread in each web process;
-* **backup**: the last backup failed, or none has worked for 36 hours (once backups
-  have been set up at all);
+* **backup**: a backup job's last attempt failed, or one is overdue (26 hours for the
+  nightly copies, 8 days for the weekly restore check), once backups are set up at all;
 * **disk**: the data folder's disk is over 85% full (cleared under 80%, so it doesn't
   flap around the line);
 * **collection**: most tenants failed the last scheduled collection, or nothing has

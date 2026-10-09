@@ -43,7 +43,6 @@ RANK = {OK: 0, WARN: 1, FAIL: 2}
 
 DISK_WARN = 85  # percent used: needs attention, and a system alert
 DISK_FAIL = 95  # percent used: writes are about to fail, so /health/ready answers 503
-BACKUP_STALE = timedelta(hours=36)  # a nightly backup missed one night and then some
 COLLECTION_GRACE = timedelta(hours=12)  # on top of the time between two collection slots
 TOKEN_KEY = "health.token_hash"  # noqa: S105 - a settings key; the value is the token's SHA-256
 ISO = "%Y-%m-%dT%H:%M:%SZ"
@@ -234,10 +233,9 @@ def check_collection(conn, cfg, now) -> Check:
 
 BACKUP_SETUP = ("Back up every night: DEPLOY.md, \"Backups\", has the one line to add to the server's crontab. "
                 "Keep the copies off the data volume.")
-
-
-def _job_label(job: str) -> str:
-    return {"local": "", "offsite": "off-site "}.get(job, f"{job} ")
+# How old each backup job's last success may get: nightly copies, and the weekly restore drill.
+BACKUP_JOBS = {"local": ("backup", timedelta(hours=26)), "offsite": ("off-site backup", timedelta(hours=26)),
+               "restore_check": ("restore check", timedelta(days=8))}
 
 
 def check_backup(conn, cfg, now) -> Check:
@@ -245,28 +243,29 @@ def check_backup(conn, cfg, now) -> Check:
     if "local" not in jobs and (newest := backups.newest_backup(cfg.data_dir / "backups")):
         # Backups made before the status file existed, into the default folder.
         made = datetime.fromtimestamp(newest.stat().st_mtime, UTC).strftime(ISO)
-        jobs["local"] = {"last_attempt_at": made, "last_success_at": made, "ok": True, "error": None}
+        jobs["local"] = {"ok": True, "last_attempt": made, "last_success": made, "detail": "", "error": ""}
     data = {"configured": bool(jobs), "jobs": {
-        name: {"ok": j.get("ok"), "last_attempt": j.get("last_attempt_at"), "last_success": j.get("last_success_at"),
-               "age_hours": _hours(now - t) if (t := parse_ts(j.get("last_success_at"))) else None}
+        name: {"ok": j.get("ok"), "last_attempt": j.get("last_attempt"), "last_success": j.get("last_success"),
+               "age_hours": _hours(now - t) if (t := parse_ts(j.get("last_success"))) else None}
         for name, j in jobs.items()}}
     if not jobs:
         return Check("backup", "Backups", WARN, "No backup has been made yet", BACKUP_SETUP, data)
     worst: tuple[int, str, str] | None = None
     newest = None
     for name, j in sorted(jobs.items()):
-        label = _job_label(name)
-        done = parse_ts(j.get("last_success_at"))
-        if done and (newest is None or done > newest):
+        label, stale = BACKUP_JOBS.get(name, (f"{name} backup", timedelta(hours=26)))
+        done = parse_ts(j.get("last_success"))
+        if done and name != "restore_check" and (newest is None or done > newest):
             newest = done
         if j.get("ok") is False:
-            problem = (2, f"The last {label}backup failed",
-                       (j.get("error") or "No details were recorded.") + " Run the backup by hand to see the whole "
-                       "message: docker compose exec web python -m officesentry backup")
-        elif done is None or now - done > BACKUP_STALE:
-            problem = (1, f"No {label}backup for {duration((now - done).total_seconds())}" if done
-                       else f"No {label}backup has worked yet",
-                       "Check that the nightly backup still runs (crontab -l on the server). " + BACKUP_SETUP)
+            problem = (2, f"The last {label} failed",
+                       (j.get("error") or "No details were recorded.").rstrip(".") + ". Run it by hand to see the "
+                       "whole message" + (": docker compose exec web python -m officesentry backup"
+                                          if name == "local" else " (DEPLOY.md, \"Backups\")."))
+        elif done is None or now - done > stale:
+            problem = (1, f"No {label} for {duration((now - done).total_seconds())}" if done
+                       else f"No {label} has worked yet",
+                       "Check that it still runs (crontab -l on the server). " + BACKUP_SETUP)
         else:
             continue
         if worst is None or problem[0] > worst[0]:
@@ -274,6 +273,8 @@ def check_backup(conn, cfg, now) -> Check:
     data["age_hours"] = _hours(now - newest) if newest else None
     if worst:
         return Check("backup", "Backups", WARN, worst[1], worst[2], data)
+    if newest is None:
+        return Check("backup", "Backups", OK, "Restore check passed", data=data)
     return Check("backup", "Backups", OK, f"Last backup {duration((now - newest).total_seconds())} ago", data=data)
 
 
