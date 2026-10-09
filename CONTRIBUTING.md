@@ -141,8 +141,9 @@ does the work. To make a release:
    workflow from" on `main`, type the version (`2.1.0`) and press **Run
    workflow**. (Pushing a tag, `git push origin v2.1.0`, does the same.)
 3. The run checks the version matches `__version__` and the changelog,
-   tests that commit, builds the image for amd64 and arm64 with an SBOM and
-   build provenance, scans it, publishes `ghcr.io/jackd99/officesentry:2.1.0`
+   tests that commit, builds the image with an SBOM and build provenance
+   (amd64 while the repository is private, plus arm64 once it is public),
+   scans it, publishes `ghcr.io/jackd99/officesentry:2.1.0`
    (and `2.1`, `2` and `latest`), then creates the `v2.1.0` tag and the GitHub
    release with the notes and install files. Nothing is published until the
    tests and the scan have passed.

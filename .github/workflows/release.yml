@@ -3,8 +3,9 @@ name: release
 # (2.1.0, or 2.1.0-rc.1 for a release candidate), or by pushing a tag such as v2.1.0. In order:
 #   1. the version must match officesentry.__version__ and have a CHANGELOG.md section (scripts/release_notes.py);
 #   2. the whole v2 suite runs on that commit;
-#   3. the image is built for amd64 and arm64 with an SBOM and build provenance, and pushed to GHCR by digest
-#      only, so nothing can pull it by name yet;
+#   3. the image is built with an SBOM and build provenance and pushed to GHCR by digest only, so nothing can
+#      pull it by name yet. It is amd64 while the repository is private (an arm64 build under emulation costs
+#      too many of GitHub Free's 2,000 private minutes) and amd64 plus arm64 once it is public;
 #   4. the image is scanned for known vulnerabilities that have a fix (high or critical stops the release);
 #   5. only then does it get its version tags (2.1.0, 2.1, 2 and latest; a candidate gets only its own);
 #   6. the GitHub release is created, with the tag (when it doesn't exist yet), the changelog section and the
@@ -95,6 +96,7 @@ jobs:
           sed -i "s/^__version__ = .*/__version__ = \"$PY_VERSION\"/" v2/officesentry/__init__.py
           grep -qx "__version__ = \"$PY_VERSION\"" v2/officesentry/__init__.py
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+        if: ${{ !github.event.repository.private }}
         with:
           platforms: arm64
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
@@ -118,7 +120,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: v2
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.event.repository.private && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           labels: ${{ steps.meta.outputs.labels }}
           # Pushed by digest only; the version tags are added once the scan has passed.
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
@@ -166,6 +168,7 @@ jobs:
       TAG: ${{ needs.notes.outputs.tag }}
       VERSION: ${{ needs.image.outputs.version }}
       DIGEST: ${{ needs.image.outputs.digest }}
+      PLATFORMS: ${{ github.event.repository.private && 'amd64 (Intel and AMD)' || 'amd64 and arm64' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Write the notes and the install files
@@ -175,7 +178,7 @@ jobs:
             echo
             echo "### Install or update"
             echo
-            echo "Image: \`$IMAGE:$VERSION\` (\`$DIGEST\`), for amd64 and arm64."
+            echo "Image: \`$IMAGE:$VERSION\` (\`$DIGEST\`), for $PLATFORMS servers."
             echo
             echo "Download \`docker-compose.yml\`, \`Caddyfile\` and \`.env.example\` below (they run this version"
             echo "unless \`OFFICESENTRY_VERSION\` in \`.env\` says otherwise), then follow"

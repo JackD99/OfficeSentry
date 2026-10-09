@@ -41,7 +41,7 @@ first, then upgrades it on start. New installs start with an empty database.
 - Tenant pause, archive and delete; connection health with plain-English fixes; national clouds (GCC High,
   DoD and China).
 - Two-step sign-in, server-side sessions, an activity log, backups and a `restore` command.
-- Releases: a versioned image on GHCR for amd64 and arm64 with an SBOM, build provenance and a
+- Releases: a versioned image on GHCR for amd64 servers with an SBOM, build provenance and a
   vulnerability scan; the version shows at the foot of the menu and on `/health`.
 
 ### Security
