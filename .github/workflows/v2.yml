@@ -6,14 +6,14 @@ name: v2
 # also catches newly published vulnerabilities in the dependencies. When the repo goes public
 # (standard runners are free there), put the full matrix back on pull requests.
 #
-# Changes that only touch Markdown, docs/ or examples/ don't run CI. If checks become required (at
+# Changes that only touch Markdown, docs/, examples/ or website/ don't run CI here (website.yml builds the site). If checks become required (at
 # go-public), add a job that always runs and passes for those, or such PRs can't merge.
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**', 'examples/**']
+    paths-ignore: ['**.md', 'docs/**', 'examples/**', 'website/**']
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', 'examples/**']
+    paths-ignore: ['**.md', 'docs/**', 'examples/**', 'website/**']
   workflow_dispatch:
   schedule:
     - cron: '17 5 * * 1'

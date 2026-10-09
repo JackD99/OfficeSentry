@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block body_class %}home{% endblock %}
+{%- macro shot(name, alt, cls='', eager=false) -%}
+{% set s = shots[name] %}<img class="{{ cls }}" src="{{ s.src }}" width="{{ s.w }}" height="{{ s.h }}" alt="{{ alt }}"{% if not eager %} loading="lazy"{% endif %} decoding="async">
+{%- endmacro -%}
+{%- macro window(name, alt, eager=false) -%}
+<figure class="window"><div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>{{ shot(name, alt, eager=eager) }}</figure>
+{%- endmacro -%}
+{%- macro check() -%}<svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{%- endmacro -%}
+{% block main %}
+<section class="hero">
+  <div class="wrap hero-inner">
+    <div class="hero-copy">
+      <p class="eyebrow">Free and open source · Built for MSPs</p>
+      <h1>Microsoft 365 reports for every client, without the busywork</h1>
+      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, an insurance evidence pack, about 30 detail reports, a view across every client and what changed since last month.</p>
+      <div class="actions">
+        <a class="btn primary lg" href="{{ demo_url }}">Try the live demo</a>
+        <a class="btn lg" href="/docs/quick-start/">Install it</a>
+      </div>
+      <p class="hero-note">No sign-up. The demo has three fictional clients and resets every night.</p>
+    </div>
+    <div class="hero-shot">{{ window('tenant-overview', "A client's overview: key figures, what needs attention and what changed since last month", eager=true) }}</div>
+  </div>
+</section>
+
+<section class="pillars" aria-label="Why Office Sentry">
+  <div class="wrap pillar-grid">
+    <div class="pillar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+      <h2>Read-only by design</h2>
+      <p>It asks Microsoft for read permissions only, so it can't change anything in a client's tenant.</p>
+    </div>
+    <div class="pillar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <h2>Keeps the history</h2>
+      <p>Every night's results are kept, so you can see what changed, when, and whether it got better.</p>
+    </div>
+    <div class="pillar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <h2>Every client side by side</h2>
+      <p>Compare any report across all your clients, worst first, and open the rows behind any figure.</p>
+    </div>
+    <div class="pillar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg>
+      <h2>Your brand, plain English</h2>
+      <p>Reports carry your logo and colours and explain findings in words a client understands.</p>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="features">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow">What you get</p>
+      <h2>The reports an MSP sends, ready when you need them</h2>
+      <p>Office Sentry does the gathering every night for every client. You review the report and send it, or let it email itself.</p>
+    </header>
+
+    <article class="feature">
+      <div class="feature-copy">
+        <h3>A monthly review your clients will read</h3>
+        <p>The Monthly Security &amp; Licensing Review opens with a verdict and a plain-English summary, then the figures that matter.</p>
+        <ul class="ticks">
+          <li>{{ check() }}Key figures with their four-week change</li>
+          <li>{{ check() }}What to fix first, and what changed</li>
+          <li>{{ check() }}Secure Score, and licence waste in money</li>
+          <li>{{ check() }}A web page, a branded PDF and a spreadsheet</li>
+        </ul>
+        <a class="more" href="/examples/monthly-security-licensing-review.pdf">Open the example PDF</a>
+      </div>
+      <div class="feature-media pair">
+        {{ window('review', 'The monthly review in the portal') }}
+        {{ shot('phone-review', 'The monthly review on a phone', 'phone') }}
+      </div>
+    </article>
+
+    <article class="feature flip">
+      <div class="feature-copy">
+        <h3>About 30 detail reports you can filter, save and export</h3>
+        <p>Identity, email, files, devices and licences: MFA coverage, mail forwarding, mailbox permissions, sign-ins, Conditional Access, licence right-sizing and more.</p>
+        <ul class="ticks">
+          <li>{{ check() }}Filter by any value or date, sort and hide columns</li>
+          <li>{{ check() }}Save a view and reuse it on any client</li>
+          <li>{{ check() }}PDF, XLSX and CSV downloads contain exactly the rows shown</li>
+          <li>{{ check() }}Every headline figure opens the rows behind it</li>
+        </ul>
+        <a class="more" href="/docs/reference/#reports">See every report</a>
+      </div>
+      <div class="feature-media">{{ window('mfa', 'MFA coverage: who has set up MFA, who is required to, and where the two differ') }}</div>
+    </article>
+
+    <article class="feature">
+      <div class="feature-copy">
+        <h3>Every client at once, and what changed</h3>
+        <p><strong>All tenants</strong> compares any report across every client, one row each. <strong>What changed</strong> lists the month's changes, most important first: new and fixed findings, admins, accounts, Conditional Access, forwarding, apps and devices.</p>
+        <ul class="ticks">
+          <li>{{ check() }}Every figure is clickable</li>
+          <li>{{ check() }}A row-by-row comparison of every detail report</li>
+        </ul>
+        <a class="more" href="/examples/what-changed-all-tenants.pdf">Open the What changed PDF</a>
+      </div>
+      <div class="feature-media">{{ window('all-tenants', "All tenants: the monthly review's figures for every client") }}</div>
+    </article>
+
+    <article class="feature flip">
+      <div class="feature-copy">
+        <h3>SharePoint storage: why it's full and what to clean up</h3>
+        <p>See how full a tenant is and when it will run out at the current rate, where the space goes, and the biggest folders, files, version histories and recycle bin items, each with what to do about it.</p>
+        <a class="more" href="/examples/sharepoint-storage.pdf">Open the 19-page example</a>
+      </div>
+      <div class="feature-media">{{ window('sharepoint-storage', 'SharePoint storage: 88% used, full in about 3 months, and where the space goes') }}</div>
+    </article>
+
+    <article class="feature">
+      <div class="feature-copy">
+        <h3>Insurance evidence, answered from the data</h3>
+        <p>The evidence pack answers the controls cyber-insurance questionnaires ask about, such as MFA, admin accounts, legacy sign-in, email authentication, forwarding, leavers and devices, with the gaps listed.</p>
+        <a class="more" href="/examples/insurance-evidence-pack.pdf">Open the example pack</a>
+      </div>
+      <div class="feature-media">{{ window('evidence', 'Insurance evidence: each control with the evidence and the gaps') }}</div>
+    </article>
+
+    <div class="cards">
+      <article class="card">
+        {{ shot('person', 'An account page: needs attention, MFA, admin roles, licences and devices') }}
+        <h3>One page per person</h3>
+        <p>Sign-in, MFA, admin roles, licences, mailbox forwarding, devices and sharing for one account, with how it changed. Handy for offboarding and "was this account compromised?"</p>
+      </article>
+      <article class="card">
+        {{ shot('projects', 'Recommended projects for every client, worst first') }}
+        <h3>Projects to recommend</h3>
+        <p>Findings become the projects an account manager can propose, with a branded proposal PDF. A project drops off once the tenant is fixed.</p>
+      </article>
+      <article class="card">
+        {{ shot('emailed-reports', 'Schedules, alerts, contacts and the delivery history') }}
+        <h3>Emailed reports and alerts</h3>
+        <p>Any mix of reports weekly, monthly or quarterly in the client's timezone, plus alert emails and Teams, Slack or webhook alerts.</p>
+      </article>
+      <article class="card">
+        {{ shot('client-view', 'What a client sees when they sign in') }}
+        <h3>A view for your clients</h3>
+        <p>Client users sign in and see only their own organisation's reports and downloads, never another client or how collection works.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="demo-band" id="demo">
+  <div class="wrap demo-inner">
+    <div>
+      <h2>See it for yourself</h2>
+      <p>Open the demo and click around three fictional clients with five weeks of history. Nothing can be changed, and it starts fresh every night.</p>
+    </div>
+    <a class="btn primary lg" href="{{ demo_url }}">Open the live demo</a>
+  </div>
+</section>
+
+<section class="examples">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow">Example reports</p>
+      <h2>See what your clients would get</h2>
+      <p>Real exports from Office Sentry, made from fictional demo data.</p>
+    </header>
+    <ul class="example-grid">
+      {% for e in examples %}
+      <li><a href="{{ e.href }}"><span class="file-kind">{{ e.kind }}</span><strong>{{ e.title }}</strong><span>{{ e.text }}</span></a></li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="security" id="security">
+  <div class="wrap security-inner">
+    <header class="section-head left">
+      <p class="eyebrow">Security</p>
+      <h2>It holds read access to many clients, so it does as little as possible with it</h2>
+      <a class="more" href="/docs/security/">Read the security model</a>
+    </header>
+    <ul class="security-list">
+      <li><strong>Read-only by construction.</strong> One app asks only for read permissions. The code has no way to write to Microsoft Graph, and only runs Exchange commands that start with Get-.</li>
+      <li><strong>Certificate sign-in, no stored passwords.</strong> The app signs in with a certificate whose private key is encrypted in the database. Secrets and private keys can never be downloaded.</li>
+      <li><strong>Every client kept apart.</strong> People see only the tenants they're given, and clients see only their own reports.</li>
+      <li><strong>Runs on your own server.</strong> Your clients' data stays with you. There's no telemetry: nothing is sent to us.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="start">
+  <div class="wrap">
+    <header class="section-head">
+      <p class="eyebrow">Get started</p>
+      <h2>Up and running on your own server</h2>
+      <p>Office Sentry runs as two Docker containers with everything in one volume. No database server, no Redis.</p>
+    </header>
+    <ol class="steps">
+      <li><span>1</span><div><h3>Start it</h3><p>Download the compose file, set your domain and timezone, and run <code>docker compose up</code>.</p></div></li>
+      <li><span>2</span><div><h3>Create the read-only app</h3><p>One command creates the app in your own Microsoft tenant, with its certificate.</p></div></li>
+      <li><span>3</span><div><h3>Add your clients</h3><p>Each client approves read access once. The first reports are ready after the first collection.</p></div></li>
+    </ol>
+    <div class="actions center">
+      <a class="btn primary lg" href="/docs/quick-start/">Read the quick start</a>
+      <a class="btn lg" href="/docs/what-it-reads/">What it reads, for your clients</a>
+    </div>
+  </div>
+</section>
+
+<section class="faq">
+  <div class="wrap narrow">
+    <h2>Questions</h2>
+    <details><summary>What does it cost?</summary><p>Nothing. Office Sentry is free, open-source software under the AGPL-3.0. You run it on your own server; a small cloud server is enough for most MSPs.</p></details>
+    <details><summary>Can it change anything in a client's tenant?</summary><p>No. It only asks Microsoft for read permissions, and its code can't write to Microsoft Graph or run Exchange commands other than ones that read.</p></details>
+    <details><summary>Does it read anyone's email?</summary><p>No. It reads settings, mailbox details such as size, forwarding and permissions, and inbox rules, never message contents. <a href="/docs/what-it-reads/">What Office Sentry reads</a> lists every permission, written for your clients.</p></details>
+    <details><summary>Where is the data kept?</summary><p>On your own server, in one database you can back up and restore. Office Sentry has no telemetry, so nothing is sent to us.</p></details>
+    <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry keeps every night's results for every client, compares them month by month and across clients, and turns them into branded reports.</p></details>
+  </div>
+</section>
+{% endblock %}
