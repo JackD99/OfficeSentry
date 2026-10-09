@@ -4,8 +4,9 @@
 # public half of your deploy key. Steps are in DEPLOY.md ("Hetzner, from a phone").
 #
 # It installs Docker, creates the "deploy" user that the "Deploy" GitHub
-# workflow signs in as, turns off password and root sign-in over SSH, and
-# backs up the database every night inside the data volume.
+# workflow signs in as, and turns off password and root sign-in over SSH.
+# Every deploy then schedules the nightly backup, the off-site copy and the
+# restore drill in the deploy user's crontab (deploy/jobs.sh).
 
 users:
   - name: deploy
@@ -16,7 +17,7 @@ users:
 
 package_update: true
 package_upgrade: true
-packages: [docker.io, docker-compose-v2, rsync, unattended-upgrades]
+packages: [docker.io, docker-compose-v2, rsync, cron, curl, unattended-upgrades]
 
 write_files:
   - path: /etc/ssh/sshd_config.d/10-officesentry.conf
@@ -25,11 +26,6 @@ write_files:
       KbdInteractiveAuthentication no
       PermitRootLogin no
       AllowUsers deploy
-  # A consistent copy of the database every night, so the server's own
-  # Hetzner backups always hold one even if they catch SQLite mid-write.
-  - path: /etc/cron.d/officesentry-backup
-    content: |
-      30 3 * * * deploy cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup --keep 14 >/dev/null
   - path: /etc/docker/daemon.json
     content: |
       {"log-driver": "local", "log-opts": {"max-size": "20m", "max-file": "5"}}

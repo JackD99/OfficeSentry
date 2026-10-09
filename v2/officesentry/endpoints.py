@@ -163,7 +163,6 @@ GRAPH: tuple[Endpoint, ...] = (
              fallback="Needs Intune; shown as unavailable without it"),
     # Mailbox settings.
     Endpoint("/users/{id}/mailFolders/inbox/messageRules", V1, "MailboxSettings.Read", ("outlook",)),
-    Endpoint("/users/{id}/mailFolders/{folder}", V1, "MailboxSettings.Read", ("outlook",)),
     # SharePoint and OneDrive, in SharePoint resource units.
     Endpoint("/sites/getAllSites", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY,
              fallback="Listed once a night; the second SharePoint collector reuses it (sharepoint_lookup)"),
@@ -187,8 +186,9 @@ EXCHANGE: tuple[Endpoint, ...] = tuple(
     Endpoint(cmdlet, ("beta",), "Exchange.ManageAsApp and Global Reader", ("exchange",), api="exchange",
              fallback="Undocumented InvokeCommand endpoint; the v2.0 admin API doesn't cover this cmdlet yet")
     for cmdlet in ("Get-Mailbox", "Get-MailboxPermission", "Get-MailboxStatistics", "Get-CASMailbox",
-                   "Get-Recipient", "Get-RecipientPermission", "Get-OrganizationConfig", "Get-TransportConfig",
-                   "Get-RemoteDomain", "Get-HostedOutboundSpamFilterPolicy", "Get-AcceptedDomain"))
+                   "Get-InboxRule", "Get-Recipient", "Get-RecipientPermission", "Get-OrganizationConfig",
+                   "Get-TransportConfig", "Get-RemoteDomain", "Get-HostedOutboundSpamFilterPolicy",
+                   "Get-AcceptedDomain"))
 
 _EXCHANGE = {e.path: e for e in EXCHANGE}
 _ID = re.compile(r"/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|b![^/]+|[^/]*,[^/]*)(?=/|$)",

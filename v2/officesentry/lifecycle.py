@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from . import events
 from .db import audit, transaction, utcnow
 from .text import plural
 
@@ -111,6 +112,7 @@ def stored(conn, tenant_id: int) -> dict[str, int]:
         "contacts": one("SELECT COUNT(*) FROM contacts WHERE tenant_id = ?"),
         "deliveries": one("SELECT COUNT(*) FROM email_deliveries WHERE tenant_id = ?"),
         "access": one("SELECT COUNT(*) FROM user_tenants WHERE tenant_id = ?"),
+        **{f"history_{k}": n for k, n in events.counts(conn, tenant_id).items()},
     }
 
 
@@ -150,6 +152,9 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
     unknown = set(delete_users) - set(allowed)
     if unknown:
         raise DeleteError("only client accounts with no other tenant can be deleted with it")
+    # The activity history is in its own files: its key goes with the tenant (ON DELETE CASCADE), and its rows
+    # are deleted right after. If that stops part-way, the daily retention pass sweeps up rows with no key.
+    key, base = events.tenant_key(conn, tenant["id"]), events.root(conn)
     # Overwrite deleted content in the file instead of leaving it in free pages (see erase_freed_pages).
     previous = conn.execute("PRAGMA secure_delete").fetchone()[0]
     conn.execute("PRAGMA secure_delete = ON")
@@ -157,6 +162,8 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
         removed = _delete(conn, tenant, user, delete_users, allowed)
     finally:
         conn.execute(f"PRAGMA secure_delete = {('OFF', 'ON', 'FAST')[int(previous)]}")
+    if key is not None:
+        events.delete_tenant(base, key)
     erase_freed_pages(conn)
     return removed
 

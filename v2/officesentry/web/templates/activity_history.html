@@ -1,0 +1,85 @@
+{#- Activity history (reports/activity_history.py): how far back this tenant's sign-in and audit logs are kept,
+    the answer first, then the last 30 days, sign-ins per day, each month and admin changes to review. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header, ts with context %}
+{% block title %}Activity history · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'activity', title='Activity history') }}
+{% set s, a = page.signins, page.audits %}
+
+{% if not page.collected %}
+<div class="card empty"><h3>No activity history yet</h3>
+  <p>From the next Sign-ins and Admin activity collections, Office Sentry keeps every sign-in and directory audit event it reads from this tenant, beyond the 30 days Microsoft keeps them. Sign-ins need Entra ID P1.</p>
+  <a class="btn" href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">{{ icon('refresh') }} Data collection</a></div>
+{% else %}
+<div class="callout lead-answer{{ '' if page.up_to_date else ' warn' }}">{{ icon('clock') }}
+  <div>
+    <strong>{% if s.since and a.since and s.since == a.since %}Every sign-in and admin change is detailed from {{ s.since.isoformat()|day }}.{% else %}{% if s.since %}Sign-ins are detailed from {{ s.since.isoformat()|day }}{% else %}No sign-ins kept yet{% endif %}; {% if a.since %}admin changes from {{ a.since.isoformat()|day }}.{% else %}no admin changes kept yet.{% endif %}{% endif %}</strong>
+    {% if page.up_to_date %}Up to date as of {{ ts(page.read_at) }}.{% else %}Part of the log hasn't been read yet; the next collection carries on from there.{% endif %}
+    <div class="small">Microsoft keeps 30 days (7 for audit events without Entra ID P1). Office Sentry keeps what it has read for longer, under the retention settings below.</div>
+  </div>
+</div>
+
+{% for src in (s, a) %}
+{% if src.not_read %}<div class="callout warn">{{ icon('alert') }}<div><strong>Not read yet: the {{ src.noun }} log for {{ ranges(src.not_read) }}.</strong> Microsoft was slow to answer, or there was more than one collection reads at a time. The next collection carries on from there.</div></div>{% endif %}
+{% if src.lost %}<div class="callout bad">{{ icon('alert') }}<div><strong>Missing: the {{ src.noun }} log for {{ ranges(src.lost) }}.</strong> Microsoft no longer kept it by the time Office Sentry got to it, so it can't be read now.</div></div>{% endif %}
+{% endfor %}
+
+{% if page.tiles %}
+<h2 class="section-title">Last 30 days</h2>
+<div class="tiles">
+  {% for t in page.tiles %}
+  <div class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}"><div class="label">{{ t.label }}</div><div class="value">{{ t.value }}</div><div class="foot">{{ t.foot }}</div></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if page.chart %}
+<section class="card chart-card">
+  <div class="card-head"><h2>Sign-ins per day</h2></div>
+  <p class="legend" aria-hidden="true"><span><i class="sw sw-good"></i>Signed in</span> <span><i class="sw sw-bad"></i>Failed</span> <span><i class="sw sw-none"></i>No data</span></p>
+  <div class="chart-scroll">{{ page.chart|safe }}</div>
+  <p class="footnote m0">The last 90 days, interactive sign-ins only. Hover over a day for its numbers; sign-ins interrupted by an MFA or other prompt are counted there too.</p>
+</section>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card flush">
+    <div class="card-head"><h2>Sign-ins by month</h2></div>
+    {% if page.months %}
+    <p class="intro">From the daily summaries. Download a month for every sign-in in it, while it's kept.</p>
+    <table class="stack-sm compact-sm">
+      <thead><tr><th>Month</th><th class="num">Sign-ins</th><th class="num">Failed</th><th class="num">Used MFA</th><th class="num">People</th><th>Every sign-in</th></tr></thead>
+      <tbody>
+      {% for m in page.months %}
+      <tr><td>{{ m.label }}</td>
+        <td class="num" data-label="Sign-ins">{{ '{:,}'.format(m.totals.sign_ins) }}</td>
+        <td class="num" data-label="Failed">{{ '{:,}'.format(m.totals.failed) }}</td>
+        <td class="num" data-label="Used MFA">{% if m.mfa_share is not none %}{{ m.mfa_share }}%{% else %}<span class="faint">–</span>{% endif %}</td>
+        <td class="num" data-label="People">{{ '{:,}'.format(m.totals.people) }}</td>
+        <td data-label="Every sign-in">{% if m.download %}<a href="{{ url_for('history.signins_csv', tenant_id=tenant.id, period=m.month) }}">{{ icon('download') }} CSV</a>{% else %}<span class="faint">Summary only</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty compact"><p>No sign-ins kept yet.{% if not s.since %} They're read with the Sign-ins collection, which needs Entra ID P1.{% endif %}</p></div>{% endif %}
+  </section>
+
+  <section class="card flush">
+    <div class="card-head"><h2>Admin changes to review</h2>{% if page.review_total %}<span class="count-badge">{{ page.review_total }}</span>{% endif %}</div>
+    {% if page.review %}
+    <p class="intro">Successful changes in the last 90 days worth a second look. <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key='admin-activity') }}">Admin activity</a> has every change.</p>
+    <ul class="change-list">
+      {% for e in page.review %}
+      <li><span class="sevtext {{ e.severity }}">{{ e.severity }}</span><div>{{ e.activity }}{% if e.targets %}: {{ e.targets|join(', ') }}{% endif %}
+        <span class="desc">{{ e.time|when }} by {{ e.actor or 'someone' }}{% if e.detail %} · {{ e.detail }}{% endif %}. {{ e.why }}.</span></div></li>
+      {% endfor %}
+      {% if page.review_total > page.review|length %}<li class="muted small">…and {{ page.review_total - page.review|length }} more in Admin activity.</li>{% endif %}
+    </ul>
+    {% elif a.since %}<div class="empty compact"><p>Nothing to review in the last 90 days: no admin roles granted, app secrets added, Conditional Access policies switched off or deleted, or domain federation changed.</p></div>
+    {% else %}<div class="empty compact"><p>No admin changes kept yet. They're read with the Admin activity collection.</p></div>{% endif %}
+  </section>
+</div>
+
+<p class="footnote">Kept: every sign-in for {{ describe('history_signin_days', page.policy.history_signin_days) }}, daily sign-in summaries for {{ describe('history_daily_months', page.policy.history_daily_months) }} and directory audit events for {{ describe('history_audit_years', page.policy.history_audit_years) }}.{% if current_user.role == 'admin' %} <a href="{{ url_for('retention.settings') }}#history">Change in Data retention</a>.{% endif %}</p>
+{% endif %}
+{% endblock %}

@@ -7,6 +7,8 @@ run the handler registered for its kind with ``@handler(kind)``:
 
 * ``approve`` (``month_end.py``): freeze one client's month and send or publish it.
 * ``send_schedule`` (``delivery.py``): one scheduled report or digest email that is due.
+* ``precompute`` (``reports/precomputed.py``): one tenant's rows on What changed and the check
+  matrix, after its collection and once a day.
 
 **Exactly once.** At most one task per ``key`` is queued or running (a partial unique index),
 so approving a client's month twice queues it once. A claimed task carries a lease the worker

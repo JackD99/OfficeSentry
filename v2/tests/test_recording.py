@@ -157,6 +157,31 @@ def test_sharepoint_drive_ids_have_their_guids_replaced():
     assert fixture["entries"][2]["body"]["@odata.deltaLink"].startswith(f"{GRAPH}/v1.0/drives/{fake}/")
 
 
+def test_outlook_ids_have_their_mailbox_guid_replaced():
+    # A folder ID is base64url of the mailbox GUID as text and binary store and folder IDs.
+    import base64
+
+    mailbox = "67794afe-1111-4222-8333-444455556666"
+    raw = b"\x00\x03$\x00" + mailbox.encode() + b"\x00.\x00\x00\x00\x00\x00" + bytes(range(40, 82))
+    folder = base64.urlsafe_b64encode(raw).decode()
+    assert folder.startswith("AAMk") and folder.endswith("=")
+    user = "b0b00000-1111-4222-8333-444455556666"
+    rules = f"/v1.0/users/{user}/mailFolders/inbox/messageRules"
+    log = [
+        _graph("/v1.0/organization", {"value": [{"id": TENANT, "verifiedDomains": [{"name": "contoso.com"}]}]}),
+        _graph(rules, {"value": [{"actions": {"moveToFolder": folder}}]}),
+        _graph(f"/v1.0/users/{user}/mailFolders/{folder}?%24select=displayName", {"displayName": "Archive"}),
+    ]
+    fixture = scrub(log, TENANT, CLIENT)
+    text = json.dumps(fixture)
+    assert folder.rstrip("=") not in text and mailbox not in text
+    fake = fixture["entries"][1]["body"]["value"][0]["actions"]["moveToFolder"]
+    assert fake.startswith("AAMk") and len(fake) == len(folder)
+    assert base64.urlsafe_b64decode(fake)[4:40].decode().startswith("5e")
+    # The rule and the folder lookup still name the same folder, so the replay matches.
+    assert f"/mailFolders/{fake}?" in fixture["entries"][2]["url"]
+
+
 def test_scrub_refuses_to_write_when_something_survives(monkeypatch):
     monkeypatch.setattr(recording.Scrubber, "text_only", lambda self, value: value)
     with pytest.raises(ValueError, match="identifying value") as exc:

@@ -149,8 +149,17 @@ needing goes in those lists.
   views and the CSV/XLSX/PDF downloads work unchanged; it keeps
   `rollups.MAX_ROWS` per table and says when it cut. `/across/checks`
   (`rollups.check_matrix`) is every check for every tenant, evaluated from
-  stored data with accepted risks from `findings`; it writes nothing. All
+  stored data with accepted risks from `findings`. All
   `/across` pages are admin and analyst only, over `visible_tenants()`.
+  `/changes` and `/across/checks` (and their downloads) read each tenant's
+  stored row from `summary_cache` (`reports/precomputed.py`, kinds
+  `changes:<days>` and `checks`) while its fingerprint matches, and build and
+  store it otherwise. The worker builds them in a `precompute` task after the
+  tenant's collection and once a day (every row again when retention removed
+  something). If a row comes to depend on something else, add it to
+  `Rows.fingerprint`; `tests/test_precomputed.py` checks stored rows equal the
+  live build (`across(..., now=...)` and `check_matrix(..., now=...)` never
+  use them). Rows are per tenant: only ever read them for `scoped_tenants()`.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change" are ignored as time-driven.
@@ -294,7 +303,8 @@ run per day for 30 days and per month for 12 by default; metrics and run rows
 are never pruned), sign-in detail objects (`retention.SIGNIN_KINDS`) once
 older than their period, resolved findings, run log info lines older than 90
 days (`store.prune_run_logs`; warnings and errors stay), and, when set, the
-activity log and issued reports (each never under 365 days). So code that
+activity log and issued reports (each never under 365 days); the activity history
+too (`retention.prune_history`, see "Activity history"). So code that
 reads an older run must cope with its objects, or just its sign-in kinds,
 being gone (see `changes._baseline_run`). A new store of personal data gets
 a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
@@ -341,8 +351,9 @@ Long work goes through **background tasks** (`tasks.py`, the `tasks` table),
 never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
-`worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`) and
-`send_schedule` (`delivery.py`). Queue with `tasks.enqueue(conn, kind,
+`worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
+`send_schedule` (`delivery.py`) and `precompute` (`reports/precomputed.py`,
+below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
 Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
@@ -538,6 +549,32 @@ the worker (the `compact` command does it all and shrinks the file). So:
 - `scripts/scale_data.py` builds N tenants with two years of history for
   sizing and timing (`--plain --compact` measures before and after).
 
+## Activity history
+
+`events.py` (schema in `migrations/0030`) keeps every sign-in and directory audit event beyond the 30 days
+Microsoft keeps them, in monthly SQLite files beside the database: `<data dir>/events/<store>/<YYYY-MM>.db`,
+stores `signins`, `daily` (one row per person, day, app and country) and `audits` (Graph's JSON,
+compressed). Rows carry the tenant's key from `event_tenants` (never reused), not `tenants.id`, and are
+deduplicated on (tenant, time, id), so reading an event twice stores it once.
+
+- Collect with `events.ingest(ctx, events.SIGNIN_LOG | AUDIT_LOG, keep_days, budget)`. Each tenant's
+  cursor (`event_cursors`, `events.Coverage`) says what's been read: each run adds `[read_to - 6 hours,
+  now]` and reads the gaps newest first, saving the cursor after every page, so a crash, a timeout (one-day
+  slices, then the 10-minute give-up) or the page budget loses nothing and the next run carries on. Ranges
+  Microsoft dropped before they were read go in `lost`. Warn with what `coverage.missing()` returns rather
+  than truncating quietly. `tests/test_events.py` replays overlapping and crashing runs.
+- Read through `events` (`signins_between`, `audits_between`, `daily_between`, `daily_for`, `totals`),
+  never the files. Pages that read it say where it starts ("detailed from <date>",
+  `Coverage.detailed_from`). Readers today: the Sign-ins, legacy sign-in and Admin activity collectors, the
+  Admin activity report (12 months), `changes.audit_changes`, each person's page and the tenant's Activity
+  history page (`/tenants/<id>/activity`, staff only, under the Changes tab).
+- Retention: `retention.Policy.history_*` (D18 defaults: sign-ins 180 days, daily summaries 25 months,
+  audits 7 years); whole months go as files (`events.prune`). `lifecycle.delete_tenant` deletes the
+  tenant's rows from every file after the database delete, and the daily pass sweeps rows whose key is
+  gone (`events.sweep`). `backup` mirrors the folder (`backups.mirror_events`) and `restore` puts back
+  missing files.
+- Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
@@ -572,10 +609,18 @@ and `python -m officesentry <command>`:
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
+| `backup-status [--json]` | what each backup job last did (`backup-status.json`); `--record` is for `deploy/jobs.sh` |
+| `check-backup FILE [--record]` | check a backup opens and passes SQLite's integrity check, without restoring it (the restore drill) |
 | `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+
+Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own
+volume), else in the data folder; `config.move_secrets` moves one left in the data folder on start. Never
+put it, or anything that decrypts, in the data volume or a backup. The server's own jobs (nightly backup,
+restic off-site copy, Sunday restore drill, uptime ping) are `deploy/jobs.sh`, scheduled by every deploy;
+restic's settings are in `.env.backup`, read only by the `offsite` service, never by the portal.
 
 Docker: `docker-compose.yml` runs the published image
 (`ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION}`); add

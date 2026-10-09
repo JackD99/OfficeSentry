@@ -45,7 +45,7 @@ Office Sentry is built so that it can't change anything in your tenant.
   command on the list starts with `Get-` (Exchange's word for "show me"):
 
   `Get-AcceptedDomain`, `Get-CASMailbox`, `Get-HostedOutboundSpamFilterPolicy`,
-  `Get-Mailbox`, `Get-MailboxPermission`, `Get-MailboxStatistics`,
+  `Get-InboxRule`, `Get-Mailbox`, `Get-MailboxPermission`, `Get-MailboxStatistics`,
   `Get-OrganizationConfig`, `Get-Recipient`, `Get-RecipientPermission`,
   `Get-RemoteDomain`, `Get-TransportConfig`.
 
@@ -113,7 +113,8 @@ commands listed above.
 
 This step is optional. Without it, the mailbox reports and the email checks
 that need Exchange stay empty, and everything else works. Inbox rules are read
-through Microsoft Graph instead, so they work either way.
+through Microsoft Graph instead, so they work either way; only the names of
+the folders they move mail to come from Exchange.
 
 ## What Office Sentry does not access
 
@@ -132,8 +133,9 @@ What it does read about mailboxes is settings: forwarding addresses, who can
 open or send from a mailbox, and inbox rules. An inbox rule includes its name,
 its conditions (for example "subject contains *invoice*" or "from
 *someone@example.com*") and what it does (for example "move to folder" or
-"forward to"). For rules that move mail, it also tries to look up the name of
-the destination folder. It never opens the folder.
+"forward to"). For rules that move mail, it also reads the name of the
+destination folder from the rule in Exchange (`Get-InboxRule`). It never opens
+the folder.
 
 ## Where the information is kept
 
