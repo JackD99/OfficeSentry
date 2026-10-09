@@ -166,6 +166,8 @@ POLICY_METHODS: dict[str, PolicyMethod] = {
                                         "A time-limited pass for setting up a new phone or passkey."),
     "X509Certificate": PolicyMethod("Certificate-based authentication", "Your choice", None, None),
     "QRCodePin": PolicyMethod("QR code sign-in", "Your choice", None, None),
+    # In every tenant's policy now (seen on the test tenant): Microsoft Entra Verified ID cards for face checks.
+    "VerifiableCredentials": PolicyMethod("Verified ID (Face Check)", "Your choice", None, None),
 }
 # Methods listed first in the policy table: the ones that decide how strong sign-in is.
 POLICY_ORDER = ("Fido2", "MicrosoftAuthenticator", "Sms", "Voice", "Email", "TemporaryAccessPass", "SoftwareOath",

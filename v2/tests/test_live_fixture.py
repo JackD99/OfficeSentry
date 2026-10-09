@@ -208,6 +208,11 @@ def test_sign_in_methods_on_real_data(db, live):
     assert not any("one person at a time" in n for n in report.notes)  # the registration report had everyone
     strongest = {row[0]: row[1] for row in sections["Strongest method"].rows}
     assert strongest["Phishing-resistant"] == 1 and strongest["None"] == 3
+    # Every method in Microsoft's real policy has a name, and Microsoft's newest method values are understood.
+    policy = [str(row[0]) for row in sections["Sign-in methods policy"].rows]
+    assert "Verified ID (Face Check)" in policy and "VerifiableCredentials" not in policy
+    registered = {str(row[0]): row[1] for row in sections["Methods registered"].rows}
+    assert registered["Synced passkey"] == "Phishing-resistant"
     strengths = {row[0][:5]: row[3] for row in sections["Authentication strengths in Conditional Access"].rows}
     assert strengths["CA001"] == "Yes" and strengths["CA002"] == "No"
     results = _results(db, live)

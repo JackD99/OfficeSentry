@@ -54,6 +54,10 @@ def test_error_codes_in_plain_english():
     assert signins.meaning(50057) == "Account is disabled"
     assert signins.meaning(99999, "Something Microsoft said.") == "Something Microsoft said."
     assert signins.meaning(99999, "Other.") == "Error 99999"
+    # Seen on the test tenant: Microsoft's text with its placeholders unfilled.
+    template = "The {redirectTerm} '{replyAddress}' specified in the request does not match. {detail}"
+    assert signins.meaning(99999, template) == "Error 99999"
+    assert "isn't set up with" in signins.meaning(50011, template)
     assert signins.meaning(None) == "Signed in"
     assert [signins.outcome(c) for c in (0, 50074, 50076, 50140, 50126, 53003)] == \
         ["success", "interrupted", "interrupted", "interrupted", "failure", "failure"]
