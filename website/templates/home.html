@@ -11,12 +11,13 @@
 <section class="hero">
   <div class="wrap hero-inner">
     <div class="hero-copy">
-      <p class="eyebrow">Free and open source · Built for MSPs</p>
+      <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
       <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, an insurance evidence pack, about 30 detail reports, a view across every client and what changed since last month.</p>
       <div class="actions">
         <a class="btn primary lg" href="{{ demo_url }}">Try the live demo</a>
-        <a class="btn lg" href="/docs/quick-start/">Install it</a>
+        {% if contact and not source_public %}<a class="btn lg" href="{{ contact }}">Ask for early access</a>
+        {% else %}<a class="btn lg" href="/docs/quick-start/">Install it</a>{% endif %}
       </div>
       <p class="hero-note">No sign-up. The demo has three fictional clients and resets every night.</p>
     </div>
@@ -179,7 +180,8 @@
       <a class="more" href="/docs/security/">Read the security model</a>
     </header>
     <ul class="security-list">
-      <li><strong>Read-only by construction.</strong> One app asks only for read permissions. The code has no way to write to Microsoft Graph, and only runs Exchange commands that start with Get-.</li>
+      <li><strong>Read-only in your clients' tenants.</strong> The app that reads them asks only for read permissions. The code has no way to write to Microsoft Graph, and only runs Exchange commands that start with Get-.</li>
+      <li><strong>Sending email is separate and optional.</strong> Reports and alerts go out through your own mail server, or through a second app in your own Microsoft 365 tenant that may send mail and nothing else, limited to one mailbox. It has no access to your clients.</li>
       <li><strong>Certificate sign-in, no stored passwords.</strong> The app signs in with a certificate whose private key is encrypted in the database. Secrets and private keys can never be downloaded.</li>
       <li><strong>Every client kept apart.</strong> People see only the tenants they're given, and clients see only their own reports.</li>
       <li><strong>Runs on your own server.</strong> Your clients' data stays with you. There's no telemetry: nothing is sent to us.</li>
@@ -206,11 +208,22 @@
   </div>
 </section>
 
+{% if contact %}
+<section class="early-access">
+  <div class="wrap narrow"><div class="early-box">
+    <h2>Run an MSP? Tell us how you report</h2>
+    <p>We're looking for a few MSPs to try Office Sentry with their own clients and say which reports they'd actually send each month. Ask for a walkthrough, a pilot or just a chat.</p>
+    <div class="actions center"><a class="btn primary lg" href="{{ contact }}">Get in touch</a></div>
+  </div></div>
+</section>
+
+{% endif %}
 <section class="faq">
   <div class="wrap narrow">
     <h2>Questions</h2>
-    <details><summary>What does it cost?</summary><p>Nothing. Office Sentry is free, open-source software under the AGPL-3.0. You run it on your own server; a small cloud server is enough for most MSPs.</p></details>
-    <details><summary>Can it change anything in a client's tenant?</summary><p>No. It only asks Microsoft for read permissions, and its code can't write to Microsoft Graph or run Exchange commands other than ones that read.</p></details>
+    <details><summary>What does it cost?</summary><p>Nothing. Office Sentry is free software under the AGPL-3.0. You run it on your own server; a small cloud server is enough for most MSPs.</p></details>
+    {% if not source_public %}<details><summary>Can I see the source code?</summary><p>Not yet. The code and its install image stay private while security and reliability testing finishes, and the source is published under the AGPL-3.0 after that.{% if contact %} Until then, <a href="{{ contact }}">ask for early access</a> to try it with your own clients.{% endif %}</p></details>{% endif %}
+    <details><summary>Can it change anything in a client's tenant?</summary><p>No. It only asks your clients' tenants for read permissions, and its code can't write to Microsoft Graph or run Exchange commands other than ones that read. The one thing it sends is your own email: reports and alerts, through your mail server or a separate app in your own tenant that can only send mail.</p></details>
     <details><summary>Does it read anyone's email?</summary><p>No. It reads settings, mailbox details such as size, forwarding and permissions, and inbox rules, never message contents. <a href="/docs/what-it-reads/">What Office Sentry reads</a> lists every permission, written for your clients.</p></details>
     <details><summary>Where is the data kept?</summary><p>On your own server, in one database you can back up and restore. Office Sentry has no telemetry, so nothing is sent to us.</p></details>
     <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry keeps every night's results for every client, compares them month by month and across clients, and turns them into branded reports.</p></details>

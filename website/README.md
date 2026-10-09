@@ -42,8 +42,10 @@ python -m http.server -d website/_site 8080
 Then open http://localhost:8080. The build goes to `website/_site/`, which isn't committed.
 
 Settings, all optional (the Deploy workflow sets them): `SITE_URL` (the site's address),
-`SITE_DEMO_URL` (the public demo's address) and `SITE_SOURCE_PUBLIC` (`true` shows the GitHub links,
-which the workflow sets once the repository is public).
+`SITE_DEMO_URL` (the public demo's address), `SITE_SOURCE_PUBLIC` (`true` shows the GitHub links and
+calls the project open source, which the workflow sets once the repository is public; until then the page
+says the source is coming) and `SITE_CONTACT` (an email address or `https://` link for "Get in touch" and
+"Ask for early access", from the `OFFICESENTRY_WEBSITE_CONTACT` variable; without it they're left out).
 
 ## Dependencies
 

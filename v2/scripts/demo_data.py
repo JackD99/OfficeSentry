@@ -440,7 +440,8 @@ def sharepoint(t: dict, users: list[dict], tenant_skus: list[dict], now: datetim
             items[f"lst-{slug}-hold"] = [
                 _list_item(t, now, f"/sites/{slug}/PreservationHoldLibrary/{name}", total=hold // parts, modified=400)
                 for name, parts in (("Contracts archive_v12.zip", 2), ("Board pack 2023_v8.pdf", 3))]
-        items[f"lst-{slug}"] = _library(t, now, slug, size - hold, rng)
+        # A site's storage counts its recycle bin too, so the files leave room for it and the parts add up.
+        items[f"lst-{slug}"] = _library(t, now, slug, size - hold - bin_gb * GB, rng)
         recycle[sid] = [] if not bin_gb else [
             {"id": f"rb-{slug}-{n}", "name": name, "size": int(bin_gb * GB * part),
              "deletedDateTime": _iso(now - timedelta(days=days)),

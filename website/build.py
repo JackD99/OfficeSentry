@@ -14,6 +14,7 @@ Settings come from the environment (the Deploy workflow sets them):
   SITE_URL            the site's address (default https://officesentry.co.uk)
   SITE_DEMO_URL       the demo's address (default: the site's with "demo." in front)
   SITE_SOURCE_PUBLIC  "true" once the repository is public: shows the GitHub links (default false)
+  SITE_CONTACT        where interested MSPs get in touch: an email address or an https:// link (default none)
 """
 
 from __future__ import annotations
@@ -107,7 +108,12 @@ def settings() -> dict:
     if parts.scheme not in ("http", "https") or not parts.netloc:
         sys.exit(f"SITE_URL must be a web address such as https://officesentry.co.uk, not {site!r}")
     demo = os.environ.get("SITE_DEMO_URL", "").strip().rstrip("/") or f"{parts.scheme}://demo.{parts.netloc}"
-    return {"site_url": site, "demo_url": demo, "github": GITHUB,
+    contact = os.environ.get("SITE_CONTACT", "").strip()
+    if contact and not contact.startswith("https://"):
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", contact):
+            sys.exit(f"SITE_CONTACT must be an email address or an https:// link, not {contact!r}")
+        contact = f"mailto:{contact}?subject=Office%20Sentry%20early%20access"
+    return {"site_url": site, "demo_url": demo, "github": GITHUB, "contact": contact,
             "source_public": os.environ.get("SITE_SOURCE_PUBLIC", "").strip().lower() == "true"}
 
 

@@ -554,7 +554,7 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `OFFICESENTRY_DOMAIN` | the domain alone, e.g. `sentry.yourmsp.com` |
 | `OFFICESENTRY_TIMEZONE` | e.g. `Europe/London` (default UTC) |
 | `HCLOUD_FIREWALL` | only if the firewall isn't called `officesentry` |
-| `OFFICESENTRY_WEBSITE_DOMAIN`, `OFFICESENTRY_DEMO_DOMAIN`, `DEMO_ENABLED` | only for the project's own website and public demo (below) |
+| `OFFICESENTRY_WEBSITE_DOMAIN`, `OFFICESENTRY_WEBSITE_CONTACT`, `OFFICESENTRY_DEMO_DOMAIN`, `DEMO_ENABLED` | only for the project's own website and public demo (below) |
 | `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *`. Variables show in run logs, so never put a password or key here |
 | `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it). Anything else, or no variable, means you deploy by hand ([below](#automatic-deploys-off-and-on)) |
 

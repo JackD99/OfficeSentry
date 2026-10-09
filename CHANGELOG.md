@@ -6,6 +6,16 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
+## 2.1.0 (unreleased)
+
+### Changed
+
+- The monthly review's "What changed" lists each new or returning finding it counts, next to the fixed
+  ones, with the tenant's own changes (new accounts, devices, forwarding) under their own heading. Before,
+  it gave the count and the list below showed different items.
+- Sizes from 1 TB to 10 TB show two decimals ("1.28 TB of 1.45 TB"), so used, free and total add up on
+  the SharePoint storage report.
+
 ## 2.0.0 (2026-10-09)
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1

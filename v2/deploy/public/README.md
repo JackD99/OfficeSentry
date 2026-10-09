@@ -44,6 +44,8 @@ The steps for the project's server, in order. Each takes a minute or two.
    - `OFFICESENTRY_DOMAIN`: the portal's name, `reports.yourmsp.example`
    - `OFFICESENTRY_WEBSITE_DOMAIN`: `officesentry.co.uk`
    - `OFFICESENTRY_DEMO_DOMAIN`: `demo.officesentry.co.uk`, and `DEMO_ENABLED`: `true`
+   - `OFFICESENTRY_WEBSITE_CONTACT` (optional): where interested MSPs get in touch, an email address or an
+     `https://` link. The website shows "Get in touch" and "Ask for early access" with it.
 3. **GitHub secret** (same page, *Secrets* tab): `PORTAL_ALLOWED_IPS`, the addresses that may open the
    portal, separated by commas (`203.0.113.7, 198.51.100.0/24`). Without it anyone can reach the portal's
    sign-in page (two-step sign-in still protects it). The old `DEMO_PASSWORD` secret isn't used any more;
