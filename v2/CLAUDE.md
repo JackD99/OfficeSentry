@@ -282,8 +282,10 @@ Office Sentry's own health is `system_health.assess()` (database, schema
 version, worker heartbeat, last collection and whether most tenants failed
 the last scheduled slot, backups from `<data dir>/backup-status.json`
 (`backups.record_status`; `local` from the `backup` command, `offsite` and
-`restore_check` from the deployment's restic jobs, in one shared format), disk, certificates), from stored state only. Each check is
-`ok`, `warn` or `fail`; `/health/ready` answers 503 on any `fail` and shows
+`restore_check` from the deployment's restic jobs, in one shared format;
+nightly copies overdue after 26 hours, the restore check after 8 days), disk
+and certificates, from stored state only. Each check is `ok`, `warn` or
+`fail`; `/health/ready` answers 503 on any `fail` and shows
 only `{"ok": ...}` unless the caller has the monitoring token (hash in
 `settings`, made on `/admin/status`) or is a signed-in admin, and never names
 a tenant or carries Microsoft's error text. `system_alerts.py` turns the same
