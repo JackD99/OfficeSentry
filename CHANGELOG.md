@@ -6,6 +6,28 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
+## 2.1.0 (unreleased)
+
+### Action required
+
+None.
+
+### New Microsoft permissions
+
+None.
+
+### Database upgrade
+
+Yes: a new table, `summary_cache`, for the precomputed rows below. The portal saves a `pre-upgrade-*` copy
+of the database first. The rows fill in as the worker gets to each tenant; until then the pages build them
+as before.
+
+### Changed
+
+- What changed across all tenants and the All tenants check matrix open in a fraction of a second at 200
+  tenants (What changed took about 30 seconds). The worker works out each tenant's line after its
+  collection and once a day; the pages read those lines, and rebuild any line whose data has changed since.
+
 ## 2.0.0 (2026-10-09)
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1

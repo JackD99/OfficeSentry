@@ -141,8 +141,17 @@ needing goes in those lists.
   views and the CSV/XLSX/PDF downloads work unchanged; it keeps
   `rollups.MAX_ROWS` per table and says when it cut. `/across/checks`
   (`rollups.check_matrix`) is every check for every tenant, evaluated from
-  stored data with accepted risks from `findings`; it writes nothing. All
+  stored data with accepted risks from `findings`. All
   `/across` pages are admin and analyst only, over `visible_tenants()`.
+  `/changes` and `/across/checks` (and their downloads) read each tenant's
+  stored row from `summary_cache` (`reports/precomputed.py`, kinds
+  `changes:<days>` and `checks`) while its fingerprint matches, and build and
+  store it otherwise. The worker builds them in a `precompute` task after the
+  tenant's collection and once a day (every row again when retention removed
+  something). If a row comes to depend on something else, add it to
+  `Rows.fingerprint`; `tests/test_precomputed.py` checks stored rows equal the
+  live build (`across(..., now=...)` and `check_matrix(..., now=...)` never
+  use them). Rows are per tenant: only ever read them for `scoped_tenants()`.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change" are ignored as time-driven.
@@ -322,8 +331,9 @@ Long work goes through **background tasks** (`tasks.py`, the `tasks` table),
 never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
-`worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`) and
-`send_schedule` (`delivery.py`). Queue with `tasks.enqueue(conn, kind,
+`worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
+`send_schedule` (`delivery.py`) and `precompute` (`reports/precomputed.py`,
+below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
 Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
