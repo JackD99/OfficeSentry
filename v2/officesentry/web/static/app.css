@@ -955,4 +955,3 @@ textarea.commentary { width: 100%; min-height: 9em; }
 @media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
-
