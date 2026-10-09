@@ -28,71 +28,13 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 3, 17, 15, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 9, 17, 5, tzinfo=UTC)
 
-# Requests added since the recording, answered with Microsoft's documented response shape (here, a new
-# tenant's default policy). Delete an entry when the fixture is re-recorded; the test below says when.
-STAND_INS = {
-    "/beta/auditLogs/signIns": {
-        "@odata.context": "https://graph.microsoft.com/beta/$metadata#auditLogs/signIns", "value": []},
-    "/v1.0/policies/authenticationMethodsPolicy": {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#policies/authenticationMethodsPolicy",
-        "id": "authenticationMethodsPolicy", "displayName": "Authentication Methods Policy",
-        "description": "The tenant-wide policy that controls which authentication methods are allowed in the "
-                       "tenant, authentication method registration requirements, and self-service password reset "
-                       "settings",
-        "lastModifiedDateTime": "2026-03-22T18:43:07Z", "policyVersion": "1.5", "reconfirmationInDays": 0,
-        "policyMigrationState": "migrationComplete",
-        "registrationEnforcement": {"authenticationMethodsRegistrationCampaign": {
-            "snoozeDurationInDays": 1, "enforceRegistrationAfterAllowedSnoozes": True, "state": "default",
-            "excludeTargets": [], "includeTargets": [{"id": "all_users", "targetType": "group",
-                                                      "targetedAuthenticationMethod": "microsoftAuthenticator"}]}},
-        "reportSuspiciousActivitySettings": {"state": "default", "voiceReportingCode": 0,
-                                             "includeTarget": {"targetType": "group", "id": "all_users"}},
-        "systemCredentialPreferences": {"state": "default", "excludeTargets": [],
-                                        "includeTargets": [{"id": "all_users", "targetType": "group"}]},
-        "authenticationMethodConfigurations": [
-            {"@odata.type": "#microsoft.graph.fido2AuthenticationMethodConfiguration", "id": "Fido2",
-             "state": "enabled", "isSelfServiceRegistrationAllowed": True, "isAttestationEnforced": False,
-             "keyRestrictions": {"isEnforced": False, "enforcementType": "block", "aaGuids": []},
-             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False}],
-             "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethodConfiguration",
-             "id": "MicrosoftAuthenticator", "state": "enabled", "isSoftwareOathEnabled": False,
-             "featureSettings": {
-                 "displayAppInformationRequiredState": {
-                     "state": "default", "includeTarget": {"targetType": "group", "id": "all_users"},
-                     "excludeTarget": {"targetType": "group", "id": "00000000-0000-0000-0000-000000000000"}},
-                 "displayLocationInformationRequiredState": {
-                     "state": "default", "includeTarget": {"targetType": "group", "id": "all_users"},
-                     "excludeTarget": {"targetType": "group", "id": "00000000-0000-0000-0000-000000000000"}}},
-             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False,
-                                 "authenticationMode": "any"}], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.smsAuthenticationMethodConfiguration", "id": "Sms", "state": "disabled",
-             "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.voiceAuthenticationMethodConfiguration", "id": "Voice",
-             "state": "disabled", "isOfficePhoneAllowed": False, "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.emailAuthenticationMethodConfiguration", "id": "Email",
-             "state": "enabled", "allowExternalIdToUseEmailOtp": "default", "excludeTargets": [],
-             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False}]},
-            {"@odata.type": "#microsoft.graph.softwareOathAuthenticationMethodConfiguration", "id": "SoftwareOath",
-             "state": "disabled", "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.temporaryAccessPassAuthenticationMethodConfiguration",
-             "id": "TemporaryAccessPass", "state": "disabled", "defaultLifetimeInMinutes": 60,
-             "defaultLength": 8, "minimumLifetimeInMinutes": 60, "maximumLifetimeInMinutes": 480,
-             "isUsableOnce": False, "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.x509CertificateAuthenticationMethodConfiguration",
-             "id": "X509Certificate", "state": "disabled", "includeTargets": [], "excludeTargets": []},
-        ],
-    },
-    # The Entra ID recycle bin, empty as in a fresh test tenant.
-    "/v1.0/directory/deletedItems/microsoft.graph.user": {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users", "value": []},
-    "/v1.0/directory/deletedItems/microsoft.graph.group": {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups", "value": []},
-}
-# Requests whose $select asks for fields added since the recording; the recorded response is served.
-NEW_FIELDS = frozenset({"/v1.0/domains"})
+# Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
+# $select asks for fields added since (the recorded response is served). Empty while the recording is current:
+# add an entry when a collector starts asking for something new, and re-record soon after.
+STAND_INS: dict[str, dict] = {}
+NEW_FIELDS: frozenset[str] = frozenset()
 
 
 # Replaying every collector takes a few seconds, and the tests below only read what it stored, so the
@@ -134,12 +76,8 @@ def live(db):
 
 def test_stand_ins_are_only_for_requests_not_recorded():
     """Once the fixture is re-recorded with these requests, delete them from STAND_INS and NEW_FIELDS."""
-    recorded = [replay.request_key(e["url"]) for e in FIXTURE["entries"] if e["api"] == "graph"]
-    paths = {path for path, _ in recorded}
-    assert not set(STAND_INS) & paths
-    for path in NEW_FIELDS:
-        selects = [dict(q).get("$select", "") for p, q in recorded if p == path]
-        assert selects and all("passwordValidityPeriodInDays" not in s for s in selects), path
+    recorded = {replay.request_key(e["url"])[0] for e in FIXTURE["entries"] if e["api"] == "graph"}
+    assert not set(STAND_INS) & recorded
 
 
 def _results(db, tenant):
