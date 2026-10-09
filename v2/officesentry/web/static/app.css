@@ -955,3 +955,25 @@ textarea.commentary { width: 100%; min-height: 9em; }
 @media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
+
+/* Report tables grouped under collapsible headings (Findings, by check) */
+.subtabs a .n { margin-left: 4px; font-size: .75rem; opacity: .7; font-variant-numeric: tabular-nums; }
+table.grouped tr.group-head th { padding: 0; background: var(--surface-2); border-top: 1px solid var(--border); text-transform: none; letter-spacing: 0; }
+table.grouped tbody.group:first-of-type tr.group-head th { border-top: 0; }
+.group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 16px; border: 0; border-radius: 0; background: none; color: var(--text); font: inherit; font-size: .875rem; font-weight: 600; text-align: left; cursor: pointer; }
+.group-toggle:hover { background: var(--sunken); }
+.group-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.group-toggle .icon { flex: none; width: 16px; height: 16px; color: var(--muted); transition: transform .15s; }
+.group-toggle[aria-expanded="false"] .icon { transform: rotate(-90deg); }
+.group-toggle .group-label { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.group-toggle .group-meta { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+tbody.group.folded tr:not(.group-head) { display: none; }
+td.row-action { min-width: 150px; }
+@media (max-width: 640px) {
+  table.stack-sm.grouped, table.stack-sm.grouped tbody { display: block; width: 100%; }
+  table.stack-sm tr.group-head { padding: 0 !important; border-bottom: 1px solid var(--border); }
+  table.stack-sm tr.group-head th { display: block; }
+  .group-toggle { padding: 10px 16px; }
+  table.stack-sm td.row-action { display: block; text-align: left; }
+  table.stack-sm td.row-action::before { content: none; }
+}
