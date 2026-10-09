@@ -45,6 +45,7 @@ This stops all access straight away. We are deleting everything Office Sentry co
       <ul class="ticks offboard-counts">
         <li>{{ stored.runs|plural('collection run') }} with {{ stored.objects|plural('stored item') }} of collected data, and {{ stored.metrics|plural('trend figure') }}</li>
         <li>{{ stored.findings|plural('finding') }} ({{ stored.open_findings }} open), including accepted risks</li>
+        {% if stored.history_signins or stored.history_audits %}<li>Activity history: {{ stored.history_signins|plural('sign-in') }}, {{ stored.history_daily|plural('daily sign-in summary', 'daily sign-in summaries') }} and {{ stored.history_audits|plural('directory audit event') }}</li>{% endif %}
         <li>{{ stored.schedules|plural('emailed report') }}, {{ stored.alerts|plural('alert email') }}, {{ stored.contacts|plural('client contact') }} and {{ stored.deliveries|plural('line') }} of email history</li>
         <li>Access for {{ stored.access|plural('Office Sentry user') }}{% if other_users %}: {% for u in other_users %}{{ u.username }} ({{ u.role }}){{ ', ' if not loop.last }}{% endfor %} lose access to this tenant only{% endif %}</li>
       </ul>

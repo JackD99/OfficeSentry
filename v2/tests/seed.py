@@ -163,7 +163,10 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
     rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
-    rsps.get(f"{BETA}/auditLogs/signIns", json={"value": gd.SIGNINS if signins is None else signins})
+    # The whole sign-in log, legacy clients included: the legacy sign-in collector reads them from the stored
+    # log once it covers 30 days (the /v1.0 query above is its fallback until then).
+    rsps.get(f"{BETA}/auditLogs/signIns",
+             json={"value": [*gd.SIGNINS, *gd.LEGACY_SIGNINS] if signins is None else signins})
     rsps.get(f"{V1}/identityProtection/riskyUsers",
              json={"value": gd.RISKY_USERS if risky_users is None else risky_users})
     mock_phase4(rsps, **phase4)

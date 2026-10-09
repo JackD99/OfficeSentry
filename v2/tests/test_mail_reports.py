@@ -4,6 +4,7 @@ import copy
 import json
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -11,9 +12,10 @@ import responses
 from openpyxl import load_workbook
 
 from officesentry import store
+from officesentry.collectors import sign_ins
 from officesentry.collectors.mail_usage import LEGACY_CLIENTS, summarise_signins
 from officesentry.exchange import ExchangeClient
-from officesentry.graph import GRAPH_ROOT, GraphClient
+from officesentry.graph import GRAPH_ROOT, GraphClient, GraphError
 from officesentry.mailflow import size_bytes
 from officesentry.reports.data_reports import REPORTS, build
 from officesentry.snapshot import TenantSnapshot
@@ -240,9 +242,12 @@ def _legacy_log(rows, fail):
 
 
 def _legacy_run(db, tenant_id):
+    """A run whose stored sign-in log can't be brought up to date, so it asks for legacy sign-ins itself."""
     store.enqueue_run(db, tenant_id, "legacy_signins")
     run = store.claim_next_run(db)
-    status = execute_run(db, run, lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None))
+    down = GraphError(504, "GatewayTimeout", "Request timed out")
+    with patch.object(sign_ins, "read_log", side_effect=down):
+        status = execute_run(db, run, lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None))
     return run["id"], status
 
 

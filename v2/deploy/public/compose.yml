@@ -1,0 +1,51 @@
+# The project's own server: the website and the public demo beside the private portal, on one machine but kept
+# apart from it (README.md here). The Deploy workflow adds this file to COMPOSE_FILE when the
+# OFFICESENTRY_WEBSITE_DOMAIN or DEMO_ENABLED variable is set. Paths are relative to v2/, the project folder.
+services:
+  # The one Caddy on the server: the portal, the website and the demo, from this folder's Caddyfile. It is the
+  # only container on both networks, so the demo can't reach the portal.
+  caddy:
+    environment:
+      WEBSITE_ADDRESS: ${OFFICESENTRY_WEBSITE_DOMAIN:-website.localhost}
+      DEMO_SITE_ADDRESS: ${OFFICESENTRY_DEMO_DOMAIN:-demo.localhost}
+      # Only these addresses (space-separated) may open the portal; everyone may open the website and demo.
+      PORTAL_ALLOWED_IPS: ${OFFICESENTRY_PORTAL_IPS:-0.0.0.0/0 ::/0}
+    volumes:
+      - ./deploy/public/Caddyfile:/etc/caddy/Caddyfile:ro
+      # The website, built by the Deploy workflow (website/README.md) and copied here.
+      - ../website:/srv/website:ro
+    networks: [default, public]
+
+  # The public demo: fictional tenants, made afresh in memory at every start and every night at 04:00 UTC
+  # (demo.sh). Nothing from the portal: no .env, no volume, no network, and no secrets of its own worth keeping.
+  demo:
+    profiles: ["demo"]
+    image: officesentry-demo:local
+    pull_policy: never  # built on the server by deploy/start.sh (build-demo.sh)
+    environment:
+      OFFICESENTRY_PUBLIC_DEMO: "1"
+      OFFICESENTRY_PUBLIC_DEMO_LINK: https://${OFFICESENTRY_WEBSITE_DOMAIN:-}
+      OFFICESENTRY_BASE_URL: https://${OFFICESENTRY_DEMO_DOMAIN:-demo.localhost}
+      OFFICESENTRY_TIMEZONE: Europe/London
+      OFFICESENTRY_REQUIRE_MFA: "off"
+      OFFICESENTRY_TRUSTED_PROXIES: "1"
+    tmpfs: ["/data:uid=10001,gid=10001,mode=0700,size=128m", "/tmp"]
+    networks: [public]
+    restart: always
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # However busy the demo gets, the portal and its worker keep most of the machine.
+    cpus: 1
+    mem_limit: 1g
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "web"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+
+networks:
+  public:
+    name: officesentry-public

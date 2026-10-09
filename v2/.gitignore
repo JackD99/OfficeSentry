@@ -1,6 +1,8 @@
 data/
 .env
 .env.demo
+.env.backup
+.env.uptime
 __pycache__/
 *.egg-info/
 .pytest_cache/

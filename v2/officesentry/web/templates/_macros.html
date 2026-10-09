@@ -69,6 +69,7 @@
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'collection': 'settings', 'manage': 'settings',
+  'activity': 'changes',
 } %}
 
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. #}
@@ -105,12 +106,15 @@
   {% set _ = pages.append(('data', 'Detail reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('review', 'Monthly review', url_for('reports.tenant_report', tenant_id=tenant.id))) %}
+{% elif tab == 'changes' and staff %}
+  {% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('activity', 'Activity history', url_for('history.activity', tenant_id=tenant.id))) %}
 {% elif tab == 'settings' and staff %}
   {% set _ = pages.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
 {% endif %}
 {% if pages %}
-<nav class="tab-pages" aria-label="{{ 'Reports' if tab == 'reports' else 'Settings' }}">
+<nav class="tab-pages" aria-label="{{ {'reports': 'Reports', 'changes': 'Changes'}.get(tab, 'Settings') }}">
   {% for key, label, href in pages %}<a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>
 {% endif %}

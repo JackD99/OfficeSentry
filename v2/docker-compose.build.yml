@@ -13,5 +13,3 @@ x-build: &build
 services:
   web: *build
   worker: *build
-  demo-web: *build
-  demo-worker: *build

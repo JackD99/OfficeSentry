@@ -1,0 +1,71 @@
+{#- Style guide for client reports (web/styleguide.py): every macro in reports/_components.html in each of its
+    states, with made-up data, as a page and as a PDF. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+
+{% block doc_title %}Report components{% endblock %}
+{% block client %}Style guide{% endblock %}
+{% block toolbar %}
+  <a class="back" href="{{ url_for('styleguide.index') }}">&larr; Style guide</a>
+  <span class="spacer"></span>
+  <a class="button primary" href="{{ url_for('styleguide.report_components_pdf') }}"><span class="wide">Download </span>PDF</a>
+{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Built from', 'reports/_components.html') }}
+  {{ ui.meta('Colours', 'tokens.css and your branding') }}
+  {{ ui.meta('Data', 'Made up') }}
+{% endblock %}
+{% block cover_status %}{{ ui.verdict(verdicts[0]) }}{% endblock %}
+{% block contents %}
+  <li><a href="#verdicts">Verdicts</a></li>
+  <li><a href="#figures">Key figures</a></li>
+  <li><a href="#labels">Labels</a></li>
+  <li><a href="#actions">Recommended actions</a></li>
+  <li><a href="#accounts">Tables</a></li>
+{% endblock %}
+
+{% block body %}
+<section id="verdicts">
+  <h2>Verdicts <span class="count">ui.verdict</span></h2>
+  <p class="section-intro">The cover's one-sentence answer, in each tone.</p>
+  {% for v in verdicts[1:] %}<div class="sg-stack">{{ ui.verdict(v) }}</div>{% endfor %}
+</section>
+
+<section id="figures" class="keep">
+  <h2>Key figures <span class="count">ui.kpi, ui.figure, ui.breakdown</span></h2>
+  <div class="kpis">
+    {{ ui.kpi('Secure Score', '33%', '<b>+2%</b> <span class="vs">vs last month</span>', 'better', meter_value=33) }}
+    {{ ui.kpi('Licence waste a month', '£164', '<b>+£12</b> <span class="vs">vs last month</span>', 'worse') }}
+    {{ ui.kpi('Users with MFA', none, note='Needs the Authentication methods report') }}
+  </div>
+  {{ ui.breakdown('Open findings by severity', [('Critical', 1, 'critical'), ('High', 10, 'high'), ('Medium', 12, 'medium'), ('Low', 3, 'low'), ('Passing', 28, 'ok')]) }}
+  {% call ui.figures(4) %}
+    {{ ui.figure('Accounts', 54, '3 without a licence') }}
+    {{ ui.figure('Without MFA', 2, 'of 54', tone='bad') }}
+    {{ ui.figure('Shared files', 12, tone='warn') }}
+    {{ ui.figure('Status', 'Mostly fine', tone='ok') }}
+  {% endcall %}
+</section>
+
+<section id="labels" class="keep">
+  <h2>Labels <span class="count">ui.sev, ui.change_tag</span></h2>
+  <p>{% for s in ('critical', 'high', 'medium', 'low', 'info') %}{{ ui.sev(s) }} {% endfor %}</p>
+  <p>{% for k in ('added', 'removed', 'changed', 'resolved') %}{{ ui.change_tag(k) }}{% endfor %}<span class="new">New</span></p>
+  <p>{% for a in ('yes', 'partly', 'no', 'not-known') %}<span class="answer answer-{{ a }}">{{ a|replace('-', ' ')|capitalize }}</span> {% endfor %}</p>
+</section>
+
+<section id="actions">
+  <h2>What we recommend next <span class="count">ui.actions</span></h2>
+  {{ ui.actions(actions) }}
+</section>
+
+{% for section in report.sections %}
+<section id="{{ section.title|lower|replace(' ', '-') }}">
+  <h2>{{ section.title }} <span class="count">ui.data_table</span></h2>
+  {% if section.intro %}<p class="section-intro">{{ section.intro }}</p>{% endif %}
+  {{ ui.data_table(section) }}
+</section>
+{% endfor %}
+<p class="note small">{{ ui.collected(report.sources) }}</p>
+{% endblock %}

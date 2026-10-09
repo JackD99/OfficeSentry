@@ -4,7 +4,6 @@ import copy
 import json
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
-from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 import responses
@@ -28,6 +27,7 @@ P2_SKUS = [dict(SKUS[0], servicePlans=SKUS[0]["servicePlans"] + [
 
 
 def _seed(db, tenant_id, **kwargs):
+    kwargs.setdefault("signins", list(gd.SIGNINS))  # the counts below leave out the seeded legacy sign-ins
     seed_tenant(db, tenant_id, users=[*USERS, gd.INFO_USER], **kwargs)
     return store.get_tenant(db, tenant_id)
 
@@ -106,7 +106,7 @@ def test_collector_summarises_the_week(db, two_tenants):
 
 
 @responses.activate
-def test_collector_reads_the_log_page_by_page_and_stops_at_the_cap(db, two_tenants):
+def test_collector_reads_the_log_page_by_page(db, two_tenants):
     alpha, _ = two_tenants
     page2 = f"{BETA}/auditLogs/signIns?$skiptoken=abc"
     responses.get(page2, json={"value": gd.SIGNINS[25:]})
@@ -115,16 +115,38 @@ def test_collector_reads_the_log_page_by_page_and_stops_at_the_cap(db, two_tenan
     assert status == "succeeded"
     first = parse_qs(urlsplit(responses.calls[0].request.url).query)
     assert first["$filter"][0].startswith("createdDateTime ge ") and first["$top"] == ["1000"]
+    # The first run reads back as far as Microsoft keeps the log.
+    since = datetime.fromisoformat(first["$filter"][0].split(" ")[2].replace("Z", "+00:00"))
+    assert abs(datetime.now(UTC) - since - timedelta(days=sign_ins.LOG_DAYS)) < timedelta(minutes=5)
     assert all(c.request.method == "GET" for c in responses.calls) and len(responses.calls) == 2
     [st] = store.run_objects(db, run_id, "sign_in_status")
     assert st["signIns"] == len(gd.SIGNINS) and not st["truncated"]
+    assert st["historyFrom"][:10] == since.strftime("%Y-%m-%d")
 
-    with patch.object(sign_ins, "SIGNIN_PAGES", 1):
-        run_id, status = _run(db, alpha)
+
+@responses.activate
+def test_a_run_that_reaches_the_page_budget_carries_on_next_time(db, two_tenants, monkeypatch):
+    alpha, bravo = two_tenants
+    rows = _recent_signins()
+    _signin_log(rows)
+    expected = _stored(db, _run(db, alpha)[0])
+
+    # Three pages a run: the newest sign-ins come first, the summary says what's missing, and each later run
+    # carries on from where the last stopped until the week is complete, with nothing counted twice.
+    monkeypatch.setattr(sign_ins, "SIGNIN_PAGES", 3)
+    run_id, status = _run(db, bravo)
     assert status == "partial"
     [st] = store.run_objects(db, run_id, "sign_in_status")
-    assert st["truncated"] and st["signIns"] == 25
-    assert db.execute("SELECT truncated FROM runs WHERE id = ?", (run_id,)).fetchone()[0] == 1
+    assert st["truncated"] and st["signIns"] == 3 * 7
+    error = db.execute("SELECT error, truncated FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert "the next run carries on from there" in error["error"] and error["truncated"] == 1
+    for _ in range(5):
+        run_id, status = _run(db, bravo)
+        if status == "succeeded":
+            break
+    assert status == "succeeded"
+    assert _stored(db, run_id) == expected
+    assert store.run_objects(db, run_id, "sign_in_status")[0]["signIns"] == len(rows)
 
 
 @responses.activate
@@ -249,7 +271,7 @@ def test_risky_sign_ins_with_entra_p2(db, two_tenants):
     assert result.status == "fail" and result.summary.startswith("1 account signed in despite")
     [finding] = result.findings
     assert (finding.severity, finding.subject, finding.object_id) == ("medium", "ann@x.com", "u1")
-    assert "2026-09-30 from FR (medium risk, at risk)" in finding.detail
+    assert f"{gd.SIGNIN_BASE - timedelta(days=2)} from FR (medium risk, at risk)" in finding.detail
     report = data_reports.build(db, tenant, "sign-ins")
     s = _sections(report)
     assert report.sections[0].title == "Risky sign-ins" and s["Risky sign-ins"].flags == ["medium"]
@@ -444,8 +466,8 @@ def test_a_sign_in_log_that_is_down_gives_up_instead_of_holding_the_worker(db, t
     _signin_log(_recent_signins(), fail=lambda flt, skip: True)
     run_id, status = _run(db, alpha)
     assert status == "failed"
-    # One retry for the week, then one for each one-day window (the last can be a sliver): not seven each.
-    assert len(responses.calls) <= 2 * (2 + signins.WINDOW_DAYS)
+    # One retry for the month, then one for each one-day window (the last can be a sliver): not seven each.
+    assert len(responses.calls) <= 2 * (2 + sign_ins.LOG_DAYS)
 
     # When even the fallback runs out of time, the windows left are not asked for.
     now = [0.0]

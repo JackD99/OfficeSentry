@@ -17,7 +17,7 @@
     print_view (web/printing.py) is the browser-made PDF: the page as it
     prints, opening the print window, for servers without WeasyPrint. -#}
 <!doctype html>
-<html lang="en">
+<html lang="en"{% if pdf or print_view %} data-theme="light"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

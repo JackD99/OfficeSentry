@@ -1,7 +1,11 @@
 """Runtime configuration.
 
 Everything comes from environment variables. Secrets that are not supplied are
-generated once and kept in ``<data_dir>/secrets.json`` with 0600 permissions.
+generated once and kept in ``secrets.json`` with 0600 permissions: at
+``OFFICESENTRY_SECRETS_FILE`` when it's set (the Docker setup keeps it in its own
+volume, ``/keys``, so the data volume and its backups never hold the key that
+decrypts them), else in the data folder. A ``secrets.json`` left in the data
+folder moves to ``OFFICESENTRY_SECRETS_FILE`` on the next start.
 
 Two secrets are deliberately separate:
 
@@ -58,8 +62,14 @@ class Config:
     trusted_proxies: int = 0
     session_idle_minutes: int = 120
     session_hours: int = 8
+    # The public demo site (web/public_demo.py): every visitor is the read-only demo user. Only takes effect on a
+    # database made by ``scripts/demo_data.py --public``. The link is where its banner sends people.
+    public_demo: bool = False
+    public_demo_link: str = ""
     testing: bool = False
     extra: dict = field(default_factory=dict)
+    # Where secrets.json is kept, when not in the data folder (OFFICESENTRY_SECRETS_FILE).
+    secrets_file: Path | None = None
 
     @property
     def db_path(self) -> Path:
@@ -67,7 +77,7 @@ class Config:
 
     @property
     def secrets_path(self) -> Path:
-        return self.data_dir / SECRETS_FILE
+        return self.secrets_file or self.data_dir / SECRETS_FILE
 
     def mfa_policy(self, conn=None) -> str:
         """The two-step policy in force: OFFICESENTRY_REQUIRE_MFA when it is set, else the install's
@@ -100,6 +110,8 @@ def write_private(path: Path, text: str, exclusive: bool = False) -> None:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
         return
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -117,13 +129,49 @@ def new_secrets() -> dict:
     }
 
 
-def _load_or_create_secrets(data_dir: Path) -> dict:
-    path = data_dir / SECRETS_FILE
+def _secrets_file() -> Path | None:
+    return Path(path).resolve() if (path := _env("SECRETS_FILE").strip()) else None
+
+
+def move_secrets(old: Path, new: Path) -> None:
+    """Move a ``secrets.json`` left in the data folder to its own place (``OFFICESENTRY_SECRETS_FILE``).
+
+    The copy is written and flushed before the old file goes, so a crash in between leaves two identical
+    files, which the next start tidies. Two *different* files stop the start: only a person can tell which
+    one decrypts the stored certificates.
+    """
+    if old == new or not old.exists():
+        return
     try:
-        write_private(path, json.dumps(new_secrets()), exclusive=True)
-    except FileExistsError:
-        tighten(path)
-    return json.loads(path.read_text(encoding="utf-8"))
+        new.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            write_private(new, old.read_text(encoding="utf-8"), exclusive=True)
+        except FileExistsError:
+            if new.read_bytes() != old.read_bytes():
+                raise ValueError(
+                    f"Configuration problem: there are two different key files, {old} and {new}. Office Sentry "
+                    f"won't guess which one decrypts your data. Keep the right one at {new} and delete {old} "
+                    "(DEPLOY.md, \"Where the keys are\").") from None
+        old.unlink()
+    except OSError as exc:
+        raise ValueError(f"Configuration problem: couldn't move {old} to {new}: {exc.strerror or exc}. "
+                         f"The folder {new.parent} must be writable by the user Office Sentry runs as "
+                         "(in Docker, the officesentry-keys volume).") from exc
+    log.warning("Moved the key file %s to %s, out of the data folder", old, new)
+
+
+def _load_or_create_secrets(path: Path) -> dict:
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            write_private(path, json.dumps(new_secrets()), exclusive=True)
+        except FileExistsError:
+            tighten(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"Configuration problem: couldn't create the key file {path}: {exc.strerror or exc}. "
+                         f"The folder {path.parent} must be writable by the user Office Sentry runs as "
+                         "(in Docker, the officesentry-keys volume).") from exc
 
 
 # -- First-run setup token ------------------------------------------------------
@@ -151,8 +199,11 @@ def load_config(**overrides) -> Config:
 
     secret_key = _env("SECRET_KEY")
     keys = [k.strip() for k in _env("ENCRYPTION_KEYS").split(",") if k.strip()]
+    secrets_file = Path(f).resolve() if (f := overrides.pop("secrets_file", None)) else _secrets_file()
     if not secret_key or not keys:
-        stored = _load_or_create_secrets(data_dir)
+        if secrets_file:
+            move_secrets(data_dir / SECRETS_FILE, secrets_file)
+        stored = _load_or_create_secrets(secrets_file or data_dir / SECRETS_FILE)
         secret_key = secret_key or stored["secret_key"]
         keys = keys or stored["encryption_keys"]
 
@@ -173,6 +224,9 @@ def load_config(**overrides) -> Config:
         trusted_proxies=int(_env("TRUSTED_PROXIES", "0")),
         session_idle_minutes=int(_env("SESSION_IDLE_MINUTES", "120")),
         session_hours=int(_env("SESSION_HOURS", "8")),
+        public_demo=_env("PUBLIC_DEMO", "") == "1",
+        public_demo_link=_env("PUBLIC_DEMO_LINK", "").strip(),
+        secrets_file=secrets_file,
     )
     if cfg.require_mfa not in MFA_POLICIES:
         raise ValueError(f"{ENV_PREFIX}REQUIRE_MFA must be one of {', '.join(MFA_POLICIES)}")

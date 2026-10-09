@@ -41,6 +41,14 @@ overview and DEPLOY.md for running it on a server.
   `ENCRYPTED_COLUMNS` in `__main__.py` so `rotate-keys` re-encrypts them
   (encrypted settings keys go in a module's `ENCRYPTED_KEYS`, gathered in
   `ENCRYPTED_SETTINGS`); name them `*_enc`, `test_key_rotation.py` checks.
+- **The public demo** (`web/public_demo.py`, `deploy/public/`) signs every
+  visitor in as the `demo` analyst and refuses anything but GET, HEAD and
+  OPTIONS. It needs both `OFFICESENTRY_PUBLIC_DEMO=1` and the `public_demo`
+  setting that only `scripts/demo_data.py --public` writes, and the visitor is
+  never an admin; keep it that way. It runs on fictional data in its
+  own container, network and memory-only folder, never with the portal's
+  `.env`, data or secrets. A new POST route is refused there automatically;
+  `tests/test_public_demo.py` opens every page as the visitor.
 - **Audit with `db.audit()`**; it records the visitor's address. Repeated
   anonymous events go through `db.audit_counted()` (one row per address and
   hour), and never store what a stranger typed. Sign-in noise is in
@@ -235,12 +243,23 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 
 ## Web UI conventions
 
-- Styles live in `web/static/app.css` (tokens at the top, light and dark).
-  Reports that also become PDFs use `report.css` instead. Text colours
-  (`--text`, `--text-2`, `--muted`, `--faint`) meet WCAG AA (4.5:1) on every
-  surface, and `test_ux_fixes.py` measures them; use `--decor` for lines and
-  icons only, never for text. Don't tell things apart by colour alone (the
-  check matrix squares carry a letter).
+- Colours, type sizes (`--fs-*`), spacing (`--space-*`, a 4px grid), radii and
+  shadows are tokens in `web/static/tokens.css`, light and dark, shared by
+  `app.css` (the portal) and `report.css` (reports that also become PDFs, which
+  set `<html data-theme="light">`). Neither file defines a colour of its own;
+  add a token instead (`test_styleguide.py` checks). Text colours
+  (`--text`, `--text-2`, `--muted`, `--faint`, `--sev-*`) meet WCAG AA (4.5:1)
+  on every surface, and `test_ux_fixes.py` measures them; use `--decor` for
+  lines and icons only, never for text. Don't tell things apart by colour alone
+  (the check matrix squares carry a letter).
+- `/styleguide` (staff) shows every token and shared component, and
+  `/styleguide/report` (and `.pdf`) the client report components
+  (`web/styleguide.py`). A new shared component or state goes there too.
+- `tests/browser` (`pytest tests/browser --ui`, in the pinned Playwright image;
+  see its README) screenshots about 34 pages at laptop and phone widths, light
+  and dark, against baselines, and runs axe-core. CI runs it
+  (`.github/workflows/ui.yml`) on PRs that touch templates or CSS; refresh the
+  baselines with `--update` when a change is meant, and look at them.
 - Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
   at the top of `base.html` (endpoint, label, other endpoints of the page),
   which gives it the row of settings links at the top of the page.
@@ -284,7 +303,8 @@ run per day for 30 days and per month for 12 by default; metrics and run rows
 are never pruned), sign-in detail objects (`retention.SIGNIN_KINDS`) once
 older than their period, resolved findings, run log info lines older than 90
 days (`store.prune_run_logs`; warnings and errors stay), and, when set, the
-activity log and issued reports (each never under 365 days). So code that
+activity log and issued reports (each never under 365 days); the activity history
+too (`retention.prune_history`, see "Activity history"). So code that
 reads an older run must cope with its objects, or just its sign-in kinds,
 being gone (see `changes._baseline_run`). A new store of personal data gets
 a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
@@ -529,6 +549,32 @@ the worker (the `compact` command does it all and shrinks the file). So:
 - `scripts/scale_data.py` builds N tenants with two years of history for
   sizing and timing (`--plain --compact` measures before and after).
 
+## Activity history
+
+`events.py` (schema in `migrations/0030`) keeps every sign-in and directory audit event beyond the 30 days
+Microsoft keeps them, in monthly SQLite files beside the database: `<data dir>/events/<store>/<YYYY-MM>.db`,
+stores `signins`, `daily` (one row per person, day, app and country) and `audits` (Graph's JSON,
+compressed). Rows carry the tenant's key from `event_tenants` (never reused), not `tenants.id`, and are
+deduplicated on (tenant, time, id), so reading an event twice stores it once.
+
+- Collect with `events.ingest(ctx, events.SIGNIN_LOG | AUDIT_LOG, keep_days, budget)`. Each tenant's
+  cursor (`event_cursors`, `events.Coverage`) says what's been read: each run adds `[read_to - 6 hours,
+  now]` and reads the gaps newest first, saving the cursor after every page, so a crash, a timeout (one-day
+  slices, then the 10-minute give-up) or the page budget loses nothing and the next run carries on. Ranges
+  Microsoft dropped before they were read go in `lost`. Warn with what `coverage.missing()` returns rather
+  than truncating quietly. `tests/test_events.py` replays overlapping and crashing runs.
+- Read through `events` (`signins_between`, `audits_between`, `daily_between`, `daily_for`, `totals`),
+  never the files. Pages that read it say where it starts ("detailed from <date>",
+  `Coverage.detailed_from`). Readers today: the Sign-ins, legacy sign-in and Admin activity collectors, the
+  Admin activity report (12 months), `changes.audit_changes`, each person's page and the tenant's Activity
+  history page (`/tenants/<id>/activity`, staff only, under the Changes tab).
+- Retention: `retention.Policy.history_*` (D18 defaults: sign-ins 180 days, daily summaries 25 months,
+  audits 7 years); whole months go as files (`events.prune`). `lifecycle.delete_tenant` deletes the
+  tenant's rows from every file after the database delete, and the daily pass sweeps rows whose key is
+  gone (`events.sweep`). `backup` mirrors the folder (`backups.mirror_events`) and `restore` puts back
+  missing files.
+- Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
@@ -563,10 +609,18 @@ and `python -m officesentry <command>`:
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
+| `backup-status [--json]` | what each backup job last did (`backup-status.json`); `--record` is for `deploy/jobs.sh` |
+| `check-backup FILE [--record]` | check a backup opens and passes SQLite's integrity check, without restoring it (the restore drill) |
 | `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+
+Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own
+volume), else in the data folder; `config.move_secrets` moves one left in the data folder on start. Never
+put it, or anything that decrypts, in the data volume or a backup. The server's own jobs (nightly backup,
+restic off-site copy, Sunday restore drill, uptime ping) are `deploy/jobs.sh`, scheduled by every deploy;
+restic's settings are in `.env.backup`, read only by the `offsite` service, never by the portal.
 
 Docker: `docker-compose.yml` runs the published image
 (`ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION}`); add
