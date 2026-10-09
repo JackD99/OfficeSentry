@@ -305,7 +305,7 @@ def cmd_live_test(args, cfg):
     from .livetest import run
 
     sys.exit(run(cfg, args.collector or None, Path(args.out) if args.out else None,
-                 Path(args.record) if args.record else None, args.connection))
+                 Path(args.record) if args.record else None, args.connection, args.dns_over_https))
 
 
 def main(argv=None):
@@ -382,6 +382,8 @@ def main(argv=None):
     live.add_argument("--connection", type=int,
                       help="app connection to link the tenant to (default: the only one, if there's one)")
     live.add_argument("--record", help="save the responses, scrubbed of names, emails and IDs, as a test fixture")
+    live.add_argument("--dns-over-https", action="store_true",
+                      help="look DNS records up over HTTPS, where this machine's DNS is blocked")
     live.set_defaults(func=cmd_live_test)
 
     args = parser.parse_args(argv)

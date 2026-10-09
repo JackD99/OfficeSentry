@@ -103,6 +103,16 @@ def test_licence_errors_are_typed(graph):
 
 
 @responses.activate
+def test_a_generic_forbidden_that_says_not_licensed_is_a_licence_error(graph):
+    # Recorded from the test tenant (Entra ID P1, no P2) for /identityProtection/riskyUsers.
+    responses.get(f"{GRAPH_ROOT}/v1.0/identityProtection/riskyUsers", status=403, json={"error": {
+        "code": "Forbidden", "message": "Your tenant is not licensed for this feature.",
+        "innerError": {"request-id": "rid"}}})
+    with pytest.raises(LicenseRequired):
+        graph.get("/identityProtection/riskyUsers")
+
+
+@responses.activate
 def test_permission_errors_are_typed(graph):
     responses.get(f"{GRAPH_ROOT}/v1.0/users", status=403, json={"error": {
         "code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
@@ -161,6 +171,33 @@ def test_network_errors_back_off_with_jitter_then_are_transient(sleeps):
         graph.get("/organization")
     assert sleeps == [1.0, 2.0]
     assert exc.value.status == 0 and is_transient(exc.value)
+
+
+@responses.activate
+def test_a_caller_with_a_fallback_can_ask_for_fewer_retries_on_timeouts(sleeps):
+    # The sign-in collectors fall back to smaller queries, so they don't wait out six timeouts first.
+    graph = GraphClient(lambda: "t", sleep=sleeps.append, jitter=lambda: 0.0)
+    url = f"{GRAPH_ROOT}/v1.0/auditLogs/signIns"
+    for _ in range(3):
+        responses.get(url, status=504)
+    with pytest.raises(GraphError) as exc:
+        graph.get("/auditLogs/signIns", transient_retries=1)
+    assert exc.value.status == 504 and len(responses.calls) == 2
+
+    # Throttling still gets the usual retries: asking again sooner wouldn't help.
+    responses.reset()
+    for _ in range(3):
+        responses.get(url, status=429, headers={"Retry-After": "1"})
+    responses.get(url, status=504)
+    responses.get(url, json={"value": [1]})
+    assert graph.get_all("/auditLogs/signIns", transient_retries=1).items == [1]
+    assert len(responses.calls) == 5
+
+    responses.reset()
+    responses.get(url, body=requests.ReadTimeout("slow"))
+    with pytest.raises(GraphError) as exc:
+        graph.get("/auditLogs/signIns", transient_retries=0)
+    assert exc.value.status == 0 and len(responses.calls) == 1
 
 
 def test_which_failures_are_transient():

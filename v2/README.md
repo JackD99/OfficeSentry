@@ -271,6 +271,24 @@ and `OFFICESENTRY_TEST_CLIENT_SECRET`, stores the result as tenant "Live test"
 and prints each collector's outcome and every check. The secret is only for
 this command; the product signs in with a certificate.
 
+With `--record tests/fixtures/live_tenant.json` it also saves Microsoft's
+responses, with names, addresses, phone numbers, domains and IDs replaced, and
+the test suite replays them, so every collector, check and report runs on real
+Microsoft responses in CI. The recording comes from one Microsoft 365 Business
+Premium tenant (Entra ID P1, synced from on-premises AD, no Intune devices).
+These areas have no real recording and are tested with simulated data only:
+
+- **Entra ID P2 features**: risky users and sign-in risk (the test tenant
+  has no P2; Microsoft answers "not licensed").
+- **Per-user MFA states**: Office Sentry only reads them on tenants without
+  Entra ID P1.
+- **Sign-in methods read one person at a time**: only used when Microsoft's
+  registration report comes back empty, as it does on a newly licensed tenant.
+- **Intune device details**: the tenant has no enrolled devices, so the
+  device compliance and encryption checks have nothing to read.
+- **National clouds** (GCC High, DoD, China): there's no test tenant in
+  them; the endpoints come from Microsoft's documentation.
+
 ## Documentation
 
 - [What Office Sentry reads](docs/what-office-sentry-reads.md): for clients

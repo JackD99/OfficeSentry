@@ -6,13 +6,20 @@ OFFICESENTRY_TEST_CLIENT_SECRET (and optionally OFFICESENTRY_TEST_CLOUD: commerc
 gcc_high, dod or china, for a test tenant in a national cloud), stores the results in the configured
 database as tenant "Live test" (so the portal shows them), and prints what
 worked, what failed and the check results. Nothing is written to the tenant.
+
+Where plain DNS is blocked (some sandboxes and proxies answer every query with
+nothing), ``dns_over_https`` looks records up over HTTPS instead, so the domain
+checks and a recording get real answers.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
+
+import requests
 
 from . import clouds, dnscheck, recording, store
 from .collectors import REGISTRY
@@ -27,6 +34,31 @@ from .text import plural
 from .worker import execute_run
 
 ENV = ("OFFICESENTRY_TEST_TENANT_ID", "OFFICESENTRY_TEST_CLIENT_ID", "OFFICESENTRY_TEST_CLIENT_SECRET")
+DOH_URL = "https://cloudflare-dns.com/dns-query"
+DOH_TYPES = {"TXT": 16, "MX": 15, "CNAME": 5}
+_QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def doh_lookup(name: str, rdtype: str, session: requests.Session | None = None) -> list[str]:
+    """``dnscheck.lookup`` over DNS-over-HTTPS (JSON), with the same answers and errors."""
+    try:
+        resp = (session or requests).get(DOH_URL, params={"name": name, "type": rdtype},
+                                         headers={"Accept": "application/dns-json"}, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise dnscheck.DnsError(f"{name} {rdtype}: {exc}") from exc
+    if data.get("Status") == 3:  # NXDOMAIN
+        return []
+    if data.get("Status") != 0:
+        raise dnscheck.DnsError(f"{name} {rdtype}: DNS status {data.get('Status')}")
+    answers = [a for a in data.get("Answer") or [] if a.get("type") == DOH_TYPES[rdtype]]
+    if rdtype == "TXT":
+        return ["".join(re.sub(r"\\(.)", r"\1", part) for part in _QUOTED.findall(a["data"])) for a in answers]
+    if rdtype == "MX":
+        ranked = sorted((int(a["data"].split()[0]), a["data"].split()[1]) for a in answers)
+        return [host.rstrip(".").lower() for _, host in ranked]
+    return [a["data"].rstrip(".").lower() for a in answers]
 
 
 def _wrap(provider, error_cls):
@@ -39,7 +71,7 @@ def _wrap(provider, error_cls):
 
 
 def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
-        record: Path | None = None, connection_id: int | None = None) -> int:
+        record: Path | None = None, connection_id: int | None = None, dns_over_https: bool = False) -> int:
     missing = [k for k in ENV if not os.environ.get(k)]
     if missing:
         print("Missing environment variables: " + ", ".join(missing))
@@ -79,9 +111,15 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
                                                                  cloud.key), ExchangeError),
                          session=session, cloud=cloud.key)
     real_lookup = dnscheck.lookup
+    answers: list = []
+    dnscheck.lookup = recording.recording_lookup(answers, doh_lookup if dns_over_https else real_lookup)
     if record:
-        dnscheck.lookup = recording.recording_lookup(log, real_lookup)
+        dnscheck.lookup = recording.recording_lookup(log, dnscheck.lookup)
     keys = [k for k in REGISTRY if not only or k in only]
+    # Count the test app as consented while collecting: a first success on an unconsented tenant queues every
+    # other collector (worker.execute_run), which would run collectors that weren't asked for, in another order.
+    consented = store.get_tenant(conn, tenant_id)["consented_at"]
+    conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), tenant_id))
     failures = 0
     for key in keys:
         store.enqueue_run(conn, tenant_id, key, trigger="manual")
@@ -93,10 +131,12 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
         print(f"{REGISTRY[key].title:32} {status:10} {count:6} objects  {finished['error'] or ''}")
         failures += status == "failed"
     dnscheck.lookup = real_lookup
-    if failures < len(keys):
-        # Data came back, so admin consent exists; without this the portal says "Awaiting consent".
-        conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
-                     (utcnow(), tenant_id))
+    if answers and not any(a["answer"] for a in answers):
+        print("\nEvery DNS lookup came back empty, so the domain checks are wrong. If this machine's DNS is "
+              "blocked, run again with --dns-over-https.")
+    if failures == len(keys) and consented is None:
+        # Nothing came back, so there may be no admin consent yet; the portal says "Awaiting consent".
+        conn.execute("UPDATE tenants SET consented_at = NULL WHERE id = ?", (tenant_id,))
 
     if record:
         fixture = recording.scrub(log, tenant_ref, client_id)

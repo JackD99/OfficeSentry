@@ -518,8 +518,12 @@ def shared_mailbox_signin(snap: TenantSnapshot, now: datetime):
     shared = [m for m in mailboxes if m.get("RecipientTypeDetails") == "SharedMailbox"]
     findings = [Finding("medium", m.get("PrimarySmtpAddress") or m["_id"], "Shared mailbox account allows sign-in",
                         m["_id"]) for m in shared if m.get("ExternalDirectoryObjectId") in enabled]
-    return ("fail", f"{len(findings)} of {len(shared)} shared mailbox(es) allow sign-in", findings) if findings else \
-        ("pass", f"All {len(shared)} shared mailbox(es) block sign-in", [])
+    if findings:
+        n = len(findings)
+        return ("fail", f"{n} of {plural(len(shared), 'shared mailbox', 'shared mailboxes')} "
+                        f"{verb(n, 'allows', 'allow')} sign-in", findings)
+    return ("pass", f"{every(len(shared), 'shared mailbox', 'shared mailboxes', start=True)} "
+                    f"{verb(len(shared), 'blocks', 'block')} sign-in", [])
 
 
 def _mail_setting(snap: TenantSnapshot, key: str):
