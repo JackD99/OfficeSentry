@@ -38,7 +38,8 @@ overview and DEPLOY.md for running it on a server.
   anonymous events go through `db.audit_counted()` (one row per address and
   hour), and never store what a stranger typed. Sign-in noise is in
   `db.AUDIT_NOISE` and pruned after 90 days. Admins read it at `/admin/activity`.
-- **Every PDF goes through `reports/export.to_pdf()`**, whose URL fetcher only
+- **Every PDF goes through `reports/export.to_pdf()`**, which makes tagged
+  PDF/UA files (`export.PDF_VARIANT`) and whose URL fetcher only
   loads files under `web/static/` and `data:` URIs. Never call WeasyPrint
   directly, and put fonts and images a PDF needs in `web/static/`.
 
@@ -196,7 +197,18 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 ## Web UI conventions
 
 - Styles live in `web/static/app.css` (tokens at the top, light and dark).
-  Reports that also become PDFs use `report.css` instead.
+  Reports that also become PDFs use `report.css` instead. Text colours
+  (`--text`, `--text-2`, `--muted`, `--faint`) meet WCAG AA (4.5:1) on every
+  surface, and `test_ux_fixes.py` measures them; use `--decor` for lines and
+  icons only, never for text. Don't tell things apart by colour alone (the
+  check matrix squares carry a letter).
+- Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
+  at the top of `base.html` (endpoint, label, other endpoints of the page),
+  which gives it the row of settings links at the top of the page.
+- Every page loads `static/app.js` (PDF links show "Preparing your PDF…" until
+  the file arrives) and `static/tables.js` (sorting, row search, in-place
+  views, and stacked tables capped at 20 rows with "Show all" on phones). A
+  page that also loads `tables.js` itself still gets one copy.
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
