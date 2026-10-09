@@ -1,0 +1,39 @@
+# Weekly dependency updates, one grouped pull request per ecosystem, so they arrive as a handful of PRs on
+# Monday rather than one per package. CI (v2.yml) tests each like any other PR. Security fixes still come
+# as soon as GitHub publishes them, outside this schedule.
+version: 2
+updates:
+  - package-ecosystem: pip
+    # v2/pyproject.toml, and the tools CI installs (.github/requirements-ci.txt)
+    directories: ["/v2", "/.github"]
+    schedule:
+      interval: weekly
+      day: monday
+    # Raise a floor or pin only when the new release falls outside it; the floors are the first releases
+    # without known vulnerabilities, so a routine bump shouldn't rewrite them.
+    versioning-strategy: increase-if-necessary
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /v2
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      # Move the image to a new Python on purpose (with the CI matrix), not as a routine update.
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      docker:
+        patterns: ["*"]

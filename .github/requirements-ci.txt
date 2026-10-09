@@ -1,0 +1,3 @@
+# Tools CI installs outside the project's own dependencies, pinned so a run means the same thing twice.
+# Dependabot keeps them current (.github/dependabot.yml).
+pip-audit==2.10.1
