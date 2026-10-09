@@ -133,9 +133,9 @@ def _ratio(a: str, b: str) -> float:
 
 
 def test_text_colours_meet_wcag_aa():
-    css = (STATIC / "app.css").read_text(encoding="utf-8")
+    css = (STATIC / "tokens.css").read_text(encoding="utf-8")
     light = _tokens(css[css.index(":root {"):css.index("}", css.index(":root {"))])
-    dark_start = css.index(":root {", css.index("@media (prefers-color-scheme: dark)"))
+    dark_start = css.index(":root:not(", css.index("@media (prefers-color-scheme: dark)"))
     dark = {**light, **_tokens(css[dark_start:css.index("}", dark_start)])}
     for theme in (light, dark):
         for text in ("text", "text-2", "muted", "faint"):

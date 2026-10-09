@@ -87,6 +87,11 @@ locally.
   and the example reports with `python scripts/screenshots.py` (from `v2/`;
   needs `pip install playwright pillow`, a Chromium for Playwright and
   `pdftoppm`) and look at them before committing.
+- Styles use the tokens in `v2/officesentry/web/static/tokens.css`; `/styleguide`
+  in a running portal shows them and every shared component. Pull requests
+  that touch templates or CSS also run the browser tests (screenshots against
+  baselines, and axe-core); `v2/tests/browser/README.md` says how to run them
+  and how to refresh the baselines after a change you meant.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class.
 - Never add a write call to a tenant or a non-read-only permission.
@@ -114,7 +119,8 @@ The same gates apply to every change, whoever wrote it:
   every page requires a login, tenant pages go through the access gate,
   and the Graph client has no write methods.
 - Pages and reports that change are checked in a real browser, with
-  screenshots, before they're merged.
+  screenshots, before they're merged, and CI compares about 34 pages with
+  their screenshots and runs an accessibility check on them.
 
 The project's direction, scope and releases are decided by its maintainer,
 [@JackD99](https://github.com/JackD99).
