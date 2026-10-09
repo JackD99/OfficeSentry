@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf %}
+{% from "_progress.html" import progress_script with context %}
 {% set TONES = {'critical': 'bad', 'high': 'warn', 'medium': 'info', 'ok': 'ok'} %}
 {% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
 {% set editable = state in ('draft', 'in_review') %}
+{% set approving = task and task.status in pending %}
 {% block title %}Review · {{ tenant.name }} · {{ label }} · Office Sentry{% endblock %}
 {% macro month_select(name, value) -%}
 <select name="{{ name }}" aria-label="Target month"><option value="">No target</option>
@@ -23,7 +25,7 @@
   </div>
 </div>
 
-{% if review and review.error %}
+{% if review and review.error and not approving %}
 <div class="callout bad">{{ icon('alert') }}<div class="grow"><strong>Approved, but the email didn't send.</strong><div class="small">{{ review.error }}</div></div>
   {% if admin %}<form method="post" action="{{ url_for('reporting.send_again', period=period, tenant_id=tenant.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Send again</button></form>{% endif %}</div>
 {% endif %}
@@ -130,9 +132,19 @@
   </section>
 
   {% if plan %}
-  <section class="card">
+  <section class="card" id="approve">
     <div class="card-head"><h2>{{ 'Approve and send' if emailed else 'Approve and publish' }}</h2></div>
-    {% if admin %}
+    {% if approving %}
+      <div class="progress-box" role="status" data-progress="{{ url_for('reporting.progress', period=period, tenant=tenant.id) }}">
+        <strong data-progress-text>{{ task_text(task) }}</strong>
+        <progress>Working on it</progress>
+        <p class="small muted m0">{% if worker_running %}This page updates when it's done. You can leave it; it carries on in the background.{% else %}The background worker isn't running, so this starts as soon as it is.{% endif %}
+          <noscript><a href="{{ url_for('reporting.review', period=period, tenant_id=tenant.id) }}">Refresh</a></noscript></p>
+      </div>
+    {% elif admin %}
+      {% if editable and task and task.status == 'failed' %}
+      <div class="callout bad">{{ icon('alert') }}<div><strong>The last approval didn't go out.</strong><div class="small">{{ task.error }}</div></div></div>
+      {% endif %}
       {% if editable %}
       <p class="small muted">The report is frozen as it is now, with your commentary, recommendations and client-visible notes, and {{ 'emailed to the client' if emailed else 'published to the client\'s report history' }}.</p>
       <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Approving…">{{ csrf() }}<button class="primary">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve and publish' }}</button></form>
@@ -157,3 +169,4 @@
 </div>
 </div>
 {% endblock %}
+{% block scripts %}{{ progress_script() }}{% endblock %}

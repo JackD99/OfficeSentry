@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import responses
@@ -188,12 +188,19 @@ def test_enqueue_is_deduplicated_and_claim_is_fifo(db, two_tenants):
     assert store.claim_next_run(db) is None
 
 
-def test_orphaned_runs_are_failed_on_startup(db, two_tenants):
-    alpha, _ = two_tenants
+def test_orphaned_runs_are_failed_once_their_lease_runs_out(db, two_tenants):
+    alpha, bravo = two_tenants
     store.enqueue_run(db, alpha, "users")
-    store.claim_next_run(db)
-    assert store.recover_orphaned_runs(db) == 1
+    run = store.claim_next_run(db)
+    assert store.expire_run_leases(db) == 0  # still claimed: another worker leaves it alone
+    later = datetime.now(UTC) + store.LEASE + timedelta(seconds=1)
+    assert store.expire_run_leases(db, later, held=[run["id"]]) == 0  # this process is still running it
+    assert store.expire_run_leases(db, later) == 1
     assert db.execute("SELECT status FROM runs").fetchone()[0] == "failed"
+    # A run left running from before leases existed has none, so it counts as orphaned at once.
+    store.enqueue_run(db, bravo, "users")
+    db.execute("UPDATE runs SET status = 'running', lease_until = NULL WHERE tenant_id = ?", (bravo,))
+    assert store.expire_run_leases(db) == 1
 
 
 def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
