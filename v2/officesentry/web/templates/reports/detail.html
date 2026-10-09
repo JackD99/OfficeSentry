@@ -39,7 +39,7 @@
 {% endif %}
 {% for section in report.sections %}
 <section class="doc-section" id="s{{ loop.index }}">
-  <h2>{{ section.title }} <span class="count">{{ section.rows|length }}</span>{% if section.flagged %} <span class="pill warn">{{ section.flagged }} to review</span>{% endif %}</h2>
+  <h2>{{ section.title }} <span class="count">{{ section.rows|length }}</span>{% if section.flagged and section.review %} <span class="pill warn">{{ section.flagged }} to review</span>{% endif %}</h2>
   {% if section.intro %}<p class="section-intro">{{ section.intro }}</p>{% endif %}
   {% if section.rows %}{{ ui.data_table(section) }}{% else %}<p class="empty-note">{{ section.empty }}</p>{% endif %}
 </section>

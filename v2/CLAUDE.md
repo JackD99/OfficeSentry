@@ -96,6 +96,16 @@ without a OneDrive aren't asked about for a week.
   the page, PDF, XLSX and CSV apply the same view (`views.apply`). Pass lists
   for list cells (they become `Many`, so a filter offers each item). Saved
   views are per person, per report key (`saved_views` table, `web/saved_views.py`).
+  A `Section` can also name its flag column (`flag_name`), group rows under
+  collapsible headings by a column (`group`, anchors in `group_ids`), always
+  offer a value filter on some columns (`filter_columns`), carry a key per row
+  for row actions (`keys`, `{% call(key) report_table(tv, csv, action=...) %}`)
+  and drop the "to review" count (`review=False`).
+- The Findings tab (`/tenants/<id>/findings`, and `/findings/resolved`) is built
+  by `reports/findings_report.py` from the `findings` table on that same table:
+  open findings grouped by check, then accepted risks, with saved views (report
+  keys `findings` and `findings-resolved`) and PDF, XLSX and CSV downloads. It
+  isn't in `REPORTS`, since it isn't built from a snapshot.
 - The Reports page (`/reports`) lists every registered report. Add a new key to
   the jobs in `reports/library.USES` and search words to `KEYWORDS` if its
   title doesn't contain what people would type.
