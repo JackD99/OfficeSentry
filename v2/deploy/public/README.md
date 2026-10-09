@@ -56,9 +56,22 @@ The steps for the project's server, in order. Each takes a minute or two.
 7. Run the Deploy workflow once more with action **restart**, so Caddy gets the new certificates straight
    away, then open the three addresses.
 
-From then on, every deploy rebuilds the demo from the code it deploys, and a change to the docs alone
-(Markdown, `docs/`, `examples/` or `website/` on `main`) rebuilds and copies the website without touching
-the portal (the Deploy workflow's **website** action, which you can also run by hand).
+## Keeping them up to date
+
+The website and the demo follow `main` by themselves; the portal only changes when you say so.
+
+| What changes on `main` | Website | Demo | Portal |
+|---|---|---|---|
+| Docs only (Markdown, `docs/`, `examples/`, `website/`) | straight away | stays | stays |
+| Code, once its tests pass | updated | rebuilt from that commit | only with `AUTO_DEPLOY` set to `true` |
+
+To update the portal, run the Deploy workflow with action **deploy** (it updates the website and the demo
+from the same commit too). With the `AUTO_DEPLOY` variable set to `true`, every merge whose tests pass
+updates the portal as well. Action **website-and-demo** does the automatic update by hand.
+
+The demo builds from its own copy of the code (`/opt/officesentry/demo-src`), so it can run newer code than
+the portal; the Caddy setup and this compose file come from the portal's copy, so a change to them reaches
+the server with the next portal deploy.
 
 To turn the demo off, set `DEMO_ENABLED` to `false` and deploy. To take the website down, delete the
 `OFFICESENTRY_WEBSITE_DOMAIN` variable and deploy.
@@ -69,8 +82,8 @@ To turn the demo off, set `DEMO_ENABLED` to `false` and deploy. To take the webs
 |---|---|
 | `compose.yml` | added to the portal's compose files on this server: the demo service, and Caddy's site list and website folder |
 | `Caddyfile` | Caddy's sites: the portal (allow-listed), the website and the demo |
-| `Dockerfile`, `demo.sh` | the demo image: the portal's image plus the fictional data maker, and its start script |
-| `build-demo.sh` | builds that image on the server; `deploy/start.sh` runs it when the demo is on |
+| `Dockerfile`, `demo.sh` | the demo image: the portal's image (built from the same code) plus the fictional data maker, and its start script |
+| `build-demo.sh` | builds that image on the server from its own copy of the code; `deploy/start.sh demo` then restarts the demo alone |
 
 To try the demo on your own computer without Docker:
 

@@ -4,7 +4,9 @@ name: Deploy
 # Hetzner Cloud Firewall keeps SSH closed: each run opens port 22 to this
 # runner's address only, and closes it again at the end, even if a step fails.
 # Setup is in v2/DEPLOY.md ("Hetzner, from a phone"). The same server can also run the project's website
-# and public demo (v2/deploy/public/README.md); a change to the docs alone updates the website.
+# and public demo (v2/deploy/public/README.md). Those two follow main by themselves: every merge whose tests
+# pass updates them (a change to the docs alone, the website straight away), while the portal only updates
+# when someone runs "deploy", or on every merge too once AUTO_DEPLOY is "true".
 #
 # Run logs will be public once the repository is, so nothing here prints the
 # first-admin link, the portal's logs or a secret: the status action reports
@@ -16,9 +18,9 @@ on:
         description: What to do
         type: choice
         default: deploy
-        options: [deploy, website, status, setup-link, backup, restart]
+        options: [deploy, website-and-demo, status, setup-link, backup, restart]
       ref:
-        description: Branch, tag or commit to deploy (deploy only)
+        description: Branch, tag or commit to deploy (deploy and website-and-demo)
         default: main
   # Deploy main after its tests pass, once AUTO_DEPLOY is set to "true".
   workflow_run:
@@ -26,7 +28,7 @@ on:
     types: [completed]
     branches: [main]
   # The website shows the docs, which the v2 workflow doesn't test, so their changes update it straight away
-  # (the "website" action: build the site and copy it over, nothing else).
+  # (the website-and-demo action without the demo, as the code hasn't changed).
   push:
     branches: [main]
     paths: ['**.md', 'docs/**', 'examples/**', 'website/**']
@@ -34,8 +36,9 @@ on:
 permissions:
   contents: read
 
-# One run at a time, and never cancel a deploy half way. (A docs change while one deploy runs and another
-# waits replaces the waiting one, as GitHub keeps one waiting run per group; the next merge deploys again.)
+# One run at a time, and never cancel a deploy half way. (GitHub keeps one waiting run per group, so a run
+# that starts while another runs and a third waits replaces the waiting one: if a deploy you started shows as
+# cancelled, run it again.)
 concurrency:
   group: deploy
   cancel-in-progress: false
@@ -68,20 +71,23 @@ jobs:
     if: >-
       always() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && vars.OFFICESENTRY_WEBSITE_DOMAIN != '') ||
-      (vars.AUTO_DEPLOY == 'true' && github.event.workflow_run.conclusion == 'success'
-       && github.event.workflow_run.event == 'push' && needs.latest.outputs.ok == 'true'))
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+       && needs.latest.outputs.ok == 'true'
+       && (vars.AUTO_DEPLOY == 'true' || vars.DEMO_ENABLED == 'true' || vars.OFFICESENTRY_WEBSITE_DOMAIN != '')))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ACTION: ${{ inputs.action || (github.event_name == 'push' && 'website') || 'deploy' }}
-      DEPLOYS: ${{ (inputs.action || (github.event_name == 'push' && 'website') || 'deploy') == 'deploy' }}
+      # A merge whose tests pass: the portal too with AUTO_DEPLOY on, otherwise just the website and demo.
+      ACTION: ${{ inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo' }}
+      DEPLOYS: ${{ (inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo') == 'deploy' }}
       HOST: ${{ vars.DEPLOY_HOST }}
-      # The public demo (v2/deploy/public/) runs while DEMO_ENABLED is "true", built from the code being
-      # deployed, and starts afresh every night by itself.
-      DEMO: ${{ vars.DEMO_ENABLED == 'true' && github.event_name != 'push' && (inputs.action || 'deploy') == 'deploy' }}
+      # The public demo (v2/deploy/public/) runs while DEMO_ENABLED is "true". Deploys and website-and-demo
+      # runs rebuild it from their code (a docs-only change leaves it), and it starts afresh every night by itself.
       DEMO_DOMAIN: ${{ vars.DEMO_ENABLED == 'true' && vars.OFFICESENTRY_DEMO_DOMAIN || '' }}
-      # The website (website/) is built and copied over by every deploy and website run while this is set.
+      DEMO: ${{ vars.DEMO_ENABLED == 'true' && github.event_name != 'push' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo') }}
+      # The website (website/) is built and copied over by the same runs while this is set.
       WEBSITE_DOMAIN: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
+      SITE: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN != '' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && 'deploy') || 'website-and-demo') }}
       FIREWALL: ${{ vars.HCLOUD_FIREWALL || 'officesentry' }}
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
       API: https://api.hetzner.cloud/v1
@@ -106,14 +112,17 @@ jobs:
             exit 1
           fi
           if [ "$DEMO" = true ] && [ -z "$DEMO_DOMAIN" ]; then missing="$missing OFFICESENTRY_DEMO_DOMAIN (variable)"; fi
-          if [ "$ACTION" = website ] && [ -z "$WEBSITE_DOMAIN" ]; then missing="$missing OFFICESENTRY_WEBSITE_DOMAIN (variable)"; fi
+          if [ "$ACTION" = website-and-demo ] && [ "$SITE$DEMO" = falsefalse ]; then
+            echo "::error::There's no website or public demo to update: set OFFICESENTRY_WEBSITE_DOMAIN, or OFFICESENTRY_DEMO_DOMAIN and DEMO_ENABLED (v2/deploy/public/README.md)."
+            exit 1
+          fi
           if [ -n "$missing" ]; then
             echo "::error::Set these under Settings > Secrets and variables > Actions:$missing"
             exit 1
           fi
 
       - uses: actions/checkout@v7
-        if: env.DEPLOYS == 'true' || env.ACTION == 'website'
+        if: env.DEPLOYS == 'true' || env.SITE == 'true' || env.DEMO == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
 
@@ -147,7 +156,7 @@ jobs:
           } > v2/.env
 
       - uses: actions/setup-python@v7
-        if: env.WEBSITE_DOMAIN != '' && (env.DEPLOYS == 'true' || env.ACTION == 'website')
+        if: env.SITE == 'true'
         with:
           python-version: '3.12'
           cache: pip
@@ -156,7 +165,7 @@ jobs:
       # The product page and the repository's docs as web pages (website/README.md). It holds nothing that
       # isn't in the repository already.
       - name: Build the website
-        if: env.WEBSITE_DOMAIN != '' && (env.DEPLOYS == 'true' || env.ACTION == 'website')
+        if: env.SITE == 'true'
         env:
           SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
           SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
@@ -224,19 +233,35 @@ jobs:
             --exclude tests/ --exclude .coverage --exclude '__pycache__/' \
             v2/ server:/opt/officesentry/v2/
 
-      # Before the containers start, so Caddy finds the site's folder. Caddy serves the files as they are, so a
-      # website run needs nothing restarted.
+      # Before the containers start, so Caddy finds the site's folder. Caddy serves the files as they are, so
+      # nothing needs restarting for them.
       - name: Copy the website to the server
-        if: env.WEBSITE_DOMAIN != '' && (env.DEPLOYS == 'true' || env.ACTION == 'website')
+        if: env.SITE == 'true'
         run: |
           rsync -az --delete website/_site/ server:/opt/officesentry/website/
           echo "Website: https://$WEBSITE_DOMAIN" >> "$GITHUB_STEP_SUMMARY"
+
+      # The demo builds from a copy of its own (tests included, as it makes its data from their fixtures), so
+      # it can follow main while the portal stays on what was last deployed. Before the portal starts, so a
+      # first deploy finds the demo's image.
+      - name: Build the public demo
+        if: env.DEMO == 'true'
+        run: |
+          rsync -az --delete --exclude .env --exclude data/ --exclude .coverage --exclude '__pycache__/' \
+            v2/ server:/opt/officesentry/demo-src/
+          ssh server 'bash /opt/officesentry/demo-src/deploy/public/build-demo.sh'
 
       - name: Build and start
         if: env.DEPLOYS == 'true'
         run: |
           ssh server 'bash -s' < v2/deploy/start.sh
-          if [ -n "$DEMO_DOMAIN" ]; then echo "Public demo: https://$DEMO_DOMAIN" >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ "$DEMO" = true ]; then echo "Public demo: https://$DEMO_DOMAIN" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Restart the public demo
+        if: env.DEMO == 'true' && env.DEPLOYS != 'true'
+        run: |
+          ssh server 'bash -s -- demo' < v2/deploy/start.sh
+          echo "Public demo: https://$DEMO_DOMAIN" >> "$GITHUB_STEP_SUMMARY"
 
       # The setup link would let whoever reads this log create the first admin,
       # so it never appears here. A deploy only says whether one is needed.

@@ -1,7 +1,7 @@
 # The public demo (README.md here): the portal's own image plus the fictional data generator, which needs the
-# test fixtures and their tools. build-demo.sh passes the portal's image in as BASE and builds from a folder
-# holding just tests/, scripts/, requirements-dev.txt and demo.sh.
-ARG BASE=officesentry:local
+# test fixtures and their tools. build-demo.sh builds the portal's image from the same code, passes it in as
+# BASE and builds this from a folder holding just tests/, scripts/, requirements-dev.txt and demo.sh.
+ARG BASE=officesentry-demo-base:local
 FROM ${BASE}
 USER root
 COPY requirements-dev.txt /tmp/

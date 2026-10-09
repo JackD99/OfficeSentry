@@ -597,7 +597,7 @@ All from *Actions → Deploy → Run workflow*:
 | Action | Does |
 |---|---|
 | `deploy` | copies the chosen branch, tag or commit and rebuilds; the portal is only down while the containers swap |
-| `website` | only with the website on (below): rebuilds it from `main` and copies it over, without touching the portal |
+| `website-and-demo` | only with the website or public demo on (below): updates them from `main` (they also update by themselves after every merge), without touching the portal |
 | `status` | container health, free disk, whether the worker checked in, and how many errors the portal and worker logged in the last 24 hours |
 | `backup` | a database copy now, keeping 14 |
 | `restart` | restarts the portal, worker and Caddy |
@@ -625,7 +625,8 @@ choose when to deploy:
 3. Open the **Variables** tab. Next to `AUTO_DEPLOY`, press the pencil.
 4. Change the value to `false` and press **Update variable**.
 
-Nothing deploys by itself from then on. To turn it back on, do the same and
+The portal doesn't update by itself from then on (the project's website and
+public demo, [below](#the-website-and-public-demo), still follow `main`). To turn it back on, do the same and
 set the value to `true`. Merges keep running their tests either way.
 
 ### Deploying by hand
