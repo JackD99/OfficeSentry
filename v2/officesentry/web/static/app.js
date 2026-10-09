@@ -1,4 +1,5 @@
 /* Every portal page. No dependencies.
+ * Wide tables: a box that scrolls sideways can be focused, so keyboard users can scroll it too (WCAG 2.1.1).
  * PDF links (any link to a .pdf): a PDF can take a few seconds to build, so the link shows
  *   "Preparing your PDF…" until the file arrives, then saves it. A page instead of a PDF (no WeasyPrint:
  *   the print-ready page) or any error falls back to opening the link normally. */
@@ -49,4 +50,24 @@
       .catch(function () { say(''); window.location.href = url.href; })
       .then(function () { a.removeAttribute('aria-busy'); a.classList.remove('preparing'); });
   });
+})();
+
+(function () {
+  function focusable() {
+    document.querySelectorAll('.scroll-x, .table-scroll').forEach(function (box) {
+      if (box.scrollWidth > box.clientWidth + 1) {
+        if (!box.hasAttribute('tabindex')) box.setAttribute('tabindex', '0');
+        if (!box.hasAttribute('role')) box.setAttribute('role', 'region');
+        if (!box.hasAttribute('aria-label')) {
+          var card = box.closest('section, .card');
+          var heading = card && card.querySelector('h1, h2, h3');
+          box.setAttribute('aria-label', heading ? heading.textContent.trim() + ' (scrolls sideways)' : 'Table (scrolls sideways)');
+        }
+      }
+    });
+  }
+  var timer;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', focusable);
+  else focusable();
+  window.addEventListener('resize', function () { clearTimeout(timer); timer = setTimeout(focusable, 150); });
 })();

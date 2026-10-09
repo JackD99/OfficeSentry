@@ -1,0 +1,205 @@
+{#- The style guide (web/styleguide.py): every token in tokens.css and every shared component, with made-up
+    data. Light or dark follows the system setting. Links in the examples go nowhere useful. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ICONS, ts, status, change_tag, sev_counts, sev_legend, tenant_header, downloads, report_nav with context %}
+{% from "_report_table.html" import report_table with context %}
+{% block title %}Style guide · Office Sentry{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Style guide</h1>
+    <div class="sub">The colours, type, spacing and components every page is built from. Light or dark follows your system setting.</div>
+  </div>
+  <div class="actions"><a class="btn" href="{{ url_for('styleguide.report_components') }}">{{ icon('doc') }} Client report components</a></div>
+</div>
+
+<nav class="subtabs sg-toc" aria-label="On this page">
+  <a href="#colours">Colours</a><a href="#type">Type</a><a href="#spacing">Spacing and shape</a><a href="#buttons">Buttons</a>
+  <a href="#labels">Labels</a><a href="#figures">Figures</a><a href="#messages">Messages</a><a href="#forms">Forms</a>
+  <a href="#tables">Tables</a><a href="#navigation">Navigation</a><a href="#icons">Icons</a>
+</nav>
+
+{# -- Colours ------------------------------------------------------------------------------------- #}
+<section class="card" id="colours">
+  <div class="card-head"><h2>Colours</h2><span class="meta">tokens.css · light / dark</span></div>
+  <p class="intro">Text colours show their contrast with the surface they sit on, light then dark; 4.5:1 is the WCAG AA minimum. Use <code>--decor</code> for lines and icons only, and severity fills for bars and dots only.</p>
+  {% for g in groups if g.colours %}
+  <h3 class="sg-group">{{ g.title }}</h3>
+  <ul class="sg-swatches">
+    {% for t in g.tokens if t.colour %}{% set r = t.ratios() %}
+    <li><span class="sg-chip" data-token="{{ t.name }}"></span>
+      <span><code>--{{ t.name }}</code>
+        <span class="sub mono">{{ t.light }}{% if t.dark != t.light %} / {{ t.dark }}{% endif %}</span>
+        {% if r %}<span class="sub">{{ '%.1f'|format(r[0]) }}:1 / {{ '%.1f'|format(r[1]) }}:1</span>{% endif %}
+        {% if t.note %}<span class="sub">{{ t.note }}</span>{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+</section>
+
+{# -- Type ------------------------------------------------------------------------------------------ #}
+<section class="card" id="type">
+  <div class="card-head"><h2>Type</h2><span class="meta">Inter · body 14px</span></div>
+  {% for g in groups if g.title.startswith('Type') %}
+  <ul class="list sg-type">
+    {% for t in g.tokens %}{% set family = not t.name.startswith('fs-') %}
+    <li><code class="sg-name">--{{ t.name }}</code><span class="grow sg-sample{{ ' sg-family' if family }}" data-token="{{ t.name }}">£164 of licence waste a month</span><span class="faint small">{{ t.light.split(',')[0] if family else t.light }}{% if t.note %} · {{ t.note }}{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+  <h3 class="sg-group">Text styles</h3>
+  <p>Body text, <strong>strong</strong>, <a href="#type">a link</a>, <code>code</code>, <span class="muted">muted</span>, <span class="faint">faint</span>, <span class="small">small</span> and <span class="tiny">tiny</span>.</p>
+</section>
+
+{# -- Spacing and shape ----------------------------------------------------------------------------- #}
+<section class="card" id="spacing">
+  <div class="card-head"><h2>Spacing and shape</h2><span class="meta">a 4px grid</span></div>
+  <div class="grid-2">
+    <ul class="list sg-space">
+      {% for g in groups if g.title.startswith('Spacing') %}{% for t in g.tokens %}
+      <li><code class="sg-name">--{{ t.name }}</code><span class="sg-bar" data-token="{{ t.name }}"></span><span class="faint small">{{ t.light }}</span></li>
+      {% endfor %}{% endfor %}
+    </ul>
+    <div>
+      <div class="sg-shapes">
+        {% for g in groups if g.title.startswith('Shape') %}{% for t in g.tokens %}
+        <div class="sg-shape" data-token="{{ t.name }}"><code>--{{ t.name }}</code></div>
+        {% endfor %}{% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{# -- Buttons --------------------------------------------------------------------------------------- #}
+<section class="card" id="buttons">
+  <div class="card-head"><h2>Buttons</h2></div>
+  <div class="sg-row">
+    <button type="button" class="primary">{{ icon('plus') }} Primary</button>
+    <button type="button">Default</button>
+    <button type="button" class="ghost">Ghost</button>
+    <button type="button" class="danger">Danger</button>
+    <button type="button" disabled>Disabled</button>
+    <a class="btn" href="#buttons">{{ icon('download') }} Link as a button</a>
+    <button type="button" class="link">Link button</button>
+  </div>
+  <div class="sg-row">
+    <button type="button" class="sm primary">Small primary</button>
+    <button type="button" class="sm">Small</button>
+    <button type="button" class="sm ghost">{{ icon('filter') }} Small ghost</button>
+    {{ downloads([('PDF', '#buttons', 'A PDF'), ('XLSX', '#buttons', 'A spreadsheet'), ('CSV', '#buttons', '')]) }}
+  </div>
+</section>
+
+{# -- Labels ---------------------------------------------------------------------------------------- #}
+<section class="card" id="labels">
+  <div class="card-head"><h2>Labels</h2><span class="meta">pills, run status, changes, severity</span></div>
+  <dl class="kv sg-kv">
+    <dt>Pills</dt><dd class="sg-row"><span class="pill">Neutral</span><span class="pill ok">OK</span><span class="pill warn">Warning</span><span class="pill bad">Problem</span><span class="pill info">Info</span><span class="pill accent">Accent</span><span class="new-tag">New</span></dd>
+    <dt>Dots</dt><dd class="sg-row"><span><span class="dot"></span> none</span><span><span class="dot ok"></span> ok</span><span><span class="dot warn"></span> warn</span><span><span class="dot bad"></span> bad</span></dd>
+    <dt><code>status()</code></dt><dd class="sg-row">{% for s in ('succeeded', 'partial', 'failed', 'queued', 'running', 'cancelled', none) %}{{ status(s) }}{% endfor %}</dd>
+    <dt><code>change_tag()</code></dt><dd class="sg-row">{% for k in ('added', 'removed', 'changed') %}{{ change_tag(k) }}{% endfor %}</dd>
+    <dt><code>sev_counts()</code></dt><dd class="sg-row">{{ sev_counts({'critical': 1, 'high': 10, 'medium': 12, 'low': 3}) }}{{ sev_counts({'critical': 0, 'high': 2, 'medium': 0, 'low': 0}) }}</dd>
+    <dt><code>sev_legend()</code></dt><dd>{{ sev_legend() }}</dd>
+    <dt>Severity text</dt><dd class="sg-row">{% for s in ('critical', 'high', 'medium', 'low') %}<span class="sevtext {{ s }}">{{ s }}</span>{% endfor %}</dd>
+    <dt>Check squares</dt><dd class="sg-row"><span class="chk pass" title="Pass"></span>{% for s in ('critical', 'high', 'medium', 'low') %}<span class="chk fail {{ s }}" title="Fail: {{ s }}"></span>{% endfor %}<span class="chk accepted" title="Accepted risk"></span><span class="chk unavailable" title="Not checked"></span></dd>
+    <dt><code>ts()</code></dt><dd class="sg-row">{{ ts(three_days_ago) }}<span>{{ ts(none) }}</span></dd>
+  </dl>
+</section>
+
+{# -- Figures --------------------------------------------------------------------------------------- #}
+<section id="figures">
+  <h2 class="sg-h2">Headline figures</h2>
+  <div class="tiles">
+    {% for t in report.tiles %}{% set href = links.tiles[loop.index0] %}
+    <{{ 'a' if href else 'div' }} class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view{% endif %}>
+      <div class="label">{{ t.label }}{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
+      <div class="value">{{ t.value }}</div>
+      <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
+    </{{ 'a' if href else 'div' }}>
+    {% endfor %}
+    {% for h in report.highlights %}
+    <div class="tile"><div class="label"><span><span class="dot {{ h.tone }}"></span>{{ h.label }}</span></div><div class="value">{{ h.value }}</div></div>
+    {% endfor %}
+    <div class="tile"><div class="label">Secure Score</div><div class="value">33%</div><div class="foot"><span class="delta better">+2%</span> in 4 weeks</div></div>
+    <div class="tile"><div class="label">Licence waste</div><div class="value">£164</div><div class="foot"><span class="delta worse">+£12</span> in 4 weeks</div></div>
+    <div class="tile"><div class="label">Guests</div><div class="value">7</div><div class="foot"><span class="delta flat">No change</span> in 4 weeks</div></div>
+  </div>
+</section>
+
+{# -- Messages -------------------------------------------------------------------------------------- #}
+<section class="card" id="messages">
+  <div class="card-head"><h2>Messages</h2><span class="meta">flash after a form, callouts on a page, empty states</span></div>
+  <div class="flash success" role="status">{{ icon('check') }}<span>Saved. The next collection uses the new schedule.</span></div>
+  <div class="flash warning" role="status">{{ icon('alert') }}<span>Saved, but two contacts have no email address.</span></div>
+  <div class="flash error" role="alert">{{ icon('alert') }}<span>That certificate has expired. Upload a newer one.</span></div>
+  <div class="callout">{{ icon('alert') }}<div><strong>Not checked</strong> Sign-in times need an Entra ID P1 licence.</div></div>
+  <div class="callout ok">{{ icon('check') }}<div><strong>Nothing is due in the next 90 days.</strong> No renewals or expiring credentials.</div></div>
+  <div class="callout warn">{{ icon('alert') }}<div><strong>2 items need attention now.</strong> A certificate expires in 6 days.</div></div>
+  <div class="callout bad">{{ icon('alert') }}<div><strong>The last collection failed.</strong> Global Reader isn't assigned to the app.</div></div>
+  <div class="card empty sg-empty"><h3>No tenants yet</h3><p>Add a client tenant and its reports show here after the first collection.</p><a class="btn primary" href="#messages">{{ icon('plus') }} Add a tenant</a></div>
+</section>
+
+{# -- Forms ----------------------------------------------------------------------------------------- #}
+<section class="card" id="forms">
+  <div class="card-head"><h2>Forms</h2></div>
+  <form class="narrow" action="#forms">
+    <label class="field"><span>Tenant name</span><input type="text" value="Fabrikam Dental Group"><span class="hint">As your clients know it. Shown on every report.</span></label>
+    <div class="form-row">
+      <label>Day of the month<select><option>1</option><option>15</option></select></label>
+      <label>Time<input type="time" value="08:00"></label>
+    </div>
+    <fieldset><legend>Send to</legend>
+      <label class="check"><input type="checkbox" checked> Practice manager</label>
+      <label class="check"><input type="checkbox"> Finance director</label>
+    </fieldset>
+    <label>Message<textarea rows="3">Your monthly review is attached.</textarea></label>
+    <div class="form-actions"><button type="button" class="primary">Save</button><a class="btn ghost" href="#forms">Cancel</a></div>
+  </form>
+</section>
+
+{# -- Tables ---------------------------------------------------------------------------------------- #}
+<section id="tables">
+  <h2 class="sg-h2">Tables</h2>
+  <div class="card">
+    <div class="card-head"><h2>A simple table</h2><span class="meta">in a card, stacking on phones</span></div>
+    <table class="stack-sm">
+      <thead><tr><th>Tenant</th><th>Last collection</th><th class="num">Findings</th></tr></thead>
+      <tbody>
+        <tr class="flag-critical"><td>Fabrikam Dental Group</td><td data-label="Last collection">{{ status('succeeded') }}</td><td class="num" data-label="Findings">137</td></tr>
+        <tr class="flag-medium"><td>Contoso Legal LLP</td><td data-label="Last collection">{{ status('partial') }}</td><td class="num" data-label="Findings">42</td></tr>
+        <tr><td>Northwind Traders</td><td data-label="Last collection">{{ status('failed') }}</td><td class="num" data-label="Findings">9</td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% for tv in tables %}{{ report_table(tv, '#tables') }}{% endfor %}
+</section>
+
+{# -- Navigation ------------------------------------------------------------------------------------ #}
+<section class="card" id="navigation">
+  <div class="card-head"><h2>Navigation</h2><span class="meta"><code>tenant_header()</code>, <code>report_nav()</code>, pill rows</span></div>
+  <div class="sg-frame">{{ tenant_header(tenant, 'data', counts={'findings': 137}) }}</div>
+  <div class="sg-frame">{{ report_nav(tenant, report_groups, report_groups[0], 'mfa') }}</div>
+  <div class="sg-frame"><nav class="subtabs m0" aria-label="Example pill row"><a class="active" aria-current="page" href="#navigation">Monthly review</a><a href="#navigation">Insurance evidence</a><a href="#navigation">Checks</a></nav></div>
+</section>
+
+{# -- Icons ----------------------------------------------------------------------------------------- #}
+<section class="card" id="icons">
+  <div class="card-head"><h2>Icons</h2><span class="meta"><code>icon(name)</code>: inline SVG on a 24px grid</span></div>
+  <ul class="sg-icons">{% for name in ICONS|sort %}<li>{{ icon(name) }}<code>{{ name }}</code></li>{% endfor %}</ul>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+<script nonce="{{ csp_nonce }}">
+  /* Draw each token with itself (the CSP allows no inline style attributes; script-set styles are fine). */
+  document.querySelectorAll('[data-token]').forEach(function (el) {
+    var name = el.getAttribute('data-token'), value = 'var(--' + name + ')';
+    if (el.classList.contains('sg-chip')) el.style.background = value;
+    else if (el.classList.contains('sg-family')) el.style.fontFamily = value;
+    else if (el.classList.contains('sg-sample')) el.style.fontSize = value;
+    else if (el.classList.contains('sg-bar')) el.style.width = value;
+    else if (name.indexOf('radius') === 0) el.style.borderRadius = value;
+    else if (name.indexOf('shadow') === 0) el.style.boxShadow = value;
+  });
+</script>
+{% endblock %}

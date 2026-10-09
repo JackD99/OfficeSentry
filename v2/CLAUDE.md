@@ -234,12 +234,23 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 
 ## Web UI conventions
 
-- Styles live in `web/static/app.css` (tokens at the top, light and dark).
-  Reports that also become PDFs use `report.css` instead. Text colours
-  (`--text`, `--text-2`, `--muted`, `--faint`) meet WCAG AA (4.5:1) on every
-  surface, and `test_ux_fixes.py` measures them; use `--decor` for lines and
-  icons only, never for text. Don't tell things apart by colour alone (the
-  check matrix squares carry a letter).
+- Colours, type sizes (`--fs-*`), spacing (`--space-*`, a 4px grid), radii and
+  shadows are tokens in `web/static/tokens.css`, light and dark, shared by
+  `app.css` (the portal) and `report.css` (reports that also become PDFs, which
+  set `<html data-theme="light">`). Neither file defines a colour of its own;
+  add a token instead (`test_styleguide.py` checks). Text colours
+  (`--text`, `--text-2`, `--muted`, `--faint`, `--sev-*`) meet WCAG AA (4.5:1)
+  on every surface, and `test_ux_fixes.py` measures them; use `--decor` for
+  lines and icons only, never for text. Don't tell things apart by colour alone
+  (the check matrix squares carry a letter).
+- `/styleguide` (staff) shows every token and shared component, and
+  `/styleguide/report` (and `.pdf`) the client report components
+  (`web/styleguide.py`). A new shared component or state goes there too.
+- `tests/browser` (`pytest tests/browser --ui`, in the pinned Playwright image;
+  see its README) screenshots about 34 pages at laptop and phone widths, light
+  and dark, against baselines, and runs axe-core. CI runs it
+  (`.github/workflows/ui.yml`) on PRs that touch templates or CSS; refresh the
+  baselines with `--update` when a change is meant, and look at them.
 - Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
   at the top of `base.html` (endpoint, label, other endpoints of the page),
   which gives it the row of settings links at the top of the page.
