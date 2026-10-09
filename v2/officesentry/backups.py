@@ -433,3 +433,20 @@ def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, for
         raise RestoreError(f"The restored database failed its check ({problem}). The previous one is in {saved}.")
     events = restore_events(source.parent / EVENTS, db_path.parent / EVENTS)
     return {"version": version, "saved": saved, "events": events}
+
+
+def inspect(source: Path) -> dict:
+    """The ``check-backup`` command and the restore drill: check that a backup (``.db`` or ``.db.gz``) is a
+    sound Office Sentry database without restoring it, and say what's in it. A gzipped one is unpacked next
+    to itself for the check, so that folder needs room for the database."""
+    source = Path(source)
+    with _unpacked(source, source.parent) as plain:
+        version = check_backup(plain, shown=source)
+        conn = sqlite3.connect(f"{plain.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            tenants = conn.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+            newest = conn.execute("SELECT MAX(finished_at) FROM runs").fetchone()[0]
+        finally:
+            conn.close()
+        size = plain.stat().st_size
+    return {"version": version, "tenants": tenants, "newest_run": newest, "bytes": size}
