@@ -1,0 +1,52 @@
+name: Report request
+description: Suggest a new report, or a change to an existing one.
+title: "Report: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Issues are public. Don't paste client data.** If you include an example (a screenshot, an export, a
+        table), replace tenant names and IDs, domains, user names and email addresses (UPNs) and IP addresses
+        with made-up ones such as `contoso.example` first.
+
+        Office Sentry is read-only: it reports on a tenant and never changes it. Requests to fix or change things
+        in a tenant are out of scope.
+  - type: textarea
+    id: question
+    attributes:
+      label: What question should the report answer?
+      description: For example "Which shared mailboxes have a licence they don't need?"
+    validations:
+      required: true
+  - type: dropdown
+    id: reader
+    attributes:
+      label: Who reads it?
+      options:
+        - MSP staff, for one client
+        - MSP staff, across all clients
+        - The client (in their portal view or a PDF)
+        - Several of these
+  - type: textarea
+    id: columns
+    attributes:
+      label: What it should show
+      description: The headline figures, columns or charts you'd want. A rough list is fine.
+  - type: textarea
+    id: source
+    attributes:
+      label: Where the data comes from, if you know
+      description: A Microsoft Graph endpoint, an Exchange `Get-` cmdlet, or the admin centre page that shows it today, and any licence it needs.
+  - type: textarea
+    id: today
+    attributes:
+      label: How you get this today
+      description: A script, another tool, a manual export. It helps to know what it replaces.
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Before you post
+      options:
+        - label: Nothing above identifies a client, a tenant or a person.
+          required: true
