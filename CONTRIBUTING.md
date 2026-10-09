@@ -34,10 +34,12 @@ ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
 
-CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request and
-push to main, plus a subset on Windows, a Docker image build and a dependency
-audit (`pip-audit`). The Python 3.12 run measures coverage and fails under
-90%; `pytest -n auto --cov=officesentry` shows it locally.
+CI runs the same on Python 3.12 for every pull request, with a Docker image
+build and a dependency audit (`pip-audit`); pushes to main and a weekly run
+add Python 3.11 and 3.13 and a subset on Windows. Changes that only touch
+Markdown, `docs/` or `examples/` skip CI. The Python 3.12 run measures
+coverage and fails under 90%; `pytest -n auto --cov=officesentry` shows it
+locally.
 
 - Keep changes small and finished end to end; update `v2/CLAUDE.md` and
   `v2/README.md` in the same pull request when behaviour changes.
@@ -57,11 +59,12 @@ The same gates apply to every change, whoever wrote it:
 
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
-- CI runs `ruff` and the full test suite on Python 3.11, 3.12 and 3.13
-  (with a 90% coverage floor), a Windows subset, a Docker build and
-  `pip-audit`, and a pull request isn't merged until it's green. The pull
-  request template's checklist covers migrations, new permissions, the
-  access gate and read-only access.
+- CI runs `ruff`, the full test suite on Python 3.12 (with a 90% coverage
+  floor), a Docker build and `pip-audit` on every pull request, and a pull
+  request isn't merged until it's green. After merging, `main` also runs
+  the suite on Python 3.11 and 3.13 and a Windows subset. The pull request
+  template's checklist covers migrations, new permissions, the access gate
+  and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
   `tests/test_live_fixture.py` replays responses recorded from a real
   Microsoft 365 Business Premium test tenant (names, emails, domains and IDs
