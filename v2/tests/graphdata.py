@@ -231,9 +231,10 @@ INBOX_RULES = {
          "actions": {"redirectTo": [{"emailAddress": {"address": "boss@x.com"}}]}},
     ],
 }
-FOLDERS = {"fid-rss": {"displayName": "RSS Feeds"}}
 
 EXCHANGE = {
+    # Graph's rule IDs here aren't real ones, so the rule's name finds its folder.
+    "Get-InboxRule": {"u1": [{"Name": ".", "RuleIdentity": 1, "MoveToFolder": "RSS Feeds"}]},
     "Get-AcceptedDomain": [{"DomainName": "x.com", "DomainType": "Authoritative", "Default": True}],
     "Get-Mailbox": [
         {"ExternalDirectoryObjectId": "u1", "Guid": "g-u1", "UserPrincipalName": "ann@x.com",

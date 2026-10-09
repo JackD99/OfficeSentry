@@ -14,6 +14,7 @@ The raw responses are never written to disk.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import uuid
@@ -31,6 +32,9 @@ from .text import plural
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 # SharePoint drive IDs are "b!" and the site, web and list GUIDs (48 bytes) in base64url, so GUID never sees them.
 DRIVE_ID = re.compile(r"b(?:!|%21)([A-Za-z0-9_-]{64})(?![A-Za-z0-9_-])")
+# Outlook folder and message IDs ("AAMk...", "AQMk...") are base64url of the mailbox GUID as text and binary
+# store and folder IDs.
+OUTLOOK_ID = re.compile(r"(?<![A-Za-z0-9_-])(A[AQ]Mk[A-Za-z0-9_-]{40,})((?:=|%3D){0,2})(?![A-Za-z0-9_-])")
 EMAIL = re.compile(r"[A-Za-z0-9._%+'{}#-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
 PHONE = re.compile(r"\+\d[\d ()-]{6,}\d")
 # National formats: UK and similar (07700 900123, 020 7946 0000) and North American ((555) 010-0199).
@@ -138,6 +142,7 @@ class Scrubber:
         self.personal_sites: dict[str, str] = {}
         self.phones: dict[str, str] = {}
         self.drive_ids: set[str] = set()
+        self.outlook_ids: dict[str, str] = {}
 
     def phone(self, value: str) -> str:
         key = re.sub(r"\D", "", value)
@@ -169,6 +174,23 @@ class Scrubber:
                         for i in range(0, 48, 16))
         return match.group(0)[:-64] + base64.urlsafe_b64encode(fake).decode().rstrip("=")
 
+    def outlook_id(self, match: re.Match) -> str:
+        """An ID of the same length: the mailbox GUID replaced as anywhere else, the binary part made up."""
+        real, padding = match.groups()
+        if real not in self.outlook_ids:
+            try:
+                raw = base64.urlsafe_b64decode(real + "=" * (-len(real) % 4))
+            except ValueError:
+                raw = b""
+            text = raw.decode("latin-1")
+            found = GUID.search(text)
+            head = (text[:found.start()] + self.guid(found.group(0))).encode("latin-1") if found else b""
+            size = len(raw) - len(head)
+            seed = hashlib.sha256(f"outlook-{len(self.outlook_ids)}".encode()).digest()
+            fake = head + (seed * (size // len(seed) + 1))[:size]
+            self.outlook_ids[real] = base64.urlsafe_b64encode(fake).decode().rstrip("=")
+        return self.outlook_ids[real] + padding
+
     def email(self, match: re.Match) -> str:
         value = match.group(0)
         local, _, domain = value.rpartition("@")
@@ -198,6 +220,7 @@ class Scrubber:
         value = PERSONAL.sub(self.personal_site, value)
         value = EMAIL.sub(self.email, value)
         value = DRIVE_ID.sub(self.drive_id, value)
+        value = OUTLOOK_ID.sub(self.outlook_id, value)
         value = GUID.sub(lambda m: self.guid(m.group(0)), value)
         if value.startswith("https://"):
             # Request and paging URLs carry IDs and domains, not names; a person called "admin"
@@ -360,7 +383,7 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     text = "\n".join(v for v in _strings(fixture) if not v.startswith("https://"))
     leaks = find_leaks(text, [*names, *personal])
     leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites,
-                                              *s.drive_ids])
+                                              *s.drive_ids, *s.outlook_ids])
     leaks += phone_leaks(fixture)
     if leaks:
         hints = ", ".join(f"{v[0]}… ({len(v)} chars)" for v in leaks)  # never print the values themselves

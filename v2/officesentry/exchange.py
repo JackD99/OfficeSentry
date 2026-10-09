@@ -42,6 +42,7 @@ READ_ONLY_CMDLETS = frozenset({
     "Get-MailboxPermission",
     "Get-MailboxStatistics",
     "Get-CASMailbox",
+    "Get-InboxRule",
     "Get-Recipient",
     "Get-RecipientPermission",
     "Get-OrganizationConfig",

@@ -2,7 +2,9 @@
 
 ``tests/fixtures/live_tenant.json`` comes from ``python -m officesentry live-test --record``
 against a Business Premium (no Teams) test tenant (Entra ID P1, no P2, synced from
-on-premises AD) with 11 Conditional Access policies, last on 9 Oct 2026. Names, emails,
+on-premises AD) with 11 Conditional Access policies, one excluding a group, a mail domain,
+a file shared with one person, a deleted file and an inbox rule that moves mail to a
+folder, last on 9 Oct 2026. Names, emails,
 phone numbers, domains and IDs are replaced; the response shapes are Microsoft's.
 Re-record when a collector starts asking for something new (DNS too: run it with
 ``--dns-over-https`` where plain DNS is blocked).
@@ -30,7 +32,7 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 9, 17, 5, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 9, 22, 26, tzinfo=UTC)
 
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
@@ -141,6 +143,21 @@ def test_delegated_access_leaves_out_exchange_system_entries(db, live):
     access = next(s for s in report.sections if s.title == "Every permission")
     text = str([s.rows for s in report.sections])
     assert access.rows and "NULL SID" not in text and "Discovery" not in text and "ExchangeOnline" not in text
+
+
+def test_inbox_rule_folder_names_on_real_data(db, live):
+    # Graph refuses to name the folder (no mail access); Get-InboxRule names it, matched by rule identity.
+    report = data_reports.build(db, live, "inbox-rules", RECORDED)
+    rules = next(s for s in report.sections if s.title == "All inbox rules")
+    assert [r[4] for r in rules.rows] == ["move to Quarantine; stop processing rules"]
+
+
+def test_conditional_access_exclusion_group_on_real_data(db, live):
+    snap = TenantSnapshot(db, live)
+    assert [g["members"] for g in snap.objects("conditional_access", "ca_group")] == [[]]  # an empty group
+    policies = next(s for s in data_reports.build(db, live, "conditional-access", RECORDED).sections
+                    if s.title == "Policies")
+    assert any(g["displayName"] in r[3] for r in policies.rows for g in snap.objects("conditional_access", "ca_group"))
 
 
 def test_first_collection_is_a_baseline(db, live):
