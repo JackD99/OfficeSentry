@@ -374,7 +374,7 @@ body.pdf .kpi .value { font-size: 17pt; }
 body.pdf .summary-text { margin-top: 0; }
 body.pdf .actions li { padding: 2.6mm 3.5mm 2.6mm 12mm; margin-bottom: 2mm; }
 body.pdf .actions li::before { left: 3.5mm; top: 2.6mm; width: 5.5mm; height: 5.5mm; line-height: 5.5mm; font-size: 8pt; }
-body.pdf .check, body.pdf .kpi, body.pdf .keep, body.pdf .control, body.pdf .actions li, body.pdf .tidy-item, body.pdf tr, body.pdf .verdict, body.pdf .callout, body.pdf .chart-card { break-inside: avoid; }
+body.pdf .kpi, body.pdf .keep, body.pdf .control, body.pdf .actions li, body.pdf .tidy-item, body.pdf tr, body.pdf .verdict, body.pdf .callout, body.pdf .chart-card { break-inside: avoid; }
 body.pdf .table-wrap { overflow: visible; }
 body.pdf thead { display: table-header-group; }
 body.pdf article.document, body.pdf article.document .cover.compact { page: doc; }
@@ -397,6 +397,11 @@ body.pdf .tidy-item:last-child { border-bottom: 1px solid var(--border); }
 /* A heading never ends a page: it keeps its intro and the first rows of its table. */
 body.pdf h2, body.pdf h3, body.pdf .section-intro, body.pdf .check-head { break-after: avoid; }
 body.pdf table { orphans: 3; widows: 3; }
+/* A long check card splits across pages rather than leaving most of a page empty: its heading, what to do
+   and the first rows stay together, the table header repeats, and each part keeps the card's border. */
+body.pdf .check { break-inside: auto; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+body.pdf .check .recommendation, body.pdf .check .check-summary { break-inside: avoid; break-after: avoid; }
+body.pdf .check .table-wrap { break-before: avoid; }
 body.pdf .legend-note { font-size: 7.5pt; color: var(--muted); margin-top: 2mm; }
 
 /* -- Browser-made PDF (no WeasyPrint): the same page, printed by the browser --- */
