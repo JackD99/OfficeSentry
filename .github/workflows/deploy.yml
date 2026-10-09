@@ -92,7 +92,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: env.DEPLOYS == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_sha || inputs.ref || 'main' }}
@@ -127,7 +127,7 @@ jobs:
             echo "OFFICESENTRY_COLLECT_CRON=0 3 1 1 *"
           } > v2/.env.demo
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         if: env.DEMO == 'true'
         with:
           python-version: '3.12'
