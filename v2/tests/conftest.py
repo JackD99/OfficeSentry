@@ -15,6 +15,15 @@ PASSWORD = "correct horse battery"
 PASSWORD_HASH = generate_password_hash(PASSWORD, method="pbkdf2:sha256:1")
 
 
+@pytest.fixture(autouse=True)
+def _roomy_disk(monkeypatch):
+    """The test machine's disk is whatever it is: report it 40% full, so no test sends a disk alert by chance.
+    tests/test_system_health.py sets its own figures."""
+    from officesentry import system_health
+
+    monkeypatch.setattr(system_health, "disk_usage", lambda path: (40.0, 60 * 2**30, 100 * 2**30))
+
+
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
     for var in ("SECRET_KEY", "ENCRYPTION_KEYS", "DATA_DIR"):

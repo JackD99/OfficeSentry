@@ -1,9 +1,11 @@
 """Every collector, check and report against responses recorded from a real tenant.
 
 ``tests/fixtures/live_tenant.json`` comes from ``python -m officesentry live-test --record``
-against a Business Premium test tenant (Entra ID P1, no P2) with 11 Conditional Access
-policies. Names, emails, phone numbers, domains and IDs are replaced; the response
-shapes are Microsoft's. Re-record when a collector starts asking for something new.
+against a Business Premium (no Teams) test tenant (Entra ID P1, no P2, synced from
+on-premises AD) with 11 Conditional Access policies, last on 9 Oct 2026. Names, emails,
+phone numbers, domains and IDs are replaced; the response shapes are Microsoft's.
+Re-record when a collector starts asking for something new (DNS too: run it with
+``--dns-over-https`` where plain DNS is blocked).
 """
 
 from datetime import UTC, datetime
@@ -28,71 +30,13 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 3, 17, 15, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 9, 17, 5, tzinfo=UTC)
 
-# Requests added since the recording, answered with Microsoft's documented response shape (here, a new
-# tenant's default policy). Delete an entry when the fixture is re-recorded; the test below says when.
-STAND_INS = {
-    "/beta/auditLogs/signIns": {
-        "@odata.context": "https://graph.microsoft.com/beta/$metadata#auditLogs/signIns", "value": []},
-    "/v1.0/policies/authenticationMethodsPolicy": {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#policies/authenticationMethodsPolicy",
-        "id": "authenticationMethodsPolicy", "displayName": "Authentication Methods Policy",
-        "description": "The tenant-wide policy that controls which authentication methods are allowed in the "
-                       "tenant, authentication method registration requirements, and self-service password reset "
-                       "settings",
-        "lastModifiedDateTime": "2026-03-22T18:43:07Z", "policyVersion": "1.5", "reconfirmationInDays": 0,
-        "policyMigrationState": "migrationComplete",
-        "registrationEnforcement": {"authenticationMethodsRegistrationCampaign": {
-            "snoozeDurationInDays": 1, "enforceRegistrationAfterAllowedSnoozes": True, "state": "default",
-            "excludeTargets": [], "includeTargets": [{"id": "all_users", "targetType": "group",
-                                                      "targetedAuthenticationMethod": "microsoftAuthenticator"}]}},
-        "reportSuspiciousActivitySettings": {"state": "default", "voiceReportingCode": 0,
-                                             "includeTarget": {"targetType": "group", "id": "all_users"}},
-        "systemCredentialPreferences": {"state": "default", "excludeTargets": [],
-                                        "includeTargets": [{"id": "all_users", "targetType": "group"}]},
-        "authenticationMethodConfigurations": [
-            {"@odata.type": "#microsoft.graph.fido2AuthenticationMethodConfiguration", "id": "Fido2",
-             "state": "enabled", "isSelfServiceRegistrationAllowed": True, "isAttestationEnforced": False,
-             "keyRestrictions": {"isEnforced": False, "enforcementType": "block", "aaGuids": []},
-             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False}],
-             "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethodConfiguration",
-             "id": "MicrosoftAuthenticator", "state": "enabled", "isSoftwareOathEnabled": False,
-             "featureSettings": {
-                 "displayAppInformationRequiredState": {
-                     "state": "default", "includeTarget": {"targetType": "group", "id": "all_users"},
-                     "excludeTarget": {"targetType": "group", "id": "00000000-0000-0000-0000-000000000000"}},
-                 "displayLocationInformationRequiredState": {
-                     "state": "default", "includeTarget": {"targetType": "group", "id": "all_users"},
-                     "excludeTarget": {"targetType": "group", "id": "00000000-0000-0000-0000-000000000000"}}},
-             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False,
-                                 "authenticationMode": "any"}], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.smsAuthenticationMethodConfiguration", "id": "Sms", "state": "disabled",
-             "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.voiceAuthenticationMethodConfiguration", "id": "Voice",
-             "state": "disabled", "isOfficePhoneAllowed": False, "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.emailAuthenticationMethodConfiguration", "id": "Email",
-             "state": "enabled", "allowExternalIdToUseEmailOtp": "default", "excludeTargets": [],
-             "includeTargets": [{"targetType": "group", "id": "all_users", "isRegistrationRequired": False}]},
-            {"@odata.type": "#microsoft.graph.softwareOathAuthenticationMethodConfiguration", "id": "SoftwareOath",
-             "state": "disabled", "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.temporaryAccessPassAuthenticationMethodConfiguration",
-             "id": "TemporaryAccessPass", "state": "disabled", "defaultLifetimeInMinutes": 60,
-             "defaultLength": 8, "minimumLifetimeInMinutes": 60, "maximumLifetimeInMinutes": 480,
-             "isUsableOnce": False, "includeTargets": [], "excludeTargets": []},
-            {"@odata.type": "#microsoft.graph.x509CertificateAuthenticationMethodConfiguration",
-             "id": "X509Certificate", "state": "disabled", "includeTargets": [], "excludeTargets": []},
-        ],
-    },
-    # The Entra ID recycle bin, empty as in a fresh test tenant.
-    "/v1.0/directory/deletedItems/microsoft.graph.user": {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users", "value": []},
-    "/v1.0/directory/deletedItems/microsoft.graph.group": {
-        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups", "value": []},
-}
-# Requests whose $select asks for fields added since the recording; the recorded response is served.
-NEW_FIELDS = frozenset({"/v1.0/domains"})
+# Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
+# $select asks for fields added since (the recorded response is served). Empty while the recording is current:
+# add an entry when a collector starts asking for something new, and re-record soon after.
+STAND_INS: dict[str, dict] = {}
+NEW_FIELDS: frozenset[str] = frozenset()
 
 
 # Replaying every collector takes a few seconds, and the tests below only read what it stored, so the
@@ -134,12 +78,8 @@ def live(db):
 
 def test_stand_ins_are_only_for_requests_not_recorded():
     """Once the fixture is re-recorded with these requests, delete them from STAND_INS and NEW_FIELDS."""
-    recorded = [replay.request_key(e["url"]) for e in FIXTURE["entries"] if e["api"] == "graph"]
-    paths = {path for path, _ in recorded}
-    assert not set(STAND_INS) & paths
-    for path in NEW_FIELDS:
-        selects = [dict(q).get("$select", "") for p, q in recorded if p == path]
-        assert selects and all("passwordValidityPeriodInDays" not in s for s in selects), path
+    recorded = {replay.request_key(e["url"])[0] for e in FIXTURE["entries"] if e["api"] == "graph"}
+    assert not set(STAND_INS) & recorded
 
 
 def _results(db, tenant):
@@ -164,10 +104,12 @@ def test_own_and_microsoft_apps_are_not_flagged(db, live):
     assert "Microsoft Graph Command Line Tools" not in names
 
 
-def test_empty_registration_report_falls_back_to_per_user_methods(db, live):
-    # On a newly licensed tenant userRegistrationDetails returns [], as recorded.
+def test_registration_report_on_real_data(db, live):
+    # The registration report now has a row per user (on 3 Oct it was still empty on this newly licensed
+    # tenant; the per-user fallback for that is covered with simulated data in test_identity_collectors.py).
     rows = TenantSnapshot(db, live).objects("mfa_registration", "mfa_registration")
-    assert rows and {r["source"] for r in rows} == {"per_user_methods"}
+    assert rows and {r["source"] for r in rows} == {"registration_report"}
+    assert sum(r["isMfaRegistered"] for r in rows) == 2
     results = _results(db, live)
     assert results["admin_mfa"].status == "pass"
     assert results["users_mfa_registered"].status == "fail"
@@ -247,24 +189,30 @@ def test_pages_and_downloads(client, db, live):
 
 
 def test_usage_reports_on_real_data(db, live):
-    # The recording's usage reports have one Business Standard user who only receives mail.
+    # One Business Premium user who receives mail and uses Excel and PowerPoint on Windows, and one with only
+    # Power Automate Free: nobody to move to a cheaper licence.
     snap = TenantSnapshot(db, live)
     people = [r for r in snap.objects("m365_usage", "user_usage") if r["products"]]
     assert len(people) == 2 and all(r["platforms"] is not None for r in people)
     report = data_reports.build(db, live, "licence-rightsizing", RECORDED)
-    [move] = report.sections[0].rows
-    assert move[1] == "Microsoft 365 Business Standard" and move[3] == "Convert to a shared mailbox"
+    assert not report.unavailable and report.sections[0].rows == []
     usage = data_reports.build(db, live, "usage", RECORDED)
     assert not usage.unavailable and usage.sections[0].rows[0][:2] == ["Email", 1]
+    office = next(s for s in usage.sections if s.title == "Office apps by platform")
+    assert {r[0] for r in office.rows} == {"Excel", "PowerPoint"}
 
 
 def test_sign_in_methods_on_real_data(db, live):
-    # The registration report was empty, so methods were read one person at a time.
     report = data_reports.build(db, live, "auth-methods", RECORDED)
     sections = {s.title: s for s in report.sections}
-    assert any("one person at a time" in n for n in report.notes)
+    assert not any("one person at a time" in n for n in report.notes)  # the registration report had everyone
     strongest = {row[0]: row[1] for row in sections["Strongest method"].rows}
     assert strongest["Phishing-resistant"] == 1 and strongest["None"] == 3
+    # Every method in Microsoft's real policy has a name, and Microsoft's newest method values are understood.
+    policy = [str(row[0]) for row in sections["Sign-in methods policy"].rows]
+    assert "Verified ID (Face Check)" in policy and "VerifiableCredentials" not in policy
+    registered = {str(row[0]): row[1] for row in sections["Methods registered"].rows}
+    assert registered["Synced passkey"] == "Phishing-resistant"
     strengths = {row[0][:5]: row[3] for row in sections["Authentication strengths in Conditional Access"].rows}
     assert strengths["CA001"] == "Yes" and strengths["CA002"] == "No"
     results = _results(db, live)
@@ -274,8 +222,7 @@ def test_sign_in_methods_on_real_data(db, live):
 
 
 def test_subscriptions_on_real_data(db, live):
-    # Business Premium (no Teams), Power Automate Free and a lapsed Business Standard trial. The subscriptions
-    # behind them and the users' licence assignment states were added by hand (see those entries' "note").
+    # Business Premium (no Teams), Power Automate Free and a suspended Business Standard trial.
     report = data_reports.build(db, live, "subscriptions", RECORDED)
     renewals = next(s for s in report.sections if s.title == "Renewals and expiry")
     assert (str(renewals.rows[0][0]), renewals.rows[0][1]) == ("Microsoft 365 Business Standard", "Suspended")

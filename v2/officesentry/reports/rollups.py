@@ -345,15 +345,16 @@ def _place(out: Section, columns: list[str], row: list, tenant_cell) -> list:
     return line
 
 
-def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None) -> AllRows:
+def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, label: str = "All tenants") -> AllRows:
     """Build the report for each tenant (with the same builders as its own page) and stack the rows.
 
     ``href(tenant)``, when given, is the tenant's own report page: the Tenant cell links to its table.
+    ``label`` names the tenants on downloads (a tenant group's name when the page shows one).
     """
     now = now or datetime.now(UTC)
     title, description, _collectors, _builder = data_reports.REPORTS[key]
     combined = DataReport(key, title, description,
-                          {"id": 0, "name": "All tenants", "tenant_ref": plural(len(tenants), "tenant")}, now)
+                          {"id": 0, "name": label, "tenant_ref": plural(len(tenants), "tenant")}, now)
     sections: dict[str, Section] = {}
     totals: Counter = Counter()
     latest: dict[str, str | None] = {}

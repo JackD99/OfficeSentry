@@ -92,6 +92,9 @@ def test_strength_tiers():
     # Method types read one user at a time name methods differently.
     assert authmethods.strength({"methodsRegistered": ["password", "phone"]}).phone_only
     assert authmethods.strength({"methodsRegistered": ["windowsHelloForBusiness"]}).phishing_resistant
+    # A passkey kept in a password manager, as the test tenant's registration report lists it.
+    synced = authmethods.strength({"methodsRegistered": ["passKeySynced"]})
+    assert synced.phishing_resistant and synced.labels == ["Synced passkey"]
     tap = authmethods.strength({"methodsRegistered": ["temporaryAccessPass"]})
     assert tap.strongest == authmethods.NO_SECOND_FACTOR
     assert authmethods.strength(None) is None

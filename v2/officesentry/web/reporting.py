@@ -21,6 +21,7 @@ from ..reports import monthly_review, summary
 from ..reports.data_reports import grouped as report_groups
 from ..text import plural
 from .access import roles_required, tenant_or_404, visible_tenants
+from .groups import group_aware, scoped_tenants
 
 bp = Blueprint("reporting", __name__)
 
@@ -191,12 +192,13 @@ def index():
 
 @bp.get("/reporting/<period>")
 @roles_required(*STAFF)
+@group_aware
 def queue(period: str):
     period = _period_or_404(period)
     show = request.args.get("show", "")
     if show not in FILTERS:
         show = ""
-    rows = month_end.queue(g.db, visible_tenants(g.db, g.user), period)
+    rows = month_end.queue(g.db, scoped_tenants(), period)
     counts = {"": len(rows), "mine": sum(r.reviewer == g.user["username"] for r in rows),
               "review": sum(r.state in ("draft", "in_review") for r in rows), "ready": sum(r.ready for r in rows)}
     shown = [r for r in rows if show == "" or (show == "mine" and r.reviewer == g.user["username"])
@@ -325,7 +327,7 @@ def review(period: str, tenant_id: int):
         "reporting_review.html", tenant=t, plan=plan, period=period, label=month_end.issued.period_label(period),
         report=report, verdict=summary.monthly(report).verdict, review=r, state=state, states=month_end.STATES,
         severe=severe, flags=flags, actions=month_end.actions(g.db, t["id"]), statuses=month_end.ACTION_STATUSES,
-        suggestions=[s for s in month_end.suggestions(report) if s["rule_key"] not in taken],
+        suggestions=[s for s in month_end.suggestions(g.db, t) if s["rule_key"] not in taken],
         notes=month_end.notes(g.db, t["id"], staff=True), visibility=month_end.VISIBILITY,
         frozen=month_end.frozen_files(g.db, t["id"], period), staff_users=staff_users,
         task=month_end.approval_task(g.db, t["id"], period), task_text=_task_text, pending=tasks.PENDING,
@@ -436,9 +438,8 @@ def add_action(tenant_id: int):
     title = request.form.get("title", "").strip()[:300]
     detail = request.form.get("detail", "").strip()[:1000]
     rule_key = request.form.get("rule_key", "").strip()[:100] or None
-    if rule_key and not title:  # picked from the failing checks: their wording
-        report = monthly_review.build(g.db, t)
-        found = next((s for s in month_end.suggestions(report) if s["rule_key"] == rule_key), None)
+    if rule_key and not title:  # picked from the suggested projects and quick fixes: their wording
+        found = next((s for s in month_end.suggestions(g.db, t) if s["rule_key"] == rule_key), None)
         if found is None:
             abort(400)
         title, detail = found["title"], detail or found["detail"]

@@ -3,7 +3,9 @@
 * **Report schedules** send one tenant a bundle of reports (the monthly review,
   the insurance evidence pack, any detail report) weekly, monthly or quarterly,
   at a time in the schedule's own timezone.
-* **Digests** send the MSP's own team one cross-tenant summary.
+* **Digests** send the MSP's own team one cross-tenant summary: the tenant
+  digest, or (``reports`` is ``["upcoming"]``) the Coming up email of what falls
+  due in the next 90 days (``upcoming.py``).
 * **Alert emails** go out when a collection opens findings at or above a
   severity: the same event (``alerts.after_sync``) that posts to Teams, Slack
   or a webhook. Failed ones are retried by ``tick()``.
@@ -33,10 +35,10 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import alerts, issued, mailer, schedule, store, tasks
+from . import alerts, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
 from .db import utcnow
 from .mailer import Email, MailError
-from .reports import branding, data_reports, evidence, export, monthly_review, workbook
+from .reports import branding, data_reports, evidence, export, monthly_review, tables, workbook
 from .rules import RULES
 from .text import day, plural
 
@@ -423,13 +425,17 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
                        attachments=attachments, inline=inline), [name for _, name in files])
 
 
-def digest_data(conn, frequency: str, now: datetime) -> dict:
-    """Cross-tenant summary for the MSP digest: the worst tenants first, and what's new."""
+def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None) -> dict:
+    """Cross-tenant summary for the MSP digest: the worst tenants first, and what's new.
+
+    ``group_id`` (the schedule's) keeps it to one tenant group; None is every tenant."""
     since = (now - DIGEST_LOOKBACK[frequency]).strftime(ISO)
+    group = tenant_groups.get(conn, group_id)
+    in_group = " AND id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else ""
     rows = []
     # Paused and archived tenants aren't being collected, so they stay out of the digest.
     for t in conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
-                          " ORDER BY name COLLATE NOCASE"):
+                          f"{in_group} ORDER BY name COLLATE NOCASE", {"group": group_id}):
         row = monthly_review.rollup_row(conn, t, now)
         counts = conn.execute(
             "SELECT"
@@ -446,13 +452,15 @@ def digest_data(conn, frequency: str, now: datetime) -> dict:
     new_findings = conn.execute(
         "SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
         " WHERE t.enabled = 1 AND t.archived_at IS NULL"
+        + (" AND t.id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else "") +
         " AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
         " AND (f.first_seen >= :since OR IFNULL(f.reopened_at, '') >= :since)"
         " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= :now))"
         " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key"
-        " LIMIT 10", {"since": since, "now": now.strftime(ISO)}).fetchall()
+        " LIMIT 10", {"since": since, "now": now.strftime(ISO), "group": group_id}).fetchall()
     return {
         "rows": rows,
+        "group": group["name"] if group else None,
         "since": since,
         "tenants": len(rows),
         "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in rows),
@@ -480,7 +488,8 @@ def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
                      "No" if r["stale_data"] else "Yes"])
     book.table("Tenants", header, rows, description="Every tenant, worst first")
     cover = workbook.Cover(
-        "Tenant digest", "All tenants", now or datetime.now(UTC), brand.display_name if brand else "",
+        "Tenant digest", data.get("group") or "All tenants", now or datetime.now(UTC),
+        brand.display_name if brand else "",
         accent=brand.accent if brand else "", intro=f"Since {day(data['since'])}.",
         facts=[("Tenants", data["tenants"], ""), ("Need attention", data["urgent"], "critical or high findings"),
                ("New critical or high findings", data["new_severe"], ""), ("Fixed", data["fixed"], ""),
@@ -493,14 +502,15 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
     now = now or datetime.now(UTC)
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
     label = period_label(schedule["frequency"], local)
-    data = digest_data(conn, schedule["frequency"], now)
+    data = digest_data(conn, schedule["frequency"], now, schedule["group_id"])
     look, inline = email_brand(conn)
-    subject = f"Tenant digest · {label}"
-    filename = f"tenant-digest-{local.strftime('%Y-%m-%d')}.xlsx"
+    subject = f"Tenant digest · {data['group']} · {label}" if data["group"] else f"Tenant digest · {label}"
+    filename = (f"tenant-digest-{tables.slug(data['group'])}-" if data["group"] else "tenant-digest-") + \
+        f"{local.strftime('%Y-%m-%d')}.xlsx"
     html = render(app, "emails/digest.html", subject=subject, d=data, label=label, **look,
                    message=schedule["message"], titles=RULE_TITLES, frequency=schedule["frequency"],
                    files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [])
-    lines = [f"Tenant digest for {label}", "",
+    lines = [f"Tenant digest for {label}" + (f": {data['group']}" if data["group"] else ""), "",
              f"Tenants: {data['tenants']}", f"Needing attention (critical or high): {data['urgent']}",
              f"New critical or high findings: {data['new_severe']}", f"Fixed: {data['fixed']}"]
     if data["avg_score"] is not None:
@@ -515,6 +525,70 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
     names = [filename] if schedule["include_xlsx"] else []
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
                        attachments=attachments, inline=inline), names)
+
+
+def is_upcoming(schedule) -> bool:
+    """A digest schedule that sends the Coming up email rather than the tenant digest."""
+    return schedule["kind"] == "digest" and upcoming.KEY in json.loads(schedule["reports"] or "[]")
+
+
+def schedule_titles(schedule) -> list[str]:
+    if schedule["kind"] == "report":
+        return report_titles(schedule["reports"])
+    return [upcoming.TITLE] if is_upcoming(schedule) else ["Tenant digest"]
+
+
+EMAIL_ROWS = 5  # items listed per window in the Coming up email; the page has the rest
+
+
+def upcoming_subject(counts: dict[str, int]) -> str:
+    """The answer first: what needs attention now and what's due within a month."""
+    now, soon = counts[upcoming.NOW], counts[upcoming.DAYS_30]
+    if not now and not soon:
+        later = counts[upcoming.DAYS_60] + counts[upcoming.DAYS_90]
+        return f"Coming up: {plural(later, 'item')} in the next 90 days" if later else \
+            "Coming up: nothing due in the next 90 days"
+    parts = ([f"{now} need{'s' if now == 1 else ''} attention now"] if now else []) + \
+        ([f"{soon} due within 30 days"] if soon else [])
+    return "Coming up: " + ", ".join(parts)
+
+
+def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None = None,
+                         attach: bool = True) -> Built:
+    """The Coming up email: everything due in the next 90 days across every active tenant, soonest first.
+
+    It goes to the MSP's team only (like the tenant digest), so it covers every tenant and Office Sentry's own
+    certificates."""
+    now = now or datetime.now(UTC)
+    local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
+    label = period_label(schedule["frequency"], local)
+    up = upcoming.collect(conn, conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
+                                             " ORDER BY name COLLATE NOCASE").fetchall(), now, ours=True)
+    counts = up.counts()
+    look, inline = email_brand(conn)
+    subject = upcoming_subject(counts)
+    filename = f"coming-up-{local.strftime('%Y-%m-%d')}.xlsx"
+    windows = [(w, up.in_window(w)) for w in upcoming.WINDOWS if counts[w]]
+    html = render(app, "emails/upcoming.html", subject=subject, up=up, counts=counts, windows=windows,
+                  label=label, frequency=schedule["frequency"], message=schedule["message"], shown=EMAIL_ROWS,
+                  w=upcoming, base_url=_cfg(app).base_url.rstrip("/"), **look,
+                  files=[("Everything coming up", filename)] if schedule["include_xlsx"] else [])
+    lines = [f"Coming up, {label}", ""]
+    if schedule["message"]:
+        lines += [schedule["message"], ""]
+    lines += [f"{w}: {counts[w]}" for w in upcoming.WINDOWS if w != upcoming.NO_DATE or counts[w]]
+    for w, items in windows:
+        lines += ["", f"{w}:"]
+        for i in items[:EMAIL_ROWS]:
+            when = f"{day(i.due.isoformat())} ({i.when})" if i.due else ""
+            lines.append(f"  {when + ' ' if when else ''}{i.tenant_name}: {i.title}. {i.detail}")
+        if len(items) > EMAIL_ROWS:
+            lines.append(f"  And {len(items) - EMAIL_ROWS} more in Office Sentry.")
+    to, bcc = split_recipients(contacts)
+    attachments = [(filename, XLSX, data_reports.to_xlsx(upcoming.report(up), brand=branding.load(conn)))] \
+        if attach and schedule["include_xlsx"] else []
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
+                       attachments=attachments, inline=inline), [filename] if schedule["include_xlsx"] else [])
 
 
 def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[alerts.Item]:
@@ -601,9 +675,11 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
             return built[-1]
         fallback = f"{tenant['name']} security report"
     else:
+        builder = build_upcoming_email if is_upcoming(schedule) else build_digest_email
+
         def build():
-            return build_digest_email(app, conn, schedule, contacts, now=now)
-        fallback = "Tenant digest"
+            return builder(app, conn, schedule, contacts, now=now)
+        fallback = schedule_titles(schedule)[0]
     email, transport, error = _attempt(conn, vault, build, schedule["kind"])
     # Everything the send changes is written at once, so a worker that stops after sending doesn't leave the
     # period looking unsent (and send it again).

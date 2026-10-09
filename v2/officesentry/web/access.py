@@ -10,8 +10,12 @@
 
 Roles:
   admin    everything, including users and app connections
-  analyst  view and refresh tenants they are granted (or all, if all_tenants)
-  client   view their granted tenants only
+  analyst  view and refresh tenants they are granted (or all, if all_tenants), one by one or
+           through a tenant group (every tenant in the group, including ones added later)
+  client   view their granted tenants only (never through a group)
+
+Grants are read here and nowhere else: ``visible_tenants`` and ``can_see_tenant``
+share ``_GRANTED``. Tenant groups otherwise only narrow lists of visible tenants.
 """
 
 from __future__ import annotations
@@ -62,15 +66,24 @@ def sees_all_tenants(user) -> bool:
     return user["role"] == "admin" or (user["role"] == "analyst" and bool(user["all_tenants"]))
 
 
+# Tenant ids granted to user :uid. Analysts also get every tenant in a group they were granted;
+# clients never do, so a tenant added to a group can't reach a client account by accident.
+_GRANTED = (
+    "SELECT tenant_id FROM user_tenants WHERE user_id = :uid"
+    " UNION SELECT m.tenant_id FROM user_tenant_groups ug"
+    " JOIN tenant_group_members m ON m.group_id = ug.group_id"
+    " WHERE ug.user_id = :uid AND :role = 'analyst'"
+)
+
+
 def visible_tenants(conn, user, archived: bool = False):
     """Tenants the user may see. Archived tenants are left out (only admins list them, with ``archived``)."""
     where = "" if archived and user["role"] == "admin" else " AND t.archived_at IS NULL"
     if sees_all_tenants(user):
         return conn.execute(f"SELECT t.* FROM tenants t WHERE 1 = 1{where} ORDER BY t.name COLLATE NOCASE").fetchall()
     return conn.execute(
-        "SELECT t.* FROM tenants t JOIN user_tenants ut ON ut.tenant_id = t.id"
-        f" WHERE ut.user_id = ?{where} ORDER BY t.name COLLATE NOCASE",
-        (user["id"],),
+        f"SELECT t.* FROM tenants t WHERE t.id IN ({_GRANTED}){where} ORDER BY t.name COLLATE NOCASE",
+        {"uid": user["id"], "role": user["role"]},
     ).fetchall()
 
 
@@ -80,7 +93,7 @@ def can_see_tenant(conn, user, tenant_id: int) -> bool:
     if sees_all_tenants(user):
         return True
     return conn.execute(
-        "SELECT 1 FROM user_tenants WHERE user_id = ? AND tenant_id = ?", (user["id"], tenant_id)
+        f"SELECT 1 WHERE :tid IN ({_GRANTED})", {"uid": user["id"], "role": user["role"], "tid": tenant_id}
     ).fetchone() is not None
 
 

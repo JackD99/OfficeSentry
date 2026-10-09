@@ -6,7 +6,7 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-10-09)
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1
 portal. Everything below is new compared with v1.
@@ -39,6 +39,10 @@ first, then upgrades it on start. New installs start with an empty database.
 ### Added
 
 - Client-ready monthly reviews, insurance evidence packs and recommended projects, as pages and branded PDFs.
+- Recommended projects are only work of half a day or more, with a rough estimate; smaller jobs are quick
+  fixes on each client's page and in the month-end review. Admin account hardening is now part of Identity
+  and Conditional Access, and Teams and groups governance part of Sharing, guests and Teams governance;
+  their Proposed, Agreed or Declined status and notes move with them.
 - Detail reports for identity, Exchange, SharePoint, OneDrive, Teams, devices and licences, each with
   filters, saved views and PDF, XLSX and CSV downloads.
 - History for every tenant: what changed month over month, per tenant and across all tenants.
@@ -46,7 +50,14 @@ first, then upgrades it on start. New installs start with an empty database.
 - Emailed reports, month-end review and approval, alerts to Teams, Slack, webhooks and email.
 - Tenant pause, archive and delete; connection health with plain-English fixes; national clouds (GCC High,
   DoD and China).
+- Tenant groups (Settings → Tenant groups) by tier, region, service level or anything else: a Group picker
+  narrows the dashboard, All tenants, What changed, the month-end queue and Client tenants (and their
+  downloads), a digest can cover one group, and an analyst can be granted every tenant in a group.
 - Two-step sign-in, server-side sessions, an activity log, backups and a `restore` command.
+- System status (Settings → System status) and system alerts: the team is emailed and the alert webhook posted
+  when the worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect.
+  `/health/ready` answers 503 for uptime monitors when the portal can't do its job, with every check as JSON
+  for a monitor holding the monitoring token ([v2/DEPLOY.md, "Is it working?"](v2/DEPLOY.md#is-it-working)).
 - The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
   pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Releases: a versioned image on GHCR for amd64 servers with an SBOM, build provenance and a

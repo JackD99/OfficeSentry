@@ -42,6 +42,8 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
   - A cross-tenant **digest** for your team, worst tenants first.
+  - A weekly **Coming up** email (and page) for your team: renewals and trials, expiring app secrets and
+    certificates, mailboxes filling up, DMARC still at p=none and accepted risks due in the next 90 days.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one tenant or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A tenant's first scan never emails.
@@ -56,6 +58,13 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   and optional HMAC signing secret are stored encrypted; only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
+- **System status and system alerts** (Settings → System status): whether the
+  worker runs, data is being collected, backups are recent and there's room on
+  the disk, with what to do about anything that isn't. The team is emailed and
+  the alert webhook posted when the worker stops, a backup fails, the disk is
+  over 85% full or most tenants fail to collect; once when it starts, daily
+  while it lasts and when it's fixed. `/health/ready` answers 503 for uptime
+  monitors when the portal can't do its job (DEPLOY.md, "Is it working?").
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
   grouped by area (identity, email, files, devices, tenant). Every table can be
   filtered by the values in it (or by age, for dates), sorted, and have columns
@@ -199,13 +208,16 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   listed. Backups and training are marked "Not assessed".
 - **Recommended projects** (`/projects` and `/tenants/<id>/projects`, admins
   and analysts): each client's failing checks and missing licences grouped
-  into the projects that fix them (Identity and Conditional Access, Admin
-  account hardening, Device management, Email security, Security licence
-  upgrade and more), worst first, with the findings behind each and the size
-  of the job. Account managers mark each one Proposed, Agreed or Declined with
-  a note (XLSX and CSV of the list), and download a client-facing proposal PDF
-  without the notes. Accepted risks don't count, and a project drops off once
-  the tenant is fixed.
+  into the projects that fix them (Identity and Conditional Access, Device
+  management, Email security, Windows upgrade, Security licence upgrade and
+  more), worst first, with the findings behind each, the size of the job and
+  a rough estimate. Only work of half a day or more is a project; smaller jobs
+  (and urgent small ones, like one admin without MFA) are listed as quick
+  fixes on the client's page and offered separately in the month-end review.
+  Account managers mark each project Proposed, Agreed or Declined with a note
+  (XLSX and CSV of the list), and download a client-facing proposal PDF
+  without the notes or estimates. Accepted risks don't count, and a project
+  drops off once the tenant is fixed.
 - **Client view**: client users land on a page that leads with their latest
   monthly review (page and PDF), then open recommendations with their status,
   key numbers, the other reports and who to contact at the MSP; they don't see
@@ -258,6 +270,24 @@ test tenant using `OFFICESENTRY_TEST_TENANT_ID`, `OFFICESENTRY_TEST_CLIENT_ID`
 and `OFFICESENTRY_TEST_CLIENT_SECRET`, stores the result as tenant "Live test"
 and prints each collector's outcome and every check. The secret is only for
 this command; the product signs in with a certificate.
+
+With `--record tests/fixtures/live_tenant.json` it also saves Microsoft's
+responses, with names, addresses, phone numbers, domains and IDs replaced, and
+the test suite replays them, so every collector, check and report runs on real
+Microsoft responses in CI. The recording comes from one Microsoft 365 Business
+Premium tenant (Entra ID P1, synced from on-premises AD, no Intune devices).
+These areas have no real recording and are tested with simulated data only:
+
+- **Entra ID P2 features**: risky users and sign-in risk (the test tenant
+  has no P2; Microsoft answers "not licensed").
+- **Per-user MFA states**: Office Sentry only reads them on tenants without
+  Entra ID P1.
+- **Sign-in methods read one person at a time**: only used when Microsoft's
+  registration report comes back empty, as it does on a newly licensed tenant.
+- **Intune device details**: the tenant has no enrolled devices, so the
+  device compliance and encryption checks have nothing to read.
+- **National clouds** (GCC High, DoD, China): there's no test tenant in
+  them; the endpoints come from Microsoft's documentation.
 
 ## Documentation
 
@@ -361,18 +391,24 @@ Create the first admin:
 
 Then:
 
-1. Create the app: `docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>`
-   (device sign-in as an admin of *your* tenant). It generates the
-   certificate, registers the app and saves the connection with its client
-   ID, so don't press *Generate certificate* as well: that would leave a
-   second connection marked *Needs client ID*.
-2. Or create it by hand: **App connection → Generate certificate**, then
-   follow the page. Make the app multi-tenant, upload the certificate (a
-   client secret won't work), add the redirect URI
-   `https://<your portal>/consent/callback` as a Web platform and paste its
-   client ID. Enter your Directory (tenant) ID with the client ID to check
-   the certificate straight away.
-3. **Add tenant**. The tenant's page shows a setup checklist that ticks itself
+1. Create the app: **Settings → App connection → Sign in to Microsoft**. The
+   page shows a code and Microsoft's link; sign in there as an admin of *your*
+   tenant who can create app registrations (Global Administrator, Application
+   Administrator or Cloud Application Administrator). Office Sentry generates
+   the certificate, registers the multi-tenant read-only app and saves the
+   connection with its client ID, then offers to add your first tenant. The
+   sign-in's token is used once, in memory, and never stored; the device code
+   is kept encrypted only while the page waits (`app_setup.py`).
+   `docker compose run --rm worker python -m officesentry create-app` does the
+   same from the command line. Both reuse a certificate you generated earlier
+   rather than making a second connection.
+2. Or create it by hand (say, if Conditional Access blocks device sign-in):
+   *Other ways to create the app* on the same page. Generate a certificate,
+   make the app multi-tenant, upload the certificate (a client secret won't
+   work), add the redirect URI `https://<your portal>/consent/callback` as a
+   Web platform and paste its client ID. Enter your Directory (tenant) ID with
+   the client ID to check the certificate straight away.
+3. **Add tenant** (or the form at the end of the wizard). The tenant's page shows a setup checklist that ticks itself
    off: grant admin consent (a Global Administrator of the tenant opens the
    link; a full collection is queued on return), assign Global Reader, first
    full collection, all permissions granted. The tenant's **Manage** tab says
@@ -395,6 +431,14 @@ Then:
   collected) or app connection, keep notes, **pause** it (no collection,
   emailed reports or alert emails; data stays) and **archive** it (also hidden
   from lists, dashboards, rollups, digests and its client users; restorable).
+- **Tenant groups** (*Settings*, *Tenant groups*) sort clients by tier, region,
+  service level or anything else; a tenant can be in several. Pick a group at
+  the top of the Tenants dashboard, All tenants, What changed, Month-end or
+  Client tenants to see only those clients, with downloads to match, and give
+  a digest one group instead of every tenant. Groups never show anyone more:
+  the only way a group grants access is an admin ticking it for an analyst on
+  their user page, which then covers every tenant in it, including ones added
+  later. Client accounts are never given tenants through a group.
 - **Offboard** walks through a final export, the client's side (remove Global
   Reader, delete the enterprise app) and what will be deleted, then deletes the
   tenant and everything stored for it after you type its name, optionally with
@@ -420,15 +464,16 @@ Commercial.
 China are separate Entra IDs: an app registered in commercial Entra can't sign
 in to them, and the other way round. For clients in one of those clouds:
 
-1. **App connection → Create another app connection**, with *Microsoft cloud*
-   set to that cloud. This generates a separate certificate.
-2. Register the app in that cloud's own admin centre (entra.microsoft.us for
-   GCC High and DoD, the 21Vianet Azure portal for China), from an account in
-   your tenant *in that cloud*, exactly as for the commercial app, and save
-   its client ID. Or skip step 1 and run `docker compose run --rm worker
-   python -m officesentry create-app --cloud gcc_high` (or `dod`, `china`)
-   with `--tenant` set to your tenant in that cloud: it creates the
-   certificate and the connection itself.
+1. **App connection → Create an app for another Microsoft cloud**, choose
+   that cloud and **Sign in to Microsoft** with an account in your tenant *in
+   that cloud*. Office Sentry creates that cloud's app and connection, with
+   its own certificate. (`docker compose run --rm worker python -m
+   officesentry create-app --cloud gcc_high`, or `dod`, `china`, does the
+   same from the command line.)
+2. Or register the app by hand in that cloud's own admin centre
+   (entra.microsoft.us for GCC High and DoD, the 21Vianet Azure portal for
+   China), exactly as for the commercial app, after generating a certificate
+   for that cloud under *Other ways to create the app*, and save its client ID.
 3. Add the tenant with the same cloud and that app connection. Its consent
    link opens on that cloud's sign-in page, and collection signs in to that
    cloud's Graph and Exchange.
@@ -500,6 +545,8 @@ officesentry/
   worker.py      queue runner, task threads, schedule, retention, heartbeat
   tasks.py       background tasks (approvals, report emails) with leases
   tenant_health.py  connection health and the onboarding checklist, from stored state
+  system_health.py  Office Sentry's own health: /health/ready and System status
+  system_alerts.py  emails and webhook posts when Office Sentry itself needs attention
   lifecycle.py   first collection, pause, archive and deleting a tenant
   web/           Flask app: access.py is the single authorization gate
 ```

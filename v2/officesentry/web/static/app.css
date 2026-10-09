@@ -268,7 +268,7 @@ details.help > summary { font-size: .875rem; }
 .settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
 .settings-nav a.active { background: var(--text); color: var(--surface); }
 
-/* -- Month-end review: suggestions from the failing checks, and the approve bar on phones ----------- */
+/* -- Month-end review: suggested projects and quick fixes, and the approve bar on phones ------------ */
 .action-row.suggestions { display: block; }
 .action-row.suggestions .label-sm { margin-top: 0; }
 .suggest-list { list-style: none; margin: 0; padding: 0; }
@@ -277,6 +277,7 @@ details.help > summary { font-size: .875rem; }
 .action-row .suggest-list form { display: flex; gap: 10px; align-items: center; padding: 7px 0; flex-wrap: nowrap; }
 .suggest-list .grow { flex: 1; min-width: 0; font-size: .875rem; }
 .suggest-list .pill, .suggest-list button { flex: none; }
+.suggest-list .effort { display: block; color: var(--muted); font-size: .8125rem; }
 .approve-bar { display: none; }
 @media (max-width: 960px) {
   .approve-bar { display: flex; position: sticky; bottom: 0; z-index: 5; gap: 12px; align-items: center; justify-content: space-between; margin: 0 -16px -48px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -8px 12px -10px rgba(16, 24, 40, .25); }
@@ -1000,3 +1001,75 @@ td.row-action { min-width: 150px; }
 .progress-box progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; transition: width .4s ease; }
 .progress-box progress::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
 .progress-box .failures { margin: 4px 0 0; padding-left: 18px; }
+
+/* -- Tenant groups (_groups.html, groups.html) ---------------------------------- */
+/* The group picker in a page head: one compact control, highlighted while a group is chosen. */
+.group-picker { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 2px 4px 2px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.group-picker label { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: .8125rem; font-weight: 500; white-space: nowrap; }
+.group-picker label .icon { width: 15px; height: 15px; color: var(--decor); }
+.group-picker select { width: auto; max-width: 240px; margin: 0; padding: 4px 6px; border: 0; background: transparent; font-weight: 600; color: var(--text); }
+.group-picker.on { border-color: var(--accent); background: var(--accent-soft); }
+.group-picker.on label, .group-picker.on label .icon { color: var(--accent); }
+.group-picker .clear { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: var(--accent); font-size: 1.05rem; line-height: 1; }
+.group-picker .clear:hover { background: var(--accent); color: var(--accent-text); text-decoration: none; }
+.month-nav { flex-wrap: wrap; }
+.group-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.group-chips .chip { padding: 0 8px; font-size: .75rem; font-weight: 500; background: var(--sunken); color: var(--text-2); }
+td .group-chips { margin-top: 4px; }
+.group-list .count { color: var(--muted); }
+
+
+.member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; max-height: 420px; overflow-y: auto; padding: 4px 2px; }
+.member-grid .check { margin: 0; padding: 4px 0; }
+.member-grid .check .sub { display: block; }
+.member-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 8px; }
+.member-tools .search { flex: 1; min-width: 180px; margin: 0; }
+@media (max-width: 640px) {
+  .page-head .actions .group-picker, .month-nav .group-picker { width: 100%; }
+  .group-picker select { flex: 1; max-width: none; }
+  .member-grid { max-height: none; grid-template-columns: 1fr; }
+}
+.group-help { margin: 0; padding-left: 18px; color: var(--text-2); }
+.group-help li + li { margin-top: 6px; }
+/* -- Coming up (upcoming.html) ---------------------------------------------------- */
+.callout.ok { background: var(--ok-soft); }
+.callout.ok > .icon { color: var(--ok); }
+.callout.lead-answer { font-size: .9375rem; padding: 14px 16px; }
+.callout.lead-answer.bad > .icon { color: var(--bad); }
+.callout.lead-answer.warn > .icon { color: var(--warn); }
+.callout.lead-answer .small { margin-top: 4px; color: var(--text-2); }
+.type-counts { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: -8px 0 16px; }
+.type-counts .pill { font-weight: 500; padding: 3px 10px; }
+.type-counts a.pill:hover { background: var(--accent-soft); color: var(--accent); text-decoration: none; }
+/* -- Setup wizard (App connection: sign in to Microsoft and create the app) ------------------------- */
+.wizard .setup-steps { padding: 0; margin: 0; }
+.wizard .card-head { margin-bottom: 4px; }
+.wizard .card-foot { border-top: 1px solid var(--border); margin: 8px -20px -20px; padding: 14px 20px; }
+.wizard .card-foot details.other-ways { margin: 0; }
+.other-ways ol { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.other-ways p { margin: 10px 0 0; }
+.setup-start .form-actions { margin-top: 0; }
+.setup-start details { margin-top: 10px; }
+.setup-start .form-row { margin-top: 10px; }
+.device-code { margin-top: 4px; padding: 16px; border-radius: var(--radius-sm); background: var(--sunken); max-width: 620px; }
+.device-code .code-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0 6px; }
+.device-code .user-code { font-size: 1.75rem; font-weight: 700; letter-spacing: .12em; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 14px; user-select: all; }
+.device-code .step-action { margin: 4px 0 12px; }
+.wait-line { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 4px; color: var(--text); font-weight: 500; }
+.spinner { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+.first-tenant .hint { color: var(--muted); font-size: .8125rem; }
+.first-tenant .form-row { margin-bottom: 8px; }
+@media (max-width: 640px) {
+  .device-code { padding: 12px; }
+  .device-code .user-code { font-size: 1.375rem; letter-spacing: .08em; }
+  .device-code .step-action .btn { width: 100%; justify-content: center; }
+}
+/* System status (system_status.html) */
+.callout.ok { background: var(--ok-soft); }
+.system-attention .callout .fix { display: block; margin-top: 2px; }
+.tile .value .unit { font-size: .875rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.recent-system-alerts { padding: 0 20px 8px; }
+.recent-system-alerts > li { flex-wrap: wrap; gap: 4px 10px; }
+#monitoring .secret { text-align: left; font-size: .8125rem; }
+#monitoring .form-actions form { display: inline; }

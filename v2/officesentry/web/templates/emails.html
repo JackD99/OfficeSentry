@@ -15,8 +15,8 @@
 {% endif %}
 
 <div class="tiles">
-  {{ next_tile(upcoming, (tenants[upcoming.tenant_id].name if upcoming.tenant_id else 'Tenant digest') if upcoming else '') }}
-  <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests)|selectattr('enabled')|list|length }}</div>
+  {{ next_tile(upcoming, (tenants[upcoming.tenant_id].name if upcoming.tenant_id else upcoming.titles[0]) if upcoming else '') }}
+  <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests + coming_up)|selectattr('enabled')|list|length }}</div>
     <div class="foot">{{ schedules|map(attribute='tenant_id')|unique|list|length }} of {{ tenants|length }} tenants covered</div></div>
   <div class="tile"><div class="label">Sent in the last 30 days</div><div class="value">{{ sent }}</div>
     <div class="foot">{{ tenant_alerts }} tenant alert{{ 's' if tenant_alerts != 1 }} on</div></div>
@@ -63,6 +63,17 @@
     {% else %}
     <p class="muted small">One email for your team with every tenant ranked worst first: what needs attention, what's new and what's fixed.</p>
     <a class="btn primary sm" href="{{ url_for('email.new_digest') }}">{{ icon('plus') }} Set up a digest</a>
+    {% endif %}
+  </section>
+
+  <section class="card" id="coming-up">
+    <div class="card-head"><h2>{{ icon('calendar') }} Coming up</h2></div>
+    {% if coming_up %}
+    <ul class="list sched-list compact-sched">{% for s in coming_up %}{{ schedule_item(s) }}{% endfor %}</ul>
+    <a class="btn sm" href="{{ url_for('email.new_upcoming') }}">{{ icon('plus') }} Another one</a>
+    {% else %}
+    <p class="muted small">A weekly email for your team of what falls due in the next 90 days: renewals and trials, expiring app secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks to review. <a href="{{ url_for('upcoming.index') }}">See it now</a>.</p>
+    <a class="btn primary sm" href="{{ url_for('email.new_upcoming') }}">{{ icon('plus') }} Set up the weekly email</a>
     {% endif %}
   </section>
 

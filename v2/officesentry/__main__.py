@@ -73,21 +73,22 @@ def cmd_setup_link(args, cfg):
 
 
 def cmd_create_app(args, cfg):
-    """Generate a certificate and create the multi-tenant read-only app (device sign-in)."""
+    """Create the multi-tenant read-only app (device sign-in). The portal's App connection page does the same."""
     from . import clouds
-    from .certs import generate_certificate
-    from .entra import create_app_registration, device_code_token
+    from .app_setup import register_app
+    from .entra import SignInError, device_code_token
 
     conn = connect(cfg.db_path)
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
-    cert = generate_certificate(f"Office Sentry - {args.name}"[:64])
     cloud = clouds.get(args.cloud)
     print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can create app registrations.")
     token = device_code_token(args.tenant, print, cloud.key)
     redirect_uri = f"{cfg.base_url}/consent/callback"
-    app = create_app_registration(token, cert.cert_pem, redirect_uri, display_name=args.name, cloud=cloud.key)
-    conn_id = store.create_connection(conn, vault, args.name, cert, client_id=app["appId"], cloud=cloud.key)
+    try:
+        conn_id, app = register_app(conn, vault, token, redirect_uri, args.name, cloud.key)
+    except SignInError as exc:
+        sys.exit(str(exc))
     audit(conn, "cli", "connection_created", detail=f"{args.name} {app['appId']}")
     print(f"Created app {app['appId']} and app connection #{conn_id}.")
     print("Next: add tenants in the portal and send each tenant admin its consent link.")
@@ -99,6 +100,7 @@ ENCRYPTED_COLUMNS = (
     ("app_connections", "id", "next_key_enc"),  # a replacement certificate's key, during rollover
     ("users", "id", "totp_secret_enc"),
     ("users", "id", "totp_pending_enc"),
+    ("setup_sign_ins", "id", "device_code_enc"),  # the setup wizard's device code, for up to 15 minutes
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.
@@ -200,12 +202,18 @@ def cmd_backup(args, cfg):
     """Write a consistent copy of the database, safe while the portal is running."""
     from pathlib import Path
 
-    from .backups import backup
+    from .backups import backup, record_status
 
+    # The outcome goes in backup-status.json for the health check and the "backup failed" alert.
     try:
         dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
     except OSError as exc:
+        record_status(cfg.data_dir, "local", False, f"No backup made: {exc.strerror or exc}.")
         sys.exit(f"No backup made: {exc.strerror or exc}.")
+    except Exception as exc:  # a damaged database, say: record it, then fail loudly as before
+        record_status(cfg.data_dir, "local", False, f"No backup made: {type(exc).__name__}: {exc}")
+        raise
+    record_status(cfg.data_dir, "local", True, file=dest)
     print(f"Saved {dest}" + (f" (removed {plural(len(old), 'older backup')})" if old else ""))
     print("Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
           " without it the stored certificates can't be decrypted.")
@@ -297,7 +305,7 @@ def cmd_live_test(args, cfg):
     from .livetest import run
 
     sys.exit(run(cfg, args.collector or None, Path(args.out) if args.out else None,
-                 Path(args.record) if args.record else None, args.connection))
+                 Path(args.record) if args.record else None, args.connection, args.dns_over_https))
 
 
 def main(argv=None):
@@ -374,6 +382,8 @@ def main(argv=None):
     live.add_argument("--connection", type=int,
                       help="app connection to link the tenant to (default: the only one, if there's one)")
     live.add_argument("--record", help="save the responses, scrubbed of names, emails and IDs, as a test fixture")
+    live.add_argument("--dns-over-https", action="store_true",
+                      help="look DNS records up over HTTPS, where this machine's DNS is blocked")
     live.set_defaults(func=cmd_live_test)
 
     args = parser.parse_args(argv)

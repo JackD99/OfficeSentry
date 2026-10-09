@@ -2,6 +2,7 @@
 
 import copy
 import json
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from urllib.parse import parse_qs, urlsplit
 
@@ -206,9 +207,11 @@ def test_mail_report_pages_tabs_and_xlsx(client, db, tenant):
 
 def _legacy_rows():
     rows = []
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     for i, client in enumerate(LEGACY_CLIENTS):
         for j in range(3):
-            rows.append({"id": f"l{i}-{j}", "createdDateTime": f"2026-09-{10 + j * 7:02d}T{i:02d}:00:00Z",
+            when = now - timedelta(days=2 + j * 9, hours=i)
+            rows.append({"id": f"l{i}-{j}", "createdDateTime": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
                          "userPrincipalName": ["ann@x.com", "info@x.com"][(i + j) % 2], "clientAppUsed": client,
                          "ipAddress": f"203.0.113.{i}", "appDisplayName": f"App {j}",
                          "location": {"countryOrRegion": ["GB", "RU", "FR"][j]},
@@ -217,14 +220,20 @@ def _legacy_rows():
 
 
 def _legacy_log(rows, fail):
-    """A fake /v1.0/auditLogs/signIns that filters on clientAppUsed and fails when ``fail(clients)``."""
+    """A fake /v1.0/auditLogs/signIns that filters on time and clientAppUsed and fails when
+    ``fail(clients, days)``, ``days`` being how long the query's time range is."""
     def handler(request):
         flt = parse_qs(urlsplit(request.url).query)["$filter"][0]
-        clients = [c.split("'")[1] for c in flt.split(" or ")]
-        if fail(clients):
+        times, _, ors = flt.partition(" and (")
+        clients = [c.split("'")[1] for c in ors.split(" or ")]
+        bounds = dict(c.split(" ")[1:] for c in times.split(" and "))
+        start = datetime.fromisoformat(bounds["ge"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(bounds["lt"].replace("Z", "+00:00")) if "lt" in bounds else datetime.now(UTC)
+        if fail(clients, (end - start).total_seconds() / 86400):
             return 504, {}, json.dumps({"error": {"code": "GatewayTimeout", "message": "Request timed out"}})
-        match = sorted((r for r in rows if r["clientAppUsed"] in clients), key=lambda r: r["createdDateTime"],
-                       reverse=True)
+        match = sorted((r for r in rows if r["clientAppUsed"] in clients and bounds["ge"] <= r["createdDateTime"]
+                        and ("lt" not in bounds or r["createdDateTime"] < bounds["lt"])),
+                       key=lambda r: r["createdDateTime"], reverse=True)
         return 200, {}, json.dumps({"value": match})
     responses.add_callback(responses.GET, f"{GRAPH_ROOT}/v1.0/auditLogs/signIns", callback=handler,
                            content_type="application/json")
@@ -241,25 +250,34 @@ def _legacy_run(db, tenant_id):
 def test_legacy_signins_split_a_timed_out_filter_and_get_the_same_rows(db, two_tenants):
     alpha, bravo = two_tenants
     rows = _legacy_rows()
-    _legacy_log(rows, fail=lambda clients: False)
+    _legacy_log(rows, fail=lambda clients, days: False)
     base_id, status = _legacy_run(db, alpha)
     assert status == "succeeded" and len(responses.calls) == 1
     expected = store.run_objects(db, base_id, "legacy_signin")
 
-    # The 13-client OR filter times out; anything over 4 clients does too, so it's split twice.
+    # As on the test tenant: 30 days time out, a week answers. Split in time, the rows are the same.
     responses.reset()
-    _legacy_log(rows, fail=lambda clients: len(clients) > 4)
+    _legacy_log(rows, fail=lambda clients, days: days > 8)
     run_id, status = _legacy_run(db, bravo)
     assert status == "succeeded"
     assert store.run_objects(db, run_id, "legacy_signin") == expected
+    assert len(responses.calls) == 2 + 2 * (2 + 1 + 1)  # 30 days, each 15 (newest first), their 7.5-day halves
     assert all(c.request.method == "GET" for c in responses.calls)
+
+    # Even a day times out with all 13 clients: those days are split by client too.
+    db.execute("DELETE FROM runs WHERE tenant_id = ?", (bravo,))
+    responses.reset()
+    _legacy_log(rows, fail=lambda clients, days: len(clients) > 4)
+    run_id, status = _legacy_run(db, bravo)
+    assert status == "succeeded"
+    assert store.run_objects(db, run_id, "legacy_signin") == expected
 
 
 @responses.activate
 def test_legacy_signins_leave_out_a_client_that_keeps_failing(db, two_tenants):
     alpha, bravo = two_tenants
     rows = _legacy_rows()
-    _legacy_log(rows, fail=lambda clients: len(clients) > 1 or clients == ["IMAP4"])
+    _legacy_log(rows, fail=lambda clients, days: len(clients) > 1 or clients == ["IMAP4"])
     run_id, status = _legacy_run(db, alpha)
     assert status == "partial"
     clients = {r["client"] for r in store.run_objects(db, run_id, "legacy_signin")}
@@ -268,6 +286,36 @@ def test_legacy_signins_leave_out_a_client_that_keeps_failing(db, two_tenants):
     assert "timed out for these clients" in error and "IMAP4" in error
 
     responses.reset()
-    _legacy_log(rows, fail=lambda clients: True)
+    _legacy_log(rows, fail=lambda clients, days: True)
     run_id, status = _legacy_run(db, bravo)
     assert status == "failed" and store.run_objects(db, run_id, "legacy_signin") == []
+
+
+@responses.activate
+def test_legacy_signins_stop_splitting_when_the_log_is_too_slow(db, two_tenants, monkeypatch):
+    from officesentry.collectors import sign_ins
+
+    alpha, bravo = two_tenants
+    rows = _legacy_rows()
+    _legacy_log(rows, fail=lambda clients, days: True)
+    run_id, status = _legacy_run(db, alpha)
+    assert status == "failed"
+    # Each query is tried twice (one retry), not seven times.
+    assert len(responses.calls) % 2 == 0 and all(c.response.status_code == 504 for c in responses.calls)
+
+    # The time limit starts at the first failure; once it's gone, the ranges left aren't asked for.
+    now = [0.0]
+
+    def clock():
+        now[0] += sign_ins.FALLBACK_SECONDS / 4
+        return now[0]
+    monkeypatch.setattr(sign_ins, "clock", clock)
+    responses.reset()
+    _legacy_log(rows, fail=lambda clients, days: days > 8)
+    run_id, status = _legacy_run(db, bravo)
+    assert status == "partial"
+    found = store.run_objects(db, run_id, "legacy_signin")
+    # The newest 15 days were read (each client's sign-ins 2 and 11 days ago); the older 15 were given up on.
+    assert sum(r["succeeded"] + r["failed"] for r in found) == 2 * len(LEGACY_CLIENTS)
+    error = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
+    assert "timed out for these clients" in error

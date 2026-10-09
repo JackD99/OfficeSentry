@@ -167,10 +167,11 @@ legacy sign-in, email authentication, forwarding, logging, leavers, apps, sharin
 
 **Projects** turns each client's findings into the projects an account manager can sell: no Conditional Access
 becomes an *Identity and Conditional Access* project, unencrypted laptops a *Device management* one, missing
-Business Premium features a *Security licence upgrade*, and so on. Every client's recommendations sit in one list,
-worst first, with what was found, how big the job is and where it stands (suggested, proposed, agreed or declined,
-with a note). Each client's page downloads a branded proposal PDF to send them. A project drops off by itself
-once the tenant is fixed.
+Business Premium features a *Security licence upgrade*, and so on. A project is half a day's work or more; anything
+smaller, like registering MFA for one admin, is a quick fix the team just does, listed on the client's page. Every
+client's recommendations sit in one list, worst first, with what was found, how big the job is, a rough estimate
+and where it stands (suggested, proposed, agreed or declined, with a note). Each client's page downloads a branded
+proposal PDF to send them. A project drops off by itself once the tenant is fixed.
 
 <table>
   <tr>
@@ -252,11 +253,11 @@ kept and how to remove access. Send it with the consent link.
 Office Sentry runs as two containers (the portal and a worker) from one image, with everything stored in one
 Docker volume.
 
-Download `docker-compose.yml`, `Caddyfile` and `.env.example` from the newest
+Download `docker-compose.yml`, `Caddyfile` and `env.example` from the newest
 [release](https://github.com/JackD99/OfficeSentry/releases) into a folder on a Linux server with Docker, then:
 
 ```bash
-cp .env.example .env          # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
+cp env.example .env           # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
 docker compose --profile https up -d
 ```
 
@@ -268,18 +269,13 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
 
 1. Run `docker compose logs web` and open the link on the line starting **No admin account yet** to create the
    first admin (with two-step sign-in).
-2. Create the multi-tenant, read-only app in your own Entra tenant:
-
-   ```bash
-   docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>.onmicrosoft.com
-   ```
-
-   It prints a code: open the link it shows, enter the code and sign in as an admin of **your own** (MSP) tenant
-   who can create app registrations. It makes the certificate, registers the app and saves both, so **App
-   connection** then shows one connection marked *Ready*. Don't press *Generate certificate* first; that is only
-   for creating the app by hand, as the page describes.
-3. **Add tenant** and follow its checklist: a Global Administrator of the client's tenant grants consent, you
-   assign Global Reader, and the first collection runs.
+2. Open **Settings → App connection** and press **Sign in to Microsoft**. The page shows a code and Microsoft's
+   link: enter the code there and sign in as an admin of **your own** (MSP) tenant who can create app
+   registrations. Office Sentry then creates its multi-tenant, read-only app with a certificate and saves it, with
+   nothing to type on the server. (`docker compose run --rm worker python -m officesentry create-app` does the
+   same from the command line.)
+3. Add your first tenant on the same page and follow its checklist: a Global Administrator of the client's
+   tenant grants consent, you assign Global Reader, and the first collection runs.
 
 Stuck? [Troubleshooting](v2/docs/troubleshooting.md) covers the common errors, such as `AADSTS50011` on the
 consent page, mailboxes failing without Global Reader and the worker not running.

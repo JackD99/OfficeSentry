@@ -104,7 +104,8 @@ def test_every_page_opens_for_the_demo_user(demo_app):
         if "GET" not in rule.methods or rule.arguments or rule.endpoint == "static":
             continue
         resp = client.get(rule.rule)
-        assert resp.status_code < 500, rule.endpoint
+        # /health/ready answers 503 by design here: the demo has no worker.
+        assert resp.status_code < 500 or rule.endpoint == "health_ready", rule.endpoint
 
 
 def test_real_portals_are_unaffected(app, client, db, two_tenants):

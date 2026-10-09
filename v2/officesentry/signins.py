@@ -10,6 +10,8 @@ counts as "unusual" is decided in one place and applies to stored data too.
 
 from __future__ import annotations
 
+import re
+
 from .snapshot import TenantSnapshot
 
 WINDOW_DAYS = 7
@@ -35,6 +37,7 @@ INTERRUPTS = {
 }
 FAILURES = {
     50005: "Blocked: the device platform isn't supported by Conditional Access",
+    50011: "The app sent the sign-in back to an address it isn't set up with (a misconfigured app)",
     50020: "The account from another organisation isn't a guest in this tenant",
     50034: "No such account in this tenant",
     50053: "Locked out: too many wrong passwords (smart lockout), or the address is known to be malicious",
@@ -98,7 +101,9 @@ def meaning(error_code, reason=None) -> str:
     text = INTERRUPTS.get(n) or FAILURES.get(n)
     if text:
         return text
-    if isinstance(reason, str) and reason.strip() and reason.strip().lower() != "other.":
+    # Microsoft's text sometimes arrives as an unfilled template ("The {redirectTerm} '{replyAddress}' ...").
+    if isinstance(reason, str) and reason.strip() and reason.strip().lower() != "other." \
+            and not re.search(r"\{\w+\}", reason):
         return reason.strip()
     return f"Error {n}" if n > 0 else "Unknown error"
 

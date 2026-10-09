@@ -37,6 +37,13 @@ SKU_NAMES = {
     "MCOEV": "Teams Phone Standard",
     "MCOPSTN1": "Domestic Calling Plan",
     "Microsoft_365_Copilot": "Microsoft 365 Copilot",
+    "FLOW_FREE": "Power Automate Free",
+    # The editions sold without Teams. Microsoft's part numbers for them are irregular, spaces included.
+    "Microsoft_365_ Business_ Premium_(no Teams)": "Microsoft 365 Business Premium (no Teams)",
+    "O365_BUSINESS_PREMIUM_NOTEAMS": "Microsoft 365 Business Standard (no Teams)",
+    "Microsoft_365_Business_Standard_EEA_(no_Teams)": "Microsoft 365 Business Standard EEA (no Teams)",
+    "Microsoft_365_Business_Premium_EEA_(no_Teams)": "Microsoft 365 Business Premium EEA (no Teams)",
+    "Microsoft_365_Business_Basic_EEA_(no_Teams)": "Microsoft 365 Business Basic EEA (no Teams)",
 }
 
 # Free or trial SKUs that are never "waste", however many units are unassigned.
@@ -241,6 +248,13 @@ def assignments(user: dict) -> dict[str, Assignment] | None:
                                             s.get("updated") if isinstance(s.get("updated"), str) else None))
         if state in ("Active", "ActiveWithError"):
             a.active = True
+    assigned = user.get("skuIds")
+    if isinstance(assigned, list):
+        # Microsoft keeps an "Active" state for a licence that is no longer assigned (seen on the test tenant, for a
+        # SKU the tenant no longer has): it isn't held, and without its subscription it can't even be named.
+        for sid in [sid for sid, a in out.items() if sid not in assigned and a.active and a.direct
+                    and not a.groups and not a.errors]:
+            del out[sid]
     for sid in user.get("skuIds") or []:  # assigned, so it works whatever the states say
         if isinstance(sid, str):
             out.setdefault(sid, Assignment(sid, direct=True)).active = True

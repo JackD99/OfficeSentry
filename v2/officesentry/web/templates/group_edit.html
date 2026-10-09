@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}{{ group.name }} · Tenant groups{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('groups.index') }}">Tenant groups</a><span>/</span><span>{{ group.name }}</span></div>
+<div class="page-head"><div><h1>{{ group.name }}</h1>
+  <div class="sub">{{ chosen|length|plural('tenant') }}{% if group.category %} · {{ group.category }}{% endif %}</div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('tenants.dashboard', group=group.id) }}">{{ icon('eye') }} Show this group on the dashboard</a></div></div>
+
+{% if analysts %}
+<div class="callout">{{ icon('users') }}<span class="grow"><strong>{{ analysts|length|plural('analyst') }} can see every tenant in this group:</strong> {{ analysts|join(', ') }}.
+  Tenants you add here become visible to them straight away, and tenants you remove are hidden from them.</span></div>
+{% endif %}
+
+<form method="post" class="grid-main">
+  {{ csrf() }}
+  <section class="card">
+    <div class="card-head"><h2>Tenants in this group</h2><span class="meta" id="member-count">{{ chosen|length }} of {{ tenants|length }} ticked</span></div>
+    {% if tenants %}
+    <div class="member-tools">
+      <input class="search" type="search" id="member-filter" placeholder="Filter tenants…" aria-label="Filter tenants">
+      <button type="button" class="sm ghost" data-tick="1">Tick shown</button>
+      <button type="button" class="sm ghost" data-tick="0">Untick shown</button>
+    </div>
+    <div class="member-grid" id="members">
+      {% for t in tenants %}
+      <label class="check" data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}"><input type="checkbox" name="tenants" value="{{ t.id }}"{% if t.id in chosen %} checked{% endif %}>
+        <span>{{ t.name }}{% if t.archived_at %} <span class="faint small">(archived)</span>{% endif %}
+          {% set elsewhere = others[t.id]|rejectattr('id', 'equalto', group.id)|list %}
+          {% if elsewhere %}<span class="sub faint small">Also in {{ elsewhere|map(attribute='name')|join(', ') }}</span>{% endif %}</span></label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No tenants yet. Add tenants first, then put them in groups.</p>
+    {% endif %}
+  </section>
+
+  <div>
+    <section class="card">
+      <h2>Details</h2>
+      <label>Name <input name="name" value="{{ group.name }}" maxlength="80" required autocomplete="off"></label>
+      <label>Category <span class="faint">(optional)</span>
+        <input name="category" value="{{ group.category }}" maxlength="40" list="group-categories" placeholder="Tier, Region, Service level…" autocomplete="off"></label>
+      <datalist id="group-categories">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
+      <label>Description <span class="faint">(optional)</span><input name="description" value="{{ group.description }}" maxlength="300" autocomplete="off"></label>
+      <div class="form-actions"><button class="primary">Save group</button><a class="btn ghost" href="{{ url_for('groups.index') }}">Cancel</a></div>
+    </section>
+  </div>
+</form>
+
+<section class="card narrow-lg danger-zone">
+  <h2>Delete group</h2>
+  <p class="muted small">The tenants stay; only the group goes.
+    {% if usage.digests %}{{ usage.digests|plural('digest') }} covering this group will cover every tenant instead.{% endif %}
+    {% if usage.analysts %}{{ usage.analysts|plural('analyst') }} granted this group will stop seeing its tenants, unless granted them another way.{% endif %}</p>
+  <form method="post" action="{{ url_for('groups.delete', group_id=group.id) }}" data-confirm="Delete the group {{ group.name }}? Its tenants are kept.">
+    {{ csrf() }}<button class="danger">Delete {{ group.name }}</button>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var grid = document.getElementById('members');
+  if (!grid) return;
+  var count = document.getElementById('member-count');
+  var boxes = grid.querySelectorAll('input[type=checkbox]');
+  function recount() {
+    var n = 0; boxes.forEach(function (b) { if (b.checked) n++; });
+    count.textContent = n + ' of ' + boxes.length + ' ticked';
+  }
+  grid.addEventListener('change', recount);
+  document.getElementById('member-filter').addEventListener('input', function (e) {
+    var q = e.target.value.trim().toLowerCase();
+    grid.querySelectorAll('label.check').forEach(function (l) { l.hidden = q && l.dataset.name.indexOf(q) === -1; });
+  });
+  document.querySelectorAll('[data-tick]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      grid.querySelectorAll('label.check:not([hidden]) input').forEach(function (i) { i.checked = b.dataset.tick === '1'; });
+      recount();
+    });
+  });
+})();
+document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+  f.addEventListener('submit', function (e) { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+});
+</script>
+{% endblock %}
