@@ -4,6 +4,10 @@ name: Deploy
 # Hetzner Cloud Firewall keeps SSH closed: each run opens port 22 to this
 # runner's address only, and closes it again at the end, even if a step fails.
 # Setup is in v2/DEPLOY.md ("Hetzner, from a phone").
+#
+# Run logs will be public once the repository is, so nothing here prints the
+# first-admin link, the portal's logs or a secret: the status action reports
+# health and error counts only.
 on:
   workflow_dispatch:
     inputs:
@@ -78,13 +82,20 @@ jobs:
         env:
           HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
           HAS_DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD != '' }}
+          SETUP_CODE: ${{ secrets.SETUP_CODE }}
           DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
         run: |
           missing=""
           [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (variable)"
           [ -n "$HCLOUD_TOKEN" ] || missing="$missing HCLOUD_TOKEN (secret)"
           [ "$HAS_KEY" = true ] || missing="$missing DEPLOY_SSH_KEY (secret)"
-          if [ "$DEPLOYS" = true ] && [ -z "$DOMAIN" ]; then missing="$missing OFFICESENTRY_DOMAIN (variable)"; fi
+          if [ "$DEPLOYS" = true ] || [ "$ACTION" = setup-link ]; then
+            [ -n "$DOMAIN" ] || missing="$missing OFFICESENTRY_DOMAIN (variable)"
+          fi
+          if [ "$ACTION" = setup-link ] && [ "${#SETUP_CODE}" -lt 20 ]; then
+            echo "::error::The setup-link action needs a SETUP_CODE secret of at least 20 characters (a long random password works). Add it under Settings > Secrets and variables > Actions > New repository secret, then run this again. v2/DEPLOY.md, step 6, has the steps."
+            exit 1
+          fi
           if [ "$DEMO" = true ] && [ -z "$DEMO_DOMAIN" ]; then missing="$missing OFFICESENTRY_DEMO_DOMAIN (variable)"; fi
           if [ "$DEMO" = true ] && [ "$HAS_DEMO_PASSWORD" != true ]; then missing="$missing DEMO_PASSWORD (secret)"; fi
           if [ -n "$missing" ]; then
@@ -166,21 +177,37 @@ jobs:
           curl -fsS -X POST -H "Authorization: Bearer $HCLOUD_TOKEN" -H "Content-Type: application/json" \
             --data @rules.json "$API/firewalls/$(jq -r .id <<<"$fw")/actions/set_rules" > /dev/null
 
-      - name: Prepare SSH
+      # SSH only talks to a server whose host key matches the DEPLOY_HOST_KEY
+      # secret, so a server swapped in at the same address gets nothing: not
+      # the code, the settings or the demo password.
+      - name: Prepare SSH and check the server's key
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
+          HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
         run: |
           install -d -m 700 ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
-          printf 'Host server\n  HostName %s\n  User deploy\n  IdentityFile ~/.ssh/id_deploy\n  ServerAliveInterval 30\n' "$HOST" > ~/.ssh/config
+          printf 'Host server\n  HostName %s\n  User deploy\n  IdentityFile %s/.ssh/id_deploy\n  ServerAliveInterval 30\n  BatchMode yes\n  StrictHostKeyChecking yes\n  UserKnownHostsFile %s/.ssh/known_hosts\n' "$HOST" "$HOME" "$HOME" > ~/.ssh/config
           # The firewall change takes a few seconds to reach the server.
           for _ in $(seq 30); do nc -z -w 3 "$HOST" 22 && break; sleep 3; done
-          if [ -n "$HOST_KEY" ]; then
-            printf '%s %s\n' "$HOST" "$HOST_KEY" > ~/.ssh/known_hosts
-          else
-            ssh-keyscan -t ed25519 "$HOST" > ~/.ssh/known_hosts
-            echo "To pin the server, set the DEPLOY_HOST_KEY variable to: $(cut -d' ' -f2- ~/.ssh/known_hosts)"
+          # The key the server shows right now. It's only used to explain a
+          # missing or wrong secret; ssh itself checks against the secret.
+          seen=$(ssh-keyscan -t ed25519 "$HOST" 2>/dev/null | cut -d' ' -f2- || true)
+          if [ -z "$HOST_KEY" ]; then
+            echo "::error::Add the server's SSH key as a secret named DEPLOY_HOST_KEY (Settings > Secrets and variables > Actions > New repository secret), then run this again. The server at $HOST shows this key: ${seen:-none, as it did not answer}. If you created that server yourself, that's its key. v2/DEPLOY.md, step 5, has the steps."
+            exit 1
+          fi
+          # Accept "ssh-ed25519 AAAA..." with or without the address in front.
+          read -r a b c _ <<<"$HOST_KEY"
+          case "$a" in ssh-*|ecdsa-*) want="$a $b" ;; *) want="$b $c" ;; esac
+          if ! grep -qE '^(ssh-[a-z0-9-]+|ecdsa-sha2-nistp[0-9]+) [A-Za-z0-9+/]+=*$' <<<"$want"; then
+            echo "::error::The DEPLOY_HOST_KEY secret doesn't look like an SSH key. It should be one line starting ssh-ed25519 AAAA. v2/DEPLOY.md, step 5, has the steps."
+            exit 1
+          fi
+          printf '%s %s\n' "$HOST" "$want" > ~/.ssh/known_hosts
+          if [ -n "$seen" ] && [ "${want%% *}" = ssh-ed25519 ] && [ "$seen" != "$want" ]; then
+            echo "::error::The server at $HOST shows a different SSH key from the DEPLOY_HOST_KEY secret, so nothing was sent to it. If you rebuilt or replaced the server, set DEPLOY_HOST_KEY to: $seen. If you didn't, change nothing and check the DEPLOY_HOST variable and the server in the Hetzner console."
+            exit 1
           fi
 
       - name: Copy the app to the server
@@ -203,9 +230,34 @@ jobs:
           ssh server 'bash -s' < v2/deploy/start.sh
           echo "Demo data loaded. The sign-in is in this run's summary."
 
-      - name: Show the first-admin link (until an admin exists)
-        if: env.ACTION == 'deploy' || env.ACTION == 'setup-link'
-        run: ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' || true
+      # The setup link would let whoever reads this log create the first admin,
+      # so it never appears here. A deploy only says whether one is needed.
+      - name: Check for an admin account
+        if: env.ACTION == 'deploy'
+        run: |
+          if ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' > /dev/null 2>&1; then
+            echo "::notice::No admin account yet. Run Deploy again with the setup-link action (v2/DEPLOY.md, step 6)."
+          fi
+
+      # Makes the SETUP_CODE secret the one-time code for creating the first
+      # admin. It goes to the server over SSH's input, never in a command line.
+      - name: Set the first-admin code
+        if: env.ACTION == 'setup-link'
+        env:
+          SETUP_CODE: ${{ secrets.SETUP_CODE }}
+          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
+        run: |
+          # Its output is the current link, so it's only searched, never shown.
+          if ! out=$(ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' 2>&1); then
+            if grep -q "admin already exists" <<<"$out"; then
+              echo "An admin already exists, so first-run setup is closed. Sign in instead."
+              exit 0
+            fi
+            echo "::error::Couldn't ask the portal whether an admin exists. Run Deploy with the status action to see what's running."
+            exit 1
+          fi
+          printf '%s' "$SETUP_CODE" | ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web sh -c "umask 077 && cat > /data/setup-token"'
+          echo "Open https://$DOMAIN/setup and enter your SETUP_CODE secret as the setup code." | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Back up the database
         if: env.ACTION == 'backup'
@@ -215,15 +267,20 @@ jobs:
         if: env.ACTION == 'restart'
         run: ssh server 'cd /opt/officesentry/v2 && docker compose restart'
 
+      # Health and counts only: the portal's own log names tenants, users and
+      # addresses, so reading it needs a shell (v2/DEPLOY.md, "If you need a shell").
       - name: Status
         if: env.ACTION == 'status' || env.ACTION == 'restart'
         run: |
           ssh server bash -s <<'EOF'
           cd /opt/officesentry/v2
-          docker compose ps
-          df -h / | tail -1
-          echo "--- worker"; docker compose logs --tail 40 worker
-          echo "--- web"; docker compose logs --tail 40 web
+          docker compose ps --format 'table {{.Service}}\t{{.Status}}'
+          df -h / | awk 'NR == 2 {print "Disk: " $5 " used, " $4 " free"}'
+          docker compose exec -T worker python -m officesentry healthcheck worker 2>&1 && echo "Worker: checked in recently"
+          for service in web worker; do
+            n=$(docker compose logs --since 24h --no-log-prefix "$service" 2>/dev/null | grep -cE ' (ERROR|CRITICAL) |\[(ERROR|CRITICAL)\]' || true)
+            echo "Errors logged by $service in the last 24 hours: $n"
+          done
           EOF
 
       - name: Close SSH again
