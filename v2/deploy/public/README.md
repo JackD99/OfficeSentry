@@ -16,6 +16,9 @@ Office Sentry yourself; it's how the project shows itself.
 - **Its own container, network and data.** The demo is a separate service (`demo` in `compose.yml`) on its
   own Docker network, which only Caddy shares with it, so it can't reach the portal. It doesn't read `.env`,
   has no volume and never sees the portal's database, `secrets.json` or keys.
+- **No way out.** That network is internal: the demo can't reach the internet at all, so it can't send email,
+  call Microsoft or post to a webhook, whatever a visitor tries. It has no worker either, so nothing is ever
+  scheduled, collected or sent, and it has no mail or alert settings.
 - **Fictional data in memory.** At every start, `demo.sh` makes three fictional tenants with
   `scripts/demo_data.py --public` in a memory-only folder. At 04:00 UTC the container stops, Docker starts it
   again, and the demo is new: whatever visitors did is gone and the dates are current again.

@@ -125,3 +125,14 @@ def test_demo_data_public_makes_no_admin(tmp_path, monkeypatch, capsys):
     db = connect(load_config(data_dir=tmp_path).db_path)
     assert [tuple(r) for r in db.execute("SELECT username, role FROM users")] == [("demo", "analyst")]
     assert db.execute("SELECT value FROM settings WHERE key = ?", (public_demo.MARKER,)).fetchone()[0] == "1"
+
+
+def test_demo_container_has_no_way_out():
+    # The demo's only network is internal (no internet), so it can't send mail, call Microsoft or post to a
+    # webhook even if a request got past refuse_changes(). Checked as text: the tests don't depend on a YAML parser.
+    compose = (V2 / "deploy" / "public" / "compose.yml").read_text()
+    demo = compose.split("\n  demo:\n", 1)[1].split("\n\n", 1)[0]
+    assert re.search(r"^    networks: \[public\]$", demo, re.M)
+    assert "env_file" not in demo and "volumes" not in demo
+    networks = compose.split("\nnetworks:\n", 1)[1]
+    assert re.search(r"^  public:\n(?:    .*\n)*    internal: true$", networks, re.M)
