@@ -125,7 +125,9 @@ jobs:
           assert HTML(string="<h1>Office Sentry</h1>").write_pdf()[:4] == b"%PDF"
           EOF
           docker exec portal python -m officesentry worker --once
-      - if: always()
+      # Only to debug a failure. This portal is thrown away with the runner, so
+      # the first-admin link in its log leads nowhere.
+      - if: failure()
         run: docker logs portal
 
   audit:

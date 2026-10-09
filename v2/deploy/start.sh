@@ -23,8 +23,11 @@ for service in web demo-web; do
     sleep 5
   done
   if [ "$status" != healthy ]; then
-    docker compose logs --tail 100 "$service"
-    echo "::error::$service didn't become healthy"
+    # Only the health check's own answer: the Deploy workflow's log will be
+    # public with the repository, and the portal's log names clients and users.
+    # Read that log in a shell (DEPLOY.md, "If you need a shell").
+    docker inspect -f '{{range .State.Health.Log}}{{println .Output}}{{end}}' "$id" | tail -n 3
+    echo "::error::$service didn't become healthy. Its log is on the server: docker compose logs $service"
     exit 1
   fi
 done
