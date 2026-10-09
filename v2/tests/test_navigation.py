@@ -55,7 +55,7 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/projects": ("Findings", None),
         f"/tenants/{alpha}/changes": ("Changes", None),
         f"/tenants/{alpha}/data/mailboxes": ("Reports", "Detail reports"),
-        f"/tenants/{alpha}/evidence": ("Reports", "Insurance evidence"),
+        f"/tenants/{alpha}/evidence": ("Reports", "Questionnaires"),
         f"/tenants/{alpha}/users": ("Users", None),
         _user_href(client, alpha): ("Users", None),
         f"/tenants/{alpha}/schedules": ("Emails", None),

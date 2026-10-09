@@ -52,7 +52,9 @@ def test_pages(client, db, two_tenants):
     login(client, "client")
     assert client.get(f"/tenants/{bravo}/evidence").status_code == 404
     page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
-    assert "Is multi-factor authentication required" in page
+    assert "Is multi-factor authentication (MFA) enforced for all users accessing email" in page
+    controls = client.get(f"/tenants/{alpha}/evidence?set=controls").get_data(as_text=True)
+    assert "Is multi-factor authentication required" in controls
     wb = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx").data))
     assert wb["Controls"].max_row == len(evidence.CONTROLS) + 1
     if pdf_available():
