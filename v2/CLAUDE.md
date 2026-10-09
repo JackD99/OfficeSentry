@@ -12,11 +12,18 @@ overview and DEPLOY.md for running it on a server.
   read-only and go in `entra.GRAPH_PERMISSIONS` (adding one forces every
   tenant to re-consent, so batch them).
 - **The one non-GET Graph call is `mailer._send_graph`** (`sendMail` from the
-  MSP's own mailbox, via a separate single-tenant app with `Mail.Send`). Never
-  add mail permissions to the multi-tenant read-only app.
+  MSP's own mailbox, via a separate single-tenant app with `Mail.Send`, in the
+  mail app's own cloud, `graph_cloud`). Never add mail permissions to the
+  multi-tenant read-only app. `tests/test_no_writes.py` fails on any
+  `.post/.put/.patch/.delete/.request(` outside its `ALLOWED` files, and
+  checks a full collection only sends GETs (plus `Get-` cmdlets).
 - **Every route needs `@login_required` or `@roles_required`.** Anything
   tenant-scoped loads the tenant with `access.tenant_or_404()`.
-  `tests/test_access.py::test_every_page_requires_login` enforces the first.
+  `tests/test_access.py::test_every_page_requires_login` enforces the first;
+  `tests/test_isolation_walk.py` opens every route that takes a tenant (or
+  one of its objects) with another tenant's IDs and expects a refusal. A new
+  URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
+  for it in the `world` fixture) or `OTHER_ARGS`.
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
 - **Microsoft hosts come from `clouds.py`** (commercial, GCC High, DoD,
   China). A tenant (`tenants.cloud`) only signs in with an app connection of
@@ -338,6 +345,19 @@ change is audited; note text is never put in the audit log.
   app roles and directory roles (GET only). Pages never call Graph for it;
   "Check connection now" queues that collector. Its fixes are plain English
   and say where in the Microsoft admin centres to click.
+- Anything the tenant granted the app beyond `entra.GRAPH_PERMISSIONS` and
+  `EXCHANGE_PERMISSIONS` (the collector's `other`), and any directory role
+  besides Global Reader, is a warning (`tenant_health.extra_permissions`,
+  `extra_roles`) on Manage and the Client tenants list.
+- App certificates (`cert_lifecycle.py`): `expiring()` grades every
+  certificate in use, each app connection's and the mail app's, at 60, 30
+  and 7 days and expired, for the App connection page, the admin banner in
+  `base.html` and the `certificate_expiry` periodic job (one email to the
+  team contacts and one webhook alert per threshold). Replacing one keeps
+  two on the connection: `start` (the `next_*` columns), the admin uploads
+  the new .cer next to the old, `test` signs in with it, `switch` swaps it
+  in and remembers `old_thumbprint` until `forget_old`. `switch` refuses
+  until a test worked. The runbook is in the root `SECURITY.md`.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
 

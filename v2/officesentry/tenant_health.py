@@ -331,10 +331,15 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
     return checks
 
 
+# Granted alongside what Office Sentry asks for but no more access: Exchange's newer name for
+# Exchange.ManageAsApp, which is still limited to what the app's admin role (Global Reader) allows.
+NOT_EXTRA = {"Exchange.ManageAsAppV2"}
+
+
 def extra_permissions(result: dict | None) -> list[str]:
     """Permissions the tenant granted the app beyond what Office Sentry asks for."""
     r = result or {}
-    return sorted(r.get("other") or []) if r.get("permissions_checked") else []
+    return sorted(set(r.get("other") or []) - NOT_EXTRA) if r.get("permissions_checked") else []
 
 
 def extra_roles(result: dict | None) -> list[str]:
