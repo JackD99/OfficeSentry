@@ -286,8 +286,10 @@ this command; the product signs in with a certificate.
   snapshots for the last 30 days plus one per month for 12 months.
 - **One worker process, no Redis/Celery.** It collects on a cron schedule in
   your timezone, skips data that is already fresh, refreshes stale data before
-  an emailed report, prunes old snapshots, and recovers runs left behind by a
-  crash.
+  an emailed report, and prunes old snapshots. Month-end approvals and report
+  emails run as background tasks in the same worker, so approving 200 clients
+  returns at once and the page shows progress; work a crashed worker left is
+  picked up again, and a client's month is still sent exactly once.
 
 ## Sign-in security
 
@@ -476,7 +478,8 @@ officesentry/
   mailer.py      sends a finished email over SMTP or Graph sendMail
   delivery.py    schedules, digests, alert emails, retries and email rendering
   schedule.py    cron slots in a timezone, freshness (max age), periodic jobs
-  worker.py      queue runner, schedule, retention, heartbeat
+  worker.py      queue runner, task threads, schedule, retention, heartbeat
+  tasks.py       background tasks (approvals, report emails) with leases
   tenant_health.py  connection health and the onboarding checklist, from stored state
   lifecycle.py   first collection, pause, archive and deleting a tenant
   web/           Flask app: access.py is the single authorization gate
