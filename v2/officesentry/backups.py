@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import errno
 import gzip
+import json
 import logging
 import os
 import re
@@ -132,6 +133,78 @@ def backup(db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
     finally:
         src.close()
     return dest, rotate(folder, BACKUP_PREFIX, keep)
+
+
+# -- Backup status --------------------------------------------------------------
+#
+# Every backup job records how it went in ``<data dir>/backup-status.json`` (``/data`` in Docker), one
+# entry per job, so the health check and the "backup failed" system alert (``system_health``,
+# ``system_alerts``) see it whatever folder or target the copies go to. This is the format the
+# deployment work (WS12) writes too: "local" is the nightly copy (the ``backup`` command), "offsite" the
+# restic copy and "restore_check" the weekly restore drill. Each key is optional; absent means never
+# run or not set up.
+#
+#   {"local": {"ok": true, "last_attempt": "2026-10-09T03:45:02Z", "last_success": "2026-10-09T03:45:02Z",
+#              "detail": "officesentry-20261009-034500.db.gz, 412 MB", "error": ""},
+#    "offsite": {"ok": false, "last_attempt": "2026-10-09T03:46:10Z", "last_success": "2026-10-08T03:46:01Z",
+#                "detail": "", "error": "restic couldn't reach the bucket"}}
+#
+# ``ok`` is the last attempt's outcome; ``last_success`` is null until one works. Times are UTC ISO 8601
+# with a Z. ``detail`` and ``error`` are short plain words with no secrets.
+
+STATUS_FILE = "backup-status.json"
+STATUS_KEYS = ("ok", "last_attempt", "last_success", "detail", "error")
+
+
+def _raw_status(data_dir: Path) -> dict:
+    try:
+        raw = json.loads((Path(data_dir) / STATUS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def read_status(data_dir: Path) -> dict[str, dict]:
+    """Every job's last outcome from ``backup-status.json`` ({} when there is none or it can't be read)."""
+    return {str(k): {f: v.get(f) for f in STATUS_KEYS} for k, v in _raw_status(data_dir).items()
+            if isinstance(v, dict)}
+
+
+def record_status(data_dir: Path, job: str, ok: bool, error: str | None = None, file: Path | None = None,
+                  detail: str | None = None, now: datetime | None = None) -> None:
+    """Record one attempt of ``job``, keeping the other jobs' entries. ``detail`` (short plain words, no
+    secrets) is stored as given; without it a successful ``file`` is described by name and size. Never
+    raises: a backup's outcome matters more than its record."""
+    stamp = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path = Path(data_dir) / STATUS_FILE
+    try:
+        status = _raw_status(data_dir)
+        entry = status.get(job) if isinstance(status.get(job), dict) else {}
+        entry.update(ok=bool(ok), last_attempt=stamp, error="" if ok else str(error or "")[:500])
+        entry.setdefault("last_success", None)
+        entry.setdefault("detail", "")
+        if ok:
+            entry["last_success"] = stamp
+            if file is not None and detail is None:
+                entry["detail"] = f"{file.name}, {max(1, round(file.stat().st_size / 2**20)):,} MB"
+        if detail is not None:
+            entry["detail"] = str(detail)[:300]
+        status[job] = entry
+        part = path.with_name(path.name + ".part")
+        _private(part)
+        part.write_text(json.dumps(status, indent=2), encoding="utf-8")
+        os.replace(part, path)
+    except OSError:
+        log.warning("Could not record the backup's outcome in %s", path, exc_info=True)
+
+
+def newest_backup(folder: Path) -> Path | None:
+    """The newest ``backup`` copy in ``folder``, for installs whose backups ran before the status file existed."""
+    try:
+        found = backup_files(Path(folder), BACKUP_PREFIX)
+    except OSError:
+        return None
+    return found[-1] if found else None
 
 
 def database_file(conn: sqlite3.Connection) -> Path | None:
@@ -273,3 +346,20 @@ def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, for
     if problem != "ok":
         raise RestoreError(f"The restored database failed its check ({problem}). The previous one is in {saved}.")
     return {"version": version, "saved": saved}
+
+
+def inspect(source: Path) -> dict:
+    """The ``check-backup`` command and the restore drill: check that a backup (``.db`` or ``.db.gz``) is a
+    sound Office Sentry database without restoring it, and say what's in it. A gzipped one is unpacked next
+    to itself for the check, so that folder needs room for the database."""
+    source = Path(source)
+    with _unpacked(source, source.parent) as plain:
+        version = check_backup(plain, shown=source)
+        conn = sqlite3.connect(f"{plain.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            tenants = conn.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+            newest = conn.execute("SELECT MAX(finished_at) FROM runs").fetchone()[0]
+        finally:
+            conn.close()
+        size = plain.stat().st_size
+    return {"version": version, "tenants": tenants, "newest_run": newest, "bytes": size}

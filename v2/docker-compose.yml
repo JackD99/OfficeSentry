@@ -1,5 +1,5 @@
-# Office Sentry: the portal ("web") and the background worker share one image
-# and one data volume. Setup steps are in DEPLOY.md.
+# Office Sentry: the portal ("web") and the background worker share one image,
+# one data volume and one keys volume. Setup steps are in DEPLOY.md.
 #
 # The image is the published release. OFFICESENTRY_VERSION in .env picks it:
 # an exact release such as 2.0.0 (recommended), or 2 for the newest 2.x. To
@@ -18,9 +18,17 @@ x-officesentry: &officesentry
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
 
+# The portal and worker keep secrets.json (the keys that decrypt stored
+# certificates and passwords) in a volume of its own, apart from the data and
+# its backups. A secrets.json left in the data volume moves there on start.
+x-keys: &keys
+  volumes: ["officesentry-data:/data", "officesentry-keys:/keys"]
+  environment:
+    OFFICESENTRY_SECRETS_FILE: /keys/secrets.json
+
 services:
   web:
-    <<: *officesentry
+    <<: [*keys, *officesentry]
     # Only reachable from this server. Put HTTPS in front: the "https" profile
     # below, or your own reverse proxy (nginx, Traefik).
     ports: ["127.0.0.1:8000:8000"]
@@ -31,7 +39,7 @@ services:
       start_period: 30s
 
   worker:
-    <<: *officesentry
+    <<: [*keys, *officesentry]
     command: ["python", "-m", "officesentry", "worker"]
     # Let a running collection finish on "docker compose down".
     stop_grace_period: 2m
@@ -45,10 +53,12 @@ services:
       start_period: 2m
 
   # Optional demo site: fictional tenants from scripts/demo_data.py on their own
-  # volume, beside the real portal and never mixed with it. The Deploy
-  # workflow's "demo-reset" action fills it; DEPLOY.md has the steps.
+  # volume (keys included), beside the real portal and never mixed with it.
+  # Every deploy fills it; DEPLOY.md has the steps. OFFICESENTRY_DEMO_IMAGE lets
+  # it run another build than the portal (the Deploy workflow's release mode).
   demo-web:
     <<: *officesentry
+    image: ${OFFICESENTRY_DEMO_IMAGE:-ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}}
     profiles: ["demo"]
     env_file: .env.demo
     volumes: ["officesentry-demo-data:/data"]
@@ -60,6 +70,7 @@ services:
 
   demo-worker:
     <<: *officesentry
+    image: ${OFFICESENTRY_DEMO_IMAGE:-ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}}
     profiles: ["demo"]
     env_file: .env.demo
     volumes: ["officesentry-demo-data:/data"]
@@ -89,8 +100,28 @@ services:
     depends_on: [web]
     restart: unless-stopped
 
+  # Optional encrypted off-site backups with restic (https://restic.net) to any
+  # S3-compatible storage, set in .env.backup. Never runs by itself:
+  # deploy/backups.sh runs it after each nightly backup (DEPLOY.md, "Off-site
+  # backups"). It reads the backups folder only; its password and storage keys
+  # are in .env.backup alone, not in the portal's settings or volumes.
+  offsite:
+    image: restic/restic:0.18.1@sha256:39d9072fb5651c80d75c7a811612eb60b4c06b32ffe87c2e9f3c7222e1797e76
+    profiles: ["offsite"]
+    env_file: .env.backup
+    environment:
+      RESTIC_CACHE_DIR: /cache
+    # restic files each copy under this name; one name keeps "forget" grouping them.
+    hostname: officesentry
+    volumes: ["officesentry-data:/data:ro", "restic-cache:/cache"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+
 volumes:
   officesentry-data:
+  officesentry-keys:
   officesentry-demo-data:
   caddy-data:
   caddy-config:
+  restic-cache:
