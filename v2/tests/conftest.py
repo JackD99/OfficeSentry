@@ -15,6 +15,19 @@ PASSWORD = "correct horse battery"
 PASSWORD_HASH = generate_password_hash(PASSWORD, method="pbkdf2:sha256:1")
 
 
+def pytest_addoption(parser):
+    # tests/browser: screenshots and accessibility in a real browser (tests/browser/README.md).
+    parser.addoption("--ui", action="store_true", help="run the browser tests in tests/browser")
+    parser.addoption("--update", action="store_true", help="with --ui: save new screenshot baselines")
+    parser.addoption("--save-all", action="store_true", help="with --ui: save every capture in tests/browser/output")
+
+
+def pytest_ignore_collect(collection_path, config):
+    if collection_path.name == "browser" and not config.getoption("--ui"):
+        return True
+    return None
+
+
 @pytest.fixture(autouse=True)
 def _roomy_disk(monkeypatch):
     """The test machine's disk is whatever it is: report it 40% full, so no test sends a disk alert by chance.
