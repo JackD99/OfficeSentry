@@ -1006,3 +1006,27 @@ td.row-action { min-width: 150px; }
 .type-counts { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: -8px 0 16px; }
 .type-counts .pill { font-weight: 500; padding: 3px 10px; }
 .type-counts a.pill:hover { background: var(--accent-soft); color: var(--accent); text-decoration: none; }
+/* -- Setup wizard (App connection: sign in to Microsoft and create the app) ------------------------- */
+.wizard .setup-steps { padding: 0; margin: 0; }
+.wizard .card-head { margin-bottom: 4px; }
+.wizard .card-foot { border-top: 1px solid var(--border); margin: 8px -20px -20px; padding: 14px 20px; }
+.wizard .card-foot details.other-ways { margin: 0; }
+.other-ways ol { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.other-ways p { margin: 10px 0 0; }
+.setup-start .form-actions { margin-top: 0; }
+.setup-start details { margin-top: 10px; }
+.setup-start .form-row { margin-top: 10px; }
+.device-code { margin-top: 4px; padding: 16px; border-radius: var(--radius-sm); background: var(--sunken); max-width: 620px; }
+.device-code .code-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0 6px; }
+.device-code .user-code { font-size: 1.75rem; font-weight: 700; letter-spacing: .12em; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 14px; user-select: all; }
+.device-code .step-action { margin: 4px 0 12px; }
+.wait-line { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0 4px; color: var(--text); font-weight: 500; }
+.spinner { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+.first-tenant .hint { color: var(--muted); font-size: .8125rem; }
+.first-tenant .form-row { margin-bottom: 8px; }
+@media (max-width: 640px) {
+  .device-code { padding: 12px; }
+  .device-code .user-code { font-size: 1.375rem; letter-spacing: .08em; }
+  .device-code .step-action .btn { width: 100%; justify-content: center; }
+}

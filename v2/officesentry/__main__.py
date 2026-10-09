@@ -73,21 +73,22 @@ def cmd_setup_link(args, cfg):
 
 
 def cmd_create_app(args, cfg):
-    """Generate a certificate and create the multi-tenant read-only app (device sign-in)."""
+    """Create the multi-tenant read-only app (device sign-in). The portal's App connection page does the same."""
     from . import clouds
-    from .certs import generate_certificate
-    from .entra import create_app_registration, device_code_token
+    from .app_setup import register_app
+    from .entra import SignInError, device_code_token
 
     conn = connect(cfg.db_path)
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
-    cert = generate_certificate(f"Office Sentry - {args.name}"[:64])
     cloud = clouds.get(args.cloud)
     print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can create app registrations.")
     token = device_code_token(args.tenant, print, cloud.key)
     redirect_uri = f"{cfg.base_url}/consent/callback"
-    app = create_app_registration(token, cert.cert_pem, redirect_uri, display_name=args.name, cloud=cloud.key)
-    conn_id = store.create_connection(conn, vault, args.name, cert, client_id=app["appId"], cloud=cloud.key)
+    try:
+        conn_id, app = register_app(conn, vault, token, redirect_uri, args.name, cloud.key)
+    except SignInError as exc:
+        sys.exit(str(exc))
     audit(conn, "cli", "connection_created", detail=f"{args.name} {app['appId']}")
     print(f"Created app {app['appId']} and app connection #{conn_id}.")
     print("Next: add tenants in the portal and send each tenant admin its consent link.")
@@ -99,6 +100,7 @@ ENCRYPTED_COLUMNS = (
     ("app_connections", "id", "next_key_enc"),  # a replacement certificate's key, during rollover
     ("users", "id", "totp_secret_enc"),
     ("users", "id", "totp_pending_enc"),
+    ("setup_sign_ins", "id", "device_code_enc"),  # the setup wizard's device code, for up to 15 minutes
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.

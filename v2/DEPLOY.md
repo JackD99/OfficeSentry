@@ -77,7 +77,9 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
    starting **No admin account yet** and open the link on it (`docker compose exec
    web python -m officesentry setup-link` prints it again). Choose a username and
    password, scan the QR code with an authenticator app and save the recovery codes.
-6. Follow the steps on the **App connection** page, then add your tenants.
+6. Open **Settings → App connection** and press **Sign in to Microsoft**. Enter the code it shows on
+   Microsoft's page and sign in as an admin of your own tenant who can create app registrations. Office
+   Sentry creates its read-only app and then offers to add your first tenant. No command needed.
 
 ## Is it working?
 
@@ -135,7 +137,8 @@ for DoD; login.chinacloudapi.cn, microsoftgraph.chinacloudapi.cn,
 partner.outlook.cn for China), so allow them if outbound traffic is filtered.
 
 Each of those clouds needs its own app registration, made in that cloud, and
-its own app connection in Office Sentry with the matching cloud: run
+its own app connection in Office Sentry with the matching cloud: on **App connection**, open
+*Create an app for another Microsoft cloud*, choose the cloud and sign in, or run
 `docker compose run --rm worker python -m officesentry create-app --cloud gcc_high --tenant <your GCC High tenant>`
 (or `dod`, `china`). The [README](README.md#national-clouds-gcc-high-dod-china)
 explains choosing the cloud for a tenant and what Microsoft doesn't offer in

@@ -268,18 +268,13 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
 
 1. Run `docker compose logs web` and open the link on the line starting **No admin account yet** to create the
    first admin (with two-step sign-in).
-2. Create the multi-tenant, read-only app in your own Entra tenant:
-
-   ```bash
-   docker compose run --rm worker python -m officesentry create-app --tenant <your-tenant>.onmicrosoft.com
-   ```
-
-   It prints a code: open the link it shows, enter the code and sign in as an admin of **your own** (MSP) tenant
-   who can create app registrations. It makes the certificate, registers the app and saves both, so **App
-   connection** then shows one connection marked *Ready*. Don't press *Generate certificate* first; that is only
-   for creating the app by hand, as the page describes.
-3. **Add tenant** and follow its checklist: a Global Administrator of the client's tenant grants consent, you
-   assign Global Reader, and the first collection runs.
+2. Open **Settings → App connection** and press **Sign in to Microsoft**. The page shows a code and Microsoft's
+   link: enter the code there and sign in as an admin of **your own** (MSP) tenant who can create app
+   registrations. Office Sentry then creates its multi-tenant, read-only app with a certificate and saves it, with
+   nothing to type on the server. (`docker compose run --rm worker python -m officesentry create-app` does the
+   same from the command line.)
+3. Add your first tenant on the same page and follow its checklist: a Global Administrator of the client's
+   tenant grants consent, you assign Global Reader, and the first collection runs.
 
 Stuck? [Troubleshooting](v2/docs/troubleshooting.md) covers the common errors, such as `AADSTS50011` on the
 consent page, mailboxes failing without Global Reader and the worker not running.

@@ -3,11 +3,24 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 
-from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    Response,
+    abort,
+    current_app,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from werkzeug.security import generate_password_hash
 
-from .. import cert_lifecycle, clouds, store, throttle
+from .. import app_setup, cert_lifecycle, clouds, entra, store, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
@@ -180,16 +193,39 @@ def delete_user(user_id: int):
 # -- App connections ---------------------------------------------------------
 
 
+def _redirect_uri() -> str:
+    return current_app.extensions["officesentry.config"].base_url + url_for("tenants.consent_callback")
+
+
+def _host(url: str) -> tuple[str, int | None]:
+    parts = urlsplit(url)
+    return (parts.hostname or "", None if parts.port in (80, 443) else parts.port)
+
+
+def _address_problem() -> str | None:
+    """The address this page was opened at, when it isn't the one consent links send people back to."""
+    same = _host(current_app.extensions["officesentry.config"].base_url) == _host("//" + request.host)
+    return None if same else request.host
+
+
 @bp.get("/connections")
 @roles_required("admin")
 def connections():
     rows = store.list_connections(g.db)
+    sign_in = app_setup.current(g.db, g.user["id"])
+    if sign_in and sign_in["status"] == "done" and g.db.execute(
+            "SELECT 1 FROM tenants WHERE connection_id = ?", (sign_in["connection_id"],)).fetchone():
+        app_setup.cancel(g.db, g.user["id"])  # the first tenant is added: the wizard is finished
+        sign_in = None
     return render_template(
         "connections.html", connections=rows, permissions=GRAPH_PERMISSIONS,
-        exchange_permissions=EXCHANGE_PERMISSIONS,
-        redirect_uri=current_app.extensions["officesentry.config"].base_url + url_for("tenants.consent_callback"),
+        exchange_permissions=EXCHANGE_PERMISSIONS, redirect_uri=_redirect_uri(),
         expiry={c["id"]: cert_lifecycle.connection_expiry(c) for c in rows},
         test_tenant={c["id"]: cert_lifecycle.test_tenant(g.db, c["id"]) for c in rows if c["next_thumbprint"]},
+        sign_in=sign_in, seconds_left=app_setup.seconds_left(sign_in) if sign_in else 0,
+        opened_at=_address_problem(), default_app_name=app_setup.DEFAULT_NAME,
+        ready_clouds={clouds.of(c).key for c in rows if c["client_id"]},
+        pending_clouds={clouds.of(c).key for c in rows if not c["client_id"]},
     )
 
 
@@ -206,6 +242,61 @@ def create_connection():
     audit(g.db, g.user["username"], "connection_created", detail=f"{name} {cert.thumbprint} {cloud}")
     flash("Certificate generated. Upload the .cer to your app registration, then save its client ID.", "success")
     return redirect(url_for("admin.connections") + f"#conn-{conn_id}")
+
+
+# -- Setup wizard: sign in to Microsoft from this page and create the app (app_setup.py) -------------------
+
+
+def _to_setup():
+    return redirect(url_for("admin.connections") + "#setup")
+
+
+@bp.post("/connections/setup")
+@roles_required("admin")
+def start_setup():
+    cloud = request.form.get("cloud", clouds.DEFAULT)
+    if not clouds.valid(cloud):
+        abort(400)
+    tenant = app_setup.tenant_ref(request.form.get("tenant", ""))
+    name = request.form.get("name", "").strip()[:100] or app_setup.DEFAULT_NAME
+    if tenant is None:
+        flash("Enter your tenant's domain (like contoso.onmicrosoft.com) or its Directory (tenant) ID, "
+              "or leave it blank.", "error")
+    elif app_setup.ready_connection(g.db, cloud):
+        flash(f"You already have an app for {clouds.get(cloud).label}, so there's nothing to create. "
+              "Add tenants with it, or replace its certificate below if that's what you need.", "error")
+    else:
+        try:
+            app_setup.start(g.db, current_app.extensions["officesentry.vault"], g.user["id"], g.user["username"],
+                            tenant, cloud, name)
+        except entra.SignInError as exc:
+            flash(str(exc), "error")
+    return _to_setup()
+
+
+@bp.post("/connections/setup/check")
+@roles_required("admin")
+def check_setup():
+    """One step of the wizard. The page calls this every few seconds while it waits (JSON); without
+    JavaScript, the "I've signed in" button posts it and comes back to the page."""
+    row = app_setup.check(g.db, current_app.extensions["officesentry.vault"], g.user["id"], g.user["username"],
+                          _redirect_uri())
+    if request.accept_mimetypes.best == "application/json":
+        if row is None:
+            return jsonify(status="none")
+        return jsonify(status=row["status"], note=row["error"] if row["status"] == "waiting" else None,
+                       wait=row["poll_seconds"], seconds_left=app_setup.seconds_left(row))
+    if row is not None and row["status"] == "waiting" and not row["error"]:
+        flash("Microsoft says sign-in hasn't finished yet. Enter the code on Microsoft's page, then check again.",
+              "warning")
+    return _to_setup()
+
+
+@bp.post("/connections/setup/cancel")
+@roles_required("admin")
+def cancel_setup():
+    app_setup.cancel(g.db, g.user["id"])
+    return redirect(url_for("admin.connections"))
 
 
 @bp.post("/connections/<int:conn_id>/client-id")

@@ -3,49 +3,139 @@
 {% block title %}App connection · Office Sentry{% endblock %}
 {% block content %}
 {% set ready = connections|selectattr('client_id')|list %}
+{% set status = sign_in.status if sign_in else none %}
+{% set active = status in ('waiting', 'working') %}
 <div class="page-head"><div><h1>App connection</h1>
-  <div class="sub">Office Sentry signs in to every client tenant as one multi-tenant, <strong>read-only</strong> Entra app. You set it up once (once per Microsoft cloud, if you have clients in GCC High, DoD or China).</div></div></div>
+  <div class="sub">Office Sentry signs in to every client tenant as one multi-tenant, <strong>read-only</strong> Entra app. You set it up once (once per Microsoft cloud, if you have clients in GCC High, DoD or China).</div></div>
+  {% if ready and not sign_in %}<div class="actions"><a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a tenant</a></div>{% endif %}</div>
 
-<ol class="setup-steps card">
-  <li class="{{ 'done' if connections else 'current' }}">
-    <div class="step-title">Generate a certificate</div>
-    <div class="step-body">The private key is created and kept encrypted inside Office Sentry. It never leaves it.
-      {% if not connections %}
-      <form method="post" action="{{ url_for('admin.create_connection') }}" class="form-row step-form">
-        {{ csrf() }}
-        <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
-        <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
-        <button class="primary">Generate certificate</button>
-      </form>
+{% if opened_at %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div><strong>Office Sentry's address doesn't match this one.</strong>
+  You opened it at <span class="mono">{{ opened_at }}</span>, but it's set up as <span class="mono">{{ redirect_uri.rsplit('/consent/', 1)[0] }}</span>. Consent links send each client's admin back to that address, and Microsoft refuses them (error AADSTS50011) if it's wrong.
+  If people use this address, set <code>OFFICESENTRY_BASE_URL</code> in the <code>.env</code> file to it and restart Office Sentry before you create the app.</div></div>
+{% endif %}
+
+{% macro start_form(choose_cloud=false) %}
+<form method="post" action="{{ url_for('admin.start_setup') }}" class="step-form setup-start">
+  {{ csrf() }}
+  {% if choose_cloud %}
+  <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}{% if key not in ready_clouds %}<option value="{{ key }}">{{ label }}</option>{% endif %}{% endfor %}</select></label>
+  {% endif %}
+  <div class="form-actions"><button class="primary">{{ icon('shield') }} Sign in to Microsoft</button></div>
+  <details class="by-hand small">
+    <summary>More options</summary>
+    <div class="form-row">
+      {% if not choose_cloud %}<label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+        <span class="hint">Leave on Commercial unless your own tenant is in US Government GCC High or DoD, or China (21Vianet).</span></label>{% endif %}
+      <label>Your tenant <input name="tenant" placeholder="Any tenant" autocomplete="off" class="mono">
+        <span class="hint">Blank works for most people. If you sign in with an account that's a guest in your tenant, enter your tenant's domain or ID.</span></label>
+      <label>App name <input name="name" value="{{ default_app_name }}" maxlength="100">
+        <span class="hint">How the app appears in Entra and on each client's consent screen.</span></label>
+    </div>
+  </details>
+</form>
+{% endmacro %}
+
+{% macro other_ways(show_generate, open=false) %}
+<details class="by-hand other-ways"{% if open %} open{% endif %}>
+  <summary>Other ways to create the app</summary>
+  <div class="small">
+    <p><strong>From the server's command line.</strong> With Docker, run <code>docker compose run --rm worker python -m officesentry create-app</code> (add <code>--cloud gcc_high</code>, <code>dod</code> or <code>china</code> for those clouds). Without Docker, run <code>python -m officesentry create-app</code>. It does the same as the button above.</p>
+    <p><strong>By hand in the Entra admin centre</strong>, if your Conditional Access blocks device sign-in:</p>
+    <ol>
+      <li>Generate a certificate here{% if show_generate %} (below){% endif %}, then download its .cer file.</li>
+      <li>In the Entra admin centre: <em>App registrations → New registration</em>. Supported account types: <em>Accounts in any organizational directory</em>.</li>
+      <li>Redirect URI (Web): <code>{{ redirect_uri }}</code>. Without it, the consent link fails with error AADSTS50011.</li>
+      <li>Under <em>Certificates &amp; secrets</em>, upload the .cer file. Under <em>API permissions</em>, add the application permissions listed at the bottom of this page.</li>
+      <li>Copy the app's <em>Application (client) ID</em> into the connection on this page.</li>
+    </ol>
+    {% if show_generate %}
+    <form method="post" action="{{ url_for('admin.create_connection') }}" class="form-row step-form">
+      {{ csrf() }}
+      <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
+      <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+      <button>Generate certificate</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+{% endmacro %}
+
+{% if sign_in or not ready %}
+<section class="card setup wizard" id="setup" aria-labelledby="setup-title">
+  <div class="card-head"><h2 id="setup-title">{{ 'Create the app for ' ~ cloud_of(sign_in).label if sign_in and not cloud_of(sign_in).is_default else 'Connect Office Sentry to Microsoft 365' }}</h2>
+    {% if status == 'done' %}<span class="pill ok">App created</span>{% elif active %}<span class="pill accent">Waiting for sign-in</span>{% endif %}</div>
+  <ol class="setup-steps flush-steps">
+    <li class="{{ 'done' if status == 'done' else 'current' }}">
+      <div class="step-title">Sign in to Microsoft</div>
+      <div class="step-body">
+      {% if status == 'done' %}Signed in{% if sign_in.home_tenant %} to tenant <span class="mono small">{{ sign_in.home_tenant }}</span>{% endif %}.
+      {% elif active %}
+        <div class="device-code" data-setup-wait="{{ sign_in.poll_seconds }}" data-check="{{ url_for('admin.check_setup') }}">
+          <p class="m0">Open Microsoft's sign-in page and enter this code:</p>
+          <div class="code-row">
+            <output class="user-code mono" id="user-code" aria-label="Sign-in code">{{ sign_in.user_code }}</output>
+            <button type="button" class="sm" data-copy="#user-code">Copy code</button>
+          </div>
+          <div class="step-action">
+            <a class="btn primary" href="{{ sign_in.verification_uri }}" target="_blank" rel="noopener noreferrer">Open Microsoft's sign-in page {{ icon('arrow') }}</a>
+            <span class="muted small">{{ sign_in.verification_uri.split('//', 1)[-1] }}</span>
+          </div>
+          <p class="small">Sign in as someone in your own (the MSP's) tenant who can create app registrations: a Global Administrator, Application Administrator or Cloud Application Administrator. Microsoft may ask you to let <em>Microsoft Graph Command Line Tools</em> (Microsoft's own app) create apps for you. Office Sentry uses this sign-in once, to create its app, and doesn't keep it.</p>
+          <p class="wait-line" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span>
+            <span data-setup-text>{% if status == 'working' %}Signed in. Creating the app…{% elif sign_in.error %}{{ sign_in.error }}{% else %}Waiting for you to sign in. This page moves on by itself.{% endif %}</span></p>
+          <p class="muted small m0">The code works for {% set m = (seconds_left / 60)|round(0, 'ceil')|int %}<span data-setup-left>{{ 'less than a minute' if m <= 1 else m ~ ' more minutes' }}</span>.</p>
+        </div>
+        <div class="step-action">
+          <form method="post" action="{{ url_for('admin.check_setup') }}" class="inline">{{ csrf() }}<button class="sm">I've signed in</button></form>
+          <form method="post" action="{{ url_for('admin.cancel_setup') }}" class="inline">{{ csrf() }}<button class="ghost sm">Cancel</button></form>
+        </div>
+      {% else %}
+        {% if status == 'failed' %}
+        <div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>The app wasn't created.</strong> {{ sign_in.error }}</div></div>
+        {% endif %}
+        Office Sentry shows you a code; you sign in on Microsoft's page in another tab, with an account in your own (the MSP's) tenant that can create app registrations. Your password and the sign-in itself never pass through Office Sentry.
+        {{ start_form() }}
       {% endif %}
-    </div>
-  </li>
-  <li class="{{ 'done' if ready else ('current' if connections else '') }}">
-    <div class="step-title">Create the app in your own Entra tenant</div>
-    <div class="step-body">
-      Easiest: run <code>python -m officesentry create-app</code> on the server. It registers the app, uploads the certificate and adds the permissions.
-      <details class="by-hand"><summary>Or do it by hand</summary>
-        <ol class="small">
-          <li>In the Entra admin center: <em>App registrations → New registration</em>.</li>
-          <li>Supported account types: <em>Accounts in any organizational directory</em>.</li>
-          <li>Redirect URI (Web): <code>{{ redirect_uri }}</code>. Without it, the consent link fails with error AADSTS50011.</li>
-          <li>Under <em>Certificates &amp; secrets</em>, upload the .cer file below.</li>
-          <li>Under <em>API permissions</em>, add the application permissions listed at the bottom of this page.</li>
-        </ol>
-      </details>
-    </div>
-  </li>
-  <li class="{{ 'done' if ready else '' }}">
-    <div class="step-title">Save the app's client ID</div>
-    <div class="step-body">Copy the <em>Application (client) ID</em> from the app's overview page into the form below. Add the <em>Directory (tenant) ID</em> from the same page too, and Office Sentry checks the certificate works straight away.</div>
-  </li>
-  <li class="{{ 'current' if ready else '' }}">
-    <div class="step-title">Add client tenants</div>
-    <div class="step-body">Each tenant gets a consent link for its Global Administrator. For mailbox reports they also give the app the read-only <em>Global Reader</em> role.
-      {% if ready %}<div class="step-action"><a class="btn sm" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add a tenant</a>
-        <a class="small" href="{{ url_for('tenant_admin.clients') }}">Every client's consent, permissions and Global Reader</a></div>{% endif %}</div>
-  </li>
-</ol>
+      </div>
+    </li>
+    <li class="{{ 'done' if status == 'done' else '' }}">
+      <div class="step-title">Office Sentry creates its app</div>
+      <div class="step-body">
+      {% if status == 'done' %}
+        Created <strong>{{ sign_in.name }}</strong> in your tenant, with client ID <span class="mono small">{{ sign_in.client_id }}</span> and a certificate whose private key stays inside Office Sentry. It's saved below.
+      {% else %}
+        A multi-tenant app named “{{ sign_in.name if sign_in else default_app_name }}” with {{ (permissions|length + exchange_permissions|length)|plural('read-only permission') }} (listed at the bottom of this page) and a certificate whose private key never leaves Office Sentry.{% if (sign_in.cloud if sign_in else 'commercial') in pending_clouds %} It uses the certificate you already generated.{% endif %} Nothing from your sign-in is kept.
+      {% endif %}
+      </div>
+    </li>
+    <li class="{{ 'current' if status == 'done' else '' }}">
+      <div class="step-title">Add your first tenant</div>
+      <div class="step-body">
+      {% if status == 'done' %}
+        Its Global Administrator then approves the app with a consent link from the tenant's page. Microsoft can take a minute or two to make a new app available for consent.
+        <form method="post" action="{{ url_for('tenants.new_tenant') }}" class="step-form first-tenant">
+          {{ csrf() }}
+          <input type="hidden" name="connection_id" value="{{ sign_in.connection_id }}">
+          <input type="hidden" name="cloud" value="{{ sign_in.cloud }}">
+          <div class="form-row">
+            <label>Client name <input name="name" maxlength="200" required placeholder="Contoso Ltd"></label>
+            <label>Tenant ID or domain <input name="tenant_ref" id="first-tenant-ref" required autocomplete="off" placeholder="contoso.onmicrosoft.com" class="mono"></label>
+          </div>
+          {% if sign_in.home_tenant %}<p class="hint m0">To start with your own tenant, its ID is <span class="mono">{{ sign_in.home_tenant }}</span>. <button type="button" class="link" data-fill="#first-tenant-ref" data-value="{{ sign_in.home_tenant }}">Use it</button></p>{% endif %}
+          <div class="form-actions"><button class="primary">{{ icon('plus') }} Add tenant</button>
+            <button class="ghost" form="setup-later" formnovalidate>I'll add tenants later</button></div>
+        </form>
+        <form method="post" action="{{ url_for('admin.cancel_setup') }}" id="setup-later">{{ csrf() }}</form>
+      {% else %}
+        Each client's Global Administrator approves the app with a consent link. Mailbox reports also need the read-only <em>Global Reader</em> role.
+      {% endif %}
+      </div>
+    </li>
+  </ol>
+  {% if not active and status != 'done' %}<div class="card-foot">{{ other_ways(not connections, open=status == 'failed') }}</div>{% endif %}
+</section>
+{% endif %}
 
 {% for c in connections %}{% set e = expiry[c.id] %}
 <section class="card" id="conn-{{ c.id }}">
@@ -114,16 +204,12 @@
 </section>
 {% endfor %}
 
-{% if connections %}
-<details class="card add-another">
-  <summary>{{ icon('plus') }} Create another app connection</summary>
-  <p class="muted small">Needed for clients in a national cloud (US Government GCC High or DoD, or China operated by 21Vianet): each of those is a separate Entra ID, so an app registered in Commercial can't sign in there. Register the app in that cloud's own admin centre (or run <code>python -m officesentry create-app --cloud gcc_high</code>, <code>dod</code> or <code>china</code>) and choose the same cloud here. GCC tenants use the Commercial app.</p>
-  <form method="post" action="{{ url_for('admin.create_connection') }}" class="form-row">
-    {{ csrf() }}
-    <label>Name <input name="name" value="Office Sentry" maxlength="100"></label>
-        <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
-    <button>Generate certificate</button>
-  </form>
+{% if ready and not sign_in %}
+<details class="card add-another" id="another">
+  <summary>{{ icon('plus') }} Create an app for another Microsoft cloud</summary>
+  <p class="muted small">Only needed for clients in a national cloud (US Government GCC High or DoD, or China operated by 21Vianet): each of those is a separate Entra ID, so an app registered in Commercial can't sign in there. Sign in with an admin of your tenant in that cloud. GCC tenants use the Commercial app.</p>
+  {% if cloud_choices|rejectattr(0, 'in', ready_clouds)|list %}{{ start_form(choose_cloud=true) }}{% else %}<p class="small">You have an app in every cloud.</p>{% endif %}
+  {{ other_ways(true) }}
 </details>
 {% endif %}
 
@@ -138,4 +224,51 @@
   </table>
   <p class="footnote pad">Exchange access only ever runs <code>Get-</code> commands from a fixed list, so it can't change anything.</p>
 </details>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  // Copy the sign-in code, and fill in the first tenant's ID with the admin's own.
+  document.querySelectorAll('[data-copy]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var text = document.querySelector(button.dataset.copy).textContent.trim();
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function () { button.textContent = 'Copied'; });
+      }
+    });
+  });
+  document.querySelectorAll('[data-fill]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var input = document.querySelector(button.dataset.fill);
+      input.value = button.dataset.value;
+      input.focus();
+    });
+  });
+  // While Office Sentry waits for the sign-in, check with it every few seconds (it asks Microsoft) and move
+  // on by itself once the app is created or something went wrong.
+  var box = document.querySelector('[data-setup-wait]');
+  if (!box) { return; }
+  var token = document.querySelector('input[name=csrf_token]');
+  var text = box.querySelector('[data-setup-text]'), left = box.querySelector('[data-setup-left]');
+  function minutes(seconds) {
+    var m = Math.ceil(seconds / 60);
+    return m <= 1 ? 'less than a minute' : m + ' more minutes';
+  }
+  function check() {
+    fetch(box.dataset.check, {method: 'POST', credentials: 'same-origin',
+                              headers: {'Accept': 'application/json', 'X-CSRFToken': token ? token.value : ''}})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { setTimeout(check, 10000); return; }
+        if (d.status !== 'waiting' && d.status !== 'working') { location.reload(); return; }
+        text.textContent = d.status === 'working' ? 'Signed in. Creating the app…'
+          : (d.note || 'Waiting for you to sign in. This page moves on by itself.');
+        if (left) { left.textContent = minutes(d.seconds_left); }
+        setTimeout(check, Math.max(d.wait || 5, 2) * 1000);
+      })
+      .catch(function () { setTimeout(check, 10000); });
+  }
+  setTimeout(check, Math.max(parseInt(box.dataset.setupWait, 10) || 5, 2) * 1000);
+}());
+</script>
 {% endblock %}
