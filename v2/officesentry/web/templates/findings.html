@@ -1,71 +1,68 @@
+{#- Findings: open findings and accepted risks (or resolved findings) from reports/findings_report.py, on the
+    shared report table, so filters, saved views and the PDF, XLSX and CSV downloads work as on every report. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import csrf, tenant_header, downloads with context %}
-{% block title %}Findings · {{ tenant.name }}{% endblock %}
+{% from "_macros.html" import csrf, icon, tenant_header, downloads with context %}
+{% from "_report_table.html" import report_table, saved_views with context %}
+{% block title %}{{ 'Resolved findings' if resolved else 'Findings' }} · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'findings') }}
 {% set staff = current_user.role in ('admin', 'analyst') %}
+{% set page = 'reports.resolved_findings' if resolved else 'reports.tenant_findings' %}
+{% set q = ('?' ~ view_query) if view_query else '' %}
 <div class="toolbar">
   <nav class="subtabs" aria-label="Finding status">
-    {% for v, label in [('open', 'Open'), ('accepted', 'Accepted risks'), ('resolved', 'Resolved')] %}
-    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id, view=v) }}"{% if v == view %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
-    {% endfor %}
+    <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}"{% if not resolved %} class="active" aria-current="page"{% endif %}>Open <span class="n">{{ counts.open }}</span></a>
+    <a href="{{ url_for('reports.resolved_findings', tenant_id=tenant.id) }}"{% if resolved %} class="active" aria-current="page"{% endif %}>Resolved <span class="n">{{ counts.resolved }}</span></a>
   </nav>
   <div class="toolbar-actions">
-    {% if rows|length > 8 %}<input class="search sm" type="search" data-filter="findings-table" placeholder="Search findings…" aria-label="Search findings, for example a person or a check">{% endif %}
-    {% if staff %}<a class="small" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">Recommended projects</a>{% endif %}
-    <span class="muted small">{{ rows|length }} {{ 'item' if rows|length == 1 else 'items' }}</span>
-    {% if view == 'open' and rows %}{{ downloads([('CSV', url_for('across.review_csv', tenant_id=tenant.id), 'Every open finding with its check and recommendation')]) }}{% endif %}
+    {% if staff and not resolved %}<a class="small" href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}">Recommended projects</a>{% endif %}
+    {{ saved_views(saved, view_query, report.key, tenant, 'e.g. Critical and high') }}
+    {{ downloads([('PDF', url_for('reports.findings_download', tenant_id=tenant.id, ext='pdf', resolved=resolved) ~ q, 'The rows and columns shown, as a PDF' if q else 'Every table, as a PDF'),
+                  ('XLSX', url_for('reports.findings_download', tenant_id=tenant.id, ext='xlsx', resolved=resolved) ~ q, 'The rows and columns shown, one sheet per table' if q else 'Every table, one sheet each')]) }}
   </div>
 </div>
-{% if view == 'open' %}<p class="muted small intro-line">Each row is an account or setting a check flagged. Findings close on their own once the next collection no longer sees the problem.{% if staff %} If something is intentional, accept the risk so it moves out of the totals.{% endif %}</p>{% endif %}
+<p class="muted small intro-line">{{ report.description }}{% if staff and not resolved %} If something is intentional, accept the risk so it moves out of the totals.{% endif %}</p>
 
-{% if rows %}
-<div class="card flush">
-<table class="stack-sm findings-table" id="findings-table">
-  <thead><tr><th>Account or item</th><th>Severity</th><th>Detail</th><th>First seen</th>
-    <th>{% if view == 'resolved' %}Resolved{% elif view == 'accepted' %}Accepted{% else %}{% if staff %}Action{% endif %}{% endif %}</th></tr></thead>
-  <tbody>
-  {% for rule_key, items in groups %}
-  {% set title = titles.get(rule_key, rule_key) %}
-  {# A search keeps a check's heading while any of its rows match. #}
-  <tr class="group" data-name="{{ (title ~ ' ' ~ items|map(attribute='subject')|join(' ') ~ ' ' ~ items|map(attribute='detail')|join(' ') ~ ' ' ~ items|map(attribute='severity')|join(' '))|lower }}" id="check-{{ rule_key }}"><td colspan="5">{{ title }} <span class="faint">· {{ items|length }}</span></td></tr>
-  {% for f in items %}
-  <tr data-name="{{ (title ~ ' ' ~ f.subject ~ ' ' ~ f.detail ~ ' ' ~ f.severity)|lower }}">
-    {% set person = people.get(f.object_id) or people.get(f.subject|lower) %}
-    <td class="wrap">{% if person %}<a class="strong" href="{{ url_for('people.person', tenant_id=tenant.id, user_id=person) }}">{{ f.subject }}</a>{% else %}<span class="strong">{{ f.subject }}</span>{% endif %}</td>
-    <td data-label="Severity"><span class="sevtext {{ f.severity }}">{{ f.severity }}</span></td>
-    <td data-label="Detail" class="wrap">{{ f.detail }}</td>
-    <td data-label="First seen" class="nowrap">{{ f.first_seen|day }}</td>
-    <td data-label="{{ 'Resolved' if view == 'resolved' else 'Status' }}">
-      {% if view == 'resolved' %}{{ f.resolved_at|day }}
-      {% elif f.accepted_at %}
-        <span class="small">By {{ f.accepted_by }}{% if f.accepted_until %} until {{ f.accepted_until|day }}{% endif %}</span>
-        <span class="sub">“{{ f.accepted_note }}”</span>
-        {% if staff %}<form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=f.id) }}">{{ csrf() }}<button class="link small">Undo</button></form>{% endif %}
-      {% elif staff %}
-        <details class="accept-risk"><summary>Accept risk</summary>
-          <form method="post" action="{{ url_for('reports.accept_finding', finding_id=f.id) }}" class="accept">
-            {{ csrf() }}
-            <label>Reason <input name="note" maxlength="500" required placeholder="e.g. Break-glass account, monitored"></label>
-            <label>Review on (optional) <input type="date" name="until"></label>
-            <button class="sm primary">Accept risk</button>
-          </form>
-        </details>
-      {% endif %}
-    </td>
-  </tr>
+{% if report.tiles %}
+<div class="tiles">
+  {% for t in report.tiles %}{% set href = links.tiles[loop.index0] %}
+  <{{ 'a' if href else 'div' }} class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view title="Show the rows behind this figure"{% endif %}>
+    <div class="label">{{ t.label }}{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
+    <div class="value">{{ t.value }}</div>
+    <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
+  </{{ 'a' if href else 'div' }}>
   {% endfor %}
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<div class="card empty">
-  {% if view == 'open' %}<h3>No open findings</h3><p>Either everything passed or no data has been collected yet.</p>
-  {% elif view == 'accepted' %}<h3>No accepted risks</h3><p>Risks you accept on the Open tab appear here, with the reason given.</p>
-  {% else %}<h3>Nothing resolved yet</h3><p>Findings move here when a later collection no longer sees the problem.</p>{% endif %}
 </div>
 {% endif %}
+
+{% for tv in tables %}
+{% if not tv.total %}
+<section class="card flush empty-section" id="t-{{ tv.slug }}">
+  <h2>{{ tv.section.title }} <span class="count-badge">0</span></h2>
+  <p>{{ tv.section.empty }}</p>
+</section>
+{% else %}
+{% set csv = url_for('reports.findings_download', tenant_id=tenant.id, ext='csv', resolved=resolved, section=loop.index) ~ ('&' ~ view_query if view_query) %}
+{% call(key) report_table(tv, csv, action='Action' if staff and not resolved else '') %}
+  {% if tv.section.title == 'Accepted risks' %}
+  <form method="post" action="{{ url_for('reports.unaccept_finding', finding_id=key) }}">{{ csrf() }}<button class="link small" title="Move it back to the open findings">Undo</button></form>
+  {% else %}
+  {% set was = lapsed.get(key) %}
+  {% if was %}<span class="sub">Accepted by {{ was.accepted_by }} until {{ was.accepted_until|day }}, now due for review</span>{% endif %}
+  <details class="accept-risk"><summary>{{ 'Accept again' if was else 'Accept risk' }}</summary>
+    <form method="post" action="{{ url_for('reports.accept_finding', finding_id=key) }}" class="accept">
+      {{ csrf() }}
+      <label>Reason <input name="note" maxlength="500" required placeholder="e.g. Break-glass account, monitored"{% if was %} value="{{ was.accepted_note }}"{% endif %}></label>
+      <label>Review on (optional) <input type="date" name="until"></label>
+      <button class="sm primary">Accept risk</button>
+    </form>
+  </details>
+  {% endif %}
+{% endcall %}
+{% endif %}
+{% endfor %}
+
+<p class="footnote">{% if report.sources[0][1] %}Latest collection {{ report.sources[0][1]|when }}. {% endif %}Severity, check and first-seen filters, sorting and hidden columns stay in the address, so a saved view or a download shows the same rows.</p>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>

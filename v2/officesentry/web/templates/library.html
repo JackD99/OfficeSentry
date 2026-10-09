@@ -46,7 +46,7 @@
 {% if tenant and saved %}
 <section class="card saved-views">
   <div class="card-head"><h2>{{ icon('eye') }} Your saved views</h2><span class="meta">Open on {{ tenant.name }}</span></div>
-  <div class="opts">{% for v in saved %}<a class="opt" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=v.report_key) }}?{{ v.query }}">{{ v.name }}<span class="n">{{ titles[v.report_key] }}</span></a>{% endfor %}</div>
+  <div class="opts">{% for v in saved %}<a class="opt" href="{{ saved_view_url(v.report_key, tenant.id) }}?{{ v.query }}">{{ v.name }}<span class="n">{{ titles[v.report_key] }}</span></a>{% endfor %}</div>
 </section>
 {% endif %}
 
