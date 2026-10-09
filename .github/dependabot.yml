@@ -4,7 +4,8 @@
 version: 2
 updates:
   - package-ecosystem: pip
-    # v2/pyproject.toml, and the tools CI installs (.github/requirements-ci.txt)
+    # v2/pyproject.toml, the lock files made from it with pip-compile (v2/requirements.txt and
+    # requirements-dev.txt), and the tools CI installs (.github/requirements-ci.txt)
     directories: ["/v2", "/.github"]
     schedule:
       interval: weekly
@@ -36,4 +37,14 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
       docker:
+        patterns: ["*"]
+
+  # The Caddy image in docker-compose.yml, pinned by digest like the Dockerfile's base.
+  - package-ecosystem: docker-compose
+    directory: /v2
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      docker-compose:
         patterns: ["*"]
