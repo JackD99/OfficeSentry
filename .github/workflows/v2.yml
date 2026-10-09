@@ -12,10 +12,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request cancels the run it replaces.
+# A newer push to a pull request cancels the run it replaces. Runs on main always finish, so every commit
+# that lands there is fully tested.
 concurrency:
   group: v2-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -23,11 +24,11 @@ defaults:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.12'
           cache: pip
@@ -37,15 +38,18 @@ jobs:
 
   test:
     name: test (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.11', '3.12']
+        python: ['3.11', '3.12', '3.13']
+        include:
+          - python: '3.12'  # the Docker image's Python
+            coverage: true
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -55,7 +59,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
       - run: pip install -e '.[dev]'
-      - run: pytest -n auto
+      - if: ${{ !matrix.coverage }}
+        run: pytest -n auto
+      - name: pytest with coverage (fails under 90%)
+        if: ${{ matrix.coverage }}
+        env:
+          COVERAGE_CORE: sysmon
+        run: pytest -n auto --cov=officesentry --cov-report=term:skip-covered --cov-fail-under=90
+      - name: Coverage summary
+        if: ${{ matrix.coverage && !cancelled() }}
+        run: |
+          {
+            echo "### Coverage: $(coverage report --format=total)% (the floor is 90%)"
+            echo "<details><summary>Files below 100%, least covered first</summary>"
+            echo
+            coverage report --format=markdown --skip-covered --sort=cover
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   windows:
     # Windows without Docker: no Pango, so PDF buttons fall back to print-ready pages and the tests that
@@ -66,8 +87,8 @@ jobs:
     timeout-minutes: 25
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.12'
           cache: pip
@@ -79,10 +100,10 @@ jobs:
           tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Build the image (not pushed)
         run: docker build -t officesentry:ci .
       - name: Start the portal and wait until it's healthy
@@ -108,11 +129,11 @@ jobs:
         run: docker logs portal
 
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.12'
           cache: pip
@@ -122,5 +143,5 @@ jobs:
           python -m venv /tmp/image
           /tmp/image/bin/pip install '.[pdf]'
           /tmp/image/bin/pip freeze --exclude-editable | grep -v '^officesentry' > /tmp/requirements.txt
-      - run: pip install pip-audit
+      - run: pip install -r ../.github/requirements-ci.txt
       - run: pip-audit --strict -r /tmp/requirements.txt
