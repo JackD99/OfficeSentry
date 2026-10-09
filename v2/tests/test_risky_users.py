@@ -13,6 +13,7 @@ from officesentry.worker import execute_run
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.stored import unpack
 from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
@@ -156,6 +157,7 @@ def test_check_is_unavailable_when_the_list_was_cut_short(db, two_tenants):
     calm = [u for u in gd.RISKY_USERS if u["riskState"] not in ("atRisk", "confirmedCompromised")]
     tenant = _seed(db, alpha, skus=P2_SKUS, risky_users=calm)
     # An account at risk could be past the page cap, so finding none proves nothing.
+    unpack(db)
     db.execute("UPDATE objects SET data = json_set(data, '$.truncated', json('true')) "
                "WHERE kind = 'risky_user_status'")
     result = {r.key: r for r in evaluate(TenantSnapshot(db, tenant))}["risky_users"]

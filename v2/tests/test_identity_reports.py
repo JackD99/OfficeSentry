@@ -15,6 +15,7 @@ from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.stored import unpack
 from tests.test_collectors import SKUS, USERS, V1, _run, factory  # noqa: F401
 
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
@@ -158,6 +159,7 @@ def test_admins_report_flags_problems_and_finds_break_glass(db, p1_tenant):
 def test_admins_report_leaves_out_office_sentrys_own_app(db, p1_tenant):
     sp = db.execute("SELECT client_id FROM app_connections").fetchone()["client_id"]
     run = store.latest_run(db, p1_tenant["id"], "admin_roles")
+    unpack(db)
     db.execute("UPDATE objects SET data = json_set(data, '$.appId', ?) WHERE run_id = ? AND object_id = 'a5'",
                (sp, run["id"]))
     rows = sections(build(db, p1_tenant, "admins", NOW))["Privileged role holders"].rows

@@ -101,7 +101,10 @@ def latest_version() -> int:
 
 def _backup_before_upgrade(conn: sqlite3.Connection, current: int) -> None:
     """Copy a database that already has a schema before upgrading it (``backups/pre-upgrade-*.db``),
-    so a bad release can be rolled back. A failed copy stops the upgrade."""
+    so a bad release can be rolled back. A failed copy, or too little disk for one, stops the upgrade.
+
+    Called before the first migration takes the write lock, so a large copy doesn't stop the portal and the
+    worker; anything they write while it runs is in the database but not in the copy."""
     from . import backups
 
     db_file = backups.database_file(conn)
@@ -147,9 +150,9 @@ def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations. Returns the resulting schema version.
 
     A database that already has a schema is copied to ``backups/`` next to it
-    first (see ``backups.before_upgrade``). A database a newer release upgraded
-    is refused (``DatabaseTooNew``) rather than run with code that doesn't know
-    its schema.
+    first (see ``backups.before_upgrade``), before the write lock is taken. A
+    database a newer release upgraded is refused (``DatabaseTooNew``) rather
+    than run with code that doesn't know its schema.
 
     Safe to call from several processes at once (gunicorn workers, the
     worker): each migration re-reads ``user_version`` inside its write
@@ -159,7 +162,8 @@ def migrate(conn: sqlite3.Connection) -> int:
     if current > latest_version():
         raise DatabaseTooNew(_too_new_message(conn, current, latest_version()))
     _use_wal(conn)
-    backed_up = current == 0  # a new database has nothing to lose
+    if current and any(version > current for version, _ in migration_files()):
+        _backup_before_upgrade(conn, current)  # a new database (version 0) has nothing to lose
     for version, path in migration_files():
         if version <= current:
             continue
@@ -167,9 +171,6 @@ def migrate(conn: sqlite3.Connection) -> int:
             current = schema_version(conn)
             if version <= current:
                 continue  # applied by another process since we looked
-            if not backed_up:
-                _backup_before_upgrade(conn, current)
-                backed_up = True
             for stmt in _split_statements(path.read_text(encoding="utf-8")):
                 conn.execute(stmt)
             conn.execute(f"PRAGMA user_version = {int(version)}")

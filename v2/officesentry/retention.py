@@ -182,17 +182,18 @@ _SIGNIN_RUNS = (
 
 
 def prune_signin_detail(conn, days: int | None, batch: int = 100, now: datetime | None = None) -> int:
-    """Delete sign-in detail from runs that finished more than ``days`` ago. Returns rows deleted."""
+    """Delete sign-in detail from runs that finished more than ``days`` ago. Returns objects deleted."""
     if days is None:
         return 0
     runs = [r["id"] for r in conn.execute(_SIGNIN_RUNS, (_cutoff(days, now), *SIGNIN_KINDS))]
     deleted = 0
     for i in range(0, len(runs), batch):
         chunk = runs[i:i + batch]
+        where = f"run_id IN ({','.join('?' * len(chunk))}) AND kind IN ({_SIGNIN_MARKS})"
         with transaction(conn, immediate=True):
-            deleted += conn.execute(
-                f"DELETE FROM objects WHERE run_id IN ({','.join('?' * len(chunk))}) AND kind IN ({_SIGNIN_MARKS})",
-                (*chunk, *SIGNIN_KINDS)).rowcount
+            deleted += conn.execute(f"SELECT COALESCE(SUM(items), 0) FROM objects WHERE {where}",
+                                    (*chunk, *SIGNIN_KINDS)).fetchone()[0]
+            conn.execute(f"DELETE FROM objects WHERE {where}", (*chunk, *SIGNIN_KINDS))
     return deleted
 
 
@@ -200,7 +201,7 @@ def _signin_count(conn, days: int | None, now: datetime | None) -> int:
     if days is None:
         return 0
     return conn.execute(
-        f"SELECT COUNT(*) FROM objects WHERE kind IN ({_SIGNIN_MARKS}) AND run_id IN ({_SIGNIN_RUNS})",
+        f"SELECT COALESCE(SUM(items), 0) FROM objects WHERE kind IN ({_SIGNIN_MARKS}) AND run_id IN ({_SIGNIN_RUNS})",
         (*SIGNIN_KINDS, _cutoff(days, now), *SIGNIN_KINDS)).fetchone()[0]
 
 

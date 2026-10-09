@@ -6,7 +6,7 @@ import re
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import findings, usage
+from .. import findings, store, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
 from ..reports import (
@@ -237,16 +237,10 @@ def data_report_xlsx(tenant_id: int, key: str):
 
 def _known_skus() -> list[tuple[str, str]]:
     """Every paid SKU part number seen in any tenant's latest licence snapshot, plus right-sizing's targets."""
-    rows = g.db.execute(
-        """
-        SELECT DISTINCT json_extract(o.data, '$.skuPartNumber') AS part
-        FROM objects o JOIN runs r ON r.id = o.run_id
-        WHERE o.kind = 'subscribed_sku' AND r.id IN (
-            SELECT MAX(id) FROM runs WHERE collector = 'tenant_profile' AND status IN ('succeeded', 'partial')
-            GROUP BY tenant_id)
-        """
-    ).fetchall()
-    parts = {r["part"] for r in rows if r["part"]}
+    runs = g.db.execute("SELECT MAX(id) AS id FROM runs WHERE collector = 'tenant_profile'"
+                        " AND status IN ('succeeded', 'partial') GROUP BY tenant_id").fetchall()
+    parts = {s.get("skuPartNumber") for r in runs for s in store.run_objects(g.db, r["id"], "subscribed_sku")}
+    parts = {p for p in parts if p and isinstance(p, str)}
     parts |= {r["sku_part_number"] for r in g.db.execute("SELECT sku_part_number FROM sku_prices")}
     if parts:  # the cheaper plans right-sizing suggests, so its savings can be priced
         parts |= set(usage.TARGETS)

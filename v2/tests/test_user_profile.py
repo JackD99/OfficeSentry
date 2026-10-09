@@ -13,6 +13,7 @@ from officesentry.web.filters import day
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.stored import unpack
 from tests.test_collectors import USERS
 
 ANN = USERS[0]
@@ -170,6 +171,7 @@ def test_leaver_checklist_for_a_blocked_account(db, two_tenants):
 
 
 def _set_mailbox_size(db, tenant_id, uid, size):
+    unpack(db)
     db.execute("UPDATE objects SET data = json_set(data, '$.totalBytes', ?) WHERE kind = 'mailbox_size'"
                " AND object_id = ? AND run_id IN (SELECT id FROM runs WHERE tenant_id = ?)", (size, uid, tenant_id))
 

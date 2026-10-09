@@ -227,12 +227,14 @@ def test_disabled_tenants_are_not_scheduled(db, cfg, two_tenants):
     assert schedule_tick(db, cfg, datetime(2026, 10, 2, 3, 0, tzinfo=UTC)) == 0
 
 
-def test_objects_are_json(db, two_tenants):
+def test_objects_are_stored_compressed(db, two_tenants):
     alpha, _ = two_tenants
     rid = store.enqueue_run(db, alpha, "users")
     store.add_objects(db, rid, "user", [("u1", {"n": 1})])
-    raw = db.execute("SELECT data FROM objects").fetchone()[0]
-    assert json.loads(raw) == {"n": 1}
+    row = db.execute("SELECT object_id, data, items FROM objects").fetchone()
+    assert (row["object_id"], row["items"]) == ("u1", 1)
+    assert [json.loads(line) for line in store.pack_lines(row["data"])] == [["u1", {"n": 1}]]
+    assert store.run_objects(db, rid) == [{"n": 1, "_kind": "user", "_id": "u1"}]
 
 
 @responses.activate

@@ -19,6 +19,7 @@ from officesentry.worker import execute_run
 from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
 from tests.seed import mock_tenant, seed_tenant
+from tests.stored import unpack
 
 
 def _snap(db, tenant_id):
@@ -123,6 +124,7 @@ def _age_sharepoint_runs(db, alpha, days: float) -> None:
     when = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute("UPDATE runs SET finished_at = ? WHERE tenant_id = ? AND collector IN"
                " ('shared_files', 'sharepoint_storage')", (when, alpha))
+    unpack(db)
     db.execute("UPDATE objects SET data = json_set(data, '$.checked', ?) WHERE kind = 'lookup_onedrive'", (when,))
 
 
