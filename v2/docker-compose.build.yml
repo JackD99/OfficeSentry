@@ -1,0 +1,17 @@
+# Build the image from this folder instead of pulling a release: for
+# development, and for servers that deploy a branch rather than a release.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# or put COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml in .env so
+# every docker compose command uses both. The local image gets its own name,
+# so it is never mistaken for a published release.
+x-build: &build
+  image: officesentry:local
+  build: .
+
+services:
+  web: *build
+  worker: *build
+  demo-web: *build
+  demo-worker: *build

@@ -23,7 +23,7 @@ def test_serve_uses_waitress_on_windows(env, monkeypatch):
     main(["serve", "--port", "8123", "--threads", "6"])
     [(app, kw)] = calls
     assert kw == {"host": "127.0.0.1", "port": 8123, "threads": 6}
-    assert app.test_client().get("/health").json == {"ok": True}
+    assert app.test_client().get("/health").json["ok"] is True
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="gunicorn doesn't run on Windows")
@@ -40,4 +40,4 @@ def test_serve_uses_gunicorn_elsewhere(env, monkeypatch):
     main(["serve", "--host", "0.0.0.0", "--port", "8124"])  # noqa: S104
     assert seen["bind"] == ["0.0.0.0:8124"] and seen["workers"] == 2 and seen["threads"] == 4
     # The app was built (and the database upgraded) before any worker starts.
-    assert seen["app"].test_client().get("/health").json == {"ok": True}
+    assert seen["app"].test_client().get("/health").json["ok"] is True

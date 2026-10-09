@@ -360,11 +360,13 @@ These areas have no real recording and are tested with simulated data only:
 
 ```bash
 cp .env.example .env          # set OFFICESENTRY_BASE_URL at least
-docker compose --profile https up -d --build
+docker compose --profile https up -d
 ```
 
-[DEPLOY.md](DEPLOY.md) has the full steps: HTTPS, schedule and retention
-settings, backups and updating.
+That runs the published release image. To run this folder's code instead,
+add `docker-compose.build.yml` (`-f docker-compose.yml -f
+docker-compose.build.yml up -d --build`). [DEPLOY.md](DEPLOY.md) has the full
+steps: HTTPS, schedule and retention settings, backups and updating.
 
 Create the first admin:
 
