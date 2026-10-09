@@ -365,8 +365,12 @@ These areas have no real recording and are tested with simulated data only:
   real client IP and scheme are used.
 - **Keys:** the session key and the encryption key are separate and kept in
   `secrets.json` (mode 0600, tightened if it was looser) unless set as
-  environment variables. `python -m officesentry rotate-keys --new` replaces
-  both and re-encrypts every stored secret.
+  environment variables. In Docker it lives in a volume of its own, apart
+  from the data and its backups. `python -m officesentry rotate-keys --new`
+  replaces both and re-encrypts every stored secret.
+- **Backups:** nightly checked copies, encrypted off-site copies with restic
+  to any S3-compatible storage, and a weekly drill that restores the newest
+  one and checks it opens (`DEPLOY.md`, "Off-site backups").
 
 ## Quick start (Docker)
 

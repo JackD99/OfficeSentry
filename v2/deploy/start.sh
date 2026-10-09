@@ -17,7 +17,8 @@ if [ "$only" = demo ]; then
   docker compose up -d --no-deps demo
   services=(demo)
 else
-  # Build first so the portal is only down while the containers swap.
+  # Build first so the portal is only down while the containers swap. A release
+  # (no docker-compose.build.yml in COMPOSE_FILE) has nothing to build: it was pulled.
   docker compose build --pull
   docker compose up -d --remove-orphans
   # A part switched off (say the demo) isn't an orphan to compose: remove it.
@@ -45,5 +46,10 @@ for service in "${services[@]}"; do
     exit 1
   fi
 done
+# Nightly backups, the off-site copy, the restore drill and the uptime ping
+# (deploy/jobs.sh), in the deploy user's crontab.
+if [ "$only" != demo ] && ! bash deploy/jobs.sh schedule; then
+  echo "::warning::Couldn't schedule the nightly backups (is cron installed?). DEPLOY.md, \"Off-site backups\"."
+fi
 docker compose ps
 docker image prune -f > /dev/null
