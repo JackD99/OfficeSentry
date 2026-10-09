@@ -69,6 +69,36 @@ def test_connection_check_flags_global_administrator(db, two_tenants):
     assert check.state == "warn" and "Remove assignments" in check.fix
 
 
+def test_extra_permissions_and_roles_are_warnings(client, db, two_tenants, monkeypatch):
+    """The read-only promise per tenant: anything granted beyond what Office Sentry asks for is shown."""
+    alpha, _ = two_tenants
+    granted = gd.our_assignments
+    extra = [{"id": "our-mail", "resourceId": "sp-graph", "appRoleId": "r-mailread", "principalId": gd.OUR_SP["id"]},
+             {"id": "our-exo-full", "resourceId": "sp-exchange", "appRoleId": "r-exo-full",
+              "principalId": gd.OUR_SP["id"]}]
+    monkeypatch.setattr(gd, "our_assignments", lambda missing=(): granted(missing) + extra)
+    roles = gd.OUR_ROLE_ASSIGNMENTS + [{"id": "a-dr", "roleDefinitionId": gd.READER, "principalId": gd.OUR_SP["id"],
+                                        "directoryScopeId": "/"}]
+    _, result, _ = _check(db, alpha, roles=roles)
+    assert result["other"] == ["Mail.Read", "full_access_as_app"] and result["missing"] == []
+
+    health = tenant_health.assess(db, store.get_tenant(db, alpha))
+    perms = health.check("extra_permissions")
+    assert perms.state == "warn" and "2 permissions Office Sentry doesn't ask for: Mail.Read, full_access_as_app" \
+        in perms.summary and "Enterprise applications" in perms.fix
+    reader = health.check("global_reader")  # any role besides Global Reader, not only the famous two
+    assert reader.state == "warn" and "also holds Directory Readers" in reader.summary
+    assert health.check("permissions").state == "ok"
+
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get("/admin/tenants").get_data(as_text=True)
+    assert "2 extra" in page and "Not asked for: Mail.Read, full_access_as_app" in page
+    assert "+ 1 other role" in page and "Also holds: Directory Readers" in page
+    page = client.get(f"/tenants/{alpha}/manage").get_data(as_text=True)
+    assert "Extra permissions" in page and "also holds Directory Readers" in page
+
+
 def test_connection_check_app_not_in_tenant(db, two_tenants):
     alpha, _ = two_tenants
     status, result, _ = _check(db, alpha, found=False)

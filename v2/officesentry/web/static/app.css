@@ -920,3 +920,14 @@ td.row-action { min-width: 150px; }
   table.stack-sm td.row-action { display: block; text-align: left; }
   table.stack-sm td.row-action::before { content: none; }
 }
+
+/* Replacing an app connection's certificate (connections.html) */
+.rollover { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.rollover .setup-steps.flush-steps { padding: 0; margin: 4px 0 8px; }
+.callout .mono { word-break: break-all; }
+@media (max-width: 640px) {
+  /* A callout's button goes under its text on phones, so the text keeps the full width. */
+  .callout:has(> form) { flex-wrap: wrap; }
+  .callout:has(> form) > .grow { flex-basis: calc(100% - 30px); }
+  .callout:has(> form) > form { margin-left: 26px; }
+}
