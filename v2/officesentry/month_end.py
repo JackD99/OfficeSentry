@@ -12,7 +12,9 @@
   renders the files once into ``issued_reports`` (frozen) and then sends those
   exact files, or only publishes them to the tenant's report history when the
   plan doesn't email. Approving again ("re-issue") stores the next version
-  with a reason.
+  with a reason. Approving is a background task (``queue_approval``, run by
+  the worker's task threads), one per tenant and period, so a bulk approval
+  of hundreds of clients returns at once and nothing renders in a request.
 
 Reporting only: nothing here reads or writes Microsoft 365. Roles: staff
 (admin and analyst) review, comment and assign; only admins edit plans and
@@ -22,15 +24,18 @@ approve, send or re-issue.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import delivery, issued
-from .db import utcnow
+from . import delivery, issued, store, tasks
+from .db import audit, transaction, utcnow
 from .reports import monthly_review, summary
 from .text import plural
+
+log = logging.getLogger(__name__)
 
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 STATES = {"draft": "Draft", "in_review": "In review", "approved": "Approved", "sent": "Sent"}
@@ -303,6 +308,7 @@ class QueueRow:
     sent_at: str | None = None
     error: str | None = None
     paused: bool = False
+    task: dict | None = None  # the latest approval task for the month (``approval_task``)
 
     @property
     def state_label(self) -> str:
@@ -311,8 +317,19 @@ class QueueRow:
         return STATES[self.state]
 
     @property
+    def approving(self) -> bool:
+        return bool(self.task and self.task["status"] in tasks.PENDING)
+
+    @property
+    def approval_failed(self) -> str | None:
+        """Why the last approval failed, while the month is still waiting for one."""
+        if self.task and self.task["status"] == "failed" and self.state in ("draft", "in_review"):
+            return self.task["error"] or "Something went wrong"
+        return None
+
+    @property
     def ready(self) -> bool:
-        return self.state in ("draft", "in_review") and not self.flags and not self.paused
+        return self.state in ("draft", "in_review") and not self.flags and not self.paused and not self.approving
 
 
 def _last_report_at(conn, tenant_id: int, period: str) -> str:
@@ -348,6 +365,7 @@ def queue(conn, tenants, period: str, now: datetime | None = None) -> list[Queue
     """One row per visible tenant on a plan, for ``period``."""
     now = now or datetime.now(UTC)
     rows = []
+    jobs = approval_tasks(conn, period)
     for t in tenants:
         plan, _ = plan_for(conn, t["id"])
         if plan is None or t["archived_at"]:
@@ -359,7 +377,7 @@ def queue(conn, tenants, period: str, now: datetime | None = None) -> list[Queue
         rows.append(QueueRow(dict(t), dict(plan), state, r["reviewer"] if r else None,
                              summary.monthly(report).verdict, severe, flags,
                              sent_at=r["sent_at"] if r else None, error=r["error"] if r else None,
-                             paused=not t["enabled"]))
+                             paused=not t["enabled"], task=dict(jobs[t["id"]]) if t["id"] in jobs else None))
     rows.sort(key=lambda q: (list(STATES).index(q.state), -len(q.flags), q.tenant["name"].lower()))
     return rows
 
@@ -450,17 +468,30 @@ def frozen_files(conn, tenant_id: int, period: str) -> list:
         " AND period = ? AND trigger = 'approval' GROUP BY filename) ORDER BY id", (tenant_id, period)).fetchall()
 
 
-def freeze(app, conn, tenant, period: str, user: str, *, reason: str | None = None,
-           now: datetime | None = None) -> list[int]:
-    """Render the plan's files once, with the month's commentary and client-visible notes, into issued_reports."""
+def render_files(app, conn, tenant, period: str, now: datetime | None = None) -> list[tuple[str, str, bytes]]:
+    """Build the plan's files for the month (the slow part of approving). Reads only, so it runs outside
+    the write transaction and the worker's collections aren't held up while PDFs render."""
     now = now or datetime.now(UTC)
-    plan, link = plan_for(conn, tenant["id"])
+    plan, _ = plan_for(conn, tenant["id"])
     if plan is None:
         raise ApprovalError(f"{tenant['name']} isn't on a report plan")
     keys = json.loads(plan["reports"] or "[]")
     report = monthly_review.build(conn, tenant, now)
-    files = delivery._attachments(app, conn, tenant, keys, bool(plan["include_xlsx"]), now, report,
-                                  review_context=report_context(conn, tenant["id"], period, staff=False))
+    return delivery._attachments(app, conn, tenant, keys, bool(plan["include_xlsx"]), now, report,
+                                 review_context=report_context(conn, tenant["id"], period, staff=False))
+
+
+def freeze(app, conn, tenant, period: str, user: str, *, reason: str | None = None,
+           now: datetime | None = None, files: list[tuple[str, str, bytes]] | None = None) -> list[int]:
+    """Store the plan's files for the month, with the month's commentary and client-visible notes, in
+    issued_reports and mark the month approved. ``files`` from ``render_files`` (built here when not given)."""
+    now = now or datetime.now(UTC)
+    plan, link = plan_for(conn, tenant["id"])
+    if plan is None:
+        raise ApprovalError(f"{tenant['name']} isn't on a report plan")
+    if files is None:
+        files = render_files(app, conn, tenant, period, now)
+    keys = json.loads(plan["reports"] or "[]")
     by_name = {name: key for key, name in delivery.attachment_plan(tenant, keys, bool(plan["include_xlsx"]))}
     known = delivery.catalog_map()
     stamp = now.strftime(ISO)
@@ -477,7 +508,11 @@ def freeze(app, conn, tenant, period: str, user: str, *, reason: str | None = No
 
 def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | None = None) -> str | None:
     """Send the frozen files per the plan, or publish them (they're already in the report history).
-    Returns an error message, or None once the month is Sent."""
+    Returns an error message, or None once the month is Sent.
+
+    The email's delivery record, the schedule, the recipients on the issued files and the Sent state are
+    written in one transaction after the email goes, so a retry after a crash either sees Sent or sends
+    again; only a crash in the moment between the mail server accepting it and that commit sends twice."""
     now = now or datetime.now(UTC)
     plan, link = plan_for(conn, tenant["id"])
     rows = frozen_files(conn, tenant["id"], period)
@@ -486,32 +521,128 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
     schedule = conn.execute("SELECT * FROM email_schedules WHERE id = ?",
                             (link["schedule_id"],)).fetchone() if link["schedule_id"] else None
     contacts = delivery.recipients(conn, "schedule", schedule["id"]) if schedule else []
+
+    def sent(conn) -> None:
+        update_review(conn, tenant["id"], period, user, state="sent", sent_at=now.strftime(ISO), error=None)
+        audit(conn, user, "report_sent", tenant["id"], period)
+
     if plan["delivery"] == "email" and contacts:
-        files = [(r["filename"], r["content_type"], bytes(r["data"])) for r in rows]
-        error = delivery.send_frozen(app, conn, vault, schedule, tenant, period, files, user=user, now=now)
-        if error:
-            update_review(conn, tenant["id"], period, user, error=error[:1000])
-            return error
         to, bcc = delivery.split_recipients(contacts)
-        conn.execute(f"UPDATE issued_reports SET recipients = ?, bcc = ? WHERE id IN ({','.join('?' * len(rows))})",
-                     (", ".join(to), ", ".join(bcc), *[r["id"] for r in rows]))
-    elif schedule is not None:
-        # Published only: the period is done, so an automatic schedule doesn't send it again.
-        conn.execute(f"UPDATE email_schedules SET last_period = {delivery.LATER_PERIOD}, attempts = 0,"
-                     " retry_at = NULL WHERE id = ?", (period, period, schedule["id"]))
-    update_review(conn, tenant["id"], period, user, state="sent", sent_at=now.strftime(ISO), error=None)
+
+        def emailed(conn) -> None:
+            conn.execute(f"UPDATE issued_reports SET recipients = ?, bcc = ? WHERE id IN ({','.join('?' * len(rows))})",
+                         (", ".join(to), ", ".join(bcc), *[r["id"] for r in rows]))
+            sent(conn)
+
+        files = [(r["filename"], r["content_type"], bytes(r["data"])) for r in rows]
+        error = delivery.send_frozen(app, conn, vault, schedule, tenant, period, files, user=user, now=now,
+                                     on_sent=emailed)
+        if error:
+            with store.atomic(conn):
+                update_review(conn, tenant["id"], period, user, error=error[:1000])
+                audit(conn, user, "report_send_failed", tenant["id"], period)
+        return error
+    with store.atomic(conn):
+        if schedule is not None:
+            # Published only: the period is done, so an automatic schedule doesn't send it again.
+            conn.execute(f"UPDATE email_schedules SET last_period = {delivery.LATER_PERIOD}, attempts = 0,"
+                         " retry_at = NULL WHERE id = ?", (period, period, schedule["id"]))
+        sent(conn)
     return None
 
 
 def approve(app, conn, vault, tenant, period: str, user: str, *, reason: str | None = None,
             now: datetime | None = None) -> str | None:
-    """Freeze and send (or publish). Approving a month that was already approved is a re-issue and
-    needs ``reason``; it stores the next version. Returns a send error, or None."""
+    """Freeze and send (or publish) in this thread. Approving a month that was already approved is a re-issue
+    and needs ``reason``; it stores the next version. Returns a send error, or None. The portal queues
+    ``queue_approval`` instead, which does the same in the worker."""
     state = state_of(conn, tenant["id"], period)
     if state in ("approved", "sent") and not (reason or "").strip():
         raise ApprovalError("Say why it's being issued again")
     freeze(app, conn, tenant, period, user, reason=(reason or "").strip() or None, now=now)
     return deliver(app, conn, vault, tenant, period, user, now=now)
+
+
+# -- Approval in the background ------------------------------------------------------------------
+
+
+def approval_key(tenant_id: int, period: str) -> str:
+    """One approval (or send) per tenant and period at a time."""
+    return f"approve:{tenant_id}:{period}"
+
+
+def queue_approval(conn, tenant, period: str, user: str, *, reason: str | None = None, send_only: bool = False,
+                   batch: str | None = None) -> int:
+    """Queue approving (freeze, then send or publish) a client's month, or with ``send_only`` sending the
+    approved files again. Asking while one is queued or running returns that one, so it happens once."""
+    return tasks.enqueue(conn, "approve", key=approval_key(tenant["id"], period), tenant_id=tenant["id"],
+                         payload={"period": period, "user": user, "reason": reason, "send_only": send_only},
+                         batch=batch, priority=tasks.PRIORITY_WAITING, user=user)
+
+
+def approval_task(conn, tenant_id: int, period: str):
+    """The latest approval task for the client's month (queued, running or finished), or None."""
+    return tasks.latest(conn, approval_key(tenant_id, period))
+
+
+def approval_tasks(conn, period: str) -> dict:
+    """{tenant id: latest approval task} for the month."""
+    rows = conn.execute("SELECT * FROM tasks WHERE id IN (SELECT MAX(id) FROM tasks WHERE kind = 'approve'"
+                        " AND key LIKE ? GROUP BY tenant_id)", (f"approve:%:{period}",)).fetchall()
+    return {r["tenant_id"]: r for r in rows}
+
+
+def new_batch(period: str) -> str:
+    return f"approve:{period}:{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}"
+
+
+def latest_batch(conn, period: str) -> str | None:
+    row = conn.execute("SELECT batch FROM tasks WHERE batch LIKE ? ORDER BY id DESC LIMIT 1",
+                       (f"approve:{period}:%",)).fetchone()
+    return row["batch"] if row else None
+
+
+@tasks.handler("approve")
+def _approve_task(ctx: tasks.TaskContext) -> dict:
+    """Freeze the month, then send or publish it. The freeze is checkpointed in its own transaction, so a
+    worker that dies before the email goes doesn't freeze a second version when the task runs again."""
+    conn, p = ctx.conn, ctx.payload
+    period, user, reason = p["period"], p["user"], p.get("reason")
+    tenant = ctx.tenant
+    if tenant is None:
+        raise tasks.TaskFailed("The client has been removed")
+    if p.get("send_only"):
+        if state_of(conn, tenant["id"], period) != "approved":
+            return {"state": state_of(conn, tenant["id"], period)}
+    elif ctx.done != "frozen":
+        if not tenant["enabled"] or tenant["archived_at"]:
+            raise tasks.TaskFailed("The client is paused")
+        if state_of(conn, tenant["id"], period) in ("approved", "sent") and not reason:
+            return {"state": state_of(conn, tenant["id"], period), "skipped": "already issued"}
+        ctx.progress("Building the reports")
+        try:
+            files = render_files(ctx.app, conn, tenant, period)
+        except ApprovalError as exc:
+            raise tasks.TaskFailed(str(exc)) from exc
+        except Exception as exc:
+            log.exception("Approving %s for tenant %s failed", period, tenant["id"])
+            raise tasks.TaskFailed(f"Couldn't build the report: {type(exc).__name__}") from exc
+        with transaction(conn, immediate=True):
+            # Checked again inside the write lock: someone may have approved it while the files were built.
+            if state_of(conn, tenant["id"], period) in ("approved", "sent") and not reason:
+                return {"state": state_of(conn, tenant["id"], period), "skipped": "already issued"}
+            freeze(ctx.app, conn, tenant, period, user, reason=reason, files=files)
+            audit(conn, user, "report_reissued" if reason else "report_approved", tenant["id"],
+                  period + (f": {reason[:200]}" if reason else ""))
+            ctx.checkpoint("frozen")
+    if state_of(conn, tenant["id"], period) == "sent":
+        return {"state": "sent"}  # an earlier attempt sent it and then stopped
+    plan, _ = plan_for(conn, tenant["id"])
+    ctx.progress("Sending" if plan and emailed(plan, conn, tenant["id"]) else "Publishing")
+    error = deliver(ctx.app, conn, ctx.vault, tenant, period, user)
+    if error:
+        raise tasks.TaskFailed(error)
+    return {"state": "sent"}
 
 
 def emailed(plan, conn, tenant_id: int) -> bool:

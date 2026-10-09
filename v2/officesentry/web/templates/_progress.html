@@ -1,0 +1,26 @@
+{#- Live progress for work the worker does in the background (``tasks.py``). A box with
+    data-progress="<json url>" polls it: {"total", "done", "failed", "finished"} for a batch, or
+    {"pending", "finished", "text"} for one task. It fills its <progress> and [data-progress-text], and
+    opens data-done (or reloads) when the work is finished. Without JavaScript, the Refresh link does it. -#}
+{% macro progress_script() -%}
+<script nonce="{{ csp_nonce }}">
+document.querySelectorAll('[data-progress]').forEach(function (box) {
+  var bar = box.querySelector('progress'), text = box.querySelector('[data-progress-text]');
+  function poll() {
+    fetch(box.dataset.progress, {headers: {'Accept': 'application/json'}, credentials: 'same-origin'})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { setTimeout(poll, 5000); return; }
+        if (d.finished) { if (box.dataset.done) { location.href = box.dataset.done; } else { location.reload(); } return; }
+        if (bar && d.total) { bar.max = d.total; bar.value = d.done; }
+        if (text) {
+          text.textContent = d.text || (d.done + ' of ' + d.total + ' done' + (d.failed ? ', ' + d.failed + ' failed' : ''));
+        }
+        setTimeout(poll, 2000);
+      })
+      .catch(function () { setTimeout(poll, 5000); });
+  }
+  setTimeout(poll, 1500);
+});
+</script>
+{%- endmacro %}

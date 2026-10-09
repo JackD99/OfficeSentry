@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf %}
+{% from "_progress.html" import progress_script with context %}
 {% set TONES = {'critical': 'bad', 'high': 'warn', 'medium': 'info', 'ok': 'ok'} %}
 {% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
 {% block title %}Month-end · {{ label }} · Office Sentry{% endblock %}
@@ -21,6 +22,24 @@
   {% endfor %}
 </div>
 
+{% if bulk %}{% set p = bulk.p %}
+{% if p.pending %}
+<div class="callout progress-box" role="status" data-progress="{{ bulk.url }}" data-done="{{ url_for('reporting.queue', period=period, show=show or none, batch=bulk.batch) }}">
+  <div><strong>Approving {{ p.total|plural('report') }}.</strong>
+    <span data-progress-text>{{ p.done }} of {{ p.total }} done{% if p.failed %}, {{ p.failed }} failed{% endif %}</span></div>
+  <progress max="{{ p.total }}" value="{{ p.done }}">{{ p.done }} of {{ p.total }}</progress>
+  <div class="small">{% if worker_running %}It carries on in the background, so you can leave this page. Each client is frozen as it is now, then emailed or published.{% else %}Waiting for the background worker, which isn't running. Approvals start as soon as it is.{% endif %}
+    <noscript><a href="{{ url_for('reporting.queue', period=period, show=show or none, batch=bulk.batch) }}">Refresh</a></noscript></div>
+</div>
+{% elif p.failed %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div class="grow"><strong>{{ p.failed }} of {{ p.total|plural('report') }} didn't go out.</strong>{% if p.succeeded %} The other {{ p.succeeded }} went out.{% endif %}
+  Open a client to see what went wrong and send it again.
+  <ul class="failures small">{% for tenant_id, name, error in bulk.failures %}<li><a href="{{ url_for('reporting.review', period=period, tenant_id=tenant_id) }}">{{ name }}</a>: {{ error }}</li>{% endfor %}</ul></div></div>
+{% else %}
+<div class="callout" role="status">{{ icon('check') }}<div><strong>All {{ p.total|plural('report') }} went out.</strong> Each one was emailed, or published to the client's report history.</div></div>
+{% endif %}
+{% endif %}
+
 <nav class="seg" aria-label="Show">
   {% for key, name in filters.items() %}<a href="{{ url_for('reporting.queue', period=period, show=key or none) }}"{% if show == key %} aria-current="page"{% endif %}>{{ name }}<span class="count">{{ counts[key] }}</span></a>{% endfor %}
 </nav>
@@ -35,11 +54,13 @@
     <tbody>
     {% for r in rows %}
     <tr>
-      {% if admin %}<td>{% if r.state in ('draft', 'in_review') and not r.paused %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
+      {% if admin %}<td>{% if r.state in ('draft', 'in_review') and not r.paused and not r.approving %}<input type="checkbox" name="tenants" value="{{ r.tenant.id }}" form="bulk" aria-label="Select {{ r.tenant.name }}">{% endif %}</td>{% endif %}
       <td data-label="Client"><a class="strong" href="{{ url_for('reporting.review', period=period, tenant_id=r.tenant.id) }}">{{ r.tenant.name }}</a>
         <span class="sub">{{ r.plan.name }}{% if r.paused %} · paused{% endif %}</span></td>
-      <td data-label="State"><span class="pill {{ STATE_PILLS[r.state] }}">{{ r.state_label }}</span>
-        {% if r.error %}<span class="sub bad-text">Send failed</span>{% elif r.sent_at %}<span class="sub">{{ ts(r.sent_at) }}</span>{% endif %}</td>
+      <td data-label="State">{% if r.approving %}<span class="pill accent">{{ 'Approving…' if r.task.status == 'running' else 'Waiting to approve' }}</span>
+        {% else %}<span class="pill {{ STATE_PILLS[r.state] }}">{{ r.state_label }}</span>{% endif %}
+        {% if r.approval_failed %}<span class="sub bad-text" title="{{ r.approval_failed }}">Approval failed</span>
+        {% elif r.error %}<span class="sub bad-text">Send failed</span>{% elif r.sent_at %}<span class="sub">{{ ts(r.sent_at) }}</span>{% endif %}</td>
       <td data-label="Verdict"><span class="pill {{ TONES.get(r.verdict.tone, '') }}">{{ r.verdict.label }}</span></td>
       <td data-label="New critical/high" class="num">{{ r.new_severe or '–' }}</td>
       <td data-label="Needs your eyes" class="wrap">{% if r.flags and r.state in ('draft', 'in_review') %}<div class="flags">{% for f in r.flags %}<span class="pill warn">{{ f }}</span>{% endfor %}</div>{% elif r.state in ('draft', 'in_review') %}<span class="muted small">Nothing flagged</span>{% endif %}</td>
@@ -51,7 +72,7 @@
   </table>
   {% if admin %}
   <div class="action-row"><button class="primary" form="bulk">{{ icon('send') }} Approve and send selected</button>
-    <span class="muted small">Each is frozen as it is now and sent, or published to the portal for plans without email.</span></div>
+    <span class="muted small">Each is frozen as it is now and sent, or published to the portal for plans without email. It runs in the background.</span></div>
   {% endif %}
   {% elif all_rows %}
   <div class="empty compact"><p>Nothing here with this filter.</p></div>
@@ -62,3 +83,4 @@
   {% endif %}
 </section>
 {% endblock %}
+{% block scripts %}{{ progress_script() }}{% endblock %}

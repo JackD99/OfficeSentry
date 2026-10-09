@@ -931,3 +931,10 @@ td.row-action { min-width: 150px; }
   .callout:has(> form) > .grow { flex-basis: calc(100% - 30px); }
   .callout:has(> form) > form { margin-left: 26px; }
 }
+/* -- Background work (month-end approvals) --------------------------------------- */
+.progress-box { display: grid; gap: 6px; }
+.progress-box progress { appearance: none; -webkit-appearance: none; width: 100%; height: 8px; border: 0; border-radius: 999px; background: var(--border); color: var(--accent); overflow: hidden; }
+.progress-box progress::-webkit-progress-bar { background: var(--border); border-radius: 999px; }
+.progress-box progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; transition: width .4s ease; }
+.progress-box progress::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
+.progress-box .failures { margin: 4px 0 0; padding-left: 18px; }
