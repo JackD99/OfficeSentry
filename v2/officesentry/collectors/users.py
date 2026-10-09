@@ -5,6 +5,10 @@ from __future__ import annotations
 from ..graph import LicenseRequired
 from .base import Collector, RunContext, register
 
+# Microsoft's largest page when signInActivity is selected (999 without it). That listing is limited to
+# 10 requests a minute for the whole app, so the shared limiter paces it (endpoints.LIMITS).
+SIGN_IN_ACTIVITY_PAGE = "500"
+
 BASE_FIELDS = [
     "id", "displayName", "userPrincipalName", "mail", "userType", "accountEnabled",
     "createdDateTime", "assignedLicenses", "lastPasswordChangeDateTime",
@@ -67,7 +71,7 @@ class Users(Collector):
         if want_activity:
             try:
                 users = ctx.paged(ctx.graph.get_all("/users", params={
-                    "$select": ",".join(BASE_FIELDS + ["signInActivity"]), "$top": "999",
+                    "$select": ",".join(BASE_FIELDS + ["signInActivity"]), "$top": SIGN_IN_ACTIVITY_PAGE,
                 }))
                 activity = True
             except LicenseRequired:

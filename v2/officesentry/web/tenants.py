@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from .. import clouds, lifecycle, store, tenant_health
+from .. import clouds, endpoints, lifecycle, store, tenant_health
 from ..collectors import REGISTRY
 from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
@@ -400,5 +400,8 @@ def run(run_id: int):
     sample = store.run_objects(g.db, run_id, kind=kind, limit=200) if kind else []
     columns = sorted({k for row in sample for k in row if not k.startswith("_")})[:12]
     pruned = not kinds and r["object_count"] > 0 and r["status"] not in ("queued", "running")
+    requests = g.db.execute("SELECT * FROM run_requests WHERE run_id = ? ORDER BY calls DESC, endpoint",
+                            (run_id,)).fetchall()
     return render_template("run.html", run=r, tenant=t, events=events, kinds=kinds, metrics=metrics,
-                           kind=kind, sample=sample, columns=columns, collectors=REGISTRY, pruned=pruned)
+                           kind=kind, sample=sample, columns=columns, collectors=REGISTRY, pruned=pruned,
+                           requests=requests, limits=endpoints.LIMITS)
