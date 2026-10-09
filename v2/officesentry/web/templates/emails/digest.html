@@ -3,7 +3,7 @@
 {% block preheader %}{{ d.urgent }} of {{ d.tenants }} tenants need attention · {{ d.new_severe }} new critical or high, {{ d.fixed }} fixed.{% endblock %}
 {% block kicker %}{{ frequency|capitalize }} digest{% endblock %}
 {% block body %}
-<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#111827;">Tenant digest</h1>
+<h1 style="margin:0 0 4px;font-size:22px;line-height:1.3;color:#111827;">Tenant digest{% if d.group %}: {{ d.group }}{% endif %}</h1>
 <div style="color:#6b7280;margin-bottom:18px;">{{ label[:1]|upper ~ label[1:] }} · since {{ d.since|day }}</div>
 
 {% if message %}

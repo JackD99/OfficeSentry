@@ -35,10 +35,10 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import alerts, issued, mailer, schedule, store, tasks, upcoming
+from . import alerts, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
 from .db import utcnow
 from .mailer import Email, MailError
-from .reports import branding, data_reports, evidence, export, monthly_review, workbook
+from .reports import branding, data_reports, evidence, export, monthly_review, tables, workbook
 from .rules import RULES
 from .text import day, plural
 
@@ -425,13 +425,17 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
                        attachments=attachments, inline=inline), [name for _, name in files])
 
 
-def digest_data(conn, frequency: str, now: datetime) -> dict:
-    """Cross-tenant summary for the MSP digest: the worst tenants first, and what's new."""
+def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None) -> dict:
+    """Cross-tenant summary for the MSP digest: the worst tenants first, and what's new.
+
+    ``group_id`` (the schedule's) keeps it to one tenant group; None is every tenant."""
     since = (now - DIGEST_LOOKBACK[frequency]).strftime(ISO)
+    group = tenant_groups.get(conn, group_id)
+    in_group = " AND id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else ""
     rows = []
     # Paused and archived tenants aren't being collected, so they stay out of the digest.
     for t in conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
-                          " ORDER BY name COLLATE NOCASE"):
+                          f"{in_group} ORDER BY name COLLATE NOCASE", {"group": group_id}):
         row = monthly_review.rollup_row(conn, t, now)
         counts = conn.execute(
             "SELECT"
@@ -448,13 +452,15 @@ def digest_data(conn, frequency: str, now: datetime) -> dict:
     new_findings = conn.execute(
         "SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
         " WHERE t.enabled = 1 AND t.archived_at IS NULL"
+        + (" AND t.id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else "") +
         " AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
         " AND (f.first_seen >= :since OR IFNULL(f.reopened_at, '') >= :since)"
         " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= :now))"
         " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key"
-        " LIMIT 10", {"since": since, "now": now.strftime(ISO)}).fetchall()
+        " LIMIT 10", {"since": since, "now": now.strftime(ISO), "group": group_id}).fetchall()
     return {
         "rows": rows,
+        "group": group["name"] if group else None,
         "since": since,
         "tenants": len(rows),
         "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in rows),
@@ -482,7 +488,8 @@ def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
                      "No" if r["stale_data"] else "Yes"])
     book.table("Tenants", header, rows, description="Every tenant, worst first")
     cover = workbook.Cover(
-        "Tenant digest", "All tenants", now or datetime.now(UTC), brand.display_name if brand else "",
+        "Tenant digest", data.get("group") or "All tenants", now or datetime.now(UTC),
+        brand.display_name if brand else "",
         accent=brand.accent if brand else "", intro=f"Since {day(data['since'])}.",
         facts=[("Tenants", data["tenants"], ""), ("Need attention", data["urgent"], "critical or high findings"),
                ("New critical or high findings", data["new_severe"], ""), ("Fixed", data["fixed"], ""),
@@ -495,14 +502,15 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
     now = now or datetime.now(UTC)
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
     label = period_label(schedule["frequency"], local)
-    data = digest_data(conn, schedule["frequency"], now)
+    data = digest_data(conn, schedule["frequency"], now, schedule["group_id"])
     look, inline = email_brand(conn)
-    subject = f"Tenant digest · {label}"
-    filename = f"tenant-digest-{local.strftime('%Y-%m-%d')}.xlsx"
+    subject = f"Tenant digest · {data['group']} · {label}" if data["group"] else f"Tenant digest · {label}"
+    filename = (f"tenant-digest-{tables.slug(data['group'])}-" if data["group"] else "tenant-digest-") + \
+        f"{local.strftime('%Y-%m-%d')}.xlsx"
     html = render(app, "emails/digest.html", subject=subject, d=data, label=label, **look,
                    message=schedule["message"], titles=RULE_TITLES, frequency=schedule["frequency"],
                    files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [])
-    lines = [f"Tenant digest for {label}", "",
+    lines = [f"Tenant digest for {label}" + (f": {data['group']}" if data["group"] else ""), "",
              f"Tenants: {data['tenants']}", f"Needing attention (critical or high): {data['urgent']}",
              f"New critical or high findings: {data['new_severe']}", f"Fixed: {data['fixed']}"]
     if data["avg_score"] is not None:

@@ -21,6 +21,15 @@
     {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}{% if t.archived_at %} <span class="faint small">(archived)</span>{% endif %}</label>{% else %}<p class="muted">No tenants yet.</p>{% endfor %}
     </div>
   </fieldset>
+  {% if groups %}
+  <fieldset>
+    <legend>Tenant groups <span class="faint small">(analysts only)</span></legend>
+    <p class="muted small m0">Every tenant in a ticked group, including tenants added to it later. Client accounts are never given tenants through a group.</p>
+    <div class="check-grid">
+    {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}" {% if gr.id in granted_groups %}checked{% endif %}> {{ gr.name }} <span class="faint small">{{ gr.tenants|plural('tenant') }}</span></label>{% endfor %}
+    </div>
+  </fieldset>
+  {% endif %}
   <label>New password <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
     <span class="hint">Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.</span></label>
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>

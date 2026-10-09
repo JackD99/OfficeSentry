@@ -20,7 +20,7 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash
 
-from .. import app_setup, cert_lifecycle, clouds, entra, store, throttle
+from .. import app_setup, cert_lifecycle, clouds, entra, store, tenant_groups, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
@@ -55,7 +55,8 @@ def users():
         "clients_without": sum(1 for u in rows if u["role"] == "client" and not u["totp_enabled_at"]
                                and not u["disabled"]),
     }
-    return render_template("users.html", users=rows, roles=ROLES, two_step=two_step)
+    group_grants = dict(g.db.execute("SELECT user_id, COUNT(*) FROM user_tenant_groups GROUP BY user_id").fetchall())
+    return render_template("users.html", users=rows, roles=ROLES, two_step=two_step, group_grants=group_grants)
 
 
 @bp.post("/users")
@@ -100,6 +101,10 @@ def edit_user(user_id: int):
         disabled = int(request.form.get("disabled") == "1" and user["id"] != g.user["id"])
         valid_ids = {t["id"] for t in tenants}
         grants = {int(x) for x in request.form.getlist("tenants") if x.isdigit()} & valid_ids
+        # Only analysts can be granted a whole group (access.visible_tenants ignores it for anyone else).
+        valid_groups = {gr["id"] for gr in tenant_groups.all_groups(g.db)}
+        group_grants = ({int(x) for x in request.form.getlist("groups") if x.isdigit()} & valid_groups
+                        if role == "analyst" else set())
         changed_access = (role != user["role"] or disabled != user["disabled"]
                           or all_tenants != user["all_tenants"])
         with transaction(g.db):
@@ -111,9 +116,10 @@ def edit_user(user_id: int):
             g.db.execute("DELETE FROM user_tenants WHERE user_id = ?", (user_id,))
             g.db.executemany("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)",
                              [(user_id, t) for t in sorted(grants)])
+            tenant_groups.set_user_groups(g.db, user_id, group_grants)
             audit(g.db, g.user["username"], "user_updated",
                   detail=f"{user['username']}: role={role} all={all_tenants} disabled={disabled} "
-                         f"tenants={sorted(grants)}")
+                         f"tenants={sorted(grants)}" + (f" groups={sorted(group_grants)}" if group_grants else ""))
         if request.form.get("password"):
             if problem := password_problem(request.form["password"]):
                 flash(problem, "error")
@@ -128,6 +134,7 @@ def edit_user(user_id: int):
         "SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
     return render_template(
         "user_edit.html", user=user, tenants=tenants, granted=granted, roles=ROLES,
+        groups=tenant_groups.all_groups(g.db), granted_groups=tenant_groups.user_groups(g.db, user_id),
         sessions=sessions.list_for(user_id), locked=_is_locked(user),
         failures=throttle.recent_failures(g.db, user["username"]),
         two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
