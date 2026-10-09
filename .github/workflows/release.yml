@@ -146,11 +146,10 @@ jobs:
           severity-cutoff: high
           only-fixed: true
           output-format: table
-      # GitHub's docs don't say whether a private repository on GitHub Free may sign attestations. While it is
-      # private a refusal doesn't stop the release (the image still carries BuildKit's SBOM and provenance);
-      # once it is public a failure here does.
+      # GitHub refuses attestations for a user-owned private repository ("Feature not available", seen on
+      # 2.0.0-rc.1), so this waits for go-public; the image still carries BuildKit's SBOM and provenance.
       - name: Sign the build provenance
-        continue-on-error: ${{ github.event.repository.private }}
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
@@ -192,7 +191,7 @@ jobs:
             echo
             echo "Image: \`$IMAGE:$VERSION\` (\`$DIGEST\`), for amd64 (Intel and AMD) servers."
             echo
-            echo "Download \`docker-compose.yml\`, \`Caddyfile\` and \`.env.example\` below (they run this version"
+            echo "Download \`docker-compose.yml\`, \`Caddyfile\` and \`env.example\` below (they run this version"
             echo "unless \`OFFICESENTRY_VERSION\` in \`.env\` says otherwise), then follow"
             echo "[DEPLOY.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/v2/DEPLOY.md)."
           } >> "$RUNNER_TEMP/notes.md"
@@ -201,10 +200,11 @@ jobs:
           sed 's/\${OFFICESENTRY_VERSION:-2}/${OFFICESENTRY_VERSION:-'"$VERSION"'}/' v2/docker-compose.yml \
             > "$RUNNER_TEMP/files/docker-compose.yml"
           grep -q "OFFICESENTRY_VERSION:-$VERSION}" "$RUNNER_TEMP/files/docker-compose.yml"
-          # So does the settings file, which a new install copies to .env.
+          # So does the settings file, which a new install copies to .env. It goes up as env.example: GitHub
+          # renames an asset whose name starts with a dot (.env.example became default.env.example).
           sed 's/^# OFFICESENTRY_VERSION=.*/OFFICESENTRY_VERSION='"$VERSION"'/' v2/.env.example \
-            > "$RUNNER_TEMP/files/.env.example"
-          grep -qx "OFFICESENTRY_VERSION=$VERSION" "$RUNNER_TEMP/files/.env.example"
+            > "$RUNNER_TEMP/files/env.example"
+          grep -qx "OFFICESENTRY_VERSION=$VERSION" "$RUNNER_TEMP/files/env.example"
           cp v2/Caddyfile "$RUNNER_TEMP/files/Caddyfile"
       - name: Create the release
         env:
@@ -214,7 +214,7 @@ jobs:
           # A pushed tag already exists; from "Run workflow", the release creates it on the commit just checked.
           gh release create "$TAG" --target "$GITHUB_SHA" --title "Office Sentry $VERSION" \
             --prerelease="$PRERELEASE" --notes-file "$RUNNER_TEMP/notes.md" \
-            "$RUNNER_TEMP/files/docker-compose.yml" "$RUNNER_TEMP/files/Caddyfile" "$RUNNER_TEMP/files/.env.example"
+            "$RUNNER_TEMP/files/docker-compose.yml" "$RUNNER_TEMP/files/Caddyfile" "$RUNNER_TEMP/files/env.example"
       # The private package counts against GitHub Free's 500 MB. Tidying never fails a release.
       - name: Keep the last three releases' images
         continue-on-error: true

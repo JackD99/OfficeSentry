@@ -252,11 +252,11 @@ kept and how to remove access. Send it with the consent link.
 Office Sentry runs as two containers (the portal and a worker) from one image, with everything stored in one
 Docker volume.
 
-Download `docker-compose.yml`, `Caddyfile` and `.env.example` from the newest
+Download `docker-compose.yml`, `Caddyfile` and `env.example` from the newest
 [release](https://github.com/JackD99/OfficeSentry/releases) into a folder on a Linux server with Docker, then:
 
 ```bash
-cp .env.example .env          # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
+cp env.example .env           # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
 docker compose --profile https up -d
 ```
 
