@@ -120,6 +120,9 @@ jobs:
             echo "# Written by the Deploy workflow; edit the repository variables instead."
             # docker compose reads this too: which optional parts run.
             if [ -n "$DEMO_DOMAIN" ]; then echo "COMPOSE_PROFILES=https,demo"; else echo "COMPOSE_PROFILES=https"; fi
+            # And which files: this server builds the deployed commit itself rather than pulling a release
+            # (commits from before releases existed always build).
+            if [ -f v2/docker-compose.build.yml ]; then echo "COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml"; fi
             echo "OFFICESENTRY_DOMAIN=$DOMAIN"
             echo "OFFICESENTRY_DEMO_DOMAIN=$DEMO_DOMAIN"
             echo "OFFICESENTRY_BASE_URL=https://$DOMAIN"

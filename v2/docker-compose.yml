@@ -1,8 +1,12 @@
 # Office Sentry: the portal ("web") and the background worker share one image
 # and one data volume. Setup steps are in DEPLOY.md.
+#
+# The image is the published release. OFFICESENTRY_VERSION in .env picks it:
+# an exact release such as 2.0.0 (recommended), or 2 for the newest 2.x. To
+# run your own build of this folder instead, add docker-compose.build.yml
+# (CONTRIBUTING.md, "Running it in Docker").
 x-officesentry: &officesentry
-  image: officesentry:latest
-  build: .
+  image: ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}
   env_file: .env
   volumes: ["officesentry-data:/data"]
   restart: unless-stopped
@@ -71,7 +75,7 @@ services:
   # Optional automatic HTTPS: set OFFICESENTRY_DOMAIN in .env, point the
   # domain's DNS at this server, then: docker compose --profile https up -d
   caddy:
-    image: caddy:2
+    image: caddy:2@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
     profiles: ["https"]
     environment:
       SITE_ADDRESS: ${OFFICESENTRY_DOMAIN:-localhost}

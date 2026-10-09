@@ -68,8 +68,10 @@
 {%- if brand.logo %}<span class="logo-chip"><img src="{{ url_for('branding.logo', v=brand.version) }}" alt="{{ brand.display_name }}"></span>
 {%- else %}<span class="logo">{{ icon('logo') }}</span>{{ brand.display_name }}{% endif %}</a>
 {%- endmacro %}
-{% macro powered_by() -%}
-{% if brand.name or brand.logo %}<p class="powered-by">Powered by Office Sentry</p>{% endif %}
+{#- Signed-in pages say which version is running, for support and after an update; the sign-in page doesn't. -#}
+{% macro powered_by(version=false) -%}
+{% if version %}<p class="powered-by">{% if brand.name or brand.logo %}Powered by {% endif %}Office Sentry {{ app_version }}</p>
+{%- elif brand.name or brand.logo %}<p class="powered-by">Powered by Office Sentry</p>{% endif %}
 {%- endmacro %}
 
 {% if current_user %}
@@ -80,14 +82,14 @@
     {{ navigation() }}
     <div class="spacer"></div>
     {{ account() }}
-    {{ powered_by() }}
+    {{ powered_by(version=true) }}
   </aside>
   <div class="content">
     <details class="mobile-bar">
       <summary>{{ brand_mark() }}<span class="sr-only">Menu</span>{{ icon('menu', 'menu-icon') }}</summary>
       {{ navigation() }}
       {{ account() }}
-      {{ powered_by() }}
+      {{ powered_by(version=true) }}
     </details>
     <main id="main" tabindex="-1">
       {% if worker_down %}<div class="callout warn" role="status">{{ icon('alert') }}<span><strong>The background worker isn't running.</strong>

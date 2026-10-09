@@ -9,7 +9,7 @@ from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import worker
+from .. import __version__, worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
@@ -125,7 +125,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
         return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down,
-                "expiring_certificates": certificates}
+                "expiring_certificates": certificates, "app_version": __version__}
 
     @app.errorhandler(403)
     def _forbidden(_e):
@@ -141,7 +141,8 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.get("/health")
     def health():
-        return {"ok": True}
+        # The version lets an uptime monitor (or a person after an update) confirm what is running.
+        return {"ok": True, "version": __version__}
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(tenants.bp)
