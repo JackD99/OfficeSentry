@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import delivery, issued, store, tasks
+from . import delivery, issued, projects, store, tasks
 from .db import audit, transaction, utcnow
 from .reports import monthly_review, summary
 from .text import plural
@@ -418,12 +418,18 @@ def move_action(conn, action, direction: int) -> None:
     conn.executemany("UPDATE report_actions SET position = ? WHERE id = ?", [(n, a) for n, a in enumerate(ids)])
 
 
-def suggestions(report) -> list[dict]:
-    """Failing checks as recommendation wording, worst first, for the TL to pick from."""
-    out = []
-    for r in report.failing:
-        text = getattr(r, "action_client", None) or r.action
-        out.append({"rule_key": r.key, "title": text, "detail": r.summary, "severity": r.severity})
+def suggestions(conn, tenant) -> list[dict]:
+    """What the review screen offers for "What we recommend next": projects worth proposing (half a day or
+    more, from ``projects.assess``, not declined), then quick fixes, each worst first.
+
+    Each is ``{"rule_key", "kind", "title", "detail", "severity", "effort"}``. ``rule_key`` is a project's
+    ``project:<key>``, a check's key or ``signal:<key>``; the title is what lands on the client's report."""
+    found = projects.assess(conn, tenant)
+    out = [{"rule_key": f"project:{rec.project.key}", "kind": "project", "title": f"{rec.project.title} project",
+            "detail": rec.project.pitch, "severity": rec.severity, "effort": rec.effort}
+           for rec in found.projects if rec.status != "declined"]
+    out += [{"rule_key": r.key, "kind": "quick", "title": r.action or r.title, "detail": r.summary,
+             "severity": r.severity, "effort": r.effort} for r in found.quick_fixes]
     return out
 
 

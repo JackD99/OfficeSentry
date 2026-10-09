@@ -37,7 +37,7 @@ OTHER_ARGS = {"key", "table", "ext", "filename", "period", "user_id", "conn_id",
               "resolved"}
 REFUSED = (400, 403, 404)
 B_NAMES = (b"Bravo Inc", b"bravo.onmicrosoft.com")
-SKIP_LISTS = {"auth.logout", "auth.end_session", "static", "health"}
+SKIP_LISTS = {"auth.logout", "auth.end_session", "static", "health", "health_ready"}
 
 
 @pytest.fixture

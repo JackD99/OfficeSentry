@@ -3,7 +3,9 @@
 * **Report schedules** send one tenant a bundle of reports (the monthly review,
   the insurance evidence pack, any detail report) weekly, monthly or quarterly,
   at a time in the schedule's own timezone.
-* **Digests** send the MSP's own team one cross-tenant summary.
+* **Digests** send the MSP's own team one cross-tenant summary: the tenant
+  digest, or (``reports`` is ``["upcoming"]``) the Coming up email of what falls
+  due in the next 90 days (``upcoming.py``).
 * **Alert emails** go out when a collection opens findings at or above a
   severity: the same event (``alerts.after_sync``) that posts to Teams, Slack
   or a webhook. Failed ones are retried by ``tick()``.
@@ -33,7 +35,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import alerts, issued, mailer, schedule, store, tasks
+from . import alerts, issued, mailer, schedule, store, tasks, upcoming
 from .db import utcnow
 from .mailer import Email, MailError
 from .reports import branding, data_reports, evidence, export, monthly_review, workbook
@@ -517,6 +519,70 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
                        attachments=attachments, inline=inline), names)
 
 
+def is_upcoming(schedule) -> bool:
+    """A digest schedule that sends the Coming up email rather than the tenant digest."""
+    return schedule["kind"] == "digest" and upcoming.KEY in json.loads(schedule["reports"] or "[]")
+
+
+def schedule_titles(schedule) -> list[str]:
+    if schedule["kind"] == "report":
+        return report_titles(schedule["reports"])
+    return [upcoming.TITLE] if is_upcoming(schedule) else ["Tenant digest"]
+
+
+EMAIL_ROWS = 5  # items listed per window in the Coming up email; the page has the rest
+
+
+def upcoming_subject(counts: dict[str, int]) -> str:
+    """The answer first: what needs attention now and what's due within a month."""
+    now, soon = counts[upcoming.NOW], counts[upcoming.DAYS_30]
+    if not now and not soon:
+        later = counts[upcoming.DAYS_60] + counts[upcoming.DAYS_90]
+        return f"Coming up: {plural(later, 'item')} in the next 90 days" if later else \
+            "Coming up: nothing due in the next 90 days"
+    parts = ([f"{now} need{'s' if now == 1 else ''} attention now"] if now else []) + \
+        ([f"{soon} due within 30 days"] if soon else [])
+    return "Coming up: " + ", ".join(parts)
+
+
+def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None = None,
+                         attach: bool = True) -> Built:
+    """The Coming up email: everything due in the next 90 days across every active tenant, soonest first.
+
+    It goes to the MSP's team only (like the tenant digest), so it covers every tenant and Office Sentry's own
+    certificates."""
+    now = now or datetime.now(UTC)
+    local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
+    label = period_label(schedule["frequency"], local)
+    up = upcoming.collect(conn, conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
+                                             " ORDER BY name COLLATE NOCASE").fetchall(), now, ours=True)
+    counts = up.counts()
+    look, inline = email_brand(conn)
+    subject = upcoming_subject(counts)
+    filename = f"coming-up-{local.strftime('%Y-%m-%d')}.xlsx"
+    windows = [(w, up.in_window(w)) for w in upcoming.WINDOWS if counts[w]]
+    html = render(app, "emails/upcoming.html", subject=subject, up=up, counts=counts, windows=windows,
+                  label=label, frequency=schedule["frequency"], message=schedule["message"], shown=EMAIL_ROWS,
+                  w=upcoming, base_url=_cfg(app).base_url.rstrip("/"), **look,
+                  files=[("Everything coming up", filename)] if schedule["include_xlsx"] else [])
+    lines = [f"Coming up, {label}", ""]
+    if schedule["message"]:
+        lines += [schedule["message"], ""]
+    lines += [f"{w}: {counts[w]}" for w in upcoming.WINDOWS if w != upcoming.NO_DATE or counts[w]]
+    for w, items in windows:
+        lines += ["", f"{w}:"]
+        for i in items[:EMAIL_ROWS]:
+            when = f"{day(i.due.isoformat())} ({i.when})" if i.due else ""
+            lines.append(f"  {when + ' ' if when else ''}{i.tenant_name}: {i.title}. {i.detail}")
+        if len(items) > EMAIL_ROWS:
+            lines.append(f"  And {len(items) - EMAIL_ROWS} more in Office Sentry.")
+    to, bcc = split_recipients(contacts)
+    attachments = [(filename, XLSX, data_reports.to_xlsx(upcoming.report(up), brand=branding.load(conn)))] \
+        if attach and schedule["include_xlsx"] else []
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
+                       attachments=attachments, inline=inline), [filename] if schedule["include_xlsx"] else [])
+
+
 def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[alerts.Item]:
     """The findings an alert email covers: what ``alerts.opened_items`` would post to Teams or Slack,
     less anything from the tenant's very first scan, so onboarding a tenant doesn't email everything it
@@ -601,9 +667,11 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
             return built[-1]
         fallback = f"{tenant['name']} security report"
     else:
+        builder = build_upcoming_email if is_upcoming(schedule) else build_digest_email
+
         def build():
-            return build_digest_email(app, conn, schedule, contacts, now=now)
-        fallback = "Tenant digest"
+            return builder(app, conn, schedule, contacts, now=now)
+        fallback = schedule_titles(schedule)[0]
     email, transport, error = _attempt(conn, vault, build, schedule["kind"])
     # Everything the send changes is written at once, so a worker that stops after sending doesn't leave the
     # period looking unsent (and send it again).
