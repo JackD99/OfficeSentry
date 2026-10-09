@@ -1,13 +1,16 @@
-"""Background worker: runs queued collector runs, the collection schedule,
-emailed reports and snapshot retention.
+"""Background worker: runs queued collector runs, background tasks, the
+collection schedule, emailed reports and snapshot retention.
 
 One process, no broker. Run it with ``python -m officesentry worker``. Inside
 it, ``cfg.worker_concurrency`` collector threads each claim and execute runs
-(one tenant per thread at a time, see ``store.claim_next_run``), while the main
-thread does the once-a-minute housekeeping, so a long collection doesn't hold
-up the schedule or emails. Every thread has its own SQLite connection. Only
-run one worker process: at start it marks any run left 'running' as failed.
-It records a heartbeat so the portal and ``healthcheck`` can tell it is running.
+(one tenant per thread at a time, see ``store.claim_next_run``) and
+``TASK_THREADS`` task threads run ``tasks.py`` work (month-end approvals and
+due report emails), while the main thread does the once-a-minute
+housekeeping, so a long collection or a month-end of PDFs doesn't hold up the
+schedule. Every thread has its own SQLite connection. Claimed runs and tasks
+carry a lease the heartbeat thread renews; one whose worker died is failed
+(a run) or queued again (a task) once its lease runs out. It records a
+heartbeat so the portal and ``healthcheck`` can tell it is running.
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import alerts, clouds, findings, lifecycle, retention, schedule, store, throttle
+from . import alerts, clouds, findings, lifecycle, ratelimit, retention, schedule, store, tasks, throttle
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -76,6 +79,7 @@ def default_graph_factory(vault: Vault):
         return GraphClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
             vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
+            limiter=ratelimit.LIMITER,
         )
     return factory
 
@@ -86,6 +90,7 @@ def default_exchange_factory(vault: Vault):
         return ExchangeClient.from_certificate(
             tenant["tenant_ref"], connection["client_id"],
             vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
+            limiter=ratelimit.LIMITER,
         )
     return factory
 
@@ -126,6 +131,19 @@ def _sync(conn, tenant, run_id: int, alerting: alerts.Alerting | None) -> None:
 
 
 def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) -> str:
+    """Run the collector, then store how many requests it made to Microsoft (whatever the outcome)."""
+    telemetry = ratelimit.Telemetry()
+    try:
+        return _run_collector(conn, run, graph_factory, exchange_factory, client_id, telemetry)
+    finally:
+        try:
+            ratelimit.save(conn, run["id"], telemetry)
+        except Exception:  # counting must never fail a collection
+            log.exception("Storing request telemetry for run %s failed", run["id"])
+
+
+def _run_collector(conn, run, graph_factory, exchange_factory, client_id: str | None,
+                   telemetry: ratelimit.Telemetry) -> str:
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
     collector_cls = REGISTRY.get(run["collector"])
@@ -137,11 +155,16 @@ def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) 
     store.log_event(conn, run_id, "info", f"Starting {collector_cls.title} for {tenant['name']}")
     try:
         graph = graph_factory(dict(tenant), dict(connection) if connection else None)
+        graph.telemetry = telemetry
         ctx = RunContext(conn=conn, run_id=run_id, tenant=dict(tenant), graph=graph,
                          capabilities=store.tenant_capabilities(tenant),
                          client_id=client_id or (connection["client_id"] if connection else None))
         if exchange_factory is not None:
-            ctx.exchange_factory = lambda: exchange_factory(dict(tenant), dict(connection) if connection else None)
+            def exchange() -> ExchangeClient:
+                client = exchange_factory(dict(tenant), dict(connection) if connection else None)
+                client.telemetry = telemetry
+                return client
+            ctx.exchange_factory = exchange
         if why := clouds.missing(clouds.of(tenant), collector_cls.key):
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
         else:
@@ -244,9 +267,11 @@ def is_alive(conn, now: datetime | None = None) -> bool:
 
 
 # The worker counts as stuck when its main loop (housekeeping) hasn't come
-# round for this long, or a single collection has run for longer than RUN_STALE.
+# round for this long, a single collection has run for longer than RUN_STALE,
+# or a single task (one client's month-end, one email) for longer than TASK_STALE.
 LOOP_STALE = timedelta(minutes=10)
 RUN_STALE = timedelta(hours=4)
+TASK_STALE = timedelta(hours=1)
 
 
 class Liveness:
@@ -256,41 +281,76 @@ class Liveness:
     wedged main loop or a collector thread stuck in one run (a deadlocked
     write, a hung request) stops the heartbeat and shows as unhealthy in the
     portal banner and ``healthcheck worker``. Collector threads record their
-    runs with ``start_run``/``end_run``; the main loop calls ``tick``.
+    runs with ``start_run``/``end_run`` and task threads their tasks with
+    ``start_task``/``end_task``; the main loop calls ``tick``. ``held`` is what
+    this process has claimed, whose leases the heartbeat thread renews.
     """
 
     def __init__(self, clock=time.monotonic):
         self.clock = clock
         self.loop_at = clock()
-        self.runs: dict[int, tuple[int, float]] = {}  # thread ident -> (run id, started)
+        self.runs: dict[int, tuple[str, int, float]] = {}  # thread ident -> ("run" or "task", id, started)
         self._lock = threading.Lock()
 
     def tick(self) -> None:
         with self._lock:
             self.loop_at = self.clock()
 
-    def start_run(self, run_id: int) -> None:
+    def start_run(self, run_id: int, kind: str = "run") -> None:
         with self._lock:
-            self.runs[threading.get_ident()] = (run_id, self.clock())
+            self.runs[threading.get_ident()] = (kind, run_id, self.clock())
 
     def end_run(self) -> None:
         with self._lock:
             self.runs.pop(threading.get_ident(), None)
 
+    def start_task(self, task_id: int) -> None:
+        self.start_run(task_id, "task")
+
+    end_task = end_run
+
+    def held(self, kind: str) -> list[int]:
+        """The runs (``"run"``) or tasks (``"task"``) this process is working on."""
+        with self._lock:
+            return [item for k, item, _ in self.runs.values() if k == kind]
+
     def problem(self) -> str | None:
         """Why the worker looks stuck, or None while it's making progress."""
         with self._lock:
             now = self.clock()
-            for run_id, started in self.runs.values():
-                if now - started > RUN_STALE.total_seconds():
-                    return f"run {run_id} has been going for {int((now - started) // 60)} minutes"
+            for kind, item, started in self.runs.values():
+                if now - started > (RUN_STALE if kind == "run" else TASK_STALE).total_seconds():
+                    return f"{kind} {item} has been going for {int((now - started) // 60)} minutes"
             if now - self.loop_at > LOOP_STALE.total_seconds():
                 return f"the main loop hasn't moved for {int((now - self.loop_at) // 60)} minutes"
             return None
 
 
+def renew_leases(conn, liveness: Liveness | None) -> None:
+    """Keep what this worker is running claimed. Done even when it looks stuck: a lease only says the
+    process is alive, so another worker never takes over a run or task that is still going."""
+    if liveness is None:
+        return
+    store.renew_run_leases(conn, liveness.held("run"))
+    tasks.renew(conn, liveness.held("task"))
+
+
+def expire_leases(conn, liveness: Liveness | None = None) -> None:
+    """Fail runs and queue again tasks whose worker stopped without finishing them."""
+    failed = store.expire_run_leases(conn, held=liveness.held("run") if liveness else ())
+    if failed:
+        log.warning("Marked %s as failed: the worker running it stopped", plural(failed, "run"))
+    requeued, gave_up = tasks.expire_leases(conn, held=liveness.held("task") if liveness else ())
+    if requeued or gave_up:
+        log.warning("Tasks whose worker stopped: %s queued again, %s failed", requeued, gave_up)
+
+
 def heartbeat_step(conn, liveness: Liveness | None) -> bool:
     """Record the heartbeat if the main loop is making progress. Returns whether it did."""
+    try:
+        renew_leases(conn, liveness)
+    except sqlite3.Error:
+        log.warning("Could not renew the leases of running work", exc_info=True)
     problem = liveness.problem() if liveness else None
     if problem:
         log.error("Worker looks stuck (%s); not recording a heartbeat", problem)
@@ -320,14 +380,20 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
 # -- Main loop ---------------------------------------------------------------
 
 
-# Modules that register ``schedule.periodic`` jobs. Add yours here.
-JOB_MODULES = ("officesentry.delivery",)
+# Modules that register ``schedule.periodic`` jobs, and ``tasks.handler`` kinds. Add yours here.
+JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing")
+TASK_MODULES = ("officesentry.delivery", "officesentry.month_end")
+TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
+
+
+def _load_modules() -> None:
+    for module in (*JOB_MODULES, *TASK_MODULES):
+        importlib.import_module(module)
 
 
 def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> None:
     """The once-a-minute work: queue scheduled collections, then run the periodic jobs."""
-    for module in JOB_MODULES:
-        importlib.import_module(module)
+    _load_modules()
     now = now or datetime.now(UTC)
     queued = schedule_tick(conn, cfg, now)
     if queued:
@@ -339,6 +405,7 @@ def prune(conn, cfg: Config) -> int:
     """The daily retention pass: the admin's settings (``retention.apply``), then sign-in noise."""
     removed = retention.apply(conn, cfg)["snapshots"]
     throttle.prune(conn)
+    tasks.prune(conn)
     if noise := prune_audit(conn):
         log.info("Retention: removed %s", plural(noise, "old failed sign-in record"))
     conn.execute("PRAGMA optimize")  # keeps the query planner's statistics current
@@ -401,8 +468,41 @@ def _collector_thread(cfg: Config, number: int, stop: threading.Event, graph_fac
     return thread
 
 
-def _housekeeping(app, conn, vault, cfg: Config) -> None:
+def _task_thread(app, vault, cfg: Config, number: int, stop: threading.Event,
+                 liveness: Liveness) -> threading.Thread:
+    """Claim and run background tasks until ``stop`` is set, then finish the current one."""
+    def loop():
+        conn = connect(cfg.db_path)
+        try:
+            while not stop.is_set():
+                try:
+                    task = tasks.claim_next(conn)
+                except sqlite3.OperationalError:
+                    log.exception("Could not claim the next task; trying again shortly")
+                    _rollback(conn)
+                    task = None
+                if task is None:
+                    stop.wait(IDLE_WAIT)
+                    continue
+                log.info("Task %s: %s", task["id"], task["kind"])
+                liveness.start_task(task["id"])
+                try:
+                    tasks.run(app, conn, vault, cfg, task)
+                except Exception:  # say, the database stayed locked: its lease runs out and it's tried again
+                    log.exception("Task %s could not be finished", task["id"])
+                    _rollback(conn)
+                finally:
+                    liveness.end_task()
+        finally:
+            conn.close()
+    thread = threading.Thread(target=loop, name=f"task-{number}", daemon=True)
+    thread.start()
+    return thread
+
+
+def _housekeeping(app, conn, vault, cfg: Config, liveness: Liveness | None = None) -> None:
     try:
+        expire_leases(conn, liveness)  # take back work a stopped worker left
         housekeeping(app, conn, vault, cfg)
     except Exception:  # say "database is locked": try again next minute rather than exit
         log.exception("Housekeeping failed; trying again in a minute")
@@ -429,18 +529,18 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
 
     app = create_app(cfg)  # for rendering emailed reports and alert emails
     alerting = alerts.Alerting(cfg.base_url, vault, app)
-    recovered = store.recover_orphaned_runs(conn)
-    if recovered:
-        log.warning("Marked %s as failed", plural(recovered, "orphaned run"))
+    _load_modules()
+    expire_leases(conn)  # left by a worker that stopped (and, from before leases, any run left running)
 
     stop = stop or threading.Event()
     liveness = Liveness()
     if once:
-        # Tests and one-off use: housekeeping, then drain the queue in this thread.
+        # Tests and one-off use: housekeeping, then drain the queues in this thread.
         _housekeeping(app, conn, vault, cfg)
         _daily(conn, cfg)
         while (run := _claim(conn)) is not None:
             _execute(conn, run, graph_factory, exchange_factory, alerting, liveness)
+        tasks.drain(app, conn, vault, cfg)
         return
 
     if threading.current_thread() is threading.main_thread():
@@ -453,12 +553,13 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
              schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat())
     collectors = [_collector_thread(cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness)
                   for n in range(cfg.worker_concurrency)]
+    collectors += [_task_thread(app, vault, cfg, n + 1, stop, liveness) for n in range(TASK_THREADS)]
 
     last_day = None
     while not stop.is_set():
         started = time.monotonic()
         liveness.tick()
-        _housekeeping(app, conn, vault, cfg)
+        _housekeeping(app, conn, vault, cfg, liveness)
         today = datetime.now(UTC).date()
         if today != last_day:
             _daily(conn, cfg)

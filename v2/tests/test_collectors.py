@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import responses
@@ -188,12 +188,19 @@ def test_enqueue_is_deduplicated_and_claim_is_fifo(db, two_tenants):
     assert store.claim_next_run(db) is None
 
 
-def test_orphaned_runs_are_failed_on_startup(db, two_tenants):
-    alpha, _ = two_tenants
+def test_orphaned_runs_are_failed_once_their_lease_runs_out(db, two_tenants):
+    alpha, bravo = two_tenants
     store.enqueue_run(db, alpha, "users")
-    store.claim_next_run(db)
-    assert store.recover_orphaned_runs(db) == 1
+    run = store.claim_next_run(db)
+    assert store.expire_run_leases(db) == 0  # still claimed: another worker leaves it alone
+    later = datetime.now(UTC) + store.LEASE + timedelta(seconds=1)
+    assert store.expire_run_leases(db, later, held=[run["id"]]) == 0  # this process is still running it
+    assert store.expire_run_leases(db, later) == 1
     assert db.execute("SELECT status FROM runs").fetchone()[0] == "failed"
+    # A run left running from before leases existed has none, so it counts as orphaned at once.
+    store.enqueue_run(db, bravo, "users")
+    db.execute("UPDATE runs SET status = 'running', lease_until = NULL WHERE tenant_id = ?", (bravo,))
+    assert store.expire_run_leases(db) == 1
 
 
 def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
@@ -220,12 +227,14 @@ def test_disabled_tenants_are_not_scheduled(db, cfg, two_tenants):
     assert schedule_tick(db, cfg, datetime(2026, 10, 2, 3, 0, tzinfo=UTC)) == 0
 
 
-def test_objects_are_json(db, two_tenants):
+def test_objects_are_stored_compressed(db, two_tenants):
     alpha, _ = two_tenants
     rid = store.enqueue_run(db, alpha, "users")
     store.add_objects(db, rid, "user", [("u1", {"n": 1})])
-    raw = db.execute("SELECT data FROM objects").fetchone()[0]
-    assert json.loads(raw) == {"n": 1}
+    row = db.execute("SELECT object_id, data, items FROM objects").fetchone()
+    assert (row["object_id"], row["items"]) == ("u1", 1)
+    assert [json.loads(line) for line in store.pack_lines(row["data"])] == [["u1", {"n": 1}]]
+    assert store.run_objects(db, rid) == [{"n": 1, "_kind": "user", "_id": "u1"}]
 
 
 @responses.activate

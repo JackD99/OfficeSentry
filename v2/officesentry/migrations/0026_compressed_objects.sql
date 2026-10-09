@@ -1,0 +1,12 @@
+-- Compressed snapshot data.
+--
+-- An `objects` row whose `data` is a BLOB is a pack: consecutive objects of
+-- one run and kind, compressed together (store.add_objects), keyed by its
+-- first object's id. `items` says how many objects a row holds, so counts
+-- read SUM(items) rather than COUNT(*). Rows written before packing hold one
+-- object as JSON text and keep the default of 1; the worker packs them a
+-- little at a time (packing.py) and readers take both.
+--
+-- Adding a column with a constant default doesn't rewrite the table, so this
+-- is quick on a large database.
+ALTER TABLE objects ADD COLUMN items INTEGER NOT NULL DEFAULT 1;

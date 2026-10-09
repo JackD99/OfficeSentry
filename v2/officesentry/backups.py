@@ -2,14 +2,23 @@
 copy taken before a database upgrade.
 
 Copies always go through SQLite's online backup API, so they're consistent
-while the portal and worker are running, and are written 0600.
+while the portal and worker are running, are checked and written 0600. Each
+copy first checks there's room for it. Backups and pre-restore copies are
+gzipped (``.db.gz``; ``restore`` takes both). Pre-upgrade copies stay plain
+``.db``: they're restored after going back to an older release, whose
+``restore`` may not read gzip.
 """
 
 from __future__ import annotations
 
+import errno
+import gzip
 import logging
 import os
+import shutil
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,6 +31,10 @@ PRE_UPGRADE_PREFIX = "pre-upgrade-"
 PRE_RESTORE_PREFIX = "pre-restore-"
 KEEP_PRE_UPGRADE = 3
 KEEP_PRE_RESTORE = 3
+COMPRESSED = ".gz"
+GZIP_LEVEL = 6
+# Room to leave on the disk besides the copy itself, so a backup never fills it.
+SPARE_BYTES = 64 * 2**20
 # Tables every Office Sentry database has had since the first migration.
 CORE_TABLES = {"users", "tenants", "runs", "objects", "settings"}
 
@@ -34,32 +47,71 @@ def _stamp() -> str:
     return f"{datetime.now(UTC):%Y%m%d-%H%M%S}"
 
 
+def _private(path: Path) -> None:
+    """Create an empty file only its owner can read, so nothing written into it is ever readable by others."""
+    path.unlink(missing_ok=True)
+    os.close(os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600))
+
+
+def database_bytes(conn: sqlite3.Connection) -> int:
+    return conn.execute("PRAGMA page_count").fetchone()[0] * conn.execute("PRAGMA page_size").fetchone()[0]
+
+
+def check_space(folder: Path, size: int, compress: bool = True) -> None:
+    """Refuse (OSError ENOSPC, with a plain message) when ``folder``'s disk can't take a copy of a ``size``-byte
+    database: the copy itself, and for a compressed backup the compressed file beside it."""
+    needed = size + (size // 2 if compress else 0) + SPARE_BYTES
+    free = shutil.disk_usage(folder).free
+    if free < needed:
+        raise OSError(errno.ENOSPC, f"a copy of the database needs about {needed // 2**20:,} MB free in {folder} "
+                                    f"and there's {free // 2**20:,} MB")
+
+
 def copy_database(src: sqlite3.Connection, dest: Path) -> Path:
-    """Write a consistent copy of ``src`` to ``dest`` (0600), via a temporary file so a
-    half-written copy never carries a backup's name."""
+    """Write a consistent, checked copy of ``src`` to ``dest`` (0600), gzipped when ``dest`` ends in ``.gz``,
+    via temporary files so a half-written copy never carries a backup's name."""
     dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    compress = dest.name.endswith(COMPRESSED)
+    check_space(dest.parent, database_bytes(src), compress)
     part = dest.with_name(dest.name + ".part")
-    part.unlink(missing_ok=True)
-    out = sqlite3.connect(part)
+    raw = dest.with_name(dest.name + ".raw.part") if compress else part
     try:
-        with out:
-            src.backup(out)
-        problem = out.execute("PRAGMA quick_check").fetchone()[0]
-    finally:
-        out.close()
-    if problem != "ok":
+        _private(raw)
+        out = sqlite3.connect(raw)
+        try:
+            with out:
+                src.backup(out)
+            problem = out.execute("PRAGMA quick_check").fetchone()[0]
+        finally:
+            out.close()
+        if problem != "ok":
+            raise sqlite3.DatabaseError(f"the copy failed its integrity check: {problem}")
+        if compress:
+            _private(part)
+            with open(raw, "rb") as plain, open(part, "r+b") as packed, \
+                    gzip.GzipFile(filename=dest.name[:-len(COMPRESSED)], mode="wb", fileobj=packed,
+                                  compresslevel=GZIP_LEVEL) as zipped:
+                shutil.copyfileobj(plain, zipped, 2**20)
+            raw.unlink()
+        os.chmod(part, 0o600)
+        os.replace(part, dest)
+    except BaseException:
         part.unlink(missing_ok=True)
-        raise sqlite3.DatabaseError(f"the copy failed its integrity check: {problem}")
-    os.chmod(part, 0o600)
-    os.replace(part, dest)
+        raw.unlink(missing_ok=True)
+        raise
     return dest
 
 
+def backup_files(folder: Path, prefix: str) -> list[Path]:
+    """Backups named ``<prefix>*.db`` or ``<prefix>*.db.gz``, oldest first (names carry the time)."""
+    return sorted([*folder.glob(f"{prefix}*.db"), *folder.glob(f"{prefix}*.db{COMPRESSED}")], key=lambda p: p.name)
+
+
 def rotate(folder: Path, prefix: str, keep: int) -> list[Path]:
-    """Delete all but the newest ``keep`` backups named ``<prefix>*.db``. Returns the deleted files."""
+    """Delete all but the newest ``keep`` backups named ``<prefix>*.db`` or ``.db.gz``. Returns the deleted files."""
     if not keep:
         return []
-    old = sorted(folder.glob(f"{prefix}*.db"))[:-keep]
+    old = backup_files(folder, prefix)[:-keep]
     for path in old:
         path.unlink()
     return old
@@ -69,7 +121,7 @@ def backup(db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
     """The ``backup`` command: a timestamped copy, keeping the newest ``keep``."""
     src = connect(db_path)
     try:
-        dest = copy_database(src, folder / f"{BACKUP_PREFIX}{_stamp()}.db")
+        dest = copy_database(src, folder / f"{BACKUP_PREFIX}{_stamp()}.db{COMPRESSED}")
     finally:
         src.close()
     return dest, rotate(folder, BACKUP_PREFIX, keep)
@@ -83,16 +135,21 @@ def database_file(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
-def before_upgrade(db_file: Path, current: int, target: int) -> Path:
+def before_upgrade(db_file: Path, current: int, target: int) -> Path | None:
     """Copy the database before migrations change it, into ``<data dir>/backups``.
 
-    Called by ``db.migrate`` while it holds the write lock, so it reads through a
-    separate connection (WAL lets it see the last committed state).
+    ``db.migrate`` calls this before it takes the write lock, so the portal and worker keep working while a
+    large database is copied. Two processes starting at once would both copy, so a copy of the same upgrade
+    made in the last hour counts and returns None.
     """
     folder = db_file.parent / "backups"
+    name = f"{PRE_UPGRADE_PREFIX}v{current}-to-v{target}-"
+    recent = datetime.now(UTC).timestamp() - 3600
+    if folder.is_dir() and any(p.stat().st_mtime > recent for p in backup_files(folder, name)):
+        return None
     src = sqlite3.connect(db_file, timeout=30)
     try:
-        dest = copy_database(src, folder / f"{PRE_UPGRADE_PREFIX}v{current}-to-v{target}-{_stamp()}.db")
+        dest = copy_database(src, folder / f"{name}{_stamp()}.db")
     finally:
         src.close()
     rotate(folder, PRE_UPGRADE_PREFIX, KEEP_PRE_UPGRADE)
@@ -100,28 +157,30 @@ def before_upgrade(db_file: Path, current: int, target: int) -> Path:
     return dest
 
 
-def check_backup(path: Path) -> int:
-    """Check that ``path`` is a sound Office Sentry database this version can open. Returns its schema version."""
+def check_backup(path: Path, shown: Path | None = None) -> int:
+    """Check that ``path`` is a sound Office Sentry database this version can open. Returns its schema version.
+    Messages name ``shown``, the file the person gave, when ``path`` is that backup unpacked."""
+    name = shown or path
     if not path.is_file():
-        raise RestoreError(f"{path} doesn't exist.")
+        raise RestoreError(f"{name} doesn't exist.")
     try:
         conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
     except sqlite3.Error as exc:
-        raise RestoreError(f"{path} can't be opened: {exc}") from exc
+        raise RestoreError(f"{name} can't be opened: {exc}") from exc
     try:
         result = conn.execute("PRAGMA integrity_check").fetchall()
         if [r[0] for r in result] != ["ok"]:
-            raise RestoreError(f"{path} is damaged: {'; '.join(r[0] for r in result[:3])}")
+            raise RestoreError(f"{name} is damaged: {'; '.join(r[0] for r in result[:3])}")
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     except sqlite3.DatabaseError as exc:  # "file is not a database"
-        raise RestoreError(f"{path} isn't an SQLite database: {exc}") from exc
+        raise RestoreError(f"{name} isn't an SQLite database: {exc}") from exc
     finally:
         conn.close()
     if version < 1 or not CORE_TABLES <= tables:
-        raise RestoreError(f"{path} isn't an Office Sentry database.")
+        raise RestoreError(f"{name} isn't an Office Sentry database.")
     if version > latest_version():
-        raise RestoreError(f"{path} was made by a newer Office Sentry (database version {version}; this one "
+        raise RestoreError(f"{name} was made by a newer Office Sentry (database version {version}; this one "
                            f"knows up to {latest_version()}). Update Office Sentry first.")
     return version
 
@@ -135,17 +194,48 @@ def _remove_stale_journal(db_path: Path) -> None:
         Path(f"{db_path}{suffix}").unlink(missing_ok=True)
 
 
-def restore(db_path: Path, source: Path, worker_running: bool, force: bool = False) -> dict:
-    """Replace the database at ``db_path`` with the backup ``source``.
+def _is_gzip(path: Path) -> bool:
+    with open(path, "rb") as f:
+        return f.read(2) == b"\x1f\x8b"
 
-    The current database is copied to ``backups/pre-restore-*.db`` first. The
+
+@contextmanager
+def _unpacked(source: Path, folder: Path) -> Iterator[Path]:
+    """``source`` itself, or for a gzipped backup a temporary uncompressed copy of it in ``folder``."""
+    if not source.is_file() or not _is_gzip(source):
+        yield source
+        return
+    folder.mkdir(parents=True, exist_ok=True)
+    plain = folder / f"restore-{_stamp()}.db.part"
+    try:
+        _private(plain)
+        with gzip.open(source, "rb") as zipped, open(plain, "r+b") as out:
+            shutil.copyfileobj(zipped, out, 2**20)
+    except (OSError, EOFError) as exc:  # a damaged or cut-short .gz, or a full disk
+        plain.unlink(missing_ok=True)
+        raise RestoreError(f"{source} couldn't be unpacked: {exc}") from exc
+    try:
+        yield plain
+    finally:
+        plain.unlink(missing_ok=True)
+
+
+def restore(db_path: Path, source: Path, worker_running: bool, force: bool = False) -> dict:
+    """Replace the database at ``db_path`` with the backup ``source`` (a ``.db`` or a gzipped ``.db.gz``).
+
+    The current database is copied to ``backups/pre-restore-*.db.gz`` first. The
     copy goes through the backup API into the database itself, so its WAL and
     shared-memory files stay consistent; nothing is copied file by file.
     """
     source = Path(source)
     if db_path.exists() and source.resolve() == db_path.resolve():
         raise RestoreError("That's the live database, not a backup.")
-    version = check_backup(source)
+    with _unpacked(source, db_path.parent) as plain:
+        return _restore(db_path, source, plain, worker_running, force)
+
+
+def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, force: bool) -> dict:
+    version = check_backup(plain, shown=source)
     if worker_running and not force:
         raise RestoreError("The worker is running (it checked in within the last few minutes). Stop the portal "
                            "and the worker first (docker compose stop web worker), or add --force if it isn't "
@@ -154,13 +244,13 @@ def restore(db_path: Path, source: Path, worker_running: bool, force: bool = Fal
     if db_path.exists():
         live = connect(db_path)
         try:
-            saved = copy_database(live, db_path.parent / "backups" / f"{PRE_RESTORE_PREFIX}{_stamp()}.db")
+            saved = copy_database(live, db_path.parent / "backups" / f"{PRE_RESTORE_PREFIX}{_stamp()}.db{COMPRESSED}")
         finally:
             live.close()
         rotate(db_path.parent / "backups", PRE_RESTORE_PREFIX, KEEP_PRE_RESTORE)
     _remove_stale_journal(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    src = sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)
+    src = sqlite3.connect(f"{plain.resolve().as_uri()}?mode=ro", uri=True)
     dest = connect(db_path)
     try:
         src.backup(dest)

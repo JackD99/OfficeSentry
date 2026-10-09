@@ -14,6 +14,12 @@ Design rules (each one fixes a v1 bug):
   when a failure (timeout, 5xx) might succeed as a smaller query.
 * Paging never stops silently: ``PagedResult.truncated`` says if it did.
 * Only GET is exposed. Office Sentry never changes a tenant.
+* With a ``limiter`` (the worker's), each request first waits for Microsoft's
+  throttling limits shared by every thread (``ratelimit.py``, limits per
+  endpoint in ``endpoints.py``), and a 429 pauses the other threads too.
+  Every request is counted in ``telemetry``.
+* Requests carry the ``User-Agent`` decoration Microsoft prioritises
+  (``ISV|company|app/version``).
 """
 
 from __future__ import annotations
@@ -28,7 +34,8 @@ from email.utils import parsedate_to_datetime
 
 import requests
 
-from . import clouds
+from . import __version__, clouds, endpoints
+from .ratelimit import Limiter, Telemetry, claims, to_pause
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +46,8 @@ RETRY_STATUSES = {429, 500, 502, 503, 504}
 # or a server error. 429 is excluded: more, smaller queries only throttle harder.
 TRANSIENT_STATUSES = {0, 500, 502, 503, 504}
 MAX_RETRY_AFTER = 300
+# Microsoft prioritises decorated traffic (SharePoint throttling guidance): ISV|CompanyName|AppName/Version.
+USER_AGENT = f"ISV|OfficeSentry|OfficeSentry/{__version__}"
 
 # Error codes Graph returns when a feature needs a licence the tenant lacks
 # (for example signInActivity or sign-in logs without Entra ID P1).
@@ -110,9 +119,16 @@ class GraphClient:
         sleep: Callable[[float], None] = time.sleep,
         jitter: Callable[[], float] = random.random,
         cloud: str | None = None,
+        limiter: Limiter | None = None,
+        telemetry: Telemetry | None = None,
+        app: str = "",
+        tenant: str = "",
     ):
         self.cloud = clouds.get(cloud)
         self.root = self.cloud.graph
+        self.limiter = limiter
+        self.telemetry = telemetry or Telemetry()
+        self.app, self.tenant = app, tenant  # who the limiter's app-wide and per-tenant buckets belong to
         self._token_provider = token_provider
         self._session = session or requests.Session()
         self._max_retries = max_retries
@@ -134,7 +150,7 @@ class GraphClient:
             except TokenError as exc:
                 raise GraphError(401, exc.code, exc.message) from exc
 
-        return cls(token, cloud=cloud, **kwargs)
+        return cls(token, cloud=cloud, app=client_id, tenant=tenant_ref, **kwargs)
 
     # -- URL handling ------------------------------------------------------
 
@@ -162,26 +178,40 @@ class GraphClient:
         # Timeouts and server errors get ``transient_retries`` (when a caller has a cheaper fallback, such as
         # asking for less); throttling (429) always gets the full count, since asking again sooner won't help.
         limit = self._max_retries if transient_retries is None else min(transient_retries, self._max_retries)
+        endpoint = endpoints.graph(url, params)
+        key = endpoints.graph_key(url, params)
+        taken = claims(endpoint, self.app, self.tenant) if self.limiter else []
         attempt = failures = 0
         while True:
-            hdrs = {"Authorization": f"Bearer {self._token_provider()}", "Accept": "application/json"}
+            waited = self.limiter.acquire(taken) if self.limiter else 0.0
+            hdrs = {"Authorization": f"Bearer {self._token_provider()}", "Accept": "application/json",
+                    "User-Agent": USER_AGENT}
             if headers:
                 hdrs.update(headers)
             try:
                 resp = self._session.get(url, params=params, headers=hdrs, timeout=self._timeout)
             except (requests.ConnectionError, requests.Timeout) as exc:
-                if attempt >= self._max_retries or failures >= limit:
+                retry = attempt < self._max_retries and failures < limit
+                delay = self._backoff(attempt) if retry else 0.0
+                self.telemetry.request(key, endpoint, status=0, limiter_wait=waited, retry_wait=delay)
+                if not retry:
                     raise GraphError(0, "network_error", str(exc)) from exc
-                self._sleep(self._backoff(attempt))
+                self._sleep(delay)
                 attempt += 1
                 failures += 1
                 continue
 
             throttled = resp.status_code == 429
-            if resp.status_code in RETRY_STATUSES and attempt < self._max_retries and (throttled or failures < limit):
+            retry = resp.status_code in RETRY_STATUSES and attempt < self._max_retries and (throttled or failures < limit)
+            delay = self._retry_after(resp, attempt) if retry else 0.0
+            self.telemetry.request(key, endpoint, status=resp.status_code, limiter_wait=waited, retry_wait=delay,
+                                   headers=resp.headers)
+            if retry:
                 failures += not throttled
-                delay = self._retry_after(resp, attempt)
                 log.info("Graph %s on %s; retrying in %ss", resp.status_code, url, delay)
+                if resp.status_code == 429 and self.limiter:
+                    # Hold the other threads using the same limits too, not just this one.
+                    self.limiter.pause(to_pause(taken, resp.headers.get("x-ms-throttle-scope", "")), delay)
                 self._sleep(delay)
                 attempt += 1
                 continue

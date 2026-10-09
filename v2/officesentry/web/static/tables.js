@@ -4,9 +4,17 @@
  * Report pickers: <form data-autosubmit> submits when its <select> changes.
  * Report search: <input data-report-search="list-id"> filters the list's [data-name] items, hiding empty
  *   .report-group blocks; a group marked data-search-only shows only while searching.
+ * Row groups: <button data-group> in a <tbody class="group"> heading folds that group's rows;
+ *   <button data-groups="table-id"> folds or opens every group in the table.
  * Views: <a data-view> links (filters, columns, sort on detail reports) load the next page in place,
  *   keeping the scroll position, open menus and anything typed in a row search. Plain links without JS. */
 (function () {
+  /* Every page loads this file (base.html); a page that also loads it gets one copy.
+   * Long tables on phones: a stacked table (table.stack-sm) shows its first 20 rows, with "Show all" under it. */
+  if (window.officeSentryTables) return;
+  window.officeSentryTables = true;
+  var CAP = 20;
+  var phone = window.matchMedia ? window.matchMedia('(max-width: 640px)') : { matches: false };
   function value(cell) {
     if (!cell) return null;
     var raw = cell.hasAttribute('data-sort') ? cell.getAttribute('data-sort') : cell.textContent.trim();
@@ -46,6 +54,7 @@
             return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
           });
           rows.forEach(function (r) { body.appendChild(r); });
+          markCap(table);
         });
       });
     });
@@ -56,6 +65,7 @@
       if (!table) return;
       input.addEventListener('input', function () {
         var q = input.value.trim().toLowerCase();
+        table.classList.toggle('searching', !!q);
         table.querySelectorAll('tbody tr').forEach(function (tr) {
           tr.hidden = q && (tr.getAttribute('data-name') || '').indexOf(q) === -1;
         });
@@ -97,8 +107,37 @@
       form.querySelector('select').addEventListener('change', function () { form.submit(); });
     });
   }
-  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); }
+  function foldOnPhones(root) {
+    // A long grouped table opens folded on a phone, as a list of headings; a linked group stays open.
+    if (!window.matchMedia || !window.matchMedia('(max-width: 640px)').matches) return;
+    root.querySelectorAll('table.grouped').forEach(function (table) {
+      if (table.querySelectorAll('tbody.group tr:not(.group-head)').length <= 20) return;
+      table.querySelectorAll('tbody.group').forEach(function (body) {
+        if ('#' + body.id !== window.location.hash) fold(body, true);
+      });
+      var all = document.querySelector('button[data-groups="' + table.id + '"]');
+      if (all) { all.setAttribute('aria-expanded', 'false'); all.querySelector('span').textContent = 'Expand all'; }
+    });
+  }
+  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); foldOnPhones(root); }
   init(document);
+
+  /* Row groups fold to their heading. Delegated, so groups loaded in place by a view work too. */
+  function fold(body, folded) {
+    body.classList.toggle('folded', folded);
+    body.querySelector('[data-group]').setAttribute('aria-expanded', folded ? 'false' : 'true');
+  }
+  document.addEventListener('click', function (e) {
+    var one = e.target.closest && e.target.closest('button[data-group]');
+    if (one) { var body = one.closest('tbody'); fold(body, !body.classList.contains('folded')); return; }
+    var all = e.target.closest && e.target.closest('button[data-groups]');
+    if (!all) return;
+    var table = document.getElementById(all.getAttribute('data-groups'));
+    var folded = all.getAttribute('aria-expanded') === 'true';
+    if (table) table.querySelectorAll('tbody.group').forEach(function (b) { fold(b, folded); });
+    all.setAttribute('aria-expanded', folded ? 'false' : 'true');
+    all.querySelector('span').textContent = folded ? 'Expand all' : 'Collapse all';
+  });
 
   /* Menus (<details class="menu">) close on Escape or a click outside. */
   document.addEventListener('click', function (e) {
@@ -108,6 +147,43 @@
     if (e.key !== 'Escape') return;
     document.querySelectorAll('details.menu[open]').forEach(function (d) { d.open = false; d.querySelector('summary').focus(); });
   });
+
+  /* Long tables on phones: the first CAP rows of a stacked table, then a "Show all" button. */
+  function rows(table) {
+    return Array.prototype.filter.call(table.tBodies[0].rows, function (r) { return !r.classList.contains('group'); });
+  }
+  function markCap(table) {
+    if (!table.classList.contains('capped')) return;
+    var shown = 0;  // a group heading goes with the rows under it
+    Array.prototype.forEach.call(table.tBodies[0].rows, function (r) {
+      r.classList.toggle('over-cap', shown >= CAP);
+      if (!r.classList.contains('group')) shown++;
+    });
+  }
+  function capRows(root) {
+    if (!phone.matches) return;
+    root.querySelectorAll('table.stack-sm').forEach(function (table) {
+      // Grouped tables (several bodies) fold their groups instead.
+      if (table.tBodies.length !== 1 || table.classList.contains('grouped') || table.hasAttribute('data-cap')) return;
+      var n = rows(table).length;
+      if (n <= CAP + 5) return;  // hiding a handful saves nothing
+      table.setAttribute('data-cap', '');
+      table.classList.add('capped');
+      markCap(table);
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'show-all';
+      button.textContent = 'Show all ' + n + ' rows';
+      button.addEventListener('click', function () {
+        table.classList.remove('capped');
+        rows(table).forEach(function (r) { r.classList.remove('over-cap'); });
+        button.remove();
+      });
+      var after = table.closest('.table-scroll, .scroll-x') || table;
+      after.parentNode.insertBefore(button, after.nextSibling);
+    });
+  }
+  capRows(document);
 
   /* In-place views: fetch the linked page and swap <main>, keeping where the person was. */
   var main = document.querySelector('main');
@@ -147,6 +223,7 @@
         document.title = doc.title;
         if (push) history.pushState({ view: true }, '', href);
         init(main);
+        capRows(main);
         if (before) restore(before);
         main.removeAttribute('aria-busy');
       })

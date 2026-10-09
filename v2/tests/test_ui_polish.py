@@ -58,7 +58,8 @@ def test_reports_not_compared_are_grouped_by_reason(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/changes").get_data(as_text=True)
-    assert page.count("Not compared (no data from the start of the period to compare with)") == 1
+    assert page.count("Not compared:") == 1
+    assert page.count("No data from the start of the period to compare with") == 1
 
 
 # -- Wording ---------------------------------------------------------------------------

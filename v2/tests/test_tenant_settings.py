@@ -16,6 +16,7 @@ from tests import graphdata as gd
 from tests import tenantsettingsdata as tsd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.stored import unpack
 from tests.test_collectors import V1, _run
 
 KEYS = ("tenant_creation", "app_registration", "guest_access_level", "email_verified_join", "admin_consent_workflow")
@@ -227,6 +228,7 @@ def test_stale_run_says_refresh(db, two_tenants):
     """A run from before this version stored the authorization policy without the admin consent settings."""
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
+    unpack(db)
     db.execute("DELETE FROM objects WHERE kind = 'admin_consent_policy'")
     new_fields = ("allowedToCreateSecurityGroups", "allowedToReadOtherUsers",
                   "allowEmailVerifiedUsersToJoinOrganization", "allowedToUseSSPR", "blockMsolPowerShell")

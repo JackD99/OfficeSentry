@@ -13,6 +13,7 @@ from tests import groupdata as grp
 from tests import licencedata as ld
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.stored import unpack
 
 
 def _licensing(db, tenant_id, **kwargs):
@@ -187,6 +188,7 @@ def test_paid_subscriptions_and_unused_trials_are_not_flagged(db, two_tenants):
 
 def _old_snapshot(db):
     """Objects as collected before licence assignment and renewal dates were read."""
+    unpack(db)
     db.execute("UPDATE objects SET data = json_remove(data, '$.licenceStates', '$.usageLocation') WHERE kind = 'user'")
     db.execute("DELETE FROM objects WHERE kind IN ('subscription_status', 'company_subscription')")
 

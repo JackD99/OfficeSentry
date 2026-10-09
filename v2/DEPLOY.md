@@ -8,9 +8,41 @@ tidies old data). Everything it stores lives in one Docker volume.
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
   installed. A small VM (2 CPUs, 2 GB RAM) is a reasonable start; disk use
-  grows with the number of tenants and users.
+  grows with the number of tenants and users (see [How much disk](#how-much-disk)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
+
+### How much disk
+
+Measured with `scripts/scale_data.py`: 200 client tenants of about 110
+accounts each, after two years of nightly collection with the default *Data
+retention* settings.
+
+| Tenants | Database | One nightly backup | Disk to plan for |
+|---|---|---|---|
+| 50 | about 1 GB | about 0.3 GB | 20 GB |
+| 200 | 4.0 GB | 1.2 GB (under 2 minutes) | 40 GB |
+| 500 | about 10 GB | about 3 GB | 80 GB |
+
+The 50 and 500 rows are scaled from the 200-tenant measurement. A tenant with
+twice the accounts takes about twice the room. "Disk to plan for" covers the
+operating system and Docker, the database, 7 nightly backups and the room a
+backup needs while it's being made (about the database's size again). Of the
+4.0 GB, collected data is 0.8 GB (stored compressed); the rest is run history
+and trend figures, which grow by about 0.7 MB per tenant a month.
+
+Before collected data was compressed the same database was 13.8 GB and 7
+backups took about 97 GB. An existing install compresses its older data a few
+seconds a minute in the background after updating; the file then stops
+growing for a long while but doesn't shrink by itself. To get the space back
+at once, run this at a quiet time (it pauses collections while it runs; on a
+large database expect several minutes):
+
+```bash
+docker compose stop worker
+docker compose run --rm --no-deps worker python -m officesentry compact
+docker compose start worker
+```
 
 ## First start
 
@@ -160,7 +192,11 @@ docker compose exec web python -m officesentry backup
 ```
 
 That writes to `/data/backups` inside the volume and keeps the last 7
-(`--keep 14` keeps more). Each copy is checked before it's kept.
+(`--keep 14` keeps more). Each copy is checked, then compressed
+(`officesentry-<time>.db.gz`, about a third of the database's size). While
+it's being made, the uncompressed copy needs room next to it: the backup
+stops with a plain message if the disk is short of about one and a half
+times the database's size.
 
 **Keep backups off the data volume.** A copy in the same volume is lost with
 the volume. Give the portal a second folder on the host (or a mounted network
@@ -198,7 +234,10 @@ it, anyone holding a backup can. It only changes when you run `rotate-keys
 
 Before every upgrade that changes the database, the portal also saves a copy
 as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db` (the last 3 are
-kept). If it can't (a full disk, say), it doesn't upgrade and says why.
+kept). It's made before the upgrade starts, so the portal keeps working while
+a large database is copied. It isn't compressed, so the older version you'd
+go back to can always restore it. If it can't (a full disk, say), it doesn't
+upgrade and says why.
 
 **Deleted tenants stay in backups.** Backups keep everything that was in the
 database when they were made. After you delete a client tenant, its data stays
@@ -220,16 +259,18 @@ client asks for their data to be erased.
    web ls /data/backups` lists them):
 
    ```bash
-   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db.gz
    ```
 
    A backup kept on the host goes in first with
-   `docker compose cp ./officesentry-20261005-033000.db web:/data/restore.db`
-   (then restore `/data/restore.db`), or from the `/backups` folder if you
-   mounted one.
+   `docker compose cp ./officesentry-20261005-033000.db.gz web:/data/restore.db.gz`
+   (then restore `/data/restore.db.gz`), or from the `/backups` folder if you
+   mounted one. Older, uncompressed `.db` backups restore the same way.
+   Versions of Office Sentry from before October 2026 can't read `.db.gz`
+   files: unpack one first with `gunzip -k <file>` and restore the `.db`.
 
    It checks that the file is a sound Office Sentry database, saves the
-   database it replaces as `/data/backups/pre-restore-<time>.db`, and copies
+   database it replaces as `/data/backups/pre-restore-<time>.db.gz`, and copies
    the backup in with SQLite's backup API (no stale `-wal` or `-shm` files are
    left behind).
 3. Put back the `secrets.json` from the same time as the backup if the keys
@@ -259,6 +300,11 @@ holds an encrypted value the command doesn't recognise, it stops and changes
 nothing. With keys in environment variables instead, put the new key first in
 `OFFICESENTRY_ENCRYPTION_KEYS`, run `rotate-keys`, then remove the old key.
 
+Rotating keys doesn't stop a leaked *certificate* signing in: anyone holding
+its private key can until it's deleted from the app registration in Entra.
+Replace it too, as described under *If a certificate or key leaks* in
+`SECURITY.md` (*Settings → App connection → Replace certificate*).
+
 Ran `rotate-keys --new` before this release? It didn't re-encrypt the alert
 webhook, so enter the webhook URL and secret again under *Settings → Alerts*.
 Old backups are still encrypted with the old key.
@@ -277,7 +323,9 @@ saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept.
 
 Database upgrades only go forward, so going back to an older version means
 going back to the database from before the upgrade. Anything collected since
-the upgrade is lost.
+the upgrade is lost. An older version started on the upgraded database
+refuses to start, and its log (`docker compose logs web`) names the copy to
+restore.
 
 1. `docker compose stop web worker`
 2. Go back to the version you had: `git log --oneline` to find it, then
@@ -343,7 +391,8 @@ removes it at the end.
 *Servers → Add server*:
 
 - **Image** Ubuntu 24.04. **Type** shared vCPU, x86, 2 vCPUs and 4 GB (the
-  smallest is fine to start).
+  smallest is fine to start). Check its disk against
+  [How much disk](#how-much-disk); a bigger type can be chosen later.
 - **Networking** public IPv4 (and IPv6 if you like).
 - **SSH keys** none needed.
 - **Firewalls** tick `officesentry`.
@@ -384,6 +433,8 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 |---|---|
 | `HCLOUD_TOKEN` | the Hetzner API token |
 | `DEPLOY_SSH_KEY` | the deploy key's **private** key, all of it, including the BEGIN and END lines |
+| `DEPLOY_HOST_KEY` | the server's own SSH key, one line starting `ssh-ed25519 AAAA` (below). Required: the workflow only talks to the server that has this key |
+| `SETUP_CODE` | only while there is no admin yet: a long random password (20 characters or more) to use as the first-admin code in step 6. Delete it afterwards |
 
 | Variables | |
 |---|---|
@@ -393,21 +444,40 @@ In GitHub: the repository's *Settings → Secrets and variables → Actions*.
 | `HCLOUD_FIREWALL` | only if the firewall isn't called `officesentry` |
 | `OFFICESENTRY_DEMO_DOMAIN` | optional: the demo site's name (below), e.g. `demo.sentry.yourmsp.com` |
 | `DEMO_ENABLED` | `true` runs the demo site, `false` (or unset) removes it at the next deploy |
-| `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *` |
-| `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it) |
-| `DEPLOY_HOST_KEY` | optional: the server's SSH host key, which the first run prints, so later runs refuse a different server |
+| `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *`. Variables show in run logs, so never put a password or key here |
+| `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it). Anything else, or no variable, means you deploy by hand ([below](#automatic-deploys-off-and-on)) |
 
 The workflow writes the server's `.env` from these on every deploy (with
 `OFFICESENTRY_TRUSTED_PROXIES=1` for Caddy), so change settings here, not on
 the server.
 
+**Getting `DEPLOY_HOST_KEY`.** Leave it out at first. Run the Deploy workflow
+(step 6): it stops with a red message that shows the key the server answered
+with, a line starting `ssh-ed25519 AAAA`. Add that line as the
+`DEPLOY_HOST_KEY` secret and run the workflow again. Because you created the
+server a few minutes earlier, the key it shows is its own. From then on every
+run checks the server's key first, and if a different machine ever answers at
+that address the run stops before sending it anything. If you rebuild or
+replace the server, it gets a new key: the run stops with a message showing
+the new one, and you update the secret the same way. If you haven't touched
+the server and see that message, don't change the secret; check the
+`DEPLOY_HOST` variable and the server in the Hetzner console first.
+
 ### 6. Deploy and create the admin
 
-*Actions → Deploy → Run workflow*, action **deploy**. When it's green, open
-the step **Show the first-admin link**, open that link on your phone and
-create the admin account (with two-step sign-in), as in *First start*. The
-link only works until the first admin exists. Then carry on from step 6 of
-*First start*.
+1. *Actions → Deploy → Run workflow*, action **deploy**. When it's green, it
+   notes that there is no admin account yet.
+2. Add a `SETUP_CODE` secret (step 5's page) holding a long random password,
+   say one your password manager makes. Keep a copy for the next step.
+3. Run the workflow again with action **setup-link**. Its summary says which
+   page to open: `https://<your domain>/setup`.
+4. Open that page, enter your `SETUP_CODE` as the setup code and create the
+   admin account (with two-step sign-in), as in *First start*. The code only
+   works until the first admin exists.
+5. Delete the `SETUP_CODE` secret. Then carry on from step 6 of *First start*.
+
+The run logs never show the setup link or code: they will be public once the
+repository is, and whoever has the link can create the first admin.
 
 ### Everyday jobs
 
@@ -416,14 +486,58 @@ All from *Actions → Deploy → Run workflow*:
 | Action | Does |
 |---|---|
 | `deploy` | copies the chosen branch, tag or commit and rebuilds; the portal is only down while the containers swap |
-| `status` | container health, free disk and the last log lines |
+| `status` | container health, free disk, whether the worker checked in, and how many errors the portal and worker logged in the last 24 hours |
 | `backup` | a database copy now, keeping 14 |
 | `restart` | restarts the portal, worker and Caddy |
-| `setup-link` | the first-admin link again |
+| `setup-link` | makes your `SETUP_CODE` secret the first-admin code (step 6); does nothing once an admin exists |
 
 To go back to an older version, deploy its commit or tag in the `ref` box; if
 the database was upgraded since, restore the `pre-upgrade-*` copy as in
 *Rolling back an update* (that needs a shell, below).
+
+The runs never print the portal's own log, because it names clients, users
+and addresses and the run logs will be public once the repository is. When
+`status` counts errors, or a deploy says the portal didn't become healthy,
+read the log in a shell (below) with `docker compose logs --tail 200 web`
+(or `worker`).
+
+### Automatic deploys: off and on
+
+With the `AUTO_DEPLOY` variable set to `true`, every pull request merged
+into main goes to your server as soon as its tests pass. To stop that and
+choose when to deploy:
+
+1. On github.com, open the repository, then **Settings** (the tab with the
+   gear; on a phone, use the browser, not the GitHub app).
+2. In the left menu, **Secrets and variables**, then **Actions**.
+3. Open the **Variables** tab. Next to `AUTO_DEPLOY`, press the pencil.
+4. Change the value to `false` and press **Update variable**.
+
+Nothing deploys by itself from then on. To turn it back on, do the same and
+set the value to `true`. Merges keep running their tests either way.
+
+### Deploying by hand
+
+1. Open the repository's **Actions** tab (in the GitHub app: the repository,
+   then *Actions*).
+2. Pick **Deploy** in the list of workflows.
+3. Press **Run workflow**. Leave *Use workflow from* on `main`, leave the
+   action on **deploy**, and leave the `ref` box on `main` to deploy the
+   newest code (or type a branch, tag or commit).
+4. Press the green **Run workflow**. The run takes a few minutes; a green
+   tick means the portal is up on the new version.
+
+To see what a deploy will bring, look at the **Pull requests** tab, filter
+*Closed*, and read what merged since your last deploy (the Deploy run list
+shows when that was).
+
+### When the repository goes public
+
+Runs before this change printed the portal's log in `status` and `restart`
+runs, and the first-admin link. GitHub keeps run logs for 90 days, and they
+become public with the repository. Before making it public, open
+*Actions → Deploy*, and for each run older than this change press **⋯** and
+**Delete workflow run** (or wait until they are 90 days old).
 
 ### A demo site to show people
 

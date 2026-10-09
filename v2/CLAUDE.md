@@ -12,11 +12,18 @@ overview and DEPLOY.md for running it on a server.
   read-only and go in `entra.GRAPH_PERMISSIONS` (adding one forces every
   tenant to re-consent, so batch them).
 - **The one non-GET Graph call is `mailer._send_graph`** (`sendMail` from the
-  MSP's own mailbox, via a separate single-tenant app with `Mail.Send`). Never
-  add mail permissions to the multi-tenant read-only app.
+  MSP's own mailbox, via a separate single-tenant app with `Mail.Send`, in the
+  mail app's own cloud, `graph_cloud`). Never add mail permissions to the
+  multi-tenant read-only app. `tests/test_no_writes.py` fails on any
+  `.post/.put/.patch/.delete/.request(` outside its `ALLOWED` files, and
+  checks a full collection only sends GETs (plus `Get-` cmdlets).
 - **Every route needs `@login_required` or `@roles_required`.** Anything
   tenant-scoped loads the tenant with `access.tenant_or_404()`.
-  `tests/test_access.py::test_every_page_requires_login` enforces the first.
+  `tests/test_access.py::test_every_page_requires_login` enforces the first;
+  `tests/test_isolation_walk.py` opens every route that takes a tenant (or
+  one of its objects) with another tenant's IDs and expects a refusal. A new
+  URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
+  for it in the `world` fixture) or `OTHER_ARGS`.
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
 - **Microsoft hosts come from `clouds.py`** (commercial, GCC High, DoD,
   China). A tenant (`tenants.cloud`) only signs in with an app connection of
@@ -38,7 +45,8 @@ overview and DEPLOY.md for running it on a server.
   anonymous events go through `db.audit_counted()` (one row per address and
   hour), and never store what a stranger typed. Sign-in noise is in
   `db.AUDIT_NOISE` and pruned after 90 days. Admins read it at `/admin/activity`.
-- **Every PDF goes through `reports/export.to_pdf()`**, whose URL fetcher only
+- **Every PDF goes through `reports/export.to_pdf()`**, which makes tagged
+  PDF/UA files (`export.PDF_VARIANT`) and whose URL fetcher only
   loads files under `web/static/` and `data:` URIs. Never call WeasyPrint
   directly, and put fonts and images a PDF needs in `web/static/`.
 
@@ -51,14 +59,20 @@ overview and DEPLOY.md for running it on a server.
    (from `tenant_profile`) to skip what it can't have.
 3. Import it in `collectors/__init__.py`.
 4. Test it in `tests/test_collectors.py` with recorded Graph responses.
+5. List every new Graph path or Exchange cmdlet in `endpoints.py` (version,
+   permission, Microsoft's throttling limits and resource-unit cost,
+   fallback). The shared limiter paces calls by it and run telemetry names
+   them by it; `tests/test_ratelimit.py` fails on a call it doesn't list.
 
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
 
 The two SharePoint collectors list sites and OneDrives through
-`collectors/sharepoint_lookup.Lookups`, so the second one each night reuses
-the first one's answers (when they have the fields it asks for) and people
-without a OneDrive aren't asked about for a week.
+`collectors/sharepoint_lookup.Lookups`, both asking for the same fields
+(`SITE_FIELDS`, `DRIVE_FIELDS`: everything either needs), so the second one
+each night reuses the first one's site list and OneDrives, and people without
+a OneDrive aren't asked about for a week. A field either collector starts
+needing goes in those lists.
 
 ## Adding a check or report
 
@@ -96,6 +110,16 @@ without a OneDrive aren't asked about for a week.
   the page, PDF, XLSX and CSV apply the same view (`views.apply`). Pass lists
   for list cells (they become `Many`, so a filter offers each item). Saved
   views are per person, per report key (`saved_views` table, `web/saved_views.py`).
+  A `Section` can also name its flag column (`flag_name`), group rows under
+  collapsible headings by a column (`group`, anchors in `group_ids`), always
+  offer a value filter on some columns (`filter_columns`), carry a key per row
+  for row actions (`keys`, `{% call(key) report_table(tv, csv, action=...) %}`)
+  and drop the "to review" count (`review=False`).
+- The Findings tab (`/tenants/<id>/findings`, and `/findings/resolved`) is built
+  by `reports/findings_report.py` from the `findings` table on that same table:
+  open findings grouped by check, then accepted risks, with saved views (report
+  keys `findings` and `findings-resolved`) and PDF, XLSX and CSV downloads. It
+  isn't in `REPORTS`, since it isn't built from a snapshot.
 - The Reports page (`/reports`) lists every registered report. Add a new key to
   the jobs in `reports/library.USES` and search words to `KEYWORDS` if its
   title doesn't contain what people would type.
@@ -196,7 +220,18 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 ## Web UI conventions
 
 - Styles live in `web/static/app.css` (tokens at the top, light and dark).
-  Reports that also become PDFs use `report.css` instead.
+  Reports that also become PDFs use `report.css` instead. Text colours
+  (`--text`, `--text-2`, `--muted`, `--faint`) meet WCAG AA (4.5:1) on every
+  surface, and `test_ux_fixes.py` measures them; use `--decor` for lines and
+  icons only, never for text. Don't tell things apart by colour alone (the
+  check matrix squares carry a letter).
+- Admin settings are one sidebar entry. A new settings page goes in `SETTINGS`
+  at the top of `base.html` (endpoint, label, other endpoints of the page),
+  which gives it the row of settings links at the top of the page.
+- Every page loads `static/app.js` (PDF links show "Preparing your PDF…" until
+  the file arrives) and `static/tables.js` (sorting, row search, in-place
+  views, and stacked tables capped at 20 rows with "Show all" on phones). A
+  page that also loads `tables.js` itself still gets one copy.
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
@@ -223,8 +258,8 @@ queued or running, so a night's collection is evaluated once. Token providers
 (`msauth.shared_certificate_token_provider`) and each thread's HTTP session are
 reused across runs. Meanwhile the main thread, once a
 minute, queues the collection slot (`schedule.py`, cron + timezone, skipping
-collectors fresher than `max_age_hours`) and sends due report emails (which
-first refresh stale collectors). Every thread opens its own SQLite connection;
+collectors fresher than `max_age_hours`) and queues due report emails (which
+first refresh stale collectors) as tasks. Every thread opens its own SQLite connection;
 never share one across threads. Manual runs and report refreshes get
 `store.PRIORITY_WAITING`. Once a day `retention.apply` prunes under
 the admin's *Data retention* settings (`retention.*` keys in `settings`;
@@ -238,10 +273,43 @@ reads an older run must cope with its objects, or just its sign-in kinds,
 being gone (see `changes._baseline_run`). A new store of personal data gets
 a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
 `healthcheck worker` read, but only while the worker makes progress
-(`worker.Liveness`: the main loop came round in the last 10 minutes and no run
-has gone for 4 hours), so a wedged loop or thread shows as down. A failing
+(`worker.Liveness`: the main loop came round in the last 10 minutes, no run
+has gone for 4 hours and no task for 1), so a wedged loop or thread shows as down. A failing
 housekeeping pass (say "database is locked") is logged, rolled back and
 retried the next minute; it never ends the worker. Don't add Celery or Redis.
+
+Microsoft's limits are per app, not per thread, so every Graph and Exchange
+call in the worker goes through one process-wide limiter
+(`ratelimit.LIMITER`, passed by `worker.default_graph_factory` and
+`default_exchange_factory`): token buckets per limit in `endpoints.LIMITS`
+(app-wide, per tenant, or per report API, some counted in resource units),
+and a 429 pauses that limit's bucket for every thread until `Retry-After`.
+Clients made elsewhere (tests, connection check, live test) aren't paced.
+Each run's requests are counted (`ratelimit.Telemetry`: calls, 429s,
+failures, retry and limiter waits, `x-ms-throttle-limit-percentage`): totals
+on `runs` (`requests`, `throttled`, `wait_seconds`; NULL before this existed)
+and per endpoint in `run_requests`, pruned with run log info lines after 90
+days. The run page shows both. Requests carry the `User-Agent`
+`ISV|OfficeSentry|OfficeSentry/<version>` Microsoft prioritises.
+
+Long work goes through **background tasks** (`tasks.py`, the `tasks` table),
+never a web request or the main loop: `worker.TASK_THREADS` task threads
+claim tasks (highest priority first) and run the function registered for
+their kind with `@tasks.handler(kind)` (add its module to
+`worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`) and
+`send_schedule` (`delivery.py`). Queue with `tasks.enqueue(conn, kind,
+key=..., payload=...)`: at most one task per `key` is queued or running, so
+use a key that names the thing done once ("approve:<tenant>:<period>").
+Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
+thread renews; when a worker dies, `expire_leases` fails its runs and queues
+its tasks again (up to `tasks.MAX_ATTEMPTS`). So a handler may run twice:
+save `ctx.checkpoint(...)` in the same transaction as any step that mustn't
+repeat and skip it when `ctx.done` says so. Raise `tasks.TaskFailed` with
+words for people; a handler's own failure isn't retried. Pages show
+progress from the rows (`tasks.batch_progress`, a JSON route polled by
+`_progress.html`). Finished tasks are pruned after 30 days. Table report
+PDFs keep the first `printing.PDF_MAX_ROWS` (2,000) rows per table and say
+so (`printing.cap_rows`); the XLSX and CSV have every row.
 
 The dashboard and the All tenants review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
@@ -309,11 +377,17 @@ template as `month_end` from `month_end.report_context()`, passed by the route
 reach staff on the web page, never a client or any PDF. A client's live report shows none
 of it until the month is approved or sent (`report_context(..., approved_only=True)`).
 
-Approving (`freeze` then `deliver`) renders the plan's files once into
-`issued_reports` (trigger `approval`, `approved_by`/`approved_at`), then emails
-those exact bytes (`delivery.send_frozen`, which marks the schedule's period
-done) or, for portal-only plans or no recipients, leaves them in the report
-history. Approving an issued month again is a re-issue: it needs a reason and
+Approving queues an `approve` task per client and month
+(`month_end.queue_approval`; bulk approval queues one per ticked client under
+one `batch`, and the queue page shows its progress). The task renders the
+plan's files outside the write lock (`render_files`), then in one
+transaction re-checks the state, stores them in `issued_reports` (`freeze`:
+trigger `approval`, `approved_by`/`approved_at`) and checkpoints "frozen";
+then emails those exact bytes (`deliver` and `delivery.send_frozen`, which
+record the email, mark the schedule's period done and the month Sent in one
+transaction) or, for portal-only plans or no recipients, leaves them in the
+report history. A worker that dies between freeze and send sends once on
+retry, without freezing again (`tests/test_tasks.py`). Approving an issued month again is a re-issue: it needs a reason and
 stores the next version. Roles: admin and analyst review, comment, assign and
 edit recommendations and notes; only admins edit plans and approve, send or
 re-issue. Clients never see the queue, reviewers or staff-only notes. Every
@@ -338,16 +412,58 @@ change is audited; note text is never put in the audit log.
   app roles and directory roles (GET only). Pages never call Graph for it;
   "Check connection now" queues that collector. Its fixes are plain English
   and say where in the Microsoft admin centres to click.
+- Anything the tenant granted the app beyond `entra.GRAPH_PERMISSIONS` and
+  `EXCHANGE_PERMISSIONS` (the collector's `other`), and any directory role
+  besides Global Reader, is a warning (`tenant_health.extra_permissions`,
+  `extra_roles`) on Manage and the Client tenants list.
+- App certificates (`cert_lifecycle.py`): `expiring()` grades every
+  certificate in use, each app connection's and the mail app's, at 60, 30
+  and 7 days and expired, for the App connection page, the admin banner in
+  `base.html` and the `certificate_expiry` periodic job (one email to the
+  team contacts and one webhook alert per threshold). Replacing one keeps
+  two on the connection: `start` (the `next_*` columns), the admin uploads
+  the new .cer next to the old, `test` signs in with it, `switch` swaps it
+  in and remembers `old_thumbprint` until `forget_old`. `switch` refuses
+  until a test worked. The runbook is in the root `SECURITY.md`.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
+
+## Snapshot storage
+
+Collected objects are stored compressed (`store.py`, "Snapshot data"): an
+`objects` row whose `data` is a BLOB is a pack of up to `store.PACK_BYTES` of
+one run and kind's objects in id order, keyed by its first object's id, with
+`items` saying how many it holds. Rows from before packing hold one object as
+JSON text (`items` 1); `packing.py` converts them a few seconds a minute from
+the worker (the `compact` command does it all and shrinks the file). So:
+
+- Read objects through `store` (`run_objects`, `find_object`,
+  `object_copies`, `matching_objects`) or `TenantSnapshot`, never
+  `objects.data` or `json_extract` in SQL.
+- Count objects with `SUM(items)`, not `COUNT(*)`. Deleting or checking rows
+  by run and kind (`EXISTS`, retention) works as before.
+- Tests that edit stored rows with SQL call `tests/stored.unpack(db)` first;
+  `test_compressed_storage.py` checks every report, check, change feed and
+  account page is identical from packed and unpacked rows.
+- `scripts/scale_data.py` builds N tenants with two years of history for
+  sizing and timing (`--plain --compact` measures before and after).
 
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 `db.migrate` re-reads `user_version` inside each migration's transaction (two
-processes may start at once) and copies a database that already has a schema
-to `backups/pre-upgrade-*.db` first (`backups.before_upgrade`); restoring that
-copy is the only way back, since migrations only go forward.
+processes may start at once) and, before taking the write lock, copies a
+database that already has a schema to `backups/pre-upgrade-*.db`
+(`backups.before_upgrade`); restoring that copy is the only way back, since
+migrations only go forward. Copies check free disk first. Backups and
+pre-restore copies are gzipped after SQLite's backup API (`restore` takes
+`.db.gz` and plain `.db`); pre-upgrade copies stay plain, since an older
+release (whose `restore` may not read gzip) restores them. Code
+older than the database refuses to start (`db.DatabaseTooNew`, naming the copy
+to restore), and two files with one number stop the upgrade, since the second
+would otherwise be skipped for good. Several branches add migrations at once:
+take the next free number above `main`'s highest when you merge `main` in
+(`tests/test_migrations.py` fails on a clash).
 
 ## Commands
 
@@ -365,8 +481,9 @@ and `python -m officesentry <command>`:
 | `create-app` | create the read-only multi-tenant Entra app (device sign-in) |
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
-| `backup [--dir] [--keep]` | a consistent copy of the database (keeps 7) |
+| `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
 | `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
+| `compact` | compress snapshots stored before compression now and shrink the database file |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
 

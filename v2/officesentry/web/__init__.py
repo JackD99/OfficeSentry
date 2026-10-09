@@ -106,7 +106,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             resp.headers["Cache-Control"] = "no-store"
         return resp
 
-    from .. import clouds
+    from .. import cert_lifecycle, clouds
 
     # National clouds (clouds.py): the choices for tenant and app connection forms, and a label for any key.
     app.jinja_env.globals.update(cloud_choices=clouds.CHOICES, cloud_label=lambda key: clouds.get(key).label,
@@ -117,8 +117,14 @@ def create_app(cfg: Config | None = None) -> Flask:
         user = g.get("user")
         # Admins are told when the background worker isn't running: without it
         # nothing is collected and no scheduled email goes out.
-        worker_down = bool(user and user["role"] == "admin" and "db" in g and not worker.is_alive(g.db))
-        return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down}
+        admin = bool(user and user["role"] == "admin" and "db" in g)
+        worker_down = admin and not worker.is_alive(g.db)
+        # ...and when a certificate Office Sentry signs in with is within 60 days of expiring.
+        # Not on the page that already says so in full.
+        here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
+        certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
+        return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down,
+                "expiring_certificates": certificates}
 
     @app.errorhandler(403)
     def _forbidden(_e):

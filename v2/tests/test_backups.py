@@ -1,6 +1,8 @@
 """Backups before upgrades, and restoring a backup."""
 
+import gzip
 import os
+import shutil
 import sqlite3
 
 import pytest
@@ -17,7 +19,17 @@ def env(cfg, monkeypatch):
     return cfg
 
 
+def _unzip(path, tmp_path):
+    """A gzipped backup as a plain database file to open."""
+    plain = tmp_path / (path.name + ".db")
+    with gzip.open(path, "rb") as zipped, open(plain, "wb") as out:
+        shutil.copyfileobj(zipped, out)
+    return plain
+
+
 def _tenants(path):
+    if path.name.endswith(".gz"):
+        path = _unzip(path, path.parent)
     conn = connect(path)
     try:
         return [r["name"] for r in conn.execute("SELECT name FROM tenants ORDER BY id")]
@@ -35,6 +47,8 @@ def test_upgrading_a_database_backs_it_up_first(cfg, monkeypatch):
     assert migrate(conn) == every[-1][0]
     saved = sorted((cfg.data_dir / "backups").glob("pre-upgrade-*.db"))
     assert len(saved) == 1 and saved[0].name.startswith(f"pre-upgrade-v4-to-v{every[-1][0]}-")
+    # Not compressed: the older release a rollback goes back to restores it, and may not read gzip.
+    assert saved[0].name.endswith(".db") and saved[0].read_bytes()[:6] == b"SQLite"
     copy = connect(saved[0])
     assert copy.execute("PRAGMA user_version").fetchone()[0] == 4
     assert copy.execute("SELECT name FROM tenants").fetchone()[0] == "Old"
@@ -85,7 +99,7 @@ def test_a_failed_backup_stops_the_upgrade(cfg, monkeypatch):
 
 def test_backup_and_restore(env, db, two_tenants, capsys):
     main(["backup"])
-    saved = next((env.data_dir / "backups").glob("officesentry-*.db"))
+    saved = next((env.data_dir / "backups").glob("officesentry-*.db.gz"))
     store.create_tenant(db, "Charlie Co", "charlie.onmicrosoft.com", None)
     db.execute("DELETE FROM tenants WHERE name = 'Alpha Ltd'")
     assert _tenants(env.db_path) == ["Bravo Inc", "Charlie Co"]
@@ -95,7 +109,7 @@ def test_backup_and_restore(env, db, two_tenants, capsys):
     assert "Restored" in out and "secrets.json" in out
     assert _tenants(env.db_path) == ["Alpha Ltd", "Bravo Inc"]
     # The database it replaced is kept, in case the wrong file was restored.
-    before = next((env.data_dir / "backups").glob("pre-restore-*.db"))
+    before = next((env.data_dir / "backups").glob("pre-restore-*.db.gz"))
     assert _tenants(before) == ["Bravo Inc", "Charlie Co"]
     # An open connection sees the restored data too: nothing was copied behind SQLite's back.
     assert [r["name"] for r in db.execute("SELECT name FROM tenants ORDER BY id")] == ["Alpha Ltd", "Bravo Inc"]
@@ -104,7 +118,7 @@ def test_backup_and_restore(env, db, two_tenants, capsys):
 
 def test_restore_refuses_while_the_worker_runs(env, db, two_tenants):
     main(["backup"])
-    saved = next((env.data_dir / "backups").glob("officesentry-*.db"))
+    saved = next((env.data_dir / "backups").glob("officesentry-*.db.gz"))
     worker.beat(db)
     with pytest.raises(SystemExit, match="worker is running"):
         main(["restore", str(saved)])
@@ -140,7 +154,7 @@ def test_restore_refuses_other_sqlite_databases_and_newer_versions(env, db, tmp_
 
 def test_restore_onto_a_new_server_clears_a_stale_wal(env, db, two_tenants, tmp_path):
     main(["backup", "--dir", str(tmp_path / "offsite")])
-    saved = next((tmp_path / "offsite").glob("officesentry-*.db"))
+    saved = next((tmp_path / "offsite").glob("officesentry-*.db.gz"))
     db.close()
     env.db_path.unlink()
     for suffix in ("-wal", "-shm"):
@@ -149,7 +163,7 @@ def test_restore_onto_a_new_server_clears_a_stale_wal(env, db, two_tenants, tmp_
         path.write_bytes(b"left over from a database that's gone")
     main(["restore", str(saved)])
     assert _tenants(env.db_path) == ["Alpha Ltd", "Bravo Inc"]
-    assert not list((env.data_dir / "backups").glob("pre-restore-*.db"))
+    assert not list((env.data_dir / "backups").glob("pre-restore-*"))
 
 
 def test_an_older_backup_is_upgraded_on_the_next_start(env, monkeypatch, tmp_path, capsys):
@@ -166,3 +180,73 @@ def test_an_older_backup_is_upgraded_on_the_next_start(env, monkeypatch, tmp_pat
     conn = connect(env.db_path)
     assert migrate(conn) == every[-1][0]
     assert conn.execute("SELECT name FROM tenants").fetchone()[0] == "Old"
+
+
+def test_backups_are_compressed_private_and_rotate_with_older_plain_ones(env, db, two_tenants):
+    folder = env.data_dir / "backups"
+    folder.mkdir(parents=True)
+    (folder / "officesentry-20260101-000000.db").write_bytes(b"")  # from before backups were compressed
+    main(["backup", "--keep", "1"])
+    saved, = folder.iterdir()  # the older plain one rotated out
+    assert saved.name.endswith(".db.gz")
+    assert saved.read_bytes()[:2] == b"\x1f\x8b"
+    assert saved.stat().st_size < backups.database_bytes(db) / 3
+    if os.name != "nt":
+        assert oct(saved.stat().st_mode & 0o777) == "0o600"
+    assert not list(folder.glob("*.part"))
+
+
+def test_a_plain_backup_still_restores(env, db, two_tenants, tmp_path):
+    plain = tmp_path / "officesentry-20260101-000000.db"
+    backups.copy_database(db, plain)
+    assert plain.read_bytes()[:6] == b"SQLite"
+    db.execute("DELETE FROM tenants WHERE name = 'Alpha Ltd'")
+    main(["restore", str(plain)])
+    assert _tenants(env.db_path) == ["Alpha Ltd", "Bravo Inc"]
+
+
+def test_restore_refuses_a_damaged_compressed_backup(env, db, two_tenants):
+    main(["backup"])
+    saved = next((env.data_dir / "backups").glob("officesentry-*.db.gz"))
+    saved.write_bytes(saved.read_bytes()[:200])  # cut short
+    with pytest.raises(SystemExit, match="couldn't be unpacked"):
+        main(["restore", str(saved)])
+    assert _tenants(env.db_path) == ["Alpha Ltd", "Bravo Inc"]
+    assert not list(env.data_dir.glob("restore-*"))
+
+
+def test_backup_refuses_without_room_for_the_copy(env, db, two_tenants, monkeypatch):
+    monkeypatch.setattr(backups.shutil, "disk_usage", lambda _p: shutil._ntuple_diskusage(10**9, 10**9, 1000))
+    with pytest.raises(SystemExit, match="No backup made: a copy of the database needs about"):
+        main(["backup"])
+    assert not list((env.data_dir / "backups").glob("*"))
+
+
+def test_the_pre_upgrade_copy_is_made_before_the_write_lock(cfg, monkeypatch):
+    every = db_module.migration_files()
+    monkeypatch.setattr(db_module, "migration_files", lambda: every[:-1])
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    other = connect(cfg.db_path)
+    seen = []
+
+    def copy(src, dest):
+        # Another connection can still write while the copy is made: nothing holds the write lock yet.
+        other.execute("INSERT INTO settings (key, value) VALUES ('written_during_copy', '1')")
+        seen.append(dest.name)
+        return dest
+
+    monkeypatch.setattr(backups, "copy_database", copy)
+    monkeypatch.setattr(db_module, "migration_files", lambda: every)
+    assert migrate(conn) == every[-1][0]
+    assert len(seen) == 1 and seen[0].startswith(f"pre-upgrade-v{every[-2][0]}-to-v{every[-1][0]}-")
+
+
+def test_a_second_process_upgrading_at_once_does_not_copy_again(cfg, monkeypatch):
+    every = db_module.migration_files()
+    monkeypatch.setattr(db_module, "migration_files", lambda: every[:-1])
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    first = backups.before_upgrade(cfg.db_path, every[-2][0], every[-1][0])
+    assert first is not None and first.exists()
+    assert backups.before_upgrade(cfg.db_path, every[-2][0], every[-1][0]) is None

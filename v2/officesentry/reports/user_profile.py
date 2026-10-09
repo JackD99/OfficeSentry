@@ -14,12 +14,11 @@ areas (usage, say) slot in between without touching the others.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from .. import authmethods, devices, identity_protection, signins
+from .. import authmethods, devices, identity_protection, signins, store
 from ..licences import (
     FREE_SKUS,
     Assignment,
@@ -1037,11 +1036,7 @@ def risk_part(p: Person) -> Part | None:
 
 
 def _object_history(conn, tenant_id: int, collector: str, kind: str, object_id: str) -> list[tuple[str, dict]]:
-    rows = conn.execute(
-        "SELECT r.finished_at, o.data FROM runs r JOIN objects o ON o.run_id = r.id AND o.kind = ?"
-        " AND o.object_id = ? WHERE r.tenant_id = ? AND r.collector = ? AND r.status IN ('succeeded', 'partial')"
-        " ORDER BY r.finished_at, r.id", (kind, object_id, tenant_id, collector)).fetchall()
-    return [(r["finished_at"], json.loads(r["data"])) for r in rows]
+    return store.object_copies(conn, tenant_id, collector, kind, object_id)
 
 
 def _role_history(conn, tenant_id: int, uid: str) -> list[tuple[str, set[str]]]:
@@ -1052,14 +1047,11 @@ def _role_history(conn, tenant_id: int, uid: str) -> list[tuple[str, set[str]]]:
         (tenant_id,)).fetchall()
     held: dict[int, set[str]] = {r["id"]: set() for r in runs}
     if runs:
-        for r in conn.execute(
-                "SELECT o.run_id, o.data FROM objects o JOIN runs r ON r.id = o.run_id WHERE r.tenant_id = ?"
-                " AND r.collector = 'admin_roles' AND o.kind = 'role_assignment'"
-                " AND json_extract(o.data, '$.principalId') = ?", (tenant_id, uid)):
-            if r["run_id"] in held:
-                d = json.loads(r["data"])
-                held[r["run_id"]].add((d.get("roleName") or "a role")
-                                      + ("" if d.get("assignment") == "active" else " (eligible)"))
+        for _, _, run_id, d in store.matching_objects(conn, tenant_id, "admin_roles", "role_assignment",
+                                                      "principalId", uid):
+            if run_id in held:
+                held[run_id].add((d.get("roleName") or "a role")
+                                 + ("" if d.get("assignment") == "active" else " (eligible)"))
     return [(r["finished_at"], held[r["id"]]) for r in runs]
 
 
@@ -1333,17 +1325,15 @@ TIMELINE_DAYS = 90
 TIMELINE_LIMIT = 50
 
 
-def _sightings(conn, tid: int, collector: str, kind: str, where: str = "",
-               params: tuple = ()) -> tuple[dict[str, list[tuple[str, dict, int]]], str | None, int | None]:
-    """Each matching object's copies across retained snapshots ({object id: [(finished_at, data, run ID)]},
-    oldest first), when the oldest retained snapshot finished and the latest run's ID."""
+def _sightings(conn, tid: int, collector: str, kind: str, key: str,
+               value: str) -> tuple[dict[str, list[tuple[str, dict, int]]], str | None, int | None]:
+    """Each object whose ``key`` is ``value``: its copies across retained snapshots ({object id:
+    [(finished_at, data, run ID)]}, oldest first), when the oldest retained snapshot finished and the latest
+    run's ID."""
     oldest, latest = _retained(conn, tid, collector)
     seen: dict[str, list[tuple[str, dict, int]]] = {}
-    for r in conn.execute(
-            "SELECT o.object_id, r.finished_at, o.run_id, o.data FROM objects o JOIN runs r ON r.id = o.run_id"
-            " WHERE r.tenant_id = ? AND r.collector = ? AND r.status IN ('succeeded', 'partial') AND o.kind = ?"
-            f"{where} ORDER BY r.finished_at, r.id", (tid, collector, kind, *params)):
-        seen.setdefault(r["object_id"], []).append((r["finished_at"], json.loads(r["data"]), r["run_id"]))
+    for object_id, finished_at, run_id, data in store.matching_objects(conn, tid, collector, kind, key, value):
+        seen.setdefault(object_id, []).append((finished_at, data, run_id))
     return seen, oldest, latest
 
 
@@ -1416,8 +1406,7 @@ def timeline(p: Person) -> list[_Happened]:
             timed(s.get("lastAttempt"), "Sign-in", f"Legacy sign-in with {s.get('client') or 'an old protocol'}: "
                   f"{s.get('succeeded') or 0} succeeded, {s.get('failed') or 0} failed",
                   "warn" if s.get("succeeded") else None)
-    places, oldest, _ = _sightings(conn, tid, "sign_ins", "sign_in_location",
-                                   " AND json_extract(o.data, '$.userId') = ?", (p.id,))
+    places, oldest, _ = _sightings(conn, tid, "sign_ins", "sign_in_location", "userId", p.id)
     for copies in places.values():
         at = copies[0][0]
         if oldest and at > oldest:  # a country this account hadn't signed in from before
@@ -1425,8 +1414,7 @@ def timeline(p: Person) -> list[_Happened]:
                   "warn")
 
     domains = tenant_domains(p.snap) or set()
-    rules, oldest, latest = _sightings(conn, tid, "inbox_rules", "inbox_rule",
-                                       " AND json_extract(o.data, '$.mailboxId') = ?", (p.id,))
+    rules, oldest, latest = _sightings(conn, tid, "inbox_rules", "inbox_rule", "mailboxId", p.id)
     for copies in rules.values():
         data = copies[-1][1]
         risk = inbox_rule_risk(data, domains)
@@ -1447,8 +1435,7 @@ def timeline(p: Person) -> list[_Happened]:
               + (" (outside the organisation)" if is_external(target, domains) else ""),
               "bad" if is_external(target, domains) else "warn")
 
-    grants, oldest, latest = _sightings(conn, tid, "app_consents", "delegated_grant",
-                                        " AND json_extract(o.data, '$.principalId') = ?", (p.id,))
+    grants, oldest, latest = _sightings(conn, tid, "app_consents", "delegated_grant", "principalId", p.id)
     sps = {s["_id"]: s for s in p.snap.objects("app_consents", "service_principal") or []}
     for copies in grants.values():
         data = copies[-1][1]

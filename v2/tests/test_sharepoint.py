@@ -19,6 +19,7 @@ from officesentry.worker import execute_run
 from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
 from tests.seed import mock_tenant, seed_tenant
+from tests.stored import unpack
 
 
 def _snap(db, tenant_id):
@@ -123,6 +124,7 @@ def _age_sharepoint_runs(db, alpha, days: float) -> None:
     when = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute("UPDATE runs SET finished_at = ? WHERE tenant_id = ? AND collector IN"
                " ('shared_files', 'sharepoint_storage')", (when, alpha))
+    unpack(db)
     db.execute("UPDATE objects SET data = json_set(data, '$.checked', ?) WHERE kind = 'lookup_onedrive'", (when,))
 
 
@@ -153,15 +155,30 @@ def test_sharepoint_collectors_share_their_lookups(db, two_tenants):
     assert storage.count("/sites/getAllSites") == 0  # shared files asked for every field storage needs
     assert storage.count("/users/u2/drive") == 0  # and found Bob has no OneDrive
     assert storage.count("/users/u1/drive") == 1  # shared files didn't need Ann's (the site listing had it)
-    # Storage's site list lacks the fields shared files needs, so it's asked for again; "no OneDrive" isn't.
+    # Both ask for the same fields, so the other way round works too: shared files reuses storage's lookups.
     again = _calls(db, alpha)
-    assert again.count("/sites/getAllSites") == 1 and again.count("/users/u2/drive") == 0
+    assert again.count("/sites/getAllSites") == 0 and again.count("/users/u2/drive") == 0
     assert _snap(db, alpha).objects("shared_files", "scan_status")[0]["drives"] == 2
 
     _age_sharepoint_runs(db, alpha, 1)  # a day later: "no OneDrive" is still remembered
     assert _calls(db, alpha).count("/users/u2/drive") == 0
     _age_sharepoint_runs(db, alpha, 8)  # after a week Bob is asked again
     assert _calls(db, alpha).count("/users/u2/drive") == 1
+
+
+def test_one_onedrive_lookup_a_night(db, two_tenants):
+    """Whichever SharePoint collector runs second asks again for no site list and no OneDrive the first asked for."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+
+    def lookups(calls):
+        return [c for c in calls if c == "/sites/getAllSites" or c.startswith("/users/") and c.endswith("/drive")]
+
+    for first, second in (("shared_files", "sharepoint_storage"), ("sharepoint_storage", "shared_files")):
+        _age_sharepoint_runs(db, alpha, 30)  # nothing fresh to reuse, and "no OneDrive" forgotten
+        asked = lookups(_calls(db, alpha, first))
+        assert asked.count("/sites/getAllSites") == 1 and asked.count("/users/u2/drive") == 1, first
+        assert set(asked) & set(lookups(_calls(db, alpha, second))) == set(), second
 
 
 

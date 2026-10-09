@@ -1,0 +1,72 @@
+name: Bug
+description: Something in Office Sentry doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Issues are public. Don't paste client data.** Before you post, remove or replace tenant names and IDs,
+        domains, user names and email addresses (UPNs), IP addresses, certificate thumbprints, client IDs and
+        anything from a report or log that identifies a client or a person. Write `contoso.example` or
+        `user1@contoso.example` instead.
+
+        Found a security problem? Don't post it here: use
+        [private vulnerability reporting](https://github.com/JackD99/OfficeSentry/security/advisories/new).
+
+        Setup errors such as AADSTS50011 or "the background worker isn't running" are often covered in
+        [Troubleshooting](https://github.com/JackD99/OfficeSentry/blob/main/v2/docs/troubleshooting.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a tenant's Overview
+        2. Press ...
+        3. See ...
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The commit you run (`git rev-parse --short HEAD` in your checkout), or the date you last updated.
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - Docker (docker compose)
+        - Windows without Docker
+        - Linux without Docker
+        - Development (python -m officesentry web)
+  - type: dropdown
+    id: cloud
+    attributes:
+      label: Microsoft cloud of the affected tenant
+      options:
+        - Commercial (includes GCC)
+        - US Government GCC High
+        - US Government DoD
+        - China (21Vianet)
+        - Not about a tenant
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error message or log (redacted)
+      description: |
+        The error from the run's page, or the relevant lines of `docker compose logs web` or `docker compose logs worker`.
+        Redact tenant IDs, domains, UPNs, IP addresses and names first. Keep Microsoft's error codes (such as
+        `AADSTS50011` or `Authorization_RequestDenied`); they help and identify nobody.
+      render: text
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Before you post
+      options:
+        - label: I've removed tenant data, tenant IDs, domains, UPNs, IP addresses and names from everything above.
+          required: true

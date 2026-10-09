@@ -94,15 +94,17 @@ class Book:
         ws.row_dimensions[row].height = 20
 
     def table(self, title: str, columns: list[str], rows: list[list], *, flags: list | None = None,
-              links: dict[tuple[int, int], str] | None = None, description: str = "", wrap: bool = True):
-        """A sheet of ``rows`` under ``columns``. ``flags`` (a severity per row) add a coloured Flag column;
+              links: dict[tuple[int, int], str] | None = None, description: str = "", wrap: bool = True,
+              flag_name: str = "Flag"):
+        """A sheet of ``rows`` under ``columns``. ``flags`` (a severity per row) add a coloured Flag column
+        (called ``flag_name``);
         ``links`` maps (row index, column index) to an https address."""
         from openpyxl.styles import Alignment, Font, PatternFill
         from openpyxl.utils import get_column_letter
 
         ws = self.wb.create_sheet(self._name(title))
         flagged = bool(flags) and any(flags)
-        header = list(columns) + (["Flag"] if flagged else [])
+        header = list(columns) + ([flag_name] if flagged else [])
         ws.append(header)
         self.header(ws, 1, len(header))
         widths = [len(str(c)) + 3 for c in header]  # room for the filter button

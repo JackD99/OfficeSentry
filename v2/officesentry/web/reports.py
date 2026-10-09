@@ -6,21 +6,29 @@ import re
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
-from .. import findings, usage
+from .. import findings, store, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
-from ..reports import branding, data_reports, evidence, evidence_answers, export, library, views
+from ..reports import (
+    branding,
+    data_reports,
+    evidence,
+    evidence_answers,
+    export,
+    findings_report,
+    library,
+    tables,
+    views,
+)
 from ..reports.monthly_review import build, setting
-from ..rules import RULES
-from ..snapshot import TenantSnapshot
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .printing import pdf_response
 from .reporting import report_extras
-
-RULE_TITLES = {r.key: r.title for r in RULES}
+from .saved_views import page_url
 
 bp = Blueprint("reports", __name__)
 
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 STAFF = ("admin", "analyst")  # may override the evidence pack's suggested answers
 CURRENCIES = ("GBP", "USD", "EUR", "AUD", "CAD", "NZD")
 
@@ -75,12 +83,13 @@ def overview():
             e.across = _library_href(e, None) if staff and tenant else ""
     saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? ORDER BY report_key, name COLLATE NOCASE",
                          (g.user["id"],)).fetchall()
-    titles = {k: v[0] for k, v in data_reports.REPORTS.items()}
+    titles = {k: v[0] for k, v in data_reports.REPORTS.items()} | findings_report.TITLES
     settings = [(url_for(ep), title, words) for ep, title, words in SETTINGS_PAGES] \
         if g.user["role"] == "admin" else []
     return render_template("library.html", areas=[a for a in areas if a.entries], tenants=tenants, tenant=tenant,
                            staff=staff, use=use, uses=library.uses(), total=library.count(), settings=settings,
-                           saved=[v for v in saved if v["report_key"] in titles], titles=titles)
+                           saved=[v for v in saved if v["report_key"] in titles], titles=titles,
+                           saved_view_url=page_url)
 
 
 @bp.get("/tenants/<int:tenant_id>/report")
@@ -228,16 +237,10 @@ def data_report_xlsx(tenant_id: int, key: str):
 
 def _known_skus() -> list[tuple[str, str]]:
     """Every paid SKU part number seen in any tenant's latest licence snapshot, plus right-sizing's targets."""
-    rows = g.db.execute(
-        """
-        SELECT DISTINCT json_extract(o.data, '$.skuPartNumber') AS part
-        FROM objects o JOIN runs r ON r.id = o.run_id
-        WHERE o.kind = 'subscribed_sku' AND r.id IN (
-            SELECT MAX(id) FROM runs WHERE collector = 'tenant_profile' AND status IN ('succeeded', 'partial')
-            GROUP BY tenant_id)
-        """
-    ).fetchall()
-    parts = {r["part"] for r in rows if r["part"]}
+    runs = g.db.execute("SELECT MAX(id) AS id FROM runs WHERE collector = 'tenant_profile'"
+                        " AND status IN ('succeeded', 'partial') GROUP BY tenant_id").fetchall()
+    parts = {s.get("skuPartNumber") for r in runs for s in store.run_objects(g.db, r["id"], "subscribed_sku")}
+    parts = {p for p in parts if p and isinstance(p, str)}
     parts |= {r["sku_part_number"] for r in g.db.execute("SELECT sku_part_number FROM sku_prices")}
     if parts:  # the cheaper plans right-sizing suggests, so its savings can be priced
         parts |= set(usage.TARGETS)
@@ -283,32 +286,63 @@ def prices():
 # -- Findings ------------------------------------------------------------------
 
 
+def _findings_page(t, resolved: bool):
+    report = findings_report.build(g.db, t, resolved=resolved)
+    view = views.View.parse(request.args)
+    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
+                         (g.user["id"], report.key)).fetchall()
+    rows = g.db.execute("SELECT * FROM findings WHERE tenant_id = ?", (t["id"],)).fetchall()
+    unresolved = [f for f in rows if not f["resolved_at"]]
+    current = [f for f in unresolved if not findings_report.is_accepted(f, report.generated_at)]
+    lapsed = {f["id"]: f for f in current if f["accepted_at"]}  # past their review date, back among the open ones
+    counts = {"open": len(current), "resolved": len(rows) - len(unresolved)}
+    return render_template("findings.html", tenant=t, report=report, resolved=resolved, view_query=view.query(),
+                           tables=views.table_views(report, view, request.path), saved=saved, lapsed=lapsed,
+                           links=views.headline_links(report, request.path),
+                           counts=counts)
+
+
 @bp.get("/tenants/<int:tenant_id>/findings")
 @login_required
 def tenant_findings(tenant_id: int):
+    """Open findings, then accepted risks, on the shared report table."""
     t = tenant_or_404(tenant_id)
-    view = request.args.get("view", "open")
-    if view == "resolved":
-        where = "resolved_at IS NOT NULL"
-    elif view == "accepted":
-        where = "resolved_at IS NULL AND accepted_at IS NOT NULL"
+    if request.args.get("view") == "resolved":  # the old tab link
+        query = views.View.parse(request.args).query()
+        return redirect(url_for("reports.resolved_findings", tenant_id=t["id"]) + (f"?{query}" if query else ""))
+    return _findings_page(t, resolved=False)
+
+
+@bp.get("/tenants/<int:tenant_id>/findings/resolved")
+@login_required
+def resolved_findings(tenant_id: int):
+    return _findings_page(tenant_or_404(tenant_id), resolved=True)
+
+
+@bp.get("/tenants/<int:tenant_id>/findings.<ext>", defaults={"resolved": False})
+@bp.get("/tenants/<int:tenant_id>/findings/resolved.<ext>", defaults={"resolved": True})
+@login_required
+def findings_download(tenant_id: int, ext: str, resolved: bool):
+    """The page's tables with its view applied: a PDF, a workbook with a sheet per table, or one table as CSV."""
+    t = tenant_or_404(tenant_id)
+    if ext not in ("pdf", "xlsx", "csv"):
+        abort(404)
+    report = views.apply(findings_report.build(g.db, t, resolved=resolved), views.View.parse(request.args))
+    name = f"{report.key}-{tables.slug(t['name'])}"
+    if ext == "csv":
+        index = request.args.get("section", 1, type=int)
+        if not 1 <= index <= len(report.sections):
+            abort(404)
+        section = report.sections[index - 1]
+        name = f"{report.key}-{tables.slug(section.title)}-{tables.slug(t['name'])}"
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{report.key}.{ext}")
+    if ext == "pdf":
+        return pdf_response("reports/detail.html", name, report=report)
+    if ext == "xlsx":
+        body, mimetype = data_reports.to_xlsx(report, brand=branding.load(g.db)), XLSX
     else:
-        view, where = "open", "resolved_at IS NULL"
-    rows = g.db.execute(
-        f"SELECT * FROM findings WHERE tenant_id = ? AND {where}"
-        " ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2"
-        " WHEN 'low' THEN 3 ELSE 4 END, rule_key, subject",
-        (t["id"],),
-    ).fetchall()
-    # Group by check, worst check first, so one check's findings sit together.
-    groups: dict[str, list] = {}
-    for row in rows:
-        groups.setdefault(row["rule_key"], []).append(row)
-    # Findings that name an account link to its page.
-    people = data_reports.people_index(TenantSnapshot(g.db, t))
-    people.update({uid: uid for uid in set(people.values())})
-    return render_template("findings.html", tenant=t, rows=rows, groups=list(groups.items()), view=view,
-                           titles=RULE_TITLES, people=people)
+        body, mimetype = tables.to_csv(data_reports.section_table(section)), "text/csv; charset=utf-8"
+    return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{name}.{ext}"'})
 
 
 def _finding_or_404(finding_id: int):
@@ -332,7 +366,8 @@ def accept_finding(finding_id: int):
     else:
         findings.accept(g.db, row["id"], g.user["username"], note, f"{until}T00:00:00Z" if until else None)
         audit(g.db, g.user["username"], "finding_accepted", row["tenant_id"], f"{row['rule_key']}:{row['subject']}")
-        flash("Risk accepted. It moves to the report's accepted risks section.", "success")
+        flash("Risk accepted. It's under Accepted risks, here and in the monthly review.", "success")
+        return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"]) + "#t-accepted-risks")
     return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"]))
 
 
@@ -342,4 +377,4 @@ def unaccept_finding(finding_id: int):
     row = _finding_or_404(finding_id)
     findings.unaccept(g.db, row["id"])
     audit(g.db, g.user["username"], "finding_unaccepted", row["tenant_id"], f"{row['rule_key']}:{row['subject']}")
-    return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"], view="accepted"))
+    return redirect(url_for("reports.tenant_findings", tenant_id=row["tenant_id"]))

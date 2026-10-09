@@ -7,8 +7,10 @@ so a failure leaves the database at the previous version.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -63,6 +65,12 @@ def migration_files() -> list[tuple[int, Path]]:
     files = []
     for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
         files.append((int(path.name.split("_", 1)[0]), path))
+    # migrate() skips any file numbered at or below the database's version, so the second of two files with
+    # one number would never run on a database the first reached. Refuse instead (test_migrations.py).
+    if clashes := sorted(v for v, n in Counter(v for v, _ in files).items() if n > 1):
+        names = ", ".join(path.name for v, path in files if v == clashes[0])
+        raise RuntimeError(f"Two database upgrades share the number {clashes[0]:04d} ({names}). Renumber the "
+                           f"newer one to the next free number above {files[-1][0]:04d}.")
     return files
 
 
@@ -93,7 +101,10 @@ def latest_version() -> int:
 
 def _backup_before_upgrade(conn: sqlite3.Connection, current: int) -> None:
     """Copy a database that already has a schema before upgrading it (``backups/pre-upgrade-*.db``),
-    so a bad release can be rolled back. A failed copy stops the upgrade."""
+    so a bad release can be rolled back. A failed copy, or too little disk for one, stops the upgrade.
+
+    Called before the first migration takes the write lock, so a large copy doesn't stop the portal and the
+    worker; anything they write while it runs is in the database but not in the copy."""
     from . import backups
 
     db_file = backups.database_file(conn)
@@ -106,19 +117,53 @@ def _backup_before_upgrade(conn: sqlite3.Connection, current: int) -> None:
                            "Free some disk space (or fix the backups folder's permissions) and start again.") from exc
 
 
+class DatabaseTooNew(RuntimeError):
+    """The database was upgraded by a newer Office Sentry than this one (usually after going back a version)."""
+
+
+def _too_new_message(conn: sqlite3.Connection, current: int, latest: int) -> str:
+    """Say how to go back: restore the newest ``pre-upgrade-*`` copy this version can open."""
+    from . import backups
+
+    db_file = backups.database_file(conn)
+    folder = db_file.parent / "backups" if db_file else None
+    fits = []
+    for path in folder.glob(f"{backups.PRE_UPGRADE_PREFIX}v*-to-v*.db") if folder and folder.is_dir() else ():
+        if (m := re.fullmatch(rf"{backups.PRE_UPGRADE_PREFIX}v(\d+)-to-v\d+-(.+)\.db", path.name)) \
+                and int(m[1]) <= latest:
+            fits.append((m[2], path))
+    if fits:
+        how = f"run `python -m officesentry restore {max(fits)[1]}`"
+    elif folder:
+        how = (f"restore the {backups.PRE_UPGRADE_PREFIX}*.db copy from {folder} (or another backup from before "
+               "the upgrade) with `python -m officesentry restore <file>`")
+    else:
+        how = (f"restore the {backups.PRE_UPGRADE_PREFIX}*.db copy taken before the upgrade with "
+               "`python -m officesentry restore <file>`")
+    return (f"This database was upgraded by a newer version of Office Sentry (database version {current}; this "
+            f"version knows up to {latest}), so this version won't start on it. Either go back to the newer "
+            f"version, or to stay on this one: stop the portal and the worker, {how}, then start them again. "
+            "Anything collected since the upgrade is lost. DEPLOY.md, \"Rolling back an update\", has the steps.")
+
+
 def migrate(conn: sqlite3.Connection) -> int:
     """Apply pending migrations. Returns the resulting schema version.
 
     A database that already has a schema is copied to ``backups/`` next to it
-    first (see ``backups.before_upgrade``).
+    first (see ``backups.before_upgrade``), before the write lock is taken. A
+    database a newer release upgraded is refused (``DatabaseTooNew``) rather
+    than run with code that doesn't know its schema.
 
     Safe to call from several processes at once (gunicorn workers, the
     worker): each migration re-reads ``user_version`` inside its write
     transaction, so one another process already applied is skipped.
     """
-    _use_wal(conn)
     current = schema_version(conn)
-    backed_up = current == 0  # a new database has nothing to lose
+    if current > latest_version():
+        raise DatabaseTooNew(_too_new_message(conn, current, latest_version()))
+    _use_wal(conn)
+    if current and any(version > current for version, _ in migration_files()):
+        _backup_before_upgrade(conn, current)  # a new database (version 0) has nothing to lose
     for version, path in migration_files():
         if version <= current:
             continue
@@ -126,9 +171,6 @@ def migrate(conn: sqlite3.Connection) -> int:
             current = schema_version(conn)
             if version <= current:
                 continue  # applied by another process since we looked
-            if not backed_up:
-                _backup_before_upgrade(conn, current)
-                backed_up = True
             for stmt in _split_statements(path.read_text(encoding="utf-8")):
                 conn.execute(stmt)
             conn.execute(f"PRAGMA user_version = {int(version)}")

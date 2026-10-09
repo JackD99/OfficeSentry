@@ -10,6 +10,14 @@
   {% if not brand.is_default %}<link rel="stylesheet" href="{{ url_for('branding.brand_css', v=brand.version) }}">{% endif %}
 </head>
 <body{% if not brand.is_default %} class="branded"{% endif %}>
+{#- Admin settings: one sidebar entry, and this row of links on top of each settings page.
+    (endpoint, label, other endpoints that belong to the page) -#}
+{% set SETTINGS = [('tenant_admin.clients', 'Client tenants', []), ('admin.connections', 'App connection', []),
+                   ('reports.prices', 'Licence prices', []), ('email.settings', 'Email delivery', []),
+                   ('alerts.settings', 'Alerts', []), ('branding.settings', 'Branding', []),
+                   ('retention.settings', 'Data retention', []), ('admin.users', 'Users', ['admin.edit_user']),
+                   ('activity.index', 'Activity log', [])] %}
+{% set SETTINGS_ENDPOINTS = SETTINGS|map(attribute=0)|list + SETTINGS|map(attribute=2)|sum(start=[]) %}
 {% macro nav_link(endpoint, label, ico, match=()) -%}
 {% set ep = request.endpoint or '' %}
 <a href="{{ url_for(endpoint) }}"{% if ep == endpoint or ep.split('.')[0] in match or ep in match %} class="active" aria-current="page"{% endif %}>{{ icon(ico) }}<span>{{ label }}</span></a>
@@ -33,16 +41,8 @@
   {{ nav_link('projects.index', 'Projects', 'projects', ('projects.index',)) }}
   {% endif %}
   {% if current_user.role == 'admin' %}
-  <div class="nav-label">Settings</div>
-  {{ nav_link('tenant_admin.clients', 'Client tenants', 'tenants') }}
-  {{ nav_link('admin.connections', 'App connection', 'connection') }}
-  {{ nav_link('reports.prices', 'Licence prices', 'price') }}
-  {{ nav_link('email.settings', 'Email delivery', 'mail') }}
-  {{ nav_link('alerts.settings', 'Alerts', 'alert') }}
-  {{ nav_link('branding.settings', 'Branding', 'doc') }}
-  {{ nav_link('retention.settings', 'Data retention', 'clock') }}
-  {{ nav_link('admin.users', 'Users', 'users', ('admin.edit_user',)) }}
-  {{ nav_link('activity.index', 'Activity log', 'clock') }}
+  {% set ep = request.endpoint or '' %}
+  <a href="{{ url_for(SETTINGS[0][0]) }}"{% if ep in SETTINGS_ENDPOINTS %} class="active" aria-current="page"{% endif %}>{{ icon('settings') }}<span>Settings</span></a>
   {% endif %}
 </nav>
 {%- endmacro %}
@@ -91,6 +91,13 @@
     <main id="main" tabindex="-1">
       {% if worker_down %}<div class="callout warn" role="status">{{ icon('alert') }}<span><strong>The background worker isn't running.</strong>
         Tenants won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span></div>{% endif %}
+      {% for e in expiring_certificates %}<div class="callout {{ e.tone }}" role="status">{{ icon('alert') }}<span class="grow"><strong>{{ e.headline }}</strong>
+        {{ e.consequence }}</span>{% if e.kind == 'mail' %}<a class="btn sm" href="{{ url_for('email.settings') }}">Renew it</a>{% elif e.replacing %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Finish replacing it</a>{% else %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Replace it</a>{% endif %}</div>{% endfor %}
+      {% if current_user.role == 'admin' and request.endpoint in SETTINGS_ENDPOINTS %}
+      <nav class="settings-nav" aria-label="Settings">
+        {% for endpoint, label, more in SETTINGS %}<a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint or request.endpoint in more %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+      </nav>
+      {% endif %}
       {{ flashes() }}
       {% block content %}{% endblock %}
     </main>
@@ -113,6 +120,8 @@
     if (bar.scrollWidth > bar.clientWidth) bar.scrollLeft = a.offsetLeft - (bar.clientWidth - a.offsetWidth) / 2;
   });
 </script>
+<script src="{{ url_for('static', filename='app.js') }}" nonce="{{ csp_nonce }}"></script>
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

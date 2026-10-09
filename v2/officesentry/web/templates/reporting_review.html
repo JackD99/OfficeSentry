@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf %}
+{% from "_progress.html" import progress_script with context %}
 {% set TONES = {'critical': 'bad', 'high': 'warn', 'medium': 'info', 'ok': 'ok'} %}
 {% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
 {% set editable = state in ('draft', 'in_review') %}
+{% set approving = task and task.status in pending %}
 {% block title %}Review · {{ tenant.name }} · {{ label }} · Office Sentry{% endblock %}
 {% macro month_select(name, value) -%}
 <select name="{{ name }}" aria-label="Target month"><option value="">No target</option>
@@ -23,7 +25,7 @@
   </div>
 </div>
 
-{% if review and review.error %}
+{% if review and review.error and not approving %}
 <div class="callout bad">{{ icon('alert') }}<div class="grow"><strong>Approved, but the email didn't send.</strong><div class="small">{{ review.error }}</div></div>
   {% if admin %}<form method="post" action="{{ url_for('reporting.send_again', period=period, tenant_id=tenant.id) }}" data-busy="Sending…">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Send again</button></form>{% endif %}</div>
 {% endif %}
@@ -71,15 +73,18 @@
       </form>
     </div>
     {% if suggestions %}
-    <div class="action-row"><div class="grow">
+    <div class="action-row suggestions">
       <div class="label-sm">From the failing checks</div>
+      <ul class="suggest-list">
       {% for s in suggestions[:8] %}
-      <form method="post" action="{{ url_for('reporting.add_action', tenant_id=tenant.id) }}">
+      <li><form method="post" action="{{ url_for('reporting.add_action', tenant_id=tenant.id) }}">
         {{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="rule_key" value="{{ s.rule_key }}">
-        <button class="sm ghost">{{ icon('plus') }}</button> <span class="small">{{ s.title }}</span>{% if s.severity %} <span class="pill {{ TONES.get(s.severity, '') }}">{{ s.severity }}</span>{% endif %}
-      </form>
+        <span class="grow">{{ s.title }}</span>{% if s.severity %}<span class="pill {{ TONES.get(s.severity, '') }}">{{ s.severity }}</span>{% endif %}
+        <button class="sm" aria-label="Add: {{ s.title }}">{{ icon('plus') }} Add</button>
+      </form></li>
       {% endfor %}
-    </div></div>
+      </ul>
+    </div>
     {% endif %}
   </section>
 
@@ -130,12 +135,22 @@
   </section>
 
   {% if plan %}
-  <section class="card">
+  <section class="card" id="approve">
     <div class="card-head"><h2>{{ 'Approve and send' if emailed else 'Approve and publish' }}</h2></div>
-    {% if admin %}
+    {% if approving %}
+      <div class="progress-box" role="status" data-progress="{{ url_for('reporting.progress', period=period, tenant=tenant.id) }}">
+        <strong data-progress-text>{{ task_text(task) }}</strong>
+        <progress>Working on it</progress>
+        <p class="small muted m0">{% if worker_running %}This page updates when it's done. You can leave it; it carries on in the background.{% else %}The background worker isn't running, so this starts as soon as it is.{% endif %}
+          <noscript><a href="{{ url_for('reporting.review', period=period, tenant_id=tenant.id) }}">Refresh</a></noscript></p>
+      </div>
+    {% elif admin %}
+      {% if editable and task and task.status == 'failed' %}
+      <div class="callout bad">{{ icon('alert') }}<div><strong>The last approval didn't go out.</strong><div class="small">{{ task.error }}</div></div></div>
+      {% endif %}
       {% if editable %}
       <p class="small muted">The report is frozen as it is now, with your commentary, recommendations and client-visible notes, and {{ 'emailed to the client' if emailed else 'published to the client\'s report history' }}.</p>
-      <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Approving…">{{ csrf() }}<button class="primary">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve and publish' }}</button></form>
+      <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Approving…" id="approve-form">{{ csrf() }}<button class="primary">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve and publish' }}</button></form>
       {% else %}
       <p class="small muted">Already issued. To change what the client has, issue a new version.</p>
       <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Issuing…">
@@ -156,4 +171,13 @@
   {% endif %}
 </div>
 </div>
+{#- Phones: the right-hand column comes after every note form, so the main action also sits in a bar
+    that stays on screen. It submits the same form as the Approve card. -#}
+{% if plan and admin and editable and not approving %}
+<div class="approve-bar">
+  <span class="small">{{ states[state] }} · <a href="#approve">Details</a></span>
+  <button class="primary" form="approve-form">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve and publish' }}</button>
+</div>
+{% endif %}
 {% endblock %}
+{% block scripts %}{{ progress_script() }}{% endblock %}
