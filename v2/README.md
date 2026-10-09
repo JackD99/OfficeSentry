@@ -201,13 +201,16 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   listed. Backups and training are marked "Not assessed".
 - **Recommended projects** (`/projects` and `/tenants/<id>/projects`, admins
   and analysts): each client's failing checks and missing licences grouped
-  into the projects that fix them (Identity and Conditional Access, Admin
-  account hardening, Device management, Email security, Security licence
-  upgrade and more), worst first, with the findings behind each and the size
-  of the job. Account managers mark each one Proposed, Agreed or Declined with
-  a note (XLSX and CSV of the list), and download a client-facing proposal PDF
-  without the notes. Accepted risks don't count, and a project drops off once
-  the tenant is fixed.
+  into the projects that fix them (Identity and Conditional Access, Device
+  management, Email security, Windows upgrade, Security licence upgrade and
+  more), worst first, with the findings behind each, the size of the job and
+  a rough estimate. Only work of half a day or more is a project; smaller jobs
+  (and urgent small ones, like one admin without MFA) are listed as quick
+  fixes on the client's page and offered separately in the month-end review.
+  Account managers mark each project Proposed, Agreed or Declined with a note
+  (XLSX and CSV of the list), and download a client-facing proposal PDF
+  without the notes or estimates. Accepted risks don't count, and a project
+  drops off once the tenant is fixed.
 - **Client view**: client users land on a page that leads with their latest
   monthly review (page and PDF), then open recommendations with their status,
   key numbers, the other reports and who to contact at the MSP; they don't see
