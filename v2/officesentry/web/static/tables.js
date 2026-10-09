@@ -5,8 +5,14 @@
  * Report search: <input data-report-search="list-id"> filters the list's [data-name] items, hiding empty
  *   .report-group blocks; a group marked data-search-only shows only while searching.
  * Views: <a data-view> links (filters, columns, sort on detail reports) load the next page in place,
- *   keeping the scroll position, open menus and anything typed in a row search. Plain links without JS. */
+ *   keeping the scroll position, open menus and anything typed in a row search. Plain links without JS.
+ * Long tables on phones: a stacked table (table.stack-sm) shows its first 20 rows, with "Show all" under it.
+ * Every page loads this file (base.html); a page that also loads it gets one copy. */
 (function () {
+  if (window.officeSentryTables) return;
+  window.officeSentryTables = true;
+  var CAP = 20;
+  var phone = window.matchMedia ? window.matchMedia('(max-width: 640px)') : { matches: false };
   function value(cell) {
     if (!cell) return null;
     var raw = cell.hasAttribute('data-sort') ? cell.getAttribute('data-sort') : cell.textContent.trim();
@@ -46,6 +52,7 @@
             return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
           });
           rows.forEach(function (r) { body.appendChild(r); });
+          markCap(table);
         });
       });
     });
@@ -56,6 +63,7 @@
       if (!table) return;
       input.addEventListener('input', function () {
         var q = input.value.trim().toLowerCase();
+        table.classList.toggle('searching', !!q);
         table.querySelectorAll('tbody tr').forEach(function (tr) {
           tr.hidden = q && (tr.getAttribute('data-name') || '').indexOf(q) === -1;
         });
@@ -97,7 +105,40 @@
       form.querySelector('select').addEventListener('change', function () { form.submit(); });
     });
   }
-  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); }
+  function rows(table) {
+    return Array.prototype.filter.call(table.tBodies[0].rows, function (r) { return !r.classList.contains('group'); });
+  }
+  function markCap(table) {
+    if (!table.classList.contains('capped')) return;
+    var shown = 0;  // a group heading goes with the rows under it
+    Array.prototype.forEach.call(table.tBodies[0].rows, function (r) {
+      r.classList.toggle('over-cap', shown >= CAP);
+      if (!r.classList.contains('group')) shown++;
+    });
+  }
+  function capRows(root) {
+    if (!phone.matches) return;
+    root.querySelectorAll('table.stack-sm').forEach(function (table) {
+      if (!table.tBodies[0] || table.hasAttribute('data-cap')) return;
+      var n = rows(table).length;
+      if (n <= CAP + 5) return;  // hiding a handful saves nothing
+      table.setAttribute('data-cap', '');
+      table.classList.add('capped');
+      markCap(table);
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'show-all';
+      button.textContent = 'Show all ' + n + ' rows';
+      button.addEventListener('click', function () {
+        table.classList.remove('capped');
+        rows(table).forEach(function (r) { r.classList.remove('over-cap'); });
+        button.remove();
+      });
+      var after = table.closest('.table-scroll, .scroll-x') || table;
+      after.parentNode.insertBefore(button, after.nextSibling);
+    });
+  }
+  function init(root) { sortable(root); rowSearch(root); reportSearch(root); autosubmit(root); capRows(root); }
   init(document);
 
   /* Menus (<details class="menu">) close on Escape or a click outside. */

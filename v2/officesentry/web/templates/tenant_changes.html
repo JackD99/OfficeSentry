@@ -82,10 +82,17 @@
 </section>
 {% endif %}
 
-{% for r in report.reports if r.count %}
-<section class="card flush">
-  <div class="card-head toolbar">
-    <h2>{{ r.title }} <span class="count-badge">{{ r.count }}</span></h2>
+{#- Detail report changes, one collapsible list per area, so a long month stays short on a phone. -#}
+{% if areas %}<h2 class="section-title changes-heading">In the detail reports</h2>
+<p class="muted small">Open an area to see what changed, row by row.</p>{% endif %}
+{% for area, reports in areas %}
+<details class="card flush change-area"{% if areas|length == 1 %} open{% endif %}>
+  <summary><h2>{{ area }} <span class="count-badge">{{ reports|sum(attribute='count') }}</span></h2>
+    <span class="meta">{{ reports|map(attribute='title')|join(', ') }}</span></summary>
+  {% for r in reports %}
+  <section class="change-report">
+  <div class="toolbar">
+    <h3>{{ r.title }} <span class="count-badge">{{ r.count }}</span></h3>
     <a class="small" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=r.key) }}">Open report {{ icon('arrow') }}</a>
   </div>
   {% for s in r.sections %}
@@ -102,10 +109,12 @@
   </table>
   </div>
   {% endfor %}
-</section>
+  </section>
+  {% endfor %}
+</details>
 {% endfor %}
 
 {% set skipped = report.reports|selectattr('note')|list %}
 {% if unchanged %}<p class="footnote">No changes in: {{ unchanged|map(attribute='title')|join(', ') }}.</p>{% endif %}
-{% for note, reports in skipped|groupby('note') %}<p class="footnote">Not compared ({{ note|trim('.')|lower }}): {{ reports|map(attribute='title')|join(', ') }}.</p>{% endfor %}
+{% for note, reports in skipped|groupby('note') %}<p class="footnote">Not compared: {{ reports|map(attribute='title')|join(', ') }}. {{ note }}</p>{% endfor %}
 {% endblock %}
