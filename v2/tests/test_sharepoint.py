@@ -153,15 +153,30 @@ def test_sharepoint_collectors_share_their_lookups(db, two_tenants):
     assert storage.count("/sites/getAllSites") == 0  # shared files asked for every field storage needs
     assert storage.count("/users/u2/drive") == 0  # and found Bob has no OneDrive
     assert storage.count("/users/u1/drive") == 1  # shared files didn't need Ann's (the site listing had it)
-    # Storage's site list lacks the fields shared files needs, so it's asked for again; "no OneDrive" isn't.
+    # Both ask for the same fields, so the other way round works too: shared files reuses storage's lookups.
     again = _calls(db, alpha)
-    assert again.count("/sites/getAllSites") == 1 and again.count("/users/u2/drive") == 0
+    assert again.count("/sites/getAllSites") == 0 and again.count("/users/u2/drive") == 0
     assert _snap(db, alpha).objects("shared_files", "scan_status")[0]["drives"] == 2
 
     _age_sharepoint_runs(db, alpha, 1)  # a day later: "no OneDrive" is still remembered
     assert _calls(db, alpha).count("/users/u2/drive") == 0
     _age_sharepoint_runs(db, alpha, 8)  # after a week Bob is asked again
     assert _calls(db, alpha).count("/users/u2/drive") == 1
+
+
+def test_one_onedrive_lookup_a_night(db, two_tenants):
+    """Whichever SharePoint collector runs second asks again for no site list and no OneDrive the first asked for."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+
+    def lookups(calls):
+        return [c for c in calls if c == "/sites/getAllSites" or c.startswith("/users/") and c.endswith("/drive")]
+
+    for first, second in (("shared_files", "sharepoint_storage"), ("sharepoint_storage", "shared_files")):
+        _age_sharepoint_runs(db, alpha, 30)  # nothing fresh to reuse, and "no OneDrive" forgotten
+        asked = lookups(_calls(db, alpha, first))
+        assert asked.count("/sites/getAllSites") == 1 and asked.count("/users/u2/drive") == 1, first
+        assert set(asked) & set(lookups(_calls(db, alpha, second))) == set(), second
 
 
 

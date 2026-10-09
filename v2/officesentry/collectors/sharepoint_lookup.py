@@ -5,7 +5,9 @@ each licensed person's OneDrive. They run one after the other each night, so
 the second reuses what the first read: each stores its lookups (``lookup_sites``
 and ``lookup_onedrive`` objects, with the fields asked for) and the other
 reads them back when that run finished within ``REUSE_HOURS`` and asked for
-every field it needs. People with no OneDrive (Microsoft answers 404 until
+every field it needs. Both ask for ``SITE_FIELDS`` and ``DRIVE_FIELDS``, the
+fields either one needs, so the second collector each night asks Microsoft for
+no site list and no OneDrive at all. People with no OneDrive (Microsoft answers 404 until
 they first open it) aren't asked again for ``NO_DRIVE_DAYS``, by either
 collector. Everything here is GET only.
 """
@@ -23,6 +25,10 @@ COLLECTORS = ("shared_files", "sharepoint_storage")
 REUSE_HOURS = 6
 NO_DRIVE_DAYS = 7
 ISO = "%Y-%m-%dT%H:%M:%SZ"
+# What both collectors ask for each site and OneDrive: shared_files needs root, name, driveType and owner,
+# sharepoint_storage needs quota. Asking for the union costs nothing extra and lets every lookup be reused.
+SITE_FIELDS = "id,displayName,webUrl,isPersonalSite,root"
+DRIVE_FIELDS = "id,name,webUrl,driveType,owner,quota"
 
 
 def _covers(stored: str | None, needed: str) -> bool:
@@ -36,8 +42,8 @@ class Lookups:
     Microsoft for; a stored lookup is reused only if it has all of them.
     """
 
-    def __init__(self, ctx: RunContext, collector: str, site_fields: str, drive_fields: str,
-                 now: datetime | None = None):
+    def __init__(self, ctx: RunContext, collector: str, site_fields: str = SITE_FIELDS,
+                 drive_fields: str = DRIVE_FIELDS, now: datetime | None = None):
         self.ctx = ctx
         self.site_fields, self.drive_fields = site_fields, drive_fields
         self.now = now or datetime.now(UTC)

@@ -14,6 +14,10 @@ It is a POST, so read-only is enforced here instead: only the cmdlets in
 
 The app needs the ``Exchange.ManageAsApp`` permission and, in each tenant,
 the Global Reader role assigned to its service principal.
+
+With the worker's ``limiter``, a 429 pauses the tenant's other Exchange calls
+too (``ratelimit.py``); Microsoft documents no rate to pace them at. Every
+request is counted in ``telemetry`` under its cmdlet.
 """
 
 from __future__ import annotations
@@ -24,7 +28,9 @@ from collections.abc import Callable
 
 import requests
 
-from . import clouds
+from . import clouds, endpoints
+from .graph import USER_AGENT
+from .ratelimit import Limiter, Telemetry, claims, to_pause
 
 log = logging.getLogger(__name__)
 
@@ -87,9 +93,15 @@ class ExchangeClient:
         timeout: int = 120,
         sleep: Callable[[float], None] = time.sleep,
         cloud: str | None = None,
+        limiter: Limiter | None = None,
+        telemetry: Telemetry | None = None,
+        app: str = "",
     ):
         self.cloud = clouds.get(cloud)
         self.root = self.cloud.exchange
+        self.limiter = limiter
+        self.telemetry = telemetry or Telemetry()
+        self.app = app
         self.tenant_id = tenant_id
         self._token_provider = token_provider
         self._session = session or requests.Session()
@@ -111,16 +123,22 @@ class ExchangeClient:
             except TokenError as exc:
                 raise ExchangeError(401, exc.code, exc.message) from exc
 
-        return cls(tenant_ref, token, cloud=cloud, **kwargs)
+        return cls(tenant_ref, token, cloud=cloud, app=client_id, **kwargs)
 
     @property
     def url(self) -> str:
         return f"{self.root}/adminapi/beta/{self.tenant_id}/InvokeCommand"
 
     def _post(self, url: str, body: dict) -> dict:
+        cmdlet = body["CmdletInput"]["CmdletName"]
+        endpoint = endpoints.exchange(cmdlet)
+        key = f"Exchange {cmdlet}"
+        taken = claims(endpoint, self.app, self.tenant_id, graph=False) if self.limiter else []
         attempt = 0
         while True:
+            waited = self.limiter.acquire(taken) if self.limiter else 0.0
             headers = {
+                "User-Agent": USER_AGENT,
                 "Authorization": f"Bearer {self._token_provider()}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
@@ -130,15 +148,25 @@ class ExchangeClient:
             try:
                 resp = self._session.post(url, json=body, headers=headers, timeout=self._timeout)
             except (requests.ConnectionError, requests.Timeout) as exc:
-                if attempt >= self._max_retries:
+                retry = attempt < self._max_retries
+                delay = float(min(2 ** attempt, 60)) if retry else 0.0
+                self.telemetry.request(key, endpoint, status=0, limiter_wait=waited, retry_wait=delay)
+                if not retry:
                     raise ExchangeError(0, "network_error", str(exc)) from exc
-                self._sleep(min(2 ** attempt, 60))
+                self._sleep(delay)
                 attempt += 1
                 continue
-            if resp.status_code in RETRY_STATUSES and attempt < self._max_retries:
+            retry = resp.status_code in RETRY_STATUSES and attempt < self._max_retries
+            delay = 0.0
+            if retry:
                 value = resp.headers.get("Retry-After", "")
                 delay = min(float(value), 300) if value.isdigit() else float(min(2 ** attempt, 60))
+            self.telemetry.request(key, endpoint, status=resp.status_code, limiter_wait=waited, retry_wait=delay,
+                                   headers=resp.headers)
+            if retry:
                 log.info("Exchange %s; retrying in %ss", resp.status_code, delay)
+                if resp.status_code == 429 and self.limiter:
+                    self.limiter.pause(to_pause(taken), delay)
                 self._sleep(delay)
                 attempt += 1
                 continue

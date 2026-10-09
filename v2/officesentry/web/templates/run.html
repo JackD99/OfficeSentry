@@ -15,6 +15,22 @@
 {% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' else 'bad' }}">{{ run.error|run_error }}
   {% if run.error|run_error != run.error %}<details class="small"><summary>Microsoft's message</summary><code>{{ run.error }}</code></details>{% endif %}</div>{% endif %}
 
+{% macro period(s) %}{% if s == 1 %}second{% elif s == 60 %}minute{% elif s % 60 == 0 %}{{ (s // 60)|int }} minutes{% else %}{{ s|int }} seconds{% endif %}{% endmacro %}
+{% macro secs(s) %}{% if s < 0.5 %}{{ 'under 1 s' if s > 0 else 'none' }}{% elif s < 90 %}{{ '%.0f'|format(s) }} s{% elif s < 5400 %}{{ '%.0f'|format(s / 60) }} min{% else %}{{ '%.1f'|format(s / 3600) }} h{% endif %}{% endmacro %}
+{% if run.requests is not none and run.requests > 0 %}
+{% set peak = requests|selectattr('throttle_pct')|map(attribute='throttle_pct')|max if requests|selectattr('throttle_pct')|list else none %}
+<div class="tiles">
+  <div class="tile"><div class="label">Requests to Microsoft</div><div class="value">{{ '{:,}'.format(run.requests) }}</div>
+    <div class="foot">{{ requests|length|plural('endpoint') if requests else 'retries included' }}</div></div>
+  <div class="tile{{ ' tone-warn' if run.throttled }}"><div class="label">Throttled</div><div class="value">{{ '{:,}'.format(run.throttled or 0) }}</div>
+    <div class="foot">{{ 'Microsoft answered “too many requests”' if run.throttled else 'Microsoft never said “too many”' }}</div></div>
+  <div class="tile"><div class="label">Time waiting</div><div class="value">{{ secs(run.wait_seconds or 0) }}</div>
+    <div class="foot">for retries and Microsoft's limits</div></div>
+  {% if peak is not none %}<div class="tile{{ ' tone-warn' if peak >= 0.8 }}"><div class="label">Closest to a limit</div><div class="value">{{ '%.0f'|format(peak * 100) }}%</div>
+    <div class="foot">as Microsoft reported it</div></div>{% endif %}
+</div>
+{% endif %}
+
 <div class="grid-2">
   <section class="card">
     <h2>Numbers recorded</h2>
@@ -28,6 +44,28 @@
     {% else %}<p class="muted">None.</p>{% endif %}
   </section>
 </div>
+
+{% if requests %}
+<section class="card flush">
+  <div class="card-head toolbar"><h2>Requests by endpoint</h2><span class="meta">Each call to Microsoft, retries included. Waiting covers retries and the shared limits every collection uses.</span></div>
+  <div class="scroll-x">
+  <table class="stack-sm">
+    <thead><tr><th>Endpoint</th><th>Microsoft's limit</th><th class="num">Requests</th><th class="num">Throttled</th><th class="num">Failed</th><th class="num">Waiting</th><th class="num">Units</th></tr></thead>
+    <tbody>{% for q in requests %}{% set limit = limits.get(q.throttle_limit) %}
+    <tr><td>{% set version, _, path = q.endpoint.partition(' ') %}<span class="mono small">{{ path }}</span> <span class="muted small">{{ version }}</span></td>
+      <td data-label="Microsoft's limit"><span>{% if limit %}{{ limit.title }}<span class="sub">{% if limit.units %}{{ '{:,}'.format(limit.units) }} {{ 'resource units' if limit.resource_units else 'requests' }} per {{ period(limit.seconds) }}, {{ {'app': 'whole app', 'tenant': 'per tenant', 'api': 'per report'}[limit.scope] }}{% else %}No published rate{% endif %}</span>{% else %}Graph, any request<span class="sub">130,000 requests per 10 seconds, whole app</span>{% endif %}</span></td>
+      <td class="num" data-label="Requests">{{ '{:,}'.format(q.calls) }}</td>
+      <td class="num{{ ' warn-text' if q.throttled }}" data-label="Throttled">{{ q.throttled or '–' }}</td>
+      <td class="num{{ ' bad-text' if q.errors }}" data-label="Failed">{{ q.errors or '–' }}</td>
+      <td class="num" data-label="Waiting">{{ secs(q.retry_wait + q.limiter_wait) if q.retry_wait + q.limiter_wait else '–' }}</td>
+      <td class="num" data-label="Units">{{ '{:,}'.format(q.units) if q.units else '–' }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+{% elif run.requests %}
+<p class="muted small">Requests per endpoint are kept for 90 days.</p>
+{% endif %}
 
 {% if kind %}
 <section class="card flush">

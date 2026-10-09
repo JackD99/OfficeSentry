@@ -51,14 +51,20 @@ overview and DEPLOY.md for running it on a server.
    (from `tenant_profile`) to skip what it can't have.
 3. Import it in `collectors/__init__.py`.
 4. Test it in `tests/test_collectors.py` with recorded Graph responses.
+5. List every new Graph path or Exchange cmdlet in `endpoints.py` (version,
+   permission, Microsoft's throttling limits and resource-unit cost,
+   fallback). The shared limiter paces calls by it and run telemetry names
+   them by it; `tests/test_ratelimit.py` fails on a call it doesn't list.
 
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
 
 The two SharePoint collectors list sites and OneDrives through
-`collectors/sharepoint_lookup.Lookups`, so the second one each night reuses
-the first one's answers (when they have the fields it asks for) and people
-without a OneDrive aren't asked about for a week.
+`collectors/sharepoint_lookup.Lookups`, both asking for the same fields
+(`SITE_FIELDS`, `DRIVE_FIELDS`: everything either needs), so the second one
+each night reuses the first one's site list and OneDrives, and people without
+a OneDrive aren't asked about for a week. A field either collector starts
+needing goes in those lists.
 
 ## Adding a check or report
 
@@ -252,6 +258,20 @@ a period there, with a dry-run count for the page, and deletes in batches. A sid
 has gone for 4 hours), so a wedged loop or thread shows as down. A failing
 housekeeping pass (say "database is locked") is logged, rolled back and
 retried the next minute; it never ends the worker. Don't add Celery or Redis.
+
+Microsoft's limits are per app, not per thread, so every Graph and Exchange
+call in the worker goes through one process-wide limiter
+(`ratelimit.LIMITER`, passed by `worker.default_graph_factory` and
+`default_exchange_factory`): token buckets per limit in `endpoints.LIMITS`
+(app-wide, per tenant, or per report API, some counted in resource units),
+and a 429 pauses that limit's bucket for every thread until `Retry-After`.
+Clients made elsewhere (tests, connection check, live test) aren't paced.
+Each run's requests are counted (`ratelimit.Telemetry`: calls, 429s,
+failures, retry and limiter waits, `x-ms-throttle-limit-percentage`): totals
+on `runs` (`requests`, `throttled`, `wait_seconds`; NULL before this existed)
+and per endpoint in `run_requests`, pruned with run log info lines after 90
+days. The run page shows both. Requests carry the `User-Agent`
+`ISV|OfficeSentry|OfficeSentry/<version>` Microsoft prioritises.
 
 The dashboard and the All tenants review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
