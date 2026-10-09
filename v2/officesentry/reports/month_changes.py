@@ -13,7 +13,9 @@ It has four parts:
   (event logs, time series), and columns that only move with time
   (``Last ...``, ``... (UTC)``, ``30-day change``) are ignored.
 
-Nothing here calls Microsoft.
+``across`` is one summary line per tenant for What changed across tenants; the
+worker stores each tenant's line (``precomputed``) so the page doesn't build
+every tenant's report. Nothing here calls Microsoft.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from ..findings import resolved_since
 from ..rules import RULES
 from ..snapshot import TenantSnapshot
 from . import data_reports
+from .precomputed import Rows
 from .tables import Table
 
 PERIODS = (7, 30, 90)  # days the report can look back
@@ -253,6 +256,12 @@ def _figures(conn, tenant_id: int, since: str) -> list[Figure]:
     return out
 
 
+def _new_findings(conn, tenant_id: int, since: str) -> list:
+    """Findings opened or reopened since ``since`` that are still open."""
+    return conn.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
+                        " AND (first_seen >= ? OR reopened_at >= ?)", (tenant_id, since, since)).fetchall()
+
+
 def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None) -> TenantChanges:
     now = now or datetime.now(UTC)
     since = now - timedelta(days=days)
@@ -265,9 +274,7 @@ def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None) -
     finished = [r["finished_at"] for r in old_snap.runs.values() if r["finished_at"]]
     baseline = min(finished) if finished else None
 
-    new_findings = conn.execute(
-        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
-        " AND (first_seen >= ? OR reopened_at >= ?)", (tenant["id"], since_iso, since_iso)).fetchall()
+    new_findings = _new_findings(conn, tenant["id"], since_iso)
     fixed = list(resolved_since(conn, tenant["id"], since_iso))
     if baseline is None:
         # Collection started inside the period: everything it found is a first look, not a change.
@@ -359,17 +366,45 @@ def summarise(tc: TenantChanges) -> Summary:
                    {f.key: f for f in tc.figures}, tc.has_baseline, areas)
 
 
-def across(conn, tenants, days: int = DEFAULT_DAYS, now: datetime | None = None) -> list[Summary]:
+def across(conn, tenants, days: int = DEFAULT_DAYS, now: datetime | None = None,
+           rebuild: bool = False) -> list[Summary]:
+    """Every tenant's summary, most important first.
+
+    Without ``now`` (the pages, which show the present), each tenant's change count and areas come
+    from its stored row (``precomputed``) while that's current, and are built and stored when it
+    isn't (always, with ``rebuild``). New and fixed findings and the key figures are read live.
+    """
+    live = now is None
     now = now or datetime.now(UTC)
+    stored = Rows(conn, f"changes:{days}", tenants, now, rebuild) if live else None
     out = []
     for t in tenants:
         try:
-            out.append(summarise(build(conn, t, days, now)))
+            out.append(_summary(conn, t, days, now, stored))
         except Exception as exc:
             logging.getLogger(__name__).exception("Change report failed for tenant %s", t["id"])
             out.append(Summary(dict(t), 0, 0, 0, 0, {}, False, [], error=type(exc).__name__))
     out.sort(key=lambda s: (-s.new_severe, -s.changes - s.new_findings, s.tenant["name"].lower()))
     return out
+
+
+def _summary(conn, tenant, days: int, now: datetime, stored: Rows | None) -> Summary:
+    if stored is None:
+        return summarise(build(conn, tenant, days, now))
+    since = now - timedelta(days=days)
+    fingerprint = stored.fingerprint(tenant, since)
+    data = stored.get(tenant, fingerprint)
+    if data is None:
+        summary = summarise(build(conn, tenant, days, now))
+        stored.save(tenant, fingerprint, {"changes": summary.changes, "areas": summary.areas,
+                                         "has_baseline": summary.has_baseline})
+        return summary
+    since_iso = since.strftime(ISO)
+    new = _new_findings(conn, tenant["id"], since_iso) if data["has_baseline"] else []
+    return Summary(dict(tenant), data["changes"], len(new),
+                   sum(1 for r in new if r["severity"] in ("critical", "high")),
+                   len(resolved_since(conn, tenant["id"], since_iso)),
+                   {f.key: f for f in _figures(conn, tenant["id"], since_iso)}, data["has_baseline"], data["areas"])
 
 
 def across_table(summaries: list[Summary], days: int) -> Table:

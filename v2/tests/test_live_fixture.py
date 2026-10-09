@@ -66,8 +66,10 @@ def live(db):
     db.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)", (FIXTURE["client_id"],))
     graph = lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
     exo = lambda t, c: ExchangeClient(t["tenant_ref"], lambda: "t", sleep=lambda s: None)  # noqa: E731
+    # The sign-in and audit logs are read up to "now" into the activity history: the recording's now.
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)):
+            patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)), \
+            patch("officesentry.events.clock", lambda: RECORDED):
         missing = replay.mock(rsps, FIXTURE, STAND_INS, NEW_FIELDS)
         statuses = {}
         for key in REGISTRY:
@@ -202,7 +204,11 @@ def test_pages_and_downloads(client, db, live):
     for url in pages:
         assert client.get(url).status_code == 200, url
     page = client.get(f"{t}/report").get_data(as_text=True)
-    assert "first report for this tenant" in page
+    # The first report: nothing to compare with yet, but admin changes from the activity history are listed
+    # (an app secret added on 6 Oct 2026) while the report's period still reaches back to the recording.
+    changes = page.split('id="changes"')[1].split("</section>")[0]
+    assert "first report for this tenant" in page or "Admin activity" in changes
+    assert client.get(f"{t}/activity").status_code == 200
 
 
 def test_usage_reports_on_real_data(db, live):

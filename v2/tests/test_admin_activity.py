@@ -132,10 +132,9 @@ def test_follows_pages(db, two_tenants, factory):
 
 
 @responses.activate
-def test_cap_warns_instead_of_silently_truncating(db, two_tenants, factory, monkeypatch):
+def test_page_budget_warns_instead_of_silently_truncating(db, two_tenants, factory, monkeypatch):
     alpha, _ = two_tenants
-    monkeypatch.setattr(collector, "MAX_EVENTS", 5)
-    monkeypatch.setattr(collector, "PAGE_SIZE", 3)
+    monkeypatch.setattr(collector, "PAGE_BUDGET", 2)
     pages = [ad.DIRECTORY_AUDITS[i:i + 3] for i in range(0, len(ad.DIRECTORY_AUDITS), 3)]
     for i, page in enumerate(pages):
         url = AUDITS if i == 0 else f"{AUDITS}?$skiptoken={i}"
@@ -145,14 +144,14 @@ def test_cap_warns_instead_of_silently_truncating(db, two_tenants, factory, monk
         responses.get(url, json=body)
     run_id, status = _run(db, alpha, "admin_activity", factory)
     assert status == "partial"
-    assert len(responses.calls) == 2  # stops paging at the cap
+    assert len(responses.calls) == 2  # stops paging at the budget
     run = db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()
-    assert "Only the newest 5 directory audit events were read" in run["error"]
+    assert "haven't been read yet" in run["error"] and "the next run carries on from there" in run["error"]
     window = _window(db, run_id)
-    assert (window["read"], window["capped"]) == (5, True)
-    assert window["oldest"] == ad.DIRECTORY_AUDITS[4]["activityDateTime"]
+    assert (window["read"], window["capped"]) == (6, True)
+    assert window["oldest"] == ad.DIRECTORY_AUDITS[5]["activityDateTime"]
     _, sections = _report(db, alpha)
-    assert "Only the newest 5 audit events could be read" in sections["All admin changes"].intro
+    assert "Part of the audit log hasn't been read yet" in sections["All admin changes"].intro
 
 
 @responses.activate

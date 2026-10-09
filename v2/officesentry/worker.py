@@ -4,8 +4,8 @@ collection schedule, emailed reports and snapshot retention.
 One process, no broker. Run it with ``python -m officesentry worker``. Inside
 it, ``cfg.worker_concurrency`` collector threads each claim and execute runs
 (one tenant per thread at a time, see ``store.claim_next_run``) and
-``TASK_THREADS`` task threads run ``tasks.py`` work (month-end approvals and
-due report emails), while the main thread does the once-a-minute
+``TASK_THREADS`` task threads run ``tasks.py`` work (month-end approvals,
+due report emails and each tenant's precomputed cross-tenant rows), while the main thread does the once-a-minute
 housekeeping, so a long collection or a month-end of PDFs doesn't hold up the
 schedule. Every thread has its own SQLite connection. Claimed runs and tasks
 carry a lease the heartbeat thread renews; one whose worker died is failed
@@ -34,7 +34,7 @@ from .crypto import Vault
 from .db import connect, migrate, prune_audit, utcnow
 from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError, LicenseRequired, PermissionMissing
-from .reports import monthly_review
+from .reports import monthly_review, precomputed
 from .text import plural
 
 log = logging.getLogger(__name__)
@@ -111,8 +111,10 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
     if tenant is not None and not conn.execute(
             "SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('queued', 'running')", (tenant["id"],)).fetchone():
         _sync(conn, tenant, run["id"], alerting)
-        # Rebuild the tenant's dashboard row now rather than on the next page load.
+        # Rebuild the tenant's dashboard row now rather than on the next page load, and its rows on
+        # What changed and the check matrix in a background task.
         warm_rollup(conn, store.get_tenant(conn, tenant["id"]))
+        _queue_precompute(conn, tenant["id"])
     return status
 
 
@@ -202,6 +204,18 @@ def warm_rollup(conn, tenant) -> None:
         monthly_review.rollup_row(conn, tenant, cached=True)
     except Exception:  # the page builds it again, and says what's wrong
         log.exception("Building the dashboard row for tenant %s failed", tenant["id"])
+
+
+def _queue_precompute(conn, tenant_id: int | None = None, rebuild: bool = False) -> None:
+    """Queue one tenant's precomputed rows (or every tenant's). Pages build a missing row themselves."""
+    try:
+        if tenant_id is None:
+            precomputed.queue_all(conn, rebuild)
+        else:
+            precomputed.queue(conn, tenant_id, rebuild)
+    except sqlite3.Error:
+        log.exception("Queueing the precomputed rows failed")
+        _rollback(conn)
 
 
 def warm_rollups(conn) -> None:
@@ -383,7 +397,7 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
 # Modules that register ``schedule.periodic`` jobs, and ``tasks.handler`` kinds. Add yours here.
 JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing",
                "officesentry.system_alerts")
-TASK_MODULES = ("officesentry.delivery", "officesentry.month_end")
+TASK_MODULES = ("officesentry.delivery", "officesentry.month_end", "officesentry.reports.precomputed")
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
 
@@ -403,8 +417,10 @@ def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> 
 
 
 def prune(conn, cfg: Config) -> int:
-    """The daily retention pass: the admin's settings (``retention.apply``), then sign-in noise."""
-    removed = retention.apply(conn, cfg)["snapshots"]
+    """The daily retention pass: the admin's settings (``retention.apply``), then sign-in noise.
+    Returns how many old runs' objects and sign-in detail rows it removed."""
+    done = retention.apply(conn, cfg)
+    removed = done["snapshots"] + done["signin_days"]
     throttle.prune(conn)
     tasks.prune(conn)
     app_setup.prune(conn)
@@ -512,12 +528,16 @@ def _housekeeping(app, conn, vault, cfg: Config, liveness: Liveness | None = Non
 
 
 def _daily(conn, cfg: Config) -> None:
+    removed = 0
     try:
-        prune(conn, cfg)
+        removed = prune(conn, cfg)
     except sqlite3.Error:
         log.exception("Pruning old snapshots failed")
         _rollback(conn)
     warm_rollups(conn)
+    # The day moved on (what's new, ages, the periods' start), and pruning may have removed a period's
+    # starting data, which the stored rows' fingerprints can't see: rebuild them all then.
+    _queue_precompute(conn, rebuild=bool(removed))
 
 
 def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None,

@@ -73,7 +73,8 @@ def test_default_prune_changes_nothing_new(db, cfg, two_tenants):
 
 
 FORM = {"keep_daily": "14", "keep_monthly": "6", "signin_days": "60", "findings_days": "180",
-        "run_log_days": "30", "audit_days": "400", "issued_days": "730"}
+        "run_log_days": "30", "audit_days": "400", "issued_days": "730", "history_signin_days": "180",
+        "history_daily_months": "25", "history_audit_years": "7"}
 
 
 @pytest.mark.parametrize("role", ["analyst", "client"])
@@ -104,7 +105,8 @@ def test_admin_saves_retention_and_it_is_audited(client, db, cfg):
 
 
 @pytest.mark.parametrize("field,value", [("audit_days", "364"), ("issued_days", "30"), ("signin_days", "7"),
-                                         ("keep_daily", "0"), ("run_log_days", "soon")])
+                                         ("keep_daily", "0"), ("run_log_days", "soon"),
+                                         ("history_signin_days", "29"), ("history_audit_years", "0")])
 def test_out_of_range_settings_are_refused(client, db, cfg, field, value):
     make_user(db, "admin")
     login(client, "admin")

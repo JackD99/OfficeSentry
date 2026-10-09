@@ -17,7 +17,9 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements.txt \
     && useradd --system --uid 10001 --home-dir /data sentry \
-    && mkdir /data && chown sentry /data
+    && mkdir -m 700 /data /keys && chown sentry /data /keys
+# docker-compose.yml mounts a volume of its own on /keys and points OFFICESENTRY_SECRETS_FILE there, so the data
+# volume and its backups never hold the key that decrypts them. A new volume takes /keys' owner from here.
 COPY pyproject.toml ./
 COPY officesentry ./officesentry
 # Built with the locked setuptools rather than whatever is newest; `pip check` fails the build if the

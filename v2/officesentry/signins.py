@@ -93,6 +93,17 @@ def outcome(error_code: int) -> str:
     return "interrupted" if error_code in INTERRUPTS else "failure"
 
 
+def mfa_used(s: dict) -> bool | None:
+    """True when a sign-in used MFA, False when a password (or other single factor) was enough, None if unknown."""
+    requirement = s.get("authenticationRequirement")
+    if requirement == "multiFactorAuthentication":
+        return True
+    if requirement == "singleFactorAuthentication":
+        return False
+    detail = s["status"].get("additionalDetails") if isinstance(s.get("status"), dict) else None
+    return True if isinstance(detail, str) and "mfa" in detail.lower() else None
+
+
 def meaning(error_code, reason=None) -> str:
     """What a sign-in error code means, in plain English; Microsoft's own text for codes not listed."""
     n = code(error_code)

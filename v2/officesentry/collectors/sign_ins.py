@@ -1,23 +1,25 @@
 """Sign-in activity: the last week of interactive sign-ins, summarised.
 
 Reads the Entra ID sign-in log (beta, for ``authenticationRequirement``: whether
-a sign-in needed MFA or only a password), which needs Entra ID P1. Pages are
-summarised as they arrive and the raw log is never stored: one row per account,
-per account and country, per country, per app, per failure reason and per
-address that failed, plus the risky sign-ins themselves when the tenant has
-Entra ID P2 (Identity Protection). Without P2 Microsoft hides sign-in risk.
+a sign-in needed MFA or only a password), which needs Entra ID P1, into the
+activity history (``events.py``): each run reads only what is new since the
+last one, from a stored cursor, and the first run reads back the 30 days
+Microsoft keeps. The week is then summarised from the stored sign-ins: one row
+per account, per account and country, per country, per app, per failure reason
+and per address that failed, plus the risky sign-ins themselves when the tenant
+has Entra ID P2 (Identity Protection). Without P2 Microsoft hides sign-in risk.
 
-Microsoft's sign-in log can time out on busy tenants. When the one big query
-fails with a timeout or server error (after the Graph client's retries), the
-collector carries on from the oldest sign-in it already has, one day at a time,
-so the summary is the same as the big query would have given. Each query gets one
-retry on a timeout (the smaller ones are the fallback), and the fallback stops
-after ``FALLBACK_SECONDS``: when the log is down for the whole tenant, every
-window times out, and without a limit the run would hold a worker thread for
-hours.
+Microsoft's sign-in log can time out on busy tenants. A range that fails with a
+timeout or server error (after the Graph client's retries) is read again a day
+at a time from the oldest sign-in already read. Each query gets one retry on a
+timeout (the smaller ones are the fallback), and the fallback stops after
+``FALLBACK_SECONDS``: when the log is down for the whole tenant, every window
+times out, and without a limit the run would hold a worker thread for hours.
+Whatever wasn't read stays in the cursor's gaps, and the next run reads it
+first, so a timeout, a crash or the per-run page budget loses nothing.
 
-Legacy-protocol sign-ins keep their own 30-day query in ``mail_usage.py``; this
-one covers every client for a shorter window, so the two don't share a fetch.
+The legacy sign-in collector (``mail_usage.py``) reads the same stored log for
+its 30 days once the history covers them.
 """
 
 from __future__ import annotations
@@ -26,16 +28,16 @@ import time
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from .. import signins
-from ..graph import GraphError, LicenseRequired, PermissionMissing, is_transient
+from .. import events, signins
+from ..graph import LicenseRequired, PermissionMissing
 from ..text import plural
 from .base import Collector, RunContext, register
 
 PAGE_SIZE = 1000
-SIGNIN_PAGES = 50  # 50,000 sign-ins; the most recent come first
+SIGNIN_PAGES = 200  # pages read per run (200,000 sign-ins), newest first; the next run carries on from there
+LOG_DAYS = 30  # how long Microsoft keeps the sign-in log; the first run reads back this far
 FAILURE_IP_LIMIT = 200
 RISKY_LIMIT = 500
-FALLBACK_WINDOW = timedelta(days=1)
 QUERY_RETRIES = 1  # retries per sign-in log request on a timeout or server error (throttling gets the usual)
 FALLBACK_SECONDS = 600  # how long to keep trying smaller queries once the big one has failed
 clock = time.monotonic
@@ -170,13 +172,7 @@ class Summary:
     @staticmethod
     def _mfa(s: dict) -> bool | None:
         """True when a successful sign-in used MFA, False when a password (or other single factor) was enough."""
-        requirement = s.get("authenticationRequirement")
-        if requirement == "multiFactorAuthentication":
-            return True
-        if requirement == "singleFactorAuthentication":
-            return False
-        detail = _text((s.get("status") or {}).get("additionalDetails")) if isinstance(s.get("status"), dict) else ""
-        return True if "mfa" in detail.lower() else None
+        return signins.mfa_used(s)
 
     @staticmethod
     def _tally(table: dict, key: str, start: dict, result: str, ukey: str, when: str) -> dict:
@@ -262,85 +258,36 @@ def _iso(value: datetime) -> str:
     return value.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-class Reader:
-    """Pages the sign-in log into a Summary, newest first, across one or more queries.
+def _at(ts: int) -> str:
+    return datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    It remembers the oldest time seen and the sign-ins at exactly that time, so
-    a later query ending at that time (inclusive) neither misses nor
-    double-counts anything. ``pages`` counts across queries, so the cap holds.
-    """
 
-    def __init__(self, ctx: RunContext, summary: Summary):
-        self.ctx = ctx
-        self.summary = summary
-        self.pages = 0
-        self.truncated = False
-        self.oldest: str | None = None
-        self.at_oldest: set[str] = set()
+def read_log(ctx: RunContext) -> events.Ingest:
+    """Bring the tenant's stored sign-ins up to date (``events.ingest``). The legacy sign-in collector
+    calls this too; whichever runs second reads only the few hours since."""
+    return events.ingest(ctx, events.SIGNIN_LOG, LOG_DAYS, SIGNIN_PAGES, retries=QUERY_RETRIES,
+                         deadline=lambda: deadline())
 
-    def read(self, flt: str) -> None:
-        url: str | None = "/auditLogs/signIns"
-        params: dict | None = {"$filter": flt, "$top": str(PAGE_SIZE)}
-        while url:
-            if self.pages >= SIGNIN_PAGES:
-                self.truncated = True
-                return
-            data = self.ctx.graph.get(url, params, version="beta", transient_retries=QUERY_RETRIES)
-            params = None
-            self.pages += 1
-            for s in data.get("value") or []:
-                self._add(s)
-            url = data.get("@odata.nextLink")
 
-    def _add(self, s) -> None:
-        when = _text(s.get("createdDateTime")) if isinstance(s, dict) else ""
-        sid = _text(s.get("id")) if isinstance(s, dict) else ""
-        if when and when == self.oldest:
-            if sid in self.at_oldest:
-                return
-            if sid:
-                self.at_oldest.add(sid)
-        elif when and (self.oldest is None or when < self.oldest):
-            self.oldest, self.at_oldest = when, ({sid} if sid else set())
-        self.summary.add(s)
-
-    def read_by_day(self, since: datetime, failure: GraphError) -> None:
-        """Read from the oldest sign-in so far back to ``since`` in one-day windows, newest first.
-
-        A window that still times out is skipped with a warning, and so is every
-        window left once ``FALLBACK_SECONDS`` have gone; if nothing was read at
-        all, the original failure is raised.
-        """
-        expired = deadline()
-        end, upper = datetime.now(UTC), ""
-        if self.oldest:
-            try:
-                end = datetime.fromisoformat(self.oldest.replace("Z", "+00:00"))
-                upper = f" and createdDateTime le {self.oldest}"
-            except ValueError:
-                pass
-        failed = 0
-        while end > since and not self.truncated:
-            if expired():
-                self.ctx.log(f"Gave up on the sign-in log after {FALLBACK_SECONDS // 60} minutes")
-                self.ctx.warn(f"Microsoft's sign-in log was too slow to answer; sign-ins before {_iso(end)} "
-                              "are missing from the summary")
-                break
-            start = max(end - FALLBACK_WINDOW, since)
-            try:
-                self.read(f"createdDateTime ge {_iso(start)}{upper}")
-            except GraphError as exc:
-                if not is_transient(exc):
-                    raise
-                failed += 1
-                self.ctx.log(f"Sign-ins from {_iso(start)} to {_iso(end)} failed too: {exc}")
-            upper = f" and createdDateTime lt {_iso(start)}"
-            end = start
-        if not self.pages:
-            raise failure
-        if failed:
-            self.ctx.warn(f"Microsoft's sign-in log timed out for {plural(failed, 'one-day window')}; "
-                          "those sign-ins are missing from the summary")
+def report_gaps(ctx: RunContext, got: events.Ingest, start: datetime, end: datetime, what: str) -> list:
+    """Warn about anything between ``start`` and ``end`` this run couldn't read; returns those ranges."""
+    missing = got.coverage.missing(int(start.timestamp()), int(end.timestamp()))
+    ranges = ", ".join(f"{_at(lo)} to {_at(hi)}" for lo, hi in missing[:3]) + (" and more" if len(missing) > 3
+                                                                                  else "")
+    if got.gave_up:
+        ctx.log(f"Gave up on the sign-in log after {FALLBACK_SECONDS // 60} minutes")
+        ctx.warn(f"Microsoft's sign-in log was too slow to answer; sign-ins from {ranges or 'earlier'} are missing "
+                 f"from {what} for now, and the next run reads them first")
+    elif got.failed_windows:
+        ctx.warn(f"Microsoft's sign-in log timed out for {plural(got.failed_windows, 'one-day window')}; those "
+                 f"sign-ins are missing from {what} until the next run reads them")
+    elif got.budget_hit and missing:
+        ctx.truncated = True
+        ctx.warn(f"More than {SIGNIN_PAGES * PAGE_SIZE:,} sign-ins to read in one run; sign-ins from {ranges} are "
+                 f"missing from {what} for now, and the next run carries on from there")
+    elif got.budget_hit:
+        ctx.log("Older sign-ins are still being read into the activity history; the next run carries on")
+    return missing
 
 
 @register
@@ -356,29 +303,23 @@ class SignIns(Collector):
             ctx.log("Tenant has no Entra ID P1; the sign-in log isn't available")
             ctx.objects("sign_in_status", [("status", {"available": False, "reason": "licence"})])
             return
-        start = (datetime.now(UTC) - timedelta(days=signins.WINDOW_DAYS)).replace(microsecond=0)
+        now = events.clock().replace(microsecond=0)
+        start = now - timedelta(days=signins.WINDOW_DAYS)
         since = _iso(start)
         p2 = ctx.capabilities.get("entra_p2")
-        summary = Summary(risk_visible=p2 is not False)
-        reader = Reader(ctx, summary)
         try:
-            try:
-                reader.read(f"createdDateTime ge {since}")
-            except GraphError as exc:
-                if not is_transient(exc):
-                    raise
-                ctx.log(f"The sign-in log query failed ({exc}); reading it a day at a time instead")
-                reader.read_by_day(start, exc)
+            got = read_log(ctx)
         except (LicenseRequired, PermissionMissing) as exc:
             ctx.warn(f"The sign-in log isn't available: {exc.message}")
             reason = "licence" if isinstance(exc, LicenseRequired) else "permission"
             ctx.objects("sign_in_status", [("status", {"available": False, "reason": reason})])
             return
-        truncated = reader.truncated
-        if truncated:
-            ctx.truncated = True
-            ctx.warn(f"More than {SIGNIN_PAGES * PAGE_SIZE:,} sign-ins in {signins.WINDOW_DAYS} days; summarised "
-                     "the most recent ones")
+        truncated = bool(report_gaps(ctx, got, start, now, "the summary"))
+        summary = Summary(risk_visible=p2 is not False)
+        for s in events.signins_between(ctx.conn, ctx.tenant["id"], start, now):
+            summary.add(s)
+        ctx.log(f"Read {plural(got.read, 'sign-in')} from Microsoft ({got.new:,} new) in "
+                f"{plural(got.pages, 'page')}")
         # Without P2 Microsoft reports risk as "hidden". When the licence isn't known, trust what came back.
         risk_visible = p2 is True or (p2 is None and summary.risk_seen)
         if not risk_visible:
@@ -386,9 +327,11 @@ class SignIns(Collector):
             for a in summary.accounts.values():
                 a["risky"] = 0
         accounts = summary.account_rows()
+        history = got.coverage.detailed_from
         ctx.objects("sign_in_status", [("status", {
             "available": True, "since": since, "days": signins.WINDOW_DAYS, "signIns": summary.total,
-            "truncated": truncated, "riskVisible": risk_visible})])
+            "truncated": truncated, "riskVisible": risk_visible,
+            "historyFrom": _at(history) if history is not None else None})])
         ctx.objects("sign_in_account", accounts)
         ctx.objects("sign_in_location", summary.location_rows())
         ctx.objects("sign_in_country", summary.counted(summary.countries))
