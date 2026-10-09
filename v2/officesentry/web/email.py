@@ -7,7 +7,8 @@ from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import alerts, delivery, issued, mailer, month_end, store
+from .. import alerts, clouds, delivery, issued, mailer, month_end, store
+from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..mailer import Email, MailError
 from ..reports.data_reports import grouped as report_groups
@@ -18,6 +19,7 @@ from .filters import _strftime as datefmt
 bp = Blueprint("email", __name__)
 
 STAFF = ("admin", "analyst")
+ISO = "%Y-%m-%dT%H:%M:%SZ"
 # The rendered email is shown in a sandboxed frame: inline styles only, nothing else.
 EMAIL_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'"
 
@@ -623,6 +625,9 @@ def settings():
                              trigger="manual", user=g.user["username"])
             return redirect(url_for("email.settings"))
 
+        if request.form.get("action") == "mail_certificate":
+            return _make_mail_certificate(vault, current)
+
         transport = request.form.get("mail_transport", "smtp")
         if transport not in mailer.TRANSPORTS:
             abort(400)
@@ -663,19 +668,81 @@ def settings():
                 flash("Enter your tenant ID (or domain), the mail app's client ID and the mailbox to send from.",
                       "error")
                 return redirect(url_for("email.settings"))
-            values |= {"graph_tenant": tenant, "graph_client_id": client_id, "graph_sender": sender}
-            # A secret only ever goes to the app it was entered for.
-            if secret:
-                values["graph_secret_enc"] = vault.encrypt(secret)
-            elif (current.get("graph_tenant"), current.get("graph_client_id")) != (tenant, client_id):
-                values["graph_secret_enc"] = ""
-            if not (secret or values.get("graph_secret_enc", current.get("graph_secret_enc"))):
-                flash("Saved, but add the client secret before email can be sent.", "warning")
+            auth = request.form.get("graph_auth") or mailer.graph_auth(current)
+            cloud = request.form.get("graph_cloud", clouds.DEFAULT)
+            if auth not in mailer.GRAPH_AUTH or not clouds.valid(cloud):
+                abort(400)
+            same_app = (current.get("graph_tenant"), current.get("graph_client_id"), mailer.graph_cloud(current).key
+                        ) == (tenant, client_id, cloud)
+            values |= {"graph_tenant": tenant, "graph_client_id": client_id, "graph_sender": sender,
+                       "graph_auth": auth, "graph_cloud": cloud}
+            if auth == "secret":
+                # A secret only ever goes to the app it was entered for.
+                if secret:
+                    values["graph_secret_enc"] = vault.encrypt(secret)
+                elif not same_app:
+                    values["graph_secret_enc"] = ""
+                if not (secret or values.get("graph_secret_enc", current.get("graph_secret_enc"))):
+                    flash("Saved, but add the client secret before email can be sent.", "warning")
+                if current.get("graph_key_enc"):  # nor a certificate key
+                    values |= {"graph_cert_pem": "", "graph_key_enc": "", "graph_thumbprint": "",
+                               "graph_cert_not_after": "", "graph_cert_warned": ""}
+                    flash("The mail app's certificate was deleted from Office Sentry. Delete it from the mail app in "
+                          "Entra too (Certificates & secrets → Certificates).", "warning")
+            else:
+                if current.get("graph_secret_enc"):  # a secret nothing uses shouldn't be kept
+                    values["graph_secret_enc"] = ""
+                    flash("The client secret was deleted from Office Sentry. Delete it from the mail app in Entra "
+                          "too (Certificates & secrets → Client secrets).", "warning")
+                if not current.get("graph_key_enc"):
+                    flash("Saved. Next: make the mail app's certificate and upload it to the app.", "warning")
+            # Limiting the app to one mailbox was confirmed for that app and that mailbox only.
+            ticked, was_scoped = request.form.get("graph_scoped") == "1", mailer.scoped(current)
+            if was_scoped and not (same_app and current.get("graph_sender") == sender):
+                values |= {"graph_scoped_at": "", "graph_scoped_by": ""}
+                flash("The mail app or mailbox changed, so limit the app to the new mailbox and tick that step "
+                      "again.", "warning")
+            elif ticked and not was_scoped:
+                values |= {"graph_scoped_at": utcnow(), "graph_scoped_by": g.user["username"]}
+            elif not ticked:
+                values |= {"graph_scoped_at": "", "graph_scoped_by": ""}
         with transaction(g.db):
             _store(values)
             audit(g.db, g.user["username"], "email_settings_updated", detail=transport)
         flash("Email settings saved. Send a test to check them.", "success")
         return redirect(url_for("email.settings"))
+    from ..cert_lifecycle import mail_expiry
+
     return render_template("email_settings.html", s=current, transport=mailer.transport(current),
                            ready=mailer.is_configured(current), has_password=bool(current.get("smtp_password_enc")),
-                           has_secret=bool(current.get("graph_secret_enc")), base_url=_cfg().base_url)
+                           has_secret=bool(current.get("graph_secret_enc")), base_url=_cfg().base_url,
+                           auth=mailer.graph_auth(current) if current.get("graph_client_id") else "certificate",
+                           cloud=mailer.graph_cloud(current), scoped=mailer.scoped(current),
+                           certificate=mail_expiry(current | {"mail_transport": "graph", "graph_auth": "certificate"}))
+
+
+def _make_mail_certificate(vault, current: dict):
+    """A certificate for the mail app to sign in with. Only its public part is ever downloaded."""
+    cert = generate_certificate("Office Sentry mail")
+    replacing = bool(current.get("graph_thumbprint"))
+    with transaction(g.db):
+        _store({"graph_cert_pem": cert.cert_pem, "graph_key_enc": vault.encrypt(cert.key_pem),
+                "graph_thumbprint": cert.thumbprint, "graph_cert_not_after": cert.not_after.strftime(ISO),
+                "graph_cert_warned": ""})
+        audit(g.db, g.user["username"], "mail_certificate_created",
+              detail=f"{cert.thumbprint}" + (f" replacing {current['graph_thumbprint']}" if replacing else ""))
+    flash("Certificate made. Download the .cer and upload it to the mail app (Certificates & secrets → "
+          "Certificates), then send a test." + (" Email fails until the new one is uploaded; delete the old one "
+                                               "from the app afterwards." if replacing else ""), "success")
+    return redirect(url_for("email.settings") + "#mail-certificate")
+
+
+@bp.get("/admin/email/mail-certificate.cer")
+@roles_required("admin")
+def mail_certificate():
+    """The mail app's public certificate. Its private key never leaves the database."""
+    pem = _settings().get("graph_cert_pem")
+    if not pem:
+        abort(404)
+    return Response(cert_der(pem), mimetype="application/pkix-cert",
+                    headers={"Content-Disposition": "attachment; filename=office-sentry-mail.cer"})

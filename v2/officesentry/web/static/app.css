@@ -898,3 +898,7 @@ textarea.commentary { width: 100%; min-height: 9em; }
 @media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
+
+/* Replacing an app connection's certificate (connections.html) */
+.rollover { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.rollover .setup-steps.flush-steps { padding: 0; margin: 4px 0 8px; }

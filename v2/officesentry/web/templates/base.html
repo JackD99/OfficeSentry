@@ -91,6 +91,8 @@
     <main id="main" tabindex="-1">
       {% if worker_down %}<div class="callout warn" role="status">{{ icon('alert') }}<span><strong>The background worker isn't running.</strong>
         Tenants won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span></div>{% endif %}
+      {% for e in expiring_certificates %}<div class="callout {{ e.tone }}" role="status">{{ icon('alert') }}<span class="grow"><strong>{{ e.headline }}</strong>
+        {{ e.consequence }}</span>{% if e.kind == 'mail' %}<a class="btn sm" href="{{ url_for('email.settings') }}">Renew it</a>{% elif e.replacing %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Finish replacing it</a>{% else %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Replace it</a>{% endif %}</div>{% endfor %}
       {{ flashes() }}
       {% block content %}{% endblock %}
     </main>

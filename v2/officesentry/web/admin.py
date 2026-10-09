@@ -7,7 +7,7 @@ import re
 from flask import Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
-from .. import clouds, store, throttle
+from .. import cert_lifecycle, clouds, store, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
@@ -183,10 +183,13 @@ def delete_user(user_id: int):
 @bp.get("/connections")
 @roles_required("admin")
 def connections():
+    rows = store.list_connections(g.db)
     return render_template(
-        "connections.html", connections=store.list_connections(g.db), permissions=GRAPH_PERMISSIONS,
+        "connections.html", connections=rows, permissions=GRAPH_PERMISSIONS,
         exchange_permissions=EXCHANGE_PERMISSIONS,
         redirect_uri=current_app.extensions["officesentry.config"].base_url + url_for("tenants.consent_callback"),
+        expiry={c["id"]: cert_lifecycle.connection_expiry(c) for c in rows},
+        test_tenant={c["id"]: cert_lifecycle.test_tenant(g.db, c["id"]) for c in rows if c["next_thumbprint"]},
     )
 
 
@@ -238,9 +241,91 @@ def set_client_id(conn_id: int):
 @bp.get("/connections/<int:conn_id>/certificate.cer")
 @roles_required("admin")
 def download_certificate(conn_id: int):
-    """Public certificate only. The private key never leaves the database."""
+    """Public certificate only (the current one, or with ?which=next its replacement). The private key never
+    leaves the database."""
     connection = store.get_connection(g.db, conn_id)
     if connection is None:
         abort(404)
-    return Response(cert_der(connection["cert_pem"]), mimetype="application/pkix-cert",
-                    headers={"Content-Disposition": f"attachment; filename=office-sentry-{conn_id}.cer"})
+    if request.args.get("which") == "next":
+        if not connection["next_cert_pem"]:
+            abort(404)
+        pem, name = connection["next_cert_pem"], f"office-sentry-{conn_id}-new"
+    else:
+        pem, name = connection["cert_pem"], f"office-sentry-{conn_id}"
+    return Response(cert_der(pem), mimetype="application/pkix-cert",
+                    headers={"Content-Disposition": f"attachment; filename={name}.cer"})
+
+
+# -- Replacing a connection's certificate (cert_lifecycle) -----------------------------------
+
+
+def _to_connection(conn_id: int):
+    return redirect(url_for("admin.connections") + f"#conn-{conn_id}")
+
+
+def _rollover(conn_id: int, step) -> bool:
+    """Run a rollover step, flashing why it can't be done. Returns whether it ran."""
+    if store.get_connection(g.db, conn_id) is None:
+        abort(404)
+    try:
+        step()
+    except cert_lifecycle.RolloverError as exc:
+        flash(str(exc), "error")
+        return False
+    return True
+
+
+@bp.post("/connections/<int:conn_id>/replace")
+@roles_required("admin")
+def start_rollover(conn_id: int):
+    vault = current_app.extensions["officesentry.vault"]
+    if _rollover(conn_id, lambda: cert_lifecycle.start(g.db, vault, conn_id, g.user["username"])):
+        flash("New certificate made. Collection keeps using the current one until you switch. Next: upload the "
+              "new .cer to the app registration.", "success")
+    return _to_connection(conn_id)
+
+
+@bp.post("/connections/<int:conn_id>/replace/test")
+@roles_required("admin")
+def test_rollover(conn_id: int):
+    tenant_ref = request.form.get("tenant_ref", "").strip().lower()
+    if not GUID_RE.match(tenant_ref) and not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", tenant_ref):
+        flash("Enter a tenant ID or domain to sign in to: your own tenant's, or a client's that has consented.",
+              "error")
+        return _to_connection(conn_id)
+    vault = current_app.extensions["officesentry.vault"]
+    outcome = []
+    if _rollover(conn_id, lambda: outcome.append(
+            cert_lifecycle.test(g.db, vault, conn_id, tenant_ref, g.user["username"]))):
+        result = outcome[0]
+        if result.ok:
+            flash(f"The new certificate works: {result.title} You can switch to it now.", "success")
+        else:
+            flash(f"The new certificate didn't work yet. {result.title} {result.fix}", "error")
+    return _to_connection(conn_id)
+
+
+@bp.post("/connections/<int:conn_id>/replace/switch")
+@roles_required("admin")
+def switch_rollover(conn_id: int):
+    if _rollover(conn_id, lambda: cert_lifecycle.switch(g.db, conn_id, g.user["username"])):
+        flash("Switched. Collection signs in with the new certificate from now on. Last step: remove the old "
+              "certificate from the app registration.", "success")
+    return _to_connection(conn_id)
+
+
+@bp.post("/connections/<int:conn_id>/replace/cancel")
+@roles_required("admin")
+def cancel_rollover(conn_id: int):
+    if _rollover(conn_id, lambda: cert_lifecycle.cancel(g.db, conn_id, g.user["username"])):
+        flash("Replacement cancelled. If you uploaded its .cer to the app registration, delete it there too.",
+              "success")
+    return _to_connection(conn_id)
+
+
+@bp.post("/connections/<int:conn_id>/old-removed")
+@roles_required("admin")
+def old_certificate_removed(conn_id: int):
+    if _rollover(conn_id, lambda: cert_lifecycle.forget_old(g.db, conn_id, g.user["username"])):
+        flash("Noted. The old certificate is no longer listed here.", "success")
+    return _to_connection(conn_id)

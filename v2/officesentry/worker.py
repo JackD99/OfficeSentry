@@ -321,7 +321,7 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
 
 
 # Modules that register ``schedule.periodic`` jobs. Add yours here.
-JOB_MODULES = ("officesentry.delivery",)
+JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle")
 
 
 def housekeeping(app, conn, vault, cfg: Config, now: datetime | None = None) -> None:
