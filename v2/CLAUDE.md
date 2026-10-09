@@ -416,15 +416,39 @@ change is audited; note text is never put in the audit log.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
 
+## Snapshot storage
+
+Collected objects are stored compressed (`store.py`, "Snapshot data"): an
+`objects` row whose `data` is a BLOB is a pack of up to `store.PACK_BYTES` of
+one run and kind's objects in id order, keyed by its first object's id, with
+`items` saying how many it holds. Rows from before packing hold one object as
+JSON text (`items` 1); `packing.py` converts them a few seconds a minute from
+the worker (the `compact` command does it all and shrinks the file). So:
+
+- Read objects through `store` (`run_objects`, `find_object`,
+  `object_copies`, `matching_objects`) or `TenantSnapshot`, never
+  `objects.data` or `json_extract` in SQL.
+- Count objects with `SUM(items)`, not `COUNT(*)`. Deleting or checking rows
+  by run and kind (`EXISTS`, retention) works as before.
+- Tests that edit stored rows with SQL call `tests/stored.unpack(db)` first;
+  `test_compressed_storage.py` checks every report, check, change feed and
+  account page is identical from packed and unpacked rows.
+- `scripts/scale_data.py` builds N tenants with two years of history for
+  sizing and timing (`--plain --compact` measures before and after).
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 `db.migrate` re-reads `user_version` inside each migration's transaction (two
-processes may start at once) and copies a database that already has a schema
-to `backups/pre-upgrade-*.db` first (`backups.before_upgrade`); restoring that
-copy is the only way back, since migrations only go forward. Code older than
-the database refuses to start (`db.DatabaseTooNew`, naming the copy to
-restore), and two files with one number stop the upgrade, since the second
+processes may start at once) and, before taking the write lock, copies a
+database that already has a schema to `backups/pre-upgrade-*.db`
+(`backups.before_upgrade`); restoring that copy is the only way back, since
+migrations only go forward. Copies check free disk first. Backups and
+pre-restore copies are gzipped after SQLite's backup API (`restore` takes
+`.db.gz` and plain `.db`); pre-upgrade copies stay plain, since an older
+release (whose `restore` may not read gzip) restores them. Code
+older than the database refuses to start (`db.DatabaseTooNew`, naming the copy
+to restore), and two files with one number stop the upgrade, since the second
 would otherwise be skipped for good. Several branches add migrations at once:
 take the next free number above `main`'s highest when you merge `main` in
 (`tests/test_migrations.py` fails on a clash).
@@ -445,8 +469,9 @@ and `python -m officesentry <command>`:
 | `create-app` | create the read-only multi-tenant Entra app (device sign-in) |
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
-| `backup [--dir] [--keep]` | a consistent copy of the database (keeps 7) |
+| `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
 | `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
+| `compact` | compress snapshots stored before compression now and shrink the database file |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
 

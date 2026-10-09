@@ -101,7 +101,8 @@ def stored(conn, tenant_id: int) -> dict[str, int]:
     one = lambda sql: conn.execute(sql, (tenant_id,)).fetchone()[0]  # noqa: E731
     return {
         "runs": one("SELECT COUNT(*) FROM runs WHERE tenant_id = ?"),
-        "objects": one("SELECT COUNT(*) FROM objects WHERE run_id IN (SELECT id FROM runs WHERE tenant_id = ?)"),
+        "objects": one("SELECT COALESCE(SUM(items), 0) FROM objects"
+                       " WHERE run_id IN (SELECT id FROM runs WHERE tenant_id = ?)"),
         "metrics": one("SELECT COUNT(*) FROM metrics WHERE tenant_id = ?"),
         "findings": one("SELECT COUNT(*) FROM findings WHERE tenant_id = ?"),
         "open_findings": one("SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"),

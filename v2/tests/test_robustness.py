@@ -49,6 +49,7 @@ from officesentry.rules import RULES, SEVERITY_RANK, Finding, Rule, evaluate
 from officesentry.snapshot import TenantSnapshot
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.stored import unpack
 
 _real_run_objects = store.run_objects
 
@@ -477,6 +478,7 @@ def test_device_checks_and_report_survive_lists_where_text_belongs(db, connectio
     tid = store.create_tenant(db, "Alpha Ltd", "alpha.onmicrosoft.com", connection_id)
     seed_tenant(db, tid)
     tenant = store.get_tenant(db, tid)
+    unpack(db)
     for kind in ("entra_device", "managed_device"):
         for row in db.execute("SELECT run_id, object_id, data FROM objects WHERE kind = ?", (kind,)).fetchall():
             data = {k: [v] if isinstance(v, str) else v for k, v in json.loads(row["data"]).items()}
@@ -525,6 +527,7 @@ def wreck_tenant(db, connection_id):
     seed_tenant(db, tid)
     latest = [r["id"] for r in db.execute("SELECT MAX(id) AS id FROM runs GROUP BY collector")]
     marks = ",".join("?" * len(latest))
+    unpack(db)
     rows = db.execute(f"SELECT run_id, kind, object_id, data FROM objects WHERE run_id IN ({marks})"
                       " ORDER BY run_id, kind, object_id", latest).fetchall()
     position: dict[str, int] = {}

@@ -1,5 +1,6 @@
 """Cron schedule, freshness, retention, worker heartbeat and deployment commands."""
 
+import gzip
 import os
 from datetime import UTC, datetime, timedelta
 
@@ -303,9 +304,11 @@ def test_backup_command(cfg, db, two_tenants, monkeypatch, tmp_path):
     out = tmp_path / "backups"
     for _ in range(3):
         main(["backup", "--dir", str(out), "--keep", "2"])
-    files = sorted(out.glob("officesentry-*.db"))
+    files = sorted(out.glob("officesentry-*.db.gz"))
     assert 1 <= len(files) <= 2
-    copy = connect(files[-1])
+    plain = tmp_path / "copy.db"
+    plain.write_bytes(gzip.decompress(files[-1].read_bytes()))
+    copy = connect(plain)
     assert copy.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
     if os.name != "nt":  # Windows has no Unix file modes
         assert oct(files[-1].stat().st_mode & 0o777) == "0o600"

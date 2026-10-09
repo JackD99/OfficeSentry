@@ -393,7 +393,7 @@ def run(run_id: int):
     t = tenant_or_404(r["tenant_id"])
     events = g.db.execute("SELECT * FROM run_events WHERE run_id = ? ORDER BY id", (run_id,)).fetchall()
     kinds = g.db.execute(
-        "SELECT kind, COUNT(*) AS n FROM objects WHERE run_id = ? GROUP BY kind ORDER BY kind", (run_id,)
+        "SELECT kind, SUM(items) AS n FROM objects WHERE run_id = ? GROUP BY kind ORDER BY kind", (run_id,)
     ).fetchall()
     metrics = g.db.execute("SELECT key, value FROM metrics WHERE run_id = ? ORDER BY key", (run_id,)).fetchall()
     kind = request.args.get("kind")

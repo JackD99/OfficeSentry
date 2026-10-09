@@ -8,9 +8,41 @@ tidies old data). Everything it stores lives in one Docker volume.
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
   installed. A small VM (2 CPUs, 2 GB RAM) is a reasonable start; disk use
-  grows with the number of tenants and users.
+  grows with the number of tenants and users (see [How much disk](#how-much-disk)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
+
+### How much disk
+
+Measured with `scripts/scale_data.py`: 200 client tenants of about 110
+accounts each, after two years of nightly collection with the default *Data
+retention* settings.
+
+| Tenants | Database | One nightly backup | Disk to plan for |
+|---|---|---|---|
+| 50 | about 1 GB | about 0.3 GB | 20 GB |
+| 200 | 4.0 GB | 1.2 GB (under 2 minutes) | 40 GB |
+| 500 | about 10 GB | about 3 GB | 80 GB |
+
+The 50 and 500 rows are scaled from the 200-tenant measurement. A tenant with
+twice the accounts takes about twice the room. "Disk to plan for" covers the
+operating system and Docker, the database, 7 nightly backups and the room a
+backup needs while it's being made (about the database's size again). Of the
+4.0 GB, collected data is 0.8 GB (stored compressed); the rest is run history
+and trend figures, which grow by about 0.7 MB per tenant a month.
+
+Before collected data was compressed the same database was 13.8 GB and 7
+backups took about 97 GB. An existing install compresses its older data a few
+seconds a minute in the background after updating; the file then stops
+growing for a long while but doesn't shrink by itself. To get the space back
+at once, run this at a quiet time (it pauses collections while it runs; on a
+large database expect several minutes):
+
+```bash
+docker compose stop worker
+docker compose run --rm --no-deps worker python -m officesentry compact
+docker compose start worker
+```
 
 ## First start
 
@@ -160,7 +192,11 @@ docker compose exec web python -m officesentry backup
 ```
 
 That writes to `/data/backups` inside the volume and keeps the last 7
-(`--keep 14` keeps more). Each copy is checked before it's kept.
+(`--keep 14` keeps more). Each copy is checked, then compressed
+(`officesentry-<time>.db.gz`, about a third of the database's size). While
+it's being made, the uncompressed copy needs room next to it: the backup
+stops with a plain message if the disk is short of about one and a half
+times the database's size.
 
 **Keep backups off the data volume.** A copy in the same volume is lost with
 the volume. Give the portal a second folder on the host (or a mounted network
@@ -198,7 +234,10 @@ it, anyone holding a backup can. It only changes when you run `rotate-keys
 
 Before every upgrade that changes the database, the portal also saves a copy
 as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db` (the last 3 are
-kept). If it can't (a full disk, say), it doesn't upgrade and says why.
+kept). It's made before the upgrade starts, so the portal keeps working while
+a large database is copied. It isn't compressed, so the older version you'd
+go back to can always restore it. If it can't (a full disk, say), it doesn't
+upgrade and says why.
 
 **Deleted tenants stay in backups.** Backups keep everything that was in the
 database when they were made. After you delete a client tenant, its data stays
@@ -220,16 +259,18 @@ client asks for their data to be erased.
    web ls /data/backups` lists them):
 
    ```bash
-   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/officesentry-20261005-033000.db.gz
    ```
 
    A backup kept on the host goes in first with
-   `docker compose cp ./officesentry-20261005-033000.db web:/data/restore.db`
-   (then restore `/data/restore.db`), or from the `/backups` folder if you
-   mounted one.
+   `docker compose cp ./officesentry-20261005-033000.db.gz web:/data/restore.db.gz`
+   (then restore `/data/restore.db.gz`), or from the `/backups` folder if you
+   mounted one. Older, uncompressed `.db` backups restore the same way.
+   Versions of Office Sentry from before October 2026 can't read `.db.gz`
+   files: unpack one first with `gunzip -k <file>` and restore the `.db`.
 
    It checks that the file is a sound Office Sentry database, saves the
-   database it replaces as `/data/backups/pre-restore-<time>.db`, and copies
+   database it replaces as `/data/backups/pre-restore-<time>.db.gz`, and copies
    the backup in with SQLite's backup API (no stale `-wal` or `-shm` files are
    left behind).
 3. Put back the `secrets.json` from the same time as the backup if the keys
@@ -350,7 +391,8 @@ removes it at the end.
 *Servers → Add server*:
 
 - **Image** Ubuntu 24.04. **Type** shared vCPU, x86, 2 vCPUs and 4 GB (the
-  smallest is fine to start).
+  smallest is fine to start). Check its disk against
+  [How much disk](#how-much-disk); a bigger type can be chosen later.
 - **Networking** public IPv4 (and IPv6 if you like).
 - **SSH keys** none needed.
 - **Firewalls** tick `officesentry`.
