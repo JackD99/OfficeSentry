@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .db import transaction, utcnow
+
+ISO = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def atomic(conn):
+    """A write transaction, or the caller's own when it already has one open."""
+    return nullcontext(conn) if conn.in_transaction else transaction(conn, immediate=True)
+
 
 # -- App connections ---------------------------------------------------------
 
@@ -64,6 +73,15 @@ def set_capabilities(conn, tenant_id: int, caps: dict) -> None:
 PRIORITY_WAITING = 1
 PRIORITY_NIGHTLY = 0
 
+# A claimed run or task belongs to its worker until its lease runs out. The worker renews the
+# leases of what it is running every ``worker.HEARTBEAT_EVERY`` seconds, so only a worker that
+# has died lets one lapse (``expire_run_leases``, ``tasks.expire_leases``).
+LEASE = timedelta(minutes=5)
+
+
+def lease_until(now: datetime | None = None) -> str:
+    return ((now or datetime.now(UTC)) + LEASE).strftime(ISO)
+
 
 def enqueue_run(conn, tenant_id: int, collector: str, trigger: str = "manual",
                 requested_by: str | None = None, scheduled_for: str | None = None,
@@ -114,25 +132,37 @@ def claim_next_run(conn):
         ).fetchone()
         if not row:
             return None
-        conn.execute("UPDATE runs SET status = 'running', started_at = ? WHERE id = ?",
-                     (utcnow(), row["id"]))
+        conn.execute("UPDATE runs SET status = 'running', started_at = ?, lease_until = ? WHERE id = ?",
+                     (utcnow(), lease_until(), row["id"]))
         return conn.execute("SELECT * FROM runs WHERE id = ?", (row["id"],)).fetchone()
 
 
 def finish_run(conn, run_id: int, status: str, error: str | None = None) -> None:
     conn.execute(
-        "UPDATE runs SET status = ?, error = ?, finished_at = ?,"
+        "UPDATE runs SET status = ?, error = ?, finished_at = ?, lease_until = NULL,"
         " object_count = (SELECT COUNT(*) FROM objects WHERE run_id = ?) WHERE id = ?",
         (status, error, utcnow(), run_id, run_id),
     )
 
 
-def recover_orphaned_runs(conn) -> int:
-    """Runs left 'running' by a crashed or restarted worker are marked failed."""
+def renew_run_leases(conn, run_ids, now: datetime | None = None) -> None:
+    """Keep the runs this worker is executing claimed (``worker._heartbeat_thread``)."""
+    ids = list(run_ids)
+    if ids:
+        conn.execute(f"UPDATE runs SET lease_until = ? WHERE status = 'running' AND id IN ({','.join('?' * len(ids))})",
+                     (lease_until(now), *ids))
+
+
+def expire_run_leases(conn, now: datetime | None = None, held=()) -> int:
+    """Fail runs left 'running' by a worker that stopped: their lease ran out (or, from before leases,
+    they never had one). ``held`` are runs this process is executing, never expired here."""
+    now_iso = (now or datetime.now(UTC)).strftime(ISO)
+    held = list(held)
     cur = conn.execute(
-        "UPDATE runs SET status = 'failed', finished_at = ?, error = 'worker stopped before the run finished'"
-        " WHERE status = 'running'",
-        (utcnow(),),
+        "UPDATE runs SET status = 'failed', finished_at = ?, error = 'worker stopped before the run finished',"
+        " lease_until = NULL WHERE id IN (SELECT id FROM runs INDEXED BY idx_runs_status WHERE status = 'running'"
+        f" AND (lease_until IS NULL OR lease_until < ?)) AND id NOT IN ({','.join('?' * len(held))})",
+        (utcnow(), now_iso, *held),
     )
     return cur.rowcount
 

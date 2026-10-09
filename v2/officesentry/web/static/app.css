@@ -898,3 +898,11 @@ textarea.commentary { width: 100%; min-height: 9em; }
 @media (max-width: 640px) { .project-cols { grid-template-columns: 1fr; } }
 .project-cols .list .desc { display: block; }
 td .project-status { flex-wrap: nowrap; }
+
+/* -- Background work (month-end approvals) --------------------------------------- */
+.progress-box { display: grid; gap: 6px; }
+.progress-box progress { appearance: none; -webkit-appearance: none; width: 100%; height: 8px; border: 0; border-radius: 999px; background: var(--border); color: var(--accent); overflow: hidden; }
+.progress-box progress::-webkit-progress-bar { background: var(--border); border-radius: 999px; }
+.progress-box progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; transition: width .4s ease; }
+.progress-box progress::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
+.progress-box .failures { margin: 4px 0 0; padding-left: 18px; }

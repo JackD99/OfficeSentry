@@ -3,6 +3,9 @@
 Admin and analyst review, comment, assign and curate recommendations and notes; only admins edit
 plans and approve, send or re-issue. Clients never reach these pages; on their report they see the
 commentary, recommendations and client-visible notes (``report_extras``). See ``month_end.py``.
+
+Approving queues a background task per client (``month_end.queue_approval``); the worker renders and
+sends, and the queue and review pages show its progress (``progress``). No request renders the files.
 """
 
 from __future__ import annotations
@@ -10,9 +13,9 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, url_for
 
-from .. import delivery, month_end
+from .. import delivery, month_end, tasks, worker
 from ..db import audit, transaction, utcnow
 from ..reports import monthly_review, summary
 from ..reports.data_reports import grouped as report_groups
@@ -26,10 +29,6 @@ STAFF = ("admin", "analyst")
 
 def _cfg():
     return current_app.extensions["officesentry.config"]
-
-
-def _vault():
-    return current_app.extensions["officesentry.vault"]
 
 
 def _period_now() -> str:
@@ -206,56 +205,94 @@ def queue(period: str):
         "reporting_queue.html", period=period, label=month_end.issued.period_label(period), rows=shown,
         all_rows=rows, show=show, filters=FILTERS, counts=counts, states=month_end.STATES,
         prev=month_end.shift_period(period, -1), next=month_end.shift_period(period, 1),
-        current=_period_now(), admin=g.user["role"] == "admin")
+        current=_period_now(), admin=g.user["role"] == "admin", bulk=_bulk_progress(period, rows),
+        worker_running=worker.is_alive(g.db))
+
+
+def _bulk_progress(period: str, rows) -> dict | None:
+    """The latest bulk approval for the month: while it runs, and afterwards when the page was opened from it."""
+    batch = month_end.latest_batch(g.db, period)
+    if batch is None:
+        return None
+    progress = tasks.batch_progress(g.db, batch, [t["id"] for t in visible_tenants(g.db, g.user)])
+    if not progress.total or not (progress.pending or request.args.get("batch") == batch):
+        return None
+    names = {r.tenant["id"]: r.tenant["name"] for r in rows}
+    failures = [(tenant_id, names.get(tenant_id, "A client"), error) for tenant_id, error in progress.failures]
+    return {"batch": batch, "p": progress, "failures": failures,
+            "url": url_for("reporting.progress", period=period, batch=batch)}
 
 
 @bp.post("/reporting/<period>/approve")
 @roles_required("admin")
 def approve_many(period: str):
+    """Queue an approval for each ticked client; the worker freezes and sends them, and the queue shows progress."""
     period = _period_or_404(period)
     visible = {t["id"]: t for t in visible_tenants(g.db, g.user)}
     ids = [int(i) for i in request.form.getlist("tenants") if i.isdigit() and int(i) in visible]
-    sent, failed, skipped = 0, [], 0
-    for tenant_id in ids:
-        t = visible[tenant_id]
-        if month_end.state_of(g.db, tenant_id, period) in ("approved", "sent") or not t["enabled"]:
-            skipped += 1  # bulk approval never re-issues; that needs a reason, one client at a time
-            continue
-        error = _approve(t, period)
-        if error:
-            failed.append(f"{t['name']}: {error}")
-        else:
-            sent += 1
-    if sent:
-        flash(f"Approved and sent {plural(sent, 'report')}.", "success")
-    if skipped:
-        flash(f"Skipped {skipped}: already approved or sent, or the client is paused.", "warning")
-    for f in failed:
-        flash(f, "error")
     if not ids:
         flash("Tick the clients to approve first.", "error")
-    return redirect(url_for("reporting.queue", period=period, show=request.form.get("show", "")))
+        return redirect(url_for("reporting.queue", period=period, show=request.form.get("show", "")))
+    batch = month_end.new_batch(period)
+    queued, skipped, busy = 0, 0, 0
+    with transaction(g.db, immediate=True):
+        for tenant_id in ids:
+            t = visible[tenant_id]
+            if month_end.state_of(g.db, tenant_id, period) in ("approved", "sent") or not t["enabled"] \
+                    or not month_end.plan_for(g.db, tenant_id)[0]:
+                skipped += 1  # bulk approval never re-issues; that needs a reason, one client at a time
+            elif tasks.pending(g.db, month_end.approval_key(tenant_id, period)):
+                busy += 1
+            else:
+                month_end.queue_approval(g.db, t, period, g.user["username"], batch=batch)
+                queued += 1
+    if busy:
+        flash(f"{plural(busy, 'client')} {'was' if busy == 1 else 'were'} already being approved.", "warning")
+    if skipped:
+        flash(f"Skipped {skipped}: already approved or sent, or the client is paused.", "warning")
+    return redirect(url_for("reporting.queue", period=period, show=request.form.get("show", "") or None,
+                            batch=batch if queued else None))
 
 
 def _approve(tenant, period: str, reason: str | None = None) -> str | None:
-    """Approve, freeze and send one client's month. Returns an error to show, or None."""
-    user = g.user["username"]
-    try:
-        # Checked inside the write lock, so a double click or two admins at once approve the month once.
-        with transaction(g.db, immediate=True):
-            if month_end.state_of(g.db, tenant["id"], period) in ("approved", "sent") and not reason:
-                return "It's already been issued. Say why it's being issued again."
-            month_end.freeze(current_app, g.db, tenant, period, user, reason=reason)
-            audit(g.db, user, "report_reissued" if reason else "report_approved", tenant["id"],
-                  f"{period}" + (f": {reason[:200]}" if reason else ""))
-    except month_end.ApprovalError as exc:
-        return str(exc)
-    except Exception as exc:  # a report bug mustn't take the whole batch down
-        current_app.logger.exception("Approving %s for %s failed", period, tenant["id"])
-        return f"Couldn't build the report: {type(exc).__name__}"
-    error = month_end.deliver(current_app, g.db, _vault(), tenant, period, user)
-    audit(g.db, user, "report_send_failed" if error else "report_sent", tenant["id"], period)
-    return error
+    """Queue approving one client's month (``month_end.queue_approval``). Returns an error to show, or None."""
+    # Checked inside the write lock, and one task per client and month, so a double click or two admins
+    # at once approve the month once.
+    with transaction(g.db, immediate=True):
+        if tasks.pending(g.db, month_end.approval_key(tenant["id"], period)):
+            return "It's already being approved."
+        if not tenant["enabled"]:
+            return "The client is paused, so nothing is sent. Resume it first."
+        if month_end.state_of(g.db, tenant["id"], period) in ("approved", "sent") and not reason:
+            return "It's already been issued. Say why it's being issued again."
+        month_end.queue_approval(g.db, tenant, period, g.user["username"], reason=reason)
+    return None
+
+
+@bp.get("/reporting/<period>/progress")
+@roles_required(*STAFF)
+def progress(period: str):
+    """How far approvals have got, for the page waiting on them: ``?batch=`` (a bulk approval, counted over the
+    clients this person can see) or ``?tenant=`` (one client's month)."""
+    period = _period_or_404(period)
+    tenant_id = request.args.get("tenant", type=int)
+    if tenant_id is not None:
+        t = tenant_or_404(tenant_id)
+        task = month_end.approval_task(g.db, t["id"], period)
+        pending = bool(task and task["status"] in tasks.PENDING)
+        return jsonify(pending=int(pending), finished=not pending,
+                       text=_task_text(task) if pending else "")
+    batch = request.args.get("batch", "")
+    if not batch.startswith(f"approve:{period}:"):
+        abort(404)
+    p = tasks.batch_progress(g.db, batch, [t["id"] for t in visible_tenants(g.db, g.user)])
+    return jsonify(p.as_dict())
+
+
+def _task_text(task) -> str:
+    if task["status"] == "queued":
+        return "Waiting for the background worker"
+    return (task["progress"] or "Working on it") + "…"
 
 
 # -- Review screen ---------------------------------------------------------------------------------
@@ -291,6 +328,8 @@ def review(period: str, tenant_id: int):
         suggestions=[s for s in month_end.suggestions(report) if s["rule_key"] not in taken],
         notes=month_end.notes(g.db, t["id"], staff=True), visibility=month_end.VISIBILITY,
         frozen=month_end.frozen_files(g.db, t["id"], period), staff_users=staff_users,
+        task=month_end.approval_task(g.db, t["id"], period), task_text=_task_text, pending=tasks.PENDING,
+        worker_running=worker.is_alive(g.db),
         emailed=month_end.emailed(plan, g.db, t["id"]) if plan else False,
         months=[month_end.shift_period(period, i) for i in range(0, 7)], admin=g.user["role"] == "admin",
         period_label=month_end.issued.period_label)
@@ -359,24 +398,20 @@ def approve(period: str, tenant_id: int):
     error = _approve(t, period, reason)
     if error:
         flash(error, "error")
-    else:
-        flash("Approved and sent." if month_end.emailed(plan, g.db, t["id"])
-              else "Approved and published to the client's report history.", "success")
-    return _review_url(t["id"], period)
+    return _review_url(t["id"], period, "approve")
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/send")
 @roles_required("admin")
 def send_again(period: str, tenant_id: int):
-    """Send the frozen files again after a failed send. Nothing is rebuilt."""
+    """Send the frozen files again after a failed send, in the background. Nothing is rebuilt."""
     period = _period_or_404(period)
     t = tenant_or_404(tenant_id)
-    if month_end.state_of(g.db, t["id"], period) != "approved":
-        abort(400)
-    error = month_end.deliver(current_app, g.db, _vault(), t, period, g.user["username"])
-    audit(g.db, g.user["username"], "report_send_failed" if error else "report_sent", t["id"], period)
-    flash(f"Sending failed: {error}" if error else "Sent.", "error" if error else "success")
-    return _review_url(t["id"], period)
+    with transaction(g.db, immediate=True):
+        if month_end.state_of(g.db, t["id"], period) != "approved":
+            abort(400)
+        month_end.queue_approval(g.db, t, period, g.user["username"], send_only=True)
+    return _review_url(t["id"], period, "approve")
 
 
 # -- Recommendations and notes ----------------------------------------------------------------------

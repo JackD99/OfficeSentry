@@ -2,7 +2,8 @@
 
 from datetime import UTC, datetime
 
-from officesentry import delivery, lifecycle, month_end, store
+from officesentry import delivery, lifecycle, month_end, store, tasks
+from officesentry.db import connect
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_email import _smtp_ready, fake_smtp, sends  # noqa: F401 (autouse fixture)
@@ -22,6 +23,17 @@ def _plan(client, tenants, mode="approval", delivery_="email", **extra):
 def _admin(client, db):
     make_user(db, "admin")
     login(client, "admin")
+
+
+def work(client) -> int:
+    """What the worker's task threads do: run every queued task (approvals) to the end."""
+    app = client.application
+    cfg = app.extensions["officesentry.config"]
+    conn = connect(cfg.db_path)
+    try:
+        return tasks.drain(app, conn, app.extensions["officesentry.vault"], cfg)
+    finally:
+        conn.close()
 
 
 def test_plan_creates_schedules_and_coverage_counts_gaps(client, db, two_tenants, connection_id):
@@ -193,6 +205,8 @@ def test_approve_freezes_sends_and_reissue_increments_version(client, db, two_te
         client.post(f"/tenants/{alpha}/finding-notes", data={"rule_key": rule.key, "body": body,
                                                             "visibility": visibility})
     client.post(f"/reporting/{PERIOD}/approve", data={"tenants": [str(alpha)]})
+    assert pdf_html == [] and sends() == []  # the request only queues it
+    assert work(client) == 1
     html, = pdf_html  # the PDF has the commentary and client notes, never staff-only ones
     assert "Signed off." in html and "Visible to the client" in html and "Internal only" not in html
     (_, _, msg, _), = sends()
@@ -209,9 +223,9 @@ def test_approve_freezes_sends_and_reissue_increments_version(client, db, two_te
 
     # Approving again needs a reason, and makes version 2.
     client.post(f"/reporting/{PERIOD}/{alpha}/approve", data={})
-    assert len(sends()) == 1
+    assert work(client) == 0 and len(sends()) == 1
     client.post(f"/reporting/{PERIOD}/{alpha}/approve", data={"reason": "Corrected the licence figures"})
-    assert len(sends()) == 2
+    assert work(client) == 1 and len(sends()) == 2
     latest = month_end.frozen_files(db, alpha, PERIOD)
     assert [f["version"] for f in latest] == [2] * len(latest)
     assert latest[0]["reason"] == "Corrected the licence figures"
@@ -228,6 +242,7 @@ def test_portal_plan_publishes_without_email(client, db, two_tenants):
     _plan(client, [alpha], mode="auto", delivery_="portal", include_xlsx="")
     assert db.execute("SELECT on_approval FROM email_schedules").fetchone()[0] == 1
     client.post(f"/reporting/{PERIOD}/{alpha}/approve")
+    work(client)
     assert sends() == []
     assert month_end.state_of(db, alpha, PERIOD) == "sent"
     rows = db.execute("SELECT * FROM issued_reports").fetchall()

@@ -223,8 +223,8 @@ queued or running, so a night's collection is evaluated once. Token providers
 (`msauth.shared_certificate_token_provider`) and each thread's HTTP session are
 reused across runs. Meanwhile the main thread, once a
 minute, queues the collection slot (`schedule.py`, cron + timezone, skipping
-collectors fresher than `max_age_hours`) and sends due report emails (which
-first refresh stale collectors). Every thread opens its own SQLite connection;
+collectors fresher than `max_age_hours`) and queues due report emails (which
+first refresh stale collectors) as tasks. Every thread opens its own SQLite connection;
 never share one across threads. Manual runs and report refreshes get
 `store.PRIORITY_WAITING`. Once a day `retention.apply` prunes under
 the admin's *Data retention* settings (`retention.*` keys in `settings`;
@@ -238,10 +238,29 @@ reads an older run must cope with its objects, or just its sign-in kinds,
 being gone (see `changes._baseline_run`). A new store of personal data gets
 a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
 `healthcheck worker` read, but only while the worker makes progress
-(`worker.Liveness`: the main loop came round in the last 10 minutes and no run
-has gone for 4 hours), so a wedged loop or thread shows as down. A failing
+(`worker.Liveness`: the main loop came round in the last 10 minutes, no run
+has gone for 4 hours and no task for 1), so a wedged loop or thread shows as down. A failing
 housekeeping pass (say "database is locked") is logged, rolled back and
 retried the next minute; it never ends the worker. Don't add Celery or Redis.
+
+Long work goes through **background tasks** (`tasks.py`, the `tasks` table),
+never a web request or the main loop: `worker.TASK_THREADS` task threads
+claim tasks (highest priority first) and run the function registered for
+their kind with `@tasks.handler(kind)` (add its module to
+`worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`) and
+`send_schedule` (`delivery.py`). Queue with `tasks.enqueue(conn, kind,
+key=..., payload=...)`: at most one task per `key` is queued or running, so
+use a key that names the thing done once ("approve:<tenant>:<period>").
+Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
+thread renews; when a worker dies, `expire_leases` fails its runs and queues
+its tasks again (up to `tasks.MAX_ATTEMPTS`). So a handler may run twice:
+save `ctx.checkpoint(...)` in the same transaction as any step that mustn't
+repeat and skip it when `ctx.done` says so. Raise `tasks.TaskFailed` with
+words for people; a handler's own failure isn't retried. Pages show
+progress from the rows (`tasks.batch_progress`, a JSON route polled by
+`_progress.html`). Finished tasks are pruned after 30 days. Table report
+PDFs keep the first `printing.PDF_MAX_ROWS` (2,000) rows per table and say
+so (`printing.cap_rows`); the XLSX and CSV have every row.
 
 The dashboard and the All tenants review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
@@ -309,11 +328,17 @@ template as `month_end` from `month_end.report_context()`, passed by the route
 reach staff on the web page, never a client or any PDF. A client's live report shows none
 of it until the month is approved or sent (`report_context(..., approved_only=True)`).
 
-Approving (`freeze` then `deliver`) renders the plan's files once into
-`issued_reports` (trigger `approval`, `approved_by`/`approved_at`), then emails
-those exact bytes (`delivery.send_frozen`, which marks the schedule's period
-done) or, for portal-only plans or no recipients, leaves them in the report
-history. Approving an issued month again is a re-issue: it needs a reason and
+Approving queues an `approve` task per client and month
+(`month_end.queue_approval`; bulk approval queues one per ticked client under
+one `batch`, and the queue page shows its progress). The task renders the
+plan's files outside the write lock (`render_files`), then in one
+transaction re-checks the state, stores them in `issued_reports` (`freeze`:
+trigger `approval`, `approved_by`/`approved_at`) and checkpoints "frozen";
+then emails those exact bytes (`deliver` and `delivery.send_frozen`, which
+record the email, mark the schedule's period done and the month Sent in one
+transaction) or, for portal-only plans or no recipients, leaves them in the
+report history. A worker that dies between freeze and send sends once on
+retry, without freezing again (`tests/test_tasks.py`). Approving an issued month again is a re-issue: it needs a reason and
 stores the next version. Roles: admin and analyst review, comment, assign and
 edit recommendations and notes; only admins edit plans and approve, send or
 re-issue. Clients never see the queue, reviewers or staff-only notes. Every

@@ -11,7 +11,10 @@
 ``tick()`` is the only entry point the worker needs. It is idempotent and
 cheap, so it can run every minute: each schedule remembers the period it last
 completed ("2026-10", "2026-W41", "2026-Q4"), and failures are retried with
-backoff before the period is given up and shown as failed.
+backoff before the period is given up and shown as failed. In the worker it
+queues each due email as a ``send_schedule`` task (``tasks.py``) rather than
+building it, so a month-end morning of 200 reports never holds up the
+worker's main loop.
 
 Recipients are contacts. A tenant's contacts get the email in "To"; the MSP's
 team (contacts with no tenant) get a hidden copy, so client contacts never see
@@ -30,7 +33,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
-from . import alerts, issued, mailer, schedule, store
+from . import alerts, issued, mailer, schedule, store, tasks
 from .db import utcnow
 from .mailer import Email, MailError
 from .reports import branding, data_reports, evidence, export, monthly_review, workbook
@@ -557,9 +560,8 @@ def record(conn, *, kind: str, email: Email | None, subject: str, error: str | N
     ).lastrowid
 
 
-def _send(conn, vault, build, *, kind: str, fallback_subject: str, trigger: str, user: str | None,
-          **fields) -> str | None:
-    """Build and send one email, and log it. Returns the error shown to people, or None."""
+def _attempt(conn, vault, build, kind: str) -> tuple[Email | None, str | None, str | None]:
+    """Build and send one email. Returns (email, transport, error shown to people or None). Writes nothing."""
     email, transport = None, None
     try:
         email = build().email
@@ -570,6 +572,13 @@ def _send(conn, vault, build, *, kind: str, fallback_subject: str, trigger: str,
     except Exception as exc:  # a report bug must not stop other emails
         log.exception("Building %s email failed", kind)
         error = f"Couldn't build the email: {type(exc).__name__}: {exc}"
+    return email, transport, error
+
+
+def _send(conn, vault, build, *, kind: str, fallback_subject: str, trigger: str, user: str | None,
+          **fields) -> str | None:
+    """Build and send one email, and log it. Returns the error shown to people, or None."""
+    email, transport, error = _attempt(conn, vault, build, kind)
     record(conn, kind=kind, email=email, subject=email.subject if email else fallback_subject, error=error,
             transport=transport, trigger=trigger, user=user, **fields)
     return error
@@ -583,6 +592,7 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     period, due = schedule_slot(schedule, default_tz, now)
     contacts = recipients(conn, "schedule", schedule["id"])
     built: list[Built] = []
+    tenant = None
     if schedule["kind"] == "report":
         tenant = store.get_tenant(conn, schedule["tenant_id"])
 
@@ -594,11 +604,24 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
         def build():
             return build_digest_email(app, conn, schedule, contacts, now=now)
         fallback = "Tenant digest"
-    error = _send(conn, vault, build, kind=schedule["kind"], fallback_subject=fallback, trigger=trigger, user=user,
-                  schedule_id=schedule["id"], tenant_id=schedule["tenant_id"], period=period)
+    email, transport, error = _attempt(conn, vault, build, schedule["kind"])
+    # Everything the send changes is written at once, so a worker that stops after sending doesn't leave the
+    # period looking unsent (and send it again).
+    with store.atomic(conn):
+        _after_send(conn, schedule, email, transport, error, period=period, due=due, trigger=trigger, user=user,
+                    now=now, fallback=fallback, archive=built[-1].email if error is None and built else None,
+                    tenant=tenant)
+    return error
+
+
+def _after_send(conn, schedule, email, transport, error, *, period: str, due: datetime, trigger: str,
+                user: str | None, now: datetime, fallback: str, archive: Email | None, tenant) -> None:
+    record(conn, kind=schedule["kind"], email=email, subject=email.subject if email else fallback, error=error,
+            transport=transport, trigger=trigger, user=user, schedule_id=schedule["id"],
+            tenant_id=schedule["tenant_id"], period=period)
     ts = now.strftime(ISO)
-    if error is None and built:
-        _archive(conn, schedule, tenant, built[-1].email, period=period, trigger=trigger, user=user, now=ts)
+    if archive is not None:
+        _archive(conn, schedule, tenant, archive, period=period, trigger=trigger, user=user, now=ts)
     if trigger == "schedule":
         if error is None:
             conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
@@ -623,7 +646,6 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
             (ts, done, period, done, done, schedule["id"]))
     else:
         conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
-    return error
 
 
 # SQL for "the later of last_period and ?" (twice the same parameter), for a monthly report plan schedule.
@@ -631,9 +653,11 @@ LATER_PERIOD = "CASE WHEN last_period IS NULL OR last_period < ? THEN ? ELSE las
 
 
 def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tuple[str, str, bytes]], *,
-                user: str | None, now: datetime | None = None) -> str | None:
+                user: str | None, now: datetime | None = None, on_sent=None) -> str | None:
     """Email a report schedule's recipients the files approved for ``period`` (``month_end.approve``), exactly
-    as they were frozen into ``issued_reports``, and count the period as done. Returns an error or None."""
+    as they were frozen into ``issued_reports``, and count the period as done. Returns an error or None.
+
+    ``on_sent(conn)`` writes the caller's own record of the send in the same transaction as the email's."""
     now = now or datetime.now(UTC)
     contacts = recipients(conn, "schedule", schedule["id"])
 
@@ -641,15 +665,21 @@ def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tup
         built = build_report_email(app, conn, schedule, tenant, contacts, now=now, attach=False)
         built.email.attachments = list(files)
         return built
-    error = _send(conn, vault, build, kind="report", fallback_subject=f"{tenant['name']} security report",
-                  trigger="manual", user=user, schedule_id=schedule["id"], tenant_id=tenant["id"], period=period)
-    if error is None:
-        # Re-issuing an earlier month never moves the schedule back, or the next tick sends again.
-        conn.execute(f"UPDATE email_schedules SET last_period = {LATER_PERIOD}, attempts = 0, retry_at = NULL,"
-                     " last_status = 'sent', last_sent_at = ? WHERE id = ?",
-                     (period, period, now.strftime(ISO), schedule["id"]))
-    else:
-        conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
+    email, transport, error = _attempt(conn, vault, build, "report")
+    fallback = f"{tenant['name']} security report"
+    with store.atomic(conn):
+        record(conn, kind="report", email=email, subject=email.subject if email else fallback, error=error,
+               transport=transport, trigger="manual", user=user, schedule_id=schedule["id"],
+               tenant_id=tenant["id"], period=period)
+        if error is None:
+            # Re-issuing an earlier month never moves the schedule back, or the next tick sends again.
+            conn.execute(f"UPDATE email_schedules SET last_period = {LATER_PERIOD}, attempts = 0, retry_at = NULL,"
+                         " last_status = 'sent', last_sent_at = ? WHERE id = ?",
+                         (period, period, now.strftime(ISO), schedule["id"]))
+            if on_sent is not None:
+                on_sent(conn)
+        else:
+            conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
     return error
 
 
@@ -741,10 +771,11 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
     return "This email can't be sent again"
 
 
-def _tick_schedule(app, conn, vault, s, cfg, now: datetime) -> bool:
-    if _field(s, "on_approval", 0):
+def _due(conn, s, cfg, now: datetime) -> bool:
+    """Whether a schedule should send now (before refreshing its data). Writes nothing."""
+    if not s["enabled"] or _field(s, "on_approval", 0):
         return False  # a report plan that waits for approval: month_end.approve sends it
-    period, due = schedule_slot(s, cfg.timezone, now)
+    period, _ = schedule_slot(s, cfg.timezone, now)
     if period_done(s["last_period"], period):
         return False
     if s["retry_at"] and now.strftime(ISO) < s["retry_at"]:
@@ -753,14 +784,48 @@ def _tick_schedule(app, conn, vault, s, cfg, now: datetime) -> bool:
         return False  # the schedules page shows "No recipients"
     if s["kind"] == "report":
         tenant = store.get_tenant(conn, s["tenant_id"])
-        if not tenant["enabled"]:
+        if tenant is None or not tenant["enabled"] or tenant["archived_at"]:
             return False
+    return True
+
+
+def send_key(s, period: str) -> str:
+    return f"schedule:{s['id']}:{period}"
+
+
+def _tick_schedule(app, conn, vault, s, cfg, now: datetime, queue: bool = False) -> bool:
+    if not _due(conn, s, cfg, now):
+        return False
+    period, due = schedule_slot(s, cfg.timezone, now)
+    if queue and tasks.pending(conn, send_key(s, period)):
+        return False  # already waiting for a task thread
+    if s["kind"] == "report":
+        tenant = store.get_tenant(conn, s["tenant_id"])
         # Collect anything older than OFFICESENTRY_MAX_AGE_HOURS first; checked again next minute.
         if tenant["connection_id"] and not schedule.refresh_for_report(
                 conn, tenant["id"], due, cfg.max_age_hours, now):
             return False
-    send_schedule(app, conn, vault, s, trigger="schedule", now=now)
+    if queue:
+        tasks.enqueue(conn, "send_schedule", key=send_key(s, period), tenant_id=s["tenant_id"],
+                      payload={"schedule_id": s["id"], "now": now.strftime(ISO)})
+    else:
+        send_schedule(app, conn, vault, s, trigger="schedule", now=now)
     return True
+
+
+@tasks.handler("send_schedule")
+def _send_schedule_task(ctx: tasks.TaskContext) -> dict:
+    """One due report or digest email, queued by ``tick``. Checked again first: it may have been sent, paused
+    or deleted while it waited."""
+    s = ctx.conn.execute("SELECT * FROM email_schedules WHERE id = ?", (ctx.payload["schedule_id"],)).fetchone()
+    now = datetime.fromisoformat(ctx.payload["now"].replace("Z", "+00:00"))
+    if s is None or not _due(ctx.conn, s, ctx.cfg, now):
+        return {"skipped": True}
+    ctx.progress("Building and sending the email")
+    error = send_schedule(ctx.app, ctx.conn, ctx.vault, s, trigger="schedule", now=now)
+    if error:
+        raise tasks.TaskFailed(error)  # the schedule itself retries with backoff (send_schedule)
+    return {"sent": True}
 
 
 def _retry_alert(app, conn, vault, d, now: datetime) -> bool:
@@ -772,15 +837,16 @@ def _retry_alert(app, conn, vault, d, now: datetime) -> bool:
     return True
 
 
-def tick(app, conn, vault, cfg, now: datetime | None = None) -> int:
+def tick(app, conn, vault, cfg, now: datetime | None = None, queue: bool = False) -> int:
     """Send every schedule that is due and retry failed alerts. Safe to call every minute.
 
-    Returns emails attempted."""
+    With ``queue`` (the worker) a due schedule is queued as a ``send_schedule`` task instead of sent here.
+    Returns emails attempted or queued."""
     now = now or datetime.now(UTC)
     attempted = 0
     for s in conn.execute("SELECT * FROM email_schedules WHERE enabled = 1 ORDER BY id").fetchall():
         try:
-            attempted += _tick_schedule(app, conn, vault, s, cfg, now)
+            attempted += _tick_schedule(app, conn, vault, s, cfg, now, queue)
         except Exception:
             log.exception("Scheduled email %s failed", s["id"])
     # Alert emails are sent when a collection opens findings (alerts.after_sync); here only failed ones retry.
@@ -795,5 +861,5 @@ def tick(app, conn, vault, cfg, now: datetime | None = None) -> int:
 
 @schedule.periodic("email_delivery")
 def _email_job(ctx) -> None:
-    """Registered with the worker through ``worker.JOB_MODULES``."""
-    tick(ctx.app, ctx.conn, ctx.vault, ctx.cfg, ctx.now)
+    """Registered with the worker through ``worker.JOB_MODULES``. Due emails become tasks for the task threads."""
+    tick(ctx.app, ctx.conn, ctx.vault, ctx.cfg, ctx.now, queue=True)
