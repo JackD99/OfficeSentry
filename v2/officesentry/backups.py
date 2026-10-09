@@ -171,9 +171,10 @@ def read_status(data_dir: Path) -> dict[str, dict]:
 
 
 def record_status(data_dir: Path, job: str, ok: bool, error: str | None = None, file: Path | None = None,
-                  now: datetime | None = None) -> None:
-    """Record one attempt of ``job``, keeping the other jobs' entries. Never raises: a backup's outcome
-    matters more than its record."""
+                  detail: str | None = None, now: datetime | None = None) -> None:
+    """Record one attempt of ``job``, keeping the other jobs' entries. ``detail`` (short plain words, no
+    secrets) is stored as given; without it a successful ``file`` is described by name and size. Never
+    raises: a backup's outcome matters more than its record."""
     stamp = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
     path = Path(data_dir) / STATUS_FILE
     try:
@@ -184,8 +185,10 @@ def record_status(data_dir: Path, job: str, ok: bool, error: str | None = None, 
         entry.setdefault("detail", "")
         if ok:
             entry["last_success"] = stamp
-            if file is not None:
+            if file is not None and detail is None:
                 entry["detail"] = f"{file.name}, {max(1, round(file.stat().st_size / 2**20)):,} MB"
+        if detail is not None:
+            entry["detail"] = str(detail)[:300]
         status[job] = entry
         part = path.with_name(path.name + ".part")
         _private(part)

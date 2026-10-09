@@ -234,8 +234,15 @@ def check_collection(conn, cfg, now) -> Check:
 BACKUP_SETUP = ("Back up every night: DEPLOY.md, \"Backups\", has the one line to add to the server's crontab. "
                 "Keep the copies off the data volume.")
 # How old each backup job's last success may get: nightly copies, and the weekly restore drill.
-BACKUP_JOBS = {"local": ("backup", timedelta(hours=26)), "offsite": ("off-site backup", timedelta(hours=26)),
-               "restore_check": ("restore check", timedelta(days=8))}
+# (what it's called, how old its last success may get, how to see the whole error)
+BACKUP_JOBS = {
+    "local": ("backup", timedelta(hours=26),
+              "Run the backup by hand to see the whole message: docker compose exec web python -m officesentry backup"),
+    "offsite": ("off-site backup", timedelta(hours=26),
+                "Run Deploy with the backup action to see the whole message (DEPLOY.md, \"Off-site backups\")."),
+    "restore_check": ("restore check", timedelta(days=8),
+                      "Run Deploy with the restore-drill action (DEPLOY.md, \"Restore drill\")."),
+}
 
 
 def check_backup(conn, cfg, now) -> Check:
@@ -253,15 +260,14 @@ def check_backup(conn, cfg, now) -> Check:
     worst: tuple[int, str, str] | None = None
     newest = None
     for name, j in sorted(jobs.items()):
-        label, stale = BACKUP_JOBS.get(name, (f"{name} backup", timedelta(hours=26)))
+        label, stale, rerun = BACKUP_JOBS.get(name, (f"{name} backup", timedelta(hours=26), "Run it by hand to see "
+                                                     "the whole message."))
         done = parse_ts(j.get("last_success"))
         if done and name != "restore_check" and (newest is None or done > newest):
             newest = done
         if j.get("ok") is False:
             problem = (2, f"The last {label} failed",
-                       (j.get("error") or "No details were recorded.").rstrip(".") + ". Run it by hand to see the "
-                       "whole message" + (": docker compose exec web python -m officesentry backup"
-                                          if name == "local" else " (DEPLOY.md, \"Backups\")."))
+                       (j.get("error") or "No details were recorded").rstrip(".") + ". " + rerun)
         elif done is None or now - done > stale:
             problem = (1, f"No {label} for {duration((now - done).total_seconds())}" if done
                        else f"No {label} has worked yet",
