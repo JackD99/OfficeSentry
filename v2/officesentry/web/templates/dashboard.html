@@ -23,7 +23,7 @@
 <div class="card empty">
   {% if current_user.role == 'admin' %}
   <h3>No tenants yet</h3>
-  <p>Set up the app connection once, then add each client tenant.</p>
+  <p>Sign in to Microsoft once so Office Sentry can create its read-only app, then add each client tenant.</p>
   <a class="btn primary" href="{{ url_for('admin.connections') }}">Set up the app connection</a>
   {% else %}
   <h3>No tenants to show</h3>

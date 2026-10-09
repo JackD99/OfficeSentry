@@ -84,9 +84,11 @@ def _decorate(s) -> dict:
     d["tz"] = delivery.schedule_tz(s, _cfg().timezone)
     # A plan schedule that waits for approval never sends on its timer (month_end.approve sends it).
     d["next"] = None if s["on_approval"] else delivery.next_send(s, _cfg().timezone)
-    group = tenant_groups.get(g.db, s["group_id"]) if s["kind"] == "digest" else None
-    d["titles"] = delivery.report_titles(s["reports"]) if s["kind"] == "report" else \
-        [f"Tenant digest · {group['name']}" if group else "Tenant digest · every tenant"]
+    d["titles"] = delivery.schedule_titles(s)
+    d["upcoming"] = delivery.is_upcoming(s)
+    if d["kind"] == "digest" and not d["upcoming"]:
+        group = tenant_groups.get(g.db, s["group_id"])
+        d["titles"] = [f"Tenant digest · {group['name']}" if group else "Tenant digest · every tenant"]
     d["due_now"] = d["next"] is not None and d["next"] <= datetime.now(UTC)
     return d
 
@@ -160,8 +162,8 @@ def _days_ago(days: int) -> str:
 # -- Schedule form (report bundles and digests) ------------------------------------------
 
 
-def _blank(kind: str) -> dict:
-    return {"id": None, "kind": kind, "reports": ["review"] if kind == "report" else [], "include_xlsx": 1,
+def _blank(kind: str, reports=None) -> dict:
+    return {"id": None, "kind": kind, "reports": reports or (["review"] if kind == "report" else []), "include_xlsx": 1,
             "frequency": "monthly", "day_of_week": 0, "day_of_month": 1, "hour": 8, "timezone": "",
             "message": "", "enabled": 1, "group_id": None}
 
@@ -226,10 +228,13 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
         recipients_limit=mailer.MAX_RECIPIENTS, groups=tenant_groups.all_groups(g.db) if not tenant else [])
 
 
-def _save_schedule(tenant, existing=None):
+def _save_schedule(tenant, existing=None, coming_up: bool = False):
     kind = existing["kind"] if existing else ("report" if tenant else "digest")
     tenant_id = tenant["id"] if tenant else None
     values = _form_values(kind)
+    if coming_up or (existing is not None and delivery.is_upcoming(existing)):
+        values["reports"] = [delivery.upcoming.KEY]  # a digest schedule that sends the Coming up email
+        values["group_id"] = None  # Coming up always covers every tenant
     with transaction(g.db):
         ids, errors = _chosen_contacts(tenant_id)
         if kind == "digest":
@@ -270,7 +275,8 @@ def _save_schedule(tenant, existing=None):
             action = "email_schedule_updated"
         delivery.set_recipients(g.db, "schedule", schedule_id, ids)
         audit(g.db, g.user["username"], action, tenant_id,
-              f"{kind} {values['frequency']} to {plural(len(ids), 'recipient')}")
+              f"{'coming up' if delivery.upcoming.KEY in values['reports'] else kind} {values['frequency']} to"
+              f" {plural(len(ids), 'recipient')}")
     s = g.db.execute("SELECT * FROM email_schedules WHERE id = ?", (schedule_id,)).fetchone()
     nxt = delivery.next_send(s, _cfg().timezone)
     flash("Saved. " + (f"Next email: {datefmt(nxt, '%a %-d %b, %H:%M')} ({nxt.tzname()})." if nxt
@@ -294,6 +300,17 @@ def new_digest():
     if request.method == "POST":
         return _save_schedule(None)
     values = _blank("digest")
+    values["frequency"] = "weekly"
+    return _render_form(None, values, {c["id"] for c in delivery.team_contacts(g.db)})
+
+
+@bp.route("/emails/coming-up/new", methods=["GET", "POST"])
+@roles_required("admin")
+def new_upcoming():
+    """The weekly Coming up email to the team: what falls due in the next 90 days (``upcoming.py``)."""
+    if request.method == "POST":
+        return _save_schedule(None, coming_up=True)
+    values = _blank("digest", [delivery.upcoming.KEY])
     values["frequency"] = "weekly"
     return _render_form(None, values, {c["id"] for c in delivery.team_contacts(g.db)})
 
@@ -367,7 +384,8 @@ def _build_preview(s):
     if s["kind"] == "report":
         tenant = tenant_or_404(s["tenant_id"])
         return delivery.build_report_email(current_app, g.db, s, tenant, contacts, attach=False)
-    return delivery.build_digest_email(current_app, g.db, s, contacts, attach=False)
+    builder = delivery.build_upcoming_email if delivery.is_upcoming(s) else delivery.build_digest_email
+    return builder(current_app, g.db, s, contacts, attach=False)
 
 
 @bp.get("/schedules/<int:schedule_id>/preview")
@@ -573,6 +591,7 @@ def overview():
                                   tenants[s["tenant_id"]]["name"].lower()))
     digests = [_decorate(s) for s in g.db.execute(
         "SELECT * FROM email_schedules WHERE kind = 'digest' ORDER BY id")] if admin else []
+    coming_up = [s for s in digests if s["upcoming"]]
     scope = f"tenant_id IN ({marks})" + (" OR tenant_id IS NULL" if admin else "")
     deliveries = g.db.execute(f"SELECT * FROM email_deliveries WHERE {scope} ORDER BY id DESC LIMIT 30",
                               ids).fetchall()
@@ -587,7 +606,8 @@ def overview():
     tenant_alerts = g.db.execute(f"SELECT COUNT(*) FROM email_alerts WHERE enabled = 1 AND tenant_id IN ({marks})",
                                  ids).fetchone()[0]
     return render_template(
-        "emails.html", schedules=schedules, digests=digests, deliveries=deliveries, tenants=tenants,
+        "emails.html", schedules=schedules, digests=[s for s in digests if not s["upcoming"]], coming_up=coming_up,
+        deliveries=deliveries, tenants=tenants,
         failing=failing, last=_last_errors([s["id"] for s in failing]), upcoming=upcoming[0] if upcoming else None,
         sent=stats["sent"] or 0, failed=stats["failed"] or 0, team=delivery.team_contacts(g.db),
         global_alert=global_alert, tenant_alerts=tenant_alerts, admin=admin,

@@ -12,6 +12,13 @@
   {% if value and value not in months %}<option value="{{ value }}" selected>{{ period_label(value) }}</option>{% endif %}
 </select>
 {%- endmacro %}
+{% macro suggestion(s) -%}
+<li><form method="post" action="{{ url_for('reporting.add_action', tenant_id=tenant.id) }}">
+  {{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="rule_key" value="{{ s.rule_key }}">
+  <span class="grow">{{ s.title }}<span class="effort">{{ s.effort }}{% if s.kind == 'quick' %} · {{ s.detail }}{% endif %}</span></span>{% if s.severity %}<span class="pill {{ TONES.get(s.severity, '') }}">{{ s.severity }}</span>{% endif %}
+  <button class="sm" aria-label="Add: {{ s.title }}">{{ icon('plus') }} Add</button>
+</form></li>
+{%- endmacro %}
 {% block content %}
 <div class="crumbs"><a href="{{ url_for('reporting.queue', period=period) }}">Month-end · {{ label }}</a><span>/</span><span>{{ tenant.name }}</span></div>
 <div class="page-head">
@@ -72,18 +79,19 @@
         <button class="sm">{{ icon('plus') }} Add</button>
       </form>
     </div>
-    {% if suggestions %}
+    {% set offered = suggestions|selectattr('kind', 'equalto', 'project')|list %}
+    {% set quick = suggestions|selectattr('kind', 'equalto', 'quick')|list %}
+    {% if offered %}
     <div class="action-row suggestions">
-      <div class="label-sm">From the failing checks</div>
-      <ul class="suggest-list">
-      {% for s in suggestions[:8] %}
-      <li><form method="post" action="{{ url_for('reporting.add_action', tenant_id=tenant.id) }}">
-        {{ csrf() }}<input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="rule_key" value="{{ s.rule_key }}">
-        <span class="grow">{{ s.title }}</span>{% if s.severity %}<span class="pill {{ TONES.get(s.severity, '') }}">{{ s.severity }}</span>{% endif %}
-        <button class="sm" aria-label="Add: {{ s.title }}">{{ icon('plus') }} Add</button>
-      </form></li>
-      {% endfor %}
-      </ul>
+      <div class="label-sm">Projects to propose <span class="faint">· half a day or more of work</span></div>
+      <ul class="suggest-list">{% for s in offered %}{{ suggestion(s) }}{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if quick %}
+    <div class="action-row suggestions">
+      <div class="label-sm">Quick fixes <span class="faint">· smaller jobs to just do</span></div>
+      <ul class="suggest-list">{% for s in quick[:8] %}{{ suggestion(s) }}{% endfor %}</ul>
+      {% if quick|length > 8 %}<p class="small muted m0">And {{ quick|length - 8 }} more on <a href="{{ url_for('projects.tenant', tenant_id=tenant.id) }}#quick-fixes">Recommended projects</a>.</p>{% endif %}
     </div>
     {% endif %}
   </section>

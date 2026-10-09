@@ -19,6 +19,7 @@ bp = Blueprint("projects", __name__)
 
 def _filters():
     project = request.args.get("project", "")
+    project = projects.MERGED.get(project, project)  # links to a project since folded into a bigger one
     return (project if project in projects.PROJECTS else ""), request.args.get("view") == "declined"
 
 
@@ -51,8 +52,10 @@ def download(ext: str):
 def tenant(tenant_id: int):
     t = tenant_or_404(tenant_id)
     snap = TenantSnapshot(g.db, t)
-    return render_template("tenant_projects.html", tenant=t, recs=projects.recommend(g.db, t, snap=snap),
-                           tenant_has_data=bool(snap.runs), statuses=projects.STATUSES)
+    found = projects.assess(g.db, t, snap=snap)
+    return render_template("tenant_projects.html", tenant=t, recs=found.projects, quick=found.quick_fixes,
+                           quick_hours=projects.effort_label(found.quick_hours), tenant_has_data=bool(snap.runs),
+                           statuses=projects.STATUSES, min_hours=projects.MIN_HOURS)
 
 
 @bp.get("/tenants/<int:tenant_id>/projects.pdf")

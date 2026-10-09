@@ -9,7 +9,7 @@ from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import __version__, worker
+from .. import __version__, system_alerts, system_health, worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
@@ -31,8 +31,10 @@ from . import (
     reports,
     saved_views,
     search,
+    system,
     tenant_admin,
     tenants,
+    upcoming,
 )
 
 csrf = CSRFProtect()
@@ -76,6 +78,8 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.before_request
     def _open_db():
+        # The worker can't report that it has stopped, so the portal watches it (system_alerts.py).
+        system_alerts.start_watchdog(app, cfg)
         g.db = connect(cfg.db_path)
         g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
@@ -145,6 +149,17 @@ def create_app(cfg: Config | None = None) -> Flask:
         # The version lets an uptime monitor (or a person after an update) confirm what is running.
         return {"ok": True, "version": __version__}
 
+    @app.get("/health/ready")
+    def health_ready():
+        # For uptime monitors: 503 when the portal can't do its job (database, its version, the worker, a full
+        # disk). Anyone sees only {"ok": ...}; the checks need the monitoring token from System status (as
+        # "Authorization: Bearer <token>" or ?token=) or an admin's session. No tenant data either way.
+        health = system_health.assess(g.db, cfg)
+        token = request.args.get("token") or request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        user = g.get("user")
+        detailed = (user is not None and user["role"] == "admin") or system_health.token_matches(g.db, token)
+        return (health.as_json() if detailed else {"ok": health.ok}), (200 if health.ok else 503)
+
     app.register_blueprint(auth.bp)
     app.register_blueprint(tenants.bp)
     app.register_blueprint(admin.bp)
@@ -162,4 +177,6 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(search.bp)
     app.register_blueprint(reporting.bp)
     app.register_blueprint(groups.bp)
+    app.register_blueprint(upcoming.bp)
+    app.register_blueprint(system.bp)
     return app

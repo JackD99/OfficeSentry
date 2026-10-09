@@ -1,6 +1,6 @@
 """Tenant groups: the MSP's own slices of its clients (tier, region, service level).
 
-Schema in ``migrations/0027_tenant_groups.sql``. A tenant is in any number of
+Schema in ``migrations/0029_tenant_groups.sql``. A tenant is in any number of
 groups. Groups filter lists of tenants someone already sees (``only``) and
 scope a digest; they never add tenants to a list. The one grant is an admin
 giving an analyst a whole group (``user_tenant_groups``), which

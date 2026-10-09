@@ -2,8 +2,9 @@
 {% from "_macros.html" import icon, csrf %}
 {% from "_email.html" import contact_checks, busy_script with context %}
 {% set digest = s.kind == 'digest' %}
+{% set coming_up = digest and 'upcoming' in s.reports %}
 {% set editing = s.id %}
-{% set heading = ('Edit ' if editing else 'New ') ~ ('digest' if digest else 'scheduled email') %}
+{% set heading = ('Edit ' if editing else 'New ') ~ ('Coming up email' if coming_up else ('digest' if digest else 'scheduled email')) %}
 {% block title %}{{ heading }} · Office Sentry{% endblock %}
 {% macro choice(o) -%}
 <label class="choice"><input type="checkbox" name="reports" value="{{ o.key }}" {% if o.key in s.reports %}checked{% endif %}>
@@ -19,14 +20,17 @@
 </div>
 <div class="page-head">
   <div><h1>{{ heading }}</h1>
-    <div class="sub">{% if digest %}One email to your team summarising every tenant, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
+    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every tenant.{% elif digest %}One email to your team summarising every tenant, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
 </div>
 
 <form method="post" class="schedule-form narrow-lg" id="schedule-form">
   {{ csrf() }}
   <section class="card">
     <h2><span class="step-no">1</span> What to send</h2>
-    {% if digest %}
+    {% if coming_up %}
+    <p class="muted small">What needs attention now, then what's due in the next 30, 60 and 90 days: subscription renewals and trials, app secrets and certificates (Office Sentry's own too), mailboxes filling up, accepted risks to review, and domains whose DMARC is still at p=none. Soonest first. <a href="{{ url_for('upcoming.index') }}">See it now</a>.</p>
+    <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every item</label>
+    {% elif digest %}
     <p class="muted small">Which tenants need attention, what's new and what's been fixed, with each tenant's Secure Score. Worst tenants first.</p>
     {% if groups %}
     <label>Tenants
@@ -94,7 +98,7 @@
         <label>Email <input name="new_email" type="email" placeholder="{{ 'you@msp.com' if digest else 'sam@client.com' }}" autocomplete="off"></label>
       </div>
     </details>
-    <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
+    <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets this email' if coming_up else 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
     {{ contact_checks(team, chosen, 'No team members yet.' if not digest else 'No team members yet. Add one above.') }}
     {% if not team and not digest and current_user.role == 'admin' %}<p class="footnote m0"><a href="{{ url_for('email.overview') }}#team">Add your team</a> to copy them in on client emails.</p>{% endif %}
   </section>
@@ -107,7 +111,7 @@
   </section>
 
   <div class="sticky-actions form-actions">
-    <button class="primary">{{ 'Save changes' if editing else ('Create digest' if digest else 'Schedule email') }}</button>
+    <button class="primary">{{ 'Save changes' if editing else ('Create email' if coming_up else 'Create digest' if digest else 'Schedule email') }}</button>
     <a class="btn ghost" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') }}">Cancel</a>
     <span class="muted small summary" id="summary" aria-live="polite"></span>
   </div>

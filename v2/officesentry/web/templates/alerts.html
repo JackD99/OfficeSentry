@@ -27,6 +27,9 @@
   <label class="check"><input type="checkbox" name="on_failures" value="1" {% if s['alerts.on_failures'] == '1' %}checked{% endif %}> A collection fails after working last time</label>
   <label class="check"><input type="checkbox" name="on_recovery" value="1" {% if s['alerts.on_recovery'] == '1' %}checked{% endif %}> A failing collection works again</label>
   <p class="footnote">Failures alert once when they start, not every night they continue.</p>
+  <h2>Problems with Office Sentry</h2>
+  <label class="check"><input type="checkbox" name="system" value="1" {% if s['alerts.system'] == '1' %}checked{% endif %}> The worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect</label>
+  <p class="footnote">These go to your team contacts by email and to the webhook above, once when a problem starts, daily while it lasts and once when it's fixed. See <a href="{{ url_for('system.status') }}">System status</a>.</p>
   <div class="form-actions"><button class="primary">Save</button></div>
 </form>
 <div class="stack">

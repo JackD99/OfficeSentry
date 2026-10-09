@@ -86,12 +86,19 @@ needing goes in those lists.
   under it. Count things with `text.plural(n, "account")` (the `plural` filter
   in templates), never "account(s)".
 - A check that calls for work an MSP would sell goes in one project's
-  `checks` in `projects.CATALOG` (each check in at most one;
-  `test_projects.py` checks). Recommended projects (`/projects`, per tenant
-  `/tenants/<id>/projects` and its proposal PDF) are worked out from the
-  checks on every view, leaving out accepted risks; only the account
-  manager's status and note are stored (`project_status`). Conditions no
-  check covers (a missing licence) are `signals` on the project.
+  `checks` in `projects.CATALOG` with a rough `Effort` in hours (each check
+  in at most one; `test_projects.py` checks). A project is half a day or more
+  (`projects.MIN_HOURS`, counting `OVERHEAD`); `projects.assess` turns the rest
+  into quick fixes, and a small critical fix is always a quick fix so it isn't
+  held for a sale. Failing checks in no project are quick fixes too.
+  Recommended projects (`/projects`, per tenant `/tenants/<id>/projects` with
+  its quick fixes, and the proposal PDF, which never shows estimates) and the
+  month-end review's suggestions (`month_end.suggestions`: projects, then
+  quick fixes) are worked out from the checks on every view, leaving out
+  accepted risks; only the account manager's status and note are stored
+  (`project_status`). Conditions no check covers (a missing licence) are
+  `signals` on the project. Merging a project away needs a migration for its
+  statuses and an entry in `projects.MERGED`.
 - Detail reports are builders in `reports/data_reports.py` returning
   `Section`s of rows; register them in `REPORTS` and they get a page, a tab
   and XLSX, CSV and PDF exports. Add the key to a menu group in
@@ -278,6 +285,25 @@ has gone for 4 hours and no task for 1), so a wedged loop or thread shows as dow
 housekeeping pass (say "database is locked") is logged, rolled back and
 retried the next minute; it never ends the worker. Don't add Celery or Redis.
 
+Office Sentry's own health is `system_health.assess()` (database, schema
+version, worker heartbeat, last collection and whether most tenants failed
+the last scheduled slot, backups from `<data dir>/backup-status.json`
+(`backups.record_status`; `local` from the `backup` command, `offsite` and
+`restore_check` from the deployment's restic jobs, in one shared format;
+nightly copies overdue after 26 hours, the restore check after 8 days), disk
+and certificates, from stored state only. Each check is `ok`, `warn` or
+`fail`; `/health/ready` answers 503 on any `fail` and shows
+only `{"ok": ...}` unless the caller has the monitoring token (hash in
+`settings`, made on `/admin/status`) or is a signed-in admin, and never names
+a tenant or carries Microsoft's error text. `system_alerts.py` turns the same
+checks into emails to the team contacts and webhook posts (`alerts.system`):
+the worker checks backup, disk and collection as the `system_alerts`
+periodic job, and since a stopped worker can't say so, each web process runs
+a watchdog thread (started on its first request, not under `cfg.testing`) for
+the worker. Alert state is a `system_alert.<key>` settings row changed in a
+write transaction before sending, so two processes never both send. Tests
+see a 40%-full disk (`conftest._roomy_disk`).
+
 Microsoft's limits are per app, not per thread, so every Graph and Exchange
 call in the worker goes through one process-wide limiter
 (`ratelimit.LIMITER`, passed by `worker.default_graph_factory` and
@@ -338,6 +364,19 @@ and retries failed alert emails. A report schedule's send time is a cron slot
 show up in the schedule form automatically. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
+
+**Coming up** (`upcoming.py`, page `/upcoming` in `web/upcoming.py`, admin and analyst) lists what falls
+due in the next 90 days across the visible, active tenants: subscription renewals and trials (lapsing ones
+need attention now), client app secrets and certificates (and expired in the last 30 days), mailboxes at
+90% of their send limit or forecast to fill from a collection two to eight weeks old, DMARC still at
+`p=none` (no date) and accepted risks whose review date comes up. Office Sentry's own certificates are
+added for admins and the email only. `upcoming.collect()` returns `Item`s sorted into windows (Now, 30,
+60, 90, No date); `upcoming.report()` puts them on the shared report table, so filters and downloads
+work. A part that fails on one tenant's data is left out for that tenant and named on the page. The
+weekly email is a digest schedule whose `reports` is `["upcoming"]` (`delivery.is_upcoming`,
+`build_upcoming_email`, `emails/upcoming.html`), so it uses the digest's sender, retries and history and
+goes to the team only. A new kind of item is a function in `upcoming.PARTS` with a test in
+`tests/test_upcoming.py`.
 
 Reports are built live, so what a client was sent is kept separately:
 after a report email goes out, `delivery.send_schedule` stores each attached
@@ -425,12 +464,22 @@ change is audited; note text is never put in the audit log.
   the new .cer next to the old, `test` signs in with it, `switch` swaps it
   in and remembers `old_thumbprint` until `forget_old`. `switch` refuses
   until a test worked. The runbook is in the root `SECURITY.md`.
+- Creating the app (`app_setup.py`): the App connection page's wizard starts
+  Microsoft's device-code sign-in (`entra.start_device_sign_in`) and the page
+  checks back every few seconds (`app_setup.check`, one token request per
+  Microsoft interval, claimed with a conditional `UPDATE` because the next
+  check may reach another portal process). The access token lives only in
+  the request that receives it and creates the app; only the device code is
+  stored, encrypted (`setup_sign_ins.device_code_enc`), until it's used,
+  fails or is cancelled. The wizard and `create-app` both finish with
+  `register_app`, which asks for exactly `entra.setup_scope` and reuses a
+  connection still waiting for its client ID in that cloud.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
 
 ## Tenant groups
 
-`tenant_groups.py` (schema in `migrations/0027`, admin page `/admin/groups` in
+`tenant_groups.py` (schema in `migrations/0029`, admin page `/admin/groups` in
 `web/groups.py`). A group is a name, an optional category (Tier, Region, ...)
 and its tenants (`tenant_group_members`); a tenant is in any number. Groups
 only ever narrow lists of tenants someone already sees (`tenant_groups.only`
@@ -500,7 +549,7 @@ and `python -m officesentry <command>`:
 | `migrate` | apply database upgrades now (the portal and worker also do it on start) |
 | `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
 | `setup-link` | print the one-time link for creating the first admin in the browser |
-| `create-app` | create the read-only multi-tenant Entra app (device sign-in) |
+| `create-app` | create the read-only multi-tenant Entra app (device sign-in); the App connection page's wizard does the same |
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
