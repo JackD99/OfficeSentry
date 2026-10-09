@@ -1,13 +1,14 @@
 {#- The top of every All tenants page: the summary tabs, the detail report picker, and for a detail
     report the choice between one row per tenant and every row. key is the page's report key. -#}
 {% from "_macros.html" import icon %}
+{% from "_groups.html" import group_picker with context %}
 {% macro across_head(key, main, groups, mode='') -%}
 <div class="page-head">
   <div>
     <h1>All tenants</h1>
-    <div class="sub">Compare any report across every tenant you look after.</div>
+    <div class="sub">{% if group_scope and group_scope.group %}Compare any report across the tenants in {{ group_scope.group.name }}.{% else %}Compare any report across every tenant you look after.{% endif %}</div>
   </div>
-  <div class="actions"><a class="btn" href="{{ url_for('across.changes') }}">{{ icon('clock') }} What changed this month</a></div>
+  <div class="actions">{{ group_picker() }}<a class="btn" href="{{ url_for('across.changes') }}">{{ icon('clock') }} What changed this month</a></div>
 </div>
 
 <div class="report-picker">

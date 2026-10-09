@@ -1,14 +1,16 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, ts, csrf %}
 {% from "_progress.html" import progress_script with context %}
+{% from "_groups.html" import group_picker with context %}
 {% set TONES = {'critical': 'bad', 'high': 'warn', 'medium': 'info', 'ok': 'ok'} %}
 {% set STATE_PILLS = {'draft': '', 'in_review': 'info', 'approved': 'accent', 'sent': 'ok'} %}
 {% block title %}Month-end · {{ label }} · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head">
   <div><h1>Month-end reporting · {{ label }}</h1>
-    <div class="sub">Every client on a report plan. Review, add your commentary, then approve to send.</div></div>
+    <div class="sub">{% if group_scope and group_scope.group %}Clients in {{ group_scope.group.name }} on a report plan.{% else %}Every client on a report plan.{% endif %} Review, add your commentary, then approve to send.</div></div>
   <div class="month-nav">
+    {{ group_picker() }}
     <a class="btn sm" href="{{ url_for('reporting.queue', period=prev, show=show) }}" aria-label="Previous month">&larr;</a>
     {% if period != current %}<a class="btn sm" href="{{ url_for('reporting.queue', period=current) }}">This month</a>{% endif %}
     <a class="btn sm" href="{{ url_for('reporting.queue', period=next, show=show) }}" aria-label="Next month">&rarr;</a>
@@ -76,6 +78,10 @@
   {% endif %}
   {% elif all_rows %}
   <div class="empty compact"><p>Nothing here with this filter.</p></div>
+  {% elif group_scope and group_scope.group %}
+  <div class="empty"><h3>No clients in {{ group_scope.group.name }} are on a report plan</h3>
+    <p>Choose another group, or show every client.</p>
+    <a class="btn" href="{{ url_for('reporting.queue', period=period, group='all') }}">Show every client</a></div>
   {% else %}
   <div class="empty"><h3>No clients on a report plan</h3>
     <p>Put clients on a report plan and each one gets a draft here every month to review and approve.</p>

@@ -44,6 +44,9 @@ first, then upgrades it on start. New installs start with an empty database.
 - Emailed reports, month-end review and approval, alerts to Teams, Slack, webhooks and email.
 - Tenant pause, archive and delete; connection health with plain-English fixes; national clouds (GCC High,
   DoD and China).
+- Tenant groups (Settings → Tenant groups) by tier, region, service level or anything else: a Group picker
+  narrows the dashboard, All tenants, What changed, the month-end queue and Client tenants (and their
+  downloads), a digest can cover one group, and an analyst can be granted every tenant in a group.
 - Two-step sign-in, server-side sessions, an activity log, backups and a `restore` command.
 - System status (Settings → System status) and system alerts: the team is emailed and the alert webhook posted
   when the worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect.

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, downloads %}
+{% from "_groups.html" import group_picker with context %}
 {% block title %}What changed · Office Sentry{% endblock %}
 {% macro period_tabs(endpoint) -%}
 <nav class="subtabs m0" aria-label="Period">
@@ -13,9 +14,9 @@
 <div class="page-head">
   <div>
     <h1>What changed</h1>
-    <div class="sub">Changes in every tenant over the last {{ days }} days, most important first.</div>
+    <div class="sub">Changes in {{ ('the tenants in ' ~ group_scope.group.name) if group_scope and group_scope.group else 'every tenant' }} over the last {{ days }} days, most important first.</div>
   </div>
-  <div class="actions"><a class="btn" href="{{ url_for('across.index') }}">{{ icon('tenants') }} Compare reports</a></div>
+  <div class="actions">{{ group_picker() }}<a class="btn" href="{{ url_for('across.index') }}">{{ icon('tenants') }} Compare reports</a></div>
 </div>
 
 <div class="report-picker">{{ period_tabs('across.changes') }}</div>
@@ -29,7 +30,7 @@
   <div class="tile{% if totals.new_severe %} tone-bad{% endif %}"><div class="label">New critical or high findings</div>
     <div class="value">{{ totals.new_severe }}</div><div class="foot">{{ totals.new }} new findings in all</div></div>
   <div class="tile{% if totals.fixed %} tone-ok{% endif %}"><div class="label">Findings fixed</div><div class="value">{{ totals.fixed }}</div>
-    <div class="foot">across all tenants</div></div>
+    <div class="foot">across {{ group_scope.group.name if group_scope and group_scope.group else 'all tenants' }}</div></div>
   <div class="tile"><div class="label">Average Secure Score change</div>
     <div class="value">{% if totals.score %}{{ '%+g'|format(totals.score) }} pts{% elif totals.score is not none %}No change{% else %}–{% endif %}</div>
     <div class="foot">{% if totals.no_baseline %}{{ totals.no_baseline }} tenant{{ 's' if totals.no_baseline != 1 }} without data from {{ days }} days ago{% else %}&nbsp;{% endif %}</div></div>
