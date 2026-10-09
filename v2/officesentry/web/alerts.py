@@ -43,6 +43,7 @@ def save():
         "alerts.min_severity": severity,
         "alerts.on_failures": "1" if request.form.get("on_failures") == "1" else "0",
         "alerts.on_recovery": "1" if request.form.get("on_recovery") == "1" else "0",
+        "alerts.system": "1" if request.form.get("system") == "1" else "0",
     }
     url = request.form.get("url", "").strip()
     url_change = "kept"
@@ -76,6 +77,7 @@ def save():
         audit(g.db, g.user["username"], "alert_settings_updated",
               detail=f"enabled={values['alerts.enabled']} format={fmt} severity={severity} "
                      f"failures={values['alerts.on_failures']} recovery={values['alerts.on_recovery']} "
+                     f"system={values['alerts.system']} "
                      f"url={url_change} secret={signing_state}")
     flash("Alert settings saved.", "success")
     return redirect(url_for("alerts.settings"))

@@ -1031,3 +1031,11 @@ td.row-action { min-width: 150px; }
   .device-code .user-code { font-size: 1.375rem; letter-spacing: .08em; }
   .device-code .step-action .btn { width: 100%; justify-content: center; }
 }
+/* System status (system_status.html) */
+.callout.ok { background: var(--ok-soft); }
+.system-attention .callout .fix { display: block; margin-top: 2px; }
+.tile .value .unit { font-size: .875rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.recent-system-alerts { padding: 0 20px 8px; }
+.recent-system-alerts > li { flex-wrap: wrap; gap: 4px 10px; }
+#monitoring .secret { text-align: left; font-size: .8125rem; }
+#monitoring .form-actions form { display: inline; }

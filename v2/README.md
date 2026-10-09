@@ -58,6 +58,13 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   and optional HMAC signing secret are stored encrypted; only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
+- **System status and system alerts** (Settings → System status): whether the
+  worker runs, data is being collected, backups are recent and there's room on
+  the disk, with what to do about anything that isn't. The team is emailed and
+  the alert webhook posted when the worker stops, a backup fails, the disk is
+  over 85% full or most tenants fail to collect; once when it starts, daily
+  while it lasts and when it's fixed. `/health/ready` answers 503 for uptime
+  monitors when the portal can't do its job (DEPLOY.md, "Is it working?").
 - **Detail reports** (`/tenants/<id>/data/<report>`, each also as PDF, XLSX and CSV),
   grouped by area (identity, email, files, devices, tenant). Every table can be
   filtered by the values in it (or by age, for dates), sorted, and have columns
@@ -512,6 +519,8 @@ officesentry/
   worker.py      queue runner, task threads, schedule, retention, heartbeat
   tasks.py       background tasks (approvals, report emails) with leases
   tenant_health.py  connection health and the onboarding checklist, from stored state
+  system_health.py  Office Sentry's own health: /health/ready and System status
+  system_alerts.py  emails and webhook posts when Office Sentry itself needs attention
   lifecycle.py   first collection, pause, archive and deleting a tenant
   web/           Flask app: access.py is the single authorization gate
 ```

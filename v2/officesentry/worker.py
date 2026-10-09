@@ -381,7 +381,8 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
 
 
 # Modules that register ``schedule.periodic`` jobs, and ``tasks.handler`` kinds. Add yours here.
-JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing")
+JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing",
+               "officesentry.system_alerts")
 TASK_MODULES = ("officesentry.delivery", "officesentry.month_end")
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
