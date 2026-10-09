@@ -140,13 +140,16 @@ does the work. To make a release:
 2. On GitHub: **Actions** → **release** → **Run workflow**, leave "Use
    workflow from" on `main`, type the version (`2.1.0`) and press **Run
    workflow**. (Pushing a tag, `git push origin v2.1.0`, does the same.)
-3. The run checks the version matches `__version__` and the changelog,
-   tests that commit, builds the image with an SBOM and build provenance
-   (amd64 while the repository is private, plus arm64 once it is public),
-   scans it, publishes `ghcr.io/jackd99/officesentry:2.1.0`
-   (and `2.1`, `2` and `latest`), then creates the `v2.1.0` tag and the GitHub
-   release with the notes and install files. Nothing is published until the
-   tests and the scan have passed.
+3. The run checks the version matches `__version__` and the changelog, and
+   that the commit passed its full v2 run on `main` (so release from `main`
+   once that run is green; the release reuses it rather than testing again).
+   It builds the amd64 image with an SBOM and build provenance, starts it
+   once, scans it, publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
+   `2` and `latest`), creates the `v2.1.0` tag and the GitHub release with
+   the notes and install files, and removes images older than the last three
+   releases. Nothing is published until the checks and the scan have passed.
+   A run costs about 8 of GitHub Free's 2,000 private Actions minutes a
+   month; arm64 images come when the repository is public.
 4. Open a pull request that moves `__version__` on to the next development
    version (`2.2.0.dev0`) and adds a `## 2.2.0 (unreleased)` section.
 

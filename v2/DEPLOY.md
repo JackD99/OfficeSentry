@@ -35,13 +35,9 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
    docker compose --profile https up -d
    ```
 
-   While the repository is private, its image is too, so the server has to
-   sign in to GitHub's registry once before step 4. On GitHub, open your
-   picture → **Settings** → **Developer settings** → **Personal access tokens**
-   → **Tokens (classic)** → **Generate new token (classic)**, tick only
-   **read:packages**, and copy the token. Then on the server run
-   `docker login ghcr.io -u <your GitHub username>` and paste the token as the
-   password.
+   Until the repository is public its image is private: pulling it needs
+   `docker login ghcr.io` with a GitHub token that can read packages. The
+   Hetzner deploy below doesn't pull, it builds.
 
    Already have a reverse proxy (nginx, Traefik)? Leave out `--profile https`
    and point the proxy at `http://127.0.0.1:8000`.

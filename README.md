@@ -261,8 +261,8 @@ docker compose --profile https up -d
 ```
 
 The image is `ghcr.io/jackd99/officesentry`, for amd64 servers (arm64 too once the repository is public); each release lists what changed in
-[CHANGELOG.md](CHANGELOG.md). While this repository is private the image is too, so sign the server in to
-GitHub's registry first ([DEPLOY.md](v2/DEPLOY.md#first-start), step 4).
+[CHANGELOG.md](CHANGELOG.md). While this repository is private the image is too, so the server needs
+`docker login ghcr.io` with a GitHub token that can read packages.
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
 

@@ -149,3 +149,25 @@ def test_the_changelog_has_a_section_for_the_code_version():
     assert version == __version__
     release = re.match(r"\d+\.\d+\.\d+", version)[0]
     assert notes.section(notes.CHANGELOG.read_text(encoding="utf-8"), release, prerelease=True)
+
+
+def test_old_images_are_pruned_with_their_parts():
+    spec = importlib.util.spec_from_file_location("prune_images", V2 / "scripts" / "prune_images.py")
+    prune = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(prune)
+
+    def version(vid, when, *tags):
+        return {"id": vid, "name": f"sha256:{vid}", "created_at": f"2026-{when}Z",
+                "metadata": {"container": {"tags": list(tags)}}}
+
+    versions = [
+        version(1, "10-01T10:00:00", "2.0.0-rc.1"), version(2, "10-01T09:58:00"),  # its platform image
+        version(3, "10-01T10:05:00", "sha256-1"),  # its signed attestation
+        version(4, "10-15T10:00:00", "2.0.0", "2.0", "2", "latest"), version(5, "10-15T09:59:00"),
+        version(6, "10-20T10:00:00"),  # a push whose scan failed: never tagged
+        version(7, "11-02T10:00:00", "2.1.0"), version(8, "11-02T09:59:00"),
+        version(9, "12-01T10:00:00", "2.2.0"), version(10, "12-01T09:59:00"),
+    ]
+    assert prune.to_delete(versions, keep=4) == []
+    assert [v["id"] for v in prune.to_delete(versions, keep=3)] == [1, 2, 3]
+    assert [v["id"] for v in prune.to_delete(versions, keep=1)] == [1, 2, 3, 4, 5, 6, 7, 8]

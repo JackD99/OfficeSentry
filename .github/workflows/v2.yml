@@ -15,8 +15,6 @@ on:
   pull_request:
     paths-ignore: ['**.md', 'docs/**', 'examples/**']
   workflow_dispatch:
-  # The release workflow runs the full set (as for main) on the commit it releases.
-  workflow_call:
   schedule:
     - cron: '17 5 * * 1'
 
@@ -25,10 +23,8 @@ permissions:
 
 # A newer push to a pull request cancels the run it replaces. Runs on main always finish, so every commit
 # that lands there is fully tested.
-# github.workflow is the caller's name when the release workflow runs this one, so a release never queues
-# behind (or gets replaced by) main's own runs.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: v2-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:

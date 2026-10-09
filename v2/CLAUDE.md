@@ -412,8 +412,10 @@ files outside `tmp_path`.
   fail otherwise. Base images are pinned by digest.
 - `.github/workflows/release.yml` publishes a release (Run workflow with a
   version, or a `v*` tag): the version must match `__version__` and have a
-  `CHANGELOG.md` section (`scripts/release_notes.py`); then tests, a
-  multi-arch image with SBOM and provenance, a vulnerability scan, version
-  tags and the GitHub release. Changes people running it must act on go in
+  `CHANGELOG.md` section (`scripts/release_notes.py`) and the commit needs a
+  passing v2 run on `main` (reused, not repeated, to save Actions minutes);
+  then an amd64 image with SBOM and provenance (arm64 waits for go-public),
+  a start-up check, a vulnerability scan, version tags, the GitHub release,
+  and `scripts/prune_images.py` keeps the last three releases' images. Changes people running it must act on go in
   the changelog's next section under **Action required**, **New Microsoft
   permissions** or **Database upgrade**.

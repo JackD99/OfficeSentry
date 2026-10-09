@@ -17,8 +17,8 @@ portal. Everything below is new compared with v1.
   the published image, `ghcr.io/jackd99/officesentry`, instead of building the folder. Add
   `OFFICESENTRY_VERSION=2.0.0` to `.env`, then `docker compose pull && docker compose up -d`. To keep
   building from the folder instead, add `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` to `.env`.
-- While the repository is private, the image is too: sign the server in once with
-  `docker login ghcr.io` ([DEPLOY.md, "First start"](v2/DEPLOY.md#first-start), step 4, has the steps).
+- While the repository is private, the image is too: a server pulling it needs `docker login ghcr.io`
+  with a GitHub token that can read packages.
 
 ### New Microsoft permissions
 
