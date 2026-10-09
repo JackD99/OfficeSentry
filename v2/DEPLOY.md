@@ -16,17 +16,31 @@ tidies old data). Everything it stores lives in one Docker volume.
 
 On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone).
 
-1. Copy the `v2` folder to the server and open a terminal in it.
+1. Make a folder on the server (say `/opt/officesentry`) and open a terminal in it.
+   From the newest [release](https://github.com/JackD99/OfficeSentry/releases),
+   download `docker-compose.yml`, `Caddyfile` and `.env.example` into it.
+   They run that release: the image `ghcr.io/jackd99/officesentry`, built and
+   tested by GitHub, for amd64 and arm64 servers.
 2. Create your settings file: `cp .env.example .env`
 3. Open `.env` in an editor (`nano .env`) and set at least:
    - `OFFICESENTRY_BASE_URL` to the address people will use, e.g. `https://sentry.yourmsp.com`
    - `OFFICESENTRY_DOMAIN` to the domain alone, e.g. `sentry.yourmsp.com`
    - `OFFICESENTRY_TIMEZONE` to your timezone, e.g. `Europe/London`
+
+   `OFFICESENTRY_VERSION` is already set to the release you downloaded.
 4. Start it, with automatic HTTPS:
 
    ```bash
-   docker compose --profile https up -d --build
+   docker compose --profile https up -d
    ```
+
+   While the repository is private, its image is too, so the server has to
+   sign in to GitHub's registry once before step 4. On GitHub, open your
+   picture → **Settings** → **Developer settings** → **Personal access tokens**
+   → **Tokens (classic)** → **Generate new token (classic)**, tick only
+   **read:packages**, and copy the token. Then on the server run
+   `docker login ghcr.io -u <your GitHub username>` and paste the token as the
+   password.
 
    Already have a reverse proxy (nginx, Traefik)? Leave out `--profile https`
    and point the proxy at `http://127.0.0.1:8000`.
@@ -197,7 +211,8 @@ it, anyone holding a backup can. It only changes when you run `rotate-keys
 --new`, so copy it again after that.
 
 Before every upgrade that changes the database, the portal also saves a copy
-as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>.db` (the last 3 are
+as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>-from-<release>.db`, where
+`<release>` is the Office Sentry version that copy goes with (the last 3 are
 kept). If it can't (a full disk, say), it doesn't upgrade and says why.
 
 **Deleted tenants stay in backups.** Backups keep everything that was in the
@@ -265,13 +280,27 @@ Old backups are still encrypted with the old key.
 
 ## Updating
 
+Read the release's notes first ([releases](https://github.com/JackD99/OfficeSentry/releases),
+or `CHANGELOG.md`), above all **Action required**, **New Microsoft
+permissions** and **Database upgrade**. Then set the new version in `.env`
+(`OFFICESENTRY_VERSION=2.1.0`) and run:
+
 ```bash
-git pull                     # or copy the new v2 folder over the old one
-docker compose --profile https up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 The portal upgrades the database on start, before the worker starts, after
-saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept.
+saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
+version now running shows at the foot of the menu and at `/health`.
+
+If the release notes change `docker-compose.yml` or `Caddyfile`, download
+the new ones as well; they are attached to every release.
+
+Running your own build of the `v2` folder instead (a branch, or changes of
+your own)? Add `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` to
+`.env`, and update with `git pull` then `docker compose up -d --build`. The
+Hetzner deploy below works this way.
 
 ### Rolling back an update
 
@@ -282,20 +311,21 @@ refuses to start, and its log (`docker compose logs web`) names the copy to
 restore.
 
 1. `docker compose stop web worker`
-2. Go back to the version you had: `git log --oneline` to find it, then
-   `git checkout <commit>` (or copy the old v2 folder back).
-3. `docker compose build`
-4. Restore the copy taken before the upgrade:
+2. Go back to the version you had: set it in `.env` (`OFFICESENTRY_VERSION=2.0.0`)
+   and run `docker compose pull`. Building your own? `git checkout <commit>`
+   and `docker compose build`.
+3. Restore the copy taken before the upgrade. Its name ends with the version
+   that made it (`-from-2.0.0`), when it was made by 2.0.0 or later:
 
    ```bash
    docker compose run --rm --no-deps web ls /data/backups
-   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/pre-upgrade-v8-to-v9-20261005-020000.db
+   docker compose run --rm --no-deps web python -m officesentry restore /data/backups/pre-upgrade-v8-to-v9-20261005-020000-from-2.0.0.db
    ```
 
    Versions from before the `restore` command: stop both containers, copy the
    backup over `/data/officesentry.db`, and delete `/data/officesentry.db-wal`
    and `/data/officesentry.db-shm` before starting.
-5. `docker compose up -d`
+4. `docker compose up -d`
 
 ## Stopping
 
@@ -310,7 +340,9 @@ Everything here works from a phone browser: the Hetzner Cloud console, GitHub
 workflows) and an SSH app such as Termius to make a key. You never type
 commands on the server. The **Deploy** workflow (`.github/workflows/deploy.yml`)
 copies the app over and starts it, and the server's Hetzner firewall decides
-who can open the portal.
+who can open the portal. It builds the chosen branch, tag or commit on the
+server (`docker-compose.build.yml`) rather than pulling a release image, so
+any commit can be deployed.
 
 ### 1. Make a deploy key
 

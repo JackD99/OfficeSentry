@@ -26,6 +26,46 @@ Windows everything else works natively (`.venv\Scripts\activate`), and PDF
 buttons open a print-ready page instead; use Docker if you're working on PDF
 layout. Tests that need real PDF rendering skip themselves without Pango.
 
+### Running it in Docker
+
+`docker-compose.yml` runs the published release image. To run your working
+copy instead, add the build file:
+
+```bash
+cd v2
+cp .env.example .env    # with OFFICESENTRY_INSECURE_COOKIES=1 for plain http://localhost
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+or put `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` in `.env`.
+The local image is called `officesentry:local`, so it is never mistaken for
+a release.
+
+### Dependencies
+
+`pyproject.toml` lists what Office Sentry needs. What it actually installs
+is pinned, with hashes, in two lock files made from it with
+[pip-tools](https://pip-tools.readthedocs.io/):
+
+- `v2/requirements.txt`: the Docker image (and the dependency audit);
+- `v2/requirements-dev.txt`: CI, the same versions plus the test tools.
+
+Dependabot refreshes both every Monday. To change a dependency yourself, edit
+`pyproject.toml`, then from `v2/` with Python 3.12 (the image's):
+
+```bash
+pip install pip-tools
+pip-compile --generate-hashes --allow-unsafe --strip-extras --extra pdf --build-deps-for wheel \
+  --output-file requirements.txt pyproject.toml
+pip-compile --generate-hashes --allow-unsafe --strip-extras --extra pdf --extra dev --build-deps-for wheel \
+  --constraint requirements.txt --output-file requirements-dev.txt pyproject.toml
+```
+
+Add `--upgrade-package <name>` to move one package, or `--upgrade` for all.
+CI fails (`pip check`, `tests/test_release.py`) when a lock no longer
+matches `pyproject.toml`. The Windows tier installs from `pyproject.toml`
+directly, since the locks are made for Linux.
+
 ## Before opening a pull request
 
 ```bash
@@ -50,6 +90,38 @@ audit (`pip-audit`). The Python 3.12 run measures coverage and fails under
 - Never add a write call to a tenant or a non-read-only permission.
 - Every route needs a login check, and tenant pages go through the access
   gate in `web/access.py`.
+
+## Releases
+
+Versions follow [semantic versioning](https://semver.org): `2.1.0` adds
+features, `2.1.1` only fixes. The [release workflow](.github/workflows/release.yml)
+does the work. To make a release:
+
+1. Open a pull request that sets `__version__` in
+   `v2/officesentry/__init__.py` (`2.1.0`) and gives the `## 2.1.0` section of
+   [CHANGELOG.md](CHANGELOG.md) its date (`## 2.1.0 (2026-11-02)`). Fill in
+   **Action required**, **New Microsoft permissions** and **Database upgrade**
+   even when the answer is "None" or "No". Merge it once CI is green.
+2. On GitHub: **Actions** → **release** → **Run workflow**, leave "Use
+   workflow from" on `main`, type the version (`2.1.0`) and press **Run
+   workflow**. (Pushing a tag, `git push origin v2.1.0`, does the same.)
+3. The run checks the version matches `__version__` and the changelog,
+   tests that commit, builds the image for amd64 and arm64 with an SBOM and
+   build provenance, scans it, publishes `ghcr.io/jackd99/officesentry:2.1.0`
+   (and `2.1`, `2` and `latest`), then creates the `v2.1.0` tag and the GitHub
+   release with the notes and install files. Nothing is published until the
+   tests and the scan have passed.
+4. Open a pull request that moves `__version__` on to the next development
+   version (`2.2.0.dev0`) and adds a `## 2.2.0 (unreleased)` section.
+
+To try the pipeline without releasing, run a release candidate: set
+`__version__` to `2.1.0rc1` and run the workflow with `2.1.0-rc.1`. It gets
+only its own image tag, is marked as a pre-release, and its changelog section
+may still say "unreleased".
+
+If the scan fails, there is no release and no version tag on the image (it
+stays in the registry under its digest only). Fix the cause, usually by
+merging Dependabot's newer base image or dependency, and run it again.
 
 ## Reporting security issues
 

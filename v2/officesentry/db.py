@@ -99,6 +99,31 @@ def latest_version() -> int:
     return files[-1][0] if files else 0
 
 
+# The Office Sentry release that last started on the database, so a pre-upgrade copy can say which release to go
+# back to with it. Databases from before 2.0.0 don't have it.
+APP_VERSION_KEY = "app.version"
+
+
+def stored_app_version(conn: sqlite3.Connection) -> str | None:
+    try:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (APP_VERSION_KEY,)).fetchone()
+    except sqlite3.OperationalError:  # no settings table yet
+        return None
+    return row[0] if row else None
+
+
+def _record_app_version(conn: sqlite3.Connection) -> None:
+    from . import __version__
+
+    if stored_app_version(conn) == __version__:
+        return
+    try:
+        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (APP_VERSION_KEY, __version__))
+    except sqlite3.OperationalError:  # no settings table yet, or busy: never stop a start over a label
+        pass
+
+
 def _backup_before_upgrade(conn: sqlite3.Connection, current: int) -> None:
     """Copy a database that already has a schema before upgrading it (``backups/pre-upgrade-*.db``),
     so a bad release can be rolled back. A failed copy stops the upgrade."""
@@ -108,7 +133,7 @@ def _backup_before_upgrade(conn: sqlite3.Connection, current: int) -> None:
     if db_file is None:
         return
     try:
-        backups.before_upgrade(db_file, current, latest_version())
+        backups.before_upgrade(db_file, current, latest_version(), stored_app_version(conn))
     except (OSError, sqlite3.Error) as exc:
         raise RuntimeError(f"Couldn't back up the database before upgrading it, so it wasn't upgraded: {exc}. "
                            "Free some disk space (or fix the backups folder's permissions) and start again.") from exc
@@ -137,7 +162,8 @@ def _too_new_message(conn: sqlite3.Connection, current: int, latest: int) -> str
     else:
         how = (f"restore the {backups.PRE_UPGRADE_PREFIX}*.db copy taken before the upgrade with "
                "`python -m officesentry restore <file>`")
-    return (f"This database was upgraded by a newer version of Office Sentry (database version {current}; this "
+    newer = f"Office Sentry {stored}" if (stored := stored_app_version(conn)) else "a newer version of Office Sentry"
+    return (f"This database was upgraded by {newer} (database version {current}; this "
             f"version knows up to {latest}), so this version won't start on it. Either go back to the newer "
             f"version, or to stay on this one: stop the portal and the worker, {how}, then start them again. "
             "Anything collected since the upgrade is lost. DEPLOY.md, \"Rolling back an update\", has the steps.")
@@ -174,6 +200,7 @@ def migrate(conn: sqlite3.Connection) -> int:
                 conn.execute(stmt)
             conn.execute(f"PRAGMA user_version = {int(version)}")
         current = version
+    _record_app_version(conn)
     return current
 
 

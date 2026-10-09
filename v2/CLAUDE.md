@@ -346,8 +346,8 @@ change is audited; note text is never put in the audit log.
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
 `db.migrate` re-reads `user_version` inside each migration's transaction (two
 processes may start at once) and copies a database that already has a schema
-to `backups/pre-upgrade-*.db` first (`backups.before_upgrade`); restoring that
-copy is the only way back, since migrations only go forward. Code older than
+to `backups/pre-upgrade-*-from-<release>.db` first (`backups.before_upgrade`);
+restoring that copy is the only way back, since migrations only go forward. Code older than
 the database refuses to start (`db.DatabaseTooNew`, naming the copy to
 restore), and two files with one number stop the upgrade, since the second
 would otherwise be skipped for good. Several branches add migrations at once:
@@ -375,7 +375,11 @@ and `python -m officesentry <command>`:
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
 
-Docker: `docker compose up -d --build` (see DEPLOY.md).
+Docker: `docker-compose.yml` runs the published image
+(`ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION}`); add
+`docker-compose.build.yml` to build this folder instead (`-f docker-compose.yml
+-f docker-compose.build.yml up -d --build`, or `COMPOSE_FILE` in `.env`, which
+is how the Hetzner deploy builds). See DEPLOY.md.
 
 Tests sign in with a password only (`require_mfa="off"` in `conftest.py`);
 `tests/test_login_security.py` covers two-step sign-in. `make_user` stores a
@@ -384,3 +388,22 @@ scrypt. A slow fixture that tests only read (`seeded`, `wrecked_once`, the
 live replay) is module-scoped with its own database; keep tests that write
 on the per-test `db`. Tests run in parallel in CI (`-n auto`), so never share
 files outside `tmp_path`.
+
+## Releases and dependencies
+
+- The version is `officesentry.__version__` (pyproject reads it). It shows at
+  the foot of the menu for signed-in people and in `/health`, and `db.migrate`
+  records it in `settings` (`app.version`) so pre-upgrade copies are named
+  `...-from-<release>.db` and `DatabaseTooNew` names the release that upgraded.
+- The image and CI install from hash-pinned lock files made with pip-compile
+  (`requirements.txt` for the image and pip-audit, `requirements-dev.txt` for
+  CI). A new dependency goes in `pyproject.toml` and both locks
+  (CONTRIBUTING.md, "Dependencies"); `tests/test_release.py` and `pip check`
+  fail otherwise. Base images are pinned by digest.
+- `.github/workflows/release.yml` publishes a release (Run workflow with a
+  version, or a `v*` tag): the version must match `__version__` and have a
+  `CHANGELOG.md` section (`scripts/release_notes.py`); then tests, a
+  multi-arch image with SBOM and provenance, a vulnerability scan, version
+  tags and the GitHub release. Changes people running it must act on go in
+  the changelog's next section under **Action required**, **New Microsoft
+  permissions** or **Database upgrade**.

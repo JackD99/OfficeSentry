@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,11 +56,17 @@ def copy_database(src: sqlite3.Connection, dest: Path) -> Path:
     return dest
 
 
+def _taken_at(path: Path) -> str:
+    """The time in a backup's name; it sorts by age, which the whole name doesn't once a pre-upgrade copy's
+    database version reaches two digits (``v9-to-v10`` sorts after ``v10-to-v11``)."""
+    return m[0] if (m := re.search(r"\d{8}-\d{6}", path.name)) else path.name
+
+
 def rotate(folder: Path, prefix: str, keep: int) -> list[Path]:
     """Delete all but the newest ``keep`` backups named ``<prefix>*.db``. Returns the deleted files."""
     if not keep:
         return []
-    old = sorted(folder.glob(f"{prefix}*.db"))[:-keep]
+    old = sorted(folder.glob(f"{prefix}*.db"), key=_taken_at)[:-keep]
     for path in old:
         path.unlink()
     return old
@@ -83,16 +90,19 @@ def database_file(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
-def before_upgrade(db_file: Path, current: int, target: int) -> Path:
-    """Copy the database before migrations change it, into ``<data dir>/backups``.
+def before_upgrade(db_file: Path, current: int, target: int, release: str | None = None) -> Path:
+    """Copy the database before migrations change it, into ``<data dir>/backups``, named
+    ``pre-upgrade-v<old>-to-v<new>-<time>[-from-<release>].db``: the database versions, and the Office Sentry
+    release to go back to with this copy, when the database knows it (``db.stored_app_version``).
 
     Called by ``db.migrate`` while it holds the write lock, so it reads through a
     separate connection (WAL lets it see the last committed state).
     """
     folder = db_file.parent / "backups"
+    suffix = f"-from-{name}" if release and (name := re.sub(r"[^0-9A-Za-z.+-]", "", release)[:40]) else ""
     src = sqlite3.connect(db_file, timeout=30)
     try:
-        dest = copy_database(src, folder / f"{PRE_UPGRADE_PREFIX}v{current}-to-v{target}-{_stamp()}.db")
+        dest = copy_database(src, folder / f"{PRE_UPGRADE_PREFIX}v{current}-to-v{target}-{_stamp()}{suffix}.db")
     finally:
         src.close()
     rotate(folder, PRE_UPGRADE_PREFIX, KEEP_PRE_UPGRADE)

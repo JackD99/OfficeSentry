@@ -1,0 +1,194 @@
+name: release
+# Publishes a release of v2. Start it from Actions -> release -> Run workflow on main with the version
+# (2.1.0, or 2.1.0-rc.1 for a release candidate), or by pushing a tag such as v2.1.0. In order:
+#   1. the version must match officesentry.__version__ and have a CHANGELOG.md section (scripts/release_notes.py);
+#   2. the whole v2 suite runs on that commit;
+#   3. the image is built for amd64 and arm64 with an SBOM and build provenance, and pushed to GHCR by digest
+#      only, so nothing can pull it by name yet;
+#   4. the image is scanned for known vulnerabilities that have a fix (high or critical stops the release);
+#   5. only then does it get its version tags (2.1.0, 2.1, 2 and latest; a candidate gets only its own);
+#   6. the GitHub release is created, with the tag (when it doesn't exist yet), the changelog section and the
+#      files needed to install it. A candidate is marked as a pre-release.
+# CONTRIBUTING.md, "Releases", has the steps for a person.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release from main, such as 2.1.0 (or 2.1.0-rc.1 to try a release candidate)
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/jackd99/officesentry
+
+jobs:
+  notes:
+    name: Check the version and changelog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      prerelease: ${{ steps.notes.outputs.prerelease }}
+    steps:
+      - id: tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "::error::Releases are made from main; choose main under \"Use workflow from\"."
+              exit 1
+            fi
+            echo "tag=v${VERSION#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - id: notes
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "::error::$TAG already exists. Releasing it again isn't possible; release the next version instead."
+            exit 1
+          fi
+          python3 v2/scripts/release_notes.py "$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    name: Test the commit
+    needs: notes
+    permissions:
+      contents: read
+    uses: ./.github/workflows/v2.yml
+
+  image:
+    name: Build, scan and publish the image
+    needs: [notes, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      # Signed build provenance (attest-build-provenance).
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          # A candidate (v2.1.0-rc.1) only gets its own tag: {{major}}.{{minor}}, {{major}} and latest skip
+          # pre-releases.
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.notes.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.notes.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ needs.notes.outputs.tag }}
+          flavor: latest=auto
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: v2
+          platforms: linux/amd64,linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          # Pushed by digest only; the version tags are added once the scan has passed.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          sbom: true
+          provenance: mode=max
+      - name: Scan for known vulnerabilities with a fix
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439  # v7.4.2
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table
+      # GitHub only offers signed attestations to private repositories on Enterprise Cloud; until the
+      # repository is public, the image carries BuildKit's own provenance and SBOM (above) instead.
+      - name: Sign the build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Add the version tags
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mapfile -t tags < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          [ "${#tags[@]}" -gt 0 ] || { echo "::error::No image tags were worked out"; exit 1; }
+          docker buildx imagetools create "${tags[@]/#/--tag=}" "$IMAGE@$DIGEST"
+          docker buildx imagetools inspect "${tags[0]}"
+          {
+            echo "### Published"
+            for tag in "${tags[@]}"; do echo "- \`$tag\`"; done
+            echo "- digest \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Create the GitHub release
+    needs: [notes, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.notes.outputs.tag }}
+      VERSION: ${{ needs.image.outputs.version }}
+      DIGEST: ${{ needs.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Write the notes and the install files
+        run: |
+          python3 v2/scripts/release_notes.py "$TAG" > "$RUNNER_TEMP/notes.md"
+          {
+            echo
+            echo "### Install or update"
+            echo
+            echo "Image: \`$IMAGE:$VERSION\` (\`$DIGEST\`), for amd64 and arm64."
+            echo
+            echo "Download \`docker-compose.yml\`, \`Caddyfile\` and \`.env.example\` below (they run this version"
+            echo "unless \`OFFICESENTRY_VERSION\` in \`.env\` says otherwise), then follow"
+            echo "[DEPLOY.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/v2/DEPLOY.md)."
+          } >> "$RUNNER_TEMP/notes.md"
+          mkdir "$RUNNER_TEMP/files"
+          # The compose file runs this release when .env doesn't choose one.
+          sed 's/\${OFFICESENTRY_VERSION:-2}/${OFFICESENTRY_VERSION:-'"$VERSION"'}/' v2/docker-compose.yml \
+            > "$RUNNER_TEMP/files/docker-compose.yml"
+          grep -q "OFFICESENTRY_VERSION:-$VERSION}" "$RUNNER_TEMP/files/docker-compose.yml"
+          # So does the settings file, which a new install copies to .env.
+          sed 's/^# OFFICESENTRY_VERSION=.*/OFFICESENTRY_VERSION='"$VERSION"'/' v2/.env.example \
+            > "$RUNNER_TEMP/files/.env.example"
+          grep -qx "OFFICESENTRY_VERSION=$VERSION" "$RUNNER_TEMP/files/.env.example"
+          cp v2/Caddyfile "$RUNNER_TEMP/files/Caddyfile"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.notes.outputs.prerelease }}
+        run: |
+          # A pushed tag already exists; from "Run workflow", the release creates it on the commit just tested.
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Office Sentry $VERSION" \
+            --prerelease="$PRERELEASE" --notes-file "$RUNNER_TEMP/notes.md" \
+            "$RUNNER_TEMP/files/docker-compose.yml" "$RUNNER_TEMP/files/Caddyfile" "$RUNNER_TEMP/files/.env.example"

@@ -9,7 +9,7 @@ from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import worker
+from .. import __version__, worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
@@ -118,7 +118,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         # Admins are told when the background worker isn't running: without it
         # nothing is collected and no scheduled email goes out.
         worker_down = bool(user and user["role"] == "admin" and "db" in g and not worker.is_alive(g.db))
-        return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down}
+        return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down,
+                "app_version": __version__}
 
     @app.errorhandler(403)
     def _forbidden(_e):
@@ -134,7 +135,8 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.get("/health")
     def health():
-        return {"ok": True}
+        # The version lets an uptime monitor (or a person after an update) confirm what is running.
+        return {"ok": True, "version": __version__}
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(tenants.bp)

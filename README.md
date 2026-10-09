@@ -252,11 +252,17 @@ kept and how to remove access. Send it with the consent link.
 Office Sentry runs as two containers (the portal and a worker) from one image, with everything stored in one
 Docker volume.
 
+Download `docker-compose.yml`, `Caddyfile` and `.env.example` from the newest
+[release](https://github.com/JackD99/OfficeSentry/releases) into a folder on a Linux server with Docker, then:
+
 ```bash
-cd v2
 cp .env.example .env          # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN and OFFICESENTRY_TIMEZONE
-docker compose --profile https up -d --build
+docker compose --profile https up -d
 ```
+
+The image is `ghcr.io/jackd99/officesentry`, for amd64 and arm64; each release lists what changed in
+[CHANGELOG.md](CHANGELOG.md). While this repository is private the image is too, so sign the server in to
+GitHub's registry first ([DEPLOY.md](v2/DEPLOY.md#first-start), step 4).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
 
