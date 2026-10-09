@@ -81,7 +81,7 @@ def test_report(db, two_tenants):
     report = _report(db, alpha)
     assert report.unavailable is None
     tiles = {t.label: t for t in report.tiles}
-    assert tiles["Storage used"].value == "Under 1%" and "of 1.1 TB (estimated)" in tiles["Storage used"].foot
+    assert tiles["Storage used"].value == "Under 1%" and "of 1.10 TB (estimated)" in tiles["Storage used"].foot
     assert tiles["Recycle bins"].value == "1.0 GB"
     assert tiles["Untouched for 2 years"].foot == "1 file"
     parts = _section(report, "Where the space goes")
@@ -105,7 +105,7 @@ def test_site_limit_and_nearly_full_tenant(db, two_tenants):
     seed_tenant(db, alpha, sharepoint_kw={"site_quota": quota})
     report = _report(db, alpha)
     sites = _section(report, "Sites by storage")
-    assert sites.flags == ["high"] and _column(sites, "Site limit") == ["1.2 TB (92% used)"]
+    assert sites.flags == ["high"] and _column(sites, "Site limit") == ["1.17 TB (92% used)"]
     assert {t.label: t for t in report.tiles}["Storage used"].tone == "bad"  # 1,100 GB of 1,124 GB
     result = {r.key: r for r in evaluate(_snap(db, alpha))}["sharepoint_storage_space"]
     assert result.status == "fail" and result.findings[0].severity == "high"

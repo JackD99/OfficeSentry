@@ -10,7 +10,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if title %}{{ title }} · Office Sentry{% else %}Office Sentry: Microsoft 365 reports for MSPs{% endif %}</title>
-  <meta name="description" content="{% block description %}Free, open-source Microsoft 365 security and licensing reports for MSPs. Read-only, self-hosted, with history across every client.{% endblock %}">
+  <meta name="description" content="{% block description %}Free{{ ", open-source" if source_public }} Microsoft 365 security and licensing reports for MSPs. Read-only, self-hosted, with history across every client.{% endblock %}">
   <link rel="canonical" href="{{ site_url }}{{ path }}">
   <meta property="og:title" content="{{ title or 'Office Sentry' }}">
   <meta property="og:description" content="{{ self.description() }}">
@@ -47,7 +47,7 @@
   <div class="wrap footer-inner">
     <div class="footer-brand">
       <a class="brand" href="/">{{ logo() }}<span>Office Sentry</span></a>
-      <p>Free, open-source Microsoft 365 reporting for MSPs. Read-only, self-hosted, licensed under the AGPL-3.0.</p>
+      <p>Free{{ ", open-source" if source_public }} Microsoft 365 reporting for MSPs. Read-only, self-hosted, licensed under the AGPL-3.0.</p>
     </div>
     <nav aria-label="Product">
       <h2>Product</h2>
@@ -68,6 +68,7 @@
       <a href="/docs/security/">Security</a>
       <a href="/docs/contributing/">Contributing</a>
       {% if source_public %}<a href="{{ github }}">Source code on GitHub</a>{% endif %}
+      {% if contact %}<a href="{{ contact }}">Get in touch</a>{% endif %}
     </nav>
   </div>
   <div class="wrap fine-print">

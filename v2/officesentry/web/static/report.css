@@ -166,6 +166,8 @@ td.more { color: var(--muted); font-style: italic; }
 ul.changes, ul.passing, ul.unavailable { list-style: none; padding: 0; margin: 0; }
 ul.changes li { padding: 7px 0; border-bottom: 1px solid var(--border); }
 ul.changes li:last-child { border-bottom: 0; }
+.changes-head { margin: var(--space-5) 0 var(--space-2); }
+.changes-head:first-of-type { margin-top: var(--space-2); }
 ul.passing { columns: 2; column-gap: 28px; }
 ul.passing li { break-inside: avoid; padding: 5px 0 5px 24px; position: relative; }
 ul.passing li::before { content: "\2713"; position: absolute; left: 0; top: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); font-size: .7rem; font-weight: 700; text-align: center; line-height: 16px; }

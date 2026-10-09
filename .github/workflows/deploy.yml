@@ -248,6 +248,7 @@ jobs:
           SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
           SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
           SITE_SOURCE_PUBLIC: ${{ !github.event.repository.private }}
+          SITE_CONTACT: ${{ vars.OFFICESENTRY_WEBSITE_CONTACT }}
         run: |
           pip install -q --require-hashes -r website/requirements.txt
           python website/build.py

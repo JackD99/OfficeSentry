@@ -62,6 +62,11 @@ tenant; until then the pages build them as before.
 - What changed across all tenants and the All tenants check matrix open in a fraction of a second at 200
   tenants (What changed took about 30 seconds). The worker works out each tenant's line after its
   collection and once a day; the pages read those lines, and rebuild any line whose data has changed since.
+- The monthly review's "What changed" lists each new or returning finding it counts, next to the fixed
+  ones, with the tenant's own changes (new accounts, devices, forwarding) under their own heading. Before,
+  it gave the count and the list below showed different items.
+- Sizes from 1 TB to 10 TB show two decimals ("1.28 TB of 1.45 TB"), so used, free and total add up on
+  the SharePoint storage report.
 
 ### Security
 

@@ -90,6 +90,12 @@ class Report:
                       key=lambda r: (SEVERITY_RANK.get(r.severity or "info", 9), r.category, r.title))
 
     @property
+    def new_findings(self) -> list[tuple[RuleResult, Finding]]:
+        """The findings first seen (or back) in the period, most severe first: the ``new_count`` items."""
+        found = [(r, f) for r in self.results for f in r.findings if f.new]
+        return sorted(found, key=lambda rf: SEVERITY_RANK.get(rf[1].severity or "info", 9))
+
+    @property
     def passing(self) -> list[RuleResult]:
         return [r for r in self.results if r.status == "pass"]
 
