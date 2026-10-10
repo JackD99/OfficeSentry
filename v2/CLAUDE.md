@@ -187,7 +187,9 @@ needing goes in those lists.
   use them). Rows are per tenant: only ever read them for `scoped_tenants()`.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
-  `Last ...`, `... (UTC)` or containing "change" are ignored as time-driven.
+  `Last ...`, `... (UTC)` or containing "change", and the day counts in
+  `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
+  time-driven; "No check-in for N days" in a cell is compared without its number.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and
@@ -247,6 +249,18 @@ needing goes in those lists.
   refuses to write the file if a name, domain or phone number survives; still
   skim the diff. Phone fields are replaced by key (`recording.PHONE_KEYS`)
   whatever their format; `tests/test_recording.py` covers the scrubber.
+- The live canary (`.github/workflows/canary.yml`, `canary.py`) runs `live-test
+  --canary` against the test tenant on a schedule, signing in with GitHub's
+  OIDC token through a federated credential (no secret), and fails when a field
+  the fixture has stops coming back or changes type, a call starts failing, or
+  Microsoft sends a `Deprecation`/`Sunset` header the fixture lacks. It compares
+  shapes only and never prints errors or check results (CI logs go public).
+  Recordings keep those headers, so re-recording acknowledges them.
+- `tests/nightly` (`pytest tests/nightly --nightly`, `.github/workflows/nightly.yml`,
+  weekly while private): every release tag's demo database upgraded and crawled,
+  the example PDFs against page baselines (`--update` refreshes them), and
+  page time budgets at 200 tenants. Both scheduled workflows keep one GitHub
+  issue open while failing (`.github/scripts/scheduled_issue.sh`); see its README.
 
 ## Robustness contract
 
@@ -479,6 +493,14 @@ month is sent or published (`month_end.deliver`), `delivery.report_ready` posts
 report history and the file names, never the files. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
+An email names the period of its schedule's latest send time
+(`delivery.email_period`, `period_label`), never the clock's, so a retry after
+midnight or a Retry next week still says, and carries the commentary of, the
+month it was for; a month-end send passes its `period`. A report schedule
+never emails a tenant nothing has been collected for (`nothing_collected`: the
+send fails with the reason and retries), and Send now and Retry refuse while
+the timer's `send_schedule` task for the period is queued or running
+(`being_sent`), so nobody sends a period twice.
 
 **Coming up** (`upcoming.py`, page `/upcoming` in `web/upcoming.py`, admin and analyst) lists what falls
 due in the next 90 days across the visible, active tenants: subscription renewals and trials (lapsing ones
@@ -539,8 +561,12 @@ transaction re-checks the state, stores them in `issued_reports` (`freeze`:
 trigger `approval`, `approved_by`/`approved_at`) and checkpoints "frozen";
 then emails those exact bytes (`deliver` and `delivery.send_frozen`, which
 record the email, mark the schedule's period done and the month Sent in one
-transaction) or, for portal-only plans or no recipients, leaves them in the
-report history. A worker that dies between freeze and send sends once on
+transaction) or, for portal-only plans, leaves them in the report history. An
+email plan with nobody to send to keeps them in the report history too, but
+the month stays Approved with the reason (`report_reviews.error`), flagged
+"Nobody to email" in the queue, until Send again reaches someone. A plan
+email goes to the client's first `mailer.MAX_RECIPIENTS` contacts plus the
+team's hidden copy (`_plan_recipients`); `coverage()` names anyone left off. A worker that dies between freeze and send sends once on
 retry, without freezing again (`tests/test_tasks.py`). Approving an issued month again is a re-issue: it needs a reason and
 stores the next version. Roles: admin and analyst review, comment, assign and
 edit recommendations and notes; only admins edit plans and approve, send or
@@ -774,7 +800,7 @@ and `python -m officesentry <command>`:
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `history [--dry-run\|--backfill\|--verify]` | the daily history: progress, an estimate of the backfill without writing, the backfill now, or a check that it reads back as the snapshots |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
-| `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+| `live-test [--record FILE] [--canary REPORT]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture or compare the answers' shape with it (the live canary) |
 
 Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own
 volume), else in the data folder; `config.move_secrets` moves one left in the data folder on start. Never

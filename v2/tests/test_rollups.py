@@ -190,6 +190,22 @@ def test_compare_sections_matches_rows_and_ignores_time_columns():
     assert month_changes.compare_sections(Section("Log", ["When"], compare=False), None) is None
 
 
+def test_day_counts_that_only_move_with_the_clock_are_not_changes():
+    # The same data collected 40 days apart: the "then" report counts days to the period start.
+    old = Section("Inactive members", ["Account", "Inactive for", "Days", "Licences"])
+    new = Section("Inactive members", ["Account", "Inactive for", "Days", "Licences"])
+    old.add(["ann@x", "180+ days", 170, "E3"])
+    new.add(["ann@x", "180+ days", 210, "E5"])
+    diff = month_changes.compare_sections(old, new)
+    assert [c.detail for c in diff.changes] == ["Licences: E3 → E5"]
+    devices_then, devices_now = (Section("Needs attention", ["Device", "Problems"]) for _ in range(2))
+    devices_then.add(["PC-1", "Not compliant; No check-in for 35 days"])
+    devices_now.add(["PC-1", "Not compliant; No check-in for 75 days"])
+    assert month_changes.compare_sections(devices_then, devices_now).changes == []
+    devices_now.rows[0][1] = "Not encrypted; No check-in for 75 days"
+    assert len(month_changes.compare_sections(devices_then, devices_now).changes) == 1
+
+
 def test_compare_sections_without_a_unique_key_reports_added_and_removed():
     old, new = Section("Access", ["Mailbox", "Who"]), Section("Access", ["Mailbox", "Who"])
     for row in (["box", "ann"], ["box", "bob"]):

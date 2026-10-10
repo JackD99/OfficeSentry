@@ -128,12 +128,15 @@ def save_plan(conn, values: dict, user: str, plan_id: int | None = None) -> int:
 
 
 def _plan_recipients(conn, plan, tenant_id: int) -> list[int]:
+    """Who a tenant's plan email goes to: its first ``MAX_RECIPIENTS`` contacts (by name, as the Emails page
+    lists them), plus the team's hidden copy when the plan asks for one. The cap is on the client's own
+    contacts, so a big client never pushes the team's copy out; ``coverage`` says who is left off."""
     if plan["delivery"] != "email":
         return []
-    ids = [c["id"] for c in delivery.tenant_contacts(conn, tenant_id)]
+    ids = [c["id"] for c in delivery.tenant_contacts(conn, tenant_id)][: delivery.mailer.MAX_RECIPIENTS]
     if ids and plan["bcc_team"]:
         ids += [c["id"] for c in delivery.team_contacts(conn)]
-    return ids[: delivery.mailer.MAX_RECIPIENTS]
+    return ids
 
 
 def apply_plan(conn, plan, tenant_ids: list[int], user: str, default_tz: str, now: datetime | None = None) -> int:
@@ -217,13 +220,11 @@ def delete_plan(conn, plan_id: int) -> None:
 
 
 def contact_added(conn, tenant_id: int, contact_id: int) -> None:
-    """A new client contact joins the tenant's plan email, so the plan keeps reaching everyone."""
+    """A new client contact joins the tenant's plan email (within the plan's limit), so the plan keeps
+    reaching everyone. The first contact also brings the team's hidden copy, if the plan sends one."""
     plan, link = plan_for(conn, tenant_id)
     if plan is not None and link["schedule_id"] and plan["delivery"] == "email":
-        conn.execute(
-            "INSERT OR IGNORE INTO email_schedule_recipients (schedule_id, contact_id) VALUES (?, ?)",
-            (link["schedule_id"], contact_id),
-        )
+        delivery.set_recipients(conn, "schedule", link["schedule_id"], _plan_recipients(conn, plan, tenant_id))
 
 
 # -- Coverage ---------------------------------------------------------------------------------
@@ -236,7 +237,8 @@ class CoverageRow:
     monthly: int  # enabled monthly report schedules (or a portal-only plan)
     contacts: int
     recipients: int  # people on those schedules
-    gaps: list[str] = field(default_factory=list)  # no_report | no_contacts | no_recipients
+    gaps: list[str] = field(default_factory=list)  # no_report | no_contacts | no_recipients | left_off
+    left_off: int = 0  # client contacts a plan email can't include (over mailer.MAX_RECIPIENTS)
 
 
 @dataclass
@@ -271,6 +273,9 @@ class Coverage:
         if self.count("no_recipients"):
             n = self.count("no_recipients")
             parts.append(f"{n} {'sends' if n == 1 else 'send'} to nobody")
+        if self.count("left_off"):
+            n = self.count("left_off")
+            parts.append(f"{n} {'has' if n == 1 else 'have'} more contacts than one email can go to")
         return text + ("; " + "; ".join(parts) if parts else "")
 
 
@@ -297,6 +302,9 @@ def coverage(conn, tenants) -> Coverage:
             row.gaps.append("no_contacts")
         elif schedules and not people and not portal:
             row.gaps.append("no_recipients")
+        if plan is not None and plan["delivery"] == "email" and contacts > delivery.mailer.MAX_RECIPIENTS:
+            row.left_off = contacts - delivery.mailer.MAX_RECIPIENTS
+            row.gaps.append("left_off")
         rows.append(row)
     return Coverage(rows, paused)
 
@@ -410,6 +418,9 @@ def flags_for(conn, tenant, report, period: str, now: datetime) -> tuple[int, li
     not_run = sum(1 for r in report.unavailable if r.summary.startswith("This check couldn't run"))
     if not_run:
         flags.append(f"{plural(not_run, 'check')} couldn't run")
+    plan, _ = plan_for(conn, tenant["id"])
+    if plan is not None and plan["delivery"] == "email" and not emailed(plan, conn, tenant["id"]):
+        flags.append("Nobody to email")
     return counts["severe"] or 0, flags
 
 
@@ -575,12 +586,22 @@ class ApprovalError(Exception):
 
 
 def frozen_files(conn, tenant_id: int, period: str) -> list:
-    """The latest approved version of each file for the period."""
-    return conn.execute(
-        "SELECT * FROM issued_reports WHERE id IN (SELECT MAX(id) FROM issued_reports WHERE tenant_id = ?"
-        " AND period = ? AND trigger = 'approval' GROUP BY filename) ORDER BY id",
+    """The files of the period's latest approval: what a re-issue sends. A file an earlier approval had and
+    this one doesn't (a report dropped from the plan, or named after the tenant's old name) isn't sent.
+
+    One approval stores each of its files once, in one transaction (``freeze``), so its rows are the newest
+    run of rows with one approval time and no file name twice."""
+    batch: list = []
+    for row in conn.execute(
+        "SELECT * FROM issued_reports WHERE tenant_id = ? AND period = ? AND trigger = 'approval' ORDER BY id DESC",
         (tenant_id, period),
-    ).fetchall()
+    ):
+        if batch and (
+            row["approved_at"] != batch[0]["approved_at"] or any(row["filename"] == b["filename"] for b in batch)
+        ):
+            break
+        batch.append(row)
+    return batch[::-1]
 
 
 def render_files(app, conn, tenant, period: str, now: datetime | None = None) -> list[tuple[str, str, bytes]]:
@@ -657,7 +678,8 @@ def freeze(
 
 def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | None = None) -> str | None:
     """Send the frozen files per the plan, or publish them (they're already in the report history).
-    Returns an error message, or None once the month is Sent.
+    Returns an error message, or None once the month is Sent. An email plan with nobody to send to returns
+    an error too: the month stays Approved until it really goes out.
 
     The email's delivery record, the schedule, the recipients on the issued files and the Sent state are
     written in one transaction after the email goes, so a retry after a crash either sees Sent or sends
@@ -678,7 +700,22 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
         update_review(conn, tenant["id"], period, user, state="sent", sent_at=now.strftime(ISO), error=None)
         audit(conn, user, "report_sent", tenant["id"], period)
 
-    if plan["delivery"] == "email" and contacts:
+    if plan["delivery"] == "email" and not contacts:
+        # The files are in the report history, but nobody was emailed: that isn't Sent. The month stays
+        # Approved with the reason, so Send again emails these same files once the client has a contact.
+        error = f"Nobody to email: {tenant['name']} has no contacts on its report plan. Add one, then send it again."
+        with store.atomic(conn):
+            if schedule is not None:
+                # The month is done, so an automatic plan's timer doesn't email a live copy of it later.
+                conn.execute(
+                    f"UPDATE email_schedules SET last_period = {delivery.LATER_PERIOD}, attempts = 0,"
+                    " retry_at = NULL WHERE id = ?",
+                    (period, period, schedule["id"]),
+                )
+            update_review(conn, tenant["id"], period, user, error=error)
+            audit(conn, user, "report_send_failed", tenant["id"], period)
+        return error
+    if plan["delivery"] == "email":
         to, bcc = delivery.split_recipients(contacts)
 
         def emailed(conn) -> None:
