@@ -539,8 +539,12 @@ transaction re-checks the state, stores them in `issued_reports` (`freeze`:
 trigger `approval`, `approved_by`/`approved_at`) and checkpoints "frozen";
 then emails those exact bytes (`deliver` and `delivery.send_frozen`, which
 record the email, mark the schedule's period done and the month Sent in one
-transaction) or, for portal-only plans or no recipients, leaves them in the
-report history. A worker that dies between freeze and send sends once on
+transaction) or, for portal-only plans, leaves them in the report history. An
+email plan with nobody to send to keeps them in the report history too, but
+the month stays Approved with the reason (`report_reviews.error`), flagged
+"Nobody to email" in the queue, until Send again reaches someone. A plan
+email goes to the client's first `mailer.MAX_RECIPIENTS` contacts plus the
+team's hidden copy (`_plan_recipients`); `coverage()` names anyone left off. A worker that dies between freeze and send sends once on
 retry, without freezing again (`tests/test_tasks.py`). Approving an issued month again is a re-issue: it needs a reason and
 stores the next version. Roles: admin and analyst review, comment, assign and
 edit recommendations and notes; only admins edit plans and approve, send or
