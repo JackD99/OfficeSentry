@@ -140,6 +140,11 @@ section.security { background: var(--bg-2); border-top: 1px solid var(--border);
 .steps li > span { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-weight: 700; }
 .steps h3 { font-size: 1.0625rem; margin-bottom: 6px; }
 .steps p { margin: 0; color: var(--muted); font-size: .9375rem; }
+section.early-access { padding: 8px 0 56px; }
+.early-box { text-align: center; padding: 36px 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-2); }
+.early-access h2 { font-size: 1.75rem; margin-bottom: 12px; }
+.early-access p { color: var(--text-2); margin: 0 auto 24px; max-width: 600px; }
+.early-access .actions { margin: 0; }
 section.faq { padding: 24px 0 96px; }
 .faq h2 { font-size: 1.75rem; text-align: center; margin-bottom: 28px; }
 .faq details { border-bottom: 1px solid var(--border); padding: 4px 0; }

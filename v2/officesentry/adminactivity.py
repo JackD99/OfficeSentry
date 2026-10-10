@@ -259,7 +259,23 @@ def window_text(window: dict | None) -> str:
         text = f"the last {window.get('requested_days') or WINDOW_DAYS} days"
     else:
         text = f"the period since {oldest:%d %b %Y}"
-    if window.get("capped") and oldest:
-        text += (f". Only the newest {window.get('read')} audit events could be read, "
-                 f"so this covers changes since {oldest:%d %b %Y %H:%M} UTC")
+    if window.get("capped"):
+        text += (". Part of the audit log hasn't been read yet (the next collection carries on from there), "
+                 "so some changes may be missing")
     return text
+
+
+HISTORY_DAYS = 365  # how far back the Admin activity report and account pages read the activity history
+
+
+def from_history(conn, tenant_id: int, start, end) -> tuple[list[dict], object] | None:
+    """The changes worth knowing about between ``start`` and ``end`` from the activity history, newest first,
+    and the history's coverage; None when the tenant's audit log has never been read into it."""
+    from . import events
+
+    cov = events.coverage(conn, tenant_id, "audits")
+    if cov.detailed_from is None:
+        return None
+    keep = lambda category, activity: kind_of({"category": category, "activityDisplayName": activity})  # noqa: E731
+    found = [normalise(e) for e in events.audits_between(conn, tenant_id, start, end, keep=keep)]
+    return found, cov

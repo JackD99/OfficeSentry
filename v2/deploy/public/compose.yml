@@ -47,5 +47,9 @@ services:
       start_period: 60s
 
 networks:
+  # Internal: no way out to the internet, so the demo can't send mail, call Microsoft or post to a webhook even
+  # if something got past public_demo.py. Caddy reaches it from inside. (A new name, as Docker can't make an
+  # existing network internal.)
   public:
-    name: officesentry-public
+    name: officesentry-demo-internal
+    internal: true

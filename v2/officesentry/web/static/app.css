@@ -583,6 +583,21 @@ svg.chart .series { stroke: var(--accent); }
 svg.chart .hit:hover { fill: var(--accent); fill-opacity: .25; }
 svg.chart .end { fill: var(--accent); stroke: var(--surface); }
 svg.chart .value { fill: var(--text); }
+/* Daily stacked columns (charts.daily_bars): two series and a "no data" track, legend printed as text. */
+svg.chart.bars .good { fill: var(--accent); }
+svg.chart.bars .bad { fill: var(--bad); }
+svg.chart.bars .nodata { fill: var(--border-strong); }
+svg.chart.bars .hit:hover { fill: var(--text); fill-opacity: .07; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 8px; font-size: .8125rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend .sw-good { background: var(--accent); }
+.legend .sw-bad { background: var(--bad); }
+.legend .sw-none { background: var(--border-strong); height: 3px; }
+/* 90 columns stay readable on a phone: the chart keeps a minimum width and scrolls sideways. */
+.chart-scroll { overflow-x: auto; direction: rtl; } /* opens on the newest days */
+.chart-scroll > svg { direction: ltr; }
+@media (max-width: 720px) { .chart-scroll svg.chart { min-width: 600px; } }
 
 /* -- Cross-tenant rollups and change report -------------------------------- */
 .report-picker { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }

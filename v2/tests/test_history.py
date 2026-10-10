@@ -88,7 +88,9 @@ def test_changes_since_baseline(db, two_tenants):
 def test_no_changes_without_baseline(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
-    assert all_changes(db, alpha, "2026-01-01T00:00:00Z") == []
+    # Nothing to compare one collection with: only admin changes from the audit log, each with its own date.
+    found = all_changes(db, alpha, "2026-01-01T00:00:00Z")
+    assert found and {c.area for c in found} == {"Admin activity"}
 
 
 def test_findings_page_and_accept_flow(client, db, two_tenants):

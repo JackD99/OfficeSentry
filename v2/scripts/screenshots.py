@@ -181,6 +181,10 @@ SHOTS = [
     Shot("person", "/tenants/{t}/users/u1", height=1100),
     Shot("all-tenants", "/across/review", height=760),
     Shot("what-changed", "/changes", height=640),
+    Shot("upcoming", "/upcoming", height=900),
+    Shot("activity-history", "/tenants/{t}/activity", height=1000),
+    Shot("tenant-groups", "/admin/groups", height=640),
+    Shot("system-status", "/admin/status", height=900),
     Shot("evidence", "/tenants/{t}/evidence", height=1000),
     Shot("emailed-reports", "/tenants/{t}/schedules", height=900),
     Shot("email-schedule-form", "/tenants/{t}/schedules/new", height=1000),
@@ -244,7 +248,9 @@ EXAMPLES = {
 
 def build_site(data_dir: Path):
     """Seed a new, empty data directory; returns (config, tenant ids, passwords by username, names)."""
-    from officesentry import worker
+    from datetime import UTC, datetime, timedelta
+
+    from officesentry import backups, system_health, worker
     from officesentry.config import load_config
     from officesentry.crypto import Vault
     from officesentry.db import connect, migrate
@@ -265,6 +271,14 @@ def build_site(data_dir: Path):
         if not all_tenants:
             db.execute("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", (uid, ids[0]))
     worker.beat(db)
+    # Last night's backups and a roomy disk, so System status shows a looked-after server, not this machine's disk.
+    now = datetime.now(UTC)
+    night = now.replace(hour=3, minute=40, second=0, microsecond=0)
+    night -= timedelta(days=1) if night > now else timedelta()
+    for job, detail in (("local", "officesentry-backup.db.gz, 48.2 MB"), ("offsite", "Copied off-site"),
+                        ("restore_check", "The newest off-site copy opened and checked out")):
+        backups.record_status(data_dir, job, True, detail=detail, now=night)
+    system_health.disk_usage = lambda path: (38.0, 62 * 2**30, 100 * 2**30)
     names = {"msp": branding.load(db).display_name,
              "tenants": [db.execute("SELECT name FROM tenants WHERE id = ?", (i,)).fetchone()[0] for i in ids]}
     db.close()

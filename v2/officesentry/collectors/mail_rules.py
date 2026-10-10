@@ -1,12 +1,18 @@
 """Inbox rules for every mailbox, read through Graph (MailboxSettings.Read).
 
 Graph is used rather than Exchange's Get-InboxRule so this works even before a
-tenant assigns the app an Exchange role.
+tenant assigns the app an Exchange role. Graph only gives a folder's ID, and
+naming it needs mail access the app doesn't have, so folder names come from
+Get-InboxRule, for mailboxes with a rule that moves mail.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
+
 from .. import store
+from ..exchange import ExchangeAccessDenied, ExchangeError
 from ..graph import GraphError, PermissionMissing
 from ..text import plural
 from . import mailbox_window
@@ -46,6 +52,7 @@ class InboxRules(Collector):
         targets = window.mailboxes
 
         rows, failed, denied = [], 0, 0
+        exchange_ok = True  # until Exchange refuses the app, then no more folder names this run
         for t in targets:
             try:
                 rules = ctx.paged(ctx.graph.get_all(f"/users/{t['id']}/mailFolders/inbox/messageRules"))
@@ -55,17 +62,17 @@ class InboxRules(Collector):
             except GraphError:  # e.g. no mailbox yet, or mailbox on-premises
                 failed += 1
                 continue
-            folders: dict[str, str | None] = {}
+            folders = {}
+            if exchange_ok and any((r.get("actions") or {}).get("moveToFolder") for r in rules):
+                folders, exchange_ok = _folder_names(ctx, t)
             for r in rules:
                 folder_id = (r.get("actions") or {}).get("moveToFolder")
-                if folder_id and folder_id not in folders:
-                    folders[folder_id] = self._folder_name(ctx, t["id"], folder_id)
                 rows.append((f"{t['id']}:{r['id']}", {
                     "mailboxId": t["id"], "mailbox": t["upn"], "mailboxType": t["type"],
                     "displayName": r.get("displayName"), "isEnabled": r.get("isEnabled", True),
                     "hasError": r.get("hasError"), "sequence": r.get("sequence"),
                     "conditions": r.get("conditions") or {}, "actions": r.get("actions") or {},
-                    "moveToFolderName": folders.get(folder_id) if folder_id else None,
+                    "moveToFolderName": _folder_of(r, folders) if folder_id else None,
                 }))
         if targets and denied == len(targets):
             raise PermissionMissing(403, "Authorization_RequestDenied",
@@ -80,10 +87,44 @@ class InboxRules(Collector):
         # Mailboxes the stored rules cover: read this run, or kept from an earlier run.
         ctx.metric("mail.mailboxes_checked", len(targets) - denied - failed + window.carried_mailboxes)
 
-    @staticmethod
-    def _folder_name(ctx: RunContext, user_id: str, folder_id: str) -> str | None:
+
+
+def _folder_names(ctx: RunContext, target: dict) -> tuple[dict[str, str], bool]:
+    """Each rule's destination folder, by rule identity and by name, from Get-InboxRule, and whether
+    Exchange let the app in."""
+    try:
+        found = ctx.exchange.invoke("Get-InboxRule", {"Mailbox": target["id"]})
+    except ExchangeAccessDenied:
+        ctx.log("Inbox rule folder names need the app's Global Reader role in Exchange", "warning")
+        return {}, False
+    except ExchangeError as exc:
+        ctx.log(f"Could not read folder names for {target['upn']}'s inbox rules: {exc.message}", "warning")
+        return {}, True
+    names = {}
+    for rule in found:
+        folder = _folder(rule.get("MoveToFolder"))
+        if folder:
+            names[str(rule.get("RuleIdentity"))] = folder
+            names.setdefault(rule.get("Name"), folder)
+    return names, True
+
+
+def _folder_of(rule: dict, folders: dict[str, str]) -> str | None:
+    """Graph's rule ID is Exchange's RuleIdentity as 8 little-endian bytes in base64, written with - for /
+    (seen on a real tenant); the rule's name is the fallback."""
+    graph_id = str(rule.get("id") or "")
+    for text in (graph_id.replace("-", "/").replace("_", "+"), graph_id.replace("-", "+").replace("_", "/")):
         try:
-            return ctx.graph.get(f"/users/{user_id}/mailFolders/{folder_id}",
-                                 params={"$select": "displayName"}).get("displayName")
-        except GraphError:
-            return None
+            raw = base64.b64decode(text + "==")
+        except (binascii.Error, ValueError):
+            continue
+        if len(raw) == 8 and str(int.from_bytes(raw, "little")) in folders:
+            return folders[str(int.from_bytes(raw, "little"))]
+    return folders.get(rule.get("displayName"))
+
+
+def _folder(value: str | None) -> str | None:
+    """'Deleted Items', or a folder in another mailbox as 'mailbox:\\Deleted Items'."""
+    if not value:
+        return None
+    return str(value).split(":\\", 1)[-1] or None

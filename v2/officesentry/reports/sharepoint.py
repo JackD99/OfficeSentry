@@ -45,7 +45,10 @@ def size(n: int | float | None) -> str:
         return ""
     for unit in ("bytes", "KB", "MB", "GB", "TB"):
         if abs(n) < 1024 or unit == "TB":
-            return f"{n:.0f} {unit}" if unit == "bytes" else f"{n:.1f} {unit}"
+            if unit == "bytes":
+                return f"{n:.0f} {unit}"
+            # Two decimals under 10 TB, so "1.28 TB of 1.45 TB" adds up with "178.1 GB free" next to it.
+            return f"{n:.2f} {unit}" if unit == "TB" and abs(n) < 10 else f"{n:.1f} {unit}"
         n /= 1024
     return ""
 
