@@ -35,7 +35,7 @@ None. The sign-in and directory audit logs were already read; they're now read i
 
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
 have been read up to, migration 0031 adds `summary_cache` for the precomputed rows under Changed, and
-migration 0032 adds `onboarding` (each new client's contact and how far their consent has got). The
+migration 0034 adds `onboarding` (each new client's contact and how far their consent has got). The
 portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
 tenant; until then the pages build them as before.
 

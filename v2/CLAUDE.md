@@ -528,7 +528,7 @@ change is audited; note text is never put in the audit log.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
 - Onboarding many clients (`onboarding.py`, admin pages `/admin/onboarding*`
-  in `web/onboarding.py`, table `onboarding` from `migrations/0032`): CSV
+  in `web/onboarding.py`, table `onboarding` from `migrations/0034`): CSV
   import (`parse` previews, `create` adds in one transaction, groups created
   as needed), each tenant's state (`onboarding.state`, from stored data only),
   the client link, email text and consent pack PDF. A **client link**
