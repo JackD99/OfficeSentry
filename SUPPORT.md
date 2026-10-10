@@ -29,11 +29,13 @@ The same docs are on the website with search: [officesentry.co.uk/docs](https://
 2. **Check Troubleshooting** for the error text. Most setup problems are there with the fix.
 3. **Get the support package.** In the portal, open **Settings → Support** and download the support
    package: one zip with the versions, health, settings, database and disk sizes and the recent log of your
-   install. `python -m officesentry support-package` makes the same zip from the shell. It contains no
-   secrets or client names unless you tick *Include client identifiers* (leave that off for a public issue).
-   If a page showed "Something went wrong on our side", note the reference it gave: it's also on the error's
-   log line and in the `X-Request-ID` header, and the bug form has a field for it. (Older versions don't have
-   the package; the bug form asks for the same facts by hand instead.)
+   install. If the portal won't open, `docker compose run --rm -T web python -m officesentry support-package
+   --out - > support.zip` (or `python -m officesentry support-package` without Docker) makes the same zip. It
+   contains no secrets or client names unless you tick *Include client identifiers* (leave that off for a
+   public issue); [Getting help](v2/docs/getting-help.md) lists exactly what's in it. If a page showed
+   "Something went wrong on our side", note the reference it gave: it's also on the error's log line and in
+   the `X-Request-ID` header, and the bug form has a field for it. (Older versions don't have the package; the
+   bug form asks for the same facts by hand instead.)
 4. **Open the bug form** and attach the package. Say what you did, what you saw and what you expected,
    and paste the error from the run's page or `docker compose logs web` / `docker compose logs worker`.
 

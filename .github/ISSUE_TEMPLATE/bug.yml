@@ -53,7 +53,7 @@ body:
       label: Support package
       description: |
         Attach the support package: the zip from **Settings → Support** in the portal (or
-        `python -m officesentry support-package` from the shell). It holds the versions, health, settings and
+        `python -m officesentry support-package` from the shell if the portal won't open). It holds the versions, health, settings and
         recent log of your install, and it contains no secrets or client names unless you ticked
         *Include client identifiers*, so it's safe to attach here. Drag the file into this box. It answers most
         of the questions we would otherwise ask. If your version doesn't have it yet, say so and fill in the
@@ -66,7 +66,7 @@ body:
       description: >-
         If a page showed "Something went wrong on our side", the reference it gave. The same reference is on
         the error's log line and in the `X-Request-ID` response header, so it points us straight at the log entry.
-      placeholder: e.g. 7f3a9c2e
+      placeholder: e.g. 3f9a1c2b7d4e
   - type: dropdown
     id: cloud
     attributes:
