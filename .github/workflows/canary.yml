@@ -1,0 +1,92 @@
+name: canary
+# The live canary: has Microsoft changed what it sends? Runs every collector against the test tenant and
+# compares the shape of each answer (which fields, what types; never the values) with the recording the tests
+# replay (v2/tests/fixtures/live_tenant.json), and lists the Deprecation and Sunset headers Microsoft puts on
+# APIs it is retiring (officesentry/canary.py). Nothing is written to the tenant, and no response is saved
+# or uploaded: the report holds field names and dates only.
+#
+# It signs in without a stored secret: GitHub gives the run an OIDC token, which the test tenant's app
+# trusts through a federated credential for this repository's main branch. Setting that up is done once in
+# Entra and GitHub (v2/tests/nightly/README.md, "Live canary"): the app's federated credential, then two
+# repository variables, CANARY_TENANT_ID and CANARY_CLIENT_ID. Until both exist the job is skipped. At
+# go-public the credential moves to a protected "canary" environment.
+#
+# A failure opens an issue labelled "canary" (or updates the open one), which notifies Jack and closes by itself
+# when a run passes again. Minutes: about 3 a run, on Mondays until the repository variable
+# SCHEDULED_CHECKS_NIGHTLY is "true", then every night; Run workflow runs it now.
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+    - cron: '41 4 * * 0,2-6'  # only with SCHEDULED_CHECKS_NIGHTLY
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    if: >-
+      vars.CANARY_TENANT_ID != '' && vars.CANARY_CLIENT_ID != '' && github.ref == 'refs/heads/main'
+      && (github.event_name != 'schedule' || github.event.schedule == '41 4 * * 1'
+      || vars.SCHEDULED_CHECKS_NIGHTLY == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write  # the OIDC token the test app trusts
+      issues: write  # the "canary" issue
+    defaults:
+      run:
+        shell: bash
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: v2/requirements-dev.txt
+      - name: Install from the lock file
+        run: |
+          pip install --require-hashes --no-deps -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation -e .
+      # Prints each collector's name, status and count only: errors and check results can name the tenant's
+      # people, and run logs will be public once the repository is.
+      - name: Collect from the test tenant and compare
+        id: canary
+        continue-on-error: true
+        env:
+          OFFICESENTRY_TEST_TENANT_ID: ${{ vars.CANARY_TENANT_ID }}
+          OFFICESENTRY_TEST_CLIENT_ID: ${{ vars.CANARY_CLIENT_ID }}
+          OFFICESENTRY_DATA_DIR: ${{ runner.temp }}/data
+        run: |
+          echo "::add-mask::$OFFICESENTRY_TEST_TENANT_ID"
+          echo "::add-mask::$OFFICESENTRY_TEST_CLIENT_ID"
+          python -m officesentry live-test --canary "$RUNNER_TEMP/canary.md"
+      - name: Summary
+        if: always()
+        run: |
+          if [ ! -s "$RUNNER_TEMP/canary.md" ]; then
+            echo "**The canary stopped before it could compare anything.** The step's log says why." > "$RUNNER_TEMP/canary.md"
+          fi
+          cat "$RUNNER_TEMP/canary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Open or update the issue
+        if: always() && steps.canary.outcome == 'failure'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          .github/scripts/scheduled_issue.sh fail canary "Live canary: Microsoft's answers changed"
+          "$RUNNER_TEMP/canary.md"
+      - name: Close the issue
+        if: steps.canary.outcome == 'success'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/scheduled_issue.sh pass canary
+      - name: Fail the run too
+        if: always() && steps.canary.outcome == 'failure'
+        run: exit 1

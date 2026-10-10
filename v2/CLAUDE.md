@@ -248,6 +248,18 @@ needing goes in those lists.
   refuses to write the file if a name, domain or phone number survives; still
   skim the diff. Phone fields are replaced by key (`recording.PHONE_KEYS`)
   whatever their format; `tests/test_recording.py` covers the scrubber.
+- The live canary (`.github/workflows/canary.yml`, `canary.py`) runs `live-test
+  --canary` against the test tenant on a schedule, signing in with GitHub's
+  OIDC token through a federated credential (no secret), and fails when a field
+  the fixture has stops coming back or changes type, a call starts failing, or
+  Microsoft sends a `Deprecation`/`Sunset` header the fixture lacks. It compares
+  shapes only and never prints errors or check results (CI logs go public).
+  Recordings keep those headers, so re-recording acknowledges them.
+- `tests/nightly` (`pytest tests/nightly --nightly`, `.github/workflows/nightly.yml`,
+  weekly while private): every release tag's demo database upgraded and crawled,
+  the example PDFs against page baselines (`--update` refreshes them), and
+  page time budgets at 200 tenants. Both scheduled workflows keep one GitHub
+  issue open while failing (`.github/scripts/scheduled_issue.sh`); see its README.
 
 ## Robustness contract
 
@@ -775,7 +787,7 @@ and `python -m officesentry <command>`:
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `history [--dry-run\|--backfill\|--verify]` | the daily history: progress, an estimate of the backfill without writing, the backfill now, or a check that it reads back as the snapshots |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
-| `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
+| `live-test [--record FILE] [--canary REPORT]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture or compare the answers' shape with it (the live canary) |
 
 Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own
 volume), else in the data folder; `config.move_secrets` moves one left in the data folder on start. Never
