@@ -26,11 +26,14 @@ SKUS = [
 ]
 
 # Ann has Business Premium directly and from the All Staff group; Bob only from the group, with no usage location.
+# Ann's manager is Bob, whose sign-in is blocked.
 USERS = [
     {"id": "u1", "displayName": "Ann", "userPrincipalName": "ann@x.com", "userType": "Member",
      "accountEnabled": True, "assignedLicenses": [{"skuId": "sku-bp"}],
      "licenseAssignmentStates": [state("sku-bp"), state("sku-bp", "s1")], "usageLocation": "GB",
-     "signInActivity": {"lastSignInDateTime": "2026-09-30T10:00:00Z"}},
+     "signInActivity": {"lastSignInDateTime": "2026-09-30T10:00:00Z"}, "department": "Sales",
+     "jobTitle": "Sales lead", "manager": {"@odata.type": "#microsoft.graph.user", "id": "u2", "displayName": "Bob",
+                                          "userPrincipalName": "bob@x.com", "accountEnabled": False}},
     {"id": "u2", "displayName": "Bob", "userPrincipalName": "bob@x.com", "userType": "Member",
      "accountEnabled": False, "assignedLicenses": [{"skuId": "sku-bp"}],
      "licenseAssignmentStates": [state("sku-bp", "s1")], "usageLocation": None, "signInActivity": {}},
