@@ -118,6 +118,14 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   - *Apps and consents*: third-party apps with what they were granted
     (application permissions, tenant-wide and per-user consent), and app
     registration secrets or certificates expiring.
+  - *Unused apps*: every app from outside Microsoft with when it last signed
+    in (signing people in, on its own, or called as an API), from Entra ID's
+    app sign-in activity (needs Entra ID P1). Apps unused for 90 days that
+    still hold application permissions or consent are flagged.
+  - *All users*: every account with its department, job title, manager,
+    licences, source (cloud or synced) and last sign-in; each manager with
+    their direct reports; member counts by department. Accounts reporting to
+    a manager whose sign-in is blocked are flagged.
   - *Conditional Access coverage*: every policy in plain words, and for each
     account which enforced policy requires MFA, whether legacy sign-in is
     blocked, and which policies exclude it (group membership expanded).
@@ -152,6 +160,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     enabled owner or a single one, every team and group with its owners,
     members and guests, every guest in a team or group, and counts of security
     groups and distribution lists.
+  - *Empty, nested and dynamic groups*: groups with no members, security
+    groups and distribution lists that contain other groups (and how many
+    levels deep), and dynamic groups with their rule, flagging paused ones.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS. SPF checks also catch multiple records,
     +all/?all, the ptr mechanism and includes that publish no SPF record;

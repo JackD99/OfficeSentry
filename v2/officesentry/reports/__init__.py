@@ -1,16 +1,19 @@
 """Report builders. Detail reports from other modules register into ``data_reports.REPORTS`` here."""
 
 from . import (
+    all_users,
     auth_methods,
     data_reports,
     deleted_items,
     group_membership,
+    group_structure,
     mail_compliance,
     risky_users,
     sharepoint,
     sharepoint_storage,
     sign_in_reports,
     subscriptions,
+    unused_apps,
     usage_reports,
 )
 
@@ -67,3 +70,12 @@ _items = list(data_reports.REPORTS.items())
 _at = [k for k, _ in _items].index("legacy-auth") + 1
 data_reports.REPORTS.clear()
 data_reports.REPORTS.update(_items[:_at] + list(mail_compliance.REPORTS.items()) + _items[_at:])
+
+# Directory reports: All users leads the account reports, Unused apps follows Apps and consents, and Empty,
+# nested and dynamic groups follows Group membership.
+for _module, _before, _after in ((all_users, "inactive", None), (unused_apps, None, "apps"),
+                                 (group_structure, None, "group-membership")):
+    _items = list(data_reports.REPORTS.items())
+    _at = [k for k, _ in _items].index(_before or _after) + (0 if _before else 1)
+    data_reports.REPORTS.clear()
+    data_reports.REPORTS.update(_items[:_at] + list(_module.REPORTS.items()) + _items[_at:])

@@ -56,6 +56,14 @@ tenant; until then the pages build them as before.
   changes worth a second look.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
+- Unused apps report: every app from outside Microsoft with when it last signed in (from Entra ID's app
+  sign-in activity, which needs Entra ID P1), flagging apps unused for 90 days that still hold permissions.
+- All users report: every account with its department, job title, manager, licences and last sign-in, each
+  manager with their direct reports, member counts by department, and accounts reporting to a manager whose
+  sign-in is blocked.
+- Empty, nested and dynamic groups report: groups with no members, groups inside other groups (and how many
+  levels deep), and dynamic groups with their rules, flagging paused ones.
+- A "Directory clean-up" job on the Reports page that groups these with Inactive accounts and the recycle bin.
 
 ### Changed
 

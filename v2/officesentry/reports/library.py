@@ -26,7 +26,7 @@ USES: tuple[Use, ...] = (
     Use("offboarding", "Offboarding check",
         "Someone has left: check their access is gone, their mail isn't forwarded and their licences come back.",
         ("inactive", "licences", "mailboxes", "inbox-rules", "mailbox-permissions", "mailbox-holds", "onedrive",
-         "shared-files", "admins", "devices", "groups", "group-membership", "deleted-items")),
+         "shared-files", "admins", "devices", "groups", "group-membership", "deleted-items", "all-users")),
     Use("quarterly", "Quarterly review",
         "What a client review meeting covers: the summary, what changed, and the trends behind it.",
         ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests")),
@@ -63,6 +63,10 @@ USES: tuple[Use, ...] = (
         "Check the client's bill against the tenant: products, quantities, prices, trials and suspended "
         "subscriptions, and licence assignment errors.",
         ("subscriptions", "licences")),
+    Use("cleanup", "Directory clean-up",
+        "What nobody uses any more: stale accounts, apps unused for months that still hold permissions, empty and "
+        "nested groups, managers who have left, and what's in the recycle bin.",
+        ("inactive", "unused-apps", "group-structure", "all-users", "apps", "deleted-items", "devices")),
 )
 
 # Words people search for that a report's own title and description don't contain.
@@ -106,6 +110,12 @@ KEYWORDS: dict[str, str] = {
     "secure-score": "score trend controls",
     "tenant-settings": "defaults user consent authorization policy",
     "admin-activity": "audit log directory changes who changed",
+    "all-users": "directory everyone staff list employees export department job title manager org chart reports to "
+                 "direct reports licences",
+    "unused-apps": "enterprise applications service principals app sign-in activity last used stale inactive apps "
+                   "oauth clean up cleanup",
+    "group-structure": "empty groups nested groups dynamic membership rule paused distribution lists security groups "
+                       "clean up cleanup",
 }
 
 SUMMARY_AREA = "Summaries"
