@@ -285,7 +285,12 @@ def exchange(t: dict, users: list[dict], first: bool, rng: random.Random) -> dic
             box.update(ForwardingSmtpAddress=f"smtp:{upn.split('@')[0]}@homemail.example",
                        DeliverToMailboxAndForward=False)
         boxes.append(box)
-        size = 47.2 if i == 3 else 45.6 if i == 9 else rng.uniform(1.5, 32)
+        rng.uniform(1.5, 32)  # still drawn, so everything drawn after it stays the same
+        # Each mailbox's own size, the same in both collections: the shared generator is at a different point by
+        # then, since two people join in between.
+        size = 47.2 if i == 3 else 45.6 if i == 9 else random.Random(t["name"] + u["id"]).uniform(1.5, 32)  # noqa: S311
+        if first:  # five weeks earlier: mailboxes grow, a few fast
+            size *= 0.93 if i == 3 else 0.97 if i == 9 else 0.86 + zlib.crc32(u["id"].encode()) % 14 / 100
         stats[guid] = [{"TotalItemSize": f"{size:.1f} GB ({int(size * GB):,} bytes)",
                         "TotalDeletedItemSize": f"{size / 20:.1f} GB ({int(size * GB / 20):,} bytes)",
                         "ItemCount": int(size * 2400)}]
@@ -334,6 +339,115 @@ def inbox_rules(users: list[dict]) -> dict:
                                "actions": {"forwardTo": [{"emailAddress": {
                                    "address": "bookkeeping@ledgerline.example"}}]}}]
     return rules
+
+
+def _ts(when: datetime) -> str:
+    return when.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")
+
+
+def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -> dict:
+    """Get-* results for phones syncing mail and distribution lists, with a message trace of the last 10 days."""
+    domain = f"{t['base']}.{t['tld']}"
+    people = [u for u in users if u["userType"] == "Member" and u.get("assignedLicenses")]
+    devices, stats = [], {}
+    for i, u in enumerate(people):
+        owned = []
+        if rng.random() < 0.75 or u["id"] in ("u1", "u2"):
+            outlook = rng.random() < 0.6
+            model, os_name = rng.choice([("iPhone 15", "iOS 17.6.1 21G93"), ("iPhone 14", "iOS 17.5.1 21F90"),
+                                         ("SM-S918B", "Android 14"), ("Pixel 8", "Android 14")])
+            synced = now - timedelta(days=2 if u["id"] == "u2" else rng.choice([0, 0, 0, 1, 2, 4]),
+                                     hours=rng.randint(0, 8))
+            owned.append((model, os_name, "Outlook" if outlook else "EAS", synced, "Allowed"))
+        if i % 6 == 2:  # an old phone nobody removed
+            owned.append(("iPhone 11", "iOS 15.7 19H12", "EAS", now - timedelta(days=rng.randint(120, 400)), "Allowed"))
+        if i == 9:
+            owned.append(("SM-A546B", "Android 13", "EAS", None, "Quarantined"))
+        for n, (model, os_name, client, synced, access) in enumerate(owned):
+            device_id = f"{zlib.crc32((u['id'] + model + str(n)).encode()):08X}"
+            first_sync = (synced or now) - timedelta(days=rng.randint(60, 700))
+            identity = f"{u['id']}\\ExchangeActiveSyncDevices\\{model.split()[0]}§{device_id}"
+            devices.append({"DeviceId": device_id, "DeviceModel": model, "DeviceType": model.split()[0],
+                            "DeviceOS": os_name, "FriendlyName": "", "ClientType": client,
+                            "DeviceAccessState": access, "DeviceAccessStateReason": "Global",
+                            "FirstSyncTime": first_sync.strftime("%Y-%m-%dT%H:%M:%SZ"), "IsManaged": False,
+                            "Identity": identity, "Guid": f"dev-{device_id}"})
+            stats.setdefault(f"g-{u['id']}", []).append({
+                "Identity": identity, "Guid": f"dev-{device_id}", "LastSuccessSync": _ts(synced) if synced else None,
+                "LastSyncAttemptTime": _ts(synced) if synced else None, "Status": "DeviceOk"})
+
+    staff = [u["userPrincipalName"] for u in people if u["accountEnabled"]]
+    lists = [("All staff", "allstaff", "ann", staff, False, 40),
+             ("Sales team", "salesteam", "bob", rng.sample(staff, min(6, len(staff))), False, 8),
+             ("Accounts", "accountsteam", "ann", rng.sample(staff, min(3, len(staff))) + ["external"], False, 12),
+             ("Website enquiries", "enquiries", "ann", rng.sample(staff, min(4, len(staff))), True, 25),
+             ("Christmas party 2023", "xmas2023", None, rng.sample(staff, min(9, len(staff))), False, 0),
+             ("Old projects", "oldprojects", None, [], False, 0)]
+    groups, members, trace = [], {}, []
+    for n, (name, alias, owner, who, outside, per_10_days) in enumerate(lists):
+        address = f"{alias}@{domain}"
+        groups.append({"Name": name, "DisplayName": name, "PrimarySmtpAddress": address, "Guid": f"dl-{n}",
+                       "ExternalDirectoryObjectId": f"dl-{n}", "RecipientTypeDetails": "MailUniversalDistributionGroup",
+                       "ManagedBy": [{"ann": "u1", "bob": "u2"}[owner]] if owner else [],
+                       "RequireSenderAuthenticationEnabled": not outside, "IsDirSynced": False,
+                       "WhenCreatedUTC": (now - timedelta(days=200 + 90 * n)).strftime("%Y-%m-%dT%H:%M:%SZ")})
+        members[f"dl-{n}"] = [
+            {"DisplayName": "Ledgerline Bookkeeping", "PrimarySmtpAddress": "team@ledgerline.example",
+             "RecipientTypeDetails": "MailContact"} if m == "external" else
+            {"DisplayName": m.split("@")[0].replace(".", " ").title(), "PrimarySmtpAddress": m,
+             "RecipientTypeDetails": "UserMailbox"} for m in who]
+        for _ in range(per_10_days):
+            received = now - timedelta(hours=2 + rng.uniform(0, 236))
+            trace.append({"RecipientAddress": address, "Received": _ts(received), "Status": "Expanded"})
+    return {"Get-MobileDevice": devices, "Get-MobileDeviceStatistics": stats, "Get-DistributionGroup": groups,
+            "Get-DistributionGroupMember": members, "Get-MessageTraceV2": trace}
+
+
+def replies(t: dict, users: list[dict], now: datetime, first: bool) -> dict:
+    """Automatic replies: one left on since the first collection, one on this week, one scheduled, a leaver's."""
+    staff = [u for u in users if u["id"].startswith("d")]
+    def on(text, audience="all", status="alwaysEnabled", start=None, end=None):
+        when = lambda d: {"dateTime": (d or now).strftime("%Y-%m-%dT%H:00:00.0000000"), "timeZone": "UTC"}  # noqa: E731
+        return {"status": status, "externalAudience": audience, "scheduledStartDateTime": when(start),
+                "scheduledEndDateTime": when(end), "internalReplyMessage": f"<p>{text}</p>",
+                "externalReplyMessage": f"<p>{text}</p>"}
+    out = {staff[4]["id"]: on("I'm on leave until 2 September. For anything urgent please email the office.")}
+    if not first:
+        out[staff[10]["id"]] = on("I'm at a conference this week and will reply on Monday.", "contactsOnly")
+        out[staff[13]["id"]] = on("I'm on holiday from next Monday for two weeks.", status="scheduled",
+                                  start=now + timedelta(days=4), end=now + timedelta(days=18))
+        out["u2"] = on(f"{t['people']['bob']} has left the company. Please contact {_upn(t, 'ann')} instead.")
+    return out
+
+
+def list_history(db, tenant_id: int, now: datetime) -> None:
+    """Pretend the distribution lists have been watched for four months, so unused ones show as unused: busy lists
+    get a few messages most days, the two old lists none."""
+    from officesentry.snapshot import TenantSnapshot
+
+    snap = TenantSnapshot(db, store.get_tenant(db, tenant_id))
+    run = snap.runs.get("distribution_lists")
+    if run is None:
+        return
+    rows = []
+    for entry in store.run_objects(db, run["id"], "dl_activity"):
+        address = entry.pop("_id")
+        entry.pop("_kind", None)
+        quiet = address.startswith(("xmas2023@", "oldprojects@"))
+        rng = random.Random(address)  # noqa: S311 (demo data)
+        if not quiet:
+            for back in range(11, 90):
+                if rng.random() < 0.6:
+                    day = (now - timedelta(days=back)).date().isoformat()
+                    entry["days"][day] = entry["days"].get(day, 0) + rng.randint(1, 4)
+        else:
+            entry["last"] = (now - timedelta(days=140 if address.startswith("xmas") else 400)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ")
+        entry["days"] = dict(sorted(entry["days"].items()))
+        entry["watchedFrom"] = (now - timedelta(days=120)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rows.append((address, entry))
+    db.execute("DELETE FROM objects WHERE run_id = ? AND kind = 'dl_activity'", (run["id"],))
+    store.add_objects(db, run["id"], "dl_activity", rows)
 
 
 def folders(rules: dict) -> dict:
@@ -509,7 +623,8 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
         rng = random.Random(t["name"] + "extras")  # noqa: S311
         entra, managed = devices(everyone, rng)
         rules = inbox_rules(everyone)
-        extras = {graphdata: {"EXCHANGE": {**exchange(t, everyone, first, rng), "Get-InboxRule": folders(rules)}},
+        extras = {graphdata: {"EXCHANGE": {**exchange(t, everyone, first, rng), "Get-InboxRule": folders(rules),
+                                           **mail_extras(t, everyone, now, random.Random(t["name"] + "mail"))}},  # noqa: S311
                   devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed},
                   sharepoint_data: sharepoint(t, everyone, tenant_skus, now, first, rng)}
         with Swapped(extras):
@@ -518,7 +633,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
                         secure_scores=secure_scores(t["score"][0] - 4, t["score"][0], now) if first
                         else secure_scores(t["score"][0] - 4, t["score"][1], now, 105),
                         usage_kw={"active": usagedata.ACTIVE_USERS + active, "apps": usagedata.APP_USERS + apps},
-                        inbox_rules=rules)
+                        inbox_rules=rules, auto_replies=replies(t, everyone, now, first))
 
 
 def activity_history(db, tenant_id: int, t: dict, now: datetime, days: int = 120) -> None:
@@ -611,6 +726,7 @@ def populate(db, vault, *, msp: str = "Harbour IT", accent: str = "#0d7a5f",
         backdate(db, tid, 35)
         activity_history(db, tid, t, now)
         collect(db, tid, t, now, first=False)
+        list_history(db, tid, now)
         ids.append(tid)
     for part, price in PRICES.items():
         db.execute("INSERT OR REPLACE INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)",

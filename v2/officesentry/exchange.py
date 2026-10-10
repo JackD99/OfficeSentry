@@ -50,6 +50,11 @@ READ_ONLY_CMDLETS = frozenset({
     "Get-RemoteDomain",
     "Get-HostedOutboundSpamFilterPolicy",
     "Get-AcceptedDomain",
+    "Get-MobileDevice",
+    "Get-MobileDeviceStatistics",
+    "Get-DistributionGroup",
+    "Get-DistributionGroupMember",
+    "Get-MessageTraceV2",
 })
 
 ACCESS_HELP = ("Exchange refused access. In this tenant, assign the Global Reader role to the "

@@ -6,7 +6,9 @@ have gets a 404, so a collector that starts asking for something new fails
 loudly instead of silently reading nothing.
 
 Until the fixture is re-recorded, a test can name the exceptions: ``stand_ins``
-answers a new Graph request with a body of the documented shape, and
+answers a new Graph request (a path, where ``{id}`` stands for any one segment)
+or a new Exchange cmdlet (``"Get-..."``, any parameters) with a body of the
+documented shape, and
 ``new_fields`` lets a request whose ``$select`` asks for more fields than were
 recorded get the recorded response (the new fields are simply absent, as for a
 tenant that doesn't set them). Anything else unrecorded is still a 404 and is
@@ -21,7 +23,7 @@ import responses
 
 from officesentry.exchange import EXCHANGE_ROOT
 from officesentry.graph import GRAPH_ROOT
-from officesentry.recording import request_key
+from officesentry.recording import TIMESTAMP, request_key
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -31,7 +33,9 @@ def load(name: str = "live_tenant.json") -> dict:
 
 
 def _cmdlet_key(url: str, cmdlet: dict) -> str:
-    return json.dumps([request_key(url), cmdlet.get("CmdletName"), cmdlet.get("Parameters") or {}], sort_keys=True)
+    # Times in parameters (the message trace's StartDate) are blanked, as in Graph queries.
+    return TIMESTAMP.sub("<time>", json.dumps([request_key(url), cmdlet.get("CmdletName"),
+                                               cmdlet.get("Parameters") or {}], sort_keys=True))
 
 
 def _select(query) -> tuple[set[str], list[tuple[str, str]]]:
@@ -76,6 +80,10 @@ def mock(rsps, fixture: dict, stand_ins: dict[str, dict] | None = None,
         e = recorded.pop(0) if len(recorded) > 1 else recorded[0]
         return e["status"], {}, json.dumps(e["body"]) if e["body"] is not None else ""
 
+    patterns = [(re.compile("".join("[^/]+" if part == "{id}" else re.escape(part)
+                                    for part in re.split(r"(\{id\})", path)) + r"\Z"), body)
+                for path, body in stand_ins.items() if path.startswith("/")]
+
     def graph_cb(request):
         path = request_key(request.url)[0]
         key = json.dumps(request_key(request.url))
@@ -83,13 +91,18 @@ def mock(rsps, fixture: dict, stand_ins: dict[str, dict] | None = None,
             entries = _recorded_subset(graph, request.url)
             if entries:
                 graph[key] = entries
-        if key not in graph and path in stand_ins:
-            return 200, {}, json.dumps(stand_ins[path])
+        if key not in graph:
+            for pattern, body in patterns:
+                if pattern.match(path):
+                    return 200, {}, json.dumps(body)
         return serve(graph, key, request.url)
 
     def exchange_cb(request):
         cmdlet = json.loads(request.body)["CmdletInput"]
-        return serve(exchange, _cmdlet_key(request.url, cmdlet), cmdlet.get("CmdletName"))
+        key = _cmdlet_key(request.url, cmdlet)
+        if key not in exchange and cmdlet.get("CmdletName") in stand_ins:
+            return 200, {}, json.dumps(stand_ins[cmdlet["CmdletName"]])
+        return serve(exchange, key, cmdlet.get("CmdletName"))
 
     rsps.add_callback(responses.GET, re.compile(re.escape(GRAPH_ROOT) + "/.*"), callback=graph_cb,
                       content_type="application/json")

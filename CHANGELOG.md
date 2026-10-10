@@ -30,6 +30,8 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 ### New Microsoft permissions
 
 None. The sign-in and directory audit logs were already read; they're now read incrementally and kept.
+The new Exchange reports use more read-only `Get-` cmdlets under the Global Reader role clients already
+assign, and automatic replies use `MailboxSettings.Read`, already granted, so no client approves again.
 
 ### Database upgrade
 
@@ -56,6 +58,13 @@ tenant; until then the pages build them as before.
   changes worth a second look.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
+- Four Exchange reports (Reports → Email): **Mobile devices** (phones and tablets syncing mail, with which
+  app, when each last synced, leavers' devices still connected and ones waiting for approval),
+  **Automatic replies** (who is sending an out-of-office reply, who outside hears it, and replies on so
+  long they look forgotten), **Distribution lists** (members, owners, outside senders, and empty,
+  ownerless or unused lists, from a count of the message trace kept per day) and **Mailbox size trend**
+  (each mailbox's growth over one and three months from Office Sentry's own snapshots, and when it will
+  fill up). If the message trace isn't available to the app, lists show without activity and say why.
 
 ### Changed
 

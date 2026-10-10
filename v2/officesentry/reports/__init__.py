@@ -2,10 +2,14 @@
 
 from . import (
     auth_methods,
+    auto_replies,
     data_reports,
     deleted_items,
+    distribution_lists,
     group_membership,
     mail_compliance,
+    mailbox_trend,
+    mobile_devices,
     risky_users,
     sharepoint,
     sharepoint_storage,
@@ -67,3 +71,10 @@ _items = list(data_reports.REPORTS.items())
 _at = [k for k, _ in _items].index("legacy-auth") + 1
 data_reports.REPORTS.clear()
 data_reports.REPORTS.update(_items[:_at] + list(mail_compliance.REPORTS.items()) + _items[_at:])
+
+# The newer Exchange reports follow Mailbox holds and archiving.
+_items = list(data_reports.REPORTS.items())
+_at = [k for k, _ in _items].index("mailbox-holds") + 1
+_new = {**mailbox_trend.REPORTS, **auto_replies.REPORTS, **mobile_devices.REPORTS, **distribution_lists.REPORTS}
+data_reports.REPORTS.clear()
+data_reports.REPORTS.update(_items[:_at] + list(_new.items()) + _items[_at:])

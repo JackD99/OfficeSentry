@@ -210,3 +210,25 @@ def test_committed_fixture_has_no_real_phone_numbers():
 
     path = Path(__file__).parent / "fixtures" / "live_tenant.json"
     assert phone_leaks(json.loads(path.read_text(encoding="utf-8"))) == []
+
+
+def test_device_numbers_and_free_text_are_redacted():
+    log = raw_log() + [
+        {"api": "exchange", "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand", "status": 200,
+         "cmdlet": {"CmdletName": "Get-MobileDeviceStatistics", "Parameters": {"Mailbox": "jsmithson"}},
+         "body": {"value": [{"DeviceImei": "356938035643809", "DevicePhoneNumber": "+44 7700 900111",
+                             "RecoveryPassword": "1234-5678", "DeviceModel": "iPhone 15"}]}},
+        {"api": "exchange", "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand", "status": 200,
+         "cmdlet": {"CmdletName": "Get-MessageTraceV2", "Parameters": {}},
+         "body": {"value": [{"Subject": "Salary review", "RecipientAddress": "all@contoso.com"}]}},
+        _graph(f"/v1.0/users/{JANE}/mailboxSettings/automaticRepliesSetting", {
+            "status": "alwaysEnabled", "internalReplyMessage": "<p>Off sick until Friday</p>",
+            "externalReplyMessage": ""}),
+    ]
+    entries = scrub(log, TENANT, CLIENT)["entries"]
+    device = entries[-3]["body"]["value"][0]
+    assert device["DeviceImei"] == device["RecoveryPassword"] == "redacted"
+    assert device["DevicePhoneNumber"].startswith("+1 555 01") and device["DeviceModel"] == "iPhone 15"
+    assert entries[-2]["body"]["value"][0]["Subject"] == "redacted"
+    reply = entries[-1]["body"]
+    assert reply["internalReplyMessage"] == "redacted" and reply["externalReplyMessage"] == ""
