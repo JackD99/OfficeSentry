@@ -21,6 +21,14 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
 
+### New Microsoft permissions
+
+None.
+
+### Database upgrade
+
+No.
+
 ### Fixed
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
@@ -71,6 +79,20 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 - What changed no longer lists every mailbox, OneDrive, site and library because its size or file count
   moved. Those columns are compared like day counts; a mailbox or site that crosses into a table (nearly
   full, say) still shows.
+
+- A report email retried after midnight, sent again with Retry the next week, or approved late now names
+  the month, week or quarter it was for, and carries that month's commentary, instead of the day it went out.
+- A tenant nothing has been collected for yet is no longer emailed an empty report: the send fails with the
+  reason and is retried.
+- Send now and Retry wait while the timer is already sending that schedule's period, so a period can't go
+  out twice. A failed Send now is logged as a failure.
+- Approving a month-end report for a client with nobody to email no longer marks the month Sent: it stays
+  Approved, flagged "Nobody to email" in the queue, with a Send again once a contact is added.
+- A month-end email to a client with more than 20 contacts keeps the team's hidden copy, and Monthly report
+  coverage names the contacts left off.
+- The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
+- The plain-text part of a report email leads with the verdict and says when the data is old.
+- Pausing and resuming an email schedule is saved as one change.
 
 ### Security
 

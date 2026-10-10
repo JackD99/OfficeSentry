@@ -132,6 +132,7 @@ def _render_plan(values: dict, chosen: set[int]):
         modes=month_end.MODES,
         deliveries=month_end.DELIVERIES,
         pdf_available=delivery.export.pdf_available(),
+        recipients_limit=delivery.mailer.MAX_RECIPIENTS,
     )
 
 

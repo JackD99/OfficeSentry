@@ -16,9 +16,12 @@
         {% if 'no_report' in r.gaps %}<span class="pill warn">No monthly report</span>{% endif %}
         {% if 'no_contacts' in r.gaps %}<span class="pill warn">No contacts</span>{% endif %}
         {% if 'no_recipients' in r.gaps %}<span class="pill warn">Sends to nobody</span>{% endif %}
+        {% if 'left_off' in r.gaps %}<span class="pill warn">{{ r.left_off|plural('contact') }} left off</span>
+          <span class="sub">One email goes to at most {{ r.contacts - r.left_off }} of a client's contacts, first by name.</span>{% endif %}
       </td>
       <td class="num">
         {% if 'no_contacts' in r.gaps or 'no_recipients' in r.gaps %}<a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=r.tenant.id) }}#contacts">Add a contact</a>{% endif %}
+        {% if 'left_off' in r.gaps %}<a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=r.tenant.id) }}#contacts">Review contacts</a>{% endif %}
         {% if 'no_report' in r.gaps %}{% if admin %}<a class="btn sm" href="{{ url_for('reporting.new_plan', tenant=r.tenant.id) }}">Add to a plan</a>{% else %}<a class="btn sm" href="{{ url_for('email.new_schedule', tenant_id=r.tenant.id) }}">Schedule a report</a>{% endif %}{% endif %}
       </td>
     </tr>
