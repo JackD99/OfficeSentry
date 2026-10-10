@@ -222,11 +222,16 @@ def cmd_backup(args, cfg):
     """Write a consistent copy of the database, safe while the portal is running."""
     from pathlib import Path
 
-    from .backups import backup, record_status
+    from .backups import BackupIncomplete, backup, record_status
 
     # The outcome goes in backup-status.json for the health check and the "backup failed" alert.
     try:
         dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
+    except BackupIncomplete as exc:
+        # The database copy is sound, but the backup as a whole isn't: the alert should say exactly that.
+        error = f"The database was copied to {exc.dest.name}, but {exc}."
+        record_status(cfg.data_dir, "local", False, error)
+        sys.exit(error)
     except OSError as exc:
         record_status(cfg.data_dir, "local", False, f"No backup made: {exc.strerror or exc}.")
         sys.exit(f"No backup made: {exc.strerror or exc}.")
@@ -263,7 +268,12 @@ def cmd_restore(args, cfg):
         result = restore(cfg.db_path, Path(args.file), worker_running=running, force=args.force)
     except RestoreError as exc:
         sys.exit(f"Not restored: {exc}")
-    if result["saved"]:
+    if result.get("damaged"):
+        print(
+            f"The database it replaced was damaged, so it couldn't be copied: it was moved aside whole as "
+            f"{result['saved']}."
+        )
+    elif result["saved"]:
         print(f"The database it replaced is saved as {result['saved']}.")
     print(f"Restored {args.file} (database version {result['version']}).")
     if result.get("events"):

@@ -39,10 +39,20 @@ GZIP_LEVEL = 6
 SPARE_BYTES = 64 * 2**20
 # Tables every Office Sentry database has had since the first migration.
 CORE_TABLES = {"users", "tenants", "runs", "objects", "settings"}
+# Files SQLite keeps beside a database.
+SIDE_FILES = ("-wal", "-shm", "-journal")
 
 
 class RestoreError(Exception):
     pass
+
+
+class BackupIncomplete(Exception):
+    """The database copy was saved (``dest``, with ``removed`` rotated out), but a later step failed."""
+
+    def __init__(self, dest: Path, removed: list[Path], problem: str):
+        super().__init__(problem)
+        self.dest, self.removed = dest, removed
 
 
 def _stamp() -> str:
@@ -129,6 +139,8 @@ def rotate(folder: Path, prefix: str, keep: int) -> list[Path]:
     old = backup_files(folder, prefix)[:-keep]
     for path in old:
         path.unlink()
+        for side in SIDE_FILES:  # a damaged database moved aside by ``restore`` keeps its WAL beside it
+            Path(f"{path}{side}").unlink(missing_ok=True)
     return old
 
 
@@ -140,8 +152,14 @@ def backup(db_path: Path, folder: Path, keep: int) -> tuple[Path, list[Path]]:
         dest = copy_database(src, folder / f"{BACKUP_PREFIX}{_stamp()}.db{COMPRESSED}")
     finally:
         src.close()
-    mirror_events(db_path.parent / EVENTS, folder / EVENTS)
-    return dest, rotate(folder, BACKUP_PREFIX, keep)
+    # The copy is sound from here on, so older ones rotate out whatever happens to the activity history.
+    removed = rotate(folder, BACKUP_PREFIX, keep)
+    try:
+        mirror_events(db_path.parent / EVENTS, folder / EVENTS)
+    except (OSError, sqlite3.Error) as exc:
+        problem = exc.strerror if isinstance(exc, OSError) and exc.strerror else str(exc)
+        raise BackupIncomplete(dest, removed, f"the activity history couldn't be copied: {problem}") from exc
+    return dest, removed
 
 
 # -- Activity history -----------------------------------------------------------------------------
@@ -387,8 +405,24 @@ def _remove_stale_journal(db_path: Path) -> None:
     would apply it to the new one."""
     if db_path.exists():
         return
-    for suffix in ("-wal", "-shm", "-journal"):
+    for suffix in SIDE_FILES:
         Path(f"{db_path}{suffix}").unlink(missing_ok=True)
+
+
+def _move_aside(db_path: Path, folder: Path) -> Path:
+    """Move a database that can't be copied (it's damaged) into ``folder`` as ``pre-restore-<time>-damaged.db``,
+    with its WAL and rollback journal beside it, which may hold its last changes. Renaming needs no free space
+    and keeps every byte, so whatever can still be saved from it can be."""
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    aside = folder / f"{PRE_RESTORE_PREFIX}{_stamp()}-damaged.db"
+    os.replace(db_path, aside)
+    for suffix in SIDE_FILES:
+        side = Path(f"{db_path}{suffix}")
+        if suffix == "-shm":  # only an index of the WAL, rebuilt from it
+            side.unlink(missing_ok=True)
+        elif side.exists():
+            os.replace(side, Path(f"{aside}{suffix}"))
+    return aside
 
 
 def _is_gzip(path: Path) -> bool:
@@ -420,9 +454,10 @@ def _unpacked(source: Path, folder: Path) -> Iterator[Path]:
 def restore(db_path: Path, source: Path, worker_running: bool, force: bool = False) -> dict:
     """Replace the database at ``db_path`` with the backup ``source`` (a ``.db`` or a gzipped ``.db.gz``).
 
-    The current database is copied to ``backups/pre-restore-*.db.gz`` first. The
-    copy goes through the backup API into the database itself, so its WAL and
-    shared-memory files stay consistent; nothing is copied file by file.
+    The current database is copied to ``backups/pre-restore-*.db.gz`` first, or, when it's too damaged to
+    copy, moved there whole as ``pre-restore-*-damaged.db`` (with its WAL). The backup goes in through the
+    backup API into the database itself, so its WAL and shared-memory files stay consistent; nothing is
+    copied file by file.
     """
     source = Path(source)
     if db_path.exists() and source.resolve() == db_path.resolve():
@@ -439,30 +474,54 @@ def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, for
             "and the worker first (docker compose stop web worker), or add --force if it isn't "
             "really running."
         )
-    saved = None
+    saved = damaged = None
+    folder = db_path.parent / "backups"
     if db_path.exists():
-        live = connect(db_path)
         try:
-            saved = copy_database(live, db_path.parent / "backups" / f"{PRE_RESTORE_PREFIX}{_stamp()}.db{COMPRESSED}")
-        finally:
-            live.close()
-        rotate(db_path.parent / "backups", PRE_RESTORE_PREFIX, KEEP_PRE_RESTORE)
+            saved = _save_live(db_path, folder)
+        except sqlite3.OperationalError as exc:  # locked, say: not damage, so the database stays where it is
+            raise RestoreError(f"The current database couldn't be copied first: {exc}.") from exc
+        except sqlite3.DatabaseError as exc:
+            # The live database is damaged (the case a restore is most often for), so it can't be copied
+            # through SQLite. Move it aside whole instead.
+            log.warning("The live database couldn't be copied (%s); moving it aside", exc)
+            saved = damaged = _move_aside(db_path, folder)
+        except OSError as exc:
+            raise RestoreError(
+                f"There's no room to keep a copy of the current database first: {exc.strerror or exc}. "
+                "Free some space and try again."
+            ) from exc
+        rotate(folder, PRE_RESTORE_PREFIX, KEEP_PRE_RESTORE)
     _remove_stale_journal(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    src = sqlite3.connect(f"{plain.resolve().as_uri()}?mode=ro", uri=True)
-    dest = connect(db_path)
     try:
-        src.backup(dest)
-        dest.execute("PRAGMA journal_mode = WAL")
-        dest.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        problem = dest.execute("PRAGMA quick_check").fetchone()[0]
-    finally:
-        src.close()
-        dest.close()
+        src = sqlite3.connect(f"{plain.resolve().as_uri()}?mode=ro", uri=True)
+        dest = connect(db_path)
+        try:
+            src.backup(dest)
+            dest.execute("PRAGMA journal_mode = WAL")
+            dest.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            problem = dest.execute("PRAGMA quick_check").fetchone()[0]
+        finally:
+            src.close()
+            dest.close()
+    except sqlite3.Error as exc:  # a full disk, say
+        problem = str(exc)
     if problem != "ok":
-        raise RestoreError(f"The restored database failed its check ({problem}). The previous one is in {saved}.")
+        kept = f" The previous one is in {saved}." if saved else ""
+        raise RestoreError(f"The restored database failed its check ({problem}).{kept}")
     events = restore_events(source.parent / EVENTS, db_path.parent / EVENTS)
-    return {"version": version, "saved": saved, "events": events}
+    return {"version": version, "saved": saved, "damaged": damaged is not None, "events": events}
+
+
+def _save_live(db_path: Path, folder: Path) -> Path:
+    """The pre-restore copy of the live database, through the backup API. Raises sqlite3.DatabaseError (but not
+    OperationalError) when the database is damaged, and OSError when there's no room for the copy."""
+    live = connect(db_path)
+    try:
+        return copy_database(live, folder / f"{PRE_RESTORE_PREFIX}{_stamp()}.db{COMPRESSED}")
+    finally:
+        live.close()
 
 
 def inspect(source: Path) -> dict:

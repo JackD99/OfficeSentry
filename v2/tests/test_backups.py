@@ -250,3 +250,90 @@ def test_a_second_process_upgrading_at_once_does_not_copy_again(cfg, monkeypatch
     first = backups.before_upgrade(cfg.db_path, every[-2][0], every[-1][0])
     assert first is not None and first.exists()
     assert backups.before_upgrade(cfg.db_path, every[-2][0], every[-1][0]) is None
+
+
+def _corrupt(db, path, how):
+    """Damage the live database the way a failing disk or a half-copied file does."""
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    db.close()
+    data = bytearray(path.read_bytes())
+    if how == "header":
+        data[:100] = b"\0" * 100  # "file is not a database"
+    else:
+        page = int.from_bytes(data[16:18], "big")
+        data[page:] = bytes((i * 7 + 3) % 251 for i in range(len(data) - page))  # every page but the first
+    path.write_bytes(bytes(data))
+    for suffix in ("-wal", "-shm"):
+        path.with_name(path.name + suffix).unlink(missing_ok=True)
+    check = sqlite3.connect(path)
+    try:
+        with pytest.raises(sqlite3.DatabaseError):
+            assert check.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+    finally:
+        check.close()
+    return bytes(data)
+
+
+@pytest.mark.parametrize("how", ["header", "pages"])
+def test_restore_replaces_a_damaged_database(env, db, two_tenants, capsys, how):
+    main(["backup"])
+    saved = next((env.data_dir / "backups").glob("officesentry-*.db.gz"))
+    damaged = _corrupt(db, env.db_path, how)
+    capsys.readouterr()
+
+    main(["restore", str(saved)])
+    out = capsys.readouterr().out
+    assert "Restored" in out and "was damaged" in out
+    assert _tenants(env.db_path) == ["Alpha Ltd", "Bravo Inc"]
+    assert connect(env.db_path).execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    # The damaged file is kept whole, not copied through SQLite, in case anything can still be saved from it.
+    (aside,) = (env.data_dir / "backups").glob("pre-restore-*")
+    assert aside.name.endswith("-damaged.db") and aside.name in out
+    assert aside.read_bytes() == damaged
+
+
+def test_rotation_takes_a_moved_aside_database_with_its_wal(tmp_path):
+    old = tmp_path / "pre-restore-20260101-000000-damaged.db"
+    old.write_bytes(b"damaged")
+    old.with_name(old.name + "-wal").write_bytes(b"its last changes")
+    for day in range(2, 5):
+        (tmp_path / f"pre-restore-2026010{day}-000000.db.gz").write_bytes(b"")
+    assert backups.rotate(tmp_path, backups.PRE_RESTORE_PREFIX, backups.KEEP_PRE_RESTORE) == [old]
+    assert not list(tmp_path.glob("*damaged*"))
+
+
+def test_restore_without_room_for_the_current_database_says_so(env, db, two_tenants, monkeypatch):
+    main(["backup"])
+    saved = next((env.data_dir / "backups").glob("officesentry-*.db.gz"))
+    db.execute("DELETE FROM tenants WHERE name = 'Alpha Ltd'")
+    monkeypatch.setattr(backups.shutil, "disk_usage", lambda _p: shutil._ntuple_diskusage(10**9, 10**9, 1000))
+    with pytest.raises(SystemExit, match="Not restored: There's no room to keep a copy of the current database"):
+        main(["restore", str(saved)])
+    assert _tenants(env.db_path) == ["Bravo Inc"]  # left as it was
+
+
+def test_a_backup_whose_activity_history_fails_says_what_was_saved(env, db, two_tenants):
+    folder = env.data_dir / "backups"
+    folder.mkdir(parents=True)
+    for day in range(1, 4):
+        (folder / f"officesentry-2026010{day}-000000.db.gz").write_bytes(b"")
+    (folder / "events").write_text("a file where the activity history's folder goes", encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"The database was copied to officesentry-.*\.db\.gz, but the activity"):
+        main(["backup", "--keep", "2"])
+    saved = backups.backup_files(folder, backups.BACKUP_PREFIX)
+    assert len(saved) == 2 and _tenants(saved[-1]) == ["Alpha Ltd", "Bravo Inc"]  # rotation still happened
+    status = backups.read_status(env.data_dir)["local"]
+    assert status["ok"] is False and status["error"].startswith("The database was copied to officesentry-")
+
+
+def test_a_locked_database_is_not_mistaken_for_a_damaged_one(env, db, two_tenants, monkeypatch):
+    main(["backup"])
+    saved = next((env.data_dir / "backups").glob("officesentry-*.db.gz"))
+
+    def locked(*_args):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(backups, "copy_database", locked)
+    with pytest.raises(SystemExit, match="Not restored: The current database couldn't be copied first"):
+        main(["restore", str(saved), "--force"])
+    assert env.db_path.exists() and not list((env.data_dir / "backups").glob("pre-restore-*"))

@@ -101,6 +101,12 @@ No.
   restore drill record that they aren't set up.
 - The server's uptime ping asks `/health/ready`, so the monitor hears when the worker stops or the disk
   fills, not only when the portal is down.
+- `restore` now works over a damaged database: the damaged file is moved aside whole as
+  `backups/pre-restore-<time>-damaged.db` and the backup goes in. A locked database, or no room for the
+  safety copy, makes it refuse and say why, changing nothing. `deploy/jobs.sh restore` leaves the portal
+  and worker stopped when the restore fails, rather than starting them over an empty database.
+- A nightly backup whose activity history copy failed says the database was copied and what failed, rather
+  than "No backup made", and still removes old copies.
 
 ### Security
 
