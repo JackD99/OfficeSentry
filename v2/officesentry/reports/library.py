@@ -1,10 +1,12 @@
 """The report library: every report in one searchable list, by area and by job to be done.
 
 Detail reports come from ``data_reports.grouped()`` at call time, so a report
-registered anywhere shows up here without changes. ``USES`` groups reports by
-the job an MSP is doing ("Offboarding check"); ``KEYWORDS`` adds words people
-search for that aren't in a report's title or description. Keys that aren't
-registered are skipped, so either can name a report another change adds.
+declared anywhere (``registry.report``) shows up here without changes. ``USES``
+groups reports by the job an MSP is doing ("Offboarding check"): each job lists
+its reports, and a report can join one with ``uses=`` in its declaration.
+``KEYWORDS`` (from the declarations' ``keywords=``) adds words people search
+for that aren't in a report's title or description. Keys that aren't
+registered are skipped, so a job can name a report another change adds.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import data_reports
+from .registry import KEYWORDS, declared_uses
 
 
 @dataclass(frozen=True)
@@ -19,14 +22,19 @@ class Use:
     key: str
     title: str
     description: str
-    reports: tuple[str, ...]
+    listed: tuple[str, ...]  # the job's reports, most useful first
+
+    @property
+    def reports(self) -> tuple[str, ...]:
+        """The listed reports, then any whose declaration names this job in ``uses``."""
+        return self.listed + tuple(k for k in declared_uses().get(self.key, ()) if k not in self.listed)
 
 
 USES: tuple[Use, ...] = (
     Use("offboarding", "Offboarding check",
         "Someone has left: check their access is gone, their mail isn't forwarded and their licences come back.",
         ("inactive", "licences", "mailboxes", "inbox-rules", "mailbox-permissions", "mailbox-holds", "onedrive",
-         "shared-files", "admins", "devices", "groups", "group-membership", "deleted-items", "all-users")),
+         "shared-files", "admins", "devices", "groups", "group-membership", "deleted-items")),
     Use("quarterly", "Quarterly review",
         "What a client review meeting covers: the summary, what changed, and the trends behind it.",
         ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests")),
@@ -69,54 +77,6 @@ USES: tuple[Use, ...] = (
         ("inactive", "unused-apps", "group-structure", "all-users", "apps", "deleted-items", "devices")),
 )
 
-# Words people search for that a report's own title and description don't contain.
-KEYWORDS: dict[str, str] = {
-    "mfa": "multi-factor two-factor 2fa authenticator authentication methods registration",
-    "auth-methods": "passkeys fido2 security keys windows hello phishing-resistant passwordless sms text message "
-                    "voice call authenticator sspr self-service password reset expiry expiration never expires "
-                    "password age authentication strengths methods policy registration campaign nudge",
-    "admins": "administrators global admin privileged roles pim break-glass",
-    "conditional-access": "ca policies policy require mfa block",
-    "inactive": "stale dormant leavers unused accounts sign-in last login",
-    "guests": "external users b2b invitations",
-    "deleted-items": "recycle bin restore undelete recover soft-deleted removed accounts leavers deleted teams "
-                     "deleted mailbox 30 days purge",
-    "legacy-auth": "basic auth smtp imap pop old protocols",
-    "sign-ins": "sign-in logs login logins failed failures password spray brute force lockout locked "
-                "countries locations risky risk compromised breach hacked single-factor audit",
-    "risky-users": "identity protection risk compromised hacked breach leaked credentials at risk p2 "
-                   "remediated dismissed",
-    "hybrid": "ad connect entra connect sync on-premises password hash",
-    "mailboxes": "forwarding redirect external smtp",
-    "inbox-rules": "forward delete move rules mailbox compromise",
-    "mailbox-permissions": "full access send as delegates",
-    "shared-mailboxes": "rooms equipment sign-in",
-    "mailbox-size": "quota storage full large",
-    "mailbox-holds": "litigation hold archive retention ediscovery",
-    "domains": "spf dkim dmarc dns mta-sts email authentication spoofing",
-    "sharepoint": "sites storage sharing anyone links",
-    "sharepoint-storage": "quota versions recycle bin large old files cleanup",
-    "onedrive": "personal storage leavers",
-    "shared-files": "anyone links external sharing links",
-    "groups": "teams microsoft 365 groups owners ownerless",
-    "group-membership": "members membership teams groups who is in",
-    "devices": "intune compliance bitlocker encryption windows",
-    "apps": "enterprise applications oauth consent secrets certificates expiry",
-    "licences": "licenses waste cost money unused subscriptions",
-    "subscriptions": "licenses skus products renewal expiry expiring trial suspended grace period billing invoice "
-                     "true-up group-based licensing assignment errors usage location csp partner center",
-    "licence-rightsizing": "licenses downgrade cheaper plan savings cost copilot business basic standard e1 e3",
-    "usage": "adoption activity active users teams onedrive outlook office apps copilot",
-    "secure-score": "score trend controls",
-    "tenant-settings": "defaults user consent authorization policy",
-    "admin-activity": "audit log directory changes who changed",
-    "all-users": "directory everyone staff list employees export department job title manager org chart reports to "
-                 "direct reports licences",
-    "unused-apps": "enterprise applications service principals app sign-in activity last used stale inactive apps "
-                   "oauth clean up cleanup",
-    "group-structure": "empty groups nested groups dynamic membership rule paused distribution lists security groups "
-                       "clean up cleanup",
-}
 
 SUMMARY_AREA = "Summaries"
 

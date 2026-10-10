@@ -1,13 +1,15 @@
-"""Report builders. Detail reports from other modules register into ``data_reports.REPORTS`` here."""
+"""Report builders. Importing a module here declares its detail reports (``registry.report``)."""
 
-from . import (
+from . import (  # noqa: F401
     all_users,
     auth_methods,
     data_reports,
     deleted_items,
     group_membership,
     group_structure,
+    identity_reports,
     mail_compliance,
+    mail_reports,
     risky_users,
     sharepoint,
     sharepoint_storage,
@@ -16,66 +18,3 @@ from . import (
     unused_apps,
     usage_reports,
 )
-
-# SharePoint storage sits next to SharePoint sites in the report tabs.
-for _key, _value in sharepoint.REPORTS.items():
-    data_reports.REPORTS[_key] = _value
-    if _key == "sharepoint":
-        data_reports.REPORTS.update(sharepoint_storage.REPORTS)
-
-# Usage and right-sizing sit next to Licence waste.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("licences") + 1
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(usage_reports.REPORTS.items()) + _items[_at:])
-
-# Sign-in activity sits next to Inactive accounts.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("inactive") + 1
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(sign_in_reports.REPORTS.items()) + _items[_at:])
-
-# Risky users sits next to Sign-in activity.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("sign-ins") + 1
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(risky_users.REPORTS.items()) + _items[_at:])
-
-# Passwords and sign-in methods sits next to MFA coverage.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("mfa") + 1
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(auth_methods.REPORTS.items()) + _items[_at:])
-
-# Licences and subscriptions comes first among the licence reports.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("licences")
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(subscriptions.REPORTS.items()) + _items[_at:])
-
-# Deleted users and groups sits next to Guests and sharing.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("guests") + 1
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(deleted_items.REPORTS.items()) + _items[_at:])
-
-# Group membership sits next to Groups and Teams.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("groups") + 1
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(group_membership.REPORTS.items()) + _items[_at:])
-
-# Mailbox holds and archiving sits after the other Exchange reports.
-_items = list(data_reports.REPORTS.items())
-_at = [k for k, _ in _items].index("legacy-auth") + 1
-data_reports.REPORTS.clear()
-data_reports.REPORTS.update(_items[:_at] + list(mail_compliance.REPORTS.items()) + _items[_at:])
-
-# Directory reports: All users leads the account reports, Unused apps follows Apps and consents, and Empty,
-# nested and dynamic groups follows Group membership.
-for _module, _before, _after in ((all_users, "inactive", None), (unused_apps, None, "apps"),
-                                 (group_structure, None, "group-membership")):
-    _items = list(data_reports.REPORTS.items())
-    _at = [k for k, _ in _items].index(_before or _after) + (0 if _before else 1)
-    data_reports.REPORTS.clear()
-    data_reports.REPORTS.update(_items[:_at] + list(_module.REPORTS.items()) + _items[_at:])

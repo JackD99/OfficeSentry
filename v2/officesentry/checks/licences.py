@@ -1,14 +1,14 @@
-"""Checks over subscriptions and how licences are assigned. Registered into ``rules.RULES`` on import."""
+"""Checks over subscriptions and how licences are assigned."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from .devices import parse_ts
-from .licences import assignment_error, assignments, sku_name
-from .rules import Finding, _label, _unavailable, rule
-from .snapshot import TenantSnapshot
-from .text import plural
+from ..devices import parse_ts
+from ..licences import assignment_error, assignments, sku_name
+from ..snapshot import TenantSnapshot
+from ..text import plural
+from .base import Finding, _label, _unavailable, rule
 
 TRIAL_DAYS = 30
 

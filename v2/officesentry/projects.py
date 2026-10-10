@@ -28,9 +28,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from .checks import SEVERITY_RANK, Finding, RuleResult, evaluate
 from .db import utcnow
 from .findings import finding_key, lifecycle_map
-from .rules import SEVERITY_RANK, Finding, RuleResult, evaluate
 from .snapshot import TenantSnapshot
 from .text import WHOLE_ORGANISATION, plural
 

@@ -13,6 +13,7 @@ from ..licences import last_sign_in, sku_name
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile, _date
+from .registry import report
 
 EVERY = "Every account"
 MANAGERS = "Managers"
@@ -37,6 +38,18 @@ def _sign_in(u: dict) -> str:
     return last.date().isoformat() if last else "Never"
 
 
+@report(
+    "all-users",
+    "All users",
+    "Every account with its department, job title, manager, licences and last sign-in, its managers and "
+    "departments, and accounts reporting to a blocked manager.",
+    ("users", "user_details", "tenant_profile"),
+    group="identity",
+    order=5,
+    uses=("offboarding",),
+    keywords="directory everyone staff list employees export department job title manager org chart reports to "
+             "direct reports licences",
+)
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     if users is None:
@@ -150,11 +163,3 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.footnote = ("Departments, job titles and managers are whatever is set on each account in Entra ID (or in "
                        "on-premises AD, for synced accounts). Last sign-in is the latest of interactive and "
                        "background sign-ins, and needs Entra ID P1.")
-
-
-REPORTS = {
-    "all-users": ("All users",
-                  "Every account with its department, job title, manager, licences and last sign-in, its managers and "
-                  "departments, and accounts reporting to a blocked manager.",
-                  ("users", "user_details", "tenant_profile"), build),
-}

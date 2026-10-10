@@ -16,6 +16,7 @@ from ..devices import parse_ts
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile, _date
+from .registry import report
 
 EMPTY = "Empty groups"
 NESTED = "Groups inside groups"
@@ -40,6 +41,17 @@ def _membership(g: dict) -> str:
     return "Dynamic" if g.get("dynamic") else ("Synced from AD" if g.get("synced") else "Assigned")
 
 
+@report(
+    "group-structure",
+    "Empty, nested and dynamic groups",
+    "Groups with no members, groups inside other groups, and dynamic groups with their rules and "
+    "whether they're paused.",
+    ("group_nesting", "groups"),
+    group="files",
+    order=70,
+    keywords="empty groups nested groups dynamic membership rule paused distribution lists security groups "
+             "clean up cleanup",
+)
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     groups = snap.objects("group_nesting", "group")
     if groups is None:
@@ -153,11 +165,3 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.footnote = ("Members are direct members. Teams and Microsoft 365 groups can't contain other groups. "
                        "Delete or change groups in the Microsoft Entra admin center (Groups), or in on-premises AD "
                        "for synced groups; Office Sentry only reads them.")
-
-
-REPORTS = {
-    "group-structure": ("Empty, nested and dynamic groups",
-                        "Groups with no members, groups inside other groups, and dynamic groups with their rules and "
-                        "whether they're paused.",
-                        ("group_nesting", "groups"), build),
-}

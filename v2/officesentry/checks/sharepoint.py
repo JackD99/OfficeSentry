@@ -1,13 +1,13 @@
-"""Checks over SharePoint and OneDrive snapshots. Registered into ``rules.RULES`` on import."""
+"""Checks over SharePoint and OneDrive snapshots."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from .rules import Finding, _unavailable, rule
-from .snapshot import TenantSnapshot
-from .storage import tenant_storage
-from .text import plural
+from ..snapshot import TenantSnapshot
+from ..storage import tenant_storage
+from ..text import plural
+from .base import Finding, _unavailable, rule
 
 
 def _where(item: dict) -> str:

@@ -14,6 +14,7 @@ from ..devices import parse_ts
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile
+from .registry import report
 
 UNUSED_DAYS = 90
 APPS = "Enterprise apps"
@@ -60,6 +61,17 @@ def _consent(grants: list[dict]) -> str:
     return plural(len(people), "person", "people") if people else ""
 
 
+@report(
+    "unused-apps",
+    "Unused apps",
+    f"Every app from outside Microsoft with when it last signed in, and those unused for {UNUSED_DAYS} "
+    "days that still hold permissions.",
+    ("app_sign_ins", "app_consents"),
+    group="devices",
+    order=30,
+    keywords="enterprise applications service principals app sign-in activity last used stale inactive apps oauth "
+             "clean up cleanup",
+)
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("app_sign_ins", "sign_in_status") or [None])[0]
     principals = snap.objects("app_consents", "service_principal")
@@ -134,11 +146,3 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         "its own or was called as an API. \"No sign-in on record\" means Microsoft has none: the app may never "
         "have been used, or not for a long time. Microsoft's own apps and Office Sentry's are left out. Remove an "
         "app in the Microsoft Entra admin center (Enterprise applications); Office Sentry only reads them.")
-
-
-REPORTS = {
-    "unused-apps": ("Unused apps",
-                    f"Every app from outside Microsoft with when it last signed in, and those unused for {UNUSED_DAYS} "
-                    "days that still hold permissions.",
-                    ("app_sign_ins", "app_consents"), build),
-}
