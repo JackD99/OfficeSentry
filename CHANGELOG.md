@@ -6,6 +6,69 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
+## 2.2.0 (unreleased)
+
+### Action required
+
+- **Uptime monitors that put the monitoring token in the address** (`/health/ready?token=...`): the token
+  now only works as a header, since addresses end up in proxy logs. Set the monitor to send
+  `Authorization: Bearer <token>` and take the token out of its URL; until then it sees only whether Office
+  Sentry is ready (200 or 503), not the checks ([v2/DEPLOY.md, "Is it working?"](v2/DEPLOY.md#is-it-working)).
+- **Webhooks that check the signature** (a signing secret under *Settings → Alerts*): the signature now covers
+  a timestamp, so a copied request can't be sent again. `X-OfficeSentry-Signature` is `v1=` and the HMAC-SHA256
+  of `X-OfficeSentry-Timestamp`, a full stop and the body, instead of `sha256=` and the HMAC of the body, and
+  `X-OfficeSentry-Key-Id` says which secret signed it. Change your receiver to check the new signature when you
+  upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
+  webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
+
+### Fixed
+
+- Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
+  invisible to the admin checks and the Admins report. The group's members are now read each night and
+  checked like any other admin; the Admins report says which group a role comes through.
+- A Conditional Access policy that accepts "MFA **or** a compliant device" no longer counts as requiring MFA,
+  since a compliant device lets people in without it. The finding names the policy and the other choice.
+- MFA policies that leave out roles or guests are now listed. Leaving out admin roles is only raised when no
+  other policy requires MFA of the people holding them.
+- The Global Administrator count leaves out disabled accounts and apps, and no active Global Administrator
+  is its own finding instead of reading "Only one".
+- Guests that can activate an admin role through PIM are flagged like guests that hold one, and a guest or
+  app with several roles is one finding naming them all.
+- MFA coverage treats only active privileged roles as admin roles, so a person with a read-only role
+  (Directory Readers, say) gets the same severity there as on the Findings tab.
+- The Admins report no longer hides Office Sentry's own app when it holds a privileged role: it only needs
+  Global Reader.
+- Shared mailboxes that need their licence (an archive, a hold or over 50 GB) aren't flagged as disabled
+  accounts holding one.
+- An inbox rule that moves mail mentioning payments, or marks it as read, into a folder Office Sentry
+  couldn't name (without the Exchange role) is raised for review instead of passing.
+- Inbox rules: an account with no Exchange Online mailbox no longer makes the collection partial every night
+  on tenants that haven't given the app the Exchange role.
+- SharePoint refusing the app while Sites.Read.All is granted is reported as SharePoint's own restriction,
+  not as a missing permission to re-consent.
+- When a tenant's Entra ID P1 licence isn't known, every collector now asks for the P1 data and lets
+  Microsoft's answer decide, instead of some skipping it.
+- A device that last checked in today, and dates written as "3 Sep 2026", are now dates to the table
+  filters ("In the last 30 days") and sort as dates.
+- A view-only anyone link with an expiry date is medium on the Shared files report, as on the finding.
+- An accepted risk's review date must be a real date: one like 31 February would never come round.
+
+### Security
+
+- Resetting someone else's password, two-step sign-in or sessions from their user page asks for the admin's
+  own password, as the account page does before the same changes, so a stolen admin session isn't enough.
+  Wrong answers count towards the admin's own sign-in lock.
+- Recovery codes are stored as an HMAC under a random key kept encrypted with your encryption key, rather
+  than a plain SHA-256, so a copy of the database alone can't be used to guess them. Codes made before this
+  release keep working; making new ones on the account page stores them the new way.
+- The two-step setup page makes a new authenticator secret each time it's opened, so someone who saw the
+  page earlier (with a stolen session, say) doesn't know the secret the person goes on to add.
+- Changing an app connection's client ID (a different app registration) no longer leaves its tenants marked
+  as consented: each one needs the client to approve the new app, links already sent are marked not sent
+  (they name the old app), and the page says how many clients must approve again.
+- The public demo no longer keeps a visitor's address in the activity log when they open or download a
+  report; what was opened is still recorded.
+
 ## 2.1.0 (unreleased)
 
 ### Action required
@@ -26,17 +89,6 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   directory audit events). The `backup` command copies it into an `events` folder next to the database
   copies, and `restore` puts back any file that's missing. If you back up the data volume some other way,
   include `/data/events` ([v2/DEPLOY.md, "Backups"](v2/DEPLOY.md#backups)).
-- **Uptime monitors that put the monitoring token in the address** (`/health/ready?token=...`): the token
-  now only works as a header, since addresses end up in proxy logs. Set the monitor to send
-  `Authorization: Bearer <token>` and take the token out of its URL; until then it sees only whether Office
-  Sentry is ready (200 or 503), not the checks ([v2/DEPLOY.md, "Is it working?"](v2/DEPLOY.md#is-it-working)).
-- **Webhooks that check the signature** (a signing secret under *Settings → Alerts*): the signature now covers
-  a timestamp, so a copied request can't be sent again. `X-OfficeSentry-Signature` is `v1=` and the HMAC-SHA256
-  of `X-OfficeSentry-Timestamp`, a full stop and the body, instead of `sha256=` and the HMAC of the body, and
-  `X-OfficeSentry-Key-Id` says which secret signed it. Change your receiver to check the new signature when you
-  upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
-  webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
-
 ### New Microsoft permissions
 
 None. The sign-in and directory audit logs were already read; they're now read incrementally and kept.
@@ -200,19 +252,6 @@ copied collection reads back exactly as its snapshot.
   interrupted rotation can no longer leave stored secrets under a key that was never saved.
 - The public demo no longer stores an authenticator secret on its shared visitor when the two-step setup
   page is opened.
-- Resetting someone else's password, two-step sign-in or sessions from their user page asks for the admin's
-  own password, as the account page does before the same changes, so a stolen admin session isn't enough.
-  Wrong answers count towards the admin's own sign-in lock.
-- Recovery codes are stored as an HMAC under a random key kept encrypted with your encryption key, rather
-  than a plain SHA-256, so a copy of the database alone can't be used to guess them. Codes made before this
-  release keep working; making new ones on the account page stores them the new way.
-- The two-step setup page makes a new authenticator secret each time it's opened, so someone who saw the
-  page earlier (with a stolen session, say) doesn't know the secret the person goes on to add.
-- Changing an app connection's client ID (a different app registration) no longer leaves its tenants marked
-  as consented: each one needs the client to approve the new app, links already sent are marked not sent
-  (they name the old app), and the page says how many clients must approve again.
-- The public demo no longer keeps a visitor's address in the activity log when they open or download a
-  report; what was opened is still recorded.
 
 ## 2.0.0 (2026-10-09)
 
