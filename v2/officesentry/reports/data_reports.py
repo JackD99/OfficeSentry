@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
 from .. import adminactivity, coverage, devices, dnscheck, hybrid
-from ..checks.apps import app_risks, user_consent_level
+from ..checks.apps import app_risks, custom_consent_policies, user_consent_level
 from ..checks.groups import group_owner_problem, group_type, m365_groups
 from ..checks.sharing import SHARING_LEVELS
 from ..checks.tenant_settings import GUEST_ROLES, admin_consent_missing
@@ -723,12 +723,15 @@ def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "low" if policy.get("allowInvitesFrom") == "everyone" else None,
         )
         consent = user_consent_level(policy)
+        custom = consent == "limited" and custom_consent_policies(policy)
         settings.add(
             [
                 "User consent to apps",
-                {"any": "Any app", "limited": "Verified publishers, low-risk permissions", "off": "Off"}[consent],
+                "Custom policy: " + ", ".join(custom)
+                if custom
+                else {"any": "Any app", "limited": "Verified publishers, low-risk permissions", "off": "Off"}[consent],
             ],
-            "medium" if consent == "any" else None,
+            "medium" if consent == "any" else "low" if custom else None,
         )
         settings.add(["Users can register apps", policy.get("allowedToCreateApps")])
     if sharepoint:

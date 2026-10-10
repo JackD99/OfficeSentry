@@ -52,6 +52,22 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   filters ("In the last 30 days") and sort as dates.
 - A view-only anyone link with an expiry date is medium on the Shared files report, as on the finding.
 - An accepted risk's review date must be a real date: one like 31 February would never come round.
+- Outbound forwarding fails only when the default policy allows it. A scoped policy that allows it for named
+  mailboxes, which is what the recommendation asks for, passes and is named in the summary.
+- A mailbox forwarding to a recipient Office Sentry couldn't look up is flagged, instead of counting as
+  internal.
+- A disabled app with risky permissions is low, and says it's disabled. Entra Connect's own provisioning
+  certificates, which it renews itself, are only flagged in their last 7 days.
+- A custom user consent policy is flagged for review rather than passed as "low-risk permissions", and the
+  Guests report names it.
+- Guest invitations are "couldn't check" when Microsoft doesn't say who can invite, rather than a pass.
+- Devices Intune couldn't evaluate (error, conflict, unknown) are low findings, since Conditional Access
+  blocks them like non-compliant ones.
+- Risky sign-ins is "couldn't check" when the sign-in log was cut short and nothing was found.
+- Active trial licences are no longer costed, or counted as unused, in Licences and subscriptions, Licence
+  waste, the unassigned licences check and the monthly review.
+- What changed tells two subscriptions of one licence apart, so a seat change on one is one changed row
+  rather than one added and one removed.
 
 ### Security
 

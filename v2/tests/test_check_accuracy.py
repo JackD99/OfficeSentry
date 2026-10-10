@@ -145,6 +145,15 @@ def test_a_custom_consent_policy_is_flagged_for_review(db, two_tenants):
     assert result.status == "pass" and "verified publishers" in result.summary
 
 
+def test_the_guests_report_names_a_custom_consent_policy(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, auth_policy=_consent("contoso-sales-apps"))
+    report = data_reports.build(db, store.get_tenant(db, alpha), "guests")
+    section = next(s for s in report.sections if s.title == "External access settings")
+    [row] = [r for r in section.rows if r[0] == "User consent to apps"]
+    assert row[1] == "Custom policy: contoso-sales-apps"
+
+
 # -- Guests -------------------------------------------------------------------------------------
 
 
@@ -280,3 +289,18 @@ def test_two_subscriptions_of_one_licence_are_compared_one_by_one(db, two_tenant
     diff = compare_sections(before, after)
     assert [(c.kind, c.diffs) for c in diff.changes] == [("changed", [("Licences", 5, 8)])]
     assert str(diff.changes[0].row[1]) == "c-s-bp2"
+
+
+def test_unused_trial_licences_are_not_waste_in_the_check_or_the_report(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=ld.USERS, skus=TRIAL_SKUS, subscriptions=TRIAL_SUBSCRIPTIONS)
+    _price(db, "SPB", 20.0)
+    _price(db, "Microsoft_365_Copilot", 25.0)
+    result = _results(db, alpha)["unassigned_licences"]
+    assert not any("Business Premium" in f.subject or "Copilot" in f.subject for f in result.findings)
+
+    report = data_reports.build(db, store.get_tenant(db, alpha), "licences")
+    section = next(s for s in report.sections if s.title == "Waste by subscription")
+    rows = {str(r[0]): r for r in section.rows}
+    assert rows["Microsoft 365 Business Premium"][3] == 0  # Unassigned: the 5 spare are the trial's
+    assert rows["Microsoft 365 Copilot"][3] == 0

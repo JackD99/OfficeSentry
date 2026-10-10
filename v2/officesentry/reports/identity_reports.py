@@ -718,7 +718,8 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         return
     users = snap.objects("users", "user")
     currency = setting(snap.conn, "currency", "GBP")
-    summary = licence_summary(skus, users, load_prices(snap.conn), now)
+    subscriptions = snap.objects("tenant_profile", "company_subscription")
+    summary = licence_summary(skus, users, load_prices(snap.conn), now, subscriptions)
     paid = {line.sku_id: line for line in summary.lines if not line.free}
 
     def cash(value: float | None) -> object:
