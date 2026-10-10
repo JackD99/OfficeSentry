@@ -85,7 +85,7 @@ def test_report_email_carries_the_brand_and_counts_every_failing_check(client, d
     seed_tenant(db, alpha)
     logo = branding.logo_data_uri(PNG)
     for key, value in (("brand_name", "Harbour IT"), ("brand_accent", "#0d7a5f"), ("brand_logo", logo),
-                       ("brand_contact", "help@harbourit.co.uk")):
+                       ("brand_contact", "help@harbourit.example")):
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "IT", "it@client.com")])
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
@@ -95,7 +95,7 @@ def test_report_email_carries_the_brand_and_counts_every_failing_check(client, d
     email = built.email
     failing = len(build(db, tenant).failing)
     assert failing > 6 and f"{failing} checks need attention" in email.html  # not just the 6 listed
-    assert 'src="cid:brand-logo"' in email.html and "#0d7a5f" in email.html and "help@harbourit.co.uk" in email.html
+    assert 'src="cid:brand-logo"' in email.html and "#0d7a5f" in email.html and "help@harbourit.example" in email.html
     assert email.inline == [("brand-logo", "image/png", PNG)]
     assert "data:image/png;base64," in email.html_for_browser()
     # SMTP: the logo travels as a related part; Graph: as an inline attachment.

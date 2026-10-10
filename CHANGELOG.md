@@ -72,6 +72,12 @@ tenant; until then the pages build them as before.
 
 - Encrypted off-site backups with restic to any S3-compatible storage, a weekly restore drill that proves
   the newest one opens, and the keys kept in a volume of their own, apart from the data and its backups.
+- Wrong guesses at the current password on the change-password form now count towards the account's
+  sign-in lock, as they already did when turning off two-step sign-in.
+- `rotate-keys --new` saves the new keys beside the old ones before it re-encrypts anything, so an
+  interrupted rotation can no longer leave stored secrets under a key that was never saved.
+- The public demo no longer stores an authenticator secret on its shared visitor when the two-step setup
+  page is opened.
 
 ## 2.0.0 (2026-10-09)
 

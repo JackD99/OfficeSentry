@@ -330,7 +330,8 @@ def two_step_setup():
     user = g.user if signed_in else _pending_user(enroll=True)
     if user is None:
         return redirect(url_for("auth.login"))
-    if user["totp_enabled_at"]:
+    if user["totp_enabled_at"] or g.get("public_demo"):
+        # The demo's shared visitor never sets up an authenticator: even the pending secret is a change.
         return redirect(url_for("auth.account"))
     vault = _vault()
 
@@ -467,22 +468,23 @@ def account():
 def change_password():
     if request.method == "GET":
         return redirect(url_for("auth.account"))
-    if not check_password_hash(g.user["password_hash"], request.form.get("current", "")):
-        flash("Current password is wrong.", "error")
-    elif problem := password_problem(request.form.get("password", ""), request.form.get("confirm", "")):
+    # Wrong guesses count towards the lock, like any other password check on a signed-in session.
+    if not _confirm_password("current", "Current password is wrong."):
+        return redirect(url_for("auth.account"))
+    if problem := password_problem(request.form.get("password", ""), request.form.get("confirm", "")):
         flash(problem, "error")
-    else:
-        g.db.execute(
-            "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?",
-            (generate_password_hash(request.form["password"]), g.user["id"]),
-        )
-        audit(g.db, g.user["username"], "password_changed")
-        sessions.keep_current(g.user["id"], g.user["session_version"] + 1)
-        flash("Password changed. You were signed out everywhere else.", "success")
+        return redirect(url_for("auth.account"))
+    g.db.execute(
+        "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?",
+        (generate_password_hash(request.form["password"]), g.user["id"]),
+    )
+    audit(g.db, g.user["username"], "password_changed")
+    sessions.keep_current(g.user["id"], g.user["session_version"] + 1)
+    flash("Password changed. You were signed out everywhere else.", "success")
     return redirect(url_for("auth.account"))
 
 
-def _confirm_password() -> bool:
+def _confirm_password(field: str = "password", wrong: str = "That password isn't right.") -> bool:
     """The signed-in person's password, asked again before a security change.
 
     Wrong answers count towards the two-step lock (MAX_FAILURES), so a stolen
@@ -492,12 +494,12 @@ def _confirm_password() -> bool:
     if attempt is None:
         flash("Too many wrong passwords or codes. Try again in 15 minutes.", "error")
         return False
-    if check_password_hash(g.user["password_hash"], request.form.get("password", "")):
+    if check_password_hash(g.user["password_hash"], request.form.get(field, "")):
         attempt.succeeded()
         g.db.execute("UPDATE users SET failed_logins = 0 WHERE id = ?", (g.user["id"],))
         return True
     attempt.failed("password_confirm_failed")
-    flash("That password isn't right.", "error")
+    flash(wrong, "error")
     return False
 
 

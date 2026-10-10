@@ -26,7 +26,8 @@ from tests.seed import exchange_factory, mock_tenant
 
 SOURCE = Path(officesentry.__file__).parent
 SENDING = {"post", "put", "patch", "delete", "request"}
-# file -> why it may send something other than GET. Only ever add with the owner's review.
+# file (relative to officesentry/, so collectors/exchange.py isn't excused by exchange.py) -> why it may send
+# something other than GET. Only ever add with the owner's review.
 ALLOWED = {
     "mailer.py": "sendMail from the MSP's own mailbox, through its own single-tenant mail app",
     "exchange.py": "Exchange's admin API takes every cmdlet as a POST; only Get- cmdlets are allowed",
@@ -56,7 +57,7 @@ def _sending_calls(path: Path, root: Path = SOURCE) -> list[str]:
 
 
 def test_no_http_writes_outside_the_named_exceptions():
-    found = [call for path in sorted(SOURCE.rglob("*.py")) if path.name not in ALLOWED
+    found = [call for path in sorted(SOURCE.rglob("*.py")) if path.relative_to(SOURCE).as_posix() not in ALLOWED
              for call in _sending_calls(path)]
     assert not found, ("These calls can send something other than GET. Office Sentry is read-only; if this one "
                        "really must, it needs the owner's review and an entry in ALLOWED: " + ", ".join(found))

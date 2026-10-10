@@ -1,19 +1,23 @@
 name: v2
-# v2 is the whole product. The repo is private on GitHub Free (2,000 Actions minutes a month, Windows
-# minutes counting double), so pull requests run lint, the dependency audit, the Docker build and the
-# tests on Python 3.12 with coverage. Pushes to main add Python 3.11 and 3.13, and the weekly and
-# manual runs add the Windows job too; a failure there is fixed on main straight away. The weekly run
-# also catches newly published vulnerabilities in the dependencies. When the repo goes public
-# (standard runners are free there), put the full matrix back on pull requests.
+# v2 is the whole product. While the repo is private on GitHub Free (2,000 Actions minutes a month,
+# Windows minutes counting double), pull requests run lint, the dependency audit, the Docker build and the
+# tests on Python 3.12 with coverage. Pushes to main add Python 3.11 and 3.13, and the weekly and manual
+# runs add the Windows job too; a failure there is fixed on main straight away. The weekly run also catches
+# newly published vulnerabilities in the dependencies. Once the repo is public (standard runners are free
+# there), pull requests get the full matrix and the Windows job by themselves: the jobs below check
+# github.event.repository.private, so nothing needs editing on the day.
 #
-# Changes that only touch Markdown, docs/, examples/ or website/ don't run CI here (website.yml builds the site). If checks become required (at
-# go-public), add a job that always runs and passes for those, or such PRs can't merge.
+# Pull requests that only touch Markdown, docs/, examples/ or website/ skip the jobs (website.yml builds the
+# site), but "CI passed" always runs and reports, so it can be the one required check on main: it fails when
+# any job failed or was cancelled, and passes when they passed or were skipped for a docs-only change. It also
+# needs the sign-off check (DCO) on pull requests from outside contributors (CONTRIBUTING.md, "Signing off").
 on:
   push:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**', 'examples/**', 'website/**']
+  # No paths-ignore here: a skipped workflow never reports, and a required check that never reports blocks
+  # the merge. The "changes" job decides instead.
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', 'examples/**', 'website/**']
   workflow_dispatch:
   schedule:
     - cron: '17 5 * * 1'
@@ -32,7 +36,44 @@ defaults:
     working-directory: v2
 
 jobs:
+  # Whether the pull request changes anything but docs. Every other event tests everything.
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      code: ${{ steps.files.outputs.code }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          code=false
+          # The same patterns as paths-ignore on push (in a case pattern, * also matches /).
+          while IFS= read -r f; do
+            case "$f" in
+              *.md|docs/*|examples/*|website/*) ;;
+              *) code=true ;;
+            esac
+          done <<<"$files"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" = false ]; then echo "Only docs changed, so the tests are skipped." >> "$GITHUB_STEP_SUMMARY"; fi
+
   lint:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -47,13 +88,16 @@ jobs:
 
   test:
     name: test (Python ${{ matrix.python }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        # Pull requests: 3.12 only (the Docker image's Python). Everything else: 3.11, 3.12 and 3.13.
-        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.11", "3.12", "3.13"]') }}
+        # Pull requests in the private repo: 3.12 only (the Docker image's Python). Everything else, and every
+        # pull request once the repo is public: 3.11, 3.12 and 3.13.
+        python: ${{ fromJSON(github.event_name == 'pull_request' && github.event.repository.private && '["3.12"]' || '["3.11", "3.12", "3.13"]') }}
         include:
           - python: '3.12'  # the Docker image's Python
             coverage: true
@@ -99,9 +143,13 @@ jobs:
     # Windows without Docker: no Pango, so PDF buttons fall back to print-ready pages and the tests that
     # need real PDF rendering skip themselves. The files below cover the parts that differ on Windows
     # (file modes, paths, SQLite files, the waitress server). Not required until it has a run of passes.
-    # Only on the weekly and manual runs: Windows minutes count double against GitHub Free's allowance.
+    # On the weekly and manual runs, and on pull requests once the repo is public: while it's private, Windows
+    # minutes count double against GitHub Free's allowance.
     name: test (Windows, no Pango)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: changes
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && !github.event.repository.private && needs.changes.outputs.code == 'true')
     runs-on: windows-latest
     timeout-minutes: 25
     continue-on-error: true
@@ -119,6 +167,8 @@ jobs:
           tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
 
   docker:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -154,6 +204,8 @@ jobs:
         run: docker logs portal
 
   audit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -166,3 +218,62 @@ jobs:
       - run: pip install -r ../.github/requirements-ci.txt
       # Exactly what the Docker image installs: the hash-pinned lock, without resolving anything.
       - run: pip-audit --strict --disable-pip -r requirements.txt
+
+  # Developer Certificate of Origin (CONTRIBUTING.md, "Signing off"): every commit in a pull request from
+  # outside the project carries a Signed-off-by line with its author's email. The maintainer's own pull
+  # requests and Dependabot's don't need it.
+  dco:
+    name: Sign-off (DCO)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          case "$ASSOCIATION" in OWNER|MEMBER|COLLABORATOR)
+            echo "Opened by a maintainer ($AUTHOR), so no sign-off is needed."; exit 0;;
+          esac
+          if [ "$AUTHOR" = "dependabot[bot]" ]; then echo "Dependabot: no sign-off needed."; exit 0; fi
+          # Merge commits are skipped; every other commit needs "Signed-off-by: Name <author's email>".
+          missing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" --jq '
+            .[] | select((.parents | length) < 2)
+            | (.commit.author.email | ascii_downcase) as $email
+            | select([.commit.message | scan("(?:^|\\n)signed-off-by: [^\\n]*<([^>\\n]+)>[ \\t]*(?=\\n|$)"; "i") | .[0] | ascii_downcase]
+                     | index($email) | not)
+            | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"')
+          if [ -n "$missing" ]; then
+            echo "::error::These commits need a sign-off line matching their author's email:"
+            printf '%s\n' "$missing"
+            echo "Add it with: git rebase --signoff origin/main && git push --force-with-lease (CONTRIBUTING.md, \"Signing off\")."
+            exit 1
+          fi
+          echo "Every commit is signed off."
+
+  # The one check to require on main (see the top of this file). It always runs, so a pull request that only
+  # changes docs can still merge.
+  ci:
+    name: CI passed
+    if: always()
+    needs: [changes, lint, test, docker, audit, dco]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$RESULTS"
+          [ "$FAILED" = false ]

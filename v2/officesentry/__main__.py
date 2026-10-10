@@ -164,6 +164,9 @@ def cmd_rotate_keys(args, cfg):
                      "old key. Set a new OFFICESENTRY_SECRET_KEY to sign everyone out.")
         fresh = new_secrets()
         keys = fresh["encryption_keys"] + keys
+        # Saved next to the old keys before anything is re-encrypted, so a crash or a failed write part way
+        # never leaves data under a key that only existed in memory.
+        write_private(cfg.secrets_path, json.dumps({"secret_key": cfg.secret_key, "encryption_keys": keys}))
     try:
         count = reencrypt_all(conn, Vault(keys))
     except RuntimeError as exc:

@@ -651,7 +651,8 @@ files outside `tmp_path`.
   version, or a `v*` tag): the version must match `__version__` and have a
   `CHANGELOG.md` section (`scripts/release_notes.py`) and the commit needs a
   passing v2 run on `main` (reused, not repeated, to save Actions minutes);
-  then an amd64 image with SBOM and provenance (arm64 waits for go-public),
+  then an amd64 image with SBOM and provenance (arm64 and signed attestations
+  switch on by themselves once the repository is public),
   a start-up check, a vulnerability scan, version tags, the GitHub release,
   and `scripts/prune_images.py` keeps the last three releases' images. Changes people running it must act on go in
   the changelog's next section under **Action required**, **New Microsoft

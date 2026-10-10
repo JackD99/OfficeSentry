@@ -110,7 +110,7 @@ def settings():
             "brand_report_footer": " ".join(request.form.get("report_footer", "").split())[:branding.MAX_FOOTER],
         }
         if values["brand_support_email"] and not valid_email(values["brand_support_email"]):
-            flash("Enter a support email like help@harbourit.co.uk.", "error")
+            flash("Enter a support email like help@harbourit.example.", "error")
             return redirect(url_for("branding.settings"))
         accent = request.form.get("accent", "").strip()
         if accent and not branding.HEX_RE.match(accent):

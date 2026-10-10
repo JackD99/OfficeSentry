@@ -38,7 +38,7 @@ the server. Moving the demo to a server of its own later is a matter of running 
 The steps for the project's server, in order. Each takes a minute or two.
 
 1. **DNS.** Point each name at the server's IPv4 address with an **A** record (proxy off, "DNS only", if
-   the domain is on Cloudflare): the portal's name (`reports` under `yourmsp.example`), the website's
+   the domain is on Cloudflare): the portal's name (such as `reports` under your company's own domain), the website's
    (`@` and `www` under `officesentry.co.uk`) and the demo's (`demo` under `officesentry.co.uk`).
 2. **GitHub variables** (the repository's *Settings → Secrets and variables → Actions → Variables*):
    - `OFFICESENTRY_DOMAIN`: the portal's name, `reports.yourmsp.example`

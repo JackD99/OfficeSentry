@@ -4,16 +4,19 @@ name: release
 #   1. the version must match officesentry.__version__ and have a CHANGELOG.md section
 #      (scripts/release_notes.py), and the commit must have passed the full v2 run on main (lint, every
 #      Python, Windows, Docker, audit), which this workflow reuses rather than repeats;
-#   2. the amd64 image is built with an SBOM and build provenance and pushed to GHCR by digest only, so
-#      nothing can pull it by name yet, then started once to check it reports its version;
+#   2. the amd64 image (and, once the repository is public, the arm64 one) is built with an SBOM and build
+#      provenance and pushed to GHCR by digest only, so nothing can pull it by name yet, then started once to
+#      check it reports its version;
 #   3. it is scanned for known vulnerabilities that have a fix (high or critical stops the release);
-#   4. only then does it get its version tags (2.1.0, 2.1, 2 and latest; a candidate gets only its own);
+#   4. only then does it get its version tags (2.1.0, 2.1, 2 and latest; a candidate gets only its own), on
+#      one multi-platform image when there is an arm64 build;
 #   5. the GitHub release is created, with the tag (when it doesn't exist yet), the changelog section and the
 #      files needed to install it (a candidate is a pre-release), and images older than the last three
 #      releases are removed from GHCR.
 # About 5 billed minutes a run (2.0.0-rc.1 took 5): GitHub Free gives a private repository 2,000 a month.
-# arm64 images wait for the repository to go public, when GitHub's Arm runners are free; under emulation
-# they cost too many minutes.
+# arm64 images and signed attestations wait for the repository to go public, when GitHub's Arm runners are
+# free and attestations work; under emulation arm64 costs too many minutes. Both check
+# github.event.repository.private, so they switch on by themselves the day the repository is public.
 # CONTRIBUTING.md, "Releases", has the steps for a person.
 on:
   push:
@@ -79,9 +82,78 @@ jobs:
             exit 1
           fi
 
+  # Built natively on GitHub's free Arm runner, which public repositories get. Skipped while the repository is
+  # private. The same checks as the amd64 build below, which then puts both under one set of tags.
+  image-arm64:
+    name: Build, scan and push the arm64 image
+    needs: check
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Stamp the version into the code
+        env:
+          PY_VERSION: ${{ needs.check.outputs.python_version }}
+        run: |
+          sed -i "s/^__version__ = .*/__version__ = \"$PY_VERSION\"/" v2/officesentry/__init__.py
+          grep -qx "__version__ = \"$PY_VERSION\"" v2/officesentry/__init__.py
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: v2
+          platforms: linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          sbom: true
+          provenance: mode=max
+      - name: Start the image and check its version
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PY_VERSION: ${{ needs.check.outputs.python_version }}
+        run: |
+          docker run -d --name portal -e OFFICESENTRY_BASE_URL=https://sentry.example "$IMAGE@$DIGEST"
+          for _ in $(seq 30); do docker exec portal python -m officesentry healthcheck web && break; sleep 2; done
+          docker exec portal python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/health')))" \
+            | tee /dev/stderr | grep -q "'version': '$PY_VERSION'"
+          docker rm -f portal
+      - name: Scan for known vulnerabilities with a fix
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439  # v7.4.2
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table
+      - name: Sign the build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
   image:
     name: Build, scan and publish the image
-    needs: check
+    # After the arm64 build when there is one (public repository), so both go under the same tags at once.
+    needs: [check, image-arm64]
+    if: ${{ !cancelled() && needs.check.result == 'success' && needs.image-arm64.result != 'failure' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -93,6 +165,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       version: ${{ steps.meta.outputs.version }}
+      platforms: ${{ steps.tags.outputs.platforms }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       # A candidate cut from the development version (2.1.0.dev0) reports its own version (2.1.0rc1).
@@ -157,21 +230,34 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
       - name: Add the version tags
+        id: tags
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.image-arm64.outputs.digest }}
         run: |
           mapfile -t tags < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
           [ "${#tags[@]}" -gt 0 ] || { echo "::error::No image tags were worked out"; exit 1; }
-          docker buildx imagetools create "${tags[@]/#/--tag=}" "$IMAGE@$DIGEST"
+          sources=("$IMAGE@$DIGEST")
+          platforms="amd64 (Intel and AMD)"
+          if [ -n "$ARM64_DIGEST" ]; then
+            sources+=("$IMAGE@$ARM64_DIGEST")
+            platforms="amd64 (Intel and AMD) and arm64 (such as Ampere and Raspberry Pi 4 or 5)"
+          fi
+          # With two sources this makes one multi-platform image; Docker pulls the right one for each server.
+          docker buildx imagetools create "${tags[@]/#/--tag=}" "${sources[@]}"
+          echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
           {
             echo "### Published"
             for tag in "${tags[@]}"; do echo "- \`$tag\`"; done
-            echo "- digest \`$DIGEST\`"
+            echo "- amd64 digest \`$DIGEST\`"
+            if [ -n "$ARM64_DIGEST" ]; then echo "- arm64 digest \`$ARM64_DIGEST\`"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
     name: Create the GitHub release
     needs: [check, image]
+    # Said outright, because the arm64 build above is skipped while the repository is private.
+    if: ${{ !cancelled() && needs.check.result == 'success' && needs.image.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -181,6 +267,7 @@ jobs:
       TAG: ${{ needs.check.outputs.tag }}
       VERSION: ${{ needs.image.outputs.version }}
       DIGEST: ${{ needs.image.outputs.digest }}
+      PLATFORMS: ${{ needs.image.outputs.platforms }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Write the notes and the install files
@@ -190,7 +277,7 @@ jobs:
             echo
             echo "### Install or update"
             echo
-            echo "Image: \`$IMAGE:$VERSION\` (\`$DIGEST\`), for amd64 (Intel and AMD) servers."
+            echo "Image: \`$IMAGE:$VERSION\`, for $PLATFORMS servers (amd64 digest \`$DIGEST\`)."
             echo
             echo "Download \`docker-compose.yml\`, \`Caddyfile\` and \`env.example\` below (they run this version"
             echo "unless \`OFFICESENTRY_VERSION\` in \`.env\` says otherwise), then follow"

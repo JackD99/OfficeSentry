@@ -46,12 +46,12 @@ def test_branding_settings_page(client, db, two_tenants):
     login(client, "admin")
     assert client.get("/admin/branding").status_code == 200
 
-    resp = client.post("/admin/branding", data={"name": "Harbour IT", "contact": "help@harbourit.co.uk",
+    resp = client.post("/admin/branding", data={"name": "Harbour IT", "contact": "help@harbourit.example",
                                                 "accent": "#0D7A5F", "logo": (io.BytesIO(PNG), "logo.png")},
                        content_type="multipart/form-data")
     assert resp.status_code == 302
     b = branding.load(db)
-    assert (b.name, b.contact, b.accent) == ("Harbour IT", "help@harbourit.co.uk", "#0d7a5f")
+    assert (b.name, b.contact, b.accent) == ("Harbour IT", "help@harbourit.example", "#0d7a5f")
     assert b.logo.startswith("data:image/png")
 
     bad = client.post("/admin/branding", data={"name": "X", "accent": "not-a-colour"})
@@ -70,7 +70,7 @@ def test_reports_carry_the_brand(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     for key, value in (("brand_name", "Harbour IT"), ("brand_accent", "#0d7a5f"),
-                       ("brand_contact", "help@harbourit.co.uk")):
+                       ("brand_contact", "help@harbourit.example")):
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")

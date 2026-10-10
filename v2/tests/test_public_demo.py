@@ -98,6 +98,14 @@ def test_banner_link_must_be_a_web_address(demo_app):
     assert "javascript:" not in page and "Get Office Sentry" not in page
 
 
+def test_two_step_setup_stores_nothing_for_the_shared_visitor(demo_app, db):
+    """Opening the authenticator setup would store a secret on the one demo user and show it to everyone."""
+    resp = demo_app.test_client().get("/two-step/setup")
+    assert resp.status_code == 302 and resp.headers["Location"].endswith("/account")
+    row = db.execute("SELECT totp_pending_enc FROM users WHERE username = ?", (public_demo.USERNAME,)).fetchone()
+    assert row["totp_pending_enc"] is None
+
+
 def test_every_page_opens_for_the_demo_user(demo_app):
     client = demo_app.test_client()
     for rule in demo_app.url_map.iter_rules():

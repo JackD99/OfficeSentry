@@ -11,3 +11,4 @@
 - [ ] **Docs:** `v2/CLAUDE.md` and `v2/README.md` updated where behaviour changed.
 - [ ] **Screenshots:** pages that look different were checked in a browser, with screenshots here (and `scripts/screenshots.py` re-run if the README images changed).
 - [ ] `ruff check .` and `pytest -n auto` pass in `v2/`.
+- [ ] **Sign-off:** every commit has a `Signed-off-by` line (`git commit -s`; CONTRIBUTING.md, "Signing off your commits"). Not needed on the maintainer's own pull requests.

@@ -167,7 +167,7 @@ jobs:
           echo "RELEASE_DIGEST=$digest" >> "$GITHUB_ENV"
           echo "Deploying release $REF to the portal: \`$IMAGE:$version@$digest\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         if: env.DEPLOYS == 'true' || env.SITE == 'true' || env.DEMO == 'true'
         with:
           ref: ${{ env.REF }}
@@ -233,7 +233,7 @@ jobs:
             if [ -n "$UPTIME_PING_URL" ]; then echo "UPTIME_PING_URL='$UPTIME_PING_URL'"; fi
           } > v2/.env.uptime
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         if: env.SITE == 'true'
         with:
           python-version: '3.12'
