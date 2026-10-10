@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+from tests import exchangedata
+
 GA = "role-ga"
 EXCH = "role-exch"
 READER = "role-reader"
@@ -258,6 +260,7 @@ EXCHANGE = {
     "Get-RemoteDomain": [{"Name": "Default", "DomainName": "*", "AutoForwardEnabled": True}],
     "Get-Recipient": [],
 }
+EXCHANGE.update(exchangedata.EXCHANGE)  # mobile devices and distribution lists
 # Sign-ins happen in the last few days, whenever the tests run: the activity history keeps the
 # sign-in log by date, and the summaries cover the last week of it.
 SIGNIN_BASE = (datetime.now(UTC) - timedelta(days=1)).date()

@@ -43,7 +43,10 @@ NATIONAL_PHONE = re.compile(r"(?<![\w.:/+-])(?:0\d(?: ?\d){8,10}|\(\d{3}\) ?\d{3
 # Keys (lower case) that hold phone numbers in Graph and Exchange, replaced whatever their format.
 PHONE_KEYS = {"businessphones", "mobilephone", "homephones", "otherphones", "faxnumber", "phonenumber",
               "telephonenumber", "phone", "phones", "mobile", "homephone", "othertelephone", "fax",
-              "otherfax", "otherhomephone", "pager"}
+              "otherfax", "otherhomephone", "pager", "devicetelephonenumber", "devicephonenumber"}
+# Free text and device secrets that may say anything about anyone: replaced whatever they hold.
+REDACTED_KEYS = {"subject", "internalreplymessage", "externalreplymessage", "recoverypassword", "deviceimei",
+                 "deviceimeinumber"}
 # Fictional numbers (555-0100 to 555-0199 are reserved for fiction); the leak check accepts only these.
 FAKE_PHONE = "+1 555 01{:02d}"
 # OneDrive addresses carry the owner's sign-in name: /personal/jane_contoso_com/Documents.
@@ -247,6 +250,8 @@ class Scrubber:
 
     def _field(self, key: str, value, device: bool):
         if device and key in DEVICE_KEYS and isinstance(value, str):
+            return "redacted"
+        if key.lower() in REDACTED_KEYS and isinstance(value, str) and value:
             return "redacted"
         if key.lower() in PHONE_KEYS and isinstance(value, str | list):
             # A phone field is replaced whatever its format; True/False flags under the same names stay.
