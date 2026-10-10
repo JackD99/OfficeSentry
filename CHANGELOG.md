@@ -106,6 +106,14 @@ views a scheduled email sends.
   ownerless or unused lists, from a count of the message trace kept per day) and **Mailbox size trend**
   (each mailbox's growth over one and three months from Office Sentry's own snapshots, and when it will
   fill up). If the message trace isn't available to the app, lists show without activity and say why.
+- Unused apps report: every app from outside Microsoft with when it last signed in (from Entra ID's app
+  sign-in activity, which needs Entra ID P1), flagging apps unused for 90 days that still hold permissions.
+- All users report: every account with its department, job title, manager, licences and last sign-in, each
+  manager with their direct reports, member counts by department, and accounts reporting to a manager whose
+  sign-in is blocked.
+- Empty, nested and dynamic groups report: groups with no members, groups inside other groups (and how many
+  levels deep), and dynamic groups with their rules, flagging paused ones.
+- A "Directory clean-up" job on the Reports page that groups these with Inactive accounts and the recycle bin.
 
 ### Changed
 

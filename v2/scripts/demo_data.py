@@ -62,6 +62,9 @@ LAST = ["Smith", "Jones", "Taylor", "Brown", "Williams", "Wilson", "Johnson", "D
         "Wood", "Harris", "Edwards", "Turner", "Martin", "Cooper", "Hill", "Ward", "Hughes", "Moore", "Clark",
         "King", "Harrison", "Lewis", "Baker", "Lee", "Allen", "Morris", "Khan", "Scott", "Watson", "Davis"]
 DEPARTMENTS = ["Finance", "Operations", "Sales", "Marketing", "Customer Service", "HR", "Projects", "Reception"]
+JOB_TITLES = {"Finance": "Accountant", "Operations": "Operations coordinator", "Sales": "Account manager",
+              "Marketing": "Marketing executive", "Customer Service": "Customer service adviser",
+              "HR": "HR adviser", "Projects": "Project manager", "Reception": "Receptionist"}
 # Fixture account and group ids that appear in addresses ("u1@x.com"), and the outside domains the fixtures use.
 FIXTURE_IDS = {"u1": "ann", "u2": "bob", "u5": "eve", "u6": "carl"}
 GROUP_MAILS = {"g1": "sales", "g2": "project-phoenix", "g3": "marketing", "g4": "board", "g5": "provisioned",
@@ -183,9 +186,17 @@ def staff(t: dict, rng: random.Random, now: datetime, mfa_share: float, joined_r
         last = now - timedelta(days=rng.randint(95, 300) if inactive else rng.choice([0, 0, 0, 1, 1, 2, 3, 6, 12]),
                                hours=rng.randint(0, 9))
         sku = "sku-bp" if i % 5 else "sku-basic"
+        # The first person in each department heads it and reports to Ann; everyone else reports to their head.
+        department = DEPARTMENTS[i % len(DEPARTMENTS)]
+        head = users[i % len(DEPARTMENTS)] if i >= len(DEPARTMENTS) else None
+        manager = ({"@odata.type": "#microsoft.graph.user", "id": head["id"], "displayName": head["displayName"],
+                    "userPrincipalName": head["userPrincipalName"], "accountEnabled": True} if head else
+                   {"@odata.type": "#microsoft.graph.user", "id": "u1", "displayName": t["people"]["ann"],
+                    "accountEnabled": True})
         users.append({"id": uid, "displayName": name, "userPrincipalName": upn, "mail": upn, "userType": "Member",
-                      "accountEnabled": True, "assignedLicenses": [{"skuId": sku}], "jobTitle": None,
-                      "department": DEPARTMENTS[i % len(DEPARTMENTS)],
+                      "accountEnabled": True, "assignedLicenses": [{"skuId": sku}],
+                      "jobTitle": JOB_TITLES[department] if head else f"Head of {department}",
+                      "department": department, "manager": manager,
                       "createdDateTime": (now - timedelta(days=30 + 37 * i)).strftime("%Y-%m-%dT%H:%M:%SZ"),
                       "signInActivity": {"lastSignInDateTime": last.strftime("%Y-%m-%dT%H:%M:%SZ")}})
         registered = rng.random() < mfa_share and not inactive

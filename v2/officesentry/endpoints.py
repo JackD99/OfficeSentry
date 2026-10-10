@@ -146,6 +146,9 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/reports/authenticationMethods/userRegistrationDetails", V1, "AuditLog.Read.All",
              ("identity_reports_tenant", "identity_reports"),
              fallback="Needs Entra ID P1; per-user methods are read instead"),
+    Endpoint("/reports/servicePrincipalSignInActivities", BETA, "AuditLog.Read.All",
+             ("identity_reports_tenant", "identity_reports"),
+             fallback="Beta only; Unused apps shows why when the tenant's licence or consent doesn't allow it"),
     Endpoint("/identityProtection/riskyUsers", V1, "IdentityRiskyUser.Read.All", ("identity_protection",),
              fallback="Needs Entra ID P2; shown as unavailable without it"),
     # Microsoft 365 usage reports. v1.0 returns CSV only, so these use beta's JSON.
