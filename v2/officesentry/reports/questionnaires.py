@@ -7,9 +7,11 @@ Microsoft 365 can't show) and that answer fills every set that asks it, so a
 backup answer written for the insurance form is already there for Cyber
 Essentials.
 
-To add a set: a ``QuestionSet`` in ``SETS`` whose questions name existing
-topics (or new ones in ``evidence_topics``); ``test_questionnaires`` checks
-every topic exists. Wording is paraphrased, never copied from an insurer.
+To add a set: ``register()`` a ``QuestionSet`` whose questions name existing
+topics (or new ones in ``evidence_topics``). It refuses an unknown topic, a
+repeated form number or a key already taken, so a set kept in its own module
+(a framework pack such as CIS or Essential Eight) fails at import, not on a
+page. Wording is paraphrased, never copied from an insurer.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .evidence_answers import BLANK, NO, NOT_KNOWN, PARTLY, YES, Answer
+from .evidence_answers import BLANK, KEYS, NO, NOT_KNOWN, PARTLY, YES, Answer
 
 # What a row shows: the answer, or that the engineer has to answer it.
 INPUT, ANSWERED = "Your input", "Answered"
@@ -259,7 +261,26 @@ CYBER_ESSENTIALS = QuestionSet(
     source_url="https://iasme.co.uk/cyber-essentials/preview-the-self-assessment-questions-for-cyber-essentials/",
 )
 
-SETS = {s.key: s for s in (INSURANCE, SUPPLIER, CYBER_ESSENTIALS)}
+SETS: dict[str, QuestionSet] = {}
+RESERVED = {"controls"}  # the page's own view of the controls
+
+
+def register(qset: QuestionSet) -> QuestionSet:
+    """Add a question set to the page, downloads and exports, after checking it."""
+    if qset.key in SETS or qset.key in RESERVED:
+        raise ValueError(f"question set {qset.key!r} already exists")
+    unknown = sorted({i.topic for i in qset.items} - set(KEYS))
+    refs = [i.ref for i in qset.items if i.ref]
+    if unknown:
+        raise ValueError(f"question set {qset.key!r} asks unknown topics: {', '.join(unknown)}")
+    if len(refs) != len(set(refs)):
+        raise ValueError(f"question set {qset.key!r} repeats a question number")
+    SETS[qset.key] = qset
+    return qset
+
+
+for _s in (INSURANCE, SUPPLIER, CYBER_ESSENTIALS):
+    register(_s)
 DEFAULT = INSURANCE.key
 
 

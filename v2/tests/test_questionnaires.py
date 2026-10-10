@@ -44,6 +44,22 @@ def test_every_question_names_a_topic_and_every_gap_has_a_template():
     assert used == set(topics), f"topics no question set asks: {set(topics) - used}"
 
 
+def test_a_set_is_checked_when_registered():
+    part = questionnaires.Part("Access", (questionnaires.Item("mfa_remote", "MFA?", ref="1"),))
+    for bad, why in ((questionnaires.QuestionSet("insurance", "T", "T", "I", (part,)), "already exists"),
+                     (questionnaires.QuestionSet("controls", "T", "T", "I", (part,)), "already exists"),
+                     (questionnaires.QuestionSet("x", "T", "T", "I", (questionnaires.Part(
+                         "P", (questionnaires.Item("nope", "Q?"),)),)), "unknown topics: nope"),
+                     (questionnaires.QuestionSet("x", "T", "T", "I", (part, part)), "repeats")):
+        try:
+            questionnaires.register(bad)
+        except ValueError as e:
+            assert why in str(e)
+        else:
+            raise AssertionError(f"registered {bad.key}")
+    assert "x" not in SETS
+
+
 def test_cyber_essentials_numbers_follow_danzell():
     ce = SETS["cyber-essentials"]
     refs = [i.ref for i in ce.items]

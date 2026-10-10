@@ -184,6 +184,14 @@ needing goes in those lists.
   (`evidence_answer_overrides`, audited, note text never logged); the page,
   PDF, XLSX and CSV show the override and who set it, and only staff on the
   page see the suggestion it replaced and the "data changed" hint.
+  Question sets (`reports/questionnaires.py`: cyber insurance, supplier
+  questionnaire, Cyber Essentials by Danzell number) word those topics the
+  way each form does, with text to paste; topics Microsoft 365 can't answer
+  (`evidence_topics.py`, `gap()`) carry a fill-in text with `[brackets]`.
+  An override is per topic, so one written answer fills every set. A new set
+  (or a framework pack) is a `QuestionSet` passed to `questionnaires.register()`,
+  which refuses unknown topics; the page (`?set=`), PDF answer sheet, XLSX,
+  CSV and text download pick it up.
 - Client-facing reports (page + PDF) extend `templates/reports/_layout.html`
   (cover, MSP branding, running headers and page numbers) and build from the
   macros in `reports/_components.html` (verdict, KPI tile, severity bar,
