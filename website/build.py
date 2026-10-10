@@ -283,9 +283,11 @@ def example_title(name: str) -> str:
 
 
 def version() -> str:
-    """The newest released version in CHANGELOG.md, if there is one."""
-    found = re.search(r"^## \[?v?(\d+\.\d+\.\d+)\]?", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M)
-    return found[1] if found else ""
+    """The newest released version in CHANGELOG.md, if there is one (not the "unreleased" section above it)."""
+    for found in re.finditer(r"^## \[?v?(\d+\.\d+\.\d+)\]?(.*)$", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M):
+        if "unreleased" not in found[2].lower():
+            return found[1]
+    return ""
 
 
 # -- Build ----------------------------------------------------------------------------------------------------
