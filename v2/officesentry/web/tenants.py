@@ -52,8 +52,10 @@ def not_connected(tenant) -> str | None:
     if clouds.of(connection).key != cloud.key:
         return clouds.app_needed(cloud)
     if not connection["client_id"]:
-        return ("This tenant isn't connected yet: its app connection has no application (client) ID. "
-                "Add it under App connection first.")
+        return (
+            "This tenant isn't connected yet: its app connection has no application (client) ID. "
+            "Add it under App connection first."
+        )
     if not tenant["consented_at"]:
         return "This tenant isn't connected yet: a tenant admin needs to grant consent first."
     return None
@@ -64,9 +66,11 @@ def cloud_mismatch(cloud_key: str, connection) -> str | None:
     if connection is None or clouds.of(connection).key == cloud_key:
         return None
     tenant_cloud, app_cloud = clouds.get(cloud_key), clouds.of(connection)
-    return (f"The app connection {connection['name']} is registered in {app_cloud.label}, so it can't sign in to a "
-            f"{tenant_cloud.label} tenant. Choose an app connection set up for {tenant_cloud.label}, or add one "
-            "under App connection.")
+    return (
+        f"The app connection {connection['name']} is registered in {app_cloud.label}, so it can't sign in to a "
+        f"{tenant_cloud.label} tenant. Choose an app connection set up for {tenant_cloud.label}, or add one "
+        "under App connection."
+    )
 
 
 def data_health(tenant, latest: dict) -> tuple[str, str, str]:
@@ -111,8 +115,14 @@ def dashboard():
     rows = [rollup_row(g.db, t, cached=True) for t in scoped_tenants()]
     for row in rows:
         row["health"] = data_health(row["tenant"], _latest_runs(row["tenant"]["id"]))
-    rows.sort(key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["counts"]["medium"],
-                             r["tenant"]["name"].lower()))
+    rows.sort(
+        key=lambda r: (
+            -r["counts"]["critical"],
+            -r["counts"]["high"],
+            -r["counts"]["medium"],
+            r["tenant"]["name"].lower(),
+        )
+    )
     scores = [r["kpis"]["secure_score.pct"].value for r in rows if r["kpis"]["secure_score.pct"].value is not None]
     summary = {
         "up_to_date": sum(r["health"][0] == "ok" for r in rows),
@@ -155,10 +165,16 @@ def new_tenant():
                 if conn_id is None:
                     flash(clouds.app_needed(clouds.get(cloud)), "warning")
             tenant_id = store.create_tenant(g.db, name, ref, conn_id, cloud)
-            tenant_groups.set_tenant_groups(g.db, tenant_id,
-                                            {int(x) for x in request.form.getlist("groups") if x.isdigit()})
-            audit(g.db, g.user["username"], "tenant_created", tenant_id,
-                  ref + ("" if cloud == clouds.DEFAULT else f" ({cloud})"))
+            tenant_groups.set_tenant_groups(
+                g.db, tenant_id, {int(x) for x in request.form.getlist("groups") if x.isdigit()}
+            )
+            audit(
+                g.db,
+                g.user["username"],
+                "tenant_created",
+                tenant_id,
+                ref + ("" if cloud == clouds.DEFAULT else f" ({cloud})"),
+            )
             return redirect(url_for("tenants.tenant", tenant_id=tenant_id))
     return render_template("tenant_new.html", connections=connections, groups=tenant_groups.all_groups(g.db))
 
@@ -190,12 +206,23 @@ def _consent_link(t, connection):
     g.db.execute(
         "INSERT INTO consent_requests (nonce_hash, tenant_id, user_id, session_hash, created_at, expires_at)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        (_nonce_hash(nonce), t["id"], g.user["id"], g.session_row["token_hash"], _iso(now),
-         _iso(now + CONSENT_LINK_LIFETIME)),
+        (
+            _nonce_hash(nonce),
+            t["id"],
+            g.user["id"],
+            g.session_row["token_hash"],
+            _iso(now),
+            _iso(now + CONSENT_LINK_LIFETIME),
+        ),
     )
     state = _consent_serializer().dumps({"t": t["id"], "n": nonce})
-    return admin_consent_url(connection["client_id"], t["tenant_ref"],
-                             _cfg().base_url + url_for("tenants.consent_callback"), state, clouds.of(t).key)
+    return admin_consent_url(
+        connection["client_id"],
+        t["tenant_ref"],
+        _cfg().base_url + url_for("tenants.consent_callback"),
+        state,
+        clouds.of(t).key,
+    )
 
 
 def _use_consent_nonce(tenant_id: int, nonce) -> bool:
@@ -203,11 +230,14 @@ def _use_consent_nonce(tenant_id: int, nonce) -> bool:
     if not isinstance(nonce, str) or not nonce or g.get("session_row") is None:
         return False
     now = _iso(datetime.now(UTC))
-    return g.db.execute(
-        "UPDATE consent_requests SET used_at = ? WHERE nonce_hash = ? AND tenant_id = ? AND user_id = ?"
-        " AND session_hash = ? AND used_at IS NULL AND expires_at > ?",
-        (now, _nonce_hash(nonce), tenant_id, g.user["id"], g.session_row["token_hash"], now),
-    ).rowcount == 1
+    return (
+        g.db.execute(
+            "UPDATE consent_requests SET used_at = ? WHERE nonce_hash = ? AND tenant_id = ? AND user_id = ?"
+            " AND session_hash = ? AND used_at IS NULL AND expires_at > ?",
+            (now, _nonce_hash(nonce), tenant_id, g.user["id"], g.session_row["token_hash"], now),
+        ).rowcount
+        == 1
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>")
@@ -232,10 +262,18 @@ def tenant(tenant_id: int):
     if not cloud.is_default and (connection is None or cloud_mismatch(cloud.key, connection)):
         cloud_problem = clouds.app_needed(cloud)
     return render_template(
-        "tenant.html", tenant=t, connection=connection, consent_link=_consent_link(t, connection),
-        redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"), report=report, attention=attention,
-        health=data_health(t, latest), report_groups=grouped(), setup=None if setup.onboarded else setup,
-        setup_can_check=_check_problem(t) is None, cloud_problem=cloud_problem,
+        "tenant.html",
+        tenant=t,
+        connection=connection,
+        consent_link=_consent_link(t, connection),
+        redirect_uri=_cfg().base_url + url_for("tenants.consent_callback"),
+        report=report,
+        attention=attention,
+        health=data_health(t, latest),
+        report_groups=grouped(),
+        setup=None if setup.onboarded else setup,
+        setup_can_check=_check_problem(t) is None,
+        cloud_problem=cloud_problem,
     )
 
 
@@ -244,13 +282,18 @@ def tenant(tenant_id: int):
 def collection(tenant_id: int):
     t = tenant_or_404(tenant_id)
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
-    runs = g.db.execute(
-        "SELECT * FROM runs WHERE tenant_id = ? ORDER BY id DESC LIMIT 50", (t["id"],)
-    ).fetchall()
+    runs = g.db.execute("SELECT * FROM runs WHERE tenant_id = ? ORDER BY id DESC LIMIT 50", (t["id"],)).fetchall()
     latest = _latest_runs(t["id"])
     return render_template(
-        "collection.html", tenant=t, connection=connection, capabilities=store.tenant_capabilities(t), runs=runs,
-        latest=latest, collectors=REGISTRY, health=data_health(t, latest), not_connected=not_connected(t),
+        "collection.html",
+        tenant=t,
+        connection=connection,
+        capabilities=store.tenant_capabilities(t),
+        runs=runs,
+        latest=latest,
+        collectors=REGISTRY,
+        health=data_health(t, latest),
+        not_connected=not_connected(t),
         setup=tenant_health.assess(g.db, t),
     )
 
@@ -288,8 +331,10 @@ def set_connection(tenant_id: int):
     from .tenant_admin import _other_app
 
     reset = conn_id != t["connection_id"] and _other_app(t["connection_id"], conn_id)
-    g.db.execute("UPDATE tenants SET connection_id = ?, consented_at = CASE WHEN ? THEN NULL ELSE consented_at END"
-                 " WHERE id = ?", (conn_id, int(reset), t["id"]))
+    g.db.execute(
+        "UPDATE tenants SET connection_id = ?, consented_at = CASE WHEN ? THEN NULL ELSE consented_at END WHERE id = ?",
+        (conn_id, int(reset), t["id"]),
+    )
     audit(g.db, g.user["username"], "tenant_connection_set", t["id"], str(conn_id))
     flash("App connection saved. Use Check connection now to check it works.", "success")
     return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
@@ -306,8 +351,13 @@ def test_connection(tenant_id: int):
         flash(not_connected(t), "error")
         return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
     vault = current_app.extensions["officesentry.vault"]
-    result = check(t["tenant_ref"], connection["client_id"], vault.decrypt(connection["key_enc"]),
-                   connection["thumbprint"], clouds.of(t).key)
+    result = check(
+        t["tenant_ref"],
+        connection["client_id"],
+        vault.decrypt(connection["key_enc"]),
+        connection["thumbprint"],
+        clouds.of(t).key,
+    )
     audit(g.db, g.user["username"], "connection_tested", t["id"], "ok" if result.ok else result.title)
     if result.ok:
         g.db.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), t["id"]))
@@ -315,8 +365,11 @@ def test_connection(tenant_id: int):
         if not t["consented_at"] and t["enabled"] and not t["archived_at"]:
             # Consent was given outside the link: start the first collection now.
             queued = lifecycle.queue_first_collection(g.db, t["id"], requested_by=g.user["username"])
-        flash(f"{result.title} Office Sentry can sign in and read this tenant."
-              + (" The first collection has been queued." if queued else ""), "success")
+        flash(
+            f"{result.title} Office Sentry can sign in and read this tenant."
+            + (" The first collection has been queued." if queued else ""),
+            "success",
+        )
     else:
         flash(f"{result.title} {result.fix}", "error")
     return redirect(url_for("tenant_admin.manage", tenant_id=t["id"]))
@@ -341,26 +394,37 @@ def consent_callback():
 @roles_required("admin")
 def _consent_return():
     try:
-        data = _consent_serializer().loads(request.args.get("state", ""),
-                                           max_age=int(CONSENT_LINK_LIFETIME.total_seconds()))
+        data = _consent_serializer().loads(
+            request.args.get("state", ""), max_age=int(CONSENT_LINK_LIFETIME.total_seconds())
+        )
     except BadSignature:
         abort(400)
     if not isinstance(data, dict) or not isinstance(data.get("t"), int):
         abort(400)
     t = tenant_or_404(data["t"])
     if not _use_consent_nonce(t["id"], data.get("n")):
-        audit(g.db, g.user["username"], "consent_link_refused", t["id"],
-              "used before, expired or opened in another browser")
-        flash("That consent link has already been used or has expired, or it was opened in a different browser. "
-              "Nothing was recorded. Open a new consent link from this page.", "error")
+        audit(
+            g.db,
+            g.user["username"],
+            "consent_link_refused",
+            t["id"],
+            "used before, expired or opened in another browser",
+        )
+        flash(
+            "That consent link has already been used or has expired, or it was opened in a different browser. "
+            "Nothing was recorded. Open a new consent link from this page.",
+            "error",
+        )
         return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
     if request.args.get("error"):
         from ..connection_check import explain
 
         description = request.args.get("error_description", request.args["error"])
         problem = explain(description)
-        flash(f"Consent was not granted. {problem}" if problem else "Consent was not granted: " + description[:300],
-              "error")
+        flash(
+            f"Consent was not granted. {problem}" if problem else "Consent was not granted: " + description[:300],
+            "error",
+        )
         return redirect(url_for("tenants.tenant", tenant_id=t["id"]))
     if request.args.get("admin_consent", "").lower() != "true":
         abort(400)
@@ -375,8 +439,10 @@ def _consent_return():
             unconfirmed = True  # record the consent, but keep signing in by domain
         elif expected != returned:
             # Anyone holding the link could otherwise point this client at another client's tenant.
-            refused = (f"Consent came from a different tenant than {t['tenant_ref']}, so it wasn't recorded. "
-                       "Open the consent link again and sign in as an administrator of that tenant.")
+            refused = (
+                f"Consent came from a different tenant than {t['tenant_ref']}, so it wasn't recorded. "
+                "Open the consent link again and sign in as an administrator of that tenant."
+            )
         elif g.db.execute("SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (returned, t["id"])).fetchone():
             refused = "Another tenant in Office Sentry already uses this tenant ID, so consent wasn't recorded here."
         else:
@@ -389,11 +455,19 @@ def _consent_return():
         if swap_to:  # replace the domain with the stable tenant GUID Microsoft confirmed for it
             g.db.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (swap_to, t["id"]))
         g.db.execute("UPDATE tenants SET consented_at = ? WHERE id = ?", (utcnow(), t["id"]))
-        audit(g.db, g.user["username"], "consent_granted", t["id"],
-              returned + (" (tenant ID not confirmed, kept the domain)" if unconfirmed else ""))
+        audit(
+            g.db,
+            g.user["username"],
+            "consent_granted",
+            t["id"],
+            returned + (" (tenant ID not confirmed, kept the domain)" if unconfirmed else ""),
+        )
     if unconfirmed:
-        flash(f"Office Sentry couldn't confirm the tenant ID for {t['tenant_ref']} with Microsoft just now, so it "
-              "keeps using the domain, which works too. You can enter the tenant ID under Manage later.", "warning")
+        flash(
+            f"Office Sentry couldn't confirm the tenant ID for {t['tenant_ref']} with Microsoft just now, so it "
+            "keeps using the domain, which works too. You can enter the tenant ID under Manage later.",
+            "warning",
+        )
     if t["enabled"] and not t["archived_at"]:
         for key in REGISTRY:  # tenant_profile is first, so licence-dependent collectors see its result
             store.enqueue_run(g.db, t["id"], key, requested_by=g.user["username"])
@@ -419,8 +493,21 @@ def run(run_id: int):
     sample = store.run_objects(g.db, run_id, kind=kind, limit=200) if kind else []
     columns = sorted({k for row in sample for k in row if not k.startswith("_")})[:12]
     pruned = not kinds and r["object_count"] > 0 and r["status"] not in ("queued", "running")
-    requests = g.db.execute("SELECT * FROM run_requests WHERE run_id = ? ORDER BY calls DESC, endpoint",
-                            (run_id,)).fetchall()
-    return render_template("run.html", run=r, tenant=t, events=events, kinds=kinds, metrics=metrics,
-                           kind=kind, sample=sample, columns=columns, collectors=REGISTRY, pruned=pruned,
-                           requests=requests, limits=endpoints.LIMITS)
+    requests = g.db.execute(
+        "SELECT * FROM run_requests WHERE run_id = ? ORDER BY calls DESC, endpoint", (run_id,)
+    ).fetchall()
+    return render_template(
+        "run.html",
+        run=r,
+        tenant=t,
+        events=events,
+        kinds=kinds,
+        metrics=metrics,
+        kind=kind,
+        sample=sample,
+        columns=columns,
+        collectors=REGISTRY,
+        pruned=pruned,
+        requests=requests,
+        limits=endpoints.LIMITS,
+    )

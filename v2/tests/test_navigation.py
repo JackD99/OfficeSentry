@@ -24,8 +24,9 @@ def _labels(bar: str) -> list[str]:
 
 
 def _active(bar: str) -> list[str]:
-    return [re.sub(r"<[^>]+>.*", "", a).strip()
-            for a in re.findall(r'<a [^>]*class="active"[^>]*>(.*?)</a>', bar, re.S)]
+    return [
+        re.sub(r"<[^>]+>.*", "", a).strip() for a in re.findall(r'<a [^>]*class="active"[^>]*>(.*?)</a>', bar, re.S)
+    ]
 
 
 def _pages(page: str) -> list[str]:
@@ -87,8 +88,10 @@ def test_report_picker_links_every_report(client, db, seeded):
     alpha = seeded
     make_user(db, "admin")
     login(client, "admin")
-    for url, current in ((f"/tenants/{alpha}/evidence", "Questionnaires and evidence"),
-                         (f"/tenants/{alpha}/data/inbox-rules", "Inbox rules")):
+    for url, current in (
+        (f"/tenants/{alpha}/evidence", "Questionnaires and evidence"),
+        (f"/tenants/{alpha}/data/inbox-rules", "Inbox rules"),
+    ):
         page = client.get(url).get_data(as_text=True)
         picker = _picker(page)
         hrefs = re.findall(r'href="(/tenants/[^"]+)"', picker)

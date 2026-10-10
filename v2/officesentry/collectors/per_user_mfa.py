@@ -31,8 +31,14 @@ class PerUserMfa(Collector):
         if users_run:
             users = store.run_objects(ctx.conn, users_run["id"], "user")
         else:
-            users = [dict(u, _id=u["id"]) for u in ctx.paged(ctx.graph.get_all("/users", params={
-                "$select": "id,userPrincipalName,userType,accountEnabled", "$top": "999"}))]
+            users = [
+                dict(u, _id=u["id"])
+                for u in ctx.paged(
+                    ctx.graph.get_all(
+                        "/users", params={"$select": "id,userPrincipalName,userType,accountEnabled", "$top": "999"}
+                    )
+                )
+            ]
         members = [u for u in users if u.get("accountEnabled") and (u.get("userType") or "Member") == "Member"]
         if len(members) > USER_LIMIT:
             ctx.warn(f"Checked the first {USER_LIMIT} of {len(members)} enabled members")
@@ -41,8 +47,9 @@ class PerUserMfa(Collector):
         rows = []
         for u in members:
             try:
-                state = ctx.graph.get(f"/users/{u['_id']}/authentication/requirements",
-                                      version="beta").get("perUserMfaState")
+                state = ctx.graph.get(f"/users/{u['_id']}/authentication/requirements", version="beta").get(
+                    "perUserMfaState"
+                )
             except PermissionMissing:
                 ctx.warn("Per-user MFA needs the Policy.Read.All permission; re-consent the app")
                 return

@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 # Words whose plural doesn't follow the endings below.
-IRREGULAR = {"person": "people", "mailbox": "mailboxes", "policy": "policies", "library": "libraries",
-             "child": "children", "team or group": "teams and groups", "file or folder": "files and folders"}
+IRREGULAR = {
+    "person": "people",
+    "mailbox": "mailboxes",
+    "policy": "policies",
+    "library": "libraries",
+    "child": "children",
+    "team or group": "teams and groups",
+    "file or folder": "files and folders",
+}
 
 
 def nouns(n: int, noun: str, many: str | None = None) -> str:
@@ -45,7 +52,7 @@ def subject_label(subject: str) -> str:
 
 
 def day(iso: str | None) -> str:
-    """"1 Oct 2026" for an ISO date or timestamp, for text people read; "?" when there's none."""
+    """ "1 Oct 2026" for an ISO date or timestamp, for text people read; "?" when there's none."""
     if not iso or len(iso) < 10 or not iso[:4].isdigit():
         return iso or "?"
     from datetime import date
@@ -58,7 +65,7 @@ def day(iso: str | None) -> str:
 
 
 def every(n: int, noun: str, many: str | None = None, start: bool = False) -> str:
-    """"all 4 domains", or "the 1 domain" when there's only one. ``start`` capitalises it to open a sentence."""
+    """ "all 4 domains", or "the 1 domain" when there's only one. ``start`` capitalises it to open a sentence."""
     text = f"the 1 {noun}" if n == 1 else f"all {n} {nouns(n, noun, many)}"
     return text[0].upper() + text[1:] if start else text
 

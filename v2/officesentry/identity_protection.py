@@ -32,8 +32,22 @@ DETAILS = {
     "userPerformedPasswordlessOrPhishingResistantMFA": "The person signed in with phishing-resistant MFA",
 }
 
-__all__ = ["DETAILS", "OPEN_RISK", "RESOLVED_DAYS", "RESOLVED_STATES", "RISK_LEVELS", "RISK_STATES",
-           "detail", "level", "open_risk", "risk_severity", "rows", "severity", "state", "status"]
+__all__ = [
+    "DETAILS",
+    "OPEN_RISK",
+    "RESOLVED_DAYS",
+    "RESOLVED_STATES",
+    "RISK_LEVELS",
+    "RISK_STATES",
+    "detail",
+    "level",
+    "open_risk",
+    "risk_severity",
+    "rows",
+    "severity",
+    "state",
+    "status",
+]
 
 
 def status(snap: TenantSnapshot) -> dict | None:

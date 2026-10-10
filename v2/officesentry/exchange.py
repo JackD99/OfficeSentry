@@ -37,29 +37,33 @@ log = logging.getLogger(__name__)
 EXCHANGE_ROOT = clouds.get(clouds.DEFAULT).exchange  # commercial; a client for another cloud uses its own
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 
-READ_ONLY_CMDLETS = frozenset({
-    "Get-Mailbox",
-    "Get-MailboxPermission",
-    "Get-MailboxStatistics",
-    "Get-CASMailbox",
-    "Get-InboxRule",
-    "Get-Recipient",
-    "Get-RecipientPermission",
-    "Get-OrganizationConfig",
-    "Get-TransportConfig",
-    "Get-RemoteDomain",
-    "Get-HostedOutboundSpamFilterPolicy",
-    "Get-AcceptedDomain",
-    "Get-MobileDevice",
-    "Get-MobileDeviceStatistics",
-    "Get-DistributionGroup",
-    "Get-DistributionGroupMember",
-    "Get-MessageTraceV2",
-})
+READ_ONLY_CMDLETS = frozenset(
+    {
+        "Get-Mailbox",
+        "Get-MailboxPermission",
+        "Get-MailboxStatistics",
+        "Get-CASMailbox",
+        "Get-InboxRule",
+        "Get-Recipient",
+        "Get-RecipientPermission",
+        "Get-OrganizationConfig",
+        "Get-TransportConfig",
+        "Get-RemoteDomain",
+        "Get-HostedOutboundSpamFilterPolicy",
+        "Get-AcceptedDomain",
+        "Get-MobileDevice",
+        "Get-MobileDeviceStatistics",
+        "Get-DistributionGroup",
+        "Get-DistributionGroupMember",
+        "Get-MessageTraceV2",
+    }
+)
 
-ACCESS_HELP = ("Exchange refused access. In this tenant, assign the Global Reader role to the "
-               "Office Sentry app (Entra admin centre > Roles and admins > Global Reader > Add "
-               "assignments), and make sure admin consent includes Exchange.ManageAsApp.")
+ACCESS_HELP = (
+    "Exchange refused access. In this tenant, assign the Global Reader role to the "
+    "Office Sentry app (Entra admin centre > Roles and admins > Global Reader > Add "
+    "assignments), and make sure admin consent includes Exchange.ManageAsApp."
+)
 
 
 class ExchangeError(Exception):
@@ -116,8 +120,9 @@ class ExchangeClient:
         self._sleep = sleep
 
     @classmethod
-    def from_certificate(cls, tenant_ref: str, client_id: str, key_pem: str,
-                         thumbprint: str, cloud: str | None = None, **kwargs) -> ExchangeClient:
+    def from_certificate(
+        cls, tenant_ref: str, client_id: str, key_pem: str, thumbprint: str, cloud: str | None = None, **kwargs
+    ) -> ExchangeClient:
         from .msauth import TokenError, shared_certificate_token_provider
 
         root = clouds.get(cloud).exchange
@@ -155,7 +160,7 @@ class ExchangeClient:
                 resp = self._session.post(url, json=body, headers=headers, timeout=self._timeout)
             except (requests.ConnectionError, requests.Timeout) as exc:
                 retry = attempt < self._max_retries
-                delay = float(min(2 ** attempt, 60)) if retry else 0.0
+                delay = float(min(2**attempt, 60)) if retry else 0.0
                 self.telemetry.request(key, endpoint, status=0, limiter_wait=waited, retry_wait=delay)
                 if not retry:
                     raise ExchangeError(0, "network_error", str(exc)) from exc
@@ -166,9 +171,10 @@ class ExchangeClient:
             delay = 0.0
             if retry:
                 value = resp.headers.get("Retry-After", "")
-                delay = min(float(value), 300) if value.isdigit() else float(min(2 ** attempt, 60))
-            self.telemetry.request(key, endpoint, status=resp.status_code, limiter_wait=waited, retry_wait=delay,
-                                   headers=resp.headers)
+                delay = min(float(value), 300) if value.isdigit() else float(min(2**attempt, 60))
+            self.telemetry.request(
+                key, endpoint, status=resp.status_code, limiter_wait=waited, retry_wait=delay, headers=resp.headers
+            )
             if retry:
                 log.info("Exchange %s; retrying in %ss", resp.status_code, delay)
                 if resp.status_code == 429 and self.limiter:

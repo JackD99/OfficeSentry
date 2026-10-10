@@ -47,14 +47,21 @@ def _mock(rsps, *, settings=None, lifecycle=None, page_size=999):
         gid, kind = request.path_url.split("?")[0].split("/")[3:5]
         page = int(parse_qs(urlparse(request.url).query).get("$skiptoken", ["0"])[0])
         rows = getattr(grp, kind.upper()).get(gid, [])
-        body = {"value": rows[page * page_size:(page + 1) * page_size]}
+        body = {"value": rows[page * page_size : (page + 1) * page_size]}
         if (page + 1) * page_size < len(rows):
             body["@odata.nextLink"] = f"{V1}/groups/{gid}/{kind}?$skiptoken={page + 1}"
         return 200, {}, json.dumps(body)
-    rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/groups/[^/]+/(owners|members)"),
-                      callback=people, content_type="application/json")
-    for path, value, default in (("groupSettings", settings, grp.GROUP_SETTINGS),
-                                 ("groupLifecyclePolicies", lifecycle, grp.LIFECYCLE_POLICIES)):
+
+    rsps.add_callback(
+        responses.GET,
+        re.compile(re.escape(V1) + r"/groups/[^/]+/(owners|members)"),
+        callback=people,
+        content_type="application/json",
+    )
+    for path, value, default in (
+        ("groupSettings", settings, grp.GROUP_SETTINGS),
+        ("groupLifecyclePolicies", lifecycle, grp.LIFECYCLE_POLICIES),
+    ):
         if isinstance(value, dict):  # an error response
             rsps.get(f"{V1}/{path}", **value)
         else:
@@ -94,10 +101,16 @@ def test_collects_groups_owners_members_and_settings(db, two_tenants, factory):
     assert groups["s2"]["synced"] and groups["m1"]["kind"] == "mail_security" and groups["d1"]["kind"] == "distribution"
 
     settings = {k: v for k, v in _one(db, run_id, "group_settings").items() if not k.startswith("_")}
-    assert settings == {"available": True, "source": "tenant", "enableGroupCreation": False,
-                        "allowedGroupId": "s3", "allowedGroupName": "Group creators",
-                        "allowGuestsToAccessGroups": True, "allowToAddGuests": False,
-                        "usageGuidelinesUrl": "https://intranet.x.com/teams"}
+    assert settings == {
+        "available": True,
+        "source": "tenant",
+        "enableGroupCreation": False,
+        "allowedGroupId": "s3",
+        "allowedGroupName": "Group creators",
+        "allowGuestsToAccessGroups": True,
+        "allowToAddGuests": False,
+        "usageGuidelinesUrl": "https://intranet.x.com/teams",
+    }
     policy = _one(db, run_id, "expiration_policy")
     assert (policy["managedGroupTypes"], policy["groupLifetimeInDays"]) == ("All", 365)
 
@@ -158,8 +171,14 @@ def test_missing_settings_mean_microsoft_defaults(db, two_tenants, factory):
 @responses.activate
 def test_unreadable_settings_are_partial(db, two_tenants, factory):
     alpha, _ = two_tenants
-    _mock(responses, settings=FORBIDDEN, lifecycle={"status": 403, "json": {"error": {
-        "code": "AadPremiumLicenseRequired", "message": "Needs a premium license"}}})
+    _mock(
+        responses,
+        settings=FORBIDDEN,
+        lifecycle={
+            "status": 403,
+            "json": {"error": {"code": "AadPremiumLicenseRequired", "message": "Needs a premium license"}},
+        },
+    )
     run_id, status = _run(db, alpha, "groups", factory)
     assert status == "partial"
     assert len(_groups(db, run_id)) == 10
@@ -219,24 +238,30 @@ def test_microsoft_defaults_fail(db, two_tenants, monkeypatch):
     r = _results(db, alpha)
     assert r["group_creation"].status == "fail"
     assert [(f.severity, f.detail) for f in r["group_creation"].findings] == [
-        ("low", "Every user can create teams and Microsoft 365 groups (Microsoft's default)")]
+        ("low", "Every user can create teams and Microsoft 365 groups (Microsoft's default)")
+    ]
     assert r["group_expiration"].status == "fail"
     assert [(f.severity, f.detail) for f in r["group_expiration"].findings] == [
-        ("low", "No expiration policy: 5 teams and groups are kept until someone deletes them")]
+        ("low", "No expiration policy: 5 teams and groups are kept until someone deletes them")
+    ]
 
 
 def test_creation_limited_to_admins(db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
-    monkeypatch.setattr(grp, "GROUP_SETTINGS", [{"displayName": "Group.Unified", "values": [
-        {"name": "EnableGroupCreation", "value": "False"}]}])
+    monkeypatch.setattr(
+        grp,
+        "GROUP_SETTINGS",
+        [{"displayName": "Group.Unified", "values": [{"name": "EnableGroupCreation", "value": "False"}]}],
+    )
     seed_tenant(db, alpha)
     assert _results(db, alpha)["group_creation"].summary == "Only admins can create teams and groups"
 
 
 def test_expiration_for_selected_groups(db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
-    monkeypatch.setattr(grp, "LIFECYCLE_POLICIES", [{"id": "lp1", "groupLifetimeInDays": 180,
-                                                     "managedGroupTypes": "Selected"}])
+    monkeypatch.setattr(
+        grp, "LIFECYCLE_POLICIES", [{"id": "lp1", "groupLifetimeInDays": 180, "managedGroupTypes": "Selected"}]
+    )
     covered = [{**g, "expirationDateTime": "2027-03-01T00:00:00Z"} if g["id"] == "g1" else g for g in grp.GROUPS]
     monkeypatch.setattr(grp, "GROUPS", covered)
     seed_tenant(db, alpha)
@@ -249,8 +274,10 @@ def test_without_entra_p1_settings_checks_are_unavailable(db, two_tenants, monke
     alpha, _ = two_tenants
     monkeypatch.setattr(grp, "GROUP_SETTINGS", [])
     monkeypatch.setattr(grp, "LIFECYCLE_POLICIES", [])
-    no_p1 = [{**s, "servicePlans": [p for p in s["servicePlans"] if not p["servicePlanName"].startswith("AAD_")]}
-             for s in SKUS]
+    no_p1 = [
+        {**s, "servicePlans": [p for p in s["servicePlans"] if not p["servicePlanName"].startswith("AAD_")]}
+        for s in SKUS
+    ]
     seed_tenant(db, alpha, skus=no_p1)
     r = _results(db, alpha)
     assert r["group_creation"].status == r["group_expiration"].status == "unavailable"
@@ -283,8 +310,13 @@ def test_groups_report(db, two_tenants):
     seed_tenant(db, alpha)
     report = data_reports.build(db, store.get_tenant(db, alpha), "groups", datetime.now(UTC))
     sections = {s.title: s for s in report.sections}
-    assert list(sections) == ["Settings", "Needs attention", "Teams and groups", "Guests in teams and groups",
-                              "Other groups"]
+    assert list(sections) == [
+        "Settings",
+        "Needs attention",
+        "Teams and groups",
+        "Guests in teams and groups",
+        "Other groups",
+    ]
     settings = dict(sections["Settings"].rows)
     assert settings["Who can create teams and groups"] == "Admins and members of Group creators"
     assert (settings["Guests can access group content"], settings["Owners can add guests"]) == ("Yes", "No")
@@ -304,16 +336,26 @@ def test_groups_report(db, two_tenants):
     every = sections["Teams and groups"]
     assert [row[0] for row in every.rows] == ["Board", "Marketing", "Project Phoenix", "Provisioned", "Sales"]
     sales = dict(zip(every.columns, every.rows[-1], strict=True))
-    assert sales == {"Name": "Sales", "Team": "Yes", "Visibility": "Private", "Owners": "Ann, Eve", "Members": 3,
-                     "Guests": 1, "Created": "2025-01-10"}
+    assert sales == {
+        "Name": "Sales",
+        "Team": "Yes",
+        "Visibility": "Private",
+        "Owners": "Ann, Eve",
+        "Members": 3,
+        "Guests": 1,
+        "Created": "2025-01-10",
+    }
 
     assert sections["Guests in teams and groups"].rows == [
         ["lee_partner.org#EXT#@x.onmicrosoft.com", "Project Phoenix", "Team"],
         ["pat@supplier.com", "Project Phoenix", "Team"],
         ["pat@supplier.com", "Sales", "Team"],
     ]
-    assert sections["Other groups"].rows == [["Security groups", 3, 1, 1], ["Mail-enabled security groups", 1, 0, 0],
-                                             ["Distribution lists", 1, 0, 0]]
+    assert sections["Other groups"].rows == [
+        ["Security groups", 3, 1, 1],
+        ["Mail-enabled security groups", 1, 0, 0],
+        ["Distribution lists", 1, 0, 0],
+    ]
 
 
 def test_groups_report_with_microsoft_defaults(db, two_tenants, monkeypatch):
@@ -347,8 +389,14 @@ def test_groups_page_and_xlsx(client, db, two_tenants):
     resp = client.get(f"/tenants/{alpha}/data/groups.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
-    assert wb.sheetnames == ["Summary", "Settings", "Needs attention", "Teams and groups", "Guests in teams and groups",
-                             "Other groups"]
+    assert wb.sheetnames == [
+        "Summary",
+        "Settings",
+        "Needs attention",
+        "Teams and groups",
+        "Guests in teams and groups",
+        "Other groups",
+    ]
 
 
 # -- Since last month --------------------------------------------------------------------
@@ -362,8 +410,9 @@ def test_group_changes_since_last_month(db, two_tenants, monkeypatch):
     launch = {**grp.GROUPS[0], "id": "g6", "displayName": "Launch", "visibility": "Public"}
     lab = {**grp.GROUPS[5], "id": "s9", "displayName": "New security group"}
     monkeypatch.setattr(grp, "GROUPS", [g for g in grp.GROUPS if g["id"] != "g5"] + [launch, lab])
-    monkeypatch.setattr(grp, "OWNERS", {**grp.OWNERS, "g1": [], "g4": [{**grp.ANN, "accountEnabled": False}],
-                                        "g6": [grp.ANN]})
+    monkeypatch.setattr(
+        grp, "OWNERS", {**grp.OWNERS, "g1": [], "g4": [{**grp.ANN, "accountEnabled": False}], "g6": [grp.ANN]}
+    )
     seed_tenant(db, alpha)
     since = (datetime.now(UTC) - timedelta(days=28)).strftime("%Y-%m-%dT%H:%M:%SZ")
     got = {(c.kind, c.subject, c.detail) for c in all_changes(db, alpha, since) if c.area == "Teams and groups"}

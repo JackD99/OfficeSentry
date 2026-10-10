@@ -34,8 +34,8 @@ def _code_at(secret: str, step: int) -> str:
     key = base64.b32decode(secret + "=" * (-len(secret) % 8), casefold=True)
     digest = hmac.new(key, struct.pack(">Q", step), hashlib.sha1).digest()
     offset = digest[-1] & 0x0F
-    value = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
-    return str(value % 10 ** DIGITS).zfill(DIGITS)
+    value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return str(value % 10**DIGITS).zfill(DIGITS)
 
 
 def current_step(now: float | None = None) -> int:
@@ -72,14 +72,24 @@ def provisioning_uri(secret: str, account: str) -> str:
 def qr_svg(data: str) -> str:
     """Inline SVG QR code (no external assets, so the CSP stays strict)."""
     buf = io.BytesIO()
-    segno.make(data, error="m").save(buf, kind="svg", xmldecl=False, svgns=True, scale=5,
-                                     border=3, dark="#111827", light="#ffffff", svgclass=None, lineclass=None)
+    segno.make(data, error="m").save(
+        buf,
+        kind="svg",
+        xmldecl=False,
+        svgns=True,
+        scale=5,
+        border=3,
+        dark="#111827",
+        light="#ffffff",
+        svgclass=None,
+        lineclass=None,
+    )
     return buf.getvalue().decode()
 
 
 def grouped(secret: str) -> str:
     """The secret in groups of four, for typing into an app by hand."""
-    return " ".join(secret[i:i + 4] for i in range(0, len(secret), 4))
+    return " ".join(secret[i : i + 4] for i in range(0, len(secret), 4))
 
 
 # -- Recovery codes ------------------------------------------------------------
@@ -89,6 +99,7 @@ def new_recovery_codes(n: int = RECOVERY_CODES) -> list[str]:
     def one():
         raw = "".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(10))
         return f"{raw[:5]}-{raw[5:]}"
+
     return [one() for _ in range(n)]
 
 

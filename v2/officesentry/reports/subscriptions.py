@@ -23,8 +23,14 @@ from .monthly_review import setting
 from .registry import report
 
 # companySubscription.status and subscribedSku.capabilityStatus, in words.
-STATUS = {"Enabled": "Active", "Warning": "Grace period", "Suspended": "Suspended", "LockedOut": "Locked out",
-          "Deleted": "Ended", "Expired": "Ended"}
+STATUS = {
+    "Enabled": "Active",
+    "Warning": "Grace period",
+    "Suspended": "Suspended",
+    "LockedOut": "Locked out",
+    "Deleted": "Ended",
+    "Expired": "Ended",
+}
 LAPSING = ("Grace period", "Suspended", "Locked out")
 NEEDS_ACTION = ("Trial", *LAPSING)
 WINDOWS = (30, 60, 90)
@@ -32,10 +38,10 @@ SOON = ("Passed", "30 days")  # "Ends within" values that count as within 30 day
 WHAT_HAPPENS = {
     "Trial": "The trial ends on this date. Buy it before then or its licences stop working.",
     "Active": "Renews on this date if it's set to renew automatically; otherwise it expires then. Check the billing "
-              "settings.",
+    "settings.",
     "Grace period": "Expired, but people can still use it. Renew it before this date or it's suspended.",
     "Suspended": "Suspended: people can't use it, though admins can still back up its data. Reactivate it before "
-                 "this date or it's deleted.",
+    "this date or it's deleted.",
     "Locked out": "Locked: nobody can use it. Contact Microsoft or the reseller before this date or it's deleted.",
     "Ended": "Ended.",
 }
@@ -103,15 +109,19 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if status is None:
         report.notes.append("Renewal dates show after the next collection of Tenant profile and licences.")
     elif not status.get("available"):
-        report.notes.append("Microsoft didn't return the tenant's subscriptions on the last collection, so renewal "
-                            "dates aren't shown. The collection log on the tenant page has the reason.")
+        report.notes.append(
+            "Microsoft didn't return the tenant's subscriptions on the last collection, so renewal "
+            "dates aren't shown. The collection log on the tenant page has the reason."
+        )
     known = status is not None and bool(status.get("available"))
 
     renewals, soon, trials = _renewals(subs, by_sku, now, known)
     subscriptions, cost, priced, unpriced, assigned, bought = _subscriptions(skus, subs, names, prices, currency, now)
     if unpriced:
-        report.notes.append(f"{plural(unpriced, 'paid product')} {'has' if unpriced == 1 else 'have'} no price, so "
-                            "the monthly cost leaves them out. An admin can add prices on the Licence prices page.")
+        report.notes.append(
+            f"{plural(unpriced, 'paid product')} {'has' if unpriced == 1 else 'have'} no price, so "
+            "the monthly cost leaves them out. An admin can add prices on the Licence prices page."
+        )
 
     users = snap.objects("users", "user")
     groups = {g["_id"]: g for g in snap.objects("groups", "group") or []}
@@ -120,8 +130,9 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     held = {u["_id"]: assignments(u) for u in users or []}
     paths_known = any(a is not None for a in held.values())
     if users is not None and not paths_known:
-        report.notes.append("Whether licences are assigned directly or by a group shows after the next collection "
-                            "of Users.")
+        report.notes.append(
+            "Whether licences are assigned directly or by a group shows after the next collection of Users."
+        )
     if snap.objects("groups", "group") is None and paths_known:
         report.notes.append("Groups haven't been collected yet, so groups show by their ID.")
 
@@ -131,23 +142,46 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
 
     via_group = sum(1 for row in who.rows if row[2] in ("By group", TWICE))
     report.highlights = [
-        Highlight("Monthly cost", Money(cost, currency) if priced else "Not priced",
-                  f"{plural(unpriced, 'product')} not priced" if unpriced and priced else "Licences bought, at your "
-                  "prices", rows=Rows(SUBSCRIPTIONS)),
+        Highlight(
+            "Monthly cost",
+            Money(cost, currency) if priced else "Not priced",
+            f"{plural(unpriced, 'product')} not priced" if unpriced and priced else "Licences bought, at your prices",
+            rows=Rows(SUBSCRIPTIONS),
+        ),
         Highlight("Licences in use", f"{assigned} of {bought}", "Paid licences assigned", rows=Rows(SUBSCRIPTIONS)),
-        Highlight("Lapsing within 30 days", soon if known else "Not checked",
-                  "Trials in use, expired or suspended", ("bad" if soon else "ok") if known else None,
-                  Rows(RENEWALS, {"Ends within": list(SOON)}, flagged=True)),
-        Highlight("Trials", trials if known else "Not checked", "Active trial subscriptions",
-                  "warn" if trials else None, Rows(RENEWALS, {"Status": "Trial"})),
-        Highlight("Licence errors", errors if paths_known else "Not checked", "Licences that couldn't be assigned",
-                  ("bad" if errors else "ok") if paths_known else None, Rows(PROBLEMS, {"Problem": ERROR})),
-        Highlight("Assigned by group", f"{via_group} of {len(who.rows)}" if paths_known else "Not checked",
-                  "Licences that come from a group", rows=Rows(WHO, {"Assigned": ["By group", TWICE]})),
+        Highlight(
+            "Lapsing within 30 days",
+            soon if known else "Not checked",
+            "Trials in use, expired or suspended",
+            ("bad" if soon else "ok") if known else None,
+            Rows(RENEWALS, {"Ends within": list(SOON)}, flagged=True),
+        ),
+        Highlight(
+            "Trials",
+            trials if known else "Not checked",
+            "Active trial subscriptions",
+            "warn" if trials else None,
+            Rows(RENEWALS, {"Status": "Trial"}),
+        ),
+        Highlight(
+            "Licence errors",
+            errors if paths_known else "Not checked",
+            "Licences that couldn't be assigned",
+            ("bad" if errors else "ok") if paths_known else None,
+            Rows(PROBLEMS, {"Problem": ERROR}),
+        ),
+        Highlight(
+            "Assigned by group",
+            f"{via_group} of {len(who.rows)}" if paths_known else "Not checked",
+            "Licences that come from a group",
+            rows=Rows(WHO, {"Assigned": ["By group", TWICE]}),
+        ),
     ]
-    report.footnote = ("Costs use the monthly prices on the Licence prices page. Microsoft doesn't say whether a paid "
-                       "subscription renews automatically: check Billing > Your products in the Microsoft 365 admin "
-                       "center, or Partner Center for subscriptions you sell.")
+    report.footnote = (
+        "Costs use the monthly prices on the Licence prices page. Microsoft doesn't say whether a paid "
+        "subscription renews automatically: check Billing > Your products in the Microsoft 365 admin "
+        "center, or Partner Center for subscriptions you sell."
+    )
 
 
 # -- Products and subscriptions -----------------------------------------------------------------
@@ -165,11 +199,25 @@ def _next_dates(subs: list[dict], now: datetime) -> dict[str, datetime]:
 
 
 def _subscriptions(skus, subs, names, prices, currency, now):
-    section = Section(SUBSCRIPTIONS, ["Licence", "Status", "Purchased", "Assigned", "Available", "In grace period",
-                                      "Suspended", "Price / month", "Cost / month", "Next renewal or end", "Trial"],
-                      intro="Every product the tenant has, with licences bought, assigned and still available, and "
-                            "what they cost a month at your prices. Free products are listed last.",
-                      empty="The tenant has no subscriptions.")
+    section = Section(
+        SUBSCRIPTIONS,
+        [
+            "Licence",
+            "Status",
+            "Purchased",
+            "Assigned",
+            "Available",
+            "In grace period",
+            "Suspended",
+            "Price / month",
+            "Cost / month",
+            "Next renewal or end",
+            "Trial",
+        ],
+        intro="Every product the tenant has, with licences bought, assigned and still available, and "
+        "what they cost a month at your prices. Free products are listed last.",
+        empty="The tenant has no subscriptions.",
+    )
     section.chart = Chart("Licence", ("Assigned", "Available"), total="Purchased", tones=("1", "muted"))
     next_dates = _next_dates(subs, now)
     trials = {s.get("skuId") for s in subs if s.get("isTrial") is True and _status(s.get("status")) != "Ended"}
@@ -210,21 +258,47 @@ def _subscriptions(skus, subs, names, prices, currency, now):
             each = total = "Not priced"
         else:
             each, total = Money(price, currency), Money(purchased * price, currency)
-        rows.append(((free, status not in LAPSING and not trial, names[sid].lower()),
-                     [names[sid], status, purchased, used if per_user else "",
-                      purchased + grace - used if per_user else "",
-                      grace, stopped, each, total, when.strftime("%Y-%m-%d") if when else "", trial], flag))
+        rows.append(
+            (
+                (free, status not in LAPSING and not trial, names[sid].lower()),
+                [
+                    names[sid],
+                    status,
+                    purchased,
+                    used if per_user else "",
+                    purchased + grace - used if per_user else "",
+                    grace,
+                    stopped,
+                    each,
+                    total,
+                    when.strftime("%Y-%m-%d") if when else "",
+                    trial,
+                ],
+                flag,
+            )
+        )
     for _, row, flag in sorted(rows, key=lambda r: r[0]):
         section.add(row, flag)
     return section, round(cost, 2), priced, unpriced, assigned, bought
 
 
 def _renewals(subs, by_sku, now, known):
-    section = Section(RENEWALS, ["Licence", "Status", "Licences", "Started", "Next renewal or end", "Ends within",
-                                 "What happens", "Subscription ID"],
-                      intro="Each subscription and the date it next renews, lapses or is deleted. Trials and "
-                            "subscriptions in their grace period, suspended or locked come first.",
-                      empty="No subscriptions." if known else "Renewal dates haven't been collected.")
+    section = Section(
+        RENEWALS,
+        [
+            "Licence",
+            "Status",
+            "Licences",
+            "Started",
+            "Next renewal or end",
+            "Ends within",
+            "What happens",
+            "Subscription ID",
+        ],
+        intro="Each subscription and the date it next renews, lapses or is deleted. Trials and "
+        "subscriptions in their grace period, suspended or locked come first.",
+        empty="No subscriptions." if known else "Renewal dates haven't been collected.",
+    )
     rows = []
     soon = trials = 0
     for s in subs:
@@ -249,14 +323,26 @@ def _renewals(subs, by_sku, now, known):
         total = s.get("totalLicenses")
         name = sku_name(s.get("skuPartNumber") or sku.get("skuPartNumber"))
         started = parse_ts(s.get("createdDateTime"))
-        rows.append(((status not in NEEDS_ACTION, status == "Ended", days if days is not None else 10 ** 6,
-                      name.lower()),
-                     [name, status, total if isinstance(total, int) else "",
-                      started.strftime("%Y-%m-%d") if started else "",
-                      when.strftime("%Y-%m-%d") if when else "", within,
-                      "Free: nothing to renew." if is_free(sku) else WHAT_HAPPENS.get(status, "") if when or
-                      status != "Active" else "",
-                      s.get("commerceSubscriptionId") or s.get("_id") or ""], flag))
+        rows.append(
+            (
+                (status not in NEEDS_ACTION, status == "Ended", days if days is not None else 10**6, name.lower()),
+                [
+                    name,
+                    status,
+                    total if isinstance(total, int) else "",
+                    started.strftime("%Y-%m-%d") if started else "",
+                    when.strftime("%Y-%m-%d") if when else "",
+                    within,
+                    "Free: nothing to renew."
+                    if is_free(sku)
+                    else WHAT_HAPPENS.get(status, "")
+                    if when or status != "Active"
+                    else "",
+                    s.get("commerceSubscriptionId") or s.get("_id") or "",
+                ],
+                flag,
+            )
+        )
     for _, row, flag in sorted(rows, key=lambda r: r[0]):
         section.add(row, flag)
     return section, soon, trials
@@ -270,13 +356,20 @@ def _group_name(gid: str, groups: dict) -> str:
 
 
 def _people(users: list[dict], held: dict, names: dict, groups: dict, stopped: set[str]):
-    who = Section(WHO, ["Account", "Licence", "Assigned", "Groups", "State", "Usage location", "Sign-in"],
-                  intro="One row for each licence each account holds, and whether it was assigned directly or by a "
-                        "group. Filter by licence to see who has it.", empty="Nobody holds a licence.")
-    problems = Section(PROBLEMS, ["Account", "Licence", "Problem", "Group", "What it means", "What to do"],
-                       intro="Licences that couldn't be assigned, licensed accounts without a usage location, and "
-                             "licences assigned both directly and by a group.",
-                       empty="No licence assignment problems.")
+    who = Section(
+        WHO,
+        ["Account", "Licence", "Assigned", "Groups", "State", "Usage location", "Sign-in"],
+        intro="One row for each licence each account holds, and whether it was assigned directly or by a "
+        "group. Filter by licence to see who has it.",
+        empty="Nobody holds a licence.",
+    )
+    problems = Section(
+        PROBLEMS,
+        ["Account", "Licence", "Problem", "Group", "What it means", "What to do"],
+        intro="Licences that couldn't be assigned, licensed accounts without a usage location, and "
+        "licences assigned both directly and by a group.",
+        empty="No licence assignment problems.",
+    )
     by_group: dict[str, dict] = {}
     errors = 0
     rows, problem_rows = [], []
@@ -287,8 +380,13 @@ def _people(users: list[dict], held: dict, names: dict, groups: dict, stopped: s
         location = u.get("usageLocation") if isinstance(u.get("usageLocation"), str) else ""
         if mine is None:  # how licences are assigned wasn't collected for this account
             for sid in dict.fromkeys(x for x in u.get("skuIds") or [] if isinstance(x, str)):
-                rows.append(((label.lower(), names.get(sid, "")), [label, names.get(sid, "Unknown licence"),
-                                                                   "Not known", [], "Active", location, signin], None))
+                rows.append(
+                    (
+                        (label.lower(), names.get(sid, "")),
+                        [label, names.get(sid, "Unknown licence"), "Not known", [], "Active", location, signin],
+                        None,
+                    )
+                )
             continue
         for sid, a in mine.items():
             name = names.get(sid, "Unknown licence")
@@ -305,30 +403,65 @@ def _people(users: list[dict], held: dict, names: dict, groups: dict, stopped: s
                 state = "Active with errors" if a.errors else "Active"
             else:
                 state = "Not assigned (error)" if a.errors else "Disabled"
-            flag = "medium" if (failed and not a.active) or (a.active and sid in stopped) else (
-                "low" if a.errors or (a.direct and a.groups) else None)
-            rows.append(((label.lower(), name.lower()), [label, name, a.path, group_names, state, location, signin],
-                         flag))
+            flag = (
+                "medium"
+                if (failed and not a.active) or (a.active and sid in stopped)
+                else ("low" if a.errors or (a.direct and a.groups) else None)
+            )
+            rows.append(
+                ((label.lower(), name.lower()), [label, name, a.path, group_names, state, location, signin], flag)
+            )
             for e in a.errors:
                 meaning, todo = assignment_error(e.code)
                 errors += 1
                 if e.group:
                     by_group.setdefault(e.group, {"people": set(), "errors": 0, "skus": set()})["errors"] += 1
-                problem_rows.append(((0, label.lower(), name.lower()), [
-                    label, name, ERROR, _group_name(e.group, groups) if e.group else "Assigned directly",
-                    meaning + (" (the licence works, but not every part of it)" if e.active else ""), todo],
-                    "low" if e.active else "medium"))
+                problem_rows.append(
+                    (
+                        (0, label.lower(), name.lower()),
+                        [
+                            label,
+                            name,
+                            ERROR,
+                            _group_name(e.group, groups) if e.group else "Assigned directly",
+                            meaning + (" (the licence works, but not every part of it)" if e.active else ""),
+                            todo,
+                        ],
+                        "low" if e.active else "medium",
+                    )
+                )
             if a.direct and a.groups:
-                problem_rows.append(((2, label.lower(), name.lower()), [
-                    label, name, TWICE, group_names,
-                    "Removing the account from the group won't remove the licence, which is how leavers keep "
-                    "licences.", "Remove the direct assignment so the group manages it"], "low"))
+                problem_rows.append(
+                    (
+                        (2, label.lower(), name.lower()),
+                        [
+                            label,
+                            name,
+                            TWICE,
+                            group_names,
+                            "Removing the account from the group won't remove the licence, which is how leavers keep "
+                            "licences.",
+                            "Remove the direct assignment so the group manages it",
+                        ],
+                        "low",
+                    )
+                )
         if mine and "usageLocation" in u and not location:
-            problem_rows.append(((1, label.lower(), ""), [
-                label, [names.get(sid, "Unknown licence") for sid in mine], NO_LOCATION, "",
-                "Microsoft needs a usage location (country) to assign a licence. Groups fall back to the "
-                "organisation's country; assigning one directly fails.",
-                "Set the usage location on the account in the Microsoft 365 admin center"], "low"))
+            problem_rows.append(
+                (
+                    (1, label.lower(), ""),
+                    [
+                        label,
+                        [names.get(sid, "Unknown licence") for sid in mine],
+                        NO_LOCATION,
+                        "",
+                        "Microsoft needs a usage location (country) to assign a licence. Groups fall back to the "
+                        "organisation's country; assigning one directly fails.",
+                        "Set the usage location on the account in the Microsoft 365 admin center",
+                    ],
+                    "low",
+                )
+            )
     for _, row, flag in sorted(rows, key=lambda r: r[0]):
         who.add(row, flag)
     for _, row, flag in sorted(problem_rows, key=lambda r: r[0]):
@@ -337,24 +470,37 @@ def _people(users: list[dict], held: dict, names: dict, groups: dict, stopped: s
 
 
 def _groups(groups: dict, by_group: dict, names: dict) -> Section:
-    section = Section(GROUPS, ["Group", "Licences it gives", "People licensed through it", "Errors", "Members",
-                               "Membership"],
-                      intro="Groups that hand out licences to their members (group-based licensing), how many "
-                            "people have a licence through each and how many assignments failed.",
-                      empty="No group assigns licences: every licence is assigned directly.")
+    section = Section(
+        GROUPS,
+        ["Group", "Licences it gives", "People licensed through it", "Errors", "Members", "Membership"],
+        intro="Groups that hand out licences to their members (group-based licensing), how many "
+        "people have a licence through each and how many assignments failed.",
+        empty="No group assigns licences: every licence is assigned directly.",
+    )
     ids = [gid for gid, g in groups.items() if g.get("licenceSkuIds")] + [g for g in by_group if g not in groups]
     rows = []
     for gid in dict.fromkeys(ids):
         g = groups.get(gid) or {}
         entry = by_group.get(gid) or {"people": set(), "errors": 0, "skus": set()}
         skus = [s for s in g.get("licenceSkuIds") or [] if isinstance(s, str)] or sorted(entry["skus"])
-        membership = "Dynamic" if g.get("dynamic") else ("Synced from AD" if g.get("synced") else
-                                                         ("Assigned" if g else ""))
+        membership = (
+            "Dynamic" if g.get("dynamic") else ("Synced from AD" if g.get("synced") else ("Assigned" if g else ""))
+        )
         members = g.get("memberCount") if g.get("examined") and isinstance(g.get("memberCount"), int) else ""
-        rows.append(((not entry["errors"], (g.get("displayName") or gid).lower()),
-                     [g.get("displayName") or gid, [names.get(s, "Unknown licence") for s in skus],
-                      len(entry["people"]), entry["errors"], members, membership],
-                     "medium" if entry["errors"] else None))
+        rows.append(
+            (
+                (not entry["errors"], (g.get("displayName") or gid).lower()),
+                [
+                    g.get("displayName") or gid,
+                    [names.get(s, "Unknown licence") for s in skus],
+                    len(entry["people"]),
+                    entry["errors"],
+                    members,
+                    membership,
+                ],
+                "medium" if entry["errors"] else None,
+            )
+        )
     for _, row, flag in sorted(rows, key=lambda r: r[0]):
         section.add(row, flag)
     return section

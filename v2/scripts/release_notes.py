@@ -44,8 +44,10 @@ def parse_tag(tag: str) -> tuple[str, str]:
     writes it (PEP 440), which is what ``__version__`` holds."""
     match = re.fullmatch(r"v(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.(\d+))?", tag)
     if not match:
-        raise ReleaseError(f"{tag} isn't a release tag: use v<major>.<minor>.<patch>, such as v2.1.0, or "
-                           "v2.1.0-rc.1 for a release candidate.")
+        raise ReleaseError(
+            f"{tag} isn't a release tag: use v<major>.<minor>.<patch>, such as v2.1.0, or "
+            "v2.1.0-rc.1 for a release candidate."
+        )
     return match[1], match[1] + (f"{PRE[match[2]]}{match[3]}" if match[2] else "")
 
 
@@ -57,10 +59,11 @@ def section(changelog: str, release: str, prerelease: bool) -> str:
         if not heading or heading[1] != release:
             continue
         if not prerelease and "unreleased" in heading[2].lower():
-            raise ReleaseError(f"CHANGELOG.md still calls {release} unreleased: put the release date in its "
-                               "heading before tagging it.")
+            raise ReleaseError(
+                f"CHANGELOG.md still calls {release} unreleased: put the release date in its heading before tagging it."
+            )
         end = next((j for j in range(i + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
-        body = "\n".join(lines[i + 1:end]).strip()
+        body = "\n".join(lines[i + 1 : end]).strip()
         if not body:
             raise ReleaseError(f"CHANGELOG.md's {release} section is empty.")
         return body + "\n"
@@ -74,8 +77,10 @@ def notes(tag: str, changelog: str, version_in_code: str) -> tuple[str, bool]:
     # workflow stamps the candidate's version into the image, so trying the pipeline needs no version PR.
     candidate_of_dev = prerelease and re.fullmatch(rf"{re.escape(release)}\.dev\d+", version_in_code)
     if python_version != version_in_code and not candidate_of_dev:
-        raise ReleaseError(f"The tag {tag} needs the code's version (officesentry/__init__.py) to be "
-                           f"{python_version}, but it is {version_in_code}.")
+        raise ReleaseError(
+            f"The tag {tag} needs the code's version (officesentry/__init__.py) to be "
+            f"{python_version}, but it is {version_in_code}."
+        )
     return section(changelog, release, prerelease), prerelease
 
 

@@ -34,8 +34,10 @@ def load(name: str = "live_tenant.json") -> dict:
 
 def _cmdlet_key(url: str, cmdlet: dict) -> str:
     # Times in parameters (the message trace's StartDate) are blanked, as in Graph queries.
-    return TIMESTAMP.sub("<time>", json.dumps([request_key(url), cmdlet.get("CmdletName"),
-                                               cmdlet.get("Parameters") or {}], sort_keys=True))
+    return TIMESTAMP.sub(
+        "<time>",
+        json.dumps([request_key(url), cmdlet.get("CmdletName"), cmdlet.get("Parameters") or {}], sort_keys=True),
+    )
 
 
 def _select(query) -> tuple[set[str], list[tuple[str, str]]]:
@@ -55,8 +57,9 @@ def _recorded_subset(graph: dict[str, list], url: str) -> list | None:
     return None
 
 
-def mock(rsps, fixture: dict, stand_ins: dict[str, dict] | None = None,
-         new_fields: frozenset[str] = frozenset()) -> list[str]:
+def mock(
+    rsps, fixture: dict, stand_ins: dict[str, dict] | None = None, new_fields: frozenset[str] = frozenset()
+) -> list[str]:
     """Register the recording on ``rsps``. Returns a list that collects unmatched requests.
 
     ``stand_ins`` maps Graph paths (``/v1.0/...``) to bodies for requests the recording doesn't have;
@@ -80,9 +83,16 @@ def mock(rsps, fixture: dict, stand_ins: dict[str, dict] | None = None,
         e = recorded.pop(0) if len(recorded) > 1 else recorded[0]
         return e["status"], {}, json.dumps(e["body"]) if e["body"] is not None else ""
 
-    patterns = [(re.compile("".join("[^/]+" if part == "{id}" else re.escape(part)
-                                    for part in re.split(r"(\{id\})", path)) + r"\Z"), body)
-                for path, body in stand_ins.items() if path.startswith("/")]
+    patterns = [
+        (
+            re.compile(
+                "".join("[^/]+" if part == "{id}" else re.escape(part) for part in re.split(r"(\{id\})", path)) + r"\Z"
+            ),
+            body,
+        )
+        for path, body in stand_ins.items()
+        if path.startswith("/")
+    ]
 
     def graph_cb(request):
         path = request_key(request.url)[0]
@@ -104,10 +114,15 @@ def mock(rsps, fixture: dict, stand_ins: dict[str, dict] | None = None,
             return 200, {}, json.dumps(stand_ins[cmdlet["CmdletName"]])
         return serve(exchange, key, cmdlet.get("CmdletName"))
 
-    rsps.add_callback(responses.GET, re.compile(re.escape(GRAPH_ROOT) + "/.*"), callback=graph_cb,
-                      content_type="application/json")
-    rsps.add_callback(responses.POST, re.compile(re.escape(EXCHANGE_ROOT) + "/adminapi/.*"), callback=exchange_cb,
-                      content_type="application/json")
+    rsps.add_callback(
+        responses.GET, re.compile(re.escape(GRAPH_ROOT) + "/.*"), callback=graph_cb, content_type="application/json"
+    )
+    rsps.add_callback(
+        responses.POST,
+        re.compile(re.escape(EXCHANGE_ROOT) + "/adminapi/.*"),
+        callback=exchange_cb,
+        content_type="application/json",
+    )
     return missing
 
 

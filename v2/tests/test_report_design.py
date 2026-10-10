@@ -12,7 +12,8 @@ from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
 PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
 
 
 def test_brand_defaults_and_colour_safety(db):
@@ -46,9 +47,16 @@ def test_branding_settings_page(client, db, two_tenants):
     login(client, "admin")
     assert client.get("/admin/branding").status_code == 200
 
-    resp = client.post("/admin/branding", data={"name": "Harbour IT", "contact": "help@harbourit.example",
-                                                "accent": "#0D7A5F", "logo": (io.BytesIO(PNG), "logo.png")},
-                       content_type="multipart/form-data")
+    resp = client.post(
+        "/admin/branding",
+        data={
+            "name": "Harbour IT",
+            "contact": "help@harbourit.example",
+            "accent": "#0D7A5F",
+            "logo": (io.BytesIO(PNG), "logo.png"),
+        },
+        content_type="multipart/form-data",
+    )
     assert resp.status_code == 302
     b = branding.load(db)
     assert (b.name, b.contact, b.accent) == ("Harbour IT", "help@harbourit.example", "#0d7a5f")
@@ -56,9 +64,11 @@ def test_branding_settings_page(client, db, two_tenants):
 
     bad = client.post("/admin/branding", data={"name": "X", "accent": "not-a-colour"})
     assert bad.status_code == 302 and branding.load(db).name == "Harbour IT"
-    svg = client.post("/admin/branding", data={"name": "X", "accent": "#000000",
-                                               "logo": (io.BytesIO(b"<svg/>"), "logo.svg")},
-                      content_type="multipart/form-data")
+    svg = client.post(
+        "/admin/branding",
+        data={"name": "X", "accent": "#000000", "logo": (io.BytesIO(b"<svg/>"), "logo.svg")},
+        content_type="multipart/form-data",
+    )
     assert svg.status_code == 302 and branding.load(db).name == "Harbour IT"  # rejected as a whole
 
     client.post("/admin/branding", data={"name": "Harbour IT", "accent": "#0d7a5f", "remove_logo": "1"})
@@ -69,8 +79,11 @@ def test_branding_settings_page(client, db, two_tenants):
 def test_reports_carry_the_brand(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
-    for key, value in (("brand_name", "Harbour IT"), ("brand_accent", "#0d7a5f"),
-                       ("brand_contact", "help@harbourit.example")):
+    for key, value in (
+        ("brand_name", "Harbour IT"),
+        ("brand_accent", "#0d7a5f"),
+        ("brand_contact", "help@harbourit.example"),
+    ):
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")

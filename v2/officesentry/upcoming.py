@@ -40,9 +40,11 @@ log = logging.getLogger(__name__)
 
 KEY = "upcoming"
 TITLE = "Coming up"
-DESCRIPTION = ("What will need doing in the next 90 days across your tenants: renewals and trials, expiring app "
-               "secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks due for "
-               "review.")
+DESCRIPTION = (
+    "What will need doing in the next 90 days across your tenants: renewals and trials, expiring app "
+    "secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks due for "
+    "review."
+)
 HORIZON = 90  # days ahead
 EXPIRED_DAYS = 30  # app credentials that expired this recently are still listed
 QUOTA_NEAR = 0.9  # a mailbox at this share of its send limit needs attention now
@@ -106,8 +108,13 @@ class Item:
 
     @property
     def sort_key(self) -> tuple:
-        return (WINDOWS.index(self.window), self.due or date.max, SEVERITY_RANK.get(self.severity, 3),
-                self.tenant_name.lower(), self.title.lower())
+        return (
+            WINDOWS.index(self.window),
+            self.due or date.max,
+            SEVERITY_RANK.get(self.severity, 3),
+            self.tenant_name.lower(),
+            self.title.lower(),
+        )
 
 
 @dataclass
@@ -148,8 +155,11 @@ def _days(when: date, today: date) -> int:
 
 def _subscriptions(snap: TenantSnapshot, tenant, today: date) -> list[Item]:
     subs = snap.objects("tenant_profile", "company_subscription") or []
-    skus = {s.get("skuId"): s for s in snap.objects("tenant_profile", "subscribed_sku") or []
-            if isinstance(s.get("skuId"), str)}
+    skus = {
+        s.get("skuId"): s
+        for s in snap.objects("tenant_profile", "subscribed_sku") or []
+        if isinstance(s.get("skuId"), str)
+    }
     href = f"/tenants/{tenant['id']}/data/subscriptions"
     out = []
     for s in subs:
@@ -170,16 +180,40 @@ def _subscriptions(snap: TenantSnapshot, tenant, today: date) -> list[Item]:
         used = sku.get("consumedUnits") if isinstance(sku.get("consumedUnits"), int) else 0
         licences = f"{plural(total, 'licence')}. " if isinstance(total, int) and total else ""
         if lapsing:
-            out.append(Item(tenant, SUBSCRIPTION, f"{name} ({lapsing.lower()})",
-                            licences + WHAT_HAPPENS[lapsing], due, days, "high", now=True, href=href))
+            out.append(
+                Item(
+                    tenant,
+                    SUBSCRIPTION,
+                    f"{name} ({lapsing.lower()})",
+                    licences + WHAT_HAPPENS[lapsing],
+                    due,
+                    days,
+                    "high",
+                    now=True,
+                    href=href,
+                )
+            )
         elif s.get("isTrial") is True:
             in_use = f"{plural(used, 'person', 'people')} {'uses' if used == 1 else 'use'} it. " if used else ""
             severity = ("high" if days <= 30 else "medium") if used else "low"
-            out.append(Item(tenant, TRIAL, f"{name} trial ends", in_use + WHAT_HAPPENS["Trial"], due, days,
-                            severity, href=href))
+            out.append(
+                Item(
+                    tenant, TRIAL, f"{name} trial ends", in_use + WHAT_HAPPENS["Trial"], due, days, severity, href=href
+                )
+            )
         else:
-            out.append(Item(tenant, SUBSCRIPTION, f"{name} renews", licences + WHAT_HAPPENS["Active"], due, days,
-                            "medium" if days <= 30 else "low", href=href))
+            out.append(
+                Item(
+                    tenant,
+                    SUBSCRIPTION,
+                    f"{name} renews",
+                    licences + WHAT_HAPPENS["Active"],
+                    due,
+                    days,
+                    "medium" if days <= 30 else "low",
+                    href=href,
+                )
+            )
     return out
 
 
@@ -199,30 +233,42 @@ def _app_credentials(snap: TenantSnapshot, tenant, today: date) -> list[Item]:
                 continue
             kind = APP_KEY_TYPE if c.get("type") == "secret" else APP_CERTIFICATE
             # Another credential of the same kind that lasts beyond this one usually means it's been replaced.
-            later = [o for o in creds if o is not c and o.get("type") == c.get("type")
-                     and (e := parse_ts(o.get("endDateTime"))) and e > end and _days(e.date(), today) > HORIZON]
+            later = [
+                o
+                for o in creds
+                if o is not c
+                and o.get("type") == c.get("type")
+                and (e := parse_ts(o.get("endDateTime")))
+                and e > end
+                and _days(e.date(), today) > HORIZON
+            ]
             noun = "secret" if kind == APP_KEY_TYPE else "certificate"
             label = f"“{c['displayName']}” " if isinstance(c.get("displayName"), str) and c["displayName"] else ""
             app = a.get("displayName") or a.get("appId") or a.get("_id") or "An app"
             if later:
-                detail = (f"A newer {noun} lasts until {day(later[0]['endDateTime'])}, so this one has probably been "
-                          f"replaced. Remove it from the app registration once nothing uses it.")
+                detail = (
+                    f"A newer {noun} lasts until {day(later[0]['endDateTime'])}, so this one has probably been "
+                    f"replaced. Remove it from the app registration once nothing uses it."
+                )
                 severity = "low"
             elif days < 0:
-                detail = (f"Expired. Whatever signs in with it has stopped working, unless the app is no longer used. "
-                          f"Add a new {noun} in Entra, or delete the app registration.")
+                detail = (
+                    f"Expired. Whatever signs in with it has stopped working, unless the app is no longer used. "
+                    f"Add a new {noun} in Entra, or delete the app registration."
+                )
                 severity = "high"
             else:
-                detail = (f"Anything that signs in with it stops working then. Add a new {noun} to the app "
-                          "registration in Entra and update whatever uses it.")
+                detail = (
+                    f"Anything that signs in with it stops working then. Add a new {noun} to the app "
+                    "registration in Entra and update whatever uses it."
+                )
                 severity = "high" if days <= 30 else "medium"
-            out.append(Item(tenant, kind, f"{app}: {label}{noun}", detail,
-                            end.date(), days, severity, href=href))
+            out.append(Item(tenant, kind, f"{app}: {label}{noun}", detail, end.date(), days, severity, href=href))
     return out
 
 
 def _gb(n: float) -> str:
-    return f"{n / 1024 ** 3:.1f} GB"
+    return f"{n / 1024**3:.1f} GB"
 
 
 def _baseline(conn, tenant_id: int, now: datetime) -> tuple[dict[str, int], datetime] | None:
@@ -231,12 +277,17 @@ def _baseline(conn, tenant_id: int, now: datetime) -> tuple[dict[str, int], date
     run = conn.execute(
         "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = 'mailbox_usage'"
         " AND status IN ('succeeded', 'partial') AND finished_at BETWEEN ? AND ?"
-        " ORDER BY finished_at, id LIMIT 1", (tenant_id, oldest, newest)).fetchone()
+        " ORDER BY finished_at, id LIMIT 1",
+        (tenant_id, oldest, newest),
+    ).fetchone()
     when = parse_ts(run["finished_at"]) if run else None
     if when is None:
         return None
-    sizes = {m["_id"]: m["totalBytes"] for m in store.run_objects(conn, run["id"], "mailbox_size")
-             if isinstance(m.get("totalBytes"), int)}
+    sizes = {
+        m["_id"]: m["totalBytes"]
+        for m in store.run_objects(conn, run["id"], "mailbox_size")
+        if isinstance(m.get("totalBytes"), int)
+    }
     return (sizes, when) if sizes else None
 
 
@@ -255,9 +306,20 @@ def _mailboxes(snap: TenantSnapshot, tenant, now: datetime, today: date) -> list
         share = used / quota
         sizes = f"{_gb(used)} of {_gb(quota)} ({share:.0%})"
         if share >= 1:
-            out.append(Item(tenant, QUOTA, f"{name} is full", f"{sizes}. It can't send mail until it's cleaned up "
-                            "or given more room (an archive, or a bigger licence).", None, None, "high", now=True,
-                            href=href))
+            out.append(
+                Item(
+                    tenant,
+                    QUOTA,
+                    f"{name} is full",
+                    f"{sizes}. It can't send mail until it's cleaned up "
+                    "or given more room (an archive, or a bigger licence).",
+                    None,
+                    None,
+                    "high",
+                    now=True,
+                    href=href,
+                )
+            )
             continue
         rate = None
         if base:
@@ -269,44 +331,81 @@ def _mailboxes(snap: TenantSnapshot, tenant, now: datetime, today: date) -> list
         full = int((quota - used) / rate) if rate else None
         if share >= QUOTA_NEAR:
             due = today + timedelta(days=full) if full is not None and full <= HORIZON else None
-            out.append(Item(
-                tenant, QUOTA, f"{name} is nearly full",
-                f"{sizes}." + (f" At its current growth it's full around {day(due.isoformat())}." if due else "")
-                + " It stops sending mail when it's full: turn on its archive or clean it up.",
-                due, _days(due, today) if due else None, "high" if due and full <= 30 else "medium", now=True,
-                href=href))
+            out.append(
+                Item(
+                    tenant,
+                    QUOTA,
+                    f"{name} is nearly full",
+                    f"{sizes}."
+                    + (f" At its current growth it's full around {day(due.isoformat())}." if due else "")
+                    + " It stops sending mail when it's full: turn on its archive or clean it up.",
+                    due,
+                    _days(due, today) if due else None,
+                    "high" if due and full <= 30 else "medium",
+                    now=True,
+                    href=href,
+                )
+            )
         elif full is not None and full <= HORIZON:
             due = today + timedelta(days=full)
-            out.append(Item(tenant, QUOTA, f"{name} fills up",
-                            f"{sizes}, growing about {_gb(rate * 30)} a month. It stops sending mail when it's "
-                            "full: turn on its archive or clean it up before then.",
-                            due, full, "medium" if full <= 30 else "low", href=href))
+            out.append(
+                Item(
+                    tenant,
+                    QUOTA,
+                    f"{name} fills up",
+                    f"{sizes}, growing about {_gb(rate * 30)} a month. It stops sending mail when it's "
+                    "full: turn on its archive or clean it up before then.",
+                    due,
+                    full,
+                    "medium" if full <= 30 else "low",
+                    href=href,
+                )
+            )
     return out
 
 
 def _dmarc(snap: TenantSnapshot, tenant, now: datetime) -> list[Item]:
     rows = snap.objects("domain_health", "domain") or []
     href = f"/tenants/{tenant['id']}/data/domains"
-    since = {r["object_id"]: r for r in snap.conn.execute(
-        "SELECT object_id, first_seen, accepted_at, accepted_until FROM findings WHERE tenant_id = ?"
-        " AND rule_key = 'dmarc_policy' AND resolved_at IS NULL", (tenant["id"],))}
+    since = {
+        r["object_id"]: r
+        for r in snap.conn.execute(
+            "SELECT object_id, first_seen, accepted_at, accepted_until FROM findings WHERE tenant_id = ?"
+            " AND rule_key = 'dmarc_policy' AND resolved_at IS NULL",
+            (tenant["id"],),
+        )
+    }
     out = []
     for row in rows:
         h = dnscheck.DomainHealth.from_dict(row)
         if not h.sends_mail or h.dmarc_policy != "none":
             continue
         finding = since.get(f"{h.domain}:DMARC")
-        if finding and finding["accepted_at"] and (finding["accepted_until"] is None
-                                                   or finding["accepted_until"] > now.strftime(_ISO)):
+        if (
+            finding
+            and finding["accepted_at"]
+            and (finding["accepted_until"] is None or finding["accepted_until"] > now.strftime(_ISO))
+        ):
             continue  # accepted as it is; its review date, if any, is listed as an accepted risk
         start = parse_ts(finding["first_seen"]) if finding else None
         detail = "Monitor-only: spoofed mail from the domain is still delivered."
         if start:
-            detail = (f"Monitor-only since {day(finding['first_seen'])} ({plural((now - start).days, 'day')}): "
-                      "spoofed mail from the domain is still delivered.")
-        out.append(Item(tenant, DMARC, f"{h.domain} DMARC is p=none",
-                        detail + " Check the DMARC reports, then move to p=quarantine and later p=reject.",
-                        None, None, "medium", href=href))
+            detail = (
+                f"Monitor-only since {day(finding['first_seen'])} ({plural((now - start).days, 'day')}): "
+                "spoofed mail from the domain is still delivered."
+            )
+        out.append(
+            Item(
+                tenant,
+                DMARC,
+                f"{h.domain} DMARC is p=none",
+                detail + " Check the DMARC reports, then move to p=quarantine and later p=reject.",
+                None,
+                None,
+                "medium",
+                href=href,
+            )
+        )
     return out
 
 
@@ -315,17 +414,27 @@ def _accepted_risks(conn, tenant, now: datetime, today: date) -> list[Item]:
     href = f"/tenants/{tenant['id']}/findings"
     out = []
     for f in conn.execute(
-            "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND accepted_at IS NOT NULL"
-            " AND accepted_until > ? AND accepted_until < ? ORDER BY accepted_until",
-            (tenant["id"], now.strftime(_ISO), until)):
+        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND accepted_at IS NOT NULL"
+        " AND accepted_until > ? AND accepted_until < ? ORDER BY accepted_until",
+        (tenant["id"], now.strftime(_ISO), until),
+    ):
         due = parse_ts(f["accepted_until"])
         if due is None:
             continue
         days = _days(due.date(), today)
         who = f" by {f['accepted_by']}" if f["accepted_by"] else ""
-        out.append(Item(tenant, RISK, f"{RULE_TITLES.get(f['rule_key'], f['rule_key'])}: {f['subject']}",
-                        f"Accepted{who}. Review it by then: after that it counts as an open finding again.",
-                        due.date(), days, "medium" if days <= 30 else "low", href=href))
+        out.append(
+            Item(
+                tenant,
+                RISK,
+                f"{RULE_TITLES.get(f['rule_key'], f['rule_key'])}: {f['subject']}",
+                f"Accepted{who}. Review it by then: after that it counts as an open finding again.",
+                due.date(),
+                days,
+                "medium" if days <= 30 else "low",
+                href=href,
+            )
+        )
     return out
 
 
@@ -340,8 +449,18 @@ def _our_certificates(conn, now: datetime, today: date) -> list[Item]:
         due = end.date() if end else today + timedelta(days=e.days)
         what = "The mail app's certificate" if e.kind == "mail" else f"The {e.name} certificate"
         href = "/admin/email" if e.kind == "mail" else f"/admin/connections#conn-{e.id}"
-        out.append(Item(None, OUR_CERTIFICATE, what, f"{e.consequence} {cert_lifecycle.fix_steps(e)}", due,
-                        _days(due, today), "high" if e.days <= 30 else "medium", href=href))
+        out.append(
+            Item(
+                None,
+                OUR_CERTIFICATE,
+                what,
+                f"{e.consequence} {cert_lifecycle.fix_steps(e)}",
+                due,
+                _days(due, today),
+                "high" if e.days <= 30 else "medium",
+                href=href,
+            )
+        )
     return out
 
 
@@ -389,29 +508,49 @@ TABLE = "Coming up"
 
 def report(up: Upcoming) -> DataReport:
     """The items as one table for the page (``_report_table``, filters and sort) and the downloads."""
-    data = DataReport(KEY, TITLE, DESCRIPTION, {"id": 0, "name": "All tenants",
-                                                 "tenant_ref": plural(up.tenants, "tenant")}, up.generated_at)
-    section = Section(TABLE, [WHEN, DUE, "In", "Tenant", "Type", "What", "Details"],
-                      intro="Everything due in the next 90 days, soonest first, then what has no date.",
-                      empty="Nothing is due in the next 90 days.", compare=False, flag_name="Priority",
-                      group=WHEN, filter_columns=(WHEN, "Tenant", "Type"), review=False)
+    data = DataReport(
+        KEY,
+        TITLE,
+        DESCRIPTION,
+        {"id": 0, "name": "All tenants", "tenant_ref": plural(up.tenants, "tenant")},
+        up.generated_at,
+    )
+    section = Section(
+        TABLE,
+        [WHEN, DUE, "In", "Tenant", "Type", "What", "Details"],
+        intro="Everything due in the next 90 days, soonest first, then what has no date.",
+        empty="Nothing is due in the next 90 days.",
+        compare=False,
+        flag_name="Priority",
+        group=WHEN,
+        filter_columns=(WHEN, "Tenant", "Type"),
+        review=False,
+    )
     for i in up.items:
         tenant = UserLink(i.tenant["name"], f"/tenants/{i.tenant['id']}") if i.tenant else "Office Sentry"
         what = UserLink(i.title, i.href) if i.href else i.title
-        section.add([i.window, i.due.isoformat() if i.due else "", i.when, tenant, i.type, what, i.detail],
-                    i.severity)
+        section.add([i.window, i.due.isoformat() if i.due else "", i.when, tenant, i.type, what, i.detail], i.severity)
     data.sections = [section]
     counts = up.counts()
     data.tiles = [
-        Tile("Needs attention now", counts[NOW], "Expired, lapsing or nearly full",
-             "bad" if counts[NOW] else "ok", Rows(TABLE, {WHEN: NOW})),
-        Tile(DAYS_30, counts[DAYS_30], "Due within a month", "warn" if counts[DAYS_30] else "ok",
-             Rows(TABLE, {WHEN: DAYS_30})),
+        Tile(
+            "Needs attention now",
+            counts[NOW],
+            "Expired, lapsing or nearly full",
+            "bad" if counts[NOW] else "ok",
+            Rows(TABLE, {WHEN: NOW}),
+        ),
+        Tile(
+            DAYS_30,
+            counts[DAYS_30],
+            "Due within a month",
+            "warn" if counts[DAYS_30] else "ok",
+            Rows(TABLE, {WHEN: DAYS_30}),
+        ),
         Tile(DAYS_60, counts[DAYS_60], "Due in the second month", None, Rows(TABLE, {WHEN: DAYS_60})),
         Tile(DAYS_90, counts[DAYS_90], "Due in the third month", None, Rows(TABLE, {WHEN: DAYS_90})),
     ]
     if counts[NO_DATE]:
-        data.tiles.append(Tile(NO_DATE, counts[NO_DATE], "DMARC still at p=none", "warn",
-                               Rows(TABLE, {WHEN: NO_DATE})))
+        data.tiles.append(Tile(NO_DATE, counts[NO_DATE], "DMARC still at p=none", "warn", Rows(TABLE, {WHEN: NO_DATE})))
     data.notes = [f"{t['name']}: {part} couldn't be read from the latest data." for t, part in up.without]
     return data

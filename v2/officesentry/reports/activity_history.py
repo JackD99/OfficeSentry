@@ -20,9 +20,25 @@ REVIEW_DAYS = 90  # admin changes listed
 MAX_REVIEW = 50
 MAX_LISTED_RANGES = 3
 
-SIGNIN_CSV_COLUMNS = ("Time (UTC)", "User", "Display name", "App", "Client app", "Result", "Error code",
-                      "Failure reason", "MFA", "IP address", "Country", "City", "Operating system",
-                      "Conditional Access", "Risk level", "Interactive", "Sign-in ID")
+SIGNIN_CSV_COLUMNS = (
+    "Time (UTC)",
+    "User",
+    "Display name",
+    "App",
+    "Client app",
+    "Result",
+    "Error code",
+    "Failure reason",
+    "MFA",
+    "IP address",
+    "Country",
+    "City",
+    "Operating system",
+    "Conditional Access",
+    "Risk level",
+    "Interactive",
+    "Sign-in ID",
+)
 
 
 @dataclass
@@ -93,11 +109,13 @@ def _source(conn, tenant_id: int, key: str, noun: str) -> Source:
 
 
 def ranges_text(ranges: list[tuple[date, date]]) -> str:
-    """"9 Oct 2026", "1 Sep to 3 Sep 2026", and at most a few of them, oldest first."""
+    """ "9 Oct 2026", "1 Sep to 3 Sep 2026", and at most a few of them, oldest first."""
+
     def one(lo, hi):
         if lo == hi:
             return f"{lo.day} {lo:%b %Y}"
         return f"{lo.day} {lo:%b}{f' {lo:%Y}' if lo.year != hi.year else ''} to {hi.day} {hi:%b %Y}"
+
     shown = [one(lo, hi) for lo, hi in ranges[:MAX_LISTED_RANGES]]
     more = len(ranges) - len(shown)
     text = ", ".join(shown[:-1]) + (" and " if len(shown) > 1 else "") + shown[-1] if shown else ""
@@ -113,8 +131,9 @@ def _chart(day_totals: dict[str, events.Totals], covered: set[str], last: date) 
             days.append((d, None, None, f"{d.day} {d:%b %Y}: no data"))
             continue
         t = t or events.Totals(d.isoformat())
-        text = (f"{d.day} {d:%b %Y}: {t.succeeded:,} signed in, {t.failed:,} failed"
-                + (f", {t.interrupted:,} interrupted by a prompt" if t.interrupted else ""))
+        text = f"{d.day} {d:%b %Y}: {t.succeeded:,} signed in, {t.failed:,} failed" + (
+            f", {t.interrupted:,} interrupted by a prompt" if t.interrupted else ""
+        )
         days.append((d, t.succeeded, t.failed, text))
     label = f"Sign-ins per day for the {CHART_DAYS} days to {last.day} {last:%b %Y}: signed in and failed"
     return charts.daily_bars(days, label=label), label
@@ -126,8 +145,10 @@ def _covered_days(src: Source, first: date, last: date) -> set[str]:
         return set()
     out = set()
     start = max(first, src.since)
-    holes = src.coverage.missing(int(datetime.combine(start, datetime.min.time(), UTC).timestamp()),
-                                 int(datetime.combine(last, datetime.max.time(), UTC).timestamp()))
+    holes = src.coverage.missing(
+        int(datetime.combine(start, datetime.min.time(), UTC).timestamp()),
+        int(datetime.combine(last, datetime.max.time(), UTC).timestamp()),
+    )
     d = start
     while d <= last:
         lo = int(datetime.combine(d, datetime.min.time(), UTC).timestamp())
@@ -149,22 +170,27 @@ def build(conn, tenant_id: int, policy: retention.Policy, now: datetime | None =
     by_day = {t.period: t for t in day_list}
     recent_first = today - timedelta(days=RECENT_DAYS - 1)
     recent = [t for t in day_list if t.period >= recent_first.isoformat()]
-    people = {r.user.lower() for r in events.daily_between(conn, tenant_id, recent_first.isoformat(),
-                                                             today.isoformat())}
+    people = {
+        r.user.lower() for r in events.daily_between(conn, tenant_id, recent_first.isoformat(), today.isoformat())
+    }
     covered = _covered_days(signins_src, today - timedelta(days=CHART_DAYS - 1), today)
     chart, chart_label = _chart(by_day, covered, today) if signins_src.since else ("", "")
     raw_months = set(events.months_with_signins(conn, tenant_id))
-    months = [Month(t.period, f"{datetime.strptime(t.period, '%Y-%m'):%b %Y}", t, t.period in raw_months)
-              for t in reversed(month_list)]
+    months = [
+        Month(t.period, f"{datetime.strptime(t.period, '%Y-%m'):%b %Y}", t, t.period in raw_months)
+        for t in reversed(month_list)
+    ]
     known = {m.month for m in months}
-    months += [Month(m, f"{datetime.strptime(m, '%Y-%m'):%b %Y}", events.Totals(m), True)
-               for m in sorted(raw_months - known, reverse=True)]
+    months += [
+        Month(m, f"{datetime.strptime(m, '%Y-%m'):%b %Y}", events.Totals(m), True)
+        for m in sorted(raw_months - known, reverse=True)
+    ]
 
     # Admin changes worth a second look.
     review: list[dict] = []
     review_recent = 0
     history = adminactivity.from_history(conn, tenant_id, now - timedelta(days=REVIEW_DAYS), now)
-    for e in (history[0] if history else []):
+    for e in history[0] if history else []:
         flag = adminactivity.review(e)
         if not flag:
             continue
@@ -180,18 +206,36 @@ def build(conn, tenant_id: int, policy: retention.Policy, now: datetime | None =
     if signins_src.since:
         tiles += [
             {"label": "Sign-ins", "value": f"{total:,}", "foot": f"in the last {RECENT_DAYS} days"},
-            {"label": "Failed", "value": f"{failed:,}", "tone": "warn" if failed else None,
-             "foot": f"{round(100 * failed / total)}% of sign-ins" if total else "none"},
-            {"label": "Password only", "value": f"{single:,}", "tone": "warn" if single else None,
-             "foot": (f"{round(100 * single / succeeded)}% of successful sign-ins skipped MFA" if succeeded
-                      else "successful sign-ins without MFA")},
+            {
+                "label": "Failed",
+                "value": f"{failed:,}",
+                "tone": "warn" if failed else None,
+                "foot": f"{round(100 * failed / total)}% of sign-ins" if total else "none",
+            },
+            {
+                "label": "Password only",
+                "value": f"{single:,}",
+                "tone": "warn" if single else None,
+                "foot": (
+                    f"{round(100 * single / succeeded)}% of successful sign-ins skipped MFA"
+                    if succeeded
+                    else "successful sign-ins without MFA"
+                ),
+            },
             {"label": "People", "value": f"{len(people):,}", "foot": "signed in at least once"},
         ]
     if audits_src.since:
-        tiles.append({"label": "Admin changes to review", "value": f"{review_recent:,}",
-                      "tone": "warn" if review_recent else None, "foot": f"in the last {RECENT_DAYS} days"})
-    return Page(now, signins_src, audits_src, tiles, chart, chart_label, months, review[:MAX_REVIEW], len(review),
-                policy)
+        tiles.append(
+            {
+                "label": "Admin changes to review",
+                "value": f"{review_recent:,}",
+                "tone": "warn" if review_recent else None,
+                "foot": f"in the last {RECENT_DAYS} days",
+            }
+        )
+    return Page(
+        now, signins_src, audits_src, tiles, chart, chart_label, months, review[:MAX_REVIEW], len(review), policy
+    )
 
 
 def signin_rows(conn, tenant_id: int, month: str):
@@ -203,9 +247,22 @@ def signin_rows(conn, tenant_id: int, month: str):
         code = status.get("errorCode") or 0
         mfa = signins.mfa_used(s)
         location = s.get("location") or {}
-        yield (s["createdDateTime"], s.get("userPrincipalName"), s.get("userDisplayName"), s.get("appDisplayName"),
-               s.get("clientAppUsed"), signins.meaning(code, status.get("failureReason")), code,
-               status.get("failureReason"), {True: "Yes", False: "No"}.get(mfa, ""), s.get("ipAddress"),
-               location.get("countryOrRegion"), location.get("city"),
-               (s.get("deviceDetail") or {}).get("operatingSystem"), s.get("conditionalAccessStatus"),
-               s.get("riskLevelDuringSignIn"), "Yes" if s.get("isInteractive") else "No", s.get("id"))
+        yield (
+            s["createdDateTime"],
+            s.get("userPrincipalName"),
+            s.get("userDisplayName"),
+            s.get("appDisplayName"),
+            s.get("clientAppUsed"),
+            signins.meaning(code, status.get("failureReason")),
+            code,
+            status.get("failureReason"),
+            {True: "Yes", False: "No"}.get(mfa, ""),
+            s.get("ipAddress"),
+            location.get("countryOrRegion"),
+            location.get("city"),
+            (s.get("deviceDetail") or {}).get("operatingSystem"),
+            s.get("conditionalAccessStatus"),
+            s.get("riskLevelDuringSignIn"),
+            "Yes" if s.get("isInteractive") else "No",
+            s.get("id"),
+        )

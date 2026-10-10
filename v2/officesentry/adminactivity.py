@@ -13,18 +13,28 @@ import re
 
 from .devices import parse_ts
 
-WINDOW_DAYS = 30        # how far back we ask for
+WINDOW_DAYS = 30  # how far back we ask for
 FREE_RETENTION_DAYS = 7  # what Entra ID keeps without P1
 MAX_TARGETS = 5
 
 # Kinds of change, and the area each belongs to in the report.
 AREAS = {
-    "role_grant": "Admin roles", "role_removal": "Admin roles", "role_activation": "Admin roles",
-    "ca": "Conditional Access", "auth_policy": "Tenant policies",
-    "consent": "Apps", "app_role": "Apps", "app_credential": "Apps", "app_owner": "Apps",
-    "federation": "Domains", "domain": "Domains",
-    "password_reset": "Accounts", "user_delete": "Accounts", "user_restore": "Accounts",
-    "security_info": "Accounts", "partner": "Partners",
+    "role_grant": "Admin roles",
+    "role_removal": "Admin roles",
+    "role_activation": "Admin roles",
+    "ca": "Conditional Access",
+    "auth_policy": "Tenant policies",
+    "consent": "Apps",
+    "app_role": "Apps",
+    "app_credential": "Apps",
+    "app_owner": "Apps",
+    "federation": "Domains",
+    "domain": "Domains",
+    "password_reset": "Accounts",
+    "user_delete": "Accounts",
+    "user_restore": "Accounts",
+    "security_info": "Accounts",
+    "partner": "Partners",
 }
 
 # (category, activityDisplayName) -> kind. Names are compared after normalising (see _norm),
@@ -32,29 +42,40 @@ AREAS = {
 _ACTIVITIES = {
     "RoleManagement": {
         "role_grant": (
-            "Add member to role", "Add eligible member to role", "Add scoped member to role",
-            "Add member to role in PIM completed (permanent)", "Add member to role in PIM completed (timebound)",
+            "Add member to role",
+            "Add eligible member to role",
+            "Add scoped member to role",
+            "Add member to role in PIM completed (permanent)",
+            "Add member to role in PIM completed (timebound)",
             "Add eligible member to role in PIM completed (permanent)",
             "Add eligible member to role in PIM completed (timebound)",
             "Add member to role outside of PIM (permanent)",
         ),
         "role_removal": (
-            "Remove member from role", "Remove eligible member from role", "Remove scoped member from role",
+            "Remove member from role",
+            "Remove eligible member from role",
+            "Remove scoped member from role",
             "Remove member from role in PIM completed (permanent)",
             "Remove member from role in PIM completed (timebound)",
             "Remove eligible member from role in PIM completed (permanent)",
             "Remove eligible member from role in PIM completed (timebound)",
-            "Remove permanent direct role assignment", "Remove permanent eligible role assignment",
+            "Remove permanent direct role assignment",
+            "Remove permanent eligible role assignment",
         ),
         "role_activation": ("Add member to role completed (PIM activation)",),
     },
     "Policy": {
         "ca": (
-            "Add conditional access policy", "Update conditional access policy", "Delete conditional access policy",
-            "Add named location", "Update named location", "Delete named location",
+            "Add conditional access policy",
+            "Update conditional access policy",
+            "Delete conditional access policy",
+            "Add named location",
+            "Update named location",
+            "Delete named location",
         ),
         "auth_policy": (
-            "Update authorization policy", "Authentication Methods Policy Update",
+            "Update authorization policy",
+            "Authentication Methods Policy Update",
             "Update authentication methods policy",
         ),
     },
@@ -62,7 +83,8 @@ _ACTIVITIES = {
         "consent": ("Consent to application", "Add delegated permission grant"),
         "app_role": ("Add app role assignment to service principal",),
         "app_credential": (
-            "Add service principal credentials", "Remove service principal credentials",
+            "Add service principal credentials",
+            "Remove service principal credentials",
             "Update application - Certificates and secrets management",
         ),
         "app_owner": ("Add owner to application", "Add owner to service principal"),
@@ -70,8 +92,13 @@ _ACTIVITIES = {
     "DirectoryManagement": {
         "federation": ("Set domain authentication", "Set federation settings on domain"),
         "domain": (
-            "Add unverified domain", "Add verified domain", "Verify domain", "Verify email verified domain",
-            "Remove unverified domain", "Remove verified domain", "Delete domain",
+            "Add unverified domain",
+            "Add verified domain",
+            "Verify domain",
+            "Verify email verified domain",
+            "Remove unverified domain",
+            "Remove verified domain",
+            "Delete domain",
         ),
         "partner": ("Add partner to company", "Remove partner from company"),
     },
@@ -80,7 +107,9 @@ _ACTIVITIES = {
         "user_delete": ("Delete user", "Hard delete user"),
         "user_restore": ("Restore user",),
         "security_info": (
-            "Admin registered security info", "Admin updated security info", "Admin deleted security info",
+            "Admin registered security info",
+            "Admin updated security info",
+            "Admin deleted security info",
             "Admin registered temporary access pass method for user",
         ),
     },
@@ -93,7 +122,9 @@ def _norm(name: str | None) -> str:
 
 ACTIVITIES: dict[tuple[str, str], str] = {
     (category.lower(), _norm(name)): kind
-    for category, kinds in _ACTIVITIES.items() for kind, names in kinds.items() for name in names
+    for category, kinds in _ACTIVITIES.items()
+    for kind, names in kinds.items()
+    for name in names
 }
 
 CA_STATES = {"enabled": "On", "disabled": "Off", "enabledForReportingButNotEnforced": "Report-only"}
@@ -148,8 +179,11 @@ def normalise(event: dict) -> dict:
     actor, actor_type, ip = _actor(event)
     targets = [t for t in event.get("targetResources") or [] if t]
     old_role, new_role = props.get("Role.DisplayName") or (None, None)
-    role = new_role or old_role or next(
-        (t.get("displayName") for t in targets if t.get("type") == "Role" and t.get("displayName")), None)
+    role = (
+        new_role
+        or old_role
+        or next((t.get("displayName") for t in targets if t.get("type") == "Role" and t.get("displayName")), None)
+    )
     labels = [t.get("userPrincipalName") or t.get("displayName") for t in targets if t.get("type") != "Role"]
     detail, credential_added, ca_disabled = "", False, False
 
@@ -212,8 +246,9 @@ def _credential_detail(event: dict, props: dict) -> tuple[str, bool]:
         added = [KEY_TYPES.get(t, t) for k, t in new.items() if k not in old]
         removed = [KEY_TYPES.get(t, t) for k, t in old.items() if k not in new]
         if added or removed:
-            parts = ([f"Added {', '.join(added)}"] if added else []) + \
-                ([f"Removed {', '.join(removed)}"] if removed else [])
+            parts = ([f"Added {', '.join(added)}"] if added else []) + (
+                [f"Removed {', '.join(removed)}"] if removed else []
+            )
             return "; ".join(parts), bool(added)
     name = _norm(event.get("activityDisplayName"))
     if name.startswith("remove "):
@@ -253,15 +288,19 @@ def window_text(window: dict | None) -> str:
     window = window or {}
     retention, oldest = window.get("retention_days"), parse_ts(window.get("oldest"))
     if retention == FREE_RETENTION_DAYS:
-        text = (f"the last {FREE_RETENTION_DAYS} days (the tenant's audit log keeps only "
-                f"{FREE_RETENTION_DAYS} days without Entra ID P1)")
+        text = (
+            f"the last {FREE_RETENTION_DAYS} days (the tenant's audit log keeps only "
+            f"{FREE_RETENTION_DAYS} days without Entra ID P1)"
+        )
     elif retention or not oldest:
         text = f"the last {window.get('requested_days') or WINDOW_DAYS} days"
     else:
         text = f"the period since {oldest:%d %b %Y}"
     if window.get("capped"):
-        text += (". Part of the audit log hasn't been read yet (the next collection carries on from there), "
-                 "so some changes may be missing")
+        text += (
+            ". Part of the audit log hasn't been read yet (the next collection carries on from there), "
+            "so some changes may be missing"
+        )
     return text
 
 

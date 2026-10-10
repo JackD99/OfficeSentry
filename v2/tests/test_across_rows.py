@@ -31,9 +31,11 @@ def widgets(monkeypatch):
         s.add([f"{name} w1", "ok", 1])
         s.add([f"{name} w2", "bad", 2], "high")
         report.sections = [s, Section("Settings", ["Setting", "Value"], rows=[["x", name]], flags=[None])]
-        report.highlights = [data_reports.Highlight("Widgets", len(s.rows)),
-                             data_reports.Highlight("Saving / month", Money(10.5, "GBP")),
-                             data_reports.Highlight("Widget score", 7)]
+        report.highlights = [
+            data_reports.Highlight("Widgets", len(s.rows)),
+            data_reports.Highlight("Saving / month", Money(10.5, "GBP")),
+            data_reports.Highlight("Widget score", 7),
+        ]
 
     monkeypatch.setitem(data_reports.REPORTS, "widgets", ("Widgets", "Test widgets", (), builder))
     return "widgets"
@@ -50,8 +52,12 @@ def test_all_rows_stacks_each_tenants_rows_with_a_tenant_column(db, two_tenants,
     data = rollups.all_rows(db, _tenants(db), "widgets", href=lambda t: f"/tenants/{t['id']}/data/widgets")
     widgets_table = data.report.sections[0]
     assert widgets_table.columns == ["Tenant", "Widget", "State", "Count"]
-    assert [r[:2] for r in widgets_table.rows] == [["Alpha Ltd", "Alpha w1"], ["Alpha Ltd", "Alpha w2"],
-                                                   ["Bravo Inc", "Bravo w1"], ["Bravo Inc", "Bravo w2"]]
+    assert [r[:2] for r in widgets_table.rows] == [
+        ["Alpha Ltd", "Alpha w1"],
+        ["Alpha Ltd", "Alpha w2"],
+        ["Bravo Inc", "Bravo w1"],
+        ["Bravo Inc", "Bravo w2"],
+    ]
     assert widgets_table.flags == [None, "high", None, "high"]
     assert widgets_table.rows[0][0].page_href.endswith("/data/widgets#t-widgets")  # opens the tenant's own table
     assert data.report.sections[1].rows == [["Alpha Ltd", "x", "Alpha"], ["Bravo Inc", "x", "Bravo"]]
@@ -105,7 +111,7 @@ def test_rows_downloads_keep_the_view(client, db, two_tenants, widgets):
     values = [[c.value for c in row] for row in sheet.iter_rows()]
     header = next(i for i, row in enumerate(values) if row[0] == "Tenant")
     assert values[header][:3] == ["Tenant", "Widget", "State"]
-    assert [row[1] for row in values[header + 1:header + 5]] == ["Bravo w2", "Bravo w1", "Alpha w2", "Alpha w1"]
+    assert [row[1] for row in values[header + 1 : header + 5]] == ["Bravo w2", "Bravo w1", "Alpha w2", "Alpha w1"]
     assert len(wb.sheetnames) == 2  # only the table asked for
     assert client.get("/across/widgets/rows/widgets.pdf").status_code == 200
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'rollup_downloaded'").fetchone()[0] == 3
@@ -116,8 +122,9 @@ def test_rows_views_can_be_saved_and_open_again(client, db, two_tenants, widgets
     login(client, "admin")
     q = "f=widgets/state:bad"
     resp = client.post("/across/widgets/rows/widgets/views", data={"name": "Bad ones", "query": q})
-    assert resp.status_code == 302 and resp.headers["Location"].endswith("/across/widgets/rows/widgets?" + q.replace(
-        "/", "%2F").replace(":", "%3A"))
+    assert resp.status_code == 302 and resp.headers["Location"].endswith(
+        "/across/widgets/rows/widgets?" + q.replace("/", "%2F").replace(":", "%3A")
+    )
     row = db.execute("SELECT * FROM saved_views").fetchone()
     assert row["report_key"] == "widgets" and row["name"] == "Bad ones"
     page = client.get("/across/widgets/rows/widgets").get_data(as_text=True)
@@ -160,19 +167,34 @@ def test_rollup_totals_add_up_counts_and_money_only(db, two_tenants, widgets):
     assert total.values["c:Saving / month"] == 21.0 and isinstance(total.values["c:Saving / month"], Money)
     assert "c:Widget score" not in total.values  # a score doesn't add up
 
-    cols = [rollups.Column("open", "Open", "sev"), rollups.Column("pct", "MFA", "pct"),
-            rollups.Column("money", "Waste", "money"), rollups.Column("ctl", "Control", "status"),
-            rollups.Column("txt", "Ratio", "text")]
-    a = {"open": {"critical": 1, "high": 2, "medium": 0, "low": 0}, "pct": 50, "money": 10.25, "ctl": "In place",
-         "txt": "1 of 3"}
-    b = {"open": {"critical": 0, "high": 1, "medium": 3, "low": 1}, "pct": 70, "money": 5, "ctl": "Not in place",
-         "txt": "2 of 3"}
-    rows = [rollups.RollupRow({"name": "A"}, a, tones={"ctl": "ok"}),
-            rollups.RollupRow({"name": "B"}, b, tones={"ctl": "bad"}),
-            rollups.RollupRow({"name": "C"}, note="No data collected yet.")]
+    cols = [
+        rollups.Column("open", "Open", "sev"),
+        rollups.Column("pct", "MFA", "pct"),
+        rollups.Column("money", "Waste", "money"),
+        rollups.Column("ctl", "Control", "status"),
+        rollups.Column("txt", "Ratio", "text"),
+    ]
+    a = {
+        "open": {"critical": 1, "high": 2, "medium": 0, "low": 0},
+        "pct": 50,
+        "money": 10.25,
+        "ctl": "In place",
+        "txt": "1 of 3",
+    }
+    b = {
+        "open": {"critical": 0, "high": 1, "medium": 3, "low": 1},
+        "pct": 70,
+        "money": 5,
+        "ctl": "Not in place",
+        "txt": "2 of 3",
+    }
+    rows = [
+        rollups.RollupRow({"name": "A"}, a, tones={"ctl": "ok"}),
+        rollups.RollupRow({"name": "B"}, b, tones={"ctl": "bad"}),
+        rollups.RollupRow({"name": "C"}, note="No data collected yet."),
+    ]
     total = rollups.Rollup("x", "X", "", cols, rows, datetime.now(UTC)).total_row()
-    assert total.values == {"open": {"critical": 1, "high": 3, "medium": 3, "low": 1}, "money": 15.25,
-                            "ctl": "1 of 2"}
+    assert total.values == {"open": {"critical": 1, "high": 3, "medium": 3, "low": 1}, "money": 15.25, "ctl": "1 of 2"}
     one = rollups.Rollup("x", "X", "", cols, rows[:1], datetime.now(UTC))
     assert one.total_row() is None
 
@@ -230,9 +252,15 @@ def test_clients_cannot_open_cross_tenant_rows_or_checks(client, db, two_tenants
     alpha, _ = two_tenants
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
-    for url in ("/across/checks", "/across/checks.csv", "/across/widgets/rows", "/across/widgets/rows/widgets",
-                "/across/widgets/rows/widgets.csv", "/across/widgets/rows/widgets.xlsx",
-                "/across/widgets/rows/widgets.pdf"):
+    for url in (
+        "/across/checks",
+        "/across/checks.csv",
+        "/across/widgets/rows",
+        "/across/widgets/rows/widgets",
+        "/across/widgets/rows/widgets.csv",
+        "/across/widgets/rows/widgets.xlsx",
+        "/across/widgets/rows/widgets.pdf",
+    ):
         assert client.get(url).status_code == 403, url
     assert client.post("/across/widgets/rows/widgets/views", data={"name": "x", "query": "f=a/b:c"}).status_code == 403
 

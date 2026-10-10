@@ -47,9 +47,11 @@ ISO = "%Y-%m-%dT%H:%M:%SZ"
 def _last_run(conn, tenant_id: int, before: str | None = None) -> list:
     """The tenant's latest finished run (by ``before``, when given): one lookup on idx_runs_finished."""
     cutoff = " AND finished_at <= ?" if before else ""
-    row = conn.execute(f"SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL{cutoff}"
-                       " ORDER BY finished_at DESC, id DESC LIMIT 1",
-                       (tenant_id, *((before,) if before else ()))).fetchone()
+    row = conn.execute(
+        f"SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL{cutoff}"
+        " ORDER BY finished_at DESC, id DESC LIMIT 1",
+        (tenant_id, *((before,) if before else ())),
+    ).fetchone()
     return list(row or ())
 
 
@@ -58,7 +60,9 @@ def _open_findings(conn, tenant_id: int, now: datetime) -> list:
     row = conn.execute(
         "SELECT COUNT(*), MAX(first_seen), MAX(last_seen), MAX(reopened_at), MAX(accepted_at), MAX(accepted_until),"
         " TOTAL(accepted_at IS NOT NULL AND (accepted_until IS NULL OR accepted_until > ?))"
-        " FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (now.strftime(ISO), tenant_id)).fetchone()
+        " FROM findings WHERE tenant_id = ? AND resolved_at IS NULL",
+        (now.strftime(ISO), tenant_id),
+    ).fetchone()
     return list(row)
 
 
@@ -74,14 +78,18 @@ class Rows:
         self.conn, self.kind, self.now = conn, kind, now
         prices = conn.execute("SELECT COUNT(*), MAX(updated_at), TOTAL(monthly_price) FROM sku_prices").fetchone()
         apps = conn.execute("SELECT GROUP_CONCAT(client_id) FROM app_connections").fetchone()[0]
-        settings = conn.execute("SELECT key, value FROM settings WHERE key IN ('currency', 'live_test_client_id')"
-                                " ORDER BY key").fetchall()
+        settings = conn.execute(
+            "SELECT key, value FROM settings WHERE key IN ('currency', 'live_test_client_id') ORDER BY key"
+        ).fetchall()
         self.shared = [_code_version(), now.date().isoformat(), list(prices), apps, [list(r) for r in settings]]
         ids = [t["id"] for t in tenants]
         self.stored: dict[int, tuple[str, str]] = {}
         if ids and not rebuild:
-            rows = conn.execute(f"SELECT tenant_id, fingerprint, data FROM summary_cache WHERE kind = ?"
-                                f" AND tenant_id IN ({','.join('?' * len(ids))})", (kind, *ids))
+            rows = conn.execute(
+                f"SELECT tenant_id, fingerprint, data FROM summary_cache WHERE kind = ?"
+                f" AND tenant_id IN ({','.join('?' * len(ids))})",
+                (kind, *ids),
+            )
             self.stored = {r["tenant_id"]: (r["fingerprint"], r["data"]) for r in rows}
 
     def fingerprint(self, tenant, since: datetime | None = None) -> str:
@@ -103,7 +111,8 @@ class Rows:
                 "INSERT INTO summary_cache (tenant_id, kind, fingerprint, data, built_at) VALUES (?, ?, ?, ?, ?)"
                 " ON CONFLICT(tenant_id, kind) DO UPDATE SET fingerprint = excluded.fingerprint,"
                 " data = excluded.data, built_at = excluded.built_at",
-                (tenant["id"], self.kind, fingerprint, json.dumps(data), utcnow()))
+                (tenant["id"], self.kind, fingerprint, json.dumps(data), utcnow()),
+            )
         except sqlite3.OperationalError:
             log.warning("Couldn't store the %s row for tenant %s", self.kind, tenant["id"], exc_info=True)
 
@@ -122,11 +131,18 @@ def refresh(conn, tenant, rebuild: bool = False) -> None:
 
 def queue(conn, tenant_id: int, rebuild: bool = False) -> int:
     """Queue a refresh of one tenant's rows (once: a refresh already queued is reused)."""
-    task_id = tasks.enqueue(conn, KIND, key=f"{KIND}:{tenant_id}", tenant_id=tenant_id, priority=PRIORITY,
-                            payload={"rebuild": True} if rebuild else None)
+    task_id = tasks.enqueue(
+        conn,
+        KIND,
+        key=f"{KIND}:{tenant_id}",
+        tenant_id=tenant_id,
+        priority=PRIORITY,
+        payload={"rebuild": True} if rebuild else None,
+    )
     if rebuild:
-        conn.execute("UPDATE tasks SET payload = ? WHERE id = ? AND status = 'queued'",
-                     (json.dumps({"rebuild": True}), task_id))
+        conn.execute(
+            "UPDATE tasks SET payload = ? WHERE id = ? AND status = 'queued'", (json.dumps({"rebuild": True}), task_id)
+        )
     return task_id
 
 

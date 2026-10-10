@@ -40,10 +40,12 @@ def test_previous_fire_is_in_the_configured_timezone():
     exact = datetime(2026, 10, 2, 2, 0, tzinfo=UTC)
     assert schedule.previous_fire("0 2 * * *", "UTC", exact) == exact
     # After the clocks go back, 02:00 London is 02:00 UTC.
-    assert schedule.previous_fire("0 2 * * *", "Europe/London", datetime(2026, 11, 2, 3, 0, tzinfo=UTC)) \
-        == datetime(2026, 11, 2, 2, 0, tzinfo=UTC)
-    assert schedule.next_fire("0 2 * * 1-5", "UTC", datetime(2026, 10, 2, 3, 0, tzinfo=UTC)) \
-        == datetime(2026, 10, 5, 2, 0, tzinfo=UTC)  # Friday -> Monday
+    assert schedule.previous_fire("0 2 * * *", "Europe/London", datetime(2026, 11, 2, 3, 0, tzinfo=UTC)) == datetime(
+        2026, 11, 2, 2, 0, tzinfo=UTC
+    )
+    assert schedule.next_fire("0 2 * * 1-5", "UTC", datetime(2026, 10, 2, 3, 0, tzinfo=UTC)) == datetime(
+        2026, 10, 5, 2, 0, tzinfo=UTC
+    )  # Friday -> Monday
 
 
 def test_config_reads_cron_and_rejects_bad_values(tmp_path, monkeypatch):
@@ -75,8 +77,9 @@ def test_schedule_skips_collectors_that_are_already_fresh(db, cfg, two_tenants):
     finished_run(db, alpha, "users", "2026-10-01T20:00:00Z")  # a manual run that evening
     finished_run(db, alpha, "secure_score", "2026-09-30T20:00:00Z")  # too old
     worker.schedule_tick(db, cfg, datetime(2026, 10, 2, 3, 0, tzinfo=UTC))
-    queued = {r[0] for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? AND status = 'queued'",
-                                       (alpha,))}
+    queued = {
+        r[0] for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? AND status = 'queued'", (alpha,))
+    }
     assert "users" not in queued and "secure_score" in queued
     # Later ticks for the same slot queue nothing more.
     assert worker.schedule_tick(db, cfg, datetime(2026, 10, 2, 13, 0, tzinfo=UTC)) == 0
@@ -86,9 +89,12 @@ def test_schedule_skips_collectors_that_are_already_fresh(db, cfg, two_tenants):
 
 
 def _monthly_report(db, tenant_id):
-    sid = db.execute("INSERT INTO email_schedules (kind, tenant_id, reports, frequency, day_of_month, hour, timezone,"
-                     " created_at) VALUES ('report', ?, '[\"review\"]', 'monthly', 1, 8, 'UTC',"
-                     " '2026-01-01T00:00:00Z')", (tenant_id,)).lastrowid
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, frequency, day_of_month, hour, timezone,"
+        " created_at) VALUES ('report', ?, '[\"review\"]', 'monthly', 1, 8, 'UTC',"
+        " '2026-01-01T00:00:00Z')",
+        (tenant_id,),
+    ).lastrowid
     delivery.set_recipients(db, "schedule", sid, [delivery.add_contact(db, tenant_id, "", "a@x.com")])
     return sid
 
@@ -218,14 +224,17 @@ def test_admins_see_when_the_worker_is_not_running(client, db, two_tenants):
 
 def test_worker_once_queues_the_slot_and_drains_it(cfg, db, two_tenants, monkeypatch):
     calls = []
-    monkeypatch.setattr(worker, "execute_run", lambda conn, run, *a: (calls.append(run["collector"]),
-                                                                        store.finish_run(conn, run["id"], "failed")))
+    monkeypatch.setattr(
+        worker,
+        "execute_run",
+        lambda conn, run, *a: (calls.append(run["collector"]), store.finish_run(conn, run["id"], "failed")),
+    )
     worker.run_worker(cfg, once=True, graph_factory=lambda *a: None, exchange_factory=lambda *a: None)
     assert len(calls) == 2 * len(schedule.nightly_collectors())
 
 
 def test_worker_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, monkeypatch, caplog):
-    """"database is locked" in the once-a-minute work is logged and retried, not fatal."""
+    """ "database is locked" in the once-a-minute work is logged and retried, not fatal."""
     import sqlite3
     import threading
 
@@ -241,8 +250,9 @@ def test_worker_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, monke
     monkeypatch.setattr(worker, "housekeeping", housekeeping)
     monkeypatch.setattr(worker, "TICK_EVERY", 0)
     monkeypatch.setattr(worker, "IDLE_WAIT", 0.01)
-    thread = threading.Thread(target=worker.run_worker, args=(cfg,),
-                              kwargs={"graph_factory": lambda *a: None, "stop": stop})
+    thread = threading.Thread(
+        target=worker.run_worker, args=(cfg,), kwargs={"graph_factory": lambda *a: None, "stop": stop}
+    )
     thread.start()
     thread.join(timeout=30)
     assert not thread.is_alive()
@@ -260,8 +270,11 @@ def test_worker_once_survives_a_failing_housekeeping_pass(cfg, db, two_tenants, 
 
     ran = []
     monkeypatch.setattr(worker, "housekeeping", broken)
-    monkeypatch.setattr(worker, "execute_run", lambda conn, run, *a: (ran.append(run["id"]),
-                                                                        store.finish_run(conn, run["id"], "failed")))
+    monkeypatch.setattr(
+        worker,
+        "execute_run",
+        lambda conn, run, *a: (ran.append(run["id"]), store.finish_run(conn, run["id"], "failed")),
+    )
     store.enqueue_run(db, two_tenants[0], "users")
     worker.run_worker(cfg, once=True, graph_factory=lambda *a: None, exchange_factory=lambda *a: None)
     assert len(ran) == 1

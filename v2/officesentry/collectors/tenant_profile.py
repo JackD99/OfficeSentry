@@ -15,8 +15,16 @@ from .. import store
 from ..graph import GraphError
 from .base import Collector, RunContext, register
 
-SUBSCRIPTION_FIELDS = ("commerceSubscriptionId", "skuId", "skuPartNumber", "status", "isTrial", "totalLicenses",
-                       "createdDateTime", "nextLifecycleDateTime")
+SUBSCRIPTION_FIELDS = (
+    "commerceSubscriptionId",
+    "skuId",
+    "skuPartNumber",
+    "status",
+    "isTrial",
+    "totalLicenses",
+    "createdDateTime",
+    "nextLifecycleDateTime",
+)
 
 # Service plan name -> capability flag.
 CAPABILITY_PLANS = {
@@ -56,14 +64,16 @@ def capabilities_from_skus(skus: list[dict]) -> dict:
 class TenantProfile(Collector):
     key = "tenant_profile"
     title = "Tenant profile and licences"
-    description = ("Organization details, verified domains, subscriptions with renewal dates and licence "
-                   "capabilities.")
+    description = "Organization details, verified domains, subscriptions with renewal dates and licence capabilities."
     permissions = ("Organization.Read.All", "Directory.Read.All")
 
     def collect(self, ctx: RunContext) -> None:
-        orgs = ctx.graph.get("/organization", params={
-            "$select": "id,displayName,verifiedDomains,countryLetterCode,createdDateTime,onPremisesSyncEnabled",
-        }).get("value", [])
+        orgs = ctx.graph.get(
+            "/organization",
+            params={
+                "$select": "id,displayName,verifiedDomains,countryLetterCode,createdDateTime,onPremisesSyncEnabled",
+            },
+        ).get("value", [])
         ctx.objects("organization", [(o["id"], o) for o in orgs])
 
         skus = ctx.paged(ctx.graph.get_all("/subscribedSkus"))
@@ -74,8 +84,7 @@ class TenantProfile(Collector):
         ctx.capabilities.update(caps)
         store.set_capabilities(ctx.conn, ctx.tenant["id"], caps)
 
-        enabled = sum((s.get("prepaidUnits") or {}).get("enabled", 0) for s in skus
-                      if s.get("appliesTo") == "User")
+        enabled = sum((s.get("prepaidUnits") or {}).get("enabled", 0) for s in skus if s.get("appliesTo") == "User")
         consumed = sum(s.get("consumedUnits", 0) for s in skus if s.get("appliesTo") == "User")
         ctx.metric("licences.purchased", enabled)
         ctx.metric("licences.assigned", consumed)
@@ -91,7 +100,8 @@ class TenantProfile(Collector):
             ctx.warn(f"Subscription renewal dates weren't readable: {exc.message}")
             ctx.objects("subscription_status", [("subscriptions", {"available": False})])
             return
-        ctx.objects("company_subscription", [(s["id"], {k: s.get(k) for k in SUBSCRIPTION_FIELDS})
-                                             for s in subs if s.get("id")])
+        ctx.objects(
+            "company_subscription", [(s["id"], {k: s.get(k) for k in SUBSCRIPTION_FIELDS}) for s in subs if s.get("id")]
+        )
         ctx.objects("subscription_status", [("subscriptions", {"available": True})])
         ctx.metric("licences.trials", sum(1 for s in subs if s.get("isTrial") and s.get("status") == "Enabled"))

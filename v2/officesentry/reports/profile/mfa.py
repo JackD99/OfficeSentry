@@ -42,8 +42,11 @@ def mfa_part(p: Person) -> Part:
     result.note = " ".join(n for n in (reg.note, enf.note) if n)
 
     if p.guest:
-        result.summary, result.tone = ("Required", "ok") if required else (
-            ("Not required", "warn") if required is False else ("Not checked", None))
+        result.summary, result.tone = (
+            ("Required", "ok")
+            if required
+            else (("Not required", "warn") if required is False else ("Not checked", None))
+        )
         if required is False and p.enabled:
             p.flag("low", "This guest isn't asked for MFA when signing in to this tenant.", "mfa")
         return result
@@ -62,9 +65,11 @@ def mfa_part(p: Person) -> Part:
     result.summary = title
     result.tone = {"none": "bad", "not_required": "warn", "not_registered": "warn"}.get(kind)
     if p.enabled and kind != "unknown":
-        severity = {"none": "critical" if p.admin else "high",
-                    "not_required": "high" if p.admin else "medium",
-                    "not_registered": "high" if p.admin else "medium"}[kind]
+        severity = {
+            "none": "critical" if p.admin else "high",
+            "not_required": "high" if p.admin else "medium",
+            "not_registered": "high" if p.admin else "medium",
+        }[kind]
         p.flag(severity, f"{title}: {meaning}" + (" This account holds an admin role." if p.admin else ""), "mfa")
     if excluded and p.enabled:
         p.flag("medium" if p.admin else "low", f"Excluded from {', '.join(excluded)}.", "mfa")
@@ -78,16 +83,25 @@ def _sign_in_strength(p: Person, row: dict, result: Part) -> None:
     first = authmethods.preferred(row)
     if first:
         result.facts.append(("Asked for first", first))
-    for key, label in (("isPasswordlessCapable", "Can sign in without a password"),
-                       ("isSsprRegistered", "Can reset their own password")):
+    for key, label in (
+        ("isPasswordlessCapable", "Can sign in without a password"),
+        ("isSsprRegistered", "Can reset their own password"),
+    ):
         if row.get(key) is not None:
             result.facts.append((label, _yes(row.get(key))))
     if not p.enabled:
         return
     privileged = bool(p.roles and p.roles["privileged"])
     if privileged and s.methods and not s.phishing_resistant:
-        p.flag("medium", "Admin without a phishing-resistant method: register a passkey or security key. A fake "
-                         "sign-in page can relay codes and push approvals.", "mfa")
+        p.flag(
+            "medium",
+            "Admin without a phishing-resistant method: register a passkey or security key. A fake "
+            "sign-in page can relay codes and push approvals.",
+            "mfa",
+        )
     if s.phone_only:
-        p.flag("medium" if privileged else "low", "A text or call is the only second factor: set up the "
-                                                  "Authenticator app.", "mfa")
+        p.flag(
+            "medium" if privileged else "low",
+            "A text or call is the only second factor: set up the Authenticator app.",
+            "mfa",
+        )

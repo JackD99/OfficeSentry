@@ -84,8 +84,11 @@ def test_mfa_is_partly_when_anyone_but_break_glass_is_excluded(db, two_tenants):
     assert a["mfa_privileged"].suggested in (PARTLY, NO)
 
     roles = copy.deepcopy(gd.CA_MFA_ALL)
-    roles["conditions"]["users"].update(excludeUsers=[], excludeRoles=["role-1"], excludeGuestsOrExternalUsers={
-        "guestOrExternalUserTypes": "b2bCollaborationGuest"})
+    roles["conditions"]["users"].update(
+        excludeUsers=[],
+        excludeRoles=["role-1"],
+        excludeGuestsOrExternalUsers={"guestOrExternalUserTypes": "b2bCollaborationGuest"},
+    )
     seed_tenant(db, bravo, ca=[roles])
     b = _answers(db, bravo)
     assert b["mfa_remote"].suggested == PARTLY
@@ -185,6 +188,7 @@ def test_data_changed_hint(client, db, two_tenants):
 
 def test_overrides_go_with_the_tenant(db, two_tenants):
     from officesentry import lifecycle
+
     alpha, _ = two_tenants
     evidence_answers.set_override(db, alpha, "backups", YES, "Daily to a separate provider.", NOT_KNOWN, "jack")
     lifecycle.delete_tenant(db, store.get_tenant(db, alpha), "jack")

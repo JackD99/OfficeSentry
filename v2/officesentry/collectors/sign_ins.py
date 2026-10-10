@@ -96,12 +96,29 @@ class Summary:
         a = self.accounts.get(ukey)
         if a is None:
             a = self.accounts[ukey] = {
-                "user": user, "userId": s.get("userId"), "displayName": s.get("userDisplayName"),
-                "signIns": 0, "succeeded": 0, "failed": 0, "interrupted": 0, "mfa": 0, "singleFactor": 0,
-                "credentialFailures": 0, "lockouts": 0, "risky": 0, "lastSignIn": "", "lastSuccess": None,
-                "lastFailure": None, "lastFailureCode": None, "lastFailureReason": None,
-                "_countries": Counter(), "_apps": Counter(), "_os": Counter(), "_failureIps": Counter(),
-                "_codes": Counter()}
+                "user": user,
+                "userId": s.get("userId"),
+                "displayName": s.get("userDisplayName"),
+                "signIns": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "interrupted": 0,
+                "mfa": 0,
+                "singleFactor": 0,
+                "credentialFailures": 0,
+                "lockouts": 0,
+                "risky": 0,
+                "lastSignIn": "",
+                "lastSuccess": None,
+                "lastFailure": None,
+                "lastFailureCode": None,
+                "lastFailureReason": None,
+                "_countries": Counter(),
+                "_apps": Counter(),
+                "_os": Counter(),
+                "_failureIps": Counter(),
+                "_codes": Counter(),
+            }
         a["signIns"] += 1
         a["lastSignIn"] = max(a["lastSignIn"], when)
         a["_countries"][country or "Unknown"] += 1
@@ -129,9 +146,21 @@ class Summary:
             if when >= (a["lastFailure"] or ""):
                 a["lastFailure"], a["lastFailureCode"], a["lastFailureReason"] = when, error, reason or None
 
-        loc = self.locations.setdefault((ukey, country), {
-            "user": user, "userId": s.get("userId"), "country": country or None, "succeeded": 0, "failed": 0,
-            "lastSuccess": None, "lastAttempt": "", "_ips": Counter(), "_apps": Counter(), "_cities": Counter()})
+        loc = self.locations.setdefault(
+            (ukey, country),
+            {
+                "user": user,
+                "userId": s.get("userId"),
+                "country": country or None,
+                "succeeded": 0,
+                "failed": 0,
+                "lastSuccess": None,
+                "lastAttempt": "",
+                "_ips": Counter(),
+                "_apps": Counter(),
+                "_cities": Counter(),
+            },
+        )
         loc["lastAttempt"] = max(loc["lastAttempt"], when)
         if ok:
             loc["succeeded"] += 1
@@ -150,16 +179,26 @@ class Summary:
             entry["singleFactor"] += 1
 
         if not ok:
-            f = self.failures.setdefault(error, {"code": error, "reason": None, "signIns": 0, "lastSeen": "",
-                                                 "_accounts": set()})
+            f = self.failures.setdefault(
+                error, {"code": error, "reason": None, "signIns": 0, "lastSeen": "", "_accounts": set()}
+            )
             f["signIns"] += 1
             f["_accounts"].add(ukey)
             if when >= f["lastSeen"]:
                 f["lastSeen"] = when
                 f["reason"] = reason or f["reason"]
         if result == "failure" and ip:
-            i = self.ips.setdefault(ip, {"ip": ip, "failures": 0, "credentialFailures": 0, "lastSeen": "",
-                                         "_accounts": Counter(), "_countries": Counter()})
+            i = self.ips.setdefault(
+                ip,
+                {
+                    "ip": ip,
+                    "failures": 0,
+                    "credentialFailures": 0,
+                    "lastSeen": "",
+                    "_accounts": Counter(),
+                    "_countries": Counter(),
+                },
+            )
             i["failures"] += 1
             i["credentialFailures"] += error in signins.CREDENTIAL_CODES
             i["lastSeen"] = max(i["lastSeen"], when)
@@ -178,16 +217,24 @@ class Summary:
     def _tally(table: dict, key: str, start: dict, result: str, ukey: str, when: str) -> dict:
         row = table.get(key)
         if row is None:
-            row = table[key] = {**start, "signIns": 0, "succeeded": 0, "failed": 0, "interrupted": 0,
-                                "lastSeen": "", "_accounts": set()}
+            row = table[key] = {
+                **start,
+                "signIns": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "interrupted": 0,
+                "lastSeen": "",
+                "_accounts": set(),
+            }
         row["signIns"] += 1
         row[{"success": "succeeded", "failure": "failed"}.get(result, "interrupted")] += 1
         row["_accounts"].add(ukey)
         row["lastSeen"] = max(row["lastSeen"], when)
         return row
 
-    def _risk(self, s: dict, user: str, ok: bool, error: int, when: str, country: str, city: str, ip: str,
-              app: str) -> None:
+    def _risk(
+        self, s: dict, user: str, ok: bool, error: int, when: str, country: str, city: str, ip: str, app: str
+    ) -> None:
         level, state = s.get("riskLevelDuringSignIn"), s.get("riskState")
         if level not in (None, "hidden"):
             self.risk_seen = True
@@ -200,12 +247,26 @@ class Summary:
         if len(self.risky) >= RISKY_LIMIT:
             return
         types = s.get("riskEventTypes_v2") or s.get("riskEventTypes") or []
-        self.risky.append((_text(s.get("id")) or f"{user}|{when}|{len(self.risky)}", {
-            "time": when, "user": user, "userId": s.get("userId"), "succeeded": ok, "errorCode": error,
-            "level": level if isinstance(level, str) else None, "state": state if isinstance(state, str) else None,
-            "detail": s.get("riskDetail") if isinstance(s.get("riskDetail"), str) else None,
-            "eventTypes": [t for t in types if isinstance(t, str)] if isinstance(types, list) else [],
-            "country": country or None, "city": city or None, "ip": ip or None, "app": app}))
+        self.risky.append(
+            (
+                _text(s.get("id")) or f"{user}|{when}|{len(self.risky)}",
+                {
+                    "time": when,
+                    "user": user,
+                    "userId": s.get("userId"),
+                    "succeeded": ok,
+                    "errorCode": error,
+                    "level": level if isinstance(level, str) else None,
+                    "state": state if isinstance(state, str) else None,
+                    "detail": s.get("riskDetail") if isinstance(s.get("riskDetail"), str) else None,
+                    "eventTypes": [t for t in types if isinstance(t, str)] if isinstance(types, list) else [],
+                    "country": country or None,
+                    "city": city or None,
+                    "ip": ip or None,
+                    "app": app,
+                },
+            )
+        )
 
     # -- Stored rows ----------------------------------------------------------------------------
 
@@ -265,26 +326,32 @@ def _at(ts: int) -> str:
 def read_log(ctx: RunContext) -> events.Ingest:
     """Bring the tenant's stored sign-ins up to date (``events.ingest``). The legacy sign-in collector
     calls this too; whichever runs second reads only the few hours since."""
-    return events.ingest(ctx, events.SIGNIN_LOG, LOG_DAYS, SIGNIN_PAGES, retries=QUERY_RETRIES,
-                         deadline=lambda: deadline())
+    return events.ingest(
+        ctx, events.SIGNIN_LOG, LOG_DAYS, SIGNIN_PAGES, retries=QUERY_RETRIES, deadline=lambda: deadline()
+    )
 
 
 def report_gaps(ctx: RunContext, got: events.Ingest, start: datetime, end: datetime, what: str) -> list:
     """Warn about anything between ``start`` and ``end`` this run couldn't read; returns those ranges."""
     missing = got.coverage.missing(int(start.timestamp()), int(end.timestamp()))
-    ranges = ", ".join(f"{_at(lo)} to {_at(hi)}" for lo, hi in missing[:3]) + (" and more" if len(missing) > 3
-                                                                                  else "")
+    ranges = ", ".join(f"{_at(lo)} to {_at(hi)}" for lo, hi in missing[:3]) + (" and more" if len(missing) > 3 else "")
     if got.gave_up:
         ctx.log(f"Gave up on the sign-in log after {FALLBACK_SECONDS // 60} minutes")
-        ctx.warn(f"Microsoft's sign-in log was too slow to answer; sign-ins from {ranges or 'earlier'} are missing "
-                 f"from {what} for now, and the next run reads them first")
+        ctx.warn(
+            f"Microsoft's sign-in log was too slow to answer; sign-ins from {ranges or 'earlier'} are missing "
+            f"from {what} for now, and the next run reads them first"
+        )
     elif got.failed_windows:
-        ctx.warn(f"Microsoft's sign-in log timed out for {plural(got.failed_windows, 'one-day window')}; those "
-                 f"sign-ins are missing from {what} until the next run reads them")
+        ctx.warn(
+            f"Microsoft's sign-in log timed out for {plural(got.failed_windows, 'one-day window')}; those "
+            f"sign-ins are missing from {what} until the next run reads them"
+        )
     elif got.budget_hit and missing:
         ctx.truncated = True
-        ctx.warn(f"More than {SIGNIN_PAGES * PAGE_SIZE:,} sign-ins to read in one run; sign-ins from {ranges} are "
-                 f"missing from {what} for now, and the next run carries on from there")
+        ctx.warn(
+            f"More than {SIGNIN_PAGES * PAGE_SIZE:,} sign-ins to read in one run; sign-ins from {ranges} are "
+            f"missing from {what} for now, and the next run carries on from there"
+        )
     elif got.budget_hit:
         ctx.log("Older sign-ins are still being read into the activity history; the next run carries on")
     return missing
@@ -294,8 +361,10 @@ def report_gaps(ctx: RunContext, got: events.Ingest, start: datetime, end: datet
 class SignIns(Collector):
     key = "sign_ins"
     title = "Sign-in activity"
-    description = (f"Interactive sign-ins in the last {signins.WINDOW_DAYS} days, summarised by account, country, "
-                   "app and failure reason (needs Entra ID P1; sign-in risk needs P2).")
+    description = (
+        f"Interactive sign-ins in the last {signins.WINDOW_DAYS} days, summarised by account, country, "
+        "app and failure reason (needs Entra ID P1; sign-in risk needs P2)."
+    )
     permissions = ("AuditLog.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
@@ -318,8 +387,7 @@ class SignIns(Collector):
         summary = Summary(risk_visible=p2 is not False)
         for s in events.signins_between(ctx.conn, ctx.tenant["id"], start, now):
             summary.add(s)
-        ctx.log(f"Read {plural(got.read, 'sign-in')} from Microsoft ({got.new:,} new) in "
-                f"{plural(got.pages, 'page')}")
+        ctx.log(f"Read {plural(got.read, 'sign-in')} from Microsoft ({got.new:,} new) in {plural(got.pages, 'page')}")
         # Without P2 Microsoft reports risk as "hidden". When the licence isn't known, trust what came back.
         risk_visible = p2 is True or (p2 is None and summary.risk_seen)
         if not risk_visible:
@@ -328,10 +396,23 @@ class SignIns(Collector):
                 a["risky"] = 0
         accounts = summary.account_rows()
         history = got.coverage.detailed_from
-        ctx.objects("sign_in_status", [("status", {
-            "available": True, "since": since, "days": signins.WINDOW_DAYS, "signIns": summary.total,
-            "truncated": truncated, "riskVisible": risk_visible,
-            "historyFrom": _at(history) if history is not None else None})])
+        ctx.objects(
+            "sign_in_status",
+            [
+                (
+                    "status",
+                    {
+                        "available": True,
+                        "since": since,
+                        "days": signins.WINDOW_DAYS,
+                        "signIns": summary.total,
+                        "truncated": truncated,
+                        "riskVisible": risk_visible,
+                        "historyFrom": _at(history) if history is not None else None,
+                    },
+                )
+            ],
+        )
         ctx.objects("sign_in_account", accounts)
         ctx.objects("sign_in_location", summary.location_rows())
         ctx.objects("sign_in_country", summary.counted(summary.countries))
@@ -343,8 +424,7 @@ class SignIns(Collector):
         ctx.metric("signins.total", summary.total)
         ctx.metric("signins.failed", sum(a["failed"] for a in data))
         ctx.metric("signins.single_factor", sum(a["singleFactor"] for a in data))
-        ctx.metric("signins.repeated_failures",
-                   sum(1 for a in data if a["failed"] >= signins.REPEATED_FAILURES))
+        ctx.metric("signins.repeated_failures", sum(1 for a in data if a["failed"] >= signins.REPEATED_FAILURES))
         if risk_visible:
             ctx.metric("signins.risky", len(summary.risky))
         ctx.log(f"Summarised {plural(summary.total, 'sign-in')} by {plural(len(data), 'account')}")

@@ -46,9 +46,16 @@ def start(user) -> None:
     g.db.execute(
         "INSERT INTO sessions (token_hash, user_id, session_version, created_at, last_seen_at, expires_at,"
         " ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (_hash(token), user["id"], user["session_version"], _iso(now), _iso(now),
-         _iso(now + timedelta(hours=cfg.session_hours)), (request.remote_addr or "")[:64],
-         (request.user_agent.string or "")[:300]),
+        (
+            _hash(token),
+            user["id"],
+            user["session_version"],
+            _iso(now),
+            _iso(now),
+            _iso(now + timedelta(hours=cfg.session_hours)),
+            (request.remote_addr or "")[:64],
+            (request.user_agent.string or "")[:300],
+        ),
     )
     session.permanent = True
     session["sid"] = token
@@ -68,8 +75,13 @@ def current():
     now = datetime.now(UTC)
     idle = timedelta(minutes=_cfg().session_idle_minutes)
     last_seen = _parse(row["last_seen_at"])
-    if (user is None or user["disabled"] or user["session_version"] != row["session_version"]
-            or _parse(row["expires_at"]) <= now or last_seen + idle <= now):
+    if (
+        user is None
+        or user["disabled"]
+        or user["session_version"] != row["session_version"]
+        or _parse(row["expires_at"]) <= now
+        or last_seen + idle <= now
+    ):
         g.db.execute("DELETE FROM sessions WHERE id = ?", (row["id"],))
         session.clear()
         return None, None
@@ -90,8 +102,10 @@ def keep_current(user_id: int, version: int) -> None:
     """After the user's session_version changes, keep this browser signed in (others end)."""
     token = session.get("sid")
     if token:
-        g.db.execute("UPDATE sessions SET session_version = ? WHERE token_hash = ? AND user_id = ?",
-                     (version, _hash(token), user_id))
+        g.db.execute(
+            "UPDATE sessions SET session_version = ? WHERE token_hash = ? AND user_id = ?",
+            (version, _hash(token), user_id),
+        )
     g.db.execute("DELETE FROM sessions WHERE user_id = ? AND session_version != ?", (user_id, version))
 
 
@@ -113,19 +127,43 @@ def list_for(user_id: int) -> list[dict]:
         "SELECT * FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY last_seen_at DESC",
         (user_id, now),
     ).fetchall()
-    return [{**dict(r), "current": r["token_hash"] == current_hash, "device": describe_agent(r["user_agent"])}
-            for r in rows]
+    return [
+        {**dict(r), "current": r["token_hash"] == current_hash, "device": describe_agent(r["user_agent"])} for r in rows
+    ]
 
 
 def describe_agent(ua: str | None) -> str:
     """'Edge on Windows' from a user-agent string. Good enough for a sessions list."""
     ua = ua or ""
-    browser = next((name for key, name in (("Edg/", "Edge"), ("OPR/", "Opera"), ("Firefox/", "Firefox"),
-                                           ("Chrome/", "Chrome"), ("Safari/", "Safari")) if key in ua), "")
-    system = next((name for key, name in (("Windows", "Windows"), ("iPhone", "iPhone"), ("iPad", "iPad"),
-                                          ("Android", "Android"), ("Mac OS X", "macOS"), ("Linux", "Linux"))
-                   if key in ua), "")
+    browser = next(
+        (
+            name
+            for key, name in (
+                ("Edg/", "Edge"),
+                ("OPR/", "Opera"),
+                ("Firefox/", "Firefox"),
+                ("Chrome/", "Chrome"),
+                ("Safari/", "Safari"),
+            )
+            if key in ua
+        ),
+        "",
+    )
+    system = next(
+        (
+            name
+            for key, name in (
+                ("Windows", "Windows"),
+                ("iPhone", "iPhone"),
+                ("iPad", "iPad"),
+                ("Android", "Android"),
+                ("Mac OS X", "macOS"),
+                ("Linux", "Linux"),
+            )
+            if key in ua
+        ),
+        "",
+    )
     if browser and system:
         return f"{browser} on {system}"
     return browser or system or "Unknown browser"
-

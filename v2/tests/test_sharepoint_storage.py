@@ -15,7 +15,7 @@ from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import SKUS
 
-MB = 1024 ** 2
+MB = 1024**2
 
 
 def _snap(db, tenant_id):
@@ -56,7 +56,11 @@ def test_collector_totals(db, two_tenants):
     assert old["path"] == "Old/Archive.zip"
     assert [f["path"] for f in snap.objects("sharepoint_storage", "version_file")] == ["Clients/Plan.xlsx"]
     assert {f["path"] for f in snap.objects("sharepoint_storage", "large_file")} == {
-        "Clients/Mail export.pst", "Clients/Plan.xlsx", "Old/Archive.zip", "Plan_v1.xlsx"}
+        "Clients/Mail export.pst",
+        "Clients/Plan.xlsx",
+        "Old/Archive.zip",
+        "Plan_v1.xlsx",
+    }
     # Ann's OneDrive is 93% full, so it was read file by file, separately from SharePoint.
     (ann,) = snap.objects("sharepoint_storage", "onedrive_storage")
     assert ann["scanned"] and ann["versions"] == 10 * GB and ann["limit"] == 1024 * GB
@@ -85,8 +89,13 @@ def test_report(db, two_tenants):
     assert tiles["Recycle bins"].value == "1.0 GB"
     assert tiles["Untouched for 2 years"].foot == "1 file"
     parts = _section(report, "Where the space goes")
-    assert _column(parts, "Part") == ["Current files", "Recycle bins", "Older versions of files",
-                                      "Preservation Hold libraries", "Lists, pages and other"]
+    assert _column(parts, "Part") == [
+        "Current files",
+        "Recycle bins",
+        "Older versions of files",
+        "Preservation Hold libraries",
+        "Lists, pages and other",
+    ]
     assert "1 TB + 10 GB × 10 licences" in parts.intro
     assert _column(_section(report, "Largest files"), "File")[0] == "Clients/Mail export.pst"  # largest first
     assert _column(_section(report, "Largest files"), "Location")[0] == "Finance / Documents"
@@ -121,8 +130,13 @@ def test_check_passes_and_waits_for_data(db, two_tenants):
 
 def test_tenant_quota():
     assert tenant_quota(SKUS).total == 1024 * GB + 10 * 10 * GB
-    extra = {"skuPartNumber": "SHAREPOINTSTORAGE", "appliesTo": "Company", "capabilityStatus": "Enabled",
-             "prepaidUnits": {"enabled": 250}, "servicePlans": [{"servicePlanName": "SHAREPOINTSTORAGE"}]}
+    extra = {
+        "skuPartNumber": "SHAREPOINTSTORAGE",
+        "appliesTo": "Company",
+        "capabilityStatus": "Enabled",
+        "prepaidUnits": {"enabled": 250},
+        "servicePlans": [{"servicePlanName": "SHAREPOINTSTORAGE"}],
+    }
     free = dict(SKUS[0], skuPartNumber="FREE", prepaidUnits={"enabled": 10000})
     quota = tenant_quota([*SKUS, extra, free])
     assert quota.total == 1024 * GB + 100 * GB + 250 * GB and quota.extra_gb == 250
@@ -137,7 +151,11 @@ def test_helpers():
     assert not is_library({"name": "Events", "list": {"template": "events"}})
     assert quota_row({"quota": {"used": 1, "deleted": 2, "total": 27487790694400}})["limit"] is None
     assert quota_row({"quota": {"used": "5", "total": 100, "state": "normal"}}) == {
-        "used": 5, "recycleBin": 0, "limit": 100, "state": "normal"}
+        "used": 5,
+        "recycleBin": 0,
+        "limit": 100,
+        "state": "normal",
+    }
     assert quota_row(None)["used"] == 0
 
 

@@ -29,8 +29,11 @@ def test_admin_roles_without_pim(db, two_tenants, factory):  # noqa: F811
     alpha, _ = two_tenants
     responses.get(f"{V1}/roleManagement/directory/roleDefinitions", json={"value": gd.ROLE_DEFINITIONS})
     responses.get(f"{V1}/roleManagement/directory/roleAssignments", json={"value": gd.ROLE_ASSIGNMENTS})
-    responses.get(f"{V1}/roleManagement/directory/roleEligibilitySchedules", status=403, json={"error": {
-        "code": "AadPremiumLicenseRequired", "message": "The tenant needs an AAD Premium 2 license."}})
+    responses.get(
+        f"{V1}/roleManagement/directory/roleEligibilitySchedules",
+        status=403,
+        json={"error": {"code": "AadPremiumLicenseRequired", "message": "The tenant needs an AAD Premium 2 license."}},
+    )
     _, status = _run(db, alpha, "admin_roles", factory)
     assert status == "succeeded"
 
@@ -39,8 +42,10 @@ def test_admin_roles_without_pim(db, two_tenants, factory):  # noqa: F811
 def test_conditional_access(db, two_tenants, factory):  # noqa: F811
     alpha, _ = two_tenants
     responses.get(f"{V1}/policies/identitySecurityDefaultsEnforcementPolicy", json={"isEnabled": False})
-    responses.get(f"{V1}/identity/conditionalAccess/policies",
-                  json={"value": [gd.CA_MFA_ALL, gd.CA_BLOCK_LEGACY, gd.CA_REPORT_ONLY]})
+    responses.get(
+        f"{V1}/identity/conditionalAccess/policies",
+        json={"value": [gd.CA_MFA_ALL, gd.CA_BLOCK_LEGACY, gd.CA_REPORT_ONLY]},
+    )
     run_id, status = _run(db, alpha, "conditional_access", factory)
     assert status == "succeeded"
     m = _metrics(db, run_id)
@@ -61,8 +66,9 @@ def test_conditional_access_skipped_without_p1(db, two_tenants, factory):  # noq
 @responses.activate
 def test_mfa_registration_report(db, two_tenants, factory):  # noqa: F811
     alpha, _ = two_tenants
-    responses.get(f"{V1}/reports/authenticationMethods/userRegistrationDetails",
-                  json={"value": gd.REGISTRATION_DETAILS})
+    responses.get(
+        f"{V1}/reports/authenticationMethods/userRegistrationDetails", json={"value": gd.REGISTRATION_DETAILS}
+    )
     run_id, status = _run(db, alpha, "mfa_registration", factory)
     assert status == "succeeded"
     m = _metrics(db, run_id)
@@ -72,19 +78,39 @@ def test_mfa_registration_report(db, two_tenants, factory):  # noqa: F811
 @responses.activate
 def test_mfa_falls_back_to_per_user_methods(db, two_tenants, factory):  # noqa: F811
     alpha, _ = two_tenants
-    responses.get(f"{V1}/reports/authenticationMethods/userRegistrationDetails", status=403, json={"error": {
-        "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant", "message": "premium license"}})
-    responses.get(f"{V1}/users", json={"value": [
-        {"id": "u1", "userPrincipalName": "ann@x.com", "userType": "Member", "accountEnabled": True},
-        {"id": "u6", "userPrincipalName": "carl@x.com", "userType": "Member", "accountEnabled": True},
-        {"id": "u9", "userPrincipalName": "old@x.com", "userType": "Member", "accountEnabled": False},
-    ]})
-    responses.get(f"{V1}/users/u1/authentication/methods", json={"value": [
-        {"@odata.type": "#microsoft.graph.passwordAuthenticationMethod"},
-        {"@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod"}]})
-    responses.get(f"{V1}/users/u6/authentication/methods", json={"value": [
-        {"@odata.type": "#microsoft.graph.passwordAuthenticationMethod"},
-        {"@odata.type": "#microsoft.graph.emailAuthenticationMethod"}]})
+    responses.get(
+        f"{V1}/reports/authenticationMethods/userRegistrationDetails",
+        status=403,
+        json={"error": {"code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant", "message": "premium license"}},
+    )
+    responses.get(
+        f"{V1}/users",
+        json={
+            "value": [
+                {"id": "u1", "userPrincipalName": "ann@x.com", "userType": "Member", "accountEnabled": True},
+                {"id": "u6", "userPrincipalName": "carl@x.com", "userType": "Member", "accountEnabled": True},
+                {"id": "u9", "userPrincipalName": "old@x.com", "userType": "Member", "accountEnabled": False},
+            ]
+        },
+    )
+    responses.get(
+        f"{V1}/users/u1/authentication/methods",
+        json={
+            "value": [
+                {"@odata.type": "#microsoft.graph.passwordAuthenticationMethod"},
+                {"@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod"},
+            ]
+        },
+    )
+    responses.get(
+        f"{V1}/users/u6/authentication/methods",
+        json={
+            "value": [
+                {"@odata.type": "#microsoft.graph.passwordAuthenticationMethod"},
+                {"@odata.type": "#microsoft.graph.emailAuthenticationMethod"},
+            ]
+        },
+    )
     run_id, status = _run(db, alpha, "mfa_registration", factory)
     assert status == "succeeded"
     rows = {r["_id"]: r for r in store.run_objects(db, run_id, "mfa_registration")}

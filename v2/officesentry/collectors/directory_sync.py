@@ -16,16 +16,20 @@ from ..hybrid import hours_since
 from .base import Collector, RunContext, register
 
 ORG_FIELDS = "id,onPremisesSyncEnabled,onPremisesLastSyncDateTime"
-DOMAIN_FIELDS = ("id,authenticationType,isVerified,isDefault,supportedServices,passwordValidityPeriodInDays,"
-                 "passwordNotificationWindowInDays")
+DOMAIN_FIELDS = (
+    "id,authenticationType,isVerified,isDefault,supportedServices,passwordValidityPeriodInDays,"
+    "passwordNotificationWindowInDays"
+)
 
 
 @register
 class DirectorySync(Collector):
     key = "directory_sync"
     title = "Directory sync"
-    description = ("Whether accounts are synced from on-premises Active Directory, when directory and password "
-                   "hash sync last ran, and how each domain signs in and how often its passwords expire.")
+    description = (
+        "Whether accounts are synced from on-premises Active Directory, when directory and password "
+        "hash sync last ran, and how each domain signs in and how often its passwords expire."
+    )
     permissions = ("Organization.Read.All", "Directory.Read.All")
 
     def collect(self, ctx: RunContext) -> None:
@@ -62,8 +66,9 @@ class DirectorySync(Collector):
         # onPremisesLastPasswordSyncDateTime is beta-only (v1.0 silently drops it from $select),
         # so this one call uses beta.
         try:
-            orgs = ctx.graph.get("/organization", version="beta", params={
-                "$select": "id,onPremisesLastPasswordSyncDateTime"}).get("value", [])
+            orgs = ctx.graph.get(
+                "/organization", version="beta", params={"$select": "id,onPremisesLastPasswordSyncDateTime"}
+            ).get("value", [])
         except GraphError as exc:
             ctx.warn(f"The last password hash sync time wasn't readable: {exc.message}")
             return

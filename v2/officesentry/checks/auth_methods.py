@@ -35,8 +35,14 @@ def _privileged_people(snap: TenantSnapshot) -> dict[str, tuple[str, list[str]]]
     out: dict[str, tuple[str, list[str]]] = {}
     for r in rows:
         pid = r.get("principalId")
-        if not r.get("privileged") or r.get("principalType") != "user" or not isinstance(pid, str) \
-                or r.get("accountEnabled") is False or pid in disabled or r.get("userType") == "Guest":
+        if (
+            not r.get("privileged")
+            or r.get("principalType") != "user"
+            or not isinstance(pid, str)
+            or r.get("accountEnabled") is False
+            or pid in disabled
+            or r.get("userType") == "Guest"
+        ):
             continue
         label, names = out.setdefault(pid, (_label(r), []))
         name = r.get("roleName") or "Unknown role"
@@ -45,10 +51,14 @@ def _privileged_people(snap: TenantSnapshot) -> dict[str, tuple[str, list[str]]]
     return out
 
 
-@rule("admin_phishing_resistant", "Admins use phishing-resistant sign-in methods", "Admins",
-      "Have each listed admin register a passkey (in Microsoft Authenticator or on a security key) or Windows Hello "
-      "for Business, then require the Phishing-resistant MFA authentication strength for admin roles in "
-      "Conditional Access. Codes and push approvals can be relayed by a fake sign-in page; these can't.")
+@rule(
+    "admin_phishing_resistant",
+    "Admins use phishing-resistant sign-in methods",
+    "Admins",
+    "Have each listed admin register a passkey (in Microsoft Authenticator or on a security key) or Windows Hello "
+    "for Business, then require the Phishing-resistant MFA authentication strength for admin roles in "
+    "Conditional Access. Codes and push approvals can be relayed by a fake sign-in page; these can't.",
+)
 def admin_phishing_resistant(snap: TenantSnapshot, now: datetime):
     admins = _privileged_people(snap)
     reg, reason = _registration(snap)
@@ -70,17 +80,27 @@ def admin_phishing_resistant(snap: TenantSnapshot, now: datetime):
     if findings:
         return ("fail", f"{plural(len(findings), 'admin')} without a phishing-resistant method", findings)
     if not checked:
-        return _unavailable(f"MFA registration isn't known for {plural(unknown, 'admin')}" if unknown
-                            else "Nobody holds a privileged role")
+        return _unavailable(
+            f"MFA registration isn't known for {plural(unknown, 'admin')}"
+            if unknown
+            else "Nobody holds a privileged role"
+        )
     extra = f" ({unknown} not known yet)" if unknown else ""
-    return ("pass", f"{every(checked, 'admin', start=True)} {verb(checked, 'has', 'have')} a phishing-resistant "
-                    f"method{extra}", [])
+    return (
+        "pass",
+        f"{every(checked, 'admin', start=True)} {verb(checked, 'has', 'have')} a phishing-resistant method{extra}",
+        [],
+    )
 
 
-@rule("phone_only_mfa", "Nobody relies on a text or call as their only second factor", "Identity",
-      "Ask these people to set up the Microsoft Authenticator app (the registration campaign in the authentication "
-      "methods policy prompts them at sign-in), then turn off text message and voice call sign-in, or keep them "
-      "only as a backup. Texts and calls can be intercepted or moved to an attacker's SIM.")
+@rule(
+    "phone_only_mfa",
+    "Nobody relies on a text or call as their only second factor",
+    "Identity",
+    "Ask these people to set up the Microsoft Authenticator app (the registration campaign in the authentication "
+    "methods policy prompts them at sign-in), then turn off text message and voice call sign-in, or keep them "
+    "only as a backup. Texts and calls can be intercepted or moved to an attacker's SIM.",
+)
 def phone_only_mfa(snap: TenantSnapshot, now: datetime):
     reg, reason = _registration(snap)
     if reg is None:
@@ -100,13 +120,20 @@ def phone_only_mfa(snap: TenantSnapshot, now: datetime):
         if s.phone_only:
             admin = u["_id"] in admins
             phones = ", ".join(m for m, tier in s.methods if tier == PHONE)
-            findings.append(Finding("medium" if admin else "low", _label(u),
-                                    f"Second factor is only {phones}" + (" (holds an admin role)" if admin else ""),
-                                    u["_id"]))
+            findings.append(
+                Finding(
+                    "medium" if admin else "low",
+                    _label(u),
+                    f"Second factor is only {phones}" + (" (holds an admin role)" if admin else ""),
+                    u["_id"],
+                )
+            )
     if not checked:
         return _unavailable("Nobody's sign-in methods are known yet")
     if findings:
-        return ("fail", f"{plural(len(findings), 'person')} can only use a text or call as a second factor",
-                findings)
-    return ("pass", f"Everyone with MFA has something stronger than a text or call ({plural(checked, 'person')} "
-                    "checked)", [])
+        return ("fail", f"{plural(len(findings), 'person')} can only use a text or call as a second factor", findings)
+    return (
+        "pass",
+        f"Everyone with MFA has something stronger than a text or call ({plural(checked, 'person')} checked)",
+        [],
+    )

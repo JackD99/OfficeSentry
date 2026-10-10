@@ -54,7 +54,7 @@ def test_usage_collector(db, two_tenants):
     assert len(history["onedrive"]) == 18  # only the "All" series, not the OneDrive duplicate
     assert snap.metric("sharepoint.sites") == 3  # the deleted site isn't counted
     assert snap.metric("sharepoint.links.anyone") == 2
-    assert snap.metric("onedrive.storage_bytes") == 6 * 1024 ** 3
+    assert snap.metric("onedrive.storage_bytes") == 6 * 1024**3
     assert not snap.objects("sharepoint_usage", "usage_status")[0]["concealed"]
 
 
@@ -102,13 +102,34 @@ def test_shared_files_without_permission(db, two_tenants):
 
 
 def test_describe_permissions_treats_guest_logins_as_external():
-    info = describe_permissions([{"roles": ["read"], "grantedToV2": {"siteUser": {
-        "loginName": "i:0#.f|membership|partner_other.com#ext#@x.onmicrosoft.com", "displayName": "Partner"}}}],
-        {"x.com"})
+    info = describe_permissions(
+        [
+            {
+                "roles": ["read"],
+                "grantedToV2": {
+                    "siteUser": {
+                        "loginName": "i:0#.f|membership|partner_other.com#ext#@x.onmicrosoft.com",
+                        "displayName": "Partner",
+                    }
+                },
+            }
+        ],
+        {"x.com"},
+    )
     assert info["exposure"] == "external"
-    assert describe_permissions([{"roles": ["read"], "link": {"scope": "users"},
-                                  "grantedToIdentitiesV2": [{"user": {"email": "bob@x.com"}}]}],
-                                {"x.com"})["exposure"] is None
+    assert (
+        describe_permissions(
+            [
+                {
+                    "roles": ["read"],
+                    "link": {"scope": "users"},
+                    "grantedToIdentitiesV2": [{"user": {"email": "bob@x.com"}}],
+                }
+            ],
+            {"x.com"},
+        )["exposure"]
+        is None
+    )
 
 
 def _calls(db, alpha, collector: str = "shared_files") -> list[str]:
@@ -122,8 +143,10 @@ def _calls(db, alpha, collector: str = "shared_files") -> list[str]:
 
 def _age_sharepoint_runs(db, alpha, days: float) -> None:
     when = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db.execute("UPDATE runs SET finished_at = ? WHERE tenant_id = ? AND collector IN"
-               " ('shared_files', 'sharepoint_storage')", (when, alpha))
+    db.execute(
+        "UPDATE runs SET finished_at = ? WHERE tenant_id = ? AND collector IN ('shared_files', 'sharepoint_storage')",
+        (when, alpha),
+    )
     unpack(db)
     db.execute("UPDATE objects SET data = json_set(data, '$.checked', ?) WHERE kind = 'lookup_onedrive'", (when,))
 
@@ -181,7 +204,6 @@ def test_one_onedrive_lookup_a_night(db, two_tenants):
         assert set(asked) & set(lookups(_calls(db, alpha, second))) == set(), second
 
 
-
 def test_checks(db, two_tenants):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
@@ -216,9 +238,12 @@ def test_sites_report(db, two_tenants):
 def test_site_growth_against_a_month_ago(db, two_tenants):
     alpha, _ = two_tenants
     old = (datetime.now(UTC) - timedelta(days=31)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    cur = db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at, finished_at)"
-                     " VALUES (?, 'sharepoint_usage', 'succeeded', 'manual', ?, ?)", (alpha, old, old))
-    store.add_objects(db, cur.lastrowid, "site", [(sd.FINANCE, {"storageUsed": 4 * 1024 ** 3})])
+    cur = db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at, finished_at)"
+        " VALUES (?, 'sharepoint_usage', 'succeeded', 'manual', ?, ?)",
+        (alpha, old, old),
+    )
+    store.add_objects(db, cur.lastrowid, "site", [(sd.FINANCE, {"storageUsed": 4 * 1024**3})])
     seed_tenant(db, alpha)
     row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == sd.FINANCE)
     assert row[4] == "+1.0 GB"
@@ -284,7 +309,7 @@ def test_client_only_sees_own_tenant(client, db, two_tenants):
 
 
 def test_size_and_axis():
-    assert size(0) == "0 bytes" and size(1536) == "1.5 KB" and size(5 * 1024 ** 3) == "5.0 GB"
+    assert size(0) == "0 bytes" and size(1536) == "1.5 KB" and size(5 * 1024**3) == "5.0 GB"
     assert nice_max(6) == 8 and nice_max(0.4) == 2 and nice_max(512) == 600
 
 

@@ -19,11 +19,14 @@ def test_sending_a_schedule_keeps_each_attachment(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     _configure(client)
-    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "IT", "it@client.com"),
-                                delivery.add_contact(db, None, "Me", "me@msp.com")],
-                    reports=("review", "data:mailboxes"))
+    sid = _schedule(
+        db,
+        alpha,
+        [delivery.add_contact(db, alpha, "IT", "it@client.com"), delivery.add_contact(db, None, "Me", "me@msp.com")],
+        reports=("review", "data:mailboxes"),
+    )
     client.post(f"/schedules/{sid}/send")
-    (_, _, msg, _), = sends()
+    ((_, _, msg, _),) = sends()
     attached = _attached(msg)
     rows = db.execute("SELECT * FROM issued_reports ORDER BY id").fetchall()
     assert {r["filename"]: bytes(r["data"]) for r in rows} == attached
@@ -37,8 +40,12 @@ def test_sending_a_schedule_keeps_each_attachment(client, db, two_tenants):
     assert kinds["security-review-alpha-ltd.xlsx"] == ("review", delivery.catalog_map()["review"].title)
     # Sent again for the same period: a second version, the first is kept.
     client.post(f"/schedules/{sid}/send")
-    versions = [r["version"] for r in db.execute(
-        "SELECT version FROM issued_reports WHERE filename = 'mailboxes-alpha-ltd.xlsx' ORDER BY id")]
+    versions = [
+        r["version"]
+        for r in db.execute(
+            "SELECT version FROM issued_reports WHERE filename = 'mailboxes-alpha-ltd.xlsx' ORDER BY id"
+        )
+    ]
     assert versions == [1, 2]
 
 
@@ -55,15 +62,24 @@ def test_scheduled_send_is_kept_and_failed_send_is_not(app, db, two_tenants, vau
     db.execute("UPDATE email_schedules SET retry_at = NULL, attempts = 0 WHERE id = ?", (sid,))
     assert delivery.tick(app, db, vault, cfg, now) == 1
     rows = db.execute("SELECT * FROM issued_reports").fetchall()
-    assert rows and all(r["trigger"] == "schedule" and r["period"] == "2026-10" and r["issued_by"] is None
-                        for r in rows)
+    assert rows and all(
+        r["trigger"] == "schedule" and r["period"] == "2026-10" and r["issued_by"] is None for r in rows
+    )
 
 
 def _issue(db, tenant_id, filename="security-review-alpha-ltd.pdf", data=b"%PDF-1.7 report"):
     content_type = "application/pdf" if filename.endswith(".pdf") else delivery.XLSX
-    return issued.archive(db, tenant_id, [issued.IssuedFile("review", "Monthly review", filename, content_type, data)],
-                          period="2026-10", trigger="schedule", user=None, to=["it@client.com"],
-                          bcc=["tech@msp.com"], now="2026-10-01T08:00:00Z")[0]
+    return issued.archive(
+        db,
+        tenant_id,
+        [issued.IssuedFile("review", "Monthly review", filename, content_type, data)],
+        period="2026-10",
+        trigger="schedule",
+        user=None,
+        to=["it@client.com"],
+        bcc=["tech@msp.com"],
+        now="2026-10-01T08:00:00Z",
+    )[0]
 
 
 def test_history_page_and_download_are_tenant_scoped(client, db, two_tenants):

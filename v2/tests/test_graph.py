@@ -47,10 +47,13 @@ def test_token_is_never_sent_to_another_host():
 
 @responses.activate
 def test_get_all_follows_next_links(graph):
-    responses.get(f"{GRAPH_ROOT}/v1.0/users", json={
-        "value": [{"id": "1"}, {"id": "2"}],
-        "@odata.nextLink": f"{GRAPH_ROOT}/v1.0/users?$skiptoken=abc",
-    })
+    responses.get(
+        f"{GRAPH_ROOT}/v1.0/users",
+        json={
+            "value": [{"id": "1"}, {"id": "2"}],
+            "@odata.nextLink": f"{GRAPH_ROOT}/v1.0/users?$skiptoken=abc",
+        },
+    )
     responses.get(f"{GRAPH_ROOT}/v1.0/users?$skiptoken=abc", json={"value": [{"id": "3"}]})
     result = graph.get_all("/users", params={"$top": "2"})
     assert [u["id"] for u in result.items] == ["1", "2", "3"]
@@ -63,8 +66,9 @@ def test_get_all_follows_next_links(graph):
 
 @responses.activate
 def test_paging_limit_is_reported_not_silent(graph):
-    responses.get(f"{GRAPH_ROOT}/v1.0/users", json={
-        "value": [{"id": "1"}], "@odata.nextLink": f"{GRAPH_ROOT}/v1.0/users?page=2"})
+    responses.get(
+        f"{GRAPH_ROOT}/v1.0/users", json={"value": [{"id": "1"}], "@odata.nextLink": f"{GRAPH_ROOT}/v1.0/users?page=2"}
+    )
     result = graph.get_all("/users", max_pages=1)
     assert result.truncated is True
     assert len(result.items) == 1
@@ -93,10 +97,17 @@ def test_gives_up_after_max_retries(sleeps):
 
 @responses.activate
 def test_licence_errors_are_typed(graph):
-    responses.get(f"{GRAPH_ROOT}/v1.0/users", status=403, json={"error": {
-        "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant",
-        "message": "Neither tenant is B2C or tenant doesn't have premium license",
-        "innerError": {"request-id": "rid"}}})
+    responses.get(
+        f"{GRAPH_ROOT}/v1.0/users",
+        status=403,
+        json={
+            "error": {
+                "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant",
+                "message": "Neither tenant is B2C or tenant doesn't have premium license",
+                "innerError": {"request-id": "rid"},
+            }
+        },
+    )
     with pytest.raises(LicenseRequired) as exc:
         graph.get("/users")
     assert exc.value.request_id == "rid"
@@ -105,17 +116,28 @@ def test_licence_errors_are_typed(graph):
 @responses.activate
 def test_a_generic_forbidden_that_says_not_licensed_is_a_licence_error(graph):
     # Recorded from the test tenant (Entra ID P1, no P2) for /identityProtection/riskyUsers.
-    responses.get(f"{GRAPH_ROOT}/v1.0/identityProtection/riskyUsers", status=403, json={"error": {
-        "code": "Forbidden", "message": "Your tenant is not licensed for this feature.",
-        "innerError": {"request-id": "rid"}}})
+    responses.get(
+        f"{GRAPH_ROOT}/v1.0/identityProtection/riskyUsers",
+        status=403,
+        json={
+            "error": {
+                "code": "Forbidden",
+                "message": "Your tenant is not licensed for this feature.",
+                "innerError": {"request-id": "rid"},
+            }
+        },
+    )
     with pytest.raises(LicenseRequired):
         graph.get("/identityProtection/riskyUsers")
 
 
 @responses.activate
 def test_permission_errors_are_typed(graph):
-    responses.get(f"{GRAPH_ROOT}/v1.0/users", status=403, json={"error": {
-        "code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{GRAPH_ROOT}/v1.0/users",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     with pytest.raises(PermissionMissing):
         graph.get("/users")
 

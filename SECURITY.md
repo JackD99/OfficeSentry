@@ -11,7 +11,17 @@ Use GitHub's [private vulnerability reporting](https://github.com/JackD99/Office
 3. The likely impact
 4. A suggested fix, if you have one
 
+If the private reporting form isn't available, email hello@officesentry.co.uk
+with "Security" in the subject and no details. We'll reply with a private way
+to send them.
+
 We aim to acknowledge reports within 48 hours and give an initial assessment within 7 days.
+
+## Supported versions
+
+Security fixes go into the latest release only. Run the newest `2.x`
+release (the version is at the foot of the portal's menu and in `/health`);
+older releases and the removed v1 portal get no fixes.
 
 ## Security model
 

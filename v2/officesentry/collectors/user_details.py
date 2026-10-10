@@ -9,10 +9,18 @@ from __future__ import annotations
 
 from .base import Collector, RunContext, register
 
-FIELDS = ("id,department,jobTitle,companyName,officeLocation,city,country,employeeId,employeeType")
+FIELDS = "id,department,jobTitle,companyName,officeLocation,city,country,employeeId,employeeType"
 MANAGER = "manager($select=id,displayName,userPrincipalName,mail,accountEnabled)"
-TEXT_FIELDS = ("department", "jobTitle", "companyName", "officeLocation", "city", "country", "employeeId",
-               "employeeType")
+TEXT_FIELDS = (
+    "department",
+    "jobTitle",
+    "companyName",
+    "officeLocation",
+    "city",
+    "country",
+    "employeeId",
+    "employeeType",
+)
 
 
 def _text(value) -> str | None:
@@ -23,9 +31,13 @@ def _manager(value) -> dict | None:
     if not isinstance(value, dict) or not value.get("id"):
         return None
     kind = (value.get("@odata.type") or "").rsplit(".", 1)[-1] or "user"
-    return {"id": value["id"], "name": _text(value.get("displayName")),
-            "upn": _text(value.get("userPrincipalName")) or _text(value.get("mail")), "type": kind,
-            "enabled": value.get("accountEnabled") if isinstance(value.get("accountEnabled"), bool) else None}
+    return {
+        "id": value["id"],
+        "name": _text(value.get("displayName")),
+        "upn": _text(value.get("userPrincipalName")) or _text(value.get("mail")),
+        "type": kind,
+        "enabled": value.get("accountEnabled") if isinstance(value.get("accountEnabled"), bool) else None,
+    }
 
 
 def summarise(user: dict) -> dict:
@@ -42,8 +54,7 @@ class UserDetails(Collector):
     permissions = ("User.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
-        users = ctx.paged(ctx.graph.get_all("/users", params={"$select": FIELDS, "$expand": MANAGER,
-                                                              "$top": "999"}))
+        users = ctx.paged(ctx.graph.get_all("/users", params={"$select": FIELDS, "$expand": MANAGER, "$top": "999"}))
         rows = [(u["id"], summarise(u)) for u in users if u.get("id")]
         ctx.objects("person", rows)
         data = [r for _, r in rows]

@@ -70,6 +70,18 @@ def figure_columns(rollup) -> set[str]:
 
 
 def register(app) -> None:
-    app.jinja_env.filters.update(ago=ago, when=when, day=day, datefmt=_strftime, capability=capability, money=money,
-                                 fromjson=fromjson, run_error=run_error, plural=plural, figure_columns=figure_columns,
-                                 pdf_cell=pdf_cell, breakable=breakable, subject_label=subject_label)
+    app.jinja_env.filters.update(
+        ago=ago,
+        when=when,
+        day=day,
+        datefmt=_strftime,
+        capability=capability,
+        money=money,
+        fromjson=fromjson,
+        run_error=run_error,
+        plural=plural,
+        figure_columns=figure_columns,
+        pdf_cell=pdf_cell,
+        breakable=breakable,
+        subject_label=subject_label,
+    )

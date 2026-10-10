@@ -21,14 +21,27 @@ from tests.test_collectors import SKUS, USERS, V1, _run, factory  # noqa: F401
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
 NEW_KEYS = ("mfa", "admins", "licences", "inactive", "secure-score")
 
-CARL = {"id": "u6", "displayName": "Carl", "userPrincipalName": "carl@x.com", "userType": "Member",
-        "accountEnabled": True, "createdDateTime": "2025-01-01T00:00:00Z", "assignedLicenses": [{"skuId": "sku-bp"}],
-        "signInActivity": {"lastSignInDateTime": "2026-03-01T00:00:00Z"}}
-BREAKGLASS = {"id": "u4", "displayName": "Breakglass", "userPrincipalName": "bg@x.com", "userType": "Member",
-              "accountEnabled": True, "createdDateTime": "2025-01-01T00:00:00Z", "assignedLicenses": [],
-              "signInActivity": {"lastSignInDateTime": "2026-09-01T00:00:00Z"}}
-NO_P1_SKUS = [dict(SKUS[0], servicePlans=[p for p in SKUS[0]["servicePlans"]
-                                          if p["servicePlanName"] != "AAD_PREMIUM"])]
+CARL = {
+    "id": "u6",
+    "displayName": "Carl",
+    "userPrincipalName": "carl@x.com",
+    "userType": "Member",
+    "accountEnabled": True,
+    "createdDateTime": "2025-01-01T00:00:00Z",
+    "assignedLicenses": [{"skuId": "sku-bp"}],
+    "signInActivity": {"lastSignInDateTime": "2026-03-01T00:00:00Z"},
+}
+BREAKGLASS = {
+    "id": "u4",
+    "displayName": "Breakglass",
+    "userPrincipalName": "bg@x.com",
+    "userType": "Member",
+    "accountEnabled": True,
+    "createdDateTime": "2025-01-01T00:00:00Z",
+    "assignedLicenses": [],
+    "signInActivity": {"lastSignInDateTime": "2026-09-01T00:00:00Z"},
+}
+NO_P1_SKUS = [dict(SKUS[0], servicePlans=[p for p in SKUS[0]["servicePlans"] if p["servicePlanName"] != "AAD_PREMIUM"])]
 
 
 def sections(report):
@@ -40,8 +53,9 @@ def figures(report):
 
 
 def price(db, part, amount):
-    db.execute("INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)",
-               (part, amount, utcnow()))
+    db.execute(
+        "INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)", (part, amount, utcnow())
+    )
 
 
 @pytest.fixture
@@ -99,7 +113,9 @@ def test_empty_registration_report_falls_back_to_per_user_methods(db, two_tenant
     report = build(db, tenant, "mfa", NOW)
     assert not report.notes
     assert {r[0]: r[2] for r in sections(report)["Accounts with a gap"].rows} == {
-        "ann@x.com": "Required, not set up", "carl@x.com": "Required, not set up"}
+        "ann@x.com": "Required, not set up",
+        "carl@x.com": "Required, not set up",
+    }
 
 
 def test_mfa_checks_unavailable_without_registration_data(db, two_tenants):
@@ -139,8 +155,10 @@ def test_mfa_coverage_with_security_defaults(db, two_tenants):
 def test_admins_report_flags_problems_and_finds_break_glass(db, p1_tenant):
     report = build(db, p1_tenant, "admins", NOW)
     s = sections(report)
-    holders = {r[0]: (r, flag) for r, flag in zip(s["Privileged role holders"].rows,
-                                                   s["Privileged role holders"].flags, strict=True)}
+    holders = {
+        r[0]: (r, flag)
+        for r, flag in zip(s["Privileged role holders"].rows, s["Privileged role holders"].flags, strict=True)
+    }
     assert holders["bg@x.com"][1] == "critical" and "No MFA set up" in holders["bg@x.com"][0][8]
     assert holders["g#EXT#@x.com"][1] == "high" and "Guest account" in holders["g#EXT#@x.com"][0][8]
     assert holders["eve@x.com"][0][3] == "Eligible (PIM)"
@@ -160,8 +178,9 @@ def test_admins_report_leaves_out_office_sentrys_own_app(db, p1_tenant):
     sp = db.execute("SELECT client_id FROM app_connections").fetchone()["client_id"]
     run = store.latest_run(db, p1_tenant["id"], "admin_roles")
     unpack(db)
-    db.execute("UPDATE objects SET data = json_set(data, '$.appId', ?) WHERE run_id = ? AND object_id = 'a5'",
-               (sp, run["id"]))
+    db.execute(
+        "UPDATE objects SET data = json_set(data, '$.appId', ?) WHERE run_id = ? AND object_id = 'a5'", (sp, run["id"])
+    )
     rows = sections(build(db, p1_tenant, "admins", NOW))["Privileged role holders"].rows
     assert "Some app" not in [r[0] for r in rows]
 
@@ -192,10 +211,17 @@ def test_licence_waste_without_prices_or_p1(db, free_tenant):
 
 def test_overlapping_licences(db, two_tenants):
     alpha, _ = two_tenants
-    p1 = {"skuId": "sku-p1", "skuPartNumber": "AAD_PREMIUM", "appliesTo": "User", "capabilityStatus": "Enabled",
-          "prepaidUnits": {"enabled": 1}, "consumedUnits": 1,
-          "servicePlans": [{"servicePlanId": "plan-p1", "servicePlanName": "AAD_PREMIUM",
-                            "provisioningStatus": "Success"}]}
+    p1 = {
+        "skuId": "sku-p1",
+        "skuPartNumber": "AAD_PREMIUM",
+        "appliesTo": "User",
+        "capabilityStatus": "Enabled",
+        "prepaidUnits": {"enabled": 1},
+        "consumedUnits": 1,
+        "servicePlans": [
+            {"servicePlanId": "plan-p1", "servicePlanName": "AAD_PREMIUM", "provisioningStatus": "Success"}
+        ],
+    }
     bp = dict(SKUS[0], servicePlans=[dict(p, servicePlanId=f"plan-{i}") for i, p in enumerate(SKUS[0]["servicePlans"])])
     bp["servicePlans"][0]["servicePlanId"] = "plan-p1"
     users = [dict(USERS[0], assignedLicenses=[{"skuId": "sku-bp"}, {"skuId": "sku-p1"}])]
@@ -220,8 +246,7 @@ def test_inactive_accounts(db, p1_tenant):
 
 def test_inactive_never_signed_in_wording(db, two_tenants):
     alpha, _ = two_tenants
-    new = dict(CARL, id="u7", userPrincipalName="new@x.com", createdDateTime="2026-08-01T00:00:00Z",
-               signInActivity={})
+    new = dict(CARL, id="u7", userPrincipalName="new@x.com", createdDateTime="2026-08-01T00:00:00Z", signInActivity={})
     seed_tenant(db, alpha, users=USERS + [new])
     rows = sections(build(db, store.get_tenant(db, alpha), "inactive", NOW))["Inactive members"].rows
     assert rows[0][1] == "Never signed in (created 62 days ago)" and rows[0][2] == "Never"
@@ -245,8 +270,17 @@ def test_secure_score_trend_and_control_changes(db, p1_tenant):
     assert changes.rows[0][0] == "Enable Conditional Access policies to block legacy authentication"
     assert changes.rows[0][4] == "-4" and changes.flags[0] == "medium"
     assert changes.rows[1][4] == "+5"
-    assert s["Where the points are"].rows == [["Enable Conditional Access policies to block legacy authentication",
-                                               "Identity", 4, 8, 4, "Moderate", "Moderate"]]
+    assert s["Where the points are"].rows == [
+        [
+            "Enable Conditional Access policies to block legacy authentication",
+            "Identity",
+            4,
+            8,
+            4,
+            "Moderate",
+            "Moderate",
+        ]
+    ]
     assert [r[0] for r in s["Month by month"].rows] == ["October 2026 (so far)", "September 2026", "August 2026"]
     f = figures(report)
     assert f["Secure Score"] == "42%" and f["Change in 30 days"] == "+7%" and f["Points available"] == "4"
@@ -257,8 +291,11 @@ def test_secure_score_trend_and_control_changes(db, p1_tenant):
 def test_secure_score_without_control_profiles(db, two_tenants, factory):  # noqa: F811
     alpha, _ = two_tenants
     responses.get(f"{V1}/security/secureScores", json={"value": gd.SECURE_SCORES_HISTORY})
-    responses.get(f"{V1}/security/secureScoreControlProfiles", status=403,
-                  json={"error": {"code": "Authorization_RequestDenied", "message": "Denied"}})
+    responses.get(
+        f"{V1}/security/secureScoreControlProfiles",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Denied"}},
+    )
     run_id, status = _run(db, alpha, "secure_score", factory)
     assert status == "succeeded"
     assert len(store.run_objects(db, run_id, "secure_score_control_past")) == 2
@@ -317,7 +354,7 @@ def test_identity_report_pages_and_xlsx(client, db, p1_tenant, two_tenants):
         wb = load_workbook(BytesIO(resp.data))
         assert wb.sheetnames[0] == "Summary", key
     page = client.get(f"/tenants/{p1_tenant['id']}/data/secure-score").get_data(as_text=True)
-    assert "<svg class=\"chart\"" in page and "Month by month" in page
+    assert '<svg class="chart"' in page and "Month by month" in page
     for key in NEW_KEYS:
         report = build(db, store.get_tenant(db, bravo), key, NOW)
         assert report.unavailable, key  # never collected
@@ -337,12 +374,24 @@ def test_break_glass_needs_more_than_one_exclusion(db, two_tenants):
     """An admin excluded from the all-users policy but covered by an admin policy isn't a break-glass account;
     an account named like one but without Global Administrator is called out."""
     alpha, _ = two_tenants
-    everyone = dict(gd.CA_MFA_ALL, conditions={"users": {"includeUsers": ["All"], "excludeUsers": ["u1", "u4"]},
-                                               "applications": {"includeApplications": ["All"]},
-                                               "clientAppTypes": ["all"]})
-    admins_policy = dict(gd.CA_MFA_ALL, id="ca9", displayName="Admins MFA",
-                         conditions={"users": {"includeUsers": ["u1"]},
-                                     "applications": {"includeApplications": ["All"]}, "clientAppTypes": ["all"]})
+    everyone = dict(
+        gd.CA_MFA_ALL,
+        conditions={
+            "users": {"includeUsers": ["All"], "excludeUsers": ["u1", "u4"]},
+            "applications": {"includeApplications": ["All"]},
+            "clientAppTypes": ["all"],
+        },
+    )
+    admins_policy = dict(
+        gd.CA_MFA_ALL,
+        id="ca9",
+        displayName="Admins MFA",
+        conditions={
+            "users": {"includeUsers": ["u1"]},
+            "applications": {"includeApplications": ["All"]},
+            "clientAppTypes": ["all"],
+        },
+    )
     emergency = dict(CARL, id="u8", displayName="Emergency access", userPrincipalName="emergency@x.com")
     seed_tenant(db, alpha, users=USERS + [BREAKGLASS, emergency], ca=[everyone, admins_policy])
     glass = sections(build(db, store.get_tenant(db, alpha), "admins", NOW))["Break-glass accounts"]
