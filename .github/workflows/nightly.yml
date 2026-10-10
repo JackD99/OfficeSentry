@@ -1,0 +1,180 @@
+name: nightly
+# The slow checks that don't fit on every pull request (v2/tests/nightly/README.md):
+#   1. every release's database upgrades to this code, and every page then opens;
+#   2. the example PDFs look as they did (each page compared with v2/tests/nightly/pdf_baselines);
+#   3. 200 tenants: building the scale database, and the busiest pages, stay within their time budgets.
+# A failure on main opens an issue labelled "nightly" (or updates the open one), which notifies Jack and closes
+# by itself when a run passes again. The run's page shows the timings either way.
+#
+# Minutes: one job of about 5. GitHub Free gives a private repository 2,000 a month, so the schedule runs it
+# on Mondays only until the repository variable SCHEDULED_CHECKS_NIGHTLY is "true" (set it when the repo goes
+# public and standard runners are free); then every night. Run it by hand any time: Actions > nightly > Run
+# workflow. Pull requests that change the suite or how PDFs are drawn run it too, so baselines are refreshed
+# in the same pull request: Run workflow on the branch with "Save new PDF baselines" ticked commits them.
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+    - cron: '23 3 * * 0,2-6'  # only with SCHEDULED_CHECKS_NIGHTLY
+  workflow_dispatch:
+    inputs:
+      update:
+        description: 'Save new PDF baselines and commit them to this branch'
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - '.github/workflows/nightly.yml'
+      - '.github/scripts/scheduled_issue.sh'
+      - 'v2/tests/nightly/**'
+      - 'v2/scripts/demo_data.py'
+      - 'v2/scripts/scale_data.py'
+      - 'v2/scripts/screenshots.py'
+      - 'v2/officesentry/web/templates/reports/**'
+      - 'v2/officesentry/web/static/report.css'
+      - 'v2/officesentry/web/static/tokens.css'
+      - 'v2/officesentry/reports/charts.py'
+
+permissions: {}
+
+concurrency:
+  group: nightly-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+    working-directory: v2
+
+jobs:
+  suite:
+    if: >-
+      !inputs.update && (github.event_name != 'schedule' || github.event.schedule == '23 3 * * 1'
+      || vars.SCHEDULED_CHECKS_NIGHTLY == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write  # the "nightly" issue
+    env:
+      PYTEST: python -m pytest --nightly -p no:cacheprovider -rf
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Fetch the release tags (just their commits)
+        run: git fetch --no-tags --depth=1 origin '+refs/tags/v2*:refs/tags/v2*'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: v2/requirements-dev.txt
+      - name: Install Pango and HarfBuzz (as in the Docker image) and pdftoppm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
+            fonts-dejavu-core poppler-utils
+      - name: Install from the lock files
+        run: |
+          pip install --require-hashes --no-deps -r requirements-dev.txt -r tests/nightly/requirements.txt
+          pip install --no-deps --no-build-isolation -e .
+          echo "NIGHTLY_SUMMARY=$RUNNER_TEMP/summary.md" >> "$GITHUB_ENV"
+      - name: Every release upgrades, and every page opens
+        id: upgrades
+        continue-on-error: true
+        run: $PYTEST tests/nightly/test_upgrades.py | tee -a "$RUNNER_TEMP/pytest.log"
+      - name: The example PDFs look as they did
+        id: pdfs
+        continue-on-error: true
+        run: $PYTEST tests/nightly/test_pdf_snapshots.py | tee -a "$RUNNER_TEMP/pytest.log"
+      - name: 200 tenants stay fast
+        id: scale
+        continue-on-error: true
+        run: $PYTEST tests/nightly/test_scale.py | tee -a "$RUNNER_TEMP/pytest.log"
+      - name: Keep the changed PDF pages for three days
+        if: steps.pdfs.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: pdf-pages
+          path: v2/tests/nightly/output/
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Summary
+        id: verdict
+        if: always()
+        env:
+          OUTCOMES: ${{ steps.upgrades.outcome }} ${{ steps.pdfs.outcome }} ${{ steps.scale.outcome }}
+        run: |
+          [ -f "$NIGHTLY_SUMMARY" ] && cat "$NIGHTLY_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          if [[ " $OUTCOMES " != *" failure "* && " $OUTCOMES " != *" cancelled "* ]]; then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "failed=true" >> "$GITHUB_OUTPUT"
+          # The issue: which checks failed (compared from night to night), then the details.
+          {
+            echo "**The nightly suite failed.** These checks didn't pass:"
+            echo
+            grep -E '^(FAILED|ERROR) ' "$RUNNER_TEMP/pytest.log" | sed -E 's/ - .*//; s/^(FAILED|ERROR) /- `/; s/$/`/' || echo "- a step stopped before its tests ran"
+            echo
+            echo "<!-- details -->"
+            echo "### Details"
+            echo
+            grep -E '^(FAILED|ERROR) ' "$RUNNER_TEMP/pytest.log" | cut -c1-600 | sed 's/^/    /' || true
+            echo
+            [ -f "$NIGHTLY_SUMMARY" ] && cat "$NIGHTLY_SUMMARY"
+            echo "### What to do"
+            echo
+            echo "- **Upgrade or page error:** run \`pytest tests/nightly/test_upgrades.py --nightly\` in \`v2/\` to see it, and fix the migration or page."
+            echo "- **PDF looks different:** the run's **pdf-pages** download has each changed page, its baseline and the difference in red. If the change was meant, run this workflow on the branch with *Save new PDF baselines* ticked."
+            echo "- **Over a time budget:** find what made the page slower; if it's meant, raise its budget in \`tests/nightly/test_scale.py\`."
+          } > "$RUNNER_TEMP/issue.md"
+      - name: Open or update the issue
+        if: always() && steps.verdict.outputs.failed == 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/scheduled_issue.sh fail nightly "Nightly suite failed" "$RUNNER_TEMP/issue.md"
+      - name: Close the issue
+        if: steps.verdict.outputs.failed == 'false' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/scheduled_issue.sh pass nightly
+      - name: Fail the run too
+        if: always() && steps.verdict.outputs.failed == 'true'
+        run: exit 1
+
+  update:
+    # Actions > nightly > Run workflow on a branch, with "Save new PDF baselines": draws the PDFs and commits
+    # their pages to that branch. Look at the new images in the pull request before merging.
+    if: ${{ inputs.update }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write  # commits the new baselines to the branch it ran on
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: v2/requirements-dev.txt
+      - name: Install Pango and HarfBuzz (as in the Docker image) and pdftoppm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
+            fonts-dejavu-core poppler-utils
+      - name: Install from the lock files
+        run: |
+          pip install --require-hashes --no-deps -r requirements-dev.txt -r tests/nightly/requirements.txt
+          pip install --no-deps --no-build-isolation -e .
+      - name: Save new PDF baselines
+        run: python -m pytest tests/nightly/test_pdf_snapshots.py --nightly --update -p no:cacheprovider
+      - name: Commit them
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/nightly/pdf_baselines
+          if git diff --cached --quiet; then echo "The baselines already match."; exit 0; fi
+          git commit -m "Update PDF baselines"
+          git push origin "HEAD:$BRANCH"
