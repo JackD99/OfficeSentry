@@ -35,6 +35,8 @@ def raw_log():
         "faxNumber": "(212) 555-7788",
         "otherPhones": [],
         "jobTitle": None,
+        "onPremisesSecurityIdentifier": "S-1-5-21-1514539094-1088041144-2428767999-1129",
+        "onPremisesImmutableId": "OKQ4SPFIsESXgoBAjSK8kg==",
     }
     return [
         _graph(
@@ -136,7 +138,7 @@ def raw_log():
             "api": "dns",
             "name": "contoso.com",
             "rdtype": "TXT",
-            "answer": ["v=spf1 include:spf.protection.outlook.com -all", "MS=ms12345678"],
+            "answer": ["v=spf1 include:spf.protection.outlook.com include:spf.sendgrid.net -all", "MS=ms12345678"],
         },
     ]
 
@@ -162,6 +164,9 @@ SENSITIVE = [
     "Ayrshire",
     "55.611",
     "4.495",
+    "sendgrid",
+    "1514539094",
+    "OKQ4SPFIsESXgoBAjSK8kg",
 ]
 
 
@@ -249,7 +254,17 @@ def test_committed_fixture_has_no_sign_in_places():
 def test_personal_onedrive_urls_and_dns_tokens(fixture):
     site = fixture["entries"][6]["body"]["value"][0]["webUrl"]
     assert "/personal/user1_sentrytest_example/" in site
-    assert fixture["entries"][-1]["answer"] == ["v=spf1 include:spf.protection.outlook.com -all"]
+    assert fixture["entries"][-1]["answer"] == [
+        "v=spf1 include:spf.protection.outlook.com include:spf1.mail-provider.example -all"
+    ]
+
+
+def test_on_premises_ids_are_replaced_consistently(fixture):
+    users = fixture["entries"][1]["body"]["value"][0]
+    principal = fixture["entries"][5]["body"]["value"][0]["principal"]
+    assert users["onPremisesSecurityIdentifier"] == "S-1-5-21-1000000000-2000000000-3000000001-1129"
+    assert principal["onPremisesSecurityIdentifier"] == users["onPremisesSecurityIdentifier"]
+    assert users["onPremisesImmutableId"] == principal["onPremisesImmutableId"] != "OKQ4SPFIsESXgoBAjSK8kg=="
 
 
 def test_sharepoint_drive_ids_have_their_guids_replaced():

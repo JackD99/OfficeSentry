@@ -93,6 +93,13 @@ TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z")
 # so only values under these keys are replaced, with documentation addresses.
 IP_KEYS = {"ipaddress", "clientip", "clientipaddress"}
 IP = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:]+")
+# On-premises security identifiers: the domain part (S-1-5-21- and three numbers) is the customer's own AD domain.
+SID = re.compile(r"(?<=S-1-5-21-)(\d+-\d+-\d+)(?=-\d+)")
+# A synced account's anchor: its on-premises object GUID in base64.
+ANCHOR_KEYS = {"onpremisesimmutableid", "immutableid"}
+# SPF includes for Microsoft's own senders are kept; any other names the provider the tenant sends mail through.
+SPF_INCLUDE = re.compile(r"(?<=include:)[^\s]+", re.I)
+MICROSOFT_SPF = ("protection.outlook.com", "outlook.com", "microsoft.com")
 
 
 def request_key(url: str) -> tuple[str, list[tuple[str, str]]]:
@@ -174,6 +181,8 @@ class Scrubber:
         self.drive_ids: set[str] = set()
         self.outlook_ids: dict[str, str] = {}
         self.places: dict[str, str] = {}
+        self.sids: dict[str, str] = {}
+        self.anchors: dict[str, str] = {}
 
     def place(self, value: dict) -> dict:
         """A sign-in's town, region and map position together say where someone was, so the town and
@@ -188,6 +197,25 @@ class Scrubber:
         if isinstance(value.get("geoCoordinates"), dict):
             out["geoCoordinates"] = dict.fromkeys(value["geoCoordinates"])
         return out
+
+    def sid(self, match: re.Match) -> str:
+        """The same domain part for every SID of one AD domain; the account's own number (RID) stays."""
+        real = match.group(1)
+        if real not in self.sids:
+            n = len(self.sids) + 1
+            self.sids[real] = f"1000000000-2000000000-{3000000000 + n}"
+        return self.sids[real]
+
+    def anchor(self, value: str) -> str:
+        """An on-premises object GUID (base64) replaced like any other GUID, so it stays the same everywhere."""
+        if value not in self.anchors:
+            try:
+                raw = base64.b64decode(value, validate=True)
+                fake = uuid.UUID(self.guid(str(uuid.UUID(bytes_le=raw)))).bytes_le
+                self.anchors[value] = base64.b64encode(fake).decode()
+            except ValueError:
+                self.anchors[value] = "redacted"
+        return self.anchors[value]
 
     def phone(self, value: str) -> str:
         key = re.sub(r"\D", "", value)
@@ -268,6 +296,7 @@ class Scrubber:
         value = DRIVE_ID.sub(self.drive_id, value)
         value = OUTLOOK_ID.sub(self.outlook_id, value)
         value = GUID.sub(lambda m: self.guid(m.group(0)), value)
+        value = SID.sub(self.sid, value)
         if value.startswith("https://"):
             # Request and paging URLs carry IDs and domains, not names; a person called "admin"
             # mustn't rewrite /admin/sharepoint/settings.
@@ -297,6 +326,8 @@ class Scrubber:
             return "redacted"
         if key.lower() in REDACTED_KEYS and isinstance(value, str) and value:
             return "redacted"
+        if key.lower() in ANCHOR_KEYS and isinstance(value, str) and value:
+            return self.anchor(value)
         if key.lower() in PHONE_KEYS and isinstance(value, str | list):
             # A phone field is replaced whatever its format; True/False flags under the same names stay.
             if isinstance(value, str):
@@ -393,6 +424,22 @@ def _collect_names(log: list) -> tuple[list[str], dict[str, str], set[str]]:
     return domains, names, personal
 
 
+def _collect_spf(log: list) -> dict[str, str]:
+    """Mail providers the tenant's SPF records include (Microsoft's aside) -> placeholder domains, so the
+    record keeps its shape (and the includes still resolve in the replay) without saying who sends its mail."""
+    out: dict[str, str] = {}
+    for e in log:
+        if e["api"] != "dns" or e["rdtype"] != "TXT":
+            continue
+        for answer in e["answer"]:
+            if not answer.lower().startswith("v=spf1"):
+                continue
+            for domain in SPF_INCLUDE.findall(answer):
+                if not domain.lower().endswith(MICROSOFT_SPF) and domain not in out:
+                    out[domain] = f"spf{len(out) + 1}.mail-provider.example"
+    return out
+
+
 def _collect_ips(log: list) -> dict[str, str]:
     """Real IP address -> a documentation address (203.0.113.0/24, 2001:db8::/32)."""
     ips: dict[str, str] = {}
@@ -408,7 +455,8 @@ def _collect_ips(log: list) -> dict[str, str]:
 def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     domains, names, personal = _collect_names(log)
     ips = _collect_ips(log)
-    s = Scrubber(tenant_id, domains, {**names, **ips})
+    spf = _collect_spf(log)
+    s = Scrubber(tenant_id, domains, {**names, **ips, **spf})
     entries = []
     for e in log:
         if e["api"] == "dns":
@@ -440,7 +488,19 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     leaks = find_leaks(text, [*names, *personal, *s.places])
     leaks += find_leaks(
         json.dumps(fixture),
-        [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites, *s.drive_ids, *s.outlook_ids],
+        [
+            tenant_id,
+            client_id,
+            *domains,
+            *s.emails,
+            *ips,
+            *s.personal_sites,
+            *s.drive_ids,
+            *s.outlook_ids,
+            *spf,
+            *s.sids,
+            *s.anchors,
+        ],
     )
     leaks += phone_leaks(fixture)
     if leaks:
