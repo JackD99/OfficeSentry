@@ -77,8 +77,9 @@ def test_client_cannot_trigger_collection(client, db, two_tenants):
 
 
 @pytest.mark.parametrize("role", ["analyst", "client"])
-@pytest.mark.parametrize("url", ["/admin/users", "/admin/connections", "/tenants/new",
-                                 "/admin/connections/1/certificate.cer"])
+@pytest.mark.parametrize(
+    "url", ["/admin/users", "/admin/connections", "/tenants/new", "/admin/connections/1/certificate.cer"]
+)
 def test_admin_pages_forbidden_to_others(client, db, connection_id, role, url):
     make_user(db, "someone", role=role, all_tenants=True)
     login(client, "someone")

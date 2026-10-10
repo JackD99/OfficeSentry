@@ -112,8 +112,16 @@ def connection_expiry(c, now: datetime | None = None) -> Expiry | None:
     days = days_left(c["not_after"], now)
     if days is None:
         return None
-    return Expiry("connection", c["id"], c["name"], c["thumbprint"], c["not_after"], days, level(days),
-                  replacing=bool(c["next_thumbprint"]))
+    return Expiry(
+        "connection",
+        c["id"],
+        c["name"],
+        c["thumbprint"],
+        c["not_after"],
+        days,
+        level(days),
+        replacing=bool(c["next_thumbprint"]),
+    )
 
 
 def mail_expiry(settings: dict, now: datetime | None = None) -> Expiry | None:
@@ -123,8 +131,15 @@ def mail_expiry(settings: dict, now: datetime | None = None) -> Expiry | None:
     days = days_left(settings.get("graph_cert_not_after"), now)
     if days is None:
         return None
-    return Expiry("mail", None, "Office Sentry mail", settings.get("graph_thumbprint") or "",
-                  settings["graph_cert_not_after"], days, level(days))
+    return Expiry(
+        "mail",
+        None,
+        "Office Sentry mail",
+        settings.get("graph_thumbprint") or "",
+        settings["graph_cert_not_after"],
+        days,
+        level(days),
+    )
 
 
 def expiring(conn, now: datetime | None = None) -> list[Expiry]:
@@ -151,14 +166,21 @@ def start(conn, vault, conn_id: int, user: str) -> GeneratedCert:
     """Make a replacement certificate for the connection. Collection keeps using the current one."""
     c = _connection(conn, conn_id)
     if c["next_thumbprint"]:
-        raise RolloverError("A replacement certificate is already waiting. Finish switching to it, or cancel it "
-                            "first.")
+        raise RolloverError("A replacement certificate is already waiting. Finish switching to it, or cancel it first.")
     cert = generate_certificate(f"Office Sentry - {c['name']}"[:64])
     with transaction(conn):
-        conn.execute("UPDATE app_connections SET next_cert_pem = ?, next_key_enc = ?, next_thumbprint = ?,"
-                     " next_not_after = ?, next_created_at = ?, next_checked_at = NULL WHERE id = ?",
-                     (cert.cert_pem, vault.encrypt(cert.key_pem), cert.thumbprint,
-                      cert.not_after.strftime(ISO), utcnow(), conn_id))
+        conn.execute(
+            "UPDATE app_connections SET next_cert_pem = ?, next_key_enc = ?, next_thumbprint = ?,"
+            " next_not_after = ?, next_created_at = ?, next_checked_at = NULL WHERE id = ?",
+            (
+                cert.cert_pem,
+                vault.encrypt(cert.key_pem),
+                cert.thumbprint,
+                cert.not_after.strftime(ISO),
+                utcnow(),
+                conn_id,
+            ),
+        )
         audit(conn, user, "certificate_rollover_started", detail=f"{c['name']}: new {cert.thumbprint}")
     return cert
 
@@ -177,12 +199,15 @@ def test(conn, vault, conn_id: int, tenant_ref: str, user: str):
         raise RolloverError("There's no replacement certificate to test. Start replacing the certificate first.")
     if not c["client_id"]:
         raise RolloverError("Save the app's client ID first.")
-    result = check(tenant_ref, c["client_id"], vault.decrypt(c["next_key_enc"]), c["next_thumbprint"],
-                   clouds.of(c).key)
+    result = check(tenant_ref, c["client_id"], vault.decrypt(c["next_key_enc"]), c["next_thumbprint"], clouds.of(c).key)
     if result.ok:
         conn.execute("UPDATE app_connections SET next_checked_at = ? WHERE id = ?", (utcnow(), conn_id))
-    audit(conn, user, "certificate_rollover_tested",
-          detail=f"{c['name']}: {c['next_thumbprint']} {'worked' if result.ok else 'failed'}")
+    audit(
+        conn,
+        user,
+        "certificate_rollover_tested",
+        detail=f"{c['name']}: {c['next_thumbprint']} {'worked' if result.ok else 'failed'}",
+    )
     return result
 
 
@@ -192,17 +217,19 @@ def switch(conn, conn_id: int, user: str) -> None:
     if not c["next_thumbprint"]:
         raise RolloverError("There's no replacement certificate to switch to.")
     if not c["next_checked_at"]:
-        raise RolloverError("Test the new certificate first, so collection doesn't stop if it isn't on the app "
-                            "registration yet.")
+        raise RolloverError(
+            "Test the new certificate first, so collection doesn't stop if it isn't on the app registration yet."
+        )
     with transaction(conn):
         conn.execute(
             "UPDATE app_connections SET old_thumbprint = thumbprint, old_not_after = not_after, switched_at = ?,"
             " cert_pem = next_cert_pem, key_enc = next_key_enc, thumbprint = next_thumbprint,"
             " not_after = next_not_after, expiry_warned = NULL, next_cert_pem = NULL, next_key_enc = NULL,"
             " next_thumbprint = NULL, next_not_after = NULL, next_created_at = NULL, next_checked_at = NULL"
-            " WHERE id = ?", (utcnow(), conn_id))
-        audit(conn, user, "certificate_switched",
-              detail=f"{c['name']}: {c['thumbprint']} -> {c['next_thumbprint']}")
+            " WHERE id = ?",
+            (utcnow(), conn_id),
+        )
+        audit(conn, user, "certificate_switched", detail=f"{c['name']}: {c['thumbprint']} -> {c['next_thumbprint']}")
 
 
 def cancel(conn, conn_id: int, user: str) -> None:
@@ -211,9 +238,11 @@ def cancel(conn, conn_id: int, user: str) -> None:
     if not c["next_thumbprint"]:
         return
     with transaction(conn):
-        conn.execute("UPDATE app_connections SET next_cert_pem = NULL, next_key_enc = NULL, next_thumbprint = NULL,"
-                     " next_not_after = NULL, next_created_at = NULL, next_checked_at = NULL WHERE id = ?",
-                     (conn_id,))
+        conn.execute(
+            "UPDATE app_connections SET next_cert_pem = NULL, next_key_enc = NULL, next_thumbprint = NULL,"
+            " next_not_after = NULL, next_created_at = NULL, next_checked_at = NULL WHERE id = ?",
+            (conn_id,),
+        )
         audit(conn, user, "certificate_rollover_cancelled", detail=f"{c['name']}: {c['next_thumbprint']}")
 
 
@@ -223,15 +252,17 @@ def forget_old(conn, conn_id: int, user: str) -> None:
     if not c["old_thumbprint"]:
         return
     with transaction(conn):
-        conn.execute("UPDATE app_connections SET old_thumbprint = NULL, old_not_after = NULL WHERE id = ?",
-                     (conn_id,))
+        conn.execute("UPDATE app_connections SET old_thumbprint = NULL, old_not_after = NULL WHERE id = ?", (conn_id,))
         audit(conn, user, "certificate_old_removed", detail=f"{c['name']}: {c['old_thumbprint']}")
 
 
 def test_tenant(conn, conn_id: int) -> str | None:
     """A client tenant to test a replacement against: one on this connection that has consented."""
-    row = conn.execute("SELECT tenant_ref FROM tenants WHERE connection_id = ? AND consented_at IS NOT NULL"
-                       " AND archived_at IS NULL ORDER BY enabled DESC, id LIMIT 1", (conn_id,)).fetchone()
+    row = conn.execute(
+        "SELECT tenant_ref FROM tenants WHERE connection_id = ? AND consented_at IS NOT NULL"
+        " AND archived_at IS NULL ORDER BY enabled DESC, id LIMIT 1",
+        (conn_id,),
+    ).fetchone()
     return row["tenant_ref"] if row else None
 
 
@@ -251,18 +282,25 @@ def _mark_warned(conn, e: Expiry) -> None:
     if e.kind == "connection":
         conn.execute("UPDATE app_connections SET expiry_warned = ? WHERE id = ?", (e.level, e.id))
     else:
-        conn.execute("INSERT INTO settings (key, value) VALUES ('graph_cert_warned', ?)"
-                     " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (f"{e.thumbprint}:{e.level}",))
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('graph_cert_warned', ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (f"{e.thumbprint}:{e.level}",),
+        )
 
 
 def fix_steps(e: Expiry) -> str:
     if e.kind == "mail":
-        return ("Open Settings → Email delivery in Office Sentry, make a new certificate, upload its .cer to the "
-                "mail app in Entra and send a test.")
+        return (
+            "Open Settings → Email delivery in Office Sentry, make a new certificate, upload its .cer to the "
+            "mail app in Entra and send a test."
+        )
     if e.replacing:
-        return ("A replacement is ready. Open App connection in Office Sentry, test it and switch to it.")
-    return ("Open App connection in Office Sentry and press Replace certificate. It walks you through adding the "
-            "new one in Entra and switching over without a gap.")
+        return "A replacement is ready. Open App connection in Office Sentry, test it and switch to it."
+    return (
+        "Open App connection in Office Sentry and press Replace certificate. It walks you through adding the "
+        "new one in Entra and switching over without a gap."
+    )
 
 
 def _href(base_url: str, e: Expiry) -> str:
@@ -271,10 +309,21 @@ def _href(base_url: str, e: Expiry) -> str:
 
 def _message(base_url: str, e: Expiry) -> alerts.Message:
     return alerts.Message(
-        event="certificate.expiry", title=e.headline, link=_href(base_url, e),
+        event="certificate.expiry",
+        title=e.headline,
+        link=_href(base_url, e),
         text=f"{e.consequence} {fix_steps(e)}",
-        extra={"certificate": {"kind": e.kind, "name": e.name, "thumbprint": e.thumbprint,
-                               "not_after": e.not_after, "days_left": e.days, "level": e.level}})
+        extra={
+            "certificate": {
+                "kind": e.kind,
+                "name": e.name,
+                "thumbprint": e.thumbprint,
+                "not_after": e.not_after,
+                "days_left": e.days,
+                "level": e.level,
+            }
+        },
+    )
 
 
 def _email(app, conn, vault, e: Expiry) -> str | None:
@@ -289,16 +338,21 @@ def _email(app, conn, vault, e: Expiry) -> str | None:
     look, inline = delivery.email_brand(conn)
     href = _href(app.extensions["officesentry.config"].base_url, e)
     subject = f"Action needed: {e.headline.rstrip('.')}"
-    html = delivery.render(app, "emails/certificate.html", subject=subject, e=e, steps=fix_steps(e), href=href,
-                           **look)
-    email = mailer.Email(to=team, subject=subject, html=html, inline=inline,
-                         text=f"{e.headline}\n\n{e.consequence}\n\n{fix_steps(e)}\n\n{href}")
+    html = delivery.render(app, "emails/certificate.html", subject=subject, e=e, steps=fix_steps(e), href=href, **look)
+    email = mailer.Email(
+        to=team,
+        subject=subject,
+        html=html,
+        inline=inline,
+        text=f"{e.headline}\n\n{e.consequence}\n\n{fix_steps(e)}\n\n{href}",
+    )
     try:
         used, error = mailer.send(conn, vault, email), None
     except mailer.MailError as exc:
         used, error = None, str(exc)
-    delivery.record(conn, kind="alert", email=email, subject=subject, error=error, transport=used,
-                    trigger="schedule", user=None)
+    delivery.record(
+        conn, kind="alert", email=email, subject=subject, error=error, transport=used, trigger="schedule", user=None
+    )
     return error
 
 
@@ -315,9 +369,14 @@ def warn(app, conn, vault, base_url: str, now: datetime | None = None) -> int:
         if s.get("alerts.enabled") == "1" and s.get("alerts.url_enc"):
             hooked = alerts._deliver(conn, alerts.Alerting(base_url, vault, app), s, _message(base_url, e))
         _mark_warned(conn, e)
-        audit(conn, None, "certificate_expiry_warned",
-              detail=f"{e.name} {e.thumbprint}: {e.level}" + (f"; email failed: {error}"[:300] if error else "")
-              + ("" if hooked is None else f"; webhook {'sent' if hooked else 'failed'}"))
+        audit(
+            conn,
+            None,
+            "certificate_expiry_warned",
+            detail=f"{e.name} {e.thumbprint}: {e.level}"
+            + (f"; email failed: {error}"[:300] if error else "")
+            + ("" if hooked is None else f"; webhook {'sent' if hooked else 'failed'}"),
+        )
         sent += 1
     return sent
 

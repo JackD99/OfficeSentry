@@ -64,15 +64,15 @@ def first_seen(snap: TenantSnapshot, now: datetime) -> dict[str, str]:
     runs = snap.conn.execute(
         "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = 'auto_replies'"
         " AND status IN ('succeeded', 'partial') AND finished_at <= ? ORDER BY finished_at DESC, id DESC",
-        (snap.tenant["id"], cutoff)).fetchall()
+        (snap.tenant["id"], cutoff),
+    ).fetchall()
     seen: dict[str, str] = {}
     open_: set[str] | None = None  # mailboxes still sending in every run read so far
     for run in runs:
         rows = store.run_objects(snap.conn, run["id"], "auto_reply")
         if not rows:
             break  # pruned, or nothing on: the run stops here either way
-        sending = {_text(r.get("mailboxId")) for r in rows
-                   if _sending(state(r, parse_ts(run["finished_at"]) or now))}
+        sending = {_text(r.get("mailboxId")) for r in rows if _sending(state(r, parse_ts(run["finished_at"]) or now))}
         open_ = sending if open_ is None else open_ & sending
         if not open_:
             break
@@ -103,9 +103,22 @@ def auto_replies_report(snap: TenantSnapshot, now: datetime, out: DataReport) ->
     users = {u["_id"]: u for u in snap.objects("users", "user") or []}
     seen = first_seen(snap, now)
 
-    every = Section(EVERY, ["Mailbox", "Type", "State", "From", "Until", "Replies outside the organisation",
-                            "First seen on", "Account", "Reply to colleagues", "Reply to outside senders"],
-                    empty="No mailbox has an automatic reply on or scheduled.")
+    every = Section(
+        EVERY,
+        [
+            "Mailbox",
+            "Type",
+            "State",
+            "From",
+            "Until",
+            "Replies outside the organisation",
+            "First seen on",
+            "Account",
+            "Reply to colleagues",
+            "Reply to outside senders",
+        ],
+        empty="No mailbox has an automatic reply on or scheduled.",
+    )
     sending = outside = forgotten = upcoming = 0
     entries = []
     for r in rows:
@@ -127,35 +140,63 @@ def auto_replies_report(snap: TenantSnapshot, now: datetime, out: DataReport) ->
             flag = "medium"
         start, end = (_at(r.get(k)) for k in ("start", "end"))
         status = _text(r.get("status"))
-        entries.append(((flag is None, not is_on, _text(r.get("mailbox")).lower()), [
-            r.get("mailbox"), _type(r.get("mailboxType")), current,
-            start.date().isoformat() if start and status == "scheduled" else "",
-            end.date().isoformat() if end and status == "scheduled" else "",
-            audience if is_on or current == UPCOMING else "", since,
-            "Not found in the directory" if user is None else (
-                "Active" if user.get("accountEnabled") is not False else "Sign-in blocked"),
-            _text(r.get("internalText")), _text(r.get("externalText")) if audience != "No" else ""], flag))
+        entries.append(
+            (
+                (flag is None, not is_on, _text(r.get("mailbox")).lower()),
+                [
+                    r.get("mailbox"),
+                    _type(r.get("mailboxType")),
+                    current,
+                    start.date().isoformat() if start and status == "scheduled" else "",
+                    end.date().isoformat() if end and status == "scheduled" else "",
+                    audience if is_on or current == UPCOMING else "",
+                    since,
+                    "Not found in the directory"
+                    if user is None
+                    else ("Active" if user.get("accountEnabled") is not False else "Sign-in blocked"),
+                    _text(r.get("internalText")),
+                    _text(r.get("externalText")) if audience != "No" else "",
+                ],
+                flag,
+            )
+        )
     for _, row, flag in sorted(entries, key=lambda e: e[0]):
         every.add(row, flag)
 
     checked = snap.metric("mail.auto_reply_mailboxes_checked")
-    every.intro = (f"{plural(sending, 'mailbox')} {verb(sending, 'is', 'are')} answering mail with an automatic "
-                   f"reply now, {outside} of them to people outside the organisation too."
-                   + (f" Checked {plural(int(checked), 'mailbox')}." if checked else "")
-                   + f" Replies on for over {FORGOTTEN_DAYS} days on an active account are flagged: they're "
-                   "often left on after someone is back. Turn one off in Outlook (Settings > Mail > Automatic "
-                   "replies) or, as an admin, in the Exchange admin centre (Recipients > Mailboxes > the mailbox > "
-                   "Others > Automatic replies).")
+    every.intro = (
+        f"{plural(sending, 'mailbox')} {verb(sending, 'is', 'are')} answering mail with an automatic "
+        f"reply now, {outside} of them to people outside the organisation too."
+        + (f" Checked {plural(int(checked), 'mailbox')}." if checked else "")
+        + f" Replies on for over {FORGOTTEN_DAYS} days on an active account are flagged: they're "
+        "often left on after someone is back. Turn one off in Outlook (Settings > Mail > Automatic "
+        "replies) or, as an admin, in the Exchange admin centre (Recipients > Mailboxes > the mailbox > "
+        "Others > Automatic replies)."
+    )
     out.tiles = [
-        Tile("Replying now", sending, "Mailboxes sending an automatic reply", rows=Rows(EVERY, {"State": [
-            ON, SCHEDULED_ON]})),
-        Tile("Replying outside the organisation", outside, "To everyone or to contacts",
-             rows=Rows(EVERY, {"Replies outside the organisation": ["Everyone", "Contacts only"]})),
-        Tile(f"On for over {FORGOTTEN_DAYS} days", forgotten, "Active accounts, possibly forgotten",
-             "warn" if forgotten else "ok", Rows(EVERY, flagged=True)),
+        Tile(
+            "Replying now",
+            sending,
+            "Mailboxes sending an automatic reply",
+            rows=Rows(EVERY, {"State": [ON, SCHEDULED_ON]}),
+        ),
+        Tile(
+            "Replying outside the organisation",
+            outside,
+            "To everyone or to contacts",
+            rows=Rows(EVERY, {"Replies outside the organisation": ["Everyone", "Contacts only"]}),
+        ),
+        Tile(
+            f"On for over {FORGOTTEN_DAYS} days",
+            forgotten,
+            "Active accounts, possibly forgotten",
+            "warn" if forgotten else "ok",
+            Rows(EVERY, flagged=True),
+        ),
         Tile("Scheduled to start", upcoming, "Replies set for later", rows=Rows(EVERY, {"State": UPCOMING})),
     ]
-    out.footnote = ("First seen on is the earliest of Office Sentry's collections, in an unbroken run, that found "
-                    "the reply on; it can't go back further than the snapshots kept.")
+    out.footnote = (
+        "First seen on is the earliest of Office Sentry's collections, in an unbroken run, that found "
+        "the reply on; it can't go back further than the snapshots kept."
+    )
     out.sections = [every]
-

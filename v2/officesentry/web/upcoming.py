@@ -30,11 +30,19 @@ def index():
     up = _collect()
     report = upcoming.report(up)
     view = views.View.parse(request.args)
-    return render_template("upcoming.html", up=up, report=report, view_query=view.query(),
-                           tables=views.table_views(report, view, request.path),
-                           links=views.headline_links(report, request.path), counts=up.counts(), w=upcoming,
-                           types=[(t, n, views.rows_link(report, Rows(upcoming.TABLE, {"Type": t}), request.path))
-                                  for t, n in up.by_type()])
+    return render_template(
+        "upcoming.html",
+        up=up,
+        report=report,
+        view_query=view.query(),
+        tables=views.table_views(report, view, request.path),
+        links=views.headline_links(report, request.path),
+        counts=up.counts(),
+        w=upcoming,
+        types=[
+            (t, n, views.rows_link(report, Rows(upcoming.TABLE, {"Type": t}), request.path)) for t, n in up.by_type()
+        ],
+    )
 
 
 @bp.get("/upcoming.pdf", defaults={"ext": "pdf"})

@@ -31,7 +31,7 @@ INTERRUPTS = {
     50079: "Asked to register for MFA",
     50097: "Asked for device authentication",
     50125: "Interrupted by a password reset or registration prompt",
-    50140: "Interrupted by the \"Stay signed in?\" prompt",
+    50140: 'Interrupted by the "Stay signed in?" prompt',
     50199: "Interrupted by a security confirmation prompt",
     81010: "Seamless single sign-on didn't work; the person was asked to sign in",
 }
@@ -74,8 +74,14 @@ CREDENTIAL_CODES = {50126, 50053, 50056}
 LOCKOUT = 50053
 RISK_LEVELS = ("low", "medium", "high")
 OPEN_RISK = ("atRisk", "confirmedCompromised")
-RISK_STATES = {"atRisk": "At risk", "confirmedCompromised": "Confirmed compromised", "remediated": "Remediated",
-               "dismissed": "Dismissed", "confirmedSafe": "Confirmed safe", "none": "None"}
+RISK_STATES = {
+    "atRisk": "At risk",
+    "confirmedCompromised": "Confirmed compromised",
+    "remediated": "Remediated",
+    "dismissed": "Dismissed",
+    "confirmedSafe": "Confirmed safe",
+    "none": "None",
+}
 
 
 def code(value) -> int:
@@ -113,8 +119,12 @@ def meaning(error_code, reason=None) -> str:
     if text:
         return text
     # Microsoft's text sometimes arrives as an unfilled template ("The {redirectTerm} '{replyAddress}' ...").
-    if isinstance(reason, str) and reason.strip() and reason.strip().lower() != "other." \
-            and not re.search(r"\{\w+\}", reason):
+    if (
+        isinstance(reason, str)
+        and reason.strip()
+        and reason.strip().lower() != "other."
+        and not re.search(r"\{\w+\}", reason)
+    ):
         return reason.strip()
     return f"Error {n}" if n > 0 else "Unknown error"
 
@@ -154,9 +164,14 @@ def unusual_countries(snap: TenantSnapshot) -> set[str]:
         return set()
     home = {o.get("countryLetterCode") for o in snap.objects("tenant_profile", "organization") or []}
     top = max(rows, key=lambda r: _num(r.get("succeeded")))["country"]
-    return {r["country"] for r in rows
-            if _num(r.get("succeeded")) and r["country"] not in home and r["country"] != top
-            and _num(r.get("succeeded")) / total < RARE_SHARE}
+    return {
+        r["country"]
+        for r in rows
+        if _num(r.get("succeeded"))
+        and r["country"] not in home
+        and r["country"] != top
+        and _num(r.get("succeeded")) / total < RARE_SHARE
+    }
 
 
 def for_account(snap: TenantSnapshot, user_id: str, names: set[str]) -> dict | None:

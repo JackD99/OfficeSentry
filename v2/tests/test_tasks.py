@@ -181,8 +181,7 @@ class WorkerDied(BaseException):
     """Stands in for the process being killed: nothing in the worker catches it."""
 
 
-def test_a_worker_that_dies_between_freeze_and_send_sends_once(app, client, db, two_tenants, monkeypatch, vault,
-                                                                 cfg):
+def test_a_worker_that_dies_between_freeze_and_send_sends_once(app, client, db, two_tenants, monkeypatch, vault, cfg):
     alpha, _ = two_tenants
     rendered = _planned(client, db, monkeypatch, alpha)
     client.post(f"/reporting/{PERIOD}/{alpha}/approve")
@@ -344,8 +343,9 @@ def test_worker_once_runs_the_tasks_it_queues(db, cfg, two_tenants, monkeypatch)
 def test_pdfs_keep_the_first_rows_of_a_big_table(app, monkeypatch):
     big = Section("Files", ["Name"], rows=[[f"f{i}"] for i in range(25)], flags=[None] * 25)
     small = Section("Sites", ["Name"], rows=[["s"]], flags=[None])
-    report = DataReport("files", "Files", "", {"name": "Alpha", "tenant_ref": "a"}, datetime.now(UTC),
-                        sections=[big, small])
+    report = DataReport(
+        "files", "Files", "", {"name": "Alpha", "tenant_ref": "a"}, datetime.now(UTC), sections=[big, small]
+    )
     capped = printing.cap_rows(report, 10)
     assert len(capped.sections[0].rows) == 10 and capped.sections[1] is small
     assert "first 10 of 25 rows" in capped.sections[0].intro and "XLSX" in capped.sections[0].intro

@@ -32,7 +32,7 @@ ALLOWED = {
     "mailer.py": "sendMail from the MSP's own mailbox, through its own single-tenant mail app",
     "exchange.py": "Exchange's admin API takes every cmdlet as a POST; only Get- cmdlets are allowed",
     "entra.py": "creating Office Sentry's app in the MSP's own tenant (create-app or the setup wizard), and the "
-                "device sign-in that allows it",
+    "device sign-in that allows it",
     "alerts.py": "posts alerts to the MSP's own Teams, Slack or webhook URL, never to Microsoft",
     "recording.py": "live-test's recording session passes on whatever method the caller used (GET)",
 }
@@ -46,21 +46,36 @@ def _is_telemetry(receiver: ast.expr) -> bool:
 
 def _sending_calls(path: Path, root: Path = SOURCE) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    decorators = {id(d) for node in ast.walk(tree) if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-                  for d in node.decorator_list}  # @bp.post(...) is a Flask route, not an HTTP call
+    decorators = {
+        id(d)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        for d in node.decorator_list
+    }  # @bp.post(...) is a Flask route, not an HTTP call
     found = []
     for node in ast.walk(tree):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in SENDING
-                and id(node) not in decorators and not _is_telemetry(node.func.value)):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in SENDING
+            and id(node) not in decorators
+            and not _is_telemetry(node.func.value)
+        ):
             found.append(f"{path.relative_to(root)}:{node.lineno} .{node.func.attr}(")
     return found
 
 
 def test_no_http_writes_outside_the_named_exceptions():
-    found = [call for path in sorted(SOURCE.rglob("*.py")) if path.relative_to(SOURCE).as_posix() not in ALLOWED
-             for call in _sending_calls(path)]
-    assert not found, ("These calls can send something other than GET. Office Sentry is read-only; if this one "
-                       "really must, it needs the owner's review and an entry in ALLOWED: " + ", ".join(found))
+    found = [
+        call
+        for path in sorted(SOURCE.rglob("*.py"))
+        if path.relative_to(SOURCE).as_posix() not in ALLOWED
+        for call in _sending_calls(path)
+    ]
+    assert not found, (
+        "These calls can send something other than GET. Office Sentry is read-only; if this one "
+        "really must, it needs the owner's review and an entry in ALLOWED: " + ", ".join(found)
+    )
 
 
 def test_the_allowed_files_still_need_their_exception():
@@ -79,8 +94,10 @@ def test_the_scan_catches_a_write(tmp_path):
 def test_a_full_collection_only_reads(db, connection_id):
     tenant = store.create_tenant(db, "Alpha Ltd", "alpha.onmicrosoft.com", connection_id)
     factory = lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
         mock_tenant(rsps)
         for key in REGISTRY:
             store.enqueue_run(db, tenant, key)

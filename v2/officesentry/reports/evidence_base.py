@@ -25,13 +25,13 @@ MAX_NOTE = 1000
 BLANK = re.compile(r"\[[^\[\]]+\]")  # a [part to fill in] in a template or a saved answer
 
 
-
 @dataclass(frozen=True)
 class Source:
     """Where the evidence for an answer is: a detail report's table, or a control further down the pack."""
+
     label: str
-    report: str = ""   # data_reports key
-    table: str = ""    # section title in that report
+    report: str = ""  # data_reports key
+    table: str = ""  # section title in that report
     control: str = ""  # evidence.CONTROLS key
 
     @property
@@ -96,13 +96,14 @@ class Answer:
 @dataclass(frozen=True)
 class Question:
     """One topic questionnaires ask about. Question sets (``questionnaires.SETS``) word it their own way."""
+
     key: str
     question: str
     answer: Callable  # (snap, results by rule key) -> (answer, justification)
     source: Source | None = None
     lead: dict = field(default_factory=dict)  # answer -> the opening sentence of the text to paste, in form wording
-    beyond: str = ""     # the part of the question Microsoft 365 can't show, for the engineer to check
-    template: str = ""   # the engineer's text to fill in when the data can't answer: [parts] in brackets
+    beyond: str = ""  # the part of the question Microsoft 365 can't show, for the engineer to check
+    template: str = ""  # the engineer's text to fill in when the data can't answer: [parts] in brackets
     collectors: tuple[str, ...] = ()  # where the data comes from, for the evidence date
     kind: str = "yesno"  # or "text": the form asks for a list or a description, not a yes or no
     outside: bool = False  # Microsoft 365 can't answer this at all
@@ -129,20 +130,28 @@ def _from_checks(results: dict[str, RuleResult], keys: tuple[str, ...]) -> tuple
         return NOT_KNOWN, _sentence(reason)
     good = [r for r in ran if r.status in ("pass", "accepted")]
     bad = [r for r in ran if r.status not in ("pass", "accepted")]
-    parts = [_sentence(r.summary) if r.status == "pass" else f"{r.title}: exceptions accepted as a documented risk."
-             for r in good] + [_sentence(r.summary) for r in bad]
+    parts = [
+        _sentence(r.summary) if r.status == "pass" else f"{r.title}: exceptions accepted as a documented risk."
+        for r in good
+    ] + [_sentence(r.summary) for r in bad]
     answer = YES if not bad else NO if not good else PARTLY
     return answer, " ".join(parts)
 
 
 def _global_admins(snap: TenantSnapshot) -> set[str]:
-    return {a.get("principalId") for a in snap.objects("admin_roles", "role_assignment") or []
-            if a.get("assignment") == "active" and a.get("roleName") == "Global Administrator"}
+    return {
+        a.get("principalId")
+        for a in snap.objects("admin_roles", "role_assignment") or []
+        if a.get("assignment") == "active" and a.get("roleName") == "Global Administrator"
+    }
 
 
 def _user_mailboxes(snap: TenantSnapshot) -> set[str]:
-    return {m.get("ExternalDirectoryObjectId") for m in snap.objects("mailboxes", "mailbox") or []
-            if m.get("RecipientTypeDetails") == "UserMailbox"}
+    return {
+        m.get("ExternalDirectoryObjectId")
+        for m in snap.objects("mailboxes", "mailbox") or []
+        if m.get("RecipientTypeDetails") == "UserMailbox"
+    }
 
 
 def _break_glass(uid: str, label: str, snap: TenantSnapshot, users: dict[str, dict]) -> bool:
@@ -180,8 +189,10 @@ def _mfa_everyone(snap: TenantSnapshot, results: dict[str, RuleResult]):
     if not covering:
         report_only = [p for p in policies if p.get("state") == "enabledForReportingButNotEnforced"]
         tail = f" {plural(len(report_only), 'policy')} only in report-only mode." if report_only else ""
-        return NO, ("No enabled Conditional Access policy requires MFA for all users and apps, and Security "
-                    "Defaults are off." + tail + registered)
+        return NO, (
+            "No enabled Conditional Access policy requires MFA for all users and apps, and Security "
+            "Defaults are off." + tail + registered
+        )
     names, users = _names(snap), _users(snap)
     people, groups = {}, {}
     for p in covering:
@@ -241,13 +252,17 @@ def _mfa_admins(snap: TenantSnapshot, results: dict[str, RuleResult]):
         return f"{c.label} ({'break-glass, ' if mark and glass[pid] else ''}{where})"
 
     if all(glass.values()) and covered:
-        return YES, (f"{covered} of {plural(len(seen), 'active admin account')} are required to use MFA{by}; "
-                     f"the exception is {plural(len(missing), 'break-glass account')}: "
-                     f"{', '.join(why(pid, c, False) for pid, c in missing)}.")
+        return YES, (
+            f"{covered} of {plural(len(seen), 'active admin account')} are required to use MFA{by}; "
+            f"the exception is {plural(len(missing), 'break-glass account')}: "
+            f"{', '.join(why(pid, c, False) for pid, c in missing)}."
+        )
     named = [why(pid, c, True) for pid, c in missing]
     answer = PARTLY if covered else NO
-    return answer, (f"{covered} of {plural(len(seen), 'active admin account')} are required to use MFA{by}. "
-                    f"Not covered: {', '.join(named)}.")
+    return answer, (
+        f"{covered} of {plural(len(seen), 'active admin account')} are required to use MFA{by}. "
+        f"Not covered: {', '.join(named)}."
+    )
 
 
 def _legacy(snap: TenantSnapshot, results: dict[str, RuleResult]):
@@ -274,21 +289,26 @@ def _separate_admins(snap: TenantSnapshot, results: dict[str, RuleResult]):
         return NOT_KNOWN, "Admin role and user data haven't been collected yet."
     by_id = {u["_id"]: u for u in users}
     mailboxes = _user_mailboxes(snap)
-    people = {a["principalId"]: a.get("userPrincipalName") or a.get("displayName") or a["principalId"]
-              for a in admins if a.get("principalType") == "user" and a.get("accountEnabled") is not False
-              and a.get("userType") != "Guest"}
+    people = {
+        a["principalId"]: a.get("userPrincipalName") or a.get("displayName") or a["principalId"]
+        for a in admins
+        if a.get("principalType") == "user" and a.get("accountEnabled") is not False and a.get("userType") != "Guest"
+    }
     if not people:
         return NOT_KNOWN, "No active admin accounts were found to check."
-    daily = sorted(label for pid, label in people.items()
-                   if _licensed(by_id.get(pid) or {}) or pid in mailboxes)
+    daily = sorted(label for pid, label in people.items() if _licensed(by_id.get(pid) or {}) or pid in mailboxes)
     if not daily:
-        return YES, (f"None of the {plural(len(people), 'admin account')} holds a licence or a mailbox, so they "
-                     "aren't used for everyday work.")
+        return YES, (
+            f"None of the {plural(len(people), 'admin account')} holds a licence or a mailbox, so they "
+            "aren't used for everyday work."
+        )
     answer = NO if len(daily) == len(people) else PARTLY
     one = len(daily) == 1
     looks = "it looks like an everyday account" if one else "they look like everyday accounts"
-    return answer, (f"{len(daily)} of {plural(len(people), 'admin account')} also {'has' if one else 'have'} a "
-                    f"licence or mailbox, so {looks}: {', '.join(daily)}.")
+    return answer, (
+        f"{len(daily)} of {plural(len(people), 'admin account')} also {'has' if one else 'have'} a "
+        f"licence or mailbox, so {looks}: {', '.join(daily)}."
+    )
 
 
 def _licensed(user: dict) -> bool:
@@ -300,12 +320,14 @@ def _forwarding(snap: TenantSnapshot, results: dict[str, RuleResult]):
     if policy is None or policy.status == "unavailable":
         return _from_checks(results, ("auto_forward_policy", "external_forwarding"))
     if policy.status == "fail":
-        return NO, _sentence(policy.summary) + (f" {_sentence(forwards.summary)}" if forwards and
-                                                forwards.status == "fail" else "")
+        return NO, _sentence(policy.summary) + (
+            f" {_sentence(forwards.summary)}" if forwards and forwards.status == "fail" else ""
+        )
     if forwards and forwards.status == "fail":
         return PARTLY, f"{_sentence(policy.summary)} But {forwards.summary[:1].lower() + forwards.summary[1:]} found."
-    return YES, " ".join(_sentence(r.summary) for r in (policy, forwards)
-                         if r and r.status in ("pass",)) or _sentence(policy.summary)
+    return YES, " ".join(_sentence(r.summary) for r in (policy, forwards) if r and r.status in ("pass",)) or _sentence(
+        policy.summary
+    )
 
 
 def _checks(*keys: str):
@@ -326,8 +348,10 @@ def _guests(snap: TenantSnapshot, results: dict[str, RuleResult]):
         return NOT_KNOWN, f"{plural(len(guests), 'guest account')}; sign-in activity isn't available to show review."
     problems = []
     if stale_guests:
-        problems.append(f"{plural(len(stale_guests), 'guest')} inactive for 90+ days or never signed in "
-                        f"({', '.join(stale_guests[:3])}{', …' if len(stale_guests) > 3 else ''})")
+        problems.append(
+            f"{plural(len(stale_guests), 'guest')} inactive for 90+ days or never signed in "
+            f"({', '.join(stale_guests[:3])}{', …' if len(stale_guests) > 3 else ''})"
+        )
     if pending and pending.status == "fail":
         problems.append(pending.summary[:1].lower() + pending.summary[1:])
     if not guests:

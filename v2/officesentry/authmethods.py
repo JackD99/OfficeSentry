@@ -60,16 +60,25 @@ NOT_METHODS = {"password", "apppassword", "none", ""}
 
 # Default and system-preferred methods (registration report), lower-cased.
 PREFERRED = {
-    "push": "Authenticator app", "oath": "Authenticator code", "sms": "Text message (SMS)",
-    "voicemobile": "Voice call", "voicealternatemobile": "Voice call", "voiceoffice": "Voice call (office)",
-    "fido2": "Passkey or security key", "passkey": "Passkey", "x509certificate": "Certificate",
-    "windowshelloforbusiness": "Windows Hello", "email": "Email", "temporaryaccesspass": "Temporary Access Pass",
+    "push": "Authenticator app",
+    "oath": "Authenticator code",
+    "sms": "Text message (SMS)",
+    "voicemobile": "Voice call",
+    "voicealternatemobile": "Voice call",
+    "voiceoffice": "Voice call (office)",
+    "fido2": "Passkey or security key",
+    "passkey": "Passkey",
+    "x509certificate": "Certificate",
+    "windowshelloforbusiness": "Windows Hello",
+    "email": "Email",
+    "temporaryaccesspass": "Temporary Access Pass",
 }
 
 
 @dataclass
 class Strength:
     """One person's registered methods, by tier."""
+
     methods: list[tuple[str, str]] = field(default_factory=list)  # (label, tier), strongest first
 
     @property
@@ -150,28 +159,60 @@ class PolicyMethod:
 
 
 POLICY_METHODS: dict[str, PolicyMethod] = {
-    "Fido2": PolicyMethod("Passkeys and security keys (FIDO2)", "On", True, "medium",
-                          "Needed for phishing-resistant sign-in, which admins should use."),
-    "MicrosoftAuthenticator": PolicyMethod("Microsoft Authenticator", "On", True, "medium",
-                                           "The second factor most people should use."),
-    "Sms": PolicyMethod("Text message (SMS)", "Off, once people use Authenticator", False, "low",
-                        "Texts can be intercepted or moved to another SIM."),
-    "Voice": PolicyMethod("Voice call", "Off", False, "low", "Calls can be redirected, and are easy to approve "
-                                                            "by mistake."),
-    "Email": PolicyMethod("Email one-time passcode", "Off, unless guests or password reset need it", None, None,
-                          "Not a second factor for members; only for password reset and guests."),
+    "Fido2": PolicyMethod(
+        "Passkeys and security keys (FIDO2)",
+        "On",
+        True,
+        "medium",
+        "Needed for phishing-resistant sign-in, which admins should use.",
+    ),
+    "MicrosoftAuthenticator": PolicyMethod(
+        "Microsoft Authenticator", "On", True, "medium", "The second factor most people should use."
+    ),
+    "Sms": PolicyMethod(
+        "Text message (SMS)",
+        "Off, once people use Authenticator",
+        False,
+        "low",
+        "Texts can be intercepted or moved to another SIM.",
+    ),
+    "Voice": PolicyMethod(
+        "Voice call", "Off", False, "low", "Calls can be redirected, and are easy to approve by mistake."
+    ),
+    "Email": PolicyMethod(
+        "Email one-time passcode",
+        "Off, unless guests or password reset need it",
+        None,
+        None,
+        "Not a second factor for members; only for password reset and guests.",
+    ),
     "SoftwareOath": PolicyMethod("Other authenticator apps (OATH codes)", "Your choice", None, None),
     "HardwareOath": PolicyMethod("Hardware tokens (OATH)", "Your choice", None, None),
-    "TemporaryAccessPass": PolicyMethod("Temporary Access Pass", "On, for setting up passkeys", None, None,
-                                        "A time-limited pass for setting up a new phone or passkey."),
+    "TemporaryAccessPass": PolicyMethod(
+        "Temporary Access Pass",
+        "On, for setting up passkeys",
+        None,
+        None,
+        "A time-limited pass for setting up a new phone or passkey.",
+    ),
     "X509Certificate": PolicyMethod("Certificate-based authentication", "Your choice", None, None),
     "QRCodePin": PolicyMethod("QR code sign-in", "Your choice", None, None),
     # In every tenant's policy now (seen on the test tenant): Microsoft Entra Verified ID cards for face checks.
     "VerifiableCredentials": PolicyMethod("Verified ID (Face Check)", "Your choice", None, None),
 }
 # Methods listed first in the policy table: the ones that decide how strong sign-in is.
-POLICY_ORDER = ("Fido2", "MicrosoftAuthenticator", "Sms", "Voice", "Email", "TemporaryAccessPass", "SoftwareOath",
-                "HardwareOath", "X509Certificate", "QRCodePin")
+POLICY_ORDER = (
+    "Fido2",
+    "MicrosoftAuthenticator",
+    "Sms",
+    "Voice",
+    "Email",
+    "TemporaryAccessPass",
+    "SoftwareOath",
+    "HardwareOath",
+    "X509Certificate",
+    "QRCodePin",
+)
 
 MANAGED = {"default": "Microsoft managed", "enabled": "On", "disabled": "Off"}
 

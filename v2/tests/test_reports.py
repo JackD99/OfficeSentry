@@ -25,8 +25,10 @@ def test_build_report(db, two_tenants):
 def test_kpi_delta_against_four_weeks_ago(db, two_tenants):
     alpha, _ = two_tenants
     old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db.execute("INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (NULL, ?, ?, ?, ?)",
-               (alpha, "secure_score.pct", 35.0, old))
+    db.execute(
+        "INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (NULL, ?, ?, ?, ?)",
+        (alpha, "secure_score.pct", 35.0, old),
+    )
     seed_tenant(db, alpha)
     k = {k.key: k for k in build(db, store.get_tenant(db, alpha)).kpis}["secure_score.pct"]
     assert (k.previous, k.delta, k.trend) == (35.0, 7.0, "better")

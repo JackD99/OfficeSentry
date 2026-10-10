@@ -33,9 +33,12 @@ LONG_TEXT_MAX = 4000
 WIDTHS = ("full", "half")
 SEVERITIES = (("critical", "Critical"), ("high", "High"), ("medium", "Medium"), ("low", "Low"))
 KPI_OPTIONS = (
-    ("secure_score.pct", "Secure Score"), ("mfa.registered_pct", "Users with MFA"),
-    ("admins.privileged_principals", "Privileged accounts"), ("users.licensed", "Licensed users"),
-    ("stale", "Inactive accounts"), ("waste", "Licence waste / month"),
+    ("secure_score.pct", "Secure Score"),
+    ("mfa.registered_pct", "Users with MFA"),
+    ("admins.privileged_principals", "Privileged accounts"),
+    ("users.licensed", "Licensed users"),
+    ("stale", "Inactive accounts"),
+    ("waste", "Licence waste / month"),
 )
 PLACEHOLDERS = "{client}, {month}, {msp} and {date}"
 
@@ -148,8 +151,12 @@ class Context:
 
     def fill(self, text: str) -> str:
         """Placeholders in a text block: the client's name, the month, the MSP and today's date."""
-        values = {"client": self.tenant["name"], "month": self.now.strftime("%B %Y"),
-                  "msp": self.brand.display_name if self.brand else "", "date": f"{self.now.day} {self.now:%B %Y}"}
+        values = {
+            "client": self.tenant["name"],
+            "month": self.now.strftime("%B %Y"),
+            "msp": self.brand.display_name if self.brand else "",
+            "date": f"{self.now.day} {self.now:%B %Y}",
+        }
         return re.sub(r"\{(client|month|msp|date)\}", lambda m: values[m.group(1)], text)
 
 
@@ -189,8 +196,12 @@ def b_kpis(ctx: Context, s: dict) -> dict:
     kpis = [k for k in ctx.review.kpis if k.key in wanted]
     if not kpis:
         return {"empty": "No key figures chosen."}
-    return {"kpis": kpis, "columns": min(int(s.get("columns") or 3), len(kpis)), "since": ctx.since,
-            "currency": ctx.review.currency}
+    return {
+        "kpis": kpis,
+        "columns": min(int(s.get("columns") or 3), len(kpis)),
+        "since": ctx.since,
+        "currency": ctx.review.currency,
+    }
 
 
 def b_breakdown(ctx: Context, s: dict) -> dict:
@@ -198,10 +209,11 @@ def b_breakdown(ctx: Context, s: dict) -> dict:
     ran = len(ctx.review.results) - len(ctx.review.unavailable)
     if not ran:
         return {"empty": "No checks have run for this tenant yet."}
-    bars = [(label, n, key) for key, label in SEVERITIES
-            if (n := sum(1 for r in failing if r.severity == key))]
-    return {"title": f"{len(failing)} of {ran} checks need attention" if failing else f"All {ran} checks passed",
-            "bars": bars}
+    bars = [(label, n, key) for key, label in SEVERITIES if (n := sum(1 for r in failing if r.severity == key))]
+    return {
+        "title": f"{len(failing)} of {ran} checks need attention" if failing else f"All {ran} checks passed",
+        "bars": bars,
+    }
 
 
 def b_secure_score(ctx: Context, s: dict) -> dict:
@@ -223,11 +235,15 @@ def b_actions(ctx: Context, s: dict) -> dict:
 
 
 def b_findings(ctx: Context, s: dict) -> dict:
-    results = _severities(ctx, s)[:int(s.get("max_checks") or 10)]
+    results = _severities(ctx, s)[: int(s.get("max_checks") or 10)]
     if not results:
         return {"empty": "No failing checks at the chosen severities."}
-    return {"results": results, "rows": int(s.get("max_rows") or 0), "style": s.get("style") or "detailed",
-            "notes": ctx.month_end.get("notes") or {}}
+    return {
+        "results": results,
+        "rows": int(s.get("max_rows") or 0),
+        "style": s.get("style") or "detailed",
+        "notes": ctx.month_end.get("notes") or {},
+    }
 
 
 def b_passing(ctx: Context, s: dict) -> dict:
@@ -245,14 +261,26 @@ def b_unavailable(ctx: Context, s: dict) -> dict:
 def b_changes(ctx: Context, s: dict) -> dict:
     r = ctx.review
     limit = int(s.get("max") or 15)
-    data = {"since": ctx.since, "first": r.first_report, "resolved": [], "new": [], "changes": [],
-            "more_resolved": 0, "more_new": 0, "more_changes": 0}
+    data = {
+        "since": ctx.since,
+        "first": r.first_report,
+        "resolved": [],
+        "new": [],
+        "changes": [],
+        "more_resolved": 0,
+        "more_new": 0,
+        "more_changes": 0,
+    }
     if s.get("findings", True):
         new = r.new_findings
-        data.update(resolved=r.resolved[:limit], new=new[:limit], more_resolved=max(0, len(r.resolved) - limit),
-                    more_new=max(0, len(new) - limit))
+        data.update(
+            resolved=r.resolved[:limit],
+            new=new[:limit],
+            more_resolved=max(0, len(r.resolved) - limit),
+            more_new=max(0, len(new) - limit),
+        )
     if s.get("tenant", True):
-        data.update(changes=r.changes[:limit * 2], more_changes=max(0, len(r.changes) - limit * 2))
+        data.update(changes=r.changes[: limit * 2], more_changes=max(0, len(r.changes) - limit * 2))
     if not (data["resolved"] or data["new"] or data["changes"]):
         data["nothing"] = True
     return data
@@ -263,8 +291,12 @@ def b_licences(ctx: Context, s: dict) -> dict:
     paid = [ln for ln in lic.lines if not ln.free]
     if not paid:
         return {"empty": "No paid licences in the data yet."}
-    return {"paid": paid, "waste": lic.monthly_waste if s.get("waste", True) else 0,
-            "stale_available": lic.stale_available, "currency": ctx.review.currency}
+    return {
+        "paid": paid,
+        "waste": lic.monthly_waste if s.get("waste", True) else 0,
+        "stale_available": lic.stale_available,
+        "currency": ctx.review.currency,
+    }
 
 
 def b_data_table(ctx: Context, s: dict) -> dict:
@@ -278,15 +310,25 @@ def b_data_table(ctx: Context, s: dict) -> dict:
     sections = []
     for section in report.sections[:tables]:
         rows = section.rows[:limit]
-        sections.append({"section": section, "rows": rows, "flags": section.flags[:limit] if section.flags else [],
-                         "more": max(0, len(section.rows) - limit)})
-    return {"report": report, "sections": sections, "figures": bool(s.get("figures", True)),
-            "tiles": (report.tiles or []) + (report.highlights or [])}
+        sections.append(
+            {
+                "section": section,
+                "rows": rows,
+                "flags": section.flags[:limit] if section.flags else [],
+                "more": max(0, len(section.rows) - limit),
+            }
+        )
+    return {
+        "report": report,
+        "sections": sections,
+        "figures": bool(s.get("figures", True)),
+        "tiles": (report.tiles or []) + (report.highlights or []),
+    }
 
 
 def b_evidence(ctx: Context, s: dict) -> dict:
     pack = ctx.evidence
-    answers = pack.answers[:int(s.get("max") or 40)]
+    answers = pack.answers[: int(s.get("max") or 40)]
     if not answers:
         return {"empty": "No questionnaire answers yet."}
     return {"answers": answers, "more": max(0, len(pack.answers) - len(answers))}
@@ -308,8 +350,11 @@ def b_page_break(ctx: Context, s: dict) -> dict:
 
 def b_contact(ctx: Context, s: dict) -> dict:
     b = ctx.brand
-    return {"name": b.display_name if b else "", "contact": b.contact if b else "",
-            "text": ctx.fill(str(s.get("text") or ""))}
+    return {
+        "name": b.display_name if b else "",
+        "contact": b.contact if b else "",
+        "text": ctx.fill(str(s.get("text") or "")),
+    }
 
 
 def b_about(ctx: Context, s: dict) -> dict:
@@ -317,92 +362,247 @@ def b_about(ctx: Context, s: dict) -> dict:
     return {"fresh": fresh, "stale": [f for f in ctx.review.freshness if f.stale]}
 
 
-WIDGETS: dict[str, Widget] = {w.key: w for w in (
-    Widget("verdict", "Status verdict", "One line on how the tenant is doing, coloured by its worst finding.",
-           "Summary", (), b_verdict),
-    Widget("summary_text", "Plain-English summary", "A few sentences on what was checked, what changed and what "
-           "it costs, written from the data.", "Summary", (_heading("Summary"),), b_summary_text, halfable=False),
-    Widget("commentary", "This month's commentary", "What the technical lead wrote for the month under "
-           "Month-end. Left out until something is written.", "Summary", (_heading("From your account team"),),
-           b_commentary, halfable=False),
-    Widget("kpis", "Key figures", "Headline numbers with their change since last month.", "Summary", (
-        _heading("Key figures"),
-        Field("keys", "Figures", "multiselect", [k for k, _ in KPI_OPTIONS], KPI_OPTIONS),
-        Field("columns", "Per row", "number", 3, min=2, max=4),
-    ), b_kpis, halfable=False),
-    Widget("breakdown", "Checks by severity", "A bar of the failing checks by severity, with the totals.",
-           "Summary", (_heading(""),), b_breakdown),
-    Widget("secure_score", "Secure Score trend", "Microsoft Secure Score over time, as a chart.", "Summary", (
-        _heading("Microsoft Secure Score"),
-        Field("intro", "Explain what Secure Score is", "checkbox", True),
-    ), b_secure_score),
-    Widget("actions", "Recommended next steps", "Numbered actions: the account team's curated list for the "
-           "month when there is one, else the worst failing checks.", "Summary", (
-        _heading("What we recommend next"),
-        Field("max", "At most", "number", 5, min=1, max=10),
-        Field("source", "Take them from", "select", "auto",
-              (("auto", "The month-end list, else the checks"), ("checks", "The failing checks only"))),
-    ), b_actions),
-    Widget("findings", "Failing checks", "Each failing check with what to do and the accounts or settings "
-           "affected.", "Checks", (
-        _heading("What needs attention"),
-        Field("severities", "Severities", "multiselect", ["critical", "high"], SEVERITIES),
-        Field("max_checks", "At most", "number", 10, min=1, max=50),
-        Field("max_rows", "Affected items per check", "number", 5, min=0, max=25,
-              help="0 shows only how many are affected."),
-        Field("style", "Style", "select", "detailed", (("detailed", "Detailed"), ("compact", "Compact list"))),
-    ), b_findings, halfable=False),
-    Widget("passing", "Checks that pass", "A tick list of everything in good shape.", "Checks",
-           (_heading("In good shape"),), b_passing),
-    Widget("accepted", "Accepted risks", "Exceptions that were reviewed and agreed, with who accepted them.",
-           "Checks", (_heading("Accepted risks"),), b_accepted, halfable=False),
-    Widget("unavailable", "Checks not run", "Checks that need data or a licence the tenant doesn't have.",
-           "Checks", (_heading("Not checked"),), b_unavailable),
-    Widget("changes", "What changed", "Findings fixed and new since last month, and changes in the tenant.",
-           "Checks", (
-        _heading("What changed"),
-        Field("findings", "Findings fixed and new", "checkbox", True),
-        Field("tenant", "Changes in the tenant", "checkbox", True),
-        Field("max", "Items per list", "number", 15, min=3, max=50),
-    ), b_changes, halfable=False),
-    Widget("licences", "Licences", "Paid licences: bought, assigned, unassigned and what is wasted.",
-           "Licences and data", (
-        _heading("Licences"),
-        Field("waste", "Call out the monthly waste", "checkbox", True),
-    ), b_licences, halfable=False),
-    Widget("data_table", "Table from a detail report", "The first rows of any detail report, with its "
-           "headline figures.", "Licences and data", (
-        _heading(""),
-        Field("report", "Report", "select", "", _report_options),
-        Field("max_tables", "Tables", "number", 1, min=1, max=5, help="How many of the report's tables."),
-        Field("max_rows", "Rows per table", "number", 20, min=3, max=100),
-        Field("figures", "Show the headline figures", "checkbox", True),
-    ), b_data_table, halfable=False),
-    Widget("evidence", "Insurance questionnaire answers", "The questions cyber insurers ask, answered from the "
-           "data.", "Licences and data", (
-        _heading("Questionnaire answers"),
-        Field("max", "At most", "number", 40, min=5, max=60),
-    ), b_evidence, halfable=False),
-    Widget("heading", "Heading", "A section heading, with an optional line under it.", "Text and layout", (
-        Field("heading", "Heading", "text", "New section"),
-        Field("intro", "Line under it", "textarea", "", help=f"Placeholders: {PLACEHOLDERS}."),
-    ), b_heading, halfable=False),
-    Widget("text", "Text", "Paragraphs of your own words. A blank line starts a new paragraph.",
-           "Text and layout", (
-        _heading(""),
-        Field("text", "Text", "textarea", "", help=f"Placeholders: {PLACEHOLDERS}."),
-    ), b_text),
-    Widget("contact", "Contact card", "Who to call: the MSP's name and contact line from Branding.",
-           "Text and layout", (
-        _heading("Questions?"),
-        Field("text", "Text", "textarea", "Reply to this report or call us, and we'll take it from there.",
-              help=f"Placeholders: {PLACEHOLDERS}."),
-    ), b_contact),
-    Widget("page_break", "Page break", "Starts a new page in the PDF.", "Text and layout", (), b_page_break,
-           halfable=False),
-    Widget("about", "About this report", "How and when the data was read, in the small print.",
-           "Text and layout", (), b_about, halfable=False),
-)}
+WIDGETS: dict[str, Widget] = {
+    w.key: w
+    for w in (
+        Widget(
+            "verdict",
+            "Status verdict",
+            "One line on how the tenant is doing, coloured by its worst finding.",
+            "Summary",
+            (),
+            b_verdict,
+        ),
+        Widget(
+            "summary_text",
+            "Plain-English summary",
+            "A few sentences on what was checked, what changed and what it costs, written from the data.",
+            "Summary",
+            (_heading("Summary"),),
+            b_summary_text,
+            halfable=False,
+        ),
+        Widget(
+            "commentary",
+            "This month's commentary",
+            "What the technical lead wrote for the month under Month-end. Left out until something is written.",
+            "Summary",
+            (_heading("From your account team"),),
+            b_commentary,
+            halfable=False,
+        ),
+        Widget(
+            "kpis",
+            "Key figures",
+            "Headline numbers with their change since last month.",
+            "Summary",
+            (
+                _heading("Key figures"),
+                Field("keys", "Figures", "multiselect", [k for k, _ in KPI_OPTIONS], KPI_OPTIONS),
+                Field("columns", "Per row", "number", 3, min=2, max=4),
+            ),
+            b_kpis,
+            halfable=False,
+        ),
+        Widget(
+            "breakdown",
+            "Checks by severity",
+            "A bar of the failing checks by severity, with the totals.",
+            "Summary",
+            (_heading(""),),
+            b_breakdown,
+        ),
+        Widget(
+            "secure_score",
+            "Secure Score trend",
+            "Microsoft Secure Score over time, as a chart.",
+            "Summary",
+            (
+                _heading("Microsoft Secure Score"),
+                Field("intro", "Explain what Secure Score is", "checkbox", True),
+            ),
+            b_secure_score,
+        ),
+        Widget(
+            "actions",
+            "Recommended next steps",
+            "Numbered actions: the account team's curated list for the "
+            "month when there is one, else the worst failing checks.",
+            "Summary",
+            (
+                _heading("What we recommend next"),
+                Field("max", "At most", "number", 5, min=1, max=10),
+                Field(
+                    "source",
+                    "Take them from",
+                    "select",
+                    "auto",
+                    (("auto", "The month-end list, else the checks"), ("checks", "The failing checks only")),
+                ),
+            ),
+            b_actions,
+        ),
+        Widget(
+            "findings",
+            "Failing checks",
+            "Each failing check with what to do and the accounts or settings affected.",
+            "Checks",
+            (
+                _heading("What needs attention"),
+                Field("severities", "Severities", "multiselect", ["critical", "high"], SEVERITIES),
+                Field("max_checks", "At most", "number", 10, min=1, max=50),
+                Field(
+                    "max_rows",
+                    "Affected items per check",
+                    "number",
+                    5,
+                    min=0,
+                    max=25,
+                    help="0 shows only how many are affected.",
+                ),
+                Field("style", "Style", "select", "detailed", (("detailed", "Detailed"), ("compact", "Compact list"))),
+            ),
+            b_findings,
+            halfable=False,
+        ),
+        Widget(
+            "passing",
+            "Checks that pass",
+            "A tick list of everything in good shape.",
+            "Checks",
+            (_heading("In good shape"),),
+            b_passing,
+        ),
+        Widget(
+            "accepted",
+            "Accepted risks",
+            "Exceptions that were reviewed and agreed, with who accepted them.",
+            "Checks",
+            (_heading("Accepted risks"),),
+            b_accepted,
+            halfable=False,
+        ),
+        Widget(
+            "unavailable",
+            "Checks not run",
+            "Checks that need data or a licence the tenant doesn't have.",
+            "Checks",
+            (_heading("Not checked"),),
+            b_unavailable,
+        ),
+        Widget(
+            "changes",
+            "What changed",
+            "Findings fixed and new since last month, and changes in the tenant.",
+            "Checks",
+            (
+                _heading("What changed"),
+                Field("findings", "Findings fixed and new", "checkbox", True),
+                Field("tenant", "Changes in the tenant", "checkbox", True),
+                Field("max", "Items per list", "number", 15, min=3, max=50),
+            ),
+            b_changes,
+            halfable=False,
+        ),
+        Widget(
+            "licences",
+            "Licences",
+            "Paid licences: bought, assigned, unassigned and what is wasted.",
+            "Licences and data",
+            (
+                _heading("Licences"),
+                Field("waste", "Call out the monthly waste", "checkbox", True),
+            ),
+            b_licences,
+            halfable=False,
+        ),
+        Widget(
+            "data_table",
+            "Table from a detail report",
+            "The first rows of any detail report, with its headline figures.",
+            "Licences and data",
+            (
+                _heading(""),
+                Field("report", "Report", "select", "", _report_options),
+                Field("max_tables", "Tables", "number", 1, min=1, max=5, help="How many of the report's tables."),
+                Field("max_rows", "Rows per table", "number", 20, min=3, max=100),
+                Field("figures", "Show the headline figures", "checkbox", True),
+            ),
+            b_data_table,
+            halfable=False,
+        ),
+        Widget(
+            "evidence",
+            "Insurance questionnaire answers",
+            "The questions cyber insurers ask, answered from the data.",
+            "Licences and data",
+            (
+                _heading("Questionnaire answers"),
+                Field("max", "At most", "number", 40, min=5, max=60),
+            ),
+            b_evidence,
+            halfable=False,
+        ),
+        Widget(
+            "heading",
+            "Heading",
+            "A section heading, with an optional line under it.",
+            "Text and layout",
+            (
+                Field("heading", "Heading", "text", "New section"),
+                Field("intro", "Line under it", "textarea", "", help=f"Placeholders: {PLACEHOLDERS}."),
+            ),
+            b_heading,
+            halfable=False,
+        ),
+        Widget(
+            "text",
+            "Text",
+            "Paragraphs of your own words. A blank line starts a new paragraph.",
+            "Text and layout",
+            (
+                _heading(""),
+                Field("text", "Text", "textarea", "", help=f"Placeholders: {PLACEHOLDERS}."),
+            ),
+            b_text,
+        ),
+        Widget(
+            "contact",
+            "Contact card",
+            "Who to call: the MSP's name and contact line from Branding.",
+            "Text and layout",
+            (
+                _heading("Questions?"),
+                Field(
+                    "text",
+                    "Text",
+                    "textarea",
+                    "Reply to this report or call us, and we'll take it from there.",
+                    help=f"Placeholders: {PLACEHOLDERS}.",
+                ),
+            ),
+            b_contact,
+        ),
+        Widget(
+            "page_break",
+            "Page break",
+            "Starts a new page in the PDF.",
+            "Text and layout",
+            (),
+            b_page_break,
+            halfable=False,
+        ),
+        Widget(
+            "about",
+            "About this report",
+            "How and when the data was read, in the small print.",
+            "Text and layout",
+            (),
+            b_about,
+            halfable=False,
+        ),
+    )
+}
 GROUPS = ("Summary", "Checks", "Licences and data", "Text and layout")
 
 
@@ -414,10 +614,22 @@ def palette() -> list[dict]:
         for w in WIDGETS.values():
             if w.group != group:
                 continue
-            fields = [{"key": f.key, "label": f.label, "type": f.type, "default": f.default, "min": f.min,
-                       "max": f.max, "help": f.help, "options": [list(o) for o in f.choices()]} for f in w.fields]
-            items.append({"key": w.key, "title": w.title, "description": w.description, "halfable": w.halfable,
-                          "fields": fields})
+            fields = [
+                {
+                    "key": f.key,
+                    "label": f.label,
+                    "type": f.type,
+                    "default": f.default,
+                    "min": f.min,
+                    "max": f.max,
+                    "help": f.help,
+                    "options": [list(o) for o in f.choices()],
+                }
+                for f in w.fields
+            ]
+            items.append(
+                {"key": w.key, "title": w.title, "description": w.description, "halfable": w.halfable, "fields": fields}
+            )
         out.append({"group": group, "widgets": items})
     return out
 
@@ -482,8 +694,10 @@ def clean(document: dict) -> dict:
             block.id += "x"
         seen.add(block.id)
         blocks.append(block)
-    return {"settings": settings,
-            "blocks": [{"id": b.id, "kind": b.kind, "width": b.width, "settings": b.settings} for b in blocks]}
+    return {
+        "settings": settings,
+        "blocks": [{"id": b.id, "kind": b.kind, "width": b.width, "settings": b.settings} for b in blocks],
+    }
 
 
 # -- Storage --------------------------------------------------------------------------------------------
@@ -522,18 +736,32 @@ def create(conn, name: str, user: str, document: dict | None = None, description
     cur = conn.execute(
         "INSERT INTO report_designs (name, description, settings, blocks, created_by, created_at)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        (name.strip()[:100] or "Untitled report", description.strip()[:TEXT_MAX], json.dumps(doc["settings"]),
-         json.dumps(doc["blocks"]), user, utcnow()))
+        (
+            name.strip()[:100] or "Untitled report",
+            description.strip()[:TEXT_MAX],
+            json.dumps(doc["settings"]),
+            json.dumps(doc["blocks"]),
+            user,
+            utcnow(),
+        ),
+    )
     return cur.lastrowid
 
 
 def save(conn, design_id: int, document: dict, name: str | None = None, description: str | None = None) -> dict:
     doc = clean(document)
-    conn.execute("UPDATE report_designs SET settings = ?, blocks = ?, name = COALESCE(?, name),"
-                 " description = COALESCE(?, description), updated_at = ? WHERE id = ?",
-                 (json.dumps(doc["settings"]), json.dumps(doc["blocks"]),
-                  name.strip()[:100] or None if name is not None else None,
-                  description.strip()[:TEXT_MAX] if description is not None else None, utcnow(), design_id))
+    conn.execute(
+        "UPDATE report_designs SET settings = ?, blocks = ?, name = COALESCE(?, name),"
+        " description = COALESCE(?, description), updated_at = ? WHERE id = ?",
+        (
+            json.dumps(doc["settings"]),
+            json.dumps(doc["blocks"]),
+            name.strip()[:100] or None if name is not None else None,
+            description.strip()[:TEXT_MAX] if description is not None else None,
+            utcnow(),
+            design_id,
+        ),
+    )
     return doc
 
 
@@ -574,26 +802,58 @@ def _b(kind: str, width: str = "full", **settings) -> dict:
 
 STARTERS: dict[str, tuple[str, str, dict]] = {
     "blank": ("Blank", "Start from nothing and add blocks.", {"settings": {}, "blocks": []}),
-    "executive": ("Executive summary", "One page for a business owner: verdict, figures, next steps and "
-                  "who to call.", {
-        "settings": {"title": "Microsoft 365 executive summary", "subtitle": "{month}"},
-        "blocks": [_b("summary_text"), _b("kpis", keys=["secure_score.pct", "mfa.registered_pct",
-                                                                    "stale", "waste"], columns=4),
-                   _b("actions", max=3), _b("breakdown", "half", heading="Checks by severity"),
-                   _b("contact", "half"), _b("about")]}),
-    "full": ("Full security review", "Everything the monthly review has, block by block, to rearrange.", {
-        "settings": {"title": "Security and licensing review", "subtitle": "{month}"},
-        "blocks": [_b("summary_text"), _b("kpis"), _b("breakdown", heading=""), _b("actions"),
-                   _b("changes"), _b("secure_score"), _b("findings", heading="Fix first"),
-                   _b("findings", heading="Also worth fixing", severities=["medium", "low"], max_rows=0,
-                      style="compact"), _b("licences"), _b("passing"), _b("accepted"), _b("unavailable"),
-                   _b("about")]}),
-    "licensing": ("Licensing review", "Licence spend and waste, with the right-sizing suggestions.", {
-        "settings": {"title": "Licensing review", "subtitle": "{month}"},
-        "blocks": [_b("kpis", keys=["users.licensed", "stale", "waste"], columns=3), _b("licences"),
-                   _b("data_table", heading="Where licences could be cheaper", report="licence-rightsizing",
-                      max_rows=25), _b("data_table", heading="Inactive accounts holding licences",
-                                       report="inactive", max_rows=25), _b("contact"), _b("about")]}),
+    "executive": (
+        "Executive summary",
+        "One page for a business owner: verdict, figures, next steps and who to call.",
+        {
+            "settings": {"title": "Microsoft 365 executive summary", "subtitle": "{month}"},
+            "blocks": [
+                _b("summary_text"),
+                _b("kpis", keys=["secure_score.pct", "mfa.registered_pct", "stale", "waste"], columns=4),
+                _b("actions", max=3),
+                _b("breakdown", "half", heading="Checks by severity"),
+                _b("contact", "half"),
+                _b("about"),
+            ],
+        },
+    ),
+    "full": (
+        "Full security review",
+        "Everything the monthly review has, block by block, to rearrange.",
+        {
+            "settings": {"title": "Security and licensing review", "subtitle": "{month}"},
+            "blocks": [
+                _b("summary_text"),
+                _b("kpis"),
+                _b("breakdown", heading=""),
+                _b("actions"),
+                _b("changes"),
+                _b("secure_score"),
+                _b("findings", heading="Fix first"),
+                _b("findings", heading="Also worth fixing", severities=["medium", "low"], max_rows=0, style="compact"),
+                _b("licences"),
+                _b("passing"),
+                _b("accepted"),
+                _b("unavailable"),
+                _b("about"),
+            ],
+        },
+    ),
+    "licensing": (
+        "Licensing review",
+        "Licence spend and waste, with the right-sizing suggestions.",
+        {
+            "settings": {"title": "Licensing review", "subtitle": "{month}"},
+            "blocks": [
+                _b("kpis", keys=["users.licensed", "stale", "waste"], columns=3),
+                _b("licences"),
+                _b("data_table", heading="Where licences could be cheaper", report="licence-rightsizing", max_rows=25),
+                _b("data_table", heading="Inactive accounts holding licences", report="inactive", max_rows=25),
+                _b("contact"),
+                _b("about"),
+            ],
+        },
+    ),
 }
 
 
@@ -624,18 +884,27 @@ def contents(rows: list[list[Rendered]]) -> list[tuple[str, str]]:
     return [(r.anchor, r.heading) for row in rows for r in row if r.heading and r.data is not None and r.anchor]
 
 
-def context(conn, tenant, row, now: datetime | None = None, *, brand=None, month_end: dict | None = None,
-            preview: bool = False) -> dict:
+def context(
+    conn, tenant, row, now: datetime | None = None, *, brand=None, month_end: dict | None = None, preview: bool = False
+) -> dict:
     """Template context for ``reports/design.html``."""
     doc = document(row)
     ctx = Context(conn, tenant, now, brand=brand, month_end=month_end)
     rows = render(ctx, doc)
     settings = doc["settings"]
     return {
-        "design": row, "doc": doc, "rows": rows, "contents": contents(rows), "tenant": tenant,
-        "title": ctx.fill(settings["title"]) or row["name"], "subtitle": ctx.fill(settings["subtitle"]),
+        "design": row,
+        "doc": doc,
+        "rows": rows,
+        "contents": contents(rows),
+        "tenant": tenant,
+        "title": ctx.fill(settings["title"]) or row["name"],
+        "subtitle": ctx.fill(settings["subtitle"]),
         "cover_verdict": ctx.summary.verdict if settings["cover_verdict"] else None,
-        "show_contents": settings["contents"], "generated_at": ctx.now, "preview": preview,
-        "report_currency": ctx.review.currency, "period_since": ctx.since,
+        "show_contents": settings["contents"],
+        "generated_at": ctx.now,
+        "preview": preview,
+        "report_currency": ctx.review.currency,
+        "period_since": ctx.since,
         "fresh": [(f.title, f.finished_at) for f in ctx.review.freshness],
     }

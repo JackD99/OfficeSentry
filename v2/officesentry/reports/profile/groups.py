@@ -6,8 +6,12 @@ from ...text import plural as _plural
 from ..data_reports import Section
 from .base import Part, Person, part
 
-GROUP_KINDS = {"microsoft365": "Microsoft 365 group", "security": "Security group",
-               "mail_security": "Mail-enabled security group", "distribution": "Distribution list"}
+GROUP_KINDS = {
+    "microsoft365": "Microsoft 365 group",
+    "security": "Security group",
+    "mail_security": "Mail-enabled security group",
+    "distribution": "Distribution list",
+}
 
 
 @part(40)
@@ -44,15 +48,25 @@ def groups_part(p: Person) -> Part:
             notes.append("Dynamic membership")
         if g.get("synced"):
             notes.append("Synced from AD")
-        rows.append(((role != "Owner", not g.get("isTeam"), (g.get("displayName") or "").lower()),
-                     [g.get("displayName") or "Unnamed group", kind, role, "; ".join(notes)],
-                     "medium" if "No active owner left" in notes else None))
+        rows.append(
+            (
+                (role != "Owner", not g.get("isTeam"), (g.get("displayName") or "").lower()),
+                [g.get("displayName") or "Unnamed group", kind, role, "; ".join(notes)],
+                "medium" if "No active owner left" in notes else None,
+            )
+        )
     if orphaned:
-        p.flag("medium", f"Owned {', '.join(orphaned[:3])}{' and more' if len(orphaned) > 3 else ''} and sign-in is "
-                         "now blocked, so nobody active looks after "
-                         f"{'it' if len(orphaned) == 1 else 'them'}. Add a new owner.", "groups")
-    result.note = ("Members are read for teams, Microsoft 365 groups and groups used by Conditional Access. "
-                   "For other security groups and distribution lists only owners show.")
+        p.flag(
+            "medium",
+            f"Owned {', '.join(orphaned[:3])}{' and more' if len(orphaned) > 3 else ''} and sign-in is "
+            "now blocked, so nobody active looks after "
+            f"{'it' if len(orphaned) == 1 else 'them'}. Add a new owner.",
+            "groups",
+        )
+    result.note = (
+        "Members are read for teams, Microsoft 365 groups and groups used by Conditional Access. "
+        "For other security groups and distribution lists only owners show."
+    )
     if old_snapshot:
         result.note += " Team and group members show after the next Groups and Teams collection."
     if not rows:

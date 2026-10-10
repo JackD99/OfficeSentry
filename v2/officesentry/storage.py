@@ -14,7 +14,7 @@ from .licences import FREE_UNIT_THRESHOLD
 from .snapshot import TenantSnapshot
 from .text import nouns
 
-GB = 1024 ** 3
+GB = 1024**3
 BASE = 1024 * GB
 PER_LICENCE = 10 * GB
 EXTRA_STORAGE_SKUS = {"SHAREPOINTSTORAGE", "SHAREPOINTSTORAGE_GOV"}
@@ -38,13 +38,13 @@ def tenant_quota(skus: list[dict] | None) -> TenantQuota | None:
     licences = extra = 0
     for s in skus or []:
         units = (s.get("prepaidUnits") or {}).get("enabled") or 0
-        if units <= 0 or units >= FREE_UNIT_THRESHOLD or s.get("capabilityStatus") not in (None, "Enabled",
-                                                                                            "Warning"):
+        if units <= 0 or units >= FREE_UNIT_THRESHOLD or s.get("capabilityStatus") not in (None, "Enabled", "Warning"):
             continue
         if s.get("skuPartNumber") in EXTRA_STORAGE_SKUS:
             extra += units
         elif s.get("appliesTo") == "User" and any(
-                (p.get("servicePlanName") or "").startswith(SHAREPOINT_PLANS) for p in s.get("servicePlans") or []):
+            (p.get("servicePlanName") or "").startswith(SHAREPOINT_PLANS) for p in s.get("servicePlans") or []
+        ):
             licences += units
     if not licences:
         return None

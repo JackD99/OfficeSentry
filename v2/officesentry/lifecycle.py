@@ -31,9 +31,13 @@ def queue_first_collection(conn, tenant_id: int, requested_by: str = "Onboarding
     from . import store
     from .collectors import REGISTRY
 
-    done = {r["collector"] for r in conn.execute(
-        "SELECT DISTINCT collector FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')",
-        (tenant_id,))}
+    done = {
+        r["collector"]
+        for r in conn.execute(
+            "SELECT DISTINCT collector FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')",
+            (tenant_id,),
+        )
+    }
     keys = [k for k in REGISTRY if k not in done]
     for key in keys:
         store.enqueue_run(conn, tenant_id, key, requested_by=requested_by)
@@ -47,8 +51,9 @@ def _drop_queued(conn, tenant_id: int) -> int:
 def pause(conn, tenant, user: str) -> int:
     """Stop collection and emails. Returns the queued runs dropped."""
     with transaction(conn, immediate=True):
-        conn.execute("UPDATE tenants SET enabled = 0, paused_at = COALESCE(paused_at, ?) WHERE id = ?",
-                     (utcnow(), tenant["id"]))
+        conn.execute(
+            "UPDATE tenants SET enabled = 0, paused_at = COALESCE(paused_at, ?) WHERE id = ?", (utcnow(), tenant["id"])
+        )
         dropped = _drop_queued(conn, tenant["id"])
         audit(conn, user, "tenant_paused", tenant["id"], tenant["name"])
     return dropped
@@ -65,8 +70,10 @@ def resume(conn, tenant, user: str) -> None:
 def archive(conn, tenant, user: str) -> None:
     with transaction(conn, immediate=True):
         now = utcnow()
-        conn.execute("UPDATE tenants SET enabled = 0, paused_at = COALESCE(paused_at, ?), archived_at = ?"
-                     " WHERE id = ?", (now, now, tenant["id"]))
+        conn.execute(
+            "UPDATE tenants SET enabled = 0, paused_at = COALESCE(paused_at, ?), archived_at = ? WHERE id = ?",
+            (now, now, tenant["id"]),
+        )
         _drop_queued(conn, tenant["id"])
         audit(conn, user, "tenant_archived", tenant["id"], tenant["name"])
 
@@ -87,14 +94,19 @@ def client_only_users(conn, tenant_id: int) -> list:
         "SELECT u.* FROM users u JOIN user_tenants ut ON ut.user_id = u.id AND ut.tenant_id = ?"
         " WHERE u.role = 'client' AND NOT EXISTS"
         " (SELECT 1 FROM user_tenants o WHERE o.user_id = u.id AND o.tenant_id <> ?)"
-        " ORDER BY u.username COLLATE NOCASE", (tenant_id, tenant_id)).fetchall()
+        " ORDER BY u.username COLLATE NOCASE",
+        (tenant_id, tenant_id),
+    ).fetchall()
 
 
 def _tenant_tables(conn) -> list[str]:
-    tables = [r["name"] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    return [t for t in tables
-            if any(c["name"] == "tenant_id" for c in conn.execute(f"PRAGMA table_info({t})"))]
+    tables = [
+        r["name"]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+    ]
+    return [t for t in tables if any(c["name"] == "tenant_id" for c in conn.execute(f"PRAGMA table_info({t})"))]
 
 
 def stored(conn, tenant_id: int) -> dict[str, int]:
@@ -102,8 +114,9 @@ def stored(conn, tenant_id: int) -> dict[str, int]:
     one = lambda sql: conn.execute(sql, (tenant_id,)).fetchone()[0]  # noqa: E731
     return {
         "runs": one("SELECT COUNT(*) FROM runs WHERE tenant_id = ?"),
-        "objects": one("SELECT COALESCE(SUM(items), 0) FROM objects"
-                       " WHERE run_id IN (SELECT id FROM runs WHERE tenant_id = ?)"),
+        "objects": one(
+            "SELECT COALESCE(SUM(items), 0) FROM objects WHERE run_id IN (SELECT id FROM runs WHERE tenant_id = ?)"
+        ),
         "metrics": one("SELECT COUNT(*) FROM metrics WHERE tenant_id = ?"),
         "findings": one("SELECT COUNT(*) FROM findings WHERE tenant_id = ?"),
         "open_findings": one("SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"),
@@ -128,8 +141,9 @@ def leftovers(conn, tenant_id: int, run_ids: list[int] = ()) -> dict[str, int]:
     if run_ids:
         ids = json.dumps(list(run_ids))
         for table in ("objects", "run_events", "metrics"):
-            n = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE run_id IN (SELECT value FROM json_each(?))",
-                             (ids,)).fetchone()[0]
+            n = conn.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE run_id IN (SELECT value FROM json_each(?))", (ids,)
+            ).fetchone()[0]
             if n:
                 left[table] = left.get(table, 0) + n
     return left
@@ -169,8 +183,15 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
 
 
 # Audit actions whose detail can name the client's people (UPNs, email addresses, delivery errors).
-PERSONAL_DETAIL = ("finding_accepted", "finding_unaccepted", "contact_added", "contact_removed", "email_retried",
-                   "alert_sent", "alert_failed")
+PERSONAL_DETAIL = (
+    "finding_accepted",
+    "finding_unaccepted",
+    "contact_added",
+    "contact_removed",
+    "email_retried",
+    "alert_sent",
+    "alert_failed",
+)
 REDACTED = "(removed when the tenant was deleted)"
 
 
@@ -180,15 +201,20 @@ def _scrub_audit(conn, tenant_id: int, deleted_users: dict[int, str]) -> None:
     Rows by client accounts deleted with it lose the account name and address (they are usually
     the client's own email addresses), and so do admin rows about those accounts.
     """
-    conn.execute(f"UPDATE audit_log SET detail = ? WHERE tenant_id = ? AND action IN"
-                 f" ({','.join('?' * len(PERSONAL_DETAIL))})", (REDACTED, tenant_id, *PERSONAL_DETAIL))
+    conn.execute(
+        f"UPDATE audit_log SET detail = ? WHERE tenant_id = ? AND action IN ({','.join('?' * len(PERSONAL_DETAIL))})",
+        (REDACTED, tenant_id, *PERSONAL_DETAIL),
+    )
     for uid, name in deleted_users.items():
-        conn.execute("UPDATE audit_log SET username = ?, ip = NULL WHERE username = ?",
-                     (f"deleted client account #{uid}", name))
+        conn.execute(
+            "UPDATE audit_log SET username = ?, ip = NULL WHERE username = ?", (f"deleted client account #{uid}", name)
+        )
         # "name", "name (client)", "name: role=..." in user_created, user_updated, user_signed_out...
-        conn.execute("UPDATE audit_log SET detail = ? WHERE substr(action, 1, 5) = 'user_'"
-                     " AND substr(detail, 1, ?) = ? AND substr(detail, ? + 1, 1) IN ('', ' ', ':')",
-                     (f"deleted client account #{uid}", len(name), name, len(name)))
+        conn.execute(
+            "UPDATE audit_log SET detail = ? WHERE substr(action, 1, 5) = 'user_'"
+            " AND substr(detail, 1, ?) = ? AND substr(detail, ? + 1, 1) IN ('', ' ', ':')",
+            (f"deleted client account #{uid}", len(name), name, len(name)),
+        )
 
 
 def erase_freed_pages(conn) -> bool:
@@ -216,9 +242,11 @@ def _delete(conn, tenant, user: str, delete_users, allowed: dict[int, str]) -> d
         _scrub_audit(conn, tenant["id"], {uid: allowed[uid] for uid in delete_users})
         names = sorted(allowed[u] for u in delete_users)
         removed["users"] = len(names)
-        detail = (f"{tenant['name']} ({tenant['tenant_ref']}): {plural(removed['runs'], 'run')}, "
-                  f"{plural(removed['objects'], 'stored object')}, {plural(removed['findings'], 'finding')}, "
-                  f"{plural(removed['schedules'], 'emailed report')}, {plural(removed['contacts'], 'contact')}")
+        detail = (
+            f"{tenant['name']} ({tenant['tenant_ref']}): {plural(removed['runs'], 'run')}, "
+            f"{plural(removed['objects'], 'stored object')}, {plural(removed['findings'], 'finding')}, "
+            f"{plural(removed['schedules'], 'emailed report')}, {plural(removed['contacts'], 'contact')}"
+        )
         if names:
             detail += "; client accounts deleted: " + ", ".join(names)
         audit(conn, user, "tenant_deleted", tenant["id"], detail)

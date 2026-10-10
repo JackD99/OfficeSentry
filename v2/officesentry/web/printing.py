@@ -30,13 +30,31 @@ def pdf_response(template: str, filename: str, **context) -> Response:
     if isinstance(context.get("report"), DataReport):
         context["report"] = cap_rows(context["report"])
     if export.pdf_available():
-        html = render_template(template, pdf=True, print_view=False, pdf_available=True,
-                               css_href=(STATIC_DIR / "report.css").as_uri(), **context)
-        return Response(export.to_pdf(html, STATIC_DIR.as_uri() + "/"), mimetype="application/pdf",
-                        headers={"Content-Disposition": f'attachment; filename="{filename}.pdf"'})
+        html = render_template(
+            template,
+            pdf=True,
+            print_view=False,
+            pdf_available=True,
+            css_href=(STATIC_DIR / "report.css").as_uri(),
+            **context,
+        )
+        return Response(
+            export.to_pdf(html, STATIC_DIR.as_uri() + "/"),
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.pdf"'},
+        )
     # The browser names the saved PDF after the page title, so the title is the file name.
-    return Response(render_template(template, pdf=False, print_view=True, print_name=filename, pdf_available=False,
-                                    css_href=url_for("static", filename="report.css"), **context))
+    return Response(
+        render_template(
+            template,
+            pdf=False,
+            print_view=True,
+            print_name=filename,
+            pdf_available=False,
+            css_href=url_for("static", filename="report.css"),
+            **context,
+        )
+    )
 
 
 def cap_rows(report: DataReport, limit: int | None = None) -> DataReport:
@@ -50,8 +68,11 @@ def cap_rows(report: DataReport, limit: int | None = None) -> DataReport:
         if len(s.rows) <= limit:
             sections.append(s)
             continue
-        note = (f"This PDF shows the first {limit:,} of {len(s.rows):,} rows. "
-                "Download the spreadsheet (XLSX) for all of them.")
-        sections.append(dataclasses.replace(s, rows=s.rows[:limit], flags=s.flags[:limit],
-                                            intro=f"{s.intro} {note}".strip()))
+        note = (
+            f"This PDF shows the first {limit:,} of {len(s.rows):,} rows. "
+            "Download the spreadsheet (XLSX) for all of them."
+        )
+        sections.append(
+            dataclasses.replace(s, rows=s.rows[:limit], flags=s.flags[:limit], intro=f"{s.intro} {note}".strip())
+        )
     return dataclasses.replace(report, sections=sections)

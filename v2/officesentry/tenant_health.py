@@ -34,8 +34,10 @@ STATUS = {  # status -> (label, pill tone)
     "paused": ("Paused", "info"),
     "archived": ("Archived", "info"),
 }
-GLOBAL_READER_STEPS = ("Microsoft Entra admin centre → Roles and admins → Global Reader → Add assignments, "
-                       "then select the Office Sentry app")
+GLOBAL_READER_STEPS = (
+    "Microsoft Entra admin centre → Roles and admins → Global Reader → Add assignments, "
+    "then select the Office Sentry app"
+)
 
 
 @dataclass
@@ -116,8 +118,11 @@ def connection_result(conn, tenant_id: int) -> dict | None:
 
 def _succeeded(conn, tenant_id: int) -> dict[str, str]:
     """collector -> when it last succeeded."""
-    rows = conn.execute("SELECT collector, MAX(finished_at) AS at FROM runs WHERE tenant_id = ?"
-                        " AND status IN ('succeeded', 'partial') GROUP BY collector", (tenant_id,)).fetchall()
+    rows = conn.execute(
+        "SELECT collector, MAX(finished_at) AS at FROM runs WHERE tenant_id = ?"
+        " AND status IN ('succeeded', 'partial') GROUP BY collector",
+        (tenant_id,),
+    ).fetchall()
     return {r["collector"]: r["at"] for r in rows}
 
 
@@ -146,21 +151,43 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
 
     # -- App connection and consent -----------------------------------------------------
     if not connection:
-        checks.append(Check("connection", "App connection", "bad", "No app connection chosen.",
-                            "Choose the app connection under Settings on this page.", "connection"))
+        checks.append(
+            Check(
+                "connection",
+                "App connection",
+                "bad",
+                "No app connection chosen.",
+                "Choose the app connection under Settings on this page.",
+                "connection",
+            )
+        )
     elif not connection["client_id"]:
-        checks.append(Check("connection", "App connection", "bad",
-                            f"{connection['name']} has no application (client) ID yet.",
-                            "Add it under Settings → App connection."))
+        checks.append(
+            Check(
+                "connection",
+                "App connection",
+                "bad",
+                f"{connection['name']} has no application (client) ID yet.",
+                "Add it under Settings → App connection.",
+            )
+        )
     else:
         checks.append(Check("connection", "App connection", "ok", connection["name"]))
 
     if tenant["consented_at"]:
         checks.append(Check("consent", "Admin consent", "ok", "Granted.", action="reconsent"))
     else:
-        checks.append(Check("consent", "Admin consent", "todo", "Not granted yet.",
-                            f"A Global Administrator of {name} opens the consent link and approves the read-only "
-                            "permissions. If they already have, press Check connection now.", "consent"))
+        checks.append(
+            Check(
+                "consent",
+                "Admin consent",
+                "todo",
+                "Not granted yet.",
+                f"A Global Administrator of {name} opens the consent link and approves the read-only "
+                "permissions. If they already have, press Check connection now.",
+                "consent",
+            )
+        )
 
     # -- Sign-in -------------------------------------------------------------------------
     conn_run = latest.get("connection")
@@ -170,20 +197,38 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
         error = conn_run["error"] or ""
         if error.startswith(SIGN_IN_PREFIX):
             title, _, fix = _explain(error).partition(". ")
-            checks.append(Check("sign_in", "Sign-in", "bad", f"Office Sentry can't sign in. {title}.",
-                                fix or "See the run log under Data collection.", "check"))
+            checks.append(
+                Check(
+                    "sign_in",
+                    "Sign-in",
+                    "bad",
+                    f"Office Sentry can't sign in. {title}.",
+                    fix or "See the run log under Data collection.",
+                    "check",
+                )
+            )
         else:
-            checks.append(Check("sign_in", "Sign-in", "bad", "The last connection check failed.",
-                                _explain(error), "check"))
+            checks.append(
+                Check("sign_in", "Sign-in", "bad", "The last connection check failed.", _explain(error), "check")
+            )
     elif last_success:
         checks.append(Check("sign_in", "Sign-in", "ok", "Office Sentry signs in and reads the tenant."))
     elif any(r["status"] == "failed" for r in latest.values()):
         failed = next(r for r in latest.values() if r["status"] == "failed")
-        checks.append(Check("sign_in", "Sign-in", "bad", "Collection has failed so far.", _explain(failed["error"]),
-                            "check"))
+        checks.append(
+            Check("sign_in", "Sign-in", "bad", "Collection has failed so far.", _explain(failed["error"]), "check")
+        )
     else:
-        checks.append(Check("sign_in", "Sign-in", "unknown", "Not checked yet.",
-                            "Press Check connection now once consent is granted.", "check"))
+        checks.append(
+            Check(
+                "sign_in",
+                "Sign-in",
+                "unknown",
+                "Not checked yet.",
+                "Press Check connection now once consent is granted.",
+                "check",
+            )
+        )
 
     # -- Permissions and Global Reader ----------------------------------------------------
     checks.extend(_app_checks(result, name))
@@ -192,9 +237,15 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
     caps = store.tenant_capabilities(tenant)
     if "tenant_profile" in succeeded:
         found = [capability(k) for k, v in sorted(caps.items()) if v]
-        checks.append(Check("licences", "Licences found", "info",
-                            ", ".join(found) if found else "None of the features Office Sentry checks for.",
-                            "" if found else "Checks that need a licence show as not checked."))
+        checks.append(
+            Check(
+                "licences",
+                "Licences found",
+                "info",
+                ", ".join(found) if found else "None of the features Office Sentry checks for.",
+                "" if found else "Checks that need a licence show as not checked.",
+            )
+        )
     else:
         checks.append(Check("licences", "Licences found", "unknown", "Found by the first collection."))
 
@@ -203,45 +254,83 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
     if full:
         oldest = min(succeeded[k] for k in nightly)
         if oldest < stale_cutoff and tenant["enabled"]:
-            checks.append(Check("collection", "Collection", "warn", "Some data is more than 36 hours old.",
-                                "Check the worker is running. Data sources that keep failing are listed below.",
-                                "collect"))
+            checks.append(
+                Check(
+                    "collection",
+                    "Collection",
+                    "warn",
+                    "Some data is more than 36 hours old.",
+                    "Check the worker is running. Data sources that keep failing are listed below.",
+                    "collect",
+                )
+            )
         else:
             checks.append(Check("collection", "Collection", "ok", "Every data source has been collected."))
     elif collecting:
-        checks.append(Check("collection", "Collection", "pending",
-                            f"First full collection in progress: {len([k for k in nightly if k in succeeded])} "
-                            f"of {len(nightly)} data sources done."))
+        checks.append(
+            Check(
+                "collection",
+                "Collection",
+                "pending",
+                f"First full collection in progress: {len([k for k in nightly if k in succeeded])} "
+                f"of {len(nightly)} data sources done.",
+            )
+        )
     else:
         done = len([k for k in nightly if k in succeeded])
-        checks.append(Check("collection", "Collection", "todo",
-                            f"First full collection not done yet ({done} of {len(nightly)} data sources).",
-                            "Collect everything now, or wait for the nightly collection.", "collect"))
+        checks.append(
+            Check(
+                "collection",
+                "Collection",
+                "todo",
+                f"First full collection not done yet ({done} of {len(nightly)} data sources).",
+                "Collect everything now, or wait for the nightly collection.",
+                "collect",
+            )
+        )
 
-    failing = [(k, _title(k), r["error"] or "") for k, r in latest.items()
-               if r["status"] == "failed" and k in REGISTRY]
+    failing = [(k, _title(k), r["error"] or "") for k, r in latest.items() if r["status"] == "failed" and k in REGISTRY]
     if failing:
         first = failing[0][2]
         fix = _explain(first)
         if "Global Reader" in first or "Exchange refused access" in first:
             fix = f"Assign Global Reader: {GLOBAL_READER_STEPS}."
-        checks.append(Check("sources", "Data sources",
-                            "bad", f"{plural(len(failing), 'data source')} failing: "
-                            + ", ".join(t for _, t, _ in failing) + ".", fix, "collection"))
+        checks.append(
+            Check(
+                "sources",
+                "Data sources",
+                "bad",
+                f"{plural(len(failing), 'data source')} failing: " + ", ".join(t for _, t, _ in failing) + ".",
+                fix,
+                "collection",
+            )
+        )
     elif latest:
         checks.append(Check("sources", "Data sources", "ok", "None failing."))
 
     steps = [
         Step("added", "Tenant added", True),
         Step("consent", "Admin consent granted", bool(tenant["consented_at"]), "grant admin consent"),
-        Step("global_reader", "Global Reader assigned", bool(result and result.get("global_reader")),
-             "assign Global Reader to the app"),
-        Step("collection", "First full collection done", full,
-             "first full collection (collecting now)" if collecting else "collect everything"),
-        Step("permissions", "All permissions granted",
-             bool(result and result.get("permissions_checked") and not result.get("missing")),
-             "re-grant admin consent for the missing permissions" if result and result.get("missing")
-             else "check the permissions"),
+        Step(
+            "global_reader",
+            "Global Reader assigned",
+            bool(result and result.get("global_reader")),
+            "assign Global Reader to the app",
+        ),
+        Step(
+            "collection",
+            "First full collection done",
+            full,
+            "first full collection (collecting now)" if collecting else "collect everything",
+        ),
+        Step(
+            "permissions",
+            "All permissions granted",
+            bool(result and result.get("permissions_checked") and not result.get("missing")),
+            "re-grant admin consent for the missing permissions"
+            if result and result.get("missing")
+            else "check the permissions",
+        ),
     ]
 
     onboarding_steps = {"consent", "permissions", "global_reader", "collection"}
@@ -256,77 +345,152 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
         status = "attention"
     else:
         status = "healthy"
-    return Health(tenant=tenant, status=status, checks=checks, steps=steps, result=result, latest=latest,
-                  last_success=last_success, full_collection=full, collecting=collecting, failing=failing)
+    return Health(
+        tenant=tenant,
+        status=status,
+        checks=checks,
+        steps=steps,
+        result=result,
+        latest=latest,
+        last_success=last_success,
+        full_collection=full,
+        collecting=collecting,
+        failing=failing,
+    )
 
 
 def _app_checks(result: dict | None, name: str) -> list[Check]:
     if result is None:
-        return [Check("permissions", "Permissions", "unknown", "Not checked yet.",
-                      "Checked with every collection, or press Check connection now.", "check"),
-                Check("global_reader", "Global Reader role", "unknown", "Not checked yet.",
-                      "Checked with every collection, or press Check connection now.", "check")]
+        return [
+            Check(
+                "permissions",
+                "Permissions",
+                "unknown",
+                "Not checked yet.",
+                "Checked with every collection, or press Check connection now.",
+                "check",
+            ),
+            Check(
+                "global_reader",
+                "Global Reader role",
+                "unknown",
+                "Not checked yet.",
+                "Checked with every collection, or press Check connection now.",
+                "check",
+            ),
+        ]
     if not result.get("client_id"):
         return [Check("permissions", "Permissions", "unknown", "Not checked: the tenant has no app connection.")]
     if result.get("app_found") is False:
-        fix = (f"A Global Administrator of {name} grants admin consent with the consent link. If they deleted the "
-               "app on purpose, offboard this tenant.")
-        return [Check("permissions", "Permissions", "bad", "Office Sentry's app isn't in this tenant.", fix,
-                      "consent")]
+        fix = (
+            f"A Global Administrator of {name} grants admin consent with the consent link. If they deleted the "
+            "app on purpose, offboard this tenant."
+        )
+        return [Check("permissions", "Permissions", "bad", "Office Sentry's app isn't in this tenant.", fix, "consent")]
     checks = []
     app = result.get("app_name") or "the Office Sentry app"
     if result.get("app_enabled") is False:
-        checks.append(Check("app_enabled", "App enabled", "bad", "The app is disabled in this tenant.",
-                            f"In {name}: Microsoft Entra admin centre → Enterprise applications → {app} → "
-                            "Properties → set Enabled for users to sign in to Yes."))
+        checks.append(
+            Check(
+                "app_enabled",
+                "App enabled",
+                "bad",
+                "The app is disabled in this tenant.",
+                f"In {name}: Microsoft Entra admin centre → Enterprise applications → {app} → "
+                "Properties → set Enabled for users to sign in to Yes.",
+            )
+        )
     missing = result.get("missing") or []
     if not result.get("permissions_checked"):
-        checks.append(Check("permissions", "Permissions", "warn", "Couldn't read which permissions are granted.",
-                            f"A Global Administrator of {name} opens the consent link again; it grants every "
-                            "permission at once.", "consent"))
+        checks.append(
+            Check(
+                "permissions",
+                "Permissions",
+                "warn",
+                "Couldn't read which permissions are granted.",
+                f"A Global Administrator of {name} opens the consent link again; it grants every permission at once.",
+                "consent",
+            )
+        )
     elif missing:
-        checks.append(Check("permissions", "Permissions", "bad",
-                            f"{len(missing)} of {ALL_PERMISSIONS} not granted: {', '.join(missing)}.",
-                            f"A Global Administrator of {name} opens the consent link again; it asks for every "
-                            "permission at once. Then press Check connection now.", "consent"))
+        checks.append(
+            Check(
+                "permissions",
+                "Permissions",
+                "bad",
+                f"{len(missing)} of {ALL_PERMISSIONS} not granted: {', '.join(missing)}.",
+                f"A Global Administrator of {name} opens the consent link again; it asks for every "
+                "permission at once. Then press Check connection now.",
+                "consent",
+            )
+        )
     else:
         checks.append(Check("permissions", "Permissions", "ok", f"All {ALL_PERMISSIONS} granted."))
     extra = extra_permissions(result)
     if extra:
-        checks.append(Check(
-            "extra_permissions", "Extra permissions", "warn",
-            f"The app has {plural(len(extra), 'permission')} Office Sentry doesn't ask for: {', '.join(extra)}.",
-            "Office Sentry only needs the read-only permissions listed on its App connection page, so a stolen "
-            "key shouldn't be able to do more. Remove the others from the app registration's API permissions in "
-            f"your own tenant, then in {name}: Microsoft Entra admin centre → Enterprise applications → {app} → "
-            "Permissions, revoke them. Then press Check connection now.", "check"))
+        checks.append(
+            Check(
+                "extra_permissions",
+                "Extra permissions",
+                "warn",
+                f"The app has {plural(len(extra), 'permission')} Office Sentry doesn't ask for: {', '.join(extra)}.",
+                "Office Sentry only needs the read-only permissions listed on its App connection page, so a stolen "
+                "key shouldn't be able to do more. Remove the others from the app registration's API permissions in "
+                f"your own tenant, then in {name}: Microsoft Entra admin centre → Enterprise applications → {app} → "
+                "Permissions, revoke them. Then press Check connection now.",
+                "check",
+            )
+        )
 
     if not result.get("roles_checked"):
-        checks.append(Check("global_reader", "Global Reader role", "warn", "Couldn't read the app's admin roles.",
-                            "Re-grant admin consent (RoleManagement.Read.Directory lets Office Sentry check this).",
-                            "consent"))
+        checks.append(
+            Check(
+                "global_reader",
+                "Global Reader role",
+                "warn",
+                "Couldn't read the app's admin roles.",
+                "Re-grant admin consent (RoleManagement.Read.Directory lets Office Sentry check this).",
+                "consent",
+            )
+        )
     elif result.get("global_reader"):
         extra = extra_roles(result)
         if extra:
             roles = " and ".join(extra)
-            checks.append(Check("global_reader", "Global Reader role", "warn",
-                                f"Assigned, but the app also holds {roles}.",
-                                f"Global Reader is all Office Sentry needs, and it can't change anything. In {name}: "
-                                f"Microsoft Entra admin centre → Roles and admins → {extra[0]} → select {app} → "
-                                "Remove assignments" + (", and the same for the others." if len(extra) > 1 else ".")
-                                + " Then press Check connection now.", "check"))
+            checks.append(
+                Check(
+                    "global_reader",
+                    "Global Reader role",
+                    "warn",
+                    f"Assigned, but the app also holds {roles}.",
+                    f"Global Reader is all Office Sentry needs, and it can't change anything. In {name}: "
+                    f"Microsoft Entra admin centre → Roles and admins → {extra[0]} → select {app} → "
+                    "Remove assignments"
+                    + (", and the same for the others." if len(extra) > 1 else ".")
+                    + " Then press Check connection now.",
+                    "check",
+                )
+            )
         else:
             checks.append(Check("global_reader", "Global Reader role", "ok", "Assigned."))
     else:
         others = [r for r in result.get("roles") or [] if r != "Global Reader"]
         summary = "Not assigned, so mailbox reports can't be collected."
         if others:
-            summary = (f"Not assigned (the app holds {', '.join(others)} instead), so mailbox reports may not be "
-                       "collected.")
-        checks.append(Check("global_reader", "Global Reader role", "bad", summary,
-                            f"In {name}: {GLOBAL_READER_STEPS.removesuffix('the Office Sentry app')}{app}. "
-                            "Microsoft can take up to an hour to apply it; then press Check connection now.",
-                            "check"))
+            summary = (
+                f"Not assigned (the app holds {', '.join(others)} instead), so mailbox reports may not be collected."
+            )
+        checks.append(
+            Check(
+                "global_reader",
+                "Global Reader role",
+                "bad",
+                summary,
+                f"In {name}: {GLOBAL_READER_STEPS.removesuffix('the Office Sentry app')}{app}. "
+                "Microsoft can take up to an hour to apply it; then press Check connection now.",
+                "check",
+            )
+        )
     return checks
 
 
@@ -377,4 +541,3 @@ def describe(health: Health) -> str:
     if step:
         return f"Next: {step.todo or step.title[0].lower() + step.title[1:]}."
     return "Everything is working."
-

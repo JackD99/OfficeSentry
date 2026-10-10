@@ -34,14 +34,20 @@ def apps_part(p: Person) -> Part:
         risky = sorted(a["scopes"] & SENSITIVE_DELEGATED)
         publisher = sp.get("verifiedPublisher") or sp.get("publisherName") or ""
         if third:
-            publisher += " (verified)" if sp.get("verifiedPublisher") else (" (unverified)" if publisher
-                                                                            else "Unverified")
-        table.add([name, publisher or "Microsoft", sorted(a["scopes"]),
-                   "Third party" if third else ("Microsoft" if sp.get("microsoft") else "This organisation")],
-                  ("medium" if risky else "low") if third else None)
+            publisher += (
+                " (verified)" if sp.get("verifiedPublisher") else (" (unverified)" if publisher else "Unverified")
+            )
+        table.add(
+            [
+                name,
+                publisher or "Microsoft",
+                sorted(a["scopes"]),
+                "Third party" if third else ("Microsoft" if sp.get("microsoft") else "This organisation"),
+            ],
+            ("medium" if risky else "low") if third else None,
+        )
         if third and risky:
-            p.flag("medium", f"Gave {name} access to {', '.join(risky)}. Check it's an app the business uses.",
-                   "apps")
+            p.flag("medium", f"Gave {name} access to {', '.join(risky)}. Check it's an app the business uses.", "apps")
     result.tables = [table]
     result.summary = _plural(len(by_app), "app")
     return result

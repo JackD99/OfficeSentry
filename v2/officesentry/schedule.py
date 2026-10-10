@@ -59,8 +59,9 @@ def next_fire(expr: str, tz: str, now: datetime) -> datetime:
     return croniter(expr, local).get_next(datetime).astimezone(UTC)
 
 
-def due_slot(expr: str, tz: str, now: datetime, last_slot: str | None = None,
-             not_before: str | None = None) -> datetime | None:
+def due_slot(
+    expr: str, tz: str, now: datetime, last_slot: str | None = None, not_before: str | None = None
+) -> datetime | None:
     """The latest slot of ``expr`` if it still needs doing, else None.
 
     ``last_slot`` is the ``iso()`` of the slot the caller last completed, and
@@ -81,6 +82,7 @@ def due_slot(expr: str, tz: str, now: datetime, last_slot: str | None = None,
 @dataclass
 class TickContext:
     """What a periodic job gets each minute. ``app`` renders templates (emails)."""
+
     app: object
     conn: object
     vault: object
@@ -99,11 +101,13 @@ def periodic(name: str):
     logged and doesn't stop collections or other jobs. Register at import time
     in a module ``worker.JOB_MODULES`` imports.
     """
+
     def decorator(fn):
         if name in PERIODIC:
             raise ValueError(f"duplicate periodic job {name!r}")
         PERIODIC[name] = fn
         return fn
+
     return decorator
 
 
@@ -125,8 +129,7 @@ def is_fresh(conn, tenant_id: int, collector: str, slot: datetime, max_age_hours
     return bool(last and last["finished_at"] and last["finished_at"] >= iso(slot - timedelta(hours=max_age_hours)))
 
 
-def refresh_for_report(conn, tenant_id: int, slot: datetime, max_age_hours: float,
-                       now: datetime | None = None) -> bool:
+def refresh_for_report(conn, tenant_id: int, slot: datetime, max_age_hours: float, now: datetime | None = None) -> bool:
     """Queue stale collectors before a report due at ``slot``. True once it can be sent.
 
     Each stale collector is tried once per slot; a failed refresh does not hold
@@ -145,8 +148,9 @@ def refresh_for_report(conn, tenant_id: int, slot: datetime, max_age_hours: floa
             (tenant_id, key, iso(slot)),
         ).fetchone()
         if tried is None:
-            store.enqueue_run(conn, tenant_id, key, trigger="schedule", scheduled_for=iso(slot),
-                              priority=store.PRIORITY_WAITING)  # a report is waiting for it
+            store.enqueue_run(
+                conn, tenant_id, key, trigger="schedule", scheduled_for=iso(slot), priority=store.PRIORITY_WAITING
+            )  # a report is waiting for it
             ready = False
         elif tried["status"] in ("queued", "running"):
             ready = False

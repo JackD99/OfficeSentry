@@ -65,8 +65,11 @@ def check_space(folder: Path, size: int, compress: bool = True) -> None:
     needed = size + (size // 2 if compress else 0) + SPARE_BYTES
     free = shutil.disk_usage(folder).free
     if free < needed:
-        raise OSError(errno.ENOSPC, f"a copy of the database needs about {needed // 2**20:,} MB free in {folder} "
-                                    f"and there's {free // 2**20:,} MB")
+        raise OSError(
+            errno.ENOSPC,
+            f"a copy of the database needs about {needed // 2**20:,} MB free in {folder} "
+            f"and there's {free // 2**20:,} MB",
+        )
 
 
 def copy_database(src: sqlite3.Connection, dest: Path) -> Path:
@@ -90,9 +93,13 @@ def copy_database(src: sqlite3.Connection, dest: Path) -> Path:
             raise sqlite3.DatabaseError(f"the copy failed its integrity check: {problem}")
         if compress:
             _private(part)
-            with open(raw, "rb") as plain, open(part, "r+b") as packed, \
-                    gzip.GzipFile(filename=dest.name[:-len(COMPRESSED)], mode="wb", fileobj=packed,
-                                  compresslevel=GZIP_LEVEL) as zipped:
+            with (
+                open(raw, "rb") as plain,
+                open(part, "r+b") as packed,
+                gzip.GzipFile(
+                    filename=dest.name[: -len(COMPRESSED)], mode="wb", fileobj=packed, compresslevel=GZIP_LEVEL
+                ) as zipped,
+            ):
                 shutil.copyfileobj(plain, zipped, 2**20)
             raw.unlink()
         os.chmod(part, 0o600)
@@ -151,8 +158,12 @@ MANIFEST = "manifest.json"
 
 def _stamp_of(path: Path) -> list:
     wal = path.with_name(path.name + "-wal")
-    return [path.stat().st_size, path.stat().st_mtime_ns,
-            wal.stat().st_size if wal.exists() else 0, wal.stat().st_mtime_ns if wal.exists() else 0]
+    return [
+        path.stat().st_size,
+        path.stat().st_mtime_ns,
+        wal.stat().st_size if wal.exists() else 0,
+        wal.stat().st_mtime_ns if wal.exists() else 0,
+    ]
 
 
 def _event_files(folder: Path) -> dict[str, Path]:
@@ -187,7 +198,7 @@ def mirror_events(source: Path, dest: Path) -> tuple[int, int]:
         del manifest[rel]
         removed += 1
     for stray in dest.glob(f"*/*.db{COMPRESSED}"):
-        if f"{stray.parent.name}/{stray.name[:-len(COMPRESSED)]}" not in files:
+        if f"{stray.parent.name}/{stray.name[: -len(COMPRESSED)]}" not in files:
             stray.unlink()
     _write_manifest(dest, manifest)
     return copied, removed
@@ -203,7 +214,7 @@ def restore_events(copies: Path, folder: Path) -> int:
     """Put back each activity history file the data folder is missing from a backup copy. Returns how many."""
     restored = 0
     for packed in sorted(copies.glob(f"*/*.db{COMPRESSED}")) if copies.is_dir() else []:
-        target = folder / packed.parent.name / packed.name[:-len(COMPRESSED)]
+        target = folder / packed.parent.name / packed.name[: -len(COMPRESSED)]
         if target.exists():
             continue
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -252,12 +263,18 @@ def _raw_status(data_dir: Path) -> dict:
 
 def read_status(data_dir: Path) -> dict[str, dict]:
     """Every job's last outcome from ``backup-status.json`` ({} when there is none or it can't be read)."""
-    return {str(k): {f: v.get(f) for f in STATUS_KEYS} for k, v in _raw_status(data_dir).items()
-            if isinstance(v, dict)}
+    return {str(k): {f: v.get(f) for f in STATUS_KEYS} for k, v in _raw_status(data_dir).items() if isinstance(v, dict)}
 
 
-def record_status(data_dir: Path, job: str, ok: bool, error: str | None = None, file: Path | None = None,
-                  detail: str | None = None, now: datetime | None = None) -> None:
+def record_status(
+    data_dir: Path,
+    job: str,
+    ok: bool,
+    error: str | None = None,
+    file: Path | None = None,
+    detail: str | None = None,
+    now: datetime | None = None,
+) -> None:
     """Record one attempt of ``job``, keeping the other jobs' entries. ``detail`` (short plain words, no
     secrets) is stored as given; without it a successful ``file`` is described by name and size. Never
     raises: a backup's outcome matters more than its record."""
@@ -349,8 +366,10 @@ def check_backup(path: Path, shown: Path | None = None) -> int:
     if version < 1 or not CORE_TABLES <= tables:
         raise RestoreError(f"{name} isn't an Office Sentry database.")
     if version > latest_version():
-        raise RestoreError(f"{name} was made by a newer Office Sentry (database version {version}; this one "
-                           f"knows up to {latest_version()}). Update Office Sentry first.")
+        raise RestoreError(
+            f"{name} was made by a newer Office Sentry (database version {version}; this one "
+            f"knows up to {latest_version()}). Update Office Sentry first."
+        )
     return version
 
 
@@ -406,9 +425,11 @@ def restore(db_path: Path, source: Path, worker_running: bool, force: bool = Fal
 def _restore(db_path: Path, source: Path, plain: Path, worker_running: bool, force: bool) -> dict:
     version = check_backup(plain, shown=source)
     if worker_running and not force:
-        raise RestoreError("The worker is running (it checked in within the last few minutes). Stop the portal "
-                           "and the worker first (docker compose stop web worker), or add --force if it isn't "
-                           "really running.")
+        raise RestoreError(
+            "The worker is running (it checked in within the last few minutes). Stop the portal "
+            "and the worker first (docker compose stop web worker), or add --force if it isn't "
+            "really running."
+        )
     saved = None
     if db_path.exists():
         live = connect(db_path)

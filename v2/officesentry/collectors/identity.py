@@ -66,8 +66,11 @@ class AdminRoles(Collector):
     permissions = ("RoleManagement.Read.Directory",)
 
     def collect(self, ctx: RunContext) -> None:
-        definitions = ctx.paged(ctx.graph.get_all("/roleManagement/directory/roleDefinitions", params={
-            "$select": "id,displayName,isBuiltIn,templateId"}))
+        definitions = ctx.paged(
+            ctx.graph.get_all(
+                "/roleManagement/directory/roleDefinitions", params={"$select": "id,displayName,isBuiltIn,templateId"}
+            )
+        )
         roles = {}
         for d in definitions:
             roles[d["id"]] = {
@@ -78,33 +81,45 @@ class AdminRoles(Collector):
             }
         ctx.objects("role_definition", list(roles.items()))
 
-        assignments = ctx.paged(ctx.graph.get_all("/roleManagement/directory/roleAssignments", params={
-            "$expand": "principal"}))
+        assignments = ctx.paged(
+            ctx.graph.get_all("/roleManagement/directory/roleAssignments", params={"$expand": "principal"})
+        )
         rows = []
         for a in assignments:
             role = roles.get(a.get("roleDefinitionId"), {})
-            rows.append((a["id"], {
-                **_principal_summary(a.get("principal"), a.get("principalId")),
-                "roleDefinitionId": a.get("roleDefinitionId"),
-                "roleName": role.get("displayName"),
-                "privileged": role.get("privileged", False),
-                "directoryScopeId": a.get("directoryScopeId"),
-                "assignment": "active",
-            }))
+            rows.append(
+                (
+                    a["id"],
+                    {
+                        **_principal_summary(a.get("principal"), a.get("principalId")),
+                        "roleDefinitionId": a.get("roleDefinitionId"),
+                        "roleName": role.get("displayName"),
+                        "privileged": role.get("privileged", False),
+                        "directoryScopeId": a.get("directoryScopeId"),
+                        "assignment": "active",
+                    },
+                )
+            )
 
         try:
-            eligible = ctx.paged(ctx.graph.get_all("/roleManagement/directory/roleEligibilitySchedules", params={
-                "$expand": "principal"}))
+            eligible = ctx.paged(
+                ctx.graph.get_all("/roleManagement/directory/roleEligibilitySchedules", params={"$expand": "principal"})
+            )
             for e in eligible:
                 role = roles.get(e.get("roleDefinitionId"), {})
-                rows.append((f"eligible:{e['id']}", {
-                    **_principal_summary(e.get("principal"), e.get("principalId")),
-                    "roleDefinitionId": e.get("roleDefinitionId"),
-                    "roleName": role.get("displayName"),
-                    "privileged": role.get("privileged", False),
-                    "directoryScopeId": e.get("directoryScopeId"),
-                    "assignment": "eligible",
-                }))
+                rows.append(
+                    (
+                        f"eligible:{e['id']}",
+                        {
+                            **_principal_summary(e.get("principal"), e.get("principalId")),
+                            "roleDefinitionId": e.get("roleDefinitionId"),
+                            "roleName": role.get("displayName"),
+                            "privileged": role.get("privileged", False),
+                            "directoryScopeId": e.get("directoryScopeId"),
+                            "assignment": "eligible",
+                        },
+                    )
+                )
         except (LicenseRequired, PermissionMissing):
             ctx.log("PIM eligibility not available (needs Entra ID P2); active assignments only")
 
@@ -113,8 +128,10 @@ class AdminRoles(Collector):
         priv_active = [r for r in data if r["privileged"] and r["assignment"] == "active"]
         ctx.metric("admins.privileged_active_assignments", len(priv_active))
         ctx.metric("admins.privileged_principals", len({r["principalId"] for r in priv_active}))
-        ctx.metric("admins.global_admins", len({r["principalId"] for r in priv_active
-                                               if r["roleName"] == "Global Administrator"}))
+        ctx.metric(
+            "admins.global_admins",
+            len({r["principalId"] for r in priv_active if r["roleName"] == "Global Administrator"}),
+        )
 
 
 @register
@@ -144,8 +161,9 @@ class ConditionalAccess(Collector):
         ctx.objects("ca_group", _expand_groups(ctx, policies))
         ctx.metric("ca.policies_total", len(policies))
         ctx.metric("ca.policies_enabled", sum(p.get("state") == "enabled" for p in policies))
-        ctx.metric("ca.policies_report_only",
-                   sum(p.get("state") == "enabledForReportingButNotEnforced" for p in policies))
+        ctx.metric(
+            "ca.policies_report_only", sum(p.get("state") == "enabledForReportingButNotEnforced" for p in policies)
+        )
 
 
 def _policy_group_ids(policies: list[dict]) -> list[str]:
@@ -169,14 +187,26 @@ def _expand_groups(ctx: RunContext, policies: list[dict]) -> list[tuple[str, dic
     for gid in ids:
         try:
             name = ctx.graph.get(f"/groups/{gid}", params={"$select": "displayName"}).get("displayName")
-            members = ctx.paged(ctx.graph.get_all(f"/groups/{gid}/transitiveMembers", params={
-                "$select": "id", "$top": "999"}))
+            members = ctx.paged(
+                ctx.graph.get_all(f"/groups/{gid}/transitiveMembers", params={"$select": "id", "$top": "999"})
+            )
         except GraphError as exc:
             ctx.log(f"Could not read group {gid}: {exc.message}", "warning")
             rows.append((gid, {"displayName": None, "members": None}))
             continue
-        rows.append((gid, {"displayName": name, "members": sorted(
-            m["id"] for m in members if (m.get("@odata.type") or "#microsoft.graph.user") == "#microsoft.graph.user")}))
+        rows.append(
+            (
+                gid,
+                {
+                    "displayName": name,
+                    "members": sorted(
+                        m["id"]
+                        for m in members
+                        if (m.get("@odata.type") or "#microsoft.graph.user") == "#microsoft.graph.user"
+                    ),
+                },
+            )
+        )
     return rows
 
 
@@ -192,26 +222,34 @@ class MfaRegistration(Collector):
         if ctx.capabilities.get("entra_p1", True):
             try:
                 details = ctx.paged(ctx.graph.get_all("/reports/authenticationMethods/userRegistrationDetails"))
-                rows = [(d["id"], {
-                    "userPrincipalName": d.get("userPrincipalName"),
-                    "displayName": d.get("userDisplayName"),
-                    "userType": d.get("userType"),
-                    "isAdmin": d.get("isAdmin"),
-                    "isMfaRegistered": bool(d.get("isMfaRegistered")),
-                    "isMfaCapable": bool(d.get("isMfaCapable")),
-                    "isPasswordlessCapable": bool(d.get("isPasswordlessCapable")),
-                    "methodsRegistered": d.get("methodsRegistered") or [],
-                    "defaultMfaMethod": d.get("defaultMfaMethod"),
-                    # How people sign in and reset passwords, for Passwords and sign-in methods.
-                    "isSsprRegistered": d.get("isSsprRegistered"),
-                    "isSsprCapable": d.get("isSsprCapable"),
-                    "isSystemPreferredAuthenticationMethodEnabled": d.get(
-                        "isSystemPreferredAuthenticationMethodEnabled"),
-                    "systemPreferredAuthenticationMethods": d.get("systemPreferredAuthenticationMethods") or [],
-                    "userPreferredMethodForSecondaryAuthentication": d.get(
-                        "userPreferredMethodForSecondaryAuthentication"),
-                    "source": "registration_report",
-                }) for d in details]
+                rows = [
+                    (
+                        d["id"],
+                        {
+                            "userPrincipalName": d.get("userPrincipalName"),
+                            "displayName": d.get("userDisplayName"),
+                            "userType": d.get("userType"),
+                            "isAdmin": d.get("isAdmin"),
+                            "isMfaRegistered": bool(d.get("isMfaRegistered")),
+                            "isMfaCapable": bool(d.get("isMfaCapable")),
+                            "isPasswordlessCapable": bool(d.get("isPasswordlessCapable")),
+                            "methodsRegistered": d.get("methodsRegistered") or [],
+                            "defaultMfaMethod": d.get("defaultMfaMethod"),
+                            # How people sign in and reset passwords, for Passwords and sign-in methods.
+                            "isSsprRegistered": d.get("isSsprRegistered"),
+                            "isSsprCapable": d.get("isSsprCapable"),
+                            "isSystemPreferredAuthenticationMethodEnabled": d.get(
+                                "isSystemPreferredAuthenticationMethodEnabled"
+                            ),
+                            "systemPreferredAuthenticationMethods": d.get("systemPreferredAuthenticationMethods") or [],
+                            "userPreferredMethodForSecondaryAuthentication": d.get(
+                                "userPreferredMethodForSecondaryAuthentication"
+                            ),
+                            "source": "registration_report",
+                        },
+                    )
+                    for d in details
+                ]
             except LicenseRequired:
                 ctx.log("Registration report needs Entra ID P1; checking users' methods one by one")
         if rows is None:
@@ -221,8 +259,10 @@ class MfaRegistration(Collector):
             # anyone it leaves out one by one, so they're never counted as registered or skipped.
             missing = self._per_user(ctx, skip={uid for uid, _ in rows}, fetch_users=not rows)
             if missing:
-                ctx.log(f"Registration report left out {plural(len(missing), 'enabled member')}; checked their methods "
-                        "one by one")
+                ctx.log(
+                    f"Registration report left out {plural(len(missing), 'enabled member')}; checked their methods "
+                    "one by one"
+                )
                 rows += missing
 
         ctx.objects("mfa_registration", rows)
@@ -233,18 +273,29 @@ class MfaRegistration(Collector):
         if data:
             ctx.metric("mfa.registered_pct", round(100 * sum(r["isMfaRegistered"] for r in data) / len(data), 1))
 
-    def _per_user(self, ctx: RunContext, skip: set[str] = frozenset(),
-                  fetch_users: bool = True) -> list[tuple[str, dict]]:
+    def _per_user(
+        self, ctx: RunContext, skip: set[str] = frozenset(), fetch_users: bool = True
+    ) -> list[tuple[str, dict]]:
         users_run = store.latest_run(ctx.conn, ctx.tenant["id"], "users")
         if users_run:
             users = store.run_objects(ctx.conn, users_run["id"], "user")
         elif not fetch_users:
             return []
         else:
-            users = [dict(u, _id=u["id"]) for u in ctx.paged(ctx.graph.get_all("/users", params={
-                "$select": "id,userPrincipalName,displayName,userType,accountEnabled", "$top": "999"}))]
-        members = [u for u in users if u.get("accountEnabled") and (u.get("userType") or "Member") == "Member"
-                   and u["_id"] not in skip]
+            users = [
+                dict(u, _id=u["id"])
+                for u in ctx.paged(
+                    ctx.graph.get_all(
+                        "/users",
+                        params={"$select": "id,userPrincipalName,displayName,userType,accountEnabled", "$top": "999"},
+                    )
+                )
+            ]
+        members = [
+            u
+            for u in users
+            if u.get("accountEnabled") and (u.get("userType") or "Member") == "Member" and u["_id"] not in skip
+        ]
         if len(members) > PER_USER_MFA_LIMIT:
             ctx.warn(f"Checked the first {PER_USER_MFA_LIMIT} of {len(members)} enabled members")
             members = members[:PER_USER_MFA_LIMIT]
@@ -253,16 +304,21 @@ class MfaRegistration(Collector):
             methods = ctx.paged(ctx.graph.get_all(f"/users/{u['_id']}/authentication/methods"))
             types = sorted({m.get("@odata.type", "") for m in methods})
             registered = any(t in MFA_METHOD_TYPES for t in types)
-            rows.append((u["_id"], {
-                "userPrincipalName": u.get("userPrincipalName"),
-                "displayName": u.get("displayName"),
-                "userType": u.get("userType") or "Member",
-                "isAdmin": None,
-                "isMfaRegistered": registered,
-                "isMfaCapable": registered,
-                "isPasswordlessCapable": None,
-                "methodsRegistered": [t.rsplit(".", 1)[-1].replace("AuthenticationMethod", "") for t in types],
-                "defaultMfaMethod": None,
-                "source": "per_user_methods",
-            }))
+            rows.append(
+                (
+                    u["_id"],
+                    {
+                        "userPrincipalName": u.get("userPrincipalName"),
+                        "displayName": u.get("displayName"),
+                        "userType": u.get("userType") or "Member",
+                        "isAdmin": None,
+                        "isMfaRegistered": registered,
+                        "isMfaCapable": registered,
+                        "isPasswordlessCapable": None,
+                        "methodsRegistered": [t.rsplit(".", 1)[-1].replace("AuthenticationMethod", "") for t in types],
+                        "defaultMfaMethod": None,
+                        "source": "per_user_methods",
+                    },
+                )
+            )
         return rows

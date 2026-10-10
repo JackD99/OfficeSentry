@@ -43,8 +43,9 @@ def cfg(tmp_path, monkeypatch):
         monkeypatch.delenv("OFFICESENTRY_" + var, raising=False)
     # Two-step sign-in is off here so other tests can sign in with a password;
     # tests/test_login_security.py turns it on.
-    return load_config(data_dir=tmp_path / "data", testing=True, secure_cookies=False, require_mfa="off",
-                       extra={"disable_csrf": True})
+    return load_config(
+        data_dir=tmp_path / "data", testing=True, secure_cookies=False, require_mfa="off", extra={"disable_csrf": True}
+    )
 
 
 @pytest.fixture
@@ -86,8 +87,9 @@ def login(client, username, password=PASSWORD):
 
 @pytest.fixture
 def connection_id(db, vault):
-    cid = store.create_connection(db, vault, "Test app", generate_certificate("test"),
-                                  client_id="11111111-2222-3333-4444-555555555555")
+    cid = store.create_connection(
+        db, vault, "Test app", generate_certificate("test"), client_id="11111111-2222-3333-4444-555555555555"
+    )
     return cid
 
 

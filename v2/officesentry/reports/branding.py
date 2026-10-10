@@ -17,8 +17,16 @@ from hashlib import sha256
 DEFAULT_NAME = "Office Sentry"
 DEFAULT_ACCENT = "#2557d6"
 MAX_LOGO_BYTES = 512 * 1024
-KEYS = ("brand_name", "brand_logo", "brand_accent", "brand_contact", "brand_support_name",
-        "brand_support_email", "brand_support_phone", "brand_report_footer")
+KEYS = (
+    "brand_name",
+    "brand_logo",
+    "brand_accent",
+    "brand_contact",
+    "brand_support_name",
+    "brand_support_email",
+    "brand_support_phone",
+    "brand_report_footer",
+)
 MAX_FOOTER = 400
 HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 LOGO_TYPES = {b"\x89PNG\r\n\x1a\n": "image/png", b"\xff\xd8\xff": "image/jpeg"}
@@ -45,6 +53,7 @@ def _luminance(hex_: str) -> float:
     def channel(c):
         c /= 255
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
     r, g, b = (channel(c) for c in _rgb(hex_))
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
@@ -146,9 +155,9 @@ def image_size(data: bytes) -> tuple[int, int] | None:
         while i + 9 < len(data):
             if data[i] != 0xFF:
                 return None
-            marker, length = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
+            marker, length = data[i + 1], int.from_bytes(data[i + 2 : i + 4], "big")
             if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
-                return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+                return int.from_bytes(data[i + 7 : i + 9], "big"), int.from_bytes(data[i + 5 : i + 7], "big")
             i += 2 + length
     return None
 
@@ -165,8 +174,10 @@ def fit(size: tuple[int, int] | None, height: int, max_width: int) -> tuple[int,
 
 
 def load(conn) -> Brand:
-    rows = {r["key"]: r["value"] for r in conn.execute(
-        f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(KEYS))})", KEYS)}
+    rows = {
+        r["key"]: r["value"]
+        for r in conn.execute(f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(KEYS))})", KEYS)
+    }
     accent = rows.get("brand_accent") or DEFAULT_ACCENT
     return Brand(
         name=rows.get("brand_name") or "",

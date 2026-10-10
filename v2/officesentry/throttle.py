@@ -60,8 +60,10 @@ def name_key(username: str) -> str:
 
 def _wait_for(conn, where: str, args: tuple, since: str, limit: int, now: datetime) -> int | None:
     """Seconds until fewer than ``limit`` failures match ``where`` in the window, or None if already fewer."""
-    rows = conn.execute(f"SELECT ts FROM login_attempts WHERE outcome != 'ok' AND ts >= ? AND {where}"
-                        " ORDER BY ts DESC LIMIT ?", (since, *args, limit)).fetchall()
+    rows = conn.execute(
+        f"SELECT ts FROM login_attempts WHERE outcome != 'ok' AND ts >= ? AND {where} ORDER BY ts DESC LIMIT ?",
+        (since, *args, limit),
+    ).fetchall()
     if len(rows) < limit:
         return None
     # The limit-th newest failure has to leave the window first.
@@ -72,28 +74,38 @@ def known_address(conn, user_id: int | None, ip: str, now: datetime | None = Non
     if user_id is None:
         return False
     since = _iso((now or datetime.now(UTC)) - KNOWN_FOR)
-    return conn.execute("SELECT 1 FROM login_attempts WHERE user_id = ? AND ip = ? AND outcome = 'ok' AND ts >= ?"
-                        " LIMIT 1", (user_id, ip, since)).fetchone() is not None
+    return (
+        conn.execute(
+            "SELECT 1 FROM login_attempts WHERE user_id = ? AND ip = ? AND outcome = 'ok' AND ts >= ? LIMIT 1",
+            (user_id, ip, since),
+        ).fetchone()
+        is not None
+    )
 
 
-def reserve(conn: sqlite3.Connection, ip: str, username: str, user_id: int | None,
-            now: datetime | None = None) -> int | Refused:
+def reserve(
+    conn: sqlite3.Connection, ip: str, username: str, user_id: int | None, now: datetime | None = None
+) -> int | Refused:
     """Record a password attempt before it is checked. Returns the attempt's id, or why it is refused."""
     now = now or datetime.now(UTC)
     name = name_key(username)
     since = _iso(now - WINDOW)
     with transaction(conn, immediate=True):  # one writer at a time: the checks and the insert are one step
-        for where, args, limit in (("ip = ? AND username = ?", (ip, name), PER_ADDRESS_AND_NAME),
-                                   ("ip = ?", (ip,), PER_ADDRESS)):
+        for where, args, limit in (
+            ("ip = ? AND username = ?", (ip, name), PER_ADDRESS_AND_NAME),
+            ("ip = ?", (ip,), PER_ADDRESS),
+        ):
             if (wait := _wait_for(conn, where, args, since, limit, now)) is not None:
                 return Refused(wait, "address")
         slowed = 0
-        failures = conn.execute("SELECT COUNT(*) FROM login_attempts WHERE outcome != 'ok' AND ts >= ?"
-                                " AND username = ?", (since, name)).fetchone()[0]
+        failures = conn.execute(
+            "SELECT COUNT(*) FROM login_attempts WHERE outcome != 'ok' AND ts >= ? AND username = ?", (since, name)
+        ).fetchone()[0]
         if failures >= NAME_SOFT_LIMIT and not known_address(conn, user_id, ip, now):
             spacing = min(SPACING_MAX, SPACING_START * 2 ** ((failures - NAME_SOFT_LIMIT) // NAME_SOFT_LIMIT))
-            last = conn.execute("SELECT MAX(ts) FROM login_attempts WHERE username = ? AND slowed = 1 AND ts >= ?",
-                                (name, since)).fetchone()[0]
+            last = conn.execute(
+                "SELECT MAX(ts) FROM login_attempts WHERE username = ? AND slowed = 1 AND ts >= ?", (name, since)
+            ).fetchone()[0]
             if last and now - _parse(last) < spacing:
                 return Refused(max(1, int((_parse(last) + spacing - now).total_seconds()) + 1), "name")
             slowed = 1
@@ -110,15 +122,18 @@ def finish(conn: sqlite3.Connection, attempt_id: int, ok: bool) -> None:
 def recent_failures(conn: sqlite3.Connection, username: str, now: datetime | None = None) -> tuple[int, int]:
     """(failed passwords, addresses they came from) for a name in the current window."""
     since = _iso((now or datetime.now(UTC)) - WINDOW)
-    row = conn.execute("SELECT COUNT(*), COUNT(DISTINCT ip) FROM login_attempts WHERE outcome != 'ok' AND ts >= ?"
-                       " AND username = ?", (since, name_key(username))).fetchone()
+    row = conn.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT ip) FROM login_attempts WHERE outcome != 'ok' AND ts >= ? AND username = ?",
+        (since, name_key(username)),
+    ).fetchone()
     return row[0], row[1]
 
 
 def clear(conn: sqlite3.Connection, username: str) -> int:
     """Forget a name's failed attempts (an admin's "Unlock now")."""
-    return conn.execute("DELETE FROM login_attempts WHERE username = ? AND outcome != 'ok'",
-                        (name_key(username),)).rowcount
+    return conn.execute(
+        "DELETE FROM login_attempts WHERE username = ? AND outcome != 'ok'", (name_key(username),)
+    ).rowcount
 
 
 def prune(conn: sqlite3.Connection, now: datetime | None = None) -> int:

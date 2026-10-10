@@ -39,7 +39,8 @@ SECURITY_DEFAULTS_ADVICE = (
     "This tenant has no Entra ID P1, so Conditional Access isn't available. Turn on Security Defaults instead "
     "(Entra admin centre > Overview > Properties > Manage security defaults): they require MFA for everyone "
     "and block legacy authentication. Or add Entra ID P1 (included in Microsoft 365 Business Premium) to use "
-    "Conditional Access.")
+    "Conditional Access."
+)
 
 
 def _ca_data(snap: TenantSnapshot):
@@ -54,9 +55,13 @@ def _ca_data(snap: TenantSnapshot):
 # -- MFA, admins, accounts and licences -------------------------------------------
 
 
-@rule("mfa_enforced", "MFA is enforced for all users", "Identity",
-      "Create a Conditional Access policy requiring MFA for all users and all cloud apps, or turn on "
-      "Security Defaults if the tenant has no Entra ID P1. Keep exclusions to break-glass accounts.")
+@rule(
+    "mfa_enforced",
+    "MFA is enforced for all users",
+    "Identity",
+    "Create a Conditional Access policy requiring MFA for all users and all cloud apps, or turn on "
+    "Security Defaults if the tenant has no Entra ID P1. Keep exclusions to break-glass accounts.",
+)
 def mfa_enforced(snap: TenantSnapshot, now: datetime):
     defaults, policies = _ca_data(snap)
     if defaults is None:
@@ -64,13 +69,21 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
     if defaults:
         return ("pass", "Security Defaults are on, which require MFA registration and enforce it", [])
     if _no_p1(snap):
-        return ("fail", "MFA is not enforced", [Finding(
-            "high", "Tenant", "Security Defaults are off, and without Entra ID P1 there's no Conditional Access")],
-            SECURITY_DEFAULTS_ADVICE)
+        return (
+            "fail",
+            "MFA is not enforced",
+            [
+                Finding(
+                    "high", "Tenant", "Security Defaults are off, and without Entra ID P1 there's no Conditional Access"
+                )
+            ],
+            SECURITY_DEFAULTS_ADVICE,
+        )
     covering = mfa_for_all_policies(policies)
     if not covering:
-        report_only = [p for p in policies if p.get("state") == "enabledForReportingButNotEnforced"
-                       and "mfa" in _grants(p)]
+        report_only = [
+            p for p in policies if p.get("state") == "enabledForReportingButNotEnforced" and "mfa" in _grants(p)
+        ]
         detail = "No enabled policy requires MFA for all users and apps, and Security Defaults are off."
         if report_only:
             n = len(report_only)
@@ -85,18 +98,25 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
             excluded.setdefault(uid, (names.get(uid, uid), "Excluded from", []))[2].append(p.get("displayName", "?"))
         for gid in spec.get("excludeGroups") or []:
             excluded.setdefault(gid, (names.get(gid, f"Group {gid}"), "Group excluded from", []))[2].append(
-                p.get("displayName", "?"))
-    findings = [Finding("medium", label, f"{what} " + ", ".join(f"\"{n}\"" for n in pols), oid)
-                for oid, (label, what, pols) in excluded.items()]
+                p.get("displayName", "?")
+            )
+    findings = [
+        Finding("medium", label, f"{what} " + ", ".join(f'"{n}"' for n in pols), oid)
+        for oid, (label, what, pols) in excluded.items()
+    ]
     policy_names = ", ".join(coverage.policy_name(p) for p in covering)
     if findings:
         return ("fail", f"Enforced by {policy_names}, with {plural(len(findings), 'exclusion')} to review", findings)
     return ("pass", f"Enforced by {policy_names}", [])
 
 
-@rule("legacy_auth_blocked", "Legacy authentication is blocked", "Identity",
-      "Block legacy authentication (Exchange ActiveSync and other clients) with a Conditional Access policy "
-      "for all users. Legacy protocols can't do MFA and are the most common password-spray target.")
+@rule(
+    "legacy_auth_blocked",
+    "Legacy authentication is blocked",
+    "Identity",
+    "Block legacy authentication (Exchange ActiveSync and other clients) with a Conditional Access policy "
+    "for all users. Legacy protocols can't do MFA and are the most common password-spray target.",
+)
 def legacy_auth_blocked(snap: TenantSnapshot, now: datetime):
     defaults, policies = _ca_data(snap)
     if defaults is None:
@@ -104,27 +124,44 @@ def legacy_auth_blocked(snap: TenantSnapshot, now: datetime):
     if defaults:
         return ("pass", "Security Defaults block legacy authentication", [])
     if _no_p1(snap):
-        return ("fail", "Legacy authentication is allowed", [Finding(
-            "high", "Tenant", "Security Defaults are off, and without Entra ID P1 there's no Conditional Access")],
-            SECURITY_DEFAULTS_ADVICE)
+        return (
+            "fail",
+            "Legacy authentication is allowed",
+            [
+                Finding(
+                    "high", "Tenant", "Security Defaults are off, and without Entra ID P1 there's no Conditional Access"
+                )
+            ],
+            SECURITY_DEFAULTS_ADVICE,
+        )
     for p in policies:
         if _enabled(p) and _all_users_all_apps(p) and coverage.blocks_legacy(p):
-            return ("pass", f"Blocked by \"{p.get('displayName')}\"", [])
-    return ("fail", "Legacy authentication is allowed",
-            [Finding("high", "Tenant", "No enabled policy blocks legacy authentication for all users")])
+            return ("pass", f'Blocked by "{p.get("displayName")}"', [])
+    return (
+        "fail",
+        "Legacy authentication is allowed",
+        [Finding("high", "Tenant", "No enabled policy blocks legacy authentication for all users")],
+    )
 
 
 def _privileged_users(snap: TenantSnapshot) -> list[dict] | None:
     rows = snap.objects("admin_roles", "role_assignment")
     if rows is None:
         return None
-    return [dict(r, roleName=r.get("roleName") or "Unknown role") for r in rows
-            if r.get("privileged") and r.get("assignment") == "active" and r.get("principalId")]
+    return [
+        dict(r, roleName=r.get("roleName") or "Unknown role")
+        for r in rows
+        if r.get("privileged") and r.get("assignment") == "active" and r.get("principalId")
+    ]
 
 
-@rule("admin_mfa", "Every admin has MFA registered", "Admins",
-      "Have each listed admin register a strong method (Authenticator or a FIDO2 key), or remove the role. "
-      "Break-glass accounts should use FIDO2 keys kept offline.")
+@rule(
+    "admin_mfa",
+    "Every admin has MFA registered",
+    "Admins",
+    "Have each listed admin register a strong method (Authenticator or a FIDO2 key), or remove the role. "
+    "Break-glass accounts should use FIDO2 keys kept offline.",
+)
 def admin_mfa(snap: TenantSnapshot, now: datetime):
     admins = _privileged_users(snap)
     reg = snap.objects("mfa_registration", "mfa_registration")
@@ -150,13 +187,20 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
         return ("fail", f"{plural(missing, 'admin')} without MFA{extra}", findings)
     if unknown:  # can't call it a pass, and "0 admins without MFA" as a failure reads as nonsense
         return _unavailable(f"MFA registration isn't known for {plural(unknown, 'admin')}")
-    return ("pass", f"{every(len(seen), 'privileged user', start=True)} {verb(len(seen), 'has', 'have')} MFA "
-                    "registered", [])
+    return (
+        "pass",
+        f"{every(len(seen), 'privileged user', start=True)} {verb(len(seen), 'has', 'have')} MFA registered",
+        [],
+    )
 
 
-@rule("global_admin_count", "Between 2 and 4 Global Administrators", "Admins",
-      "Keep two to four Global Administrators: enough for a break-glass account, few enough to protect. "
-      "Move day-to-day work to narrower roles such as User or Exchange Administrator.")
+@rule(
+    "global_admin_count",
+    "Between 2 and 4 Global Administrators",
+    "Admins",
+    "Keep two to four Global Administrators: enough for a break-glass account, few enough to protect. "
+    "Move day-to-day work to narrower roles such as User or Exchange Administrator.",
+)
 def global_admin_count(snap: TenantSnapshot, now: datetime):
     admins = _privileged_users(snap)
     if admins is None:
@@ -164,45 +208,79 @@ def global_admin_count(snap: TenantSnapshot, now: datetime):
     gas = {a["principalId"]: a for a in admins if a.get("roleName") == "Global Administrator"}
     n = len(gas)
     if n > 4:
-        return ("fail", f"{n} Global Administrators", [Finding("medium", _label(a), "Global Administrator", pid)
-                                                        for pid, a in gas.items()])
+        return (
+            "fail",
+            f"{n} Global Administrators",
+            [Finding("medium", _label(a), "Global Administrator", pid) for pid, a in gas.items()],
+        )
     if n < 2:
-        return ("fail", f"{plural(n, 'Global Administrator')}", [Finding(
-            "low", "Tenant", "Only one Global Administrator; there is no break-glass account to recover access")])
+        return (
+            "fail",
+            f"{plural(n, 'Global Administrator')}",
+            [
+                Finding(
+                    "low", "Tenant", "Only one Global Administrator; there is no break-glass account to recover access"
+                )
+            ],
+        )
     return ("pass", f"{n} Global Administrators", [])
 
 
-@rule("guest_admins", "No guests hold admin roles", "Admins",
-      "Remove admin roles from guest accounts. If an external partner needs access, use GDAP or a "
-      "member account in this tenant protected by MFA.")
+@rule(
+    "guest_admins",
+    "No guests hold admin roles",
+    "Admins",
+    "Remove admin roles from guest accounts. If an external partner needs access, use GDAP or a "
+    "member account in this tenant protected by MFA.",
+)
 def guest_admins(snap: TenantSnapshot, now: datetime):
     admins = _privileged_users(snap)
     if admins is None:
         return _unavailable("Admin role data hasn't been collected yet")
-    findings = [Finding("high", _label(a), f"Guest holding {a['roleName']}", a["principalId"])
-                for a in admins if a.get("userType") == "Guest"]
-    return ("fail", f"{plural(len(findings), 'guest admin assignment')}", findings) if findings else \
-        ("pass", "No guest holds a privileged role", [])
+    findings = [
+        Finding("high", _label(a), f"Guest holding {a['roleName']}", a["principalId"])
+        for a in admins
+        if a.get("userType") == "Guest"
+    ]
+    return (
+        ("fail", f"{plural(len(findings), 'guest admin assignment')}", findings)
+        if findings
+        else ("pass", "No guest holds a privileged role", [])
+    )
 
 
-@rule("service_principal_admins", "Apps with admin roles are reviewed", "Admins",
-      "Check each app that holds a privileged directory role still needs it. A compromised app secret "
-      "with an admin role bypasses MFA entirely.")
+@rule(
+    "service_principal_admins",
+    "Apps with admin roles are reviewed",
+    "Admins",
+    "Check each app that holds a privileged directory role still needs it. A compromised app secret "
+    "with an admin role bypasses MFA entirely.",
+)
 def service_principal_admins(snap: TenantSnapshot, now: datetime):
     admins = _privileged_users(snap)
     if admins is None:
         return _unavailable("Admin role data hasn't been collected yet")
     own = snap.own_app_ids
-    findings = [Finding("medium", a.get("displayName") or a["principalId"], f"App holding {a['roleName']}",
-                        a["principalId"]) for a in admins if a.get("principalType") == "servicePrincipal"
-                and not ((a.get("appId") or "").lower() in own and a.get("roleName") == "Global Reader")]
-    return ("fail", f"{plural(len(findings), 'app')} with privileged roles", findings) if findings else \
-        ("pass", "No apps hold privileged roles", [])
+    findings = [
+        Finding("medium", a.get("displayName") or a["principalId"], f"App holding {a['roleName']}", a["principalId"])
+        for a in admins
+        if a.get("principalType") == "servicePrincipal"
+        and not ((a.get("appId") or "").lower() in own and a.get("roleName") == "Global Reader")
+    ]
+    return (
+        ("fail", f"{plural(len(findings), 'app')} with privileged roles", findings)
+        if findings
+        else ("pass", "No apps hold privileged roles", [])
+    )
 
 
-@rule("users_mfa_registered", "Every active user has MFA registered", "Identity",
-      "Ask these users to register the Microsoft Authenticator app. Until they do, anyone with their "
-      "password can register MFA in their place.")
+@rule(
+    "users_mfa_registered",
+    "Every active user has MFA registered",
+    "Identity",
+    "Ask these users to register the Microsoft Authenticator app. Until they do, anyone with their "
+    "password can register MFA in their place.",
+)
 def users_mfa_registered(snap: TenantSnapshot, now: datetime):
     reg = snap.objects("mfa_registration", "mfa_registration")
     if reg is None:
@@ -218,18 +296,26 @@ def users_mfa_registered(snap: TenantSnapshot, now: datetime):
         checked += 1
         if r.get("isMfaRegistered"):
             continue
-        findings.append(Finding("high" if r.get("isAdmin") else "medium", _label(r), "No MFA method registered",
-                                r["_id"]))
+        findings.append(
+            Finding("high" if r.get("isAdmin") else "medium", _label(r), "No MFA method registered", r["_id"])
+        )
     if not checked:  # an empty registration report proves nothing
         return _unavailable("Microsoft returned no MFA registration data for any enabled member yet")
-    return ("fail", f"{plural(len(findings), 'user')} without MFA", findings) if findings else \
-        ("pass", f"{every(checked, 'checked user', start=True)} {verb(checked, 'has', 'have')} MFA registered", [])
+    return (
+        ("fail", f"{plural(len(findings), 'user')} without MFA", findings)
+        if findings
+        else ("pass", f"{every(checked, 'checked user', start=True)} {verb(checked, 'has', 'have')} MFA registered", [])
+    )
 
 
-@rule("stale_users", "No inactive accounts", "Accounts",
-      "Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used "
-      "(after checking with the client), then remove their licences. Inactive accounts are a common foothold "
-      "for attackers.")
+@rule(
+    "stale_users",
+    "No inactive accounts",
+    "Accounts",
+    "Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used "
+    "(after checking with the client), then remove their licences. Inactive accounts are a common foothold "
+    "for attackers.",
+)
 def stale_users(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")
     if users is None:
@@ -241,32 +327,50 @@ def stale_users(snap: TenantSnapshot, now: datetime):
         if not u.get("accountEnabled") or not is_stale(u, now):
             continue
         last = last_sign_in(u)
-        when = f"last signed in {day(last.date().isoformat())}" if last else \
-            f"never signed in, created {day(u.get('createdDateTime'))}"
+        when = (
+            f"last signed in {day(last.date().isoformat())}"
+            if last
+            else f"never signed in, created {day(u.get('createdDateTime'))}"
+        )
         kind = "Guest" if u.get("userType") == "Guest" else ("Licensed member" if u.get("licensed") else "Member")
         severity = "medium" if u.get("licensed") else "low"
         findings.append(Finding(severity, _label(u), f"{kind}, {when}", u["_id"]))
-    return ("fail", f"{plural(len(findings), 'account')} inactive for 90+ days or never used", findings) \
-        if findings else \
-        ("pass", "No enabled account has been inactive for 90 days", [])
+    return (
+        ("fail", f"{plural(len(findings), 'account')} inactive for 90+ days or never used", findings)
+        if findings
+        else ("pass", "No enabled account has been inactive for 90 days", [])
+    )
 
 
-@rule("licensed_disabled", "No licences on disabled accounts", "Licences",
-      "Remove licences from disabled accounts, or convert leavers' mailboxes to shared mailboxes "
-      "(free up to 50 GB) before removing the licence.")
+@rule(
+    "licensed_disabled",
+    "No licences on disabled accounts",
+    "Licences",
+    "Remove licences from disabled accounts, or convert leavers' mailboxes to shared mailboxes "
+    "(free up to 50 GB) before removing the licence.",
+)
 def licensed_disabled(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")
     if users is None:
         return _unavailable("User data hasn't been collected yet")
-    findings = [Finding("medium", _label(u), f"Disabled, holding {plural(len(u.get('skuIds') or []), 'licence')}",
-                        u["_id"])
-                for u in users if not u.get("accountEnabled") and u.get("licensed")]
-    return ("fail", f"{plural(len(findings), 'disabled account')} still licensed", findings) if findings else \
-        ("pass", "No disabled account holds a licence", [])
+    findings = [
+        Finding("medium", _label(u), f"Disabled, holding {plural(len(u.get('skuIds') or []), 'licence')}", u["_id"])
+        for u in users
+        if not u.get("accountEnabled") and u.get("licensed")
+    ]
+    return (
+        ("fail", f"{plural(len(findings), 'disabled account')} still licensed", findings)
+        if findings
+        else ("pass", "No disabled account holds a licence", [])
+    )
 
 
-@rule("unassigned_licences", "No paid licences sit unassigned", "Licences",
-      "Reduce the subscription quantity at the next renewal, or assign the spare licences.")
+@rule(
+    "unassigned_licences",
+    "No paid licences sit unassigned",
+    "Licences",
+    "Reduce the subscription quantity at the next renewal, or assign the spare licences.",
+)
 def unassigned_licences(snap: TenantSnapshot, now: datetime):
     skus = snap.objects("tenant_profile", "subscribed_sku")
     if skus is None:
@@ -278,20 +382,29 @@ def unassigned_licences(snap: TenantSnapshot, now: datetime):
     for line in summary.lines:
         if line.free or not line.unassigned:
             continue
-        cost = (f", {line.unassigned * line.monthly_price:,.2f} {currency}/month"
-                if line.monthly_price is not None else "")
-        findings.append(Finding("low", line.name, f"{line.unassigned} of {line.purchased} unassigned{cost}",
-                                line.sku_id))
-    return ("fail", f"{plural(len(findings), 'subscription')} with spare licences", findings) if findings else \
-        ("pass", "Every paid licence is assigned", [])
+        cost = (
+            f", {line.unassigned * line.monthly_price:,.2f} {currency}/month" if line.monthly_price is not None else ""
+        )
+        findings.append(
+            Finding("low", line.name, f"{line.unassigned} of {line.purchased} unassigned{cost}", line.sku_id)
+        )
+    return (
+        ("fail", f"{plural(len(findings), 'subscription')} with spare licences", findings)
+        if findings
+        else ("pass", "Every paid licence is assigned", [])
+    )
 
 
 # -- Conditional Access coverage ---------------------------------------------------
 
 
-@rule("admins_ca_mfa", "Every admin is covered by an MFA policy", "Admins",
-      "Make sure each admin is included in an enabled Conditional Access policy that requires MFA for all "
-      "apps, and isn't excluded from it directly or through a group. Use a separate policy for break-glass accounts.")
+@rule(
+    "admins_ca_mfa",
+    "Every admin is covered by an MFA policy",
+    "Admins",
+    "Make sure each admin is included in an enabled Conditional Access policy that requires MFA for all "
+    "apps, and isn't excluded from it directly or through a group. Use a separate policy for break-glass accounts.",
+)
 def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
     defaults, _ = _ca_data(snap)
     admins = _privileged_users(snap)
@@ -314,5 +427,8 @@ def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
             findings.append(Finding("high", c.label, f"{a['roleName']}: {why}", pid))
     if findings and no_p1:
         return ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings, SECURITY_DEFAULTS_ADVICE)
-    return ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings) if findings else \
-        ("pass", _all_are(len(seen), "active admin") + " covered", [])
+    return (
+        ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings)
+        if findings
+        else ("pass", _all_are(len(seen), "active admin") + " covered", [])
+    )

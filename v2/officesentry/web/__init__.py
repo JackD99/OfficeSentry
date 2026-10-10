@@ -75,8 +75,9 @@ def create_app(cfg: Config | None = None) -> Flask:
     conn = connect(cfg.db_path)
     migrate(conn)
     if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
-        app.logger.warning("No admin account yet. To create one, open %s/setup?token=%s",
-                           cfg.base_url, setup_token(cfg.data_dir))
+        app.logger.warning(
+            "No admin account yet. To create one, open %s/setup?token=%s", cfg.base_url, setup_token(cfg.data_dir)
+        )
     conn.close()
 
     csrf.init_app(app)
@@ -126,8 +127,12 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     # National clouds (clouds.py): the choices for tenant and app connection forms, and a label for any key;
     # every report under its area, for the Reports tab's picker (_macros.report_picker).
-    app.jinja_env.globals.update(cloud_choices=clouds.CHOICES, cloud_label=lambda key: clouds.get(key).label,
-                                 cloud_of=clouds.of, report_catalogue=library.catalogue)
+    app.jinja_env.globals.update(
+        cloud_choices=clouds.CHOICES,
+        cloud_label=lambda key: clouds.get(key).label,
+        cloud_of=clouds.of,
+        report_catalogue=library.catalogue,
+    )
 
     @app.context_processor
     def _inject():
@@ -140,23 +145,32 @@ def create_app(cfg: Config | None = None) -> Flask:
         # Not on the page that already says so in full.
         here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
-        return {"current_user": user, "csp_nonce": g.get("csp_nonce", ""), "worker_down": worker_down,
-                "expiring_certificates": certificates, "app_version": __version__,
-                "group_scope": g.get("group_scope"),
-                "public_demo": bool(g.get("public_demo")),
-                "public_demo_link": public_demo.link() if g.get("public_demo") else ""}
+        return {
+            "current_user": user,
+            "csp_nonce": g.get("csp_nonce", ""),
+            "worker_down": worker_down,
+            "expiring_certificates": certificates,
+            "app_version": __version__,
+            "group_scope": g.get("group_scope"),
+            "public_demo": bool(g.get("public_demo")),
+            "public_demo_link": public_demo.link() if g.get("public_demo") else "",
+        }
 
     @app.errorhandler(403)
     def _forbidden(_e):
-        return render_template("error.html", code=403, message="You don't have access to this page.",
-                               detail="Ask an admin if you need it."), 403
+        return render_template(
+            "error.html", code=403, message="You don't have access to this page.", detail="Ask an admin if you need it."
+        ), 403
 
     @app.errorhandler(404)
     def _not_found(_e):
         # Tenants someone hasn't been granted are 404s too, so say both without confirming either.
-        return render_template("error.html", code=404, message="Page not found.",
-                               detail="The link may be out of date, or the page belongs to a tenant you haven't been "
-                                      "given access to."), 404
+        return render_template(
+            "error.html",
+            code=404,
+            message="Page not found.",
+            detail="The link may be out of date, or the page belongs to a tenant you haven't been given access to.",
+        ), 404
 
     @app.get("/health")
     def health():

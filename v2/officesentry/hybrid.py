@@ -13,8 +13,8 @@ from datetime import datetime
 from .devices import parse_ts
 from .snapshot import TenantSnapshot
 
-SYNC_LATE_HOURS = 3           # several missed 30-minute cycles
-SYNC_STOPPED_HOURS = 24       # a day without sync: accounts disabled in AD stay active in the cloud
+SYNC_LATE_HOURS = 3  # several missed 30-minute cycles
+SYNC_STOPPED_HOURS = 24  # a day without sync: accounts disabled in AD stay active in the cloud
 PASSWORD_SYNC_GAP_HOURS = 24  # password sync this far behind directory sync has stopped
 
 
@@ -45,8 +45,10 @@ def sync_problem(status: dict, now: datetime) -> tuple[str, str] | None:
     if hours is None:
         return "high", "Turned on, but Entra ID has no record of a completed sync"
     if hours > SYNC_STOPPED_HOURS:
-        return "critical", (f"Last sync {age(hours)}. Accounts disabled or removed in Active Directory since then "
-                            "are still active in Microsoft 365")
+        return "critical", (
+            f"Last sync {age(hours)}. Accounts disabled or removed in Active Directory since then "
+            "are still active in Microsoft 365"
+        )
     if hours > SYNC_LATE_HOURS:
         return "high", f"Last sync {age(hours)}; Entra Connect normally syncs every 30 minutes"
     return None
@@ -59,14 +61,17 @@ def password_sync_problem(status: dict, now: datetime) -> tuple[str, str] | None
         return "medium", "Entra ID has no record of a password hash sync"
     directory = hours_since(status.get("lastSyncDateTime"), now)
     if directory is not None and password - directory > PASSWORD_SYNC_GAP_HOURS:
-        return "medium", (f"Last password sync {age(password)}, though directory sync ran {age(directory)}: "
-                          "password hash sync has stopped or been turned off")
+        return "medium", (
+            f"Last password sync {age(password)}, though directory sync ran {age(directory)}: "
+            "password hash sync has stopped or been turned off"
+        )
     return None
 
 
 def federated_domains(snap: TenantSnapshot) -> list[str]:
-    return sorted(d["_id"] for d in snap.objects("directory_sync", "domain") or []
-                  if d.get("authenticationType") == "Federated")
+    return sorted(
+        d["_id"] for d in snap.objects("directory_sync", "domain") or [] if d.get("authenticationType") == "Federated"
+    )
 
 
 def privileged_principals(snap: TenantSnapshot) -> set[str] | None:
@@ -90,12 +95,15 @@ def synced_admins(snap: TenantSnapshot) -> list[dict] | None:
         if not r.get("privileged") or r.get("principalType") != "user" or pid not in synced:
             continue
         user = synced[pid]
-        admin = admins.setdefault(pid, {
-            "principalId": pid,
-            "label": r.get("userPrincipalName") or user.get("userPrincipalName") or r.get("displayName") or pid,
-            "accountEnabled": bool(user.get("accountEnabled")),
-            "roles": [],
-        })
+        admin = admins.setdefault(
+            pid,
+            {
+                "principalId": pid,
+                "label": r.get("userPrincipalName") or user.get("userPrincipalName") or r.get("displayName") or pid,
+                "accountEnabled": bool(user.get("accountEnabled")),
+                "roles": [],
+            },
+        )
         role = (r.get("roleName") or "Unknown role") + (" (eligible)" if r.get("assignment") == "eligible" else "")
         if role not in admin["roles"]:
             admin["roles"].append(role)

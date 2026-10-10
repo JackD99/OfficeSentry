@@ -151,12 +151,15 @@ def move_secrets(old: Path, new: Path) -> None:
                 raise ValueError(
                     f"Configuration problem: there are two different key files, {old} and {new}. Office Sentry "
                     f"won't guess which one decrypts your data. Keep the right one at {new} and delete {old} "
-                    "(DEPLOY.md, \"Where the keys are\").") from None
+                    '(DEPLOY.md, "Where the keys are").'
+                ) from None
         old.unlink()
     except OSError as exc:
-        raise ValueError(f"Configuration problem: couldn't move {old} to {new}: {exc.strerror or exc}. "
-                         f"The folder {new.parent} must be writable by the user Office Sentry runs as "
-                         "(in Docker, the officesentry-keys volume).") from exc
+        raise ValueError(
+            f"Configuration problem: couldn't move {old} to {new}: {exc.strerror or exc}. "
+            f"The folder {new.parent} must be writable by the user Office Sentry runs as "
+            "(in Docker, the officesentry-keys volume)."
+        ) from exc
     log.warning("Moved the key file %s to %s, out of the data folder", old, new)
 
 
@@ -169,9 +172,11 @@ def _load_or_create_secrets(path: Path) -> dict:
             tighten(path)
         return json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise ValueError(f"Configuration problem: couldn't create the key file {path}: {exc.strerror or exc}. "
-                         f"The folder {path.parent} must be writable by the user Office Sentry runs as "
-                         "(in Docker, the officesentry-keys volume).") from exc
+        raise ValueError(
+            f"Configuration problem: couldn't create the key file {path}: {exc.strerror or exc}. "
+            f"The folder {path.parent} must be writable by the user Office Sentry runs as "
+            "(in Docker, the officesentry-keys volume)."
+        ) from exc
 
 
 # -- First-run setup token ------------------------------------------------------

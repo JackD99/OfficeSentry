@@ -76,11 +76,14 @@ def fetch_mta_sts(domain: str) -> str:
     deadline = time.monotonic() + MTA_STS_TIMEOUT
     http, host_header = outbound.pinned_session(url, address)
     try:
-        with http, http.get(url, timeout=MTA_STS_TIMEOUT, allow_redirects=False, stream=True,
-                            headers=host_header) as resp:
+        with (
+            http,
+            http.get(url, timeout=MTA_STS_TIMEOUT, allow_redirects=False, stream=True, headers=host_header) as resp,
+        ):
             if resp.is_redirect:
-                raise FetchError(f"{url} redirects to {resp.headers.get('Location')}, "
-                                 "and sending servers don't follow redirects")
+                raise FetchError(
+                    f"{url} redirects to {resp.headers.get('Location')}, and sending servers don't follow redirects"
+                )
             if resp.status_code != 200:
                 raise FetchError(f"{url} returned HTTP {resp.status_code}")
             body = b""
@@ -152,9 +155,12 @@ class DomainHealth:
             value, default = data.get(name), getattr(defaults, name)
             if name == "domain":
                 value = defaults.domain
-            elif value is None or (default is not None and not isinstance(value, type(default))) \
-                    or (default is None and isinstance(value, (list, dict, bool))) \
-                    or isinstance(value, bool) != isinstance(default, bool):
+            elif (
+                value is None
+                or (default is not None and not isinstance(value, type(default)))
+                or (default is None and isinstance(value, (list, dict, bool)))
+                or isinstance(value, bool) != isinstance(default, bool)
+            ):
                 value = default
             values[name] = value
         return cls(**values)
@@ -190,8 +196,13 @@ def count_spf_lookups(record: str, resolve=None, depth: int = 0, missing: list[s
                     nested = None  # unknown, not missing
                 if nested:
                     count += count_spf_lookups(nested[0], resolve, depth + 1, missing)
-                elif (nested is not None and missing is not None and "%" not in target
-                      and target not in SPF_TRUSTED_INCLUDES and target not in missing):
+                elif (
+                    nested is not None
+                    and missing is not None
+                    and "%" not in target
+                    and target not in SPF_TRUSTED_INCLUDES
+                    and target not in missing
+                ):
                     missing.append(target)
         elif t in ("a", "mx", "ptr") or t.startswith(("a:", "a/", "mx:", "mx/", "ptr:", "exists:")):
             count += 1
@@ -239,8 +250,9 @@ def check_domain(domain: str, resolve=None, fetch=None) -> DomainHealth:
     h.tls_rpt_records = len(rpt)
     if rpt:
         h.tls_rpt = rpt[0]
-        h.tls_rpt_reports = any(u.strip().lower().startswith(("mailto:", "https:"))
-                                for u in (_tag(rpt[0], "rua") or "").split(","))
+        h.tls_rpt_reports = any(
+            u.strip().lower().startswith(("mailto:", "https:")) for u in (_tag(rpt[0], "rua") or "").split(",")
+        )
     if len(h.errors) > failed:
         return h  # unknown rather than missing: transport_checked stays False
     if h.mta_sts and h.sends_mail:
@@ -276,7 +288,7 @@ def parse_mta_sts_policy(text: str) -> StsPolicy:
     age = (fields.get("max_age") or [""])[0]
     p.max_age = int(age) if age.isdigit() else None
     if (fields.get("version") or [""])[0] != "STSv1":
-        p.error = "the policy file has no \"version: STSv1\" line"
+        p.error = 'the policy file has no "version: STSv1" line'
     elif p.mode not in MTA_STS_MODES:
         p.error = "the policy's mode isn't enforce, testing or none"
     elif p.max_age is None or p.max_age > MTA_STS_MAX_AGE:
@@ -291,7 +303,7 @@ def mx_matches(pattern: str, host: str) -> bool:
     pattern, host = pattern.lower().rstrip("."), host.lower().rstrip(".")
     if pattern.startswith("*."):
         suffix = pattern[1:]
-        label = host[:-len(suffix)] if host.endswith(suffix) else ""
+        label = host[: -len(suffix)] if host.endswith(suffix) else ""
         return bool(label) and "." not in label
     return host == pattern
 
@@ -313,7 +325,7 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
     if not h.sends_mail:
         # A domain that never sends mail should say so, or it can be spoofed freely.
         if not h.spf or h.spf_all != "-all":
-            out.append(Issue("low", "SPF", "Doesn't receive mail but has no \"v=spf1 -all\" record to stop spoofing"))
+            out.append(Issue("low", "SPF", 'Doesn\'t receive mail but has no "v=spf1 -all" record to stop spoofing'))
         if h.dmarc_policy != "reject":
             out.append(Issue("low", "DMARC", "Doesn't receive mail but has no DMARC p=reject record"))
         return out
@@ -331,8 +343,14 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
             out.append(Issue("medium", "SPF", f"SPF needs {h.spf_lookups} DNS lookups (limit 10), so it fails"))
         if h.spf_missing_includes:
             they = "it has" if len(h.spf_missing_includes) == 1 else "they have"
-            out.append(Issue("medium", "SPF", f"SPF includes {', '.join(h.spf_missing_includes)}, but {they} no "
-                                              "SPF record, so SPF fails for all mail"))
+            out.append(
+                Issue(
+                    "medium",
+                    "SPF",
+                    f"SPF includes {', '.join(h.spf_missing_includes)}, but {they} no "
+                    "SPF record, so SPF fails for all mail",
+                )
+            )
         if any(t.lstrip("+-~?").lower().split(":")[0] == "ptr" for t in (h.spf or "").split()[1:]):
             out.append(Issue("low", "SPF", "SPF uses the ptr mechanism, which is slow and ignored by some receivers"))
 
@@ -341,16 +359,23 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
     elif h.dmarc_records > 1:
         out.append(Issue("high", "DMARC", f"{h.dmarc_records} DMARC records; receivers treat this as no DMARC at all"))
     elif h.dmarc_policy not in ("none", "quarantine", "reject"):
-        out.append(Issue("medium", "DMARC", "DMARC record has no valid p= policy, so receivers treat it as p=none")
-                   if h.dmarc_reports else
-                   Issue("high", "DMARC", "DMARC record has no valid p= policy, so receivers ignore it"))
+        out.append(
+            Issue("medium", "DMARC", "DMARC record has no valid p= policy, so receivers treat it as p=none")
+            if h.dmarc_reports
+            else Issue("high", "DMARC", "DMARC record has no valid p= policy, so receivers ignore it")
+        )
     elif h.dmarc_policy == "none":
         out.append(Issue("medium", "DMARC", "DMARC is monitor-only (p=none); spoofed mail is still delivered"))
     elif h.dmarc_policy in ("quarantine", "reject") and h.dmarc_pct < 100:
         out.append(Issue("low", "DMARC", f"DMARC applies to only {h.dmarc_pct}% of mail"))
     if h.dmarc_records <= 1 and h.dmarc_policy in ("quarantine", "reject") and h.dmarc_subdomain_policy == "none":
-        out.append(Issue("low", "DMARC", "DMARC doesn't cover subdomains (sp=none), so mail from made-up "
-                                         "subdomains is still delivered"))
+        out.append(
+            Issue(
+                "low",
+                "DMARC",
+                "DMARC doesn't cover subdomains (sp=none), so mail from made-up subdomains is still delivered",
+            )
+        )
     if h.dmarc and not h.dmarc_reports:
         out.append(Issue("low", "DMARC", "DMARC has no rua= address, so nobody sees the reports"))
 
@@ -371,13 +396,21 @@ def _transport_issues(h: DomainHealth) -> list[Issue]:
     """At most one MTA-STS and one TLS-RPT issue for a domain that receives mail."""
     out: list[Issue] = []
     if not h.mta_sts:
-        out.append(Issue("low", "MTA-STS", "No MTA-STS policy, so mail sent to this domain can be forced onto an "
-                                           "unencrypted connection"))
+        out.append(
+            Issue(
+                "low",
+                "MTA-STS",
+                "No MTA-STS policy, so mail sent to this domain can be forced onto an unencrypted connection",
+            )
+        )
     elif h.mta_sts_records > 1:
         out.append(Issue("low", "MTA-STS", f"{h.mta_sts_records} MTA-STS records; senders ignore them all"))
     elif not _valid_sts_record(h):
-        out.append(Issue("low", "MTA-STS", "MTA-STS record has no valid id= (1 to 32 letters and digits), "
-                                           "so senders ignore it"))
+        out.append(
+            Issue(
+                "low", "MTA-STS", "MTA-STS record has no valid id= (1 to 32 letters and digits), so senders ignore it"
+            )
+        )
     elif h.mta_sts_error:
         out.append(Issue("low", "MTA-STS", f"MTA-STS policy can't be used: {h.mta_sts_error}"))
     elif h.mta_sts_mode == "none":
@@ -386,24 +419,42 @@ def _transport_issues(h: DomainHealth) -> list[Issue]:
         servers = [m for m in h.mx if m]
         unlisted = [m for m in servers if not any(mx_matches(p, m) for p in h.mta_sts_mx)]
         if h.mta_sts_mode == "testing":
-            out.append(Issue("low", "MTA-STS", "MTA-STS is in testing mode, so senders still deliver unencrypted "
-                             "when encryption fails" + (f"; the policy doesn't list {', '.join(unlisted)}"
-                                                        if unlisted else "")))
+            out.append(
+                Issue(
+                    "low",
+                    "MTA-STS",
+                    "MTA-STS is in testing mode, so senders still deliver unencrypted "
+                    "when encryption fails" + (f"; the policy doesn't list {', '.join(unlisted)}" if unlisted else ""),
+                )
+            )
         elif unlisted and len(unlisted) == len(servers):
-            out.append(Issue("medium", "MTA-STS", f"MTA-STS is enforced but doesn't list {', '.join(unlisted)}, "
-                                                  "so senders that check it won't deliver mail"))
+            out.append(
+                Issue(
+                    "medium",
+                    "MTA-STS",
+                    f"MTA-STS is enforced but doesn't list {', '.join(unlisted)}, "
+                    "so senders that check it won't deliver mail",
+                )
+            )
         elif unlisted:
             those = "that server" if len(unlisted) == 1 else "those servers"
-            out.append(Issue("low", "MTA-STS", f"MTA-STS doesn't list {', '.join(unlisted)}, so senders that "
-                                               f"check it won't use {those}"))
+            out.append(
+                Issue(
+                    "low",
+                    "MTA-STS",
+                    f"MTA-STS doesn't list {', '.join(unlisted)}, so senders that check it won't use {those}",
+                )
+            )
     if h.tls_rpt_records > 1:
         out.append(Issue("low", "TLS-RPT", f"{h.tls_rpt_records} TLS-RPT records; senders ignore them all"))
     elif h.tls_rpt and not h.tls_rpt_reports:
-        out.append(Issue("low", "TLS-RPT", "TLS-RPT record has no mailto: or https: rua= address, so no reports "
-                                           "arrive"))
+        out.append(
+            Issue("low", "TLS-RPT", "TLS-RPT record has no mailto: or https: rua= address, so no reports arrive")
+        )
     elif not h.tls_rpt and h.mta_sts:
-        out.append(Issue("low", "TLS-RPT", "No TLS-RPT record, so nobody hears when encrypted delivery to this "
-                                           "domain fails"))
+        out.append(
+            Issue("low", "TLS-RPT", "No TLS-RPT record, so nobody hears when encrypted delivery to this domain fails")
+        )
     return out
 
 
