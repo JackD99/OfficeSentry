@@ -1,11 +1,9 @@
-name: v2
-# v2 is the whole product. While the repo is private on GitHub Free (2,000 Actions minutes a month,
-# Windows minutes counting double), pull requests run lint, the dependency audit, the Docker build and the
-# tests on Python 3.12 with coverage. Pushes to main add Python 3.11 and 3.13, and the weekly and manual
-# runs add the Windows job too; a failure there is fixed on main straight away. The weekly run also catches
-# newly published vulnerabilities in the dependencies. Once the repo is public (standard runners are free
-# there), pull requests get the full matrix and the Windows job by themselves: the jobs below check
-# github.event.repository.private, so nothing needs editing on the day.
+name: CI
+# The product's own checks (v2/ is the whole product): lint and format, the tests on Python 3.11, 3.12 and
+# 3.13 with coverage, a subset on Windows, the Docker build and the dependency audit, on every pull request
+# and push to main. The weekly run also catches newly published vulnerabilities in the dependencies. (On a
+# private fork on GitHub Free, where minutes are limited, pull requests run Python 3.12 only and the Windows
+# job waits for main and the weekly run: the jobs below check github.event.repository.private.)
 #
 # Pull requests and pushes to main that only touch Markdown, docs/, examples/ or website/ skip the jobs
 # (website.yml builds the site), but "CI passed" always runs and reports, so it can be the one required check

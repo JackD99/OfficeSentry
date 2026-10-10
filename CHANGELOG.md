@@ -3,10 +3,13 @@
 What changed in each Office Sentry release, written for the people who run it. Read the
 **Action required**, **New Microsoft permissions** and **Database upgrade** parts before updating.
 
-How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
-[CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (Added, Changed, Fixed,
+Security, with the newest release first and a compare link per version) plus those three sections, and
+versions follow [semantic versioning](https://semver.org). How to update: [v2/DEPLOY.md,
+"Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
+"Releases"](CONTRIBUTING.md#releases).
 
-## 2.1.1 (unreleased)
+## [2.1.1] - Unreleased
 
 ### Action required
 
@@ -36,7 +39,7 @@ No.
 - The plain-text part of a report email leads with the verdict and says when the data is old.
 - Pausing and resuming an email schedule is saved as one change.
 
-## 2.1.0 (2026-10-10)
+## [2.1.0] - 2026-10-10
 
 The first release from the public repository. The headlines: home pages for technicians and account
 managers, onboarding many clients at once, answers for insurance and supplier questionnaires and Cyber
@@ -238,7 +241,7 @@ copied collection reads back exactly as its snapshot.
 - The public demo no longer stores an authenticator secret on its shared visitor when the two-step setup
   page is opened.
 
-## 2.0.0 (2026-10-09)
+## [2.0.0] - 2026-10-09
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1
 portal. Everything below is new compared with v1.
@@ -293,3 +296,7 @@ first, then upgrades it on start. New installs start with an empty database.
 - Certificate-based, app-only sign-in to client tenants; secrets are encrypted at rest and never shown or
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
+
+[2.1.1]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

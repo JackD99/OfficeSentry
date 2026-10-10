@@ -5,10 +5,13 @@ Office Sentry reads each client tenant every night, keeps the history, and turns
 actually sends: a monthly review, a cyber-insurance evidence pack, about 30 detail reports, a view across all
 clients, and what changed since last month. It never changes anything in a client's tenant.
 
-[![v2](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
+[![CI](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
+[![Release](https://img.shields.io/github/v/release/JackD99/OfficeSentry?label=release)](https://github.com/JackD99/OfficeSentry/releases/latest)
+[![Image](https://img.shields.io/badge/image-ghcr.io%2Fjackd99%2Fofficesentry-2563eb)](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
+[![Licence](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
 
 [Website](https://officesentry.co.uk) · [Live demo](https://demo.officesentry.co.uk) · [Example reports (PDF)](examples/) · [Quick start](#quick-start) · [What it reads](v2/docs/what-office-sentry-reads.md) ·
-[Security model](#security-model) · [Technical reference](v2/README.md)
+[Security model](#security-model) · [Getting help](SUPPORT.md) · [Technical reference](v2/README.md)
 
 ![A client's overview: key figures, what needs attention and what changed since last month](docs/screenshots/tenant-overview.png)
 
@@ -272,9 +275,10 @@ cp env.example .env           # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN a
 docker compose --profile https up -d
 ```
 
-The image is `ghcr.io/jackd99/officesentry`, for amd64 servers (arm64 too once the repository is public); each release lists what changed in
-[CHANGELOG.md](CHANGELOG.md). While this repository is private the image is too, so the server needs
-`docker login ghcr.io` with a GitHub token that can read packages.
+The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
+public, for amd64 (Intel and AMD) and arm64 servers, built and scanned by GitHub Actions from a tagged release
+with a signed build provenance. Each release lists what changed, and anything to do before updating, in
+[CHANGELOG.md](CHANGELOG.md).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
 
@@ -304,6 +308,7 @@ consent page, mailboxes failing without Global Reader and the worker not running
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be
+- [Changelog](CHANGELOG.md): what changed in each release
 
 ## Development
 
@@ -321,6 +326,18 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 The screenshots and example reports here are made by `python scripts/screenshots.py` from the same demo data;
 re-run it when the UI or reports change. [DEVELOPING.md](DEVELOPING.md) is a short tour of the code and tests, and
 [CONTRIBUTING.md](CONTRIBUTING.md) has the conventions.
+
+## Getting help and contributing
+
+[SUPPORT.md](SUPPORT.md) says where to go for what: [Troubleshooting](v2/docs/troubleshooting.md) for setup
+errors, [Discussions](https://github.com/JackD99/OfficeSentry/discussions) for questions, and the
+[issue forms](https://github.com/JackD99/OfficeSentry/issues/new/choose) for bugs (attach the support package
+from the portal's Settings) and for report, check and feature requests. Issues are public: never paste a
+client's data.
+
+Pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the conventions and how every change is
+checked, and [DEVELOPING.md](DEVELOPING.md) is the tour of the code. Everyone taking part agrees to the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Security issues
 

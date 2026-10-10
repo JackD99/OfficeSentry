@@ -53,9 +53,9 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
 1. Make a folder on the server (say `/opt/officesentry`) and open a terminal in it.
    From the newest [release](https://github.com/JackD99/OfficeSentry/releases),
    download `docker-compose.yml`, `Caddyfile` and `env.example` into it.
-   They run that release: the image `ghcr.io/jackd99/officesentry`, built and
-   tested by GitHub, for amd64 (Intel and AMD) servers; arm64 builds follow
-   once the repository is public.
+   They run that release: the image `ghcr.io/jackd99/officesentry`, built,
+   tested and scanned by GitHub Actions, for amd64 (Intel and AMD) and arm64
+   servers.
 2. Create your settings file: `cp env.example .env`
 3. Open `.env` in an editor (`nano .env`) and set at least:
    - `OFFICESENTRY_BASE_URL` to the address people will use, e.g. `https://sentry.yourmsp.com`

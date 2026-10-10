@@ -94,6 +94,8 @@ SECTIONS = [
             blurb="Running it locally, how it fits together, tests and simulated Microsoft responses."),
         Doc("CONTRIBUTING.md", "contributing", "Contributing",
             blurb="Setting up for development, and how changes are built and checked."),
+        Doc("SUPPORT.md", "support", "Getting help",
+            blurb="Where to go for what, the support package, and what never goes in an issue."),
     ]),
 ]
 GUIDES = "Guides"  # v2/docs/*.md not listed above

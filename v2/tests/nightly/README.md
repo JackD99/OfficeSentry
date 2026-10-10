@@ -34,7 +34,7 @@ python -m pytest tests/nightly --nightly
 
 The run's **pdf-pages** download (kept three days) has each changed page, its baseline and a picture of the
 difference in red; locally they're in `output/`. If the change is a mistake, fix it. If you meant it, refresh
-the baselines: in GitHub, **Actions > nightly > Run workflow**, pick the branch and tick **Save new PDF
+the baselines: in GitHub, **Actions > Nightly checks > Run workflow**, pick the branch and tick **Save new PDF
 baselines** (it commits them to the branch), or run `pytest tests/nightly/test_pdf_snapshots.py --nightly
 --update` on Ubuntu 24.04 with the packages `nightly.yml` installs. Look at the new images before merging.
 
@@ -72,7 +72,7 @@ itself. To set it up (once, about 10 minutes):
    **Variables** tab (not Secrets), and add two repository variables:
    - `CANARY_TENANT_ID`: the Directory (tenant) ID
    - `CANARY_CLIENT_ID`: the Application (client) ID
-9. Open **Actions**, click **canary**, then **Run workflow** on `main`. It takes about three minutes; a green
+9. Open **Actions**, click **Live canary**, then **Run workflow** on `main`. It takes about three minutes; a green
    run with "Nothing changed" in its summary means it works.
 
 The credential only lets workflow runs on `main` sign in as the test app, which can only read. A pull request,

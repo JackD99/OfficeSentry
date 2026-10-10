@@ -29,10 +29,10 @@ on:
         default: main
   # Deploy main after its tests pass, once AUTO_DEPLOY is set to "true".
   workflow_run:
-    workflows: [v2]
+    workflows: [CI]
     types: [completed]
     branches: [main]
-  # The website shows the docs, which the v2 workflow doesn't test, so their changes update it straight away
+  # The website shows the docs, which the CI workflow doesn't test, so their changes update it straight away
   # (the website-and-demo action without the demo, as the code hasn't changed).
   push:
     branches: [main]
@@ -161,7 +161,7 @@ jobs:
             -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
             "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/$version" | tr -d '\r' | sed -n 's/^docker-content-digest: *//Ip' || true)
           if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::There's no published image for $REF. Make the release first (Actions > release > Run workflow; CONTRIBUTING.md, \"Releases\"), then deploy it."
+            echo "::error::There's no published image for $REF. Make the release first (Actions > Release > Run workflow; CONTRIBUTING.md, \"Releases\"), then deploy it."
             exit 1
           fi
           echo "RELEASE_DIGEST=$digest" >> "$GITHUB_ENV"
