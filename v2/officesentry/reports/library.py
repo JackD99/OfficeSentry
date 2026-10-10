@@ -100,8 +100,10 @@ class Area:
 SUMMARIES = (
     ("review", "Monthly review", "Security and licensing summary with recommendations, ready to send to the client.",
      "review", "summary pdf client report recommendations"),
-    ("evidence", "Insurance evidence", "Answers to the controls cyber insurers ask about, with the evidence.",
-     "evidence", "cyber insurance questionnaire controls"),
+    ("evidence", "Questionnaires and evidence", "Answers to paste into cyber insurance, supplier security and "
+     "Cyber Essentials questions, with the evidence behind each.",
+     "evidence", "cyber insurance questionnaire controls supplier vendor due diligence cyber essentials iasme "
+     "danzell proposal renewal form"),
     ("changes", "What changed", "Configuration changes, new and fixed findings, and figures that moved.",
      "changes", "month over month history drift differences"),
     ("findings", "Findings", "Every open finding from the checks, worst first, with accepted risks.",

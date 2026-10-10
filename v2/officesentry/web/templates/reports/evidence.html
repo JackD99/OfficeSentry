@@ -50,16 +50,18 @@
 
 <section id="answers" class="page-break">
   <h2>Questionnaire answers</h2>
-  <p class="section-intro">The questions cyber insurers usually ask, worded as they ask them, answered from the Microsoft 365 data. "Not known" means the data can't show it. Answers marked with a name were set by your technical lead.</p>
+  <p class="section-intro">The questions cyber insurance proposal forms usually ask, answered from the Microsoft 365 data. "Your input" marks what Microsoft 365 can't show, with a text to complete. Answers marked with a name were set by your technical lead.</p>
+  {%- set ANSWER_CLASS = {'Yes': 'yes', 'Answered': 'yes', 'Partly': 'partly', 'No': 'no'} %}
   <table class="answers-table">
-    <thead><tr><th>Question</th><th>Answer</th><th>Why</th></tr></thead>
+    <thead><tr><th>Question</th><th>Answer</th><th>Text to paste</th></tr></thead>
     <tbody>
-    {% for a in pack.answers %}
+    {% for r in sheet.rows %}
+    {% set a = r.answer %}
     <tr id="answer-{{ a.key }}">
-      <td class="q">{{ a.question }}</td>
-      <td><span class="answer answer-{{ a.answer|lower|replace(' ', '-') }}">{{ a.answer }}</span></td>
-      <td>{% if a.override %}{% if a.override.note %}{{ a.override.note }} {% endif %}<span class="set-by">Set by {{ a.override.set_by }} on {{ a.override.set_at|day }}.</span>{% else %}{{ a.why }}{% endif %}
-        {%- if a.source %}<div class="source">Evidence: {{ a.source.label }}{% if a.source.report %} report{% else %}, below{% endif %}</div>{% endif %}</td>
+      <td class="q">{{ r.item.question }}</td>
+      <td><span class="answer answer-{{ ANSWER_CLASS.get(r.state, 'not-known') }}">{{ r.state }}</span></td>
+      <td>{{ a.text }}{% if a.override %} <span class="set-by">Set by {{ a.override.set_by }} on {{ a.override.set_at|day }}.</span>{% endif %}
+        {%- if a.source and not a.needs_input %}<div class="source">Evidence: {{ a.source.label }}{% if a.source.report %} report{% else %}, below{% endif %}</div>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>
