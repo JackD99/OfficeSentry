@@ -266,7 +266,8 @@ jobs:
           SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
           SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
           SITE_SOURCE_PUBLIC: ${{ !github.event.repository.private }}
-          SITE_CONTACT: ${{ vars.OFFICESENTRY_WEBSITE_CONTACT }}
+          # The project's own address unless the variable says otherwise (v2/deploy/public/README.md).
+          SITE_CONTACT: ${{ vars.OFFICESENTRY_WEBSITE_CONTACT || (vars.OFFICESENTRY_WEBSITE_DOMAIN == 'officesentry.co.uk' && 'hello@officesentry.co.uk') || '' }}
         run: |
           pip install -q --require-hashes -r website/requirements.txt
           python website/build.py
