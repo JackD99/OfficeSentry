@@ -1107,3 +1107,70 @@ dd.sg-row { margin-bottom: 0; }
   .sg-name { min-width: 0; }
   .sg-type li { flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 }
+
+/* -- Report design editor (designer.js, design_editor.html): blocks on the left, the layout in the middle,
+   the preview on the right. Everything here reuses the tokens; the preview is a report page in an iframe. */
+.designer { display: flex; flex-direction: column; gap: var(--space-3); }
+.designer-bar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2-5) var(--space-3-5); box-shadow: var(--shadow); }
+.designer-bar .spacer { flex: 1; }
+.designer-name { flex: 1 1 240px; max-width: 420px; margin: 0; }
+.designer-name input { margin: 0; font-weight: 600; font-size: var(--fs-lg); }
+.designer-tenant { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; }
+.designer-tenant select { margin: 0; width: auto; max-width: 260px; font-size: var(--fs-sm); padding: 5px 9px; }
+.designer-status { font-size: var(--fs-sm); color: var(--ok); white-space: nowrap; }
+.designer-status.pending { color: var(--muted); }
+.designer-status.failed { color: var(--bad); }
+.designer-body { display: grid; grid-template-columns: 250px minmax(300px, 380px) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.designer-pane-title { font-weight: 600; font-size: var(--fs-sm); color: var(--text-2); margin-bottom: var(--space-2); display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; }
+.designer-palette, .designer-layout { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3) var(--space-3-5); box-shadow: var(--shadow); }
+.designer-palette { position: sticky; top: var(--space-3); max-height: calc(100vh - var(--space-6)); overflow-y: auto; }
+.designer-palette > .hint { font-size: var(--fs-xs); color: var(--muted); margin: 0 0 var(--space-2); }
+.palette-group-title { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin: var(--space-3) 0 var(--space-1); }
+.palette-item { display: flex; align-items: center; gap: var(--space-1-5); padding: 6px 6px 6px 4px; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: grab; }
+.palette-item:hover { background: var(--surface-2); border-color: var(--border); }
+.palette-item:active { cursor: grabbing; }
+.palette-grip { color: var(--decor); display: inline-flex; }
+.palette-grip .icon { width: 14px; height: 14px; }
+.palette-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.palette-title { font-size: var(--fs-sm); font-weight: 500; }
+.palette-desc { font-size: var(--fs-xs); color: var(--muted); display: none; }
+.palette-item:hover .palette-desc, .palette-item:focus-within .palette-desc { display: block; }
+.palette-add { flex: none; padding: 2px 8px; font-size: var(--fs-xs); }
+.layout-list { list-style: none; padding: 0; margin: 0; min-height: 40px; }
+.layout-card { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: var(--space-2); transition: border-color .15s, box-shadow .15s; }
+.layout-card.half { margin-left: var(--space-4); border-left: 3px solid var(--decor); }
+.layout-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.layout-card.dragging { opacity: .4; }
+.layout-head { display: flex; align-items: center; gap: var(--space-1); padding: 4px 6px 4px 4px; }
+.layout-grip { color: var(--decor); cursor: grab; display: inline-flex; padding: 4px 2px; }
+.layout-grip:active { cursor: grabbing; }
+.layout-open, button.layout-head { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; background: none; border: 0; padding: 6px 4px; color: var(--text); font: inherit; cursor: pointer; border-radius: var(--radius-sm); }
+button.layout-head { padding: 8px 10px; }
+.layout-open:hover, button.layout-head:hover { background: var(--surface-2); }
+.layout-title { font-weight: 600; font-size: var(--fs-sm); }
+.layout-sub { font-size: var(--fs-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.layout-width { font-size: var(--fs-xs); color: var(--accent); }
+.layout-actions { display: flex; gap: 1px; flex: none; }
+.layout-actions button { padding: 2px 6px; min-width: 26px; font-size: var(--fs-sm); line-height: 1.4; }
+.layout-settings { border-top: 1px solid var(--border); padding: var(--space-2-5) var(--space-3) var(--space-1); background: var(--surface-2); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.layout-settings label, .layout-settings fieldset { font-size: var(--fs-sm); margin-bottom: var(--space-2-5); }
+.layout-settings fieldset.multi { border: 0; padding: 0; margin: 0 0 var(--space-2-5); }
+.layout-settings fieldset.multi legend { font-weight: 500; margin-bottom: var(--space-1); padding: 0; }
+.layout-settings fieldset.multi label.check { display: block; margin: 2px 0; font-weight: 400; }
+.layout-settings input:not([type=checkbox]), .layout-settings select, .layout-settings textarea { padding: 6px 9px; font-size: var(--fs-sm); }
+.layout-settings .hint { font-size: var(--fs-xs); }
+.layout-placeholder { height: 0; border-top: 3px solid var(--accent); border-radius: 2px; margin: 0 0 var(--space-2); list-style: none; }
+.layout-empty { font-size: var(--fs-sm); color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: var(--space-4); text-align: center; }
+.cover-card { margin-bottom: var(--space-3); background: var(--surface-2); }
+.designer-preview { min-width: 0; }
+.designer-preview iframe { width: 100%; height: calc(100vh - 140px); min-height: 520px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); }
+@media (max-width: 1180px) {
+  .designer-body { grid-template-columns: 230px minmax(0, 1fr); }
+  .designer-preview { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .designer-body { grid-template-columns: minmax(0, 1fr); }
+  .designer-palette { position: static; max-height: none; }
+  .palette-item { cursor: default; }
+  .designer-preview iframe { height: 70vh; }
+}

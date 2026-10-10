@@ -498,8 +498,8 @@ def freeze(app, conn, tenant, period: str, user: str, *, reason: str | None = No
     if files is None:
         files = render_files(app, conn, tenant, period, now)
     keys = json.loads(plan["reports"] or "[]")
-    by_name = {name: key for key, name in delivery.attachment_plan(tenant, keys, bool(plan["include_xlsx"]))}
-    known = delivery.catalog_map()
+    by_name = {name: key for key, name in delivery.attachment_plan(tenant, keys, bool(plan["include_xlsx"]), conn)}
+    known = delivery.catalog_map(conn)
     stamp = now.strftime(ISO)
     ids = issued.archive(conn, tenant["id"], [
         issued.IssuedFile(by_name.get(name, ""), known[by_name[name]].title if by_name.get(name) in known else name,

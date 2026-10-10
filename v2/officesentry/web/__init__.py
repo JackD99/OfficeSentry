@@ -22,6 +22,7 @@ from . import (
     auth,
     branding,
     data_retention,
+    designs,
     email,
     filters,
     groups,
@@ -190,4 +191,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(upcoming.bp)
     app.register_blueprint(system.bp)
     app.register_blueprint(styleguide.bp)
+    app.register_blueprint(designs.bp)
     return app

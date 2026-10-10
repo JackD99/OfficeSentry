@@ -1,0 +1,270 @@
+{#- The blocks of a report design (reports/designs.py), one macro per widget kind. Import with
+    {% import "reports/_widgets.html" as widgets with context %} and call widgets.draw(item).
+    Each macro gets the Rendered item: item.block.settings, item.data and item.heading. The same macros
+    draw the page and the PDF, so a design always prints as it previews. -#}
+{% import "reports/_components.html" as ui with context %}
+{% set WHOLE_ORG = ('Tenant', 'Organisation') %}
+
+{% macro head(item) -%}
+{% if item.heading %}<h2>{{ item.heading }}</h2>{% endif %}
+{%- endmacro %}
+
+{% macro w_verdict(item) -%}
+{{ ui.verdict(item.data.verdict) }}
+{%- endmacro %}
+
+{% macro w_summary_text(item) -%}
+{{ head(item) }}
+<div class="summary-text">{% for p in item.data.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro w_commentary(item) -%}
+{{ head(item) }}
+<div class="summary-text commentary">{% for p in item.data.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro w_kpis(item) -%}
+{{ head(item) }}
+{% set d = item.data %}
+<div class="kpis cols-{{ d.columns }}">
+  {% for k in d.kpis %}
+    {%- if k.value is none -%}{% set value = none %}
+    {%- elif k.unit == 'currency' -%}{% set value = k.value|money(d.currency, 2) %}
+    {%- else -%}{% set value = '%g'|format(k.value) ~ k.unit %}{%- endif -%}
+    {%- set trend = 'flat' if k.better == 'none' else k.trend -%}
+    {%- if k.delta -%}
+      {%- set amount = (k.delta|abs)|money(d.currency, 2) if k.unit == 'currency' else ('%g'|format(k.delta|abs) ~ (' pts' if k.unit == '%' else '')) -%}
+      {%- set delta_text = ('↑ ' if k.delta > 0 else '↓ ') ~ amount ~ ' <span class="vs">since ' ~ d.since ~ '</span>' -%}
+    {%- elif k.previous is not none -%}{% set delta_text = 'No change since ' ~ d.since %}
+    {%- else -%}{% set delta_text = '' %}{%- endif -%}
+    {{ ui.kpi(k.label, value, delta_text, trend, k.note, k.value if k.unit == '%' else none) }}
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro w_breakdown(item) -%}
+{{ head(item) }}
+{% if item.data.bars %}{{ ui.breakdown(item.data.title, item.data.bars) }}{% else %}<p class="all-clear">{{ item.data.title }}.</p>{% endif %}
+{%- endmacro %}
+
+{% macro w_secure_score(item) -%}
+{{ head(item) }}
+{% if item.data.intro %}<p class="section-intro">Microsoft's own measure of how many recommended security settings are turned on. Higher is better.</p>{% endif %}
+<div class="chart-card">{{ item.data.chart|safe }}</div>
+{%- endmacro %}
+
+{% macro w_actions(item) -%}
+{{ head(item) }}
+{% if item.data.curated %}
+<ol class="actions">
+  {% for a in item.data.curated %}<li>
+    <div class="act-title">{{ a.title }}</div>
+    {% if a.detail %}<p class="act-why">{{ a.detail }}</p>{% endif %}
+    <div class="act-meta"><span class="act-status st-{{ a.status }}">{{ a.status_label }}</span>{% if a.target_label %}<span>Target: {{ a.target_label }}</span>{% endif %}</div>
+  </li>{% endfor %}
+</ol>
+{% else %}{{ ui.actions(item.data.actions) }}{% endif %}
+{%- endmacro %}
+
+{% macro w_findings(item) -%}
+{{ head(item) }}
+{% set d = item.data %}
+{% if d.style == 'compact' %}
+<div class="tidy">
+  {% for r in d.results %}
+  <div class="tidy-item" id="{{ item.anchor }}-{{ r.key }}">
+    <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.summary|trim('.') }}</h3><span class="category">{{ r.category }}</span></div>
+    {% set named = r.findings|rejectattr('subject', 'in', WHOLE_ORG)|list %}
+    {% if named and d.rows %}<p class="tidy-found"><span class="muted">Affects {% for f in named[:d.rows] %}{{ f.subject|breakable }}{% if f.new %}<span class="new">New</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if named|length > d.rows %} and {{ named|length - d.rows }} more{% endif %}.</span></p>
+    {% elif named %}<p class="tidy-found"><span class="muted">Affects {{ named|length|plural('account or item', 'accounts or items') }}.</span></p>
+    {% elif r.findings %}<p class="tidy-found"><span class="muted">Applies to the whole organisation.</span>{% if r.findings|selectattr('new')|list %}<span class="new">New</span>{% endif %}</p>{% endif %}
+    <p class="tidy-rec">{{ r.recommendation }}</p>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+{% for r in d.results %}
+<div class="check s-{{ r.severity }}" id="{{ item.anchor }}-{{ r.key }}">
+  <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.summary|trim('.') }}</h3><span class="category">{{ r.category }}</span></div>
+  <p class="recommendation"><strong>What to do:</strong> {{ r.recommendation }}</p>
+  {% set ns = d.notes.get(r.key, []) %}
+  {% if ns %}<ul class="tl-notes">{% for n in ns %}<li>{% if n.subject %}<span class="who">{{ n.subject|subject_label }}:</span> {% endif %}{{ n.body }}</li>{% endfor %}</ul>{% endif %}
+  {% if r.findings and d.rows %}
+  <div class="table-wrap"><table class="findings">
+    <thead><tr><th>Account or item</th><th>Detail</th><th>Severity</th></tr></thead>
+    <tbody>
+    {% for f in r.findings[:d.rows] %}<tr><td>{{ f.subject|subject_label|breakable }}{% if f.new %}<span class="new">New</span>{% endif %}</td><td>{{ f.detail }}</td><td>{{ ui.sev(f.severity) }}</td></tr>{% endfor %}
+    {% if r.findings|length > d.rows %}<tr><td colspan="3" class="more">…and {{ r.findings|length - d.rows }} more.</td></tr>{% endif %}
+    </tbody>
+  </table></div>
+  {% elif r.findings %}<p class="tidy-found"><span class="muted">Affects {{ r.findings|length|plural('account or item', 'accounts or items') }}.</span></p>{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{%- endmacro %}
+
+{% macro w_passing(item) -%}
+{{ head(item) }}
+<ul class="passing">{% for r in item.data.results %}<li>{{ r.title }}</li>{% endfor %}</ul>
+{%- endmacro %}
+
+{% macro w_accepted(item) -%}
+{{ head(item) }}
+<p class="section-intro">Exceptions that have been reviewed and agreed. They come back into the report when the acceptance ends.</p>
+<div class="table-wrap"><table class="findings">
+  <thead><tr><th>Check</th><th>Account or item</th><th>Accepted by</th><th>Reason</th></tr></thead>
+  <tbody>
+  {% for r, f, life in item.data.accepted %}<tr><td>{{ r.title }}</td><td>{{ f.subject }}</td>
+    <td>{{ life.accepted_by }}{% if life.accepted_until %}<div class="muted small">until {{ life.accepted_until[:10]|day }}</div>{% endif %}</td>
+    <td>{{ life.accepted_note }}</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+{%- endmacro %}
+
+{% macro w_unavailable(item) -%}
+{{ head(item) }}
+<p class="section-intro">These checks need data or a Microsoft licence that isn't available, so they're neither a pass nor a fail.</p>
+<ul class="unavailable">{% for r in item.data.results %}<li><strong>{{ r.title }}.</strong> <span class="muted">{{ r.summary }}</span></li>{% endfor %}</ul>
+{%- endmacro %}
+
+{% macro w_changes(item) -%}
+{{ head(item) }}
+{% set d = item.data %}
+{% if d.nothing %}
+  {% if d.first %}<p class="muted">This is the first report for this tenant, so its findings are the starting point. Changes are tracked from here on.</p>
+  {% else %}<p class="muted">No changes recorded since {{ d.since }}.</p>{% endif %}
+{% else %}
+  {% if d.resolved or d.new %}
+  <h3 class="changes-head">Findings</h3>
+  <p class="section-intro">{{ (d.resolved|length + d.more_resolved) }} fixed and {{ (d.new|length + d.more_new) }} new or returning since {{ d.since }}.</p>
+  <ul class="changes">
+    {% for f in d.resolved %}<li>{{ ui.change_tag("fixed") }} {{ f.subject|subject_label }}: {{ f.detail }}</li>{% endfor %}
+    {% if d.more_resolved %}<li class="muted">…and {{ d.more_resolved }} more fixed</li>{% endif %}
+    {% for r, f in d.new %}<li>{{ ui.change_tag("added") }} {{ f.subject|subject_label }}: {{ f.detail }}</li>{% endfor %}
+    {% if d.more_new %}<li class="muted">…and {{ d.more_new }} more new</li>{% endif %}
+  </ul>
+  {% endif %}
+  {% if d.changes %}
+  <h3 class="changes-head">In the tenant</h3>
+  <ul class="changes">
+    {% for c in d.changes %}<li>{{ ui.change_tag(c.kind) }} <strong>{{ c.area }}:</strong> {{ c.subject }}: {{ c.detail }}</li>{% endfor %}
+    {% if d.more_changes %}<li class="muted">…and {{ d.more_changes }} more changes</li>{% endif %}
+  </ul>
+  {% endif %}
+{% endif %}
+{%- endmacro %}
+
+{% macro w_licences(item) -%}
+{{ head(item) }}
+{% set d = item.data %}
+{% macro money(v) %}{{ v|money(d.currency, 2) }}{% endmacro %}
+{% if d.waste %}
+<div class="callout keep">
+  <div class="big">{{ money(d.waste) }} a month</div>
+  <div>could be saved: that's {{ money(d.waste * 12) }} a year on licences that are unassigned or held by disabled or inactive accounts.</div>
+</div>
+{% endif %}
+<div class="table-wrap"><table class="licences">
+  <thead><tr><th>Licence</th><th class="num">Purchased</th><th class="num">Assigned</th><th class="num">Unassigned</th>
+    <th class="num">Disabled users</th><th class="num">Inactive users</th><th class="num">Waste / month</th></tr></thead>
+  <tbody>
+  {% for ln in d.paid %}
+  <tr><td>{{ ln.name }}</td><td class="num">{{ ln.purchased }}</td><td class="num">{{ ln.assigned }}</td>
+    <td class="num">{{ ln.unassigned }}</td><td class="num">{{ ln.on_disabled_users }}</td>
+    <td class="num">{{ ln.on_stale_users if d.stale_available else 'n/a' }}</td>
+    <td class="num">{% if ln.monthly_waste %}<span class="highlight">{{ money(ln.monthly_waste) }}</span>{% elif ln.monthly_waste is not none %}{{ money(0) }}{% elif ln.wasted_units %}{{ ln.wasted_units }} unpriced{% else %}–{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{%- endmacro %}
+
+{% macro w_data_table(item) -%}
+{{ head(item) }}
+{% set d = item.data %}
+{% if not item.heading %}<h2>{{ d.report.title }}</h2>{% endif %}
+{% if d.report.notice %}<div class="callout warn">{{ d.report.notice }}</div>{% endif %}
+{% if d.figures and d.tiles %}
+{% call ui.figures(d.tiles|length) %}{% for t in d.tiles %}{{ ui.figure(t.label, t.value, t.foot, t.tone) }}{% endfor %}{% endcall %}
+{% endif %}
+{% for s in d.sections %}
+<div class="doc-section">
+  {% if d.sections|length > 1 or s.section.title != d.report.title %}<h3>{{ s.section.title }} <span class="count">{{ s.section.rows|length }}</span></h3>{% endif %}
+  {% if s.section.intro %}<p class="section-intro">{{ s.section.intro }}</p>{% endif %}
+  {% if s.rows %}
+  {{ ui.data_table(namespace(title=s.section.title, columns=s.section.columns, rows=s.rows, flags=s.flags, flag_name=s.section.flag_name)) }}
+  {% if s.more %}<p class="muted small">…and {{ s.more }} more rows in the full report.</p>{% endif %}
+  {% else %}<p class="empty-note">{{ s.section.empty }}</p>{% endif %}
+</div>
+{% endfor %}
+{%- endmacro %}
+
+{% macro w_evidence(item) -%}
+{{ head(item) }}
+<p class="section-intro">The questions cyber insurers usually ask, answered from the Microsoft 365 data. "Not known" means the data can't show it.</p>
+<table class="answers-table">
+  <thead><tr><th>Question</th><th>Answer</th><th>Why</th></tr></thead>
+  <tbody>
+  {% for a in item.data.answers %}
+  <tr><td class="q">{{ a.question }}</td>
+    <td><span class="answer answer-{{ a.answer|lower|replace(' ', '-') }}">{{ a.answer }}</span></td>
+    <td class="why">{{ a.why }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if item.data.more %}<p class="muted small">…and {{ item.data.more }} more in the insurance evidence pack.</p>{% endif %}
+{%- endmacro %}
+
+{% macro w_heading(item) -%}
+{{ head(item) }}
+{% if item.data.intro %}<p class="lede">{{ item.data.intro }}</p>{% endif %}
+{%- endmacro %}
+
+{% macro w_text(item) -%}
+{{ head(item) }}
+<div class="summary-text own-words">{% for p in item.data.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro w_contact(item) -%}
+{{ head(item) }}
+<div class="callout contact-card">
+  {% if item.data.name %}<div class="big">{{ item.data.name }}</div>{% endif %}
+  {% if item.data.contact %}<div>{{ item.data.contact }}</div>{% endif %}
+  {% if item.data.text %}<p class="m0">{{ item.data.text }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro w_page_break(item) -%}
+<div class="page-break-marker"></div>
+{%- endmacro %}
+
+{% macro w_about(item) -%}
+<footer class="about keep">
+  <h2>About this report</h2>
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Everything here was read from Microsoft 365 with read-only access; nothing was changed. Changes are compared with the closest data from at least 4 weeks earlier.
+  {{ ui.collected(item.data.fresh) }}</p>
+  {% if item.data.stale %}<p><span class="stale">Out of date:</span> {% for f in item.data.stale %}{{ f.title }} ({{ ('last collected ' ~ f.finished_at|day) if f.finished_at else 'not collected yet' }}){{ ', ' if not loop.last else '.' }}{% endfor %} Figures that rely on these may not reflect the latest settings.</p>{% endif %}
+</footer>
+{%- endmacro %}
+
+{% set DRAW = {
+  'verdict': w_verdict, 'summary_text': w_summary_text, 'commentary': w_commentary, 'kpis': w_kpis,
+  'breakdown': w_breakdown, 'secure_score': w_secure_score, 'actions': w_actions, 'findings': w_findings,
+  'passing': w_passing, 'accepted': w_accepted, 'unavailable': w_unavailable, 'changes': w_changes,
+  'licences': w_licences, 'data_table': w_data_table, 'evidence': w_evidence, 'heading': w_heading,
+  'text': w_text, 'contact': w_contact, 'page_break': w_page_break, 'about': w_about,
+} %}
+
+{#- One block: its section, or in the preview a note on why it's empty or broken. -#}
+{% macro draw(item, preview=false) -%}
+{% if item.error %}
+  {% if preview %}<section class="block block-empty"><div class="block-note">{{ item.widget.title }}: couldn't be built for this tenant. The log has the details.</div></section>{% endif %}
+{% elif item.data is none %}
+  {% if preview %}<section class="block block-empty"><div class="block-note"><strong>{{ item.widget.title }}</strong> has nothing to show for this tenant, so it's left out: {{ item.empty }}</div></section>{% endif %}
+{% elif item.block.kind == 'page_break' %}
+  {% if preview %}<div class="block-note page-break-note">Page break</div>{% endif %}{{ w_page_break(item) }}
+{% else %}
+<section class="block block-{{ item.block.kind }}{% if item.block.width == 'half' %} half{% endif %}{% if item.block.kind in ('verdict', 'kpis', 'breakdown', 'secure_score', 'passing', 'contact', 'text', 'heading') %} keep{% endif %}"{% if item.anchor %} id="{{ item.anchor }}"{% endif %}>
+  {{ DRAW[item.block.kind](item) }}
+</section>
+{% endif %}
+{%- endmacro %}

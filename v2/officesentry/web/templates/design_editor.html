@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}{{ design.name }} · Report designs{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><a href="{{ url_for('designs.index') }}">Report designs</a><span>/</span><span>{{ design.name }}</span></div>
+
+<div class="designer" id="designer" data-save="{{ url_for('designs.save', design_id=design.id) }}" data-preview="{{ url_for('designs.preview', design_id=design.id) }}">
+  {{ csrf() }}
+  <div class="designer-bar">
+    <label class="designer-name"><span class="sr-only">Design name</span>
+      <input type="text" id="design-name" value="{{ design.name }}" maxlength="100" aria-label="Design name"></label>
+    <span class="designer-status" id="designer-status" role="status" aria-live="polite">Saved</span>
+    <span class="spacer"></span>
+    {% if tenants %}
+    <label class="designer-tenant">Preview on
+      <select id="preview-tenant">
+        {% for t in tenants %}<option value="{{ t.id }}"{% if tenant and t.id == tenant.id %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select></label>
+    {% if pdf_available and tenant %}<a class="btn sm" id="open-pdf" href="{{ url_for('designs.tenant_design_pdf', tenant_id=tenant.id, design_id=design.id) }}" data-pattern="{{ url_for('designs.tenant_design_pdf', tenant_id=0, design_id=design.id) }}">{{ icon('download') }} PDF</a>{% endif %}
+    {% endif %}
+    <a class="btn sm ghost" href="{{ url_for('designs.index') }}">Done</a>
+  </div>
+
+  <div class="designer-body">
+    <aside class="designer-palette" aria-label="Blocks to add">
+      <div class="designer-pane-title">Blocks</div>
+      <p class="hint">Drag a block into the layout, or press Add.</p>
+      {% for group in palette %}
+      <div class="palette-group">
+        <div class="palette-group-title">{{ group.group }}</div>
+        {% for w in group.widgets %}
+        <div class="palette-item" draggable="true" data-kind="{{ w.key }}" title="{{ w.description }}">
+          <span class="palette-grip" aria-hidden="true">{{ icon('grip') }}</span>
+          <span class="palette-text"><span class="palette-title">{{ w.title }}</span><span class="palette-desc">{{ w.description }}</span></span>
+          <button type="button" class="sm ghost palette-add" data-add="{{ w.key }}" aria-label="Add {{ w.title }}">Add</button>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </aside>
+
+    <section class="designer-layout" aria-label="Layout">
+      <div class="designer-pane-title">Layout <span class="muted small" id="block-count"></span></div>
+      <div class="layout-card cover-card" id="cover-card">
+        <button type="button" class="layout-head" id="cover-toggle" aria-expanded="false">
+          <span class="layout-title">Cover</span><span class="layout-sub" id="cover-sub"></span>
+        </button>
+        <div class="layout-settings" id="cover-settings" hidden>
+          <label>Title <input type="text" id="cover-title" maxlength="120" placeholder="{{ design.name }}"><span class="hint">Placeholders: {client}, {month}, {msp}, {date}.</span></label>
+          <label>Subtitle <input type="text" id="cover-subtitle" maxlength="{{ text_max }}" placeholder="{month}"></label>
+          <label>Description <span class="faint">(for the designs list)</span> <input type="text" id="design-description" maxlength="{{ text_max }}" value="{{ design.description }}"></label>
+          <label class="check"><input type="checkbox" id="cover-verdict"> Show the status verdict on the cover</label>
+          <label class="check"><input type="checkbox" id="cover-contents"> List the sections on the cover</label>
+        </div>
+      </div>
+      <ol class="layout-list" id="layout-list" aria-label="Blocks in order"></ol>
+      <div class="layout-empty" id="layout-empty" hidden>Nothing here yet. Drag a block in from the left, or press Add on one.</div>
+    </section>
+
+    <section class="designer-preview" aria-label="Preview">
+      <div class="designer-pane-title">Preview{% if tenant %} <span class="muted small">on {{ tenant.name }}, with the blocks that have nothing to show named</span>{% endif %}</div>
+      <iframe id="preview" title="Report preview" src="{{ preview_url }}"></iframe>
+    </section>
+  </div>
+</div>
+
+<script type="application/json" id="designer-data">{{ {"doc": doc, "palette": palette, "tenant": tenant.id if tenant else none}|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='designer.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}
