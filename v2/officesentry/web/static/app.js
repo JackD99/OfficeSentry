@@ -71,3 +71,38 @@
   else focusable();
   window.addEventListener('resize', function () { clearTimeout(timer); timer = setTimeout(focusable, 150); });
 })();
+
+/* Copy buttons: data-copy="#id" copies that element's text (a textarea's value) to the clipboard and says so. */
+(function () {
+  function fallback(text) {
+    var box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.position = 'fixed';
+    box.style.opacity = '0';
+    document.body.appendChild(box);
+    box.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    box.remove();
+    return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
+  }
+  document.addEventListener('click', function (e) {
+    var button = e.target.closest && e.target.closest('[data-copy]');
+    if (!button) return;
+    var source = document.querySelector(button.getAttribute('data-copy'));
+    if (!source) return;
+    var text = source.value !== undefined ? source.value : source.textContent;
+    var done = navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(text) : fallback(text);
+    var label = button.getAttribute('data-label') || button.innerHTML;
+    button.setAttribute('data-label', label);
+    done.then(function () {
+      button.classList.add('copied');
+      button.textContent = button.getAttribute('data-copied') || 'Copied';
+    }, function () {
+      button.textContent = 'Select and copy';
+    }).then(function () {
+      setTimeout(function () { button.innerHTML = label; button.classList.remove('copied'); }, 2000);
+    });
+  });
+})();
