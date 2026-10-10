@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from officesentry import store
 from officesentry.db import MIGRATIONS_DIR
 from officesentry.reports import evidence, evidence_answers, export
-from officesentry.reports.evidence_answers import NO, NOT_KNOWN, PARTLY, YES
+from officesentry.reports.evidence_base import NO, NOT_KNOWN, PARTLY, YES
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -131,7 +131,7 @@ def test_read_only_users_cannot_override(client, db, two_tenants):
     assert client.post(f"/tenants/{alpha}/evidence/answers/legacy_auth", data={"answer": "Yes"}).status_code == 403
     assert db.execute("SELECT COUNT(*) FROM evidence_answer_overrides").fetchone()[0] == 0
     page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
-    assert "Questionnaire answers" in page and "Set a different answer" not in page
+    assert "Copy all answers" in page and "Change this answer" not in page and "Write this answer" not in page
 
 
 def test_overrides_reach_page_pdf_and_exports(client, db, two_tenants, monkeypatch):
@@ -152,10 +152,10 @@ def test_overrides_reach_page_pdf_and_exports(client, db, two_tenants, monkeypat
     legacy = next(r for r in rows if r[1] == "Is legacy authentication blocked?")
     assert legacy[2] == "Yes" and legacy[3] == "Blocked at the firewall." and legacy[4].startswith("jack, ")
 
-    sheet = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx").data))["Questionnaire"]
+    sheet = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx").data))["Cyber insurance"]
     values = [[c.value for c in row] for row in sheet.iter_rows()]
-    legacy = next(r for r in values if "Is legacy authentication blocked?" in r)
-    assert "Yes" in legacy and "Blocked at the firewall." in legacy
+    legacy = next(r for r in values if "Are legacy authentication protocols that can't use MFA blocked?" in r)
+    assert "Yes" in legacy and "Blocked at the firewall." in legacy and any("jack" in str(v) for v in legacy)
 
     if export.pdf_available():
         assert client.get(f"/tenants/{alpha}/evidence.pdf").data[:4] == b"%PDF"

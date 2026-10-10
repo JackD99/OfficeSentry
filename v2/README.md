@@ -209,11 +209,16 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     Licence waste so nothing is counted twice. When the tenant hides names in
     usage reports, people show as short codes, licences are read from
     Microsoft's product names, and the page explains how to show names.
-- **Insurance evidence** (`/tenants/<id>/evidence`, PDF, XLSX): the controls
-  cyber-insurance questionnaires ask about (MFA, admin accounts, legacy auth,
-  email authentication, forwarding, logging, leavers, apps, sharing, devices), each
-  answered In place / Partly / Not in place from the checks, with the gaps
-  listed. Backups and training are marked "Not assessed".
+- **Questionnaires and evidence** (`/tenants/<id>/evidence`, PDF, XLSX, CSV,
+  text): answers for cyber insurance proposal forms, supplier security
+  questionnaires and Cyber Essentials (IASME's Danzell set, by question
+  number), in each form's wording with text to copy and paste, and the
+  Microsoft 365 data and date behind each. Questions Microsoft 365 can't
+  answer (backups, firewalls, plans) get a text to complete, with the gaps in
+  `[brackets]`; an answer written once fills every form that asks it. The
+  Controls view keeps the controls insurers ask about (MFA, admin accounts,
+  legacy auth, email authentication, forwarding, logging, leavers, apps,
+  sharing, devices), each In place / Partly / Not in place with the gaps.
 - **Recommended projects** (`/projects` and `/tenants/<id>/projects`, admins
   and analysts): each client's failing checks and missing licences grouped
   into the projects that fix them (Identity and Conditional Access, Device

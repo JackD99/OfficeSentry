@@ -155,7 +155,10 @@ logged, failures retry automatically, and you can preview at desktop and phone w
 
 The **insurance evidence pack** answers the controls cyber-insurance questionnaires ask about (MFA, admin accounts,
 legacy sign-in, email authentication, forwarding, logging, leavers, apps, sharing, devices) with *In place*,
-*Partly* or *Not in place*, from the data, with the gaps listed.
+*Partly* or *Not in place*, from the data, with the gaps listed. **Questionnaires** turn the same data into
+answers for cyber insurance proposal forms, supplier security questionnaires and Cyber Essentials, in each
+form's wording and ready to paste, with a text to complete where Microsoft 365 can't answer (backups,
+firewalls, plans).
 
 <table>
   <tr>
