@@ -97,6 +97,54 @@ def test_recovery_code_works_once(client, db, vault, staff_mfa):
     assert client.get("/").status_code == 302
 
 
+def test_recovery_codes_are_stored_under_a_key(client, db, vault, staff_mfa):
+    """A copy of the database alone can't be used to guess recovery codes: they're an HMAC under a key that
+    is itself encrypted with the vault."""
+    import hashlib
+
+    make_user(db, "admin")
+    _secret, codes = enrol(client, db, vault, "admin")
+    stored = {r[0] for r in db.execute("SELECT code_hash FROM user_recovery_codes")}
+    plain = {hashlib.sha256(c.replace("-", "").encode()).hexdigest() for c in codes}
+    assert len(stored) == 10 and all(h.startswith("hmac:") for h in stored) and not stored & plain
+    key = db.execute("SELECT value FROM settings WHERE key = 'totp.recovery_key_enc'").fetchone()[0]
+    assert stored == {totp.hash_recovery_code(c, vault.decrypt(key).encode()) for c in codes}
+
+
+def test_recovery_codes_stored_before_keyed_hashes_still_work(client, db, vault, staff_mfa):
+    import hashlib
+
+    uid = make_user(db, "admin")
+    enrol(client, db, vault, "admin")
+    client.post("/logout")
+    db.execute("DELETE FROM user_recovery_codes")
+    old = "abcde-fghjk"
+    db.execute(
+        "INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)",
+        (uid, hashlib.sha256(b"abcdefghjk").hexdigest()),
+    )
+    login(client, "admin")
+    assert client.post("/login/code", data={"code": old}).status_code == 302
+    assert client.get("/").status_code == 200
+    client.post("/logout")
+    login(client, "admin")
+    client.post("/login/code", data={"code": old})  # once only, like any other code
+    assert client.get("/").status_code == 302
+
+
+def test_recovery_codes_survive_key_rotation(db, vault, cfg):
+    from cryptography.fernet import Fernet
+
+    from officesentry.__main__ import reencrypt_all
+    from officesentry.crypto import Vault
+
+    key = totp.recovery_key(db, vault)
+    assert totp.recovery_key(db, vault) == key  # made once
+    new = Fernet.generate_key().decode()
+    reencrypt_all(db, Vault([new, *cfg.encryption_keys]))  # what rotate-keys --new does, before it drops the old key
+    assert totp.recovery_key(db, Vault([new])) == key
+
+
 def test_wrong_codes_lock_the_account(client, db, vault, staff_mfa):
     make_user(db, "admin")
     secret, _codes = enrol(client, db, vault, "admin")

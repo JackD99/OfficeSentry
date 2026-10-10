@@ -193,6 +193,9 @@ copied collection reads back exactly as its snapshot.
 - Resetting someone else's password, two-step sign-in or sessions from their user page asks for the admin's
   own password, as the account page does before the same changes, so a stolen admin session isn't enough.
   Wrong answers count towards the admin's own sign-in lock.
+- Recovery codes are stored as an HMAC under a random key kept encrypted with your encryption key, rather
+  than a plain SHA-256, so a copy of the database alone can't be used to guess them. Codes made before this
+  release keep working; making new ones on the account page stores them the new way.
 
 ## 2.0.0 (2026-10-09)
 

@@ -330,8 +330,8 @@ def login_code():
             ok = used_recovery = (
                 g.db.execute(
                     "UPDATE user_recovery_codes SET used_at = ?"
-                    " WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
-                    (utcnow(), user["id"], totp.hash_recovery_code(value)),
+                    " WHERE user_id = ? AND code_hash IN (?, ?) AND used_at IS NULL",
+                    (utcnow(), user["id"], *totp.recovery_code_hashes(value, totp.recovery_key(g.db, _vault()))),
                 ).rowcount
                 > 0
             )
@@ -437,10 +437,11 @@ def _setup_page(user, signed_in: bool):
 
 
 def _store_recovery_codes(user_id: int, codes: list[str]) -> None:
+    key = totp.recovery_key(g.db, _vault())
     g.db.execute("DELETE FROM user_recovery_codes WHERE user_id = ?", (user_id,))
     g.db.executemany(
         "INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)",
-        [(user_id, totp.hash_recovery_code(c)) for c in codes],
+        [(user_id, totp.hash_recovery_code(c, key)) for c in codes],
     )
 
 
