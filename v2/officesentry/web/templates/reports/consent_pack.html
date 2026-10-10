@@ -1,0 +1,83 @@
+{#- The "send this to your client" pack (web/onboarding.pack): how to approve Office Sentry, and what it reads.
+    For the client's Global Administrator, so it names nothing they don't need: no staff, no internals. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+
+{% block doc_title %}Approving read-only access{% endblock %}
+{% block client %}{{ tenant.name }}{% endblock %}
+{% block cover_subtitle %}<p class="cover-sub">For your Microsoft 365 security and licensing reports from {{ brand.display_name }}</p>{% endblock %}
+{% block toolbar %}
+  <a class="back" href="{{ url_for('onboarding.send', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a>
+  <span class="spacer"></span>
+  <a class="button primary" href="{{ url_for('onboarding.pack', tenant_id=tenant.id) }}"><span class="wide">Download </span>PDF</a>
+{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', today.day ~ ' ' ~ today.strftime('%B %Y')) }}
+  {{ ui.meta('Microsoft 365 tenant', tenant.tenant_ref) }}
+  {{ ui.meta('App to approve', app) }}
+{% endblock %}
+{% block footer_note %}For {{ tenant.name }}{% endblock %}
+
+{% block body %}
+<p class="lede">{{ brand.display_name }} uses Office Sentry to read your Microsoft 365 security and licence settings and turn them into reports. It needs your approval, once, from a <strong>Global Administrator</strong> of your Microsoft 365. It takes about five minutes, and the access is read-only: it can't change anything.</p>
+
+<section class="doc-section keep">
+  <h2>Step 1: approve the app</h2>
+  {% if link %}
+  <ol class="pack-steps">
+    <li>Open this link and sign in with a Global Administrator account of {{ tenant.name }}:
+      <p class="pack-link"><a href="{{ link }}">{{ link|breakable }}</a></p></li>
+    <li>Microsoft shows the app's name, <strong>{{ app }}</strong>, and the permissions below, all of them read-only. Press <strong>Accept</strong>.</li>
+    <li>You land on a {{ brand.display_name }} page saying thank you. That's it for step 1.</li>
+  </ol>
+  {% else %}
+  <p class="section-intro">{{ brand.display_name }} will send you the approval link separately.</p>
+  {% endif %}
+</section>
+
+<section class="doc-section keep">
+  <h2>Step 2: give it the Global Reader role</h2>
+  <p class="section-intro">Microsoft only shows mailbox settings, such as forwarding, to an app with an admin role. Global Reader is Microsoft's built-in role that can view settings but can't change any of them, and it can't open anyone's email.</p>
+  <ol class="pack-steps">
+    <li>Sign in to the Microsoft Entra admin centre, {{ cloud.admin_centre.split('//')[-1] }}, as a Global Administrator.</li>
+    <li>Go to <strong>Roles and admins</strong>, open <strong>Global Reader</strong> and choose <strong>Add assignments</strong>.</li>
+    <li>Select <strong>{{ app }}</strong> and add it.</li>
+  </ol>
+  <p class="section-intro">This step is optional: without it, only the mailbox reports stay empty.</p>
+</section>
+
+<section class="doc-section">
+  <h2>What Office Sentry reads</h2>
+  <p class="section-intro">These are the permissions Microsoft lists on the approval page, in Microsoft's names, with what Office Sentry uses each one to read.</p>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Permission</th><th>What it reads</th></tr></thead>
+    <tbody>
+    {% for name, words in permissions %}<tr><td class="nw"><code>{{ name }}</code></td><td>{{ words }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="doc-section keep">
+  <h2>What it never reads</h2>
+  <ul class="pack-list">{% for item in never %}<li>{{ item }}</li>{% endfor %}</ul>
+  <p class="section-intro">Office Sentry connects as an app with a certificate {{ brand.display_name }} holds, not with anyone's password. Every request it makes to Microsoft 365 is a read; the Exchange commands it may run all start with <code>Get-</code>.</p>
+</section>
+
+<section class="doc-section keep">
+  <h2>Removing the access</h2>
+  <p class="section-intro">You can take it away at any time, and it stops straight away. In the Microsoft Entra admin centre:</p>
+  <ol class="pack-steps">
+    <li><strong>Roles and admins</strong> → <strong>Global Reader</strong>: select {{ app }} and choose <strong>Remove assignments</strong>.</li>
+    <li><strong>Enterprise applications</strong>: open {{ app }}, choose <strong>Properties</strong>, then <strong>Delete</strong>.</li>
+  </ol>
+</section>
+
+<section class="cta keep">
+  <h3>Questions?</h3>
+  <p>Ask us before you approve anything you're unsure of.</p>
+  <p class="contact">{{ brand.display_name }}{% if brand.contact %} · {{ brand.contact }}{% endif %}</p>
+</section>
+{% endblock %}

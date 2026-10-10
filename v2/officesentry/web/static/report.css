@@ -445,3 +445,8 @@ body.report:not(.pdf) .content p a:not([class]), body.report:not(.pdf) .content 
 .contact-card .big { margin-bottom: var(--space-1); }
 body.pdf .block-note { display: none; }
 @media (max-width: 700px) { .block-row { grid-template-columns: 1fr; } }
+
+/* Consent pack (reports/consent_pack.html): numbered steps and the link, readable on paper. */
+.pack-steps { margin: var(--space-2) 0 var(--space-3); padding-left: var(--space-5); display: grid; gap: var(--space-2); }
+.pack-list { margin: var(--space-2) 0 var(--space-3); padding-left: var(--space-5); }
+.pack-link { margin: var(--space-1-5) 0 0; font-family: var(--mono); font-size: var(--fs-xs); word-break: break-all; }

@@ -11,7 +11,8 @@
     <div class="sub">Connection, permissions, Global Reader and collection for every client, the ones that need fixing first.</div>
   </div>
   <div class="actions">{{ group_picker() }}
-    {% if admin %}<a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a>{% endif %}</div>
+    {% if admin %}<a class="btn" href="{{ url_for('onboarding.index') }}">{{ icon('send') }} Onboarding</a>
+      <a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a>{% endif %}</div>
 </div>
 
 {% if not show_archived %}

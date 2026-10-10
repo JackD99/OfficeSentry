@@ -2,7 +2,8 @@
 {% block title %}Add tenant · Office Sentry{% endblock %}
 {% block content %}
 <div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span><span>Add tenant</span></div>
-<div class="page-head"><div><h1>Add a tenant</h1><div class="sub">Next comes admin consent; collection starts by itself once it's granted.</div></div></div>
+<div class="page-head"><div><h1>Add a tenant</h1><div class="sub">Next comes admin consent; collection starts by itself once it's granted.</div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('onboarding.import_tenants') }}">Adding many? Import a CSV</a></div></div>
 {% if not connections %}
 <div class="card empty narrow-lg">
   <h3>Set up the app connection first</h3>

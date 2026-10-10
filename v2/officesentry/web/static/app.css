@@ -944,7 +944,7 @@ main:focus { outline: none; }
 /* Month-end reporting: queue filters as links, flags, the review screen's editors. */
 .seg a { display: block; padding: 5px 14px; border-radius: 6px; color: var(--muted); font-weight: 500; text-decoration: none; }
 .seg a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-.seg a .count { color: var(--faint); font-weight: 400; margin-left: var(--space-1); }
+.seg a .count { display: inline; padding: 0; color: var(--faint); font-weight: 400; margin-left: var(--space-1); }
 .flags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .month-nav { display: inline-flex; gap: var(--space-1-5); align-items: center; }
 .review-check { padding: var(--space-3-5) var(--space-5); border-top: 1px solid var(--border); }
@@ -1180,3 +1180,26 @@ button.layout-head { padding: 8px 10px; }
   .palette-item { cursor: default; }
   .designer-preview iframe { height: 70vh; }
 }
+
+/* -- Onboarding many clients (web/onboarding.py): tracker, import, send page ---------------- */
+.toolbar-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+.toolbar-row .seg { margin-bottom: 0; }
+.onboarding-table td:first-child, .onboarding-table th:first-child { width: 1%; }
+.action-row .hint { align-self: center; }
+@media (max-width: 640px) {  /* each tenant a card: tick box beside the name, then the details */
+  .card.flush table.stack-sm.onboarding-table tr { position: relative; padding-left: calc(var(--space-4) + 30px); }
+  .onboarding-table td:first-child { position: absolute; left: var(--space-4); top: var(--space-2-5); }
+  .onboarding-table td.who { display: block; text-align: left; }
+  .onboarding-table td.who::before { content: none; }
+  .onboarding-table td.who .sub { overflow-wrap: anywhere; }
+}
+.import-notes { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-2); color: var(--text-2); }
+.import-notes li { display: flex; gap: var(--space-2); align-items: flex-start; }
+.import-notes .icon { flex: none; margin-top: 2px; color: var(--muted); }
+.column-notes { margin: var(--space-1-5) 0; padding-left: var(--space-5); display: grid; gap: var(--space-1); }
+.inline-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-3); margin: var(--space-1-5) 0 var(--space-2); }
+.inline-fields label { flex: 1 1 200px; margin: 0; }
+.copy-label { margin: var(--space-3) 0 0; }
+input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
+.sent-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
+.send-steps details.by-hand { margin-top: var(--space-3); }
