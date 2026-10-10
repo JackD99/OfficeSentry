@@ -125,6 +125,27 @@ def test_tenant_profile_detects_capabilities(db, two_tenants, factory):
     assert store.run_objects(db, run_id, "subscription_status")[0]["available"] is True
 
 
+@pytest.mark.parametrize(
+    "plans, exchange, sharepoint",
+    [
+        (["EXCHANGE_S_STANDARD_GOV", "SHAREPOINTSTANDARD_GOV"], True, True),  # Office 365 G1/G3 (GCC)
+        (["EXCHANGE_S_ENTERPRISE", "SHAREPOINTENTERPRISE_EDU"], True, True),  # A3 education
+        (["EXCHANGE_S_DESKLESS", "SHAREPOINTDESKLESS"], True, True),  # F3 frontline
+        (["EXCHANGE_S_FOUNDATION", "SHAREPOINTWAC", "SHAREPOINTSTORAGE"], False, False),  # Power BI, add-ons
+    ],
+)
+def test_licence_capabilities_recognise_government_education_and_frontline_plans(plans, exchange, sharepoint):
+    from officesentry.collectors.tenant_profile import capabilities_from_skus
+
+    sku = {
+        "capabilityStatus": "Enabled",
+        "prepaidUnits": {"enabled": 5},
+        "servicePlans": [{"servicePlanName": p, "provisioningStatus": "Success"} for p in plans],
+    }
+    caps = capabilities_from_skus([sku])
+    assert (caps["exchange"], caps["sharepoint"]) == (exchange, sharepoint)
+
+
 @responses.activate
 def test_unreadable_subscriptions_leave_the_rest_of_the_profile(db, two_tenants, factory):
     alpha, _ = two_tenants
