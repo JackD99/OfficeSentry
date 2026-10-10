@@ -49,6 +49,7 @@ from .reports import (
     findings_report,
     monthly_review,
     rollups,
+    summary,
     tables,
     views,
     workbook,
@@ -411,13 +412,33 @@ def describe(s) -> str:
     return f"Quarterly on the {ordinal(s['day_of_month'])} of Jan, Apr, Jul and Oct {at}"
 
 
-def period_label(frequency: str, local: datetime) -> str:
-    if frequency == "weekly":
-        monday = local.date() - timedelta(days=local.weekday())
+def period_label(period: str) -> str:
+    """What an email calls its period: "October 2026", "week of 5 Oct 2026" or "Q4 2026" (a ``period_key``)."""
+    year, rest = period[:4], period[5:]
+    if rest.startswith("W"):
+        monday = date.fromisocalendar(int(year), int(rest[1:]), 1)
         return f"week of {monday.day} {monday.strftime('%b %Y')}"
-    if frequency == "quarterly":
-        return f"Q{(local.month - 1) // 3 + 1} {local.year}"
-    return local.strftime("%B %Y")
+    if rest.startswith("Q"):
+        return f"{rest} {year}"
+    return date(int(year), int(rest), 1).strftime("%B %Y")
+
+
+def email_period(schedule, default_tz: str, now: datetime) -> tuple[str, date]:
+    """The period an email built at ``now`` is for, and the local day of its send time: the latest send time,
+    not the clock. A retry that runs after midnight on the 1st, or a failed email sent again next week, still
+    names the period it belongs to and carries that month's commentary."""
+    period, due = schedule_slot(schedule, default_tz, now)
+    return period, due.astimezone(ZoneInfo(schedule_tz(schedule, default_tz))).date()
+
+
+def nothing_collected(conn, tenant_id: int) -> bool:
+    """No collection has ever finished for the tenant, so a report would be empty."""
+    return (
+        conn.execute(
+            "SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial') LIMIT 1", (tenant_id,)
+        ).fetchone()
+        is None
+    )
 
 
 # -- Who ---------------------------------------------------------------------------------
@@ -588,12 +609,25 @@ class Built:
 
 
 def build_report_email(
-    app, conn, schedule, tenant, contacts, *, now: datetime | None = None, attach: bool = True
+    app,
+    conn,
+    schedule,
+    tenant,
+    contacts,
+    *,
+    now: datetime | None = None,
+    attach: bool = True,
+    period: str | None = None,
 ) -> Built:
+    """``period`` names the month a month-end approval is for; otherwise it's the schedule's latest send time's."""
     now = now or datetime.now(UTC)
     keys = json.loads(schedule["reports"] or "[]")
-    local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
-    label = period_label(schedule["frequency"], local)
+    if period is None:
+        period, sent_on = email_period(schedule, _cfg(app).timezone, now)
+        month = f"{sent_on.year}-{sent_on.month:02d}"
+    else:
+        month = period
+    label = period_label(period)
     review = monthly_review.build(conn, tenant, now)
     known = catalog_map(conn)
     plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]), conn)
@@ -603,6 +637,7 @@ def build_report_email(
     ]
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
+    verdict = summary.monthly(review).verdict
     subject = (
         fill_placeholders(_field(schedule, "subject", "") or "", tenant["name"], label).strip()
         or f"{tenant['name']} security report · {label}"
@@ -630,6 +665,10 @@ def build_report_email(
     lines = [f"{tenant['name']}: security report for {label}", ""]
     if message:
         lines += [message, ""]
+    # The answer first, as the HTML has it.
+    lines += [f"{verdict.label}: {verdict.headline}", ""]
+    if stale:
+        lines += ["Some of this tenant's data is more than 36 hours old, so a few figures may be out of date.", ""]
     for k in review.kpis:
         if k.value is None:
             continue
@@ -651,7 +690,7 @@ def build_report_email(
         from . import month_end  # imports this module
 
         # The month's commentary, recommendations and client-visible notes go in the PDF too.
-        context = month_end.report_context(conn, tenant["id"], f"{local.year}-{local.month:02d}", staff=False)
+        context = month_end.report_context(conn, tenant["id"], month, staff=False)
         attachments = _attachments(
             app,
             conn,
@@ -672,6 +711,10 @@ def build_report_email(
     )
 
 
+# A finding that isn't an accepted risk now: never accepted, or accepted until a date that has passed (``:now``).
+NOT_ACCEPTED = "(accepted_at IS NULL OR (accepted_until IS NOT NULL AND accepted_until <= :now))"
+
+
 def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None) -> dict:
     """Cross-tenant summary for the MSP digest: the worst tenants first, and what's new.
 
@@ -689,10 +732,11 @@ def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None
         counts = conn.execute(
             "SELECT"
             " SUM(resolved_at IS NULL AND severity IN ('critical', 'high')"
-            "     AND (first_seen >= :since OR IFNULL(reopened_at, '') >= :since)) AS new_severe,"
+            "     AND (first_seen >= :since OR IFNULL(reopened_at, '') >= :since)"
+            f"     AND {NOT_ACCEPTED}) AS new_severe,"
             " SUM(resolved_at >= :since) AS fixed"
             " FROM findings WHERE tenant_id = :tid",
-            {"since": since, "tid": t["id"]},
+            {"since": since, "tid": t["id"], "now": now.strftime(ISO)},
         ).fetchone()
         row["new_severe"] = counts["new_severe"] or 0
         row["fixed"] = counts["fixed"] or 0
@@ -707,7 +751,7 @@ def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None
         + (" AND t.id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else "")
         + " AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
         " AND (f.first_seen >= :since OR IFNULL(f.reopened_at, '') >= :since)"
-        " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= :now))"
+        f" AND {NOT_ACCEPTED}"
         " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key"
         " LIMIT 10",
         {"since": since, "now": now.strftime(ISO), "group": group_id},
@@ -784,7 +828,7 @@ def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
 def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = None, attach: bool = True) -> Built:
     now = now or datetime.now(UTC)
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
-    label = period_label(schedule["frequency"], local)
+    label = period_label(email_period(schedule, _cfg(app).timezone, now)[0])
     data = digest_data(conn, schedule["frequency"], now, schedule["group_id"])
     look, inline = email_brand(conn)
     subject = f"Client digest · {data['group']} · {label}" if data["group"] else f"Client digest · {label}"
@@ -883,7 +927,7 @@ def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None 
     certificates."""
     now = now or datetime.now(UTC)
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
-    label = period_label(schedule["frequency"], local)
+    label = period_label(email_period(schedule, _cfg(app).timezone, now)[0])
     up = upcoming.collect(
         conn,
         conn.execute(
@@ -989,8 +1033,7 @@ def build_views_email(app, conn, schedule, contacts, *, now: datetime | None = N
     """Saved views across every active tenant, or one group's, for the MSP's team. A CSV view sends one
     file per table it shapes; a PDF or XLSX has those tables."""
     now = now or datetime.now(UTC)
-    local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
-    label = period_label(schedule["frequency"], local)
+    label = period_label(email_period(schedule, _cfg(app).timezone, now)[0])
     data = views_data(conn, schedule_views(conn, schedule["id"]), schedule["group_id"], now)
     names = [r.view.name for r in data["views"]]
     lead = (
@@ -1161,6 +1204,11 @@ def send_schedule(
         tenant = store.get_tenant(conn, schedule["tenant_id"])
 
         def build():
+            if nothing_collected(conn, tenant["id"]):  # a report with no data would tell the client nothing true
+                raise MailError(
+                    f"Nothing has been collected for {tenant['name']} yet, so there's no report to send."
+                    " Check its connection under Settings."
+                )
             built.append(build_report_email(app, conn, schedule, tenant, contacts, now=now))
             return built[-1]
 
@@ -1292,7 +1340,7 @@ def send_frozen(
     contacts = recipients(conn, "schedule", schedule["id"])
 
     def build():
-        built = build_report_email(app, conn, schedule, tenant, contacts, now=now, attach=False)
+        built = build_report_email(app, conn, schedule, tenant, contacts, now=now, attach=False, period=period)
         built.email.attachments = list(files)
         return built
 
@@ -1445,6 +1493,8 @@ def retry_delivery(app, conn, vault, delivery, user: str) -> str | None:
             return "That schedule has been removed"
         if _field(schedule, "on_approval", 0):
             return "This report goes out when its month-end review is approved; send it from Month-end reporting"
+        if being_sent(conn, schedule, _cfg(app).timezone):
+            return BEING_SENT
         return send_schedule(app, conn, vault, schedule, trigger="retry", user=user)
     if delivery["alert_id"] and delivery["payload"]:
         conn.execute("UPDATE email_deliveries SET retry_at = NULL WHERE id = ?", (delivery["id"],))
@@ -1477,6 +1527,16 @@ def _due(conn, s, cfg, now: datetime) -> bool:
 
 def send_key(s, period: str) -> str:
     return f"schedule:{s['id']}:{period}"
+
+
+BEING_SENT = "It's being sent on its schedule right now. Check its history in a minute before sending it again."
+
+
+def being_sent(conn, s, default_tz: str, now: datetime | None = None) -> bool:
+    """Whether the timer has queued (or is sending) the schedule's latest period, so Send now or Retry would
+    send it twice."""
+    period, _ = schedule_slot(s, default_tz, now or datetime.now(UTC))
+    return tasks.pending(conn, send_key(s, period)) is not None
 
 
 def _tick_schedule(app, conn, vault, s, cfg, now: datetime, queue: bool = False) -> bool:

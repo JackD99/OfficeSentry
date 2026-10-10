@@ -526,24 +526,26 @@ def delete_schedule(schedule_id: int):
 def toggle_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     enabled = 0 if s["enabled"] else 1
-    g.db.execute("UPDATE email_schedules SET enabled = ? WHERE id = ?", (enabled, s["id"]))
-    if enabled:  # resuming never sends a period that was missed while paused
-        tz = delivery.schedule_tz(s, _cfg().timezone)
-        period = delivery.initial_period(
-            s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], tz, datetime.now(UTC)
-        )
-        if period:
+    # One transaction: the worker must never see the schedule resumed with the paused period still unsent.
+    with transaction(g.db):
+        if enabled:  # resuming never sends a period that was missed while paused
+            tz = delivery.schedule_tz(s, _cfg().timezone)
+            period = delivery.initial_period(
+                s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], tz, datetime.now(UTC)
+            )
             g.db.execute(
-                "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
+                "UPDATE email_schedules SET enabled = 1, last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
                 (period, s["id"]),
             )
-    audit(
-        g.db,
-        g.user["username"],
-        "email_schedule_resumed" if enabled else "email_schedule_paused",
-        s["tenant_id"],
-        s["kind"],
-    )
+        else:
+            g.db.execute("UPDATE email_schedules SET enabled = 0 WHERE id = ?", (s["id"],))
+        audit(
+            g.db,
+            g.user["username"],
+            "email_schedule_resumed" if enabled else "email_schedule_paused",
+            s["tenant_id"],
+            s["kind"],
+        )
     flash("Resumed." if enabled else "Paused. Nothing will be sent until you resume it.", "success")
     return _back(s["tenant_id"])
 
@@ -560,8 +562,12 @@ def send_now(schedule_id: int):
     if not delivery.recipients(g.db, "schedule", s["id"]):
         flash("Add someone to send it to first.", "error")
         return _back(s["tenant_id"])
+    if delivery.being_sent(g.db, s, _cfg().timezone):
+        flash(delivery.BEING_SENT, "error")
+        return _back(s["tenant_id"])
     error = delivery.send_schedule(current_app, g.db, _vault(), s, trigger="manual", user=g.user["username"])
-    audit(g.db, g.user["username"], "email_sent", s["tenant_id"], s["kind"])
+    # The delivery history has the error; the activity log only says it failed.
+    audit(g.db, g.user["username"], "email_send_failed" if error else "email_sent", s["tenant_id"], s["kind"])
     flash(f"Sending failed: {error}" if error else "Sent.", "error" if error else "success")
     if request.form.get("from") == "preview":
         return redirect(url_for("email.preview_schedule", schedule_id=s["id"]))

@@ -8,6 +8,18 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 
 ## 2.2.0 (unreleased)
 
+### Action required
+
+None.
+
+### New Microsoft permissions
+
+None.
+
+### Database upgrade
+
+No.
+
 ### Changed
 
 - **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
@@ -18,7 +30,29 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   saved views and bookmarked links that filter or sort on that column keep working. The group digest is
   now the "Client digest", and its spreadsheet is named `client-digest-...`.
 
-## 2.1.0 (unreleased)
+### Fixed
+
+- A report email retried after midnight, sent again with Retry the next week, or approved late now names
+  the month, week or quarter it was for, and carries that month's commentary, instead of the day it went out.
+- A tenant nothing has been collected for yet is no longer emailed an empty report: the send fails with the
+  reason and is retried.
+- Send now and Retry wait while the timer is already sending that schedule's period, so a period can't go
+  out twice. A failed Send now is logged as a failure.
+- Approving a month-end report for a client with nobody to email no longer marks the month Sent: it stays
+  Approved, flagged "Nobody to email" in the queue, with a Send again once a contact is added.
+- A month-end email to a client with more than 20 contacts keeps the team's hidden copy, and Monthly report
+  coverage names the contacts left off.
+- The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
+- The plain-text part of a report email leads with the verdict and says when the data is old.
+- Pausing and resuming an email schedule is saved as one change.
+
+## 2.1.0 (2026-10-10)
+
+The first release from the public repository. The headlines: home pages for technicians and account
+managers, onboarding many clients at once, answers for insurance and supplier questionnaires and Cyber
+Essentials, client reports built from blocks, four Exchange reports, sign-in and audit history kept beyond
+Microsoft's 30 days, and every report shown as the tenant was on any earlier day. Read **Action required**
+before updating: the keys move to a volume of their own.
 
 ### Action required
 
@@ -126,7 +160,8 @@ copied collection reads back exactly as its snapshot.
   tenant (a block with nothing to show for a client is left out), opens from the tenant's Reports tab as a
   page and a PDF, and a report plan or email schedule can send it like the monthly review.
 - Four Exchange reports (Reports → Email): **Mobile devices** (phones and tablets syncing mail, with which
-  app, when each last synced, leavers' devices still connected and ones waiting for approval),
+  app, when each last synced, leavers' devices still connected, devices left over from mailboxes that
+  no longer exist and ones waiting for approval),
   **Automatic replies** (who is sending an out-of-office reply, who outside hears it, and replies on so
   long they look forgotten), **Distribution lists** (members, owners, outside senders, and empty,
   ownerless or unused lists, from a count of the message trace kept per day) and **Mailbox size trend**
