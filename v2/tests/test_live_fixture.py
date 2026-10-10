@@ -38,7 +38,11 @@ RECORDED = datetime(2026, 10, 10, 19, 30, tzinfo=UTC)
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
-STAND_INS: dict[str, dict] = {}
+STAND_INS: dict[str, dict] = {
+    # Administrative units (the test tenant has none).
+    "/v1.0/directory/administrativeUnits": {"value": []},
+    "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
+}
 NEW_FIELDS: frozenset[str] = frozenset()
 
 

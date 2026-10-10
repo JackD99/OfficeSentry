@@ -6,7 +6,7 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
-## 2.1.1 (unreleased)
+## 2.2.0 (unreleased)
 
 ### Action required
 
@@ -19,6 +19,14 @@ None.
 ### Database upgrade
 
 No.
+
+### Added
+
+- **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
+  and whether the rule is paused), restricted management units, how many users, groups and devices are in
+  each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
+  and the members of each unit by name. A new Administrative units collector reads them with the permissions
+  the app already has, and each person's page shows the units they are in and administer.
 
 ### Fixed
 
