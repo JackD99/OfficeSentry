@@ -20,6 +20,8 @@ from datetime import UTC, datetime, timedelta
 
 from .. import adminactivity, authmethods, devices, identity_protection, signins, store
 from .. import events as events_store
+from ..formatting import day
+from ..formatting import when as at_time
 from ..licences import (
     FREE_SKUS,
     Assignment,
@@ -1432,14 +1434,12 @@ class _Happened:
 
 
 def _first_seen(at: str, oldest: str | None) -> str:
-    from ..web.filters import day
     return f"On or before {day(at)}" if oldest and at <= oldest else day(at)
 
 
 def timeline(p: Person) -> list[_Happened]:
     """Dated events for the account, newest first: admin changes, sign-in highlights and when inbox rules,
     forwarding, app consents, MFA methods and admin roles were first collected."""
-    from ..web.filters import when as at_time
     conn, tid = p.snap.conn, p.snap.tenant["id"]
     out: list[_Happened] = []
 

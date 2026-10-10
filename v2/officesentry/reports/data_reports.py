@@ -29,6 +29,7 @@ from ..rules import (
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from . import workbook
+from .registry import GROUPS, REPORTS, ReportGroup, grouped, report  # noqa: F401  (read from here)
 from .tables import Table
 
 
@@ -204,6 +205,15 @@ def _date(value: str | None) -> str:
 # -- Mailboxes ------------------------------------------------------------------
 
 
+@report(
+    "mailboxes",
+    "Mail forwarding",
+    "Every mailbox that sends mail on automatically, and the settings that allow it.",
+    ("mailboxes", "inbox_rules"),
+    group="email",
+    order=10,
+    keywords="forwarding redirect external smtp",
+)
 def mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     boxes = snap.objects("mailboxes", "mailbox")
     rules = snap.objects("inbox_rules", "inbox_rule")
@@ -307,6 +317,15 @@ def _describe_actions(r: dict) -> str:
 # -- Apps ----------------------------------------------------------------------------
 
 
+@report(
+    "apps",
+    "Apps and consents",
+    "Third-party apps with access to the tenant, and app credential expiry.",
+    ("app_consents",),
+    group="devices",
+    order=20,
+    keywords="enterprise applications oauth consent secrets certificates expiry",
+)
 def apps(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     risks = app_risks(snap)
     if risks is None:
@@ -364,6 +383,16 @@ def _targets(e: dict) -> str:
     return names + (f" and {e['more_targets']} more" if e.get("more_targets") else "")
 
 
+@report(
+    "admin-activity",
+    "Admin activity",
+    "Admin roles, Conditional Access, app credentials, consents, domains and account changes "
+    "from the directory audit log, and who made them.",
+    ("admin_activity",),
+    group="tenant",
+    order=70,
+    keywords="audit log directory changes who changed",
+)
 def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     events = snap.objects("admin_activity", "admin_event")
     window = (snap.objects("admin_activity", "audit_window") or [None])[0]
@@ -425,6 +454,15 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
 # -- Conditional Access coverage -------------------------------------------------------
 
 
+@report(
+    "conditional-access",
+    "Conditional Access coverage",
+    "Every policy in plain words, and which accounts each one actually covers.",
+    ("conditional_access", "admin_roles", "users"),
+    group="identity",
+    order=40,
+    keywords="ca policies policy require mfa block",
+)
 def conditional_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     defaults = snap.objects("conditional_access", "security_defaults")
     d = coverage.directory(snap)
@@ -473,6 +511,15 @@ INVITES = {"none": "Nobody", "adminsAndGuestInviters": "Admins and Guest Inviter
            "adminsGuestInvitersAndAllMembers": "Admins and members", "everyone": "Everyone, including guests"}
 
 
+@report(
+    "guests",
+    "Guests and sharing",
+    "Who can invite and share externally, and every guest account.",
+    ("tenant_policies", "users"),
+    group="identity",
+    order=80,
+    keywords="external users b2b invitations",
+)
 def guests(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     policy = (snap.objects("tenant_policies", "authorization_policy") or [None])[0]
@@ -526,6 +573,15 @@ GUEST_ACCESS = {"member": "Same as members", "limited": "Limited (the default)",
                 "restricted": "Only their own objects (most restrictive)"}
 
 
+@report(
+    "tenant-settings",
+    "Tenant settings",
+    "What users and guests can do by default, and whether users can ask an admin to approve apps.",
+    ("tenant_policies",),
+    group="tenant",
+    order=60,
+    keywords="defaults user consent authorization policy",
+)
 def tenant_settings(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     policy = (snap.objects("tenant_policies", "authorization_policy") or [None])[0]
     if policy is None:
@@ -576,6 +632,16 @@ def tenant_settings(snap: TenantSnapshot, now: datetime, report: DataReport) -> 
 # -- Email domains --------------------------------------------------------------------
 
 
+@report(
+    "domains",
+    "Email domains",
+    "SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from "
+    "public DNS.",
+    ("domain_health",),
+    group="email",
+    order=70,
+    keywords="spf dkim dmarc dns mta-sts email authentication spoofing",
+)
 def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     rows = snap.objects("domain_health", "domain")
     if not rows:
@@ -654,6 +720,15 @@ def _group_settings_section(snap: TenantSnapshot) -> Section:
     return section
 
 
+@report(
+    "groups",
+    "Groups and Teams",
+    "Who can create teams and groups, which have no owner, and the guests in each.",
+    ("groups",),
+    group="files",
+    order=50,
+    keywords="teams microsoft 365 groups owners ownerless",
+)
 def group_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     rows = snap.objects("groups", "group")
     if rows is None:
@@ -762,6 +837,15 @@ def _seen(value: str | None, now: datetime) -> str:
     return "Today" if days == 0 else f"{_date(value)} ({days}d)"
 
 
+@report(
+    "devices",
+    "Devices",
+    "Intune compliance, encryption and Windows support, and every Entra ID device record.",
+    ("devices",),
+    group="devices",
+    order=10,
+    keywords="intune compliance bitlocker encryption windows",
+)
 def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     entra = devices.objects(snap, "entra_device")
     if entra is None:
@@ -847,6 +931,16 @@ def _synced_at(value: str | None, now: datetime) -> str:
     return "Never" if hours is None else f"{value[:16].replace('T', ' ')} UTC ({hybrid.age(hours)})"
 
 
+@report(
+    "hybrid",
+    "Hybrid identity",
+    "Directory sync from on-premises AD, password hash sync, how each domain signs in, "
+    "and admin accounts synced from AD.",
+    ("directory_sync", "users", "admin_roles"),
+    group="identity",
+    order=110,
+    keywords="ad connect entra connect sync on-premises password hash",
+)
 def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = hybrid.sync_status(snap)
     if status is None:
@@ -919,86 +1013,6 @@ def hybrid_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
 # -- Registry ----------------------------------------------------------------------------
 
 Builder = Callable[[TenantSnapshot, datetime, DataReport], None]
-
-REPORTS: dict[str, tuple[str, str, tuple[str, ...], Builder]] = {
-    "mailboxes": ("Mail forwarding",
-                  "Every mailbox that sends mail on automatically, and the settings that allow it.",
-                  ("mailboxes", "inbox_rules"), mailboxes),
-    "admin-activity": ("Admin activity",
-                       "Admin roles, Conditional Access, app credentials, consents, domains and account changes "
-                       "from the directory audit log, and who made them.",
-                       ("admin_activity",), admin_activity),
-    "apps": ("Apps and consents", "Third-party apps with access to the tenant, and app credential expiry.",
-             ("app_consents",), apps),
-    "conditional-access": ("Conditional Access coverage",
-                           "Every policy in plain words, and which accounts each one actually covers.",
-                           ("conditional_access", "admin_roles", "users"), conditional_access),
-    "tenant-settings": ("Tenant settings",
-                        "What users and guests can do by default, and whether users can ask an admin to approve apps.",
-                        ("tenant_policies",), tenant_settings),
-    "domains": ("Email domains", "SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from "
-                "public DNS.",
-                ("domain_health",), domains),
-    "guests": ("Guests and sharing", "Who can invite and share externally, and every guest account.",
-               ("tenant_policies", "users"), guests),
-    "groups": ("Groups and Teams", "Who can create teams and groups, which have no owner, and the guests in each.",
-               ("groups",), group_report),
-    "devices": ("Devices", "Intune compliance, encryption and Windows support, and every Entra ID device record.",
-                ("devices",), device_report),
-    "hybrid": ("Hybrid identity", "Directory sync from on-premises AD, password hash sync, how each domain signs in, "
-               "and admin accounts synced from AD.", ("directory_sync", "users", "admin_roles"), hybrid_report),
-}
-
-
-# Identity and licence reports live in their own module; it needs Section and
-# DataReport from above, so it's imported here rather than at the top.
-from .identity_reports import REPORTS as _IDENTITY_REPORTS  # noqa: E402
-from .mail_reports import REPORTS as _MAIL_REPORTS  # noqa: E402
-
-REPORTS.update(_IDENTITY_REPORTS)
-# The Exchange reports sit next to Mail forwarding in the report tabs.
-_items = list(REPORTS.items())
-_at = [k for k, _ in _items].index("mailboxes") + 1
-REPORTS.clear()
-REPORTS.update(_items[:_at] + list(_MAIL_REPORTS.items()) + _items[_at:])
-
-
-# Detail reports grouped for menus, in menu order. Reports registered elsewhere (SharePoint) are
-# listed by key; a report missing from every group still shows, under "More reports".
-GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("identity", "Identity and access",
-     ("mfa", "auth-methods", "admins", "conditional-access", "inactive", "sign-ins", "risky-users", "guests",
-      "deleted-items", "legacy-auth", "hybrid")),
-    ("email", "Email", ("mailboxes", "inbox-rules", "mailbox-permissions", "shared-mailboxes", "mailbox-size",
-                        "mailbox-holds", "domains")),
-    ("files", "Files and Teams", ("sharepoint", "sharepoint-storage", "onedrive", "shared-files", "groups",
-                                  "group-membership")),
-    ("devices", "Devices and apps", ("devices", "apps")),
-    ("tenant", "Tenant and licences", ("secure-score", "subscriptions", "licences", "licence-rightsizing", "usage",
-                                       "tenant-settings", "admin-activity")),
-)
-
-
-@dataclass
-class ReportGroup:
-    key: str
-    title: str
-    reports: list[tuple[str, str, str]]  # (report key, title, description)
-
-
-def grouped() -> list[ReportGroup]:
-    """Every detail report, once, under its menu group. Read at call time so new reports appear."""
-    seen: set[str] = set()
-    groups = []
-    for key, title, keys in GROUPS:
-        items = [(k, REPORTS[k][0], REPORTS[k][1]) for k in keys if k in REPORTS and k not in seen]
-        seen.update(k for k, _, _ in items)
-        if items:
-            groups.append(ReportGroup(key, title, items))
-    rest = [(k, v[0], v[1]) for k, v in REPORTS.items() if k not in seen]
-    if rest:
-        groups.append(ReportGroup("more", "More reports", rest))
-    return groups
 
 
 def build(conn, tenant, key: str, now: datetime | None = None, as_of: datetime | None = None,

@@ -15,6 +15,7 @@ from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import DataReport, Rows, Section, Tile, _type
 from .mail_reports import NOT_COLLECTED, _no_exchange, _size, _text
+from .registry import report
 
 GB = 1024 ** 3
 # A mailbox without an archive is "large" at 80% of what it may send (40 GB of a 50 GB quota), or at
@@ -66,6 +67,16 @@ def _large(size: dict) -> tuple[bool, float | None]:
     return total >= LARGE_BYTES, None
 
 
+@report(
+    "mailbox-holds",
+    "Mailbox holds and archiving",
+    "Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't "
+    "held, and large mailboxes that need an archive.",
+    ("mailboxes", "users", "mailbox_usage"),
+    group="email",
+    order=60,
+    keywords="litigation hold archive retention ediscovery",
+)
 def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     boxes = snap.objects("mailboxes", "mailbox")
     if boxes is None:
@@ -130,11 +141,3 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
              "warn" if leavers.rows else "ok", Rows(LEAVERS)),
     ]
     report.sections = [every, leavers, large]
-
-
-REPORTS = {
-    "mailbox-holds": ("Mailbox holds and archiving",
-                      "Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't "
-                      "held, and large mailboxes that need an archive.",
-                      ("mailboxes", "users", "mailbox_usage"), holds),
-}

@@ -14,6 +14,7 @@ from ..rules import m365_groups
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import VISIBILITY, DataReport, Rows, Section, Tile, _owner_names
+from .registry import report
 
 GUEST_MANY = 5  # a guest in this many teams and groups is flagged for review
 
@@ -39,6 +40,16 @@ def _sort_name(text: str) -> str:
     return (text or "").lower()
 
 
+@report(
+    "group-membership",
+    "Group membership",
+    "Who is in which team and Microsoft 365 group: each person's teams and groups, each "
+    "group's members, and every membership in one table.",
+    ("groups", "users"),
+    group="files",
+    order=60,
+    keywords="members membership teams groups who is in",
+)
 def membership(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     groups = m365_groups(snap)
     users = snap.objects("users", "user")
@@ -167,11 +178,3 @@ def membership(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                             f"{verb(len(truncated), 'is', 'are')} listed only in part: "
                             + ", ".join(g.get("displayName") or g["_id"] for g in truncated) + ".")
     report.sections = [person, group, every]
-
-
-REPORTS = {
-    "group-membership": ("Group membership",
-                         "Who is in which team and Microsoft 365 group: each person's teams and groups, each "
-                         "group's members, and every membership in one table.",
-                         ("groups", "users"), membership),
-}
