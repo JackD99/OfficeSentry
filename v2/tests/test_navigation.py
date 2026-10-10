@@ -6,6 +6,7 @@ import re
 
 import pytest
 
+from officesentry.reports import data_reports
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
@@ -55,8 +56,8 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/projects": ("Findings", None),
         f"/tenants/{alpha}/changes": ("Changes", "What changed"),
         f"/tenants/{alpha}/activity": ("Changes", "Activity history"),
-        f"/tenants/{alpha}/data/mailboxes": ("Reports", "Detail reports"),
-        f"/tenants/{alpha}/evidence": ("Reports", "Insurance evidence"),
+        f"/tenants/{alpha}/data/mailboxes": ("Reports", None),
+        f"/tenants/{alpha}/evidence": ("Reports", None),
         f"/tenants/{alpha}/users": ("Users", None),
         _user_href(client, alpha): ("Users", None),
         f"/tenants/{alpha}/schedules": ("Emails", None),
@@ -75,14 +76,40 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         assert page.count('aria-current="page"') >= 1, url
 
 
-def test_reports_row_links_each_report(client, db, seeded):
+def _picker(page: str) -> str:
+    pickers = re.findall(r'<nav class="report-menu"[^>]*>(.*?)</nav>', page, re.S)
+    assert len(pickers) == 1
+    return pickers[0]
+
+
+def test_report_picker_links_every_report(client, db, seeded):
+    """The Reports tab has one picker: the summaries and every detail report, the open one marked."""
     alpha = seeded
     make_user(db, "admin")
     login(client, "admin")
-    page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
-    row = re.search(r'<nav class="tab-pages"[^>]*>(.*?)</nav>', page, re.S).group(1)
-    for href in (f"/tenants/{alpha}/data", f"/tenants/{alpha}/evidence", f"/tenants/{alpha}/report"):
-        assert f'href="{href}"' in row
+    for url, current in ((f"/tenants/{alpha}/evidence", "Insurance evidence"),
+                         (f"/tenants/{alpha}/data/inbox-rules", "Inbox rules")):
+        page = client.get(url).get_data(as_text=True)
+        picker = _picker(page)
+        hrefs = re.findall(r'href="(/tenants/[^"]+)"', picker)
+        assert f"/tenants/{alpha}/report" in hrefs and f"/tenants/{alpha}/evidence" in hrefs
+        assert {f"/tenants/{alpha}/data/{key}" for key in data_reports.REPORTS} <= set(hrefs)
+        assert len(hrefs) == len(data_reports.REPORTS) + 2
+        assert _active(picker) == [] and re.findall(r'aria-current="page">([^<]+)<', picker) == [current]
+        assert 'data-report-search="report-list"' in picker and '<label for="report-find"' in picker
+        # Narrower screens get the same list as a select, which the Reports tab URL turns into the page.
+        assert '<option value="evidence"' in page and '<optgroup label="Identity and access">' in page
+    assert client.get(f"/tenants/{alpha}/data?key=evidence").headers["Location"].endswith(f"/tenants/{alpha}/evidence")
+    assert client.get(f"/tenants/{alpha}/data?key=review").headers["Location"].endswith(f"/tenants/{alpha}/report")
+
+
+def test_tenant_header_pins_its_tab_bar(client, db, seeded):
+    alpha = seeded
+    make_user(db, "admin")
+    login(client, "admin")
+    page = client.get(f"/tenants/{alpha}").get_data(as_text=True)
+    head = re.search(r'<header class="tenant-head" data-pin>(.*?)</header>', page, re.S).group(1)
+    assert '<nav class="tabs"' in head and '<span class="pin-name" aria-hidden="true">' in head
 
 
 @pytest.mark.parametrize("role", ["analyst", "client"])

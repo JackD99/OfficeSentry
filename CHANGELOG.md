@@ -59,6 +59,10 @@ tenant; until then the pages build them as before.
 
 ### Changed
 
+- Tenant pages and reports are shorter to reach: the Reports tab lists every report (summaries and detail
+  reports) in one searchable list beside the report on laptops and in one menu on phones, instead of three
+  rows of buttons, and the tab bar stays at the top of the window as you scroll. On a laptop screen a
+  report's first table rows now show without scrolling.
 - What changed across all tenants and the All tenants check matrix open in a fraction of a second at 200
   tenants (What changed took about 30 seconds). The worker works out each tenant's line after its
   collection and once a day; the pages read those lines, and rebuild any line whose data has changed since.

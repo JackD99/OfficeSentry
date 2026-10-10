@@ -273,7 +273,12 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
   `_macros.html` (import it `with context`). There are seven tabs (Overview,
   Findings, Changes, Reports, Users, Emails, Settings); a page that belongs
   under one gets its own key, mapped to that tab in `TAB_OF`, and a link in
-  the tab's second row (`.tab-pages`), rather than a new tab.
+  the tab's second row (`.tab-pages`), rather than a new tab. On laptops its tab bar stays pinned to the
+  top as the page scrolls (`data-pin`, `app.js`: CSS `position: sticky` with a negative top, so nothing
+  changes height); pass `pin=false` for a sample header. The Reports tab has no second row: its pages
+  (Monthly review, Insurance evidence and every detail report, from `library.catalogue()`) are in
+  `report_picker()`, a searchable list beside the report on wide screens and a select on narrower ones;
+  a page that uses it wraps itself in `.report-layout` with the report in `.report-main`.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
   ISO strings. Licence flags go through the `capability` filter.
 - Tables that people read on phones get `class="stack-sm"` and a

@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, downloads, report_nav, csrf with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, report_picker, csrf with context %}
 {% from "_report_table.html" import report_table, saved_views with context %}
 {% block title %}{{ report.title }} · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'data') }}
-{{ report_nav(tenant, groups, group, report.key) }}
+<div class="report-layout">
+{{ report_picker(tenant, report.key) }}
+<div class="report-main" id="report" tabindex="-1">
 <div class="toolbar report-title">
   <div>
     <h2 class="section-title">{{ report.title }}</h2>
@@ -73,6 +75,8 @@
 {% if report.footnote and not report.unavailable %}<p class="footnote">{{ report.footnote }}</p>{% endif %}
 <p class="footnote">Data from
 {% for title, finished in report.sources %}{{ title }} ({% if finished %}{{ ts(finished) }}{% else %}not collected yet{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+</div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>

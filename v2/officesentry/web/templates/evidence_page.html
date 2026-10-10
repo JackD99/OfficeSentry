@@ -1,12 +1,18 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, downloads, csrf with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, report_picker, csrf with context %}
 {% block title %}Insurance evidence · {{ pack.tenant.name }}{% endblock %}
 {% set TONE = {'In place': 'ok', 'Partly in place': 'warn', 'Not in place': 'bad', 'Not assessed': ''} %}
 {% set ANSWER_TONE = {'Yes': 'ok', 'Partly': 'warn', 'No': 'bad', 'Not known': ''} %}
 {% block content %}
 {{ tenant_header(pack.tenant, 'evidence') }}
-<div class="toolbar">
-  <p class="muted small m0 intro-line">Answers to the questions cyber insurers and security questionnaires ask, based on settings read from Microsoft 365 rather than self-assessment.</p>
+<div class="report-layout">
+{{ report_picker(pack.tenant, 'evidence') }}
+<div class="report-main" id="report" tabindex="-1">
+<div class="toolbar report-title">
+  <div>
+    <h2 class="section-title">Insurance evidence</h2>
+    <p class="muted small m0">Answers to the questions cyber insurers and security questionnaires ask, based on settings read from Microsoft 365 rather than self-assessment.</p>
+  </div>
   {{ downloads([('PDF', url_for('reports.evidence_pdf', tenant_id=pack.tenant.id), ''),
                 ('XLSX', url_for('reports.evidence_xlsx', tenant_id=pack.tenant.id), ''),
                 ('CSV', url_for('across.evidence_csv', tenant_id=pack.tenant.id), '')]) }}
@@ -64,4 +70,6 @@
   {% endfor %}
 </section>
 <p class="footnote">Oldest data used: {{ ts(pack.oldest_data, 'not collected yet') }}. Accepted risks count as documented exceptions.</p>
+</div>
+</div>
 {% endblock %}

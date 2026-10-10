@@ -224,6 +224,7 @@
         if (push) history.pushState({ view: true }, '', href);
         init(main);
         capRows(main);
+        if (window.officeSentryHead) window.officeSentryHead();
         if (before) restore(before);
         main.removeAttribute('aria-busy');
       })
