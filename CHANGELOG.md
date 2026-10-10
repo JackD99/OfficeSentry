@@ -134,6 +134,10 @@ copied collection reads back exactly as its snapshot.
   still reads) and checked against each one as it's written, so a tenant can be shown as it was on any day.
   Kept for 25 months by default (Settings → Data retention, "Daily history"); about 2.5 MB a night at 200
   tenants ([v2/DEPLOY.md, "How long data is kept"](v2/DEPLOY.md#how-long-data-is-kept)).
+- Reports as of any date: every detail report can show the tenant as it was on an earlier day (its downloads
+  too), read from the daily history when that day's snapshot has gone, and What changed compares any two
+  dates instead of only "now against N days ago". Sign-in detail, which retention keeps for less time, says
+  when it's no longer held.
 
 ### Changed
 
