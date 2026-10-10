@@ -60,6 +60,8 @@ LIMITS: dict[str, Limit] = {limit.name: limit for limit in (
     # Resource units; this is the tier for up to 1,000 licences (more licences allow up to 5 times as many).
     Limit("sharepoint", 1_250, 60, "tenant", "SharePoint and OneDrive", SHAREPOINT_DOCS, resource_units=True),
     Limit("exchange", None, 0, "tenant", "Exchange admin API"),  # no documented rate
+    Limit("message_trace", 100, 300, "tenant", "Exchange message trace",
+          "https://learn.microsoft.com/powershell/module/exchangepowershell/get-messagetracev2"),
 )}
 
 
@@ -163,6 +165,7 @@ GRAPH: tuple[Endpoint, ...] = (
              fallback="Needs Intune; shown as unavailable without it"),
     # Mailbox settings.
     Endpoint("/users/{id}/mailFolders/inbox/messageRules", V1, "MailboxSettings.Read", ("outlook",)),
+    Endpoint("/users/{id}/mailboxSettings/automaticRepliesSetting", V1, "MailboxSettings.Read", ("outlook",)),
     # SharePoint and OneDrive, in SharePoint resource units.
     Endpoint("/sites/getAllSites", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY,
              fallback="Listed once a night; the second SharePoint collector reuses it (sharepoint_lookup)"),
@@ -188,7 +191,12 @@ EXCHANGE: tuple[Endpoint, ...] = tuple(
     for cmdlet in ("Get-Mailbox", "Get-MailboxPermission", "Get-MailboxStatistics", "Get-CASMailbox",
                    "Get-InboxRule", "Get-Recipient", "Get-RecipientPermission", "Get-OrganizationConfig",
                    "Get-TransportConfig", "Get-RemoteDomain", "Get-HostedOutboundSpamFilterPolicy",
-                   "Get-AcceptedDomain"))
+                   "Get-AcceptedDomain", "Get-MobileDevice", "Get-MobileDeviceStatistics", "Get-DistributionGroup",
+                   "Get-DistributionGroupMember")) + (
+    Endpoint("Get-MessageTraceV2", ("beta",), "Exchange.ManageAsApp and Global Reader", ("exchange", "message_trace"),
+             api="exchange", fallback="10 days a query; list activity is kept as daily counts so each run reads only "
+             "what's new. Without access, lists are shown without activity"),
+)
 
 _EXCHANGE = {e.path: e for e in EXCHANGE}
 _ID = re.compile(r"/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|b![^/]+|[^/]*,[^/]*)(?=/|$)",
