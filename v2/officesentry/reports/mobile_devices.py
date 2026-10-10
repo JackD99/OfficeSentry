@@ -26,6 +26,7 @@ PLATFORMS = "Devices by platform"
 
 SEVERITY = ("high", "medium", "low")
 APPS = {"EAS": "Mail app (ActiveSync)", "Outlook": "Outlook app", "REST": "Outlook app"}
+MAILBOX_GONE = "Mailbox no longer exists"
 ACCESS = {"Allowed": "Allowed", "Blocked": "Blocked", "Quarantined": "Waiting for approval",
           "DeviceDiscovery": "Being checked"}
 
@@ -54,7 +55,9 @@ def _day(value) -> str:
     return when.date().isoformat() if when else ""
 
 
-def _account(user: dict | None) -> str:
+def _account(user: dict | None, gone: bool = False) -> str:
+    if gone:
+        return MAILBOX_GONE
     if user is None:
         return "Not found in the directory"
     return "Active" if user.get("accountEnabled") is not False else "Sign-in blocked"
@@ -111,6 +114,9 @@ def devices_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None
             reasons.append(("medium", "Waiting for an admin to allow or block it"))
         if d.get("DeviceWipeRequestTime") and not d.get("DeviceWipeAckTime"):
             reasons.append(("medium", "A wipe was requested but the device hasn't confirmed it"))
+        if d.get("mailboxGone"):
+            reasons.append(("low", "Left over from a mailbox that no longer exists: remove it with "
+                                   "Remove-MobileDevice in Exchange Online PowerShell"))
         if days is not None and days >= STALE_DAYS:
             stale += 1
             reasons.append(("low", f"Not synced for {days} days: the partnership can be removed"))
@@ -124,7 +130,7 @@ def devices_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None
         every.add([mailbox, name, plat, _text(d.get("DeviceOS")),
                    APPS.get(_text(d.get("ClientType")), _text(d.get("ClientType")) or "Unknown"),
                    ACCESS.get(access, access or "Unknown"), _day(d.get("FirstSyncTime")), last_day,
-                   _account(user)], flag)
+                   _account(user, bool(d.get("mailboxGone")))], flag)
         if reasons:
             needs.append((SEVERITY.index(flag), [mailbox, name, [why for _, why in reasons], last_day], flag))
 
