@@ -35,6 +35,11 @@ No.
 - The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
 - The plain-text part of a report email leads with the verdict and says when the data is old.
 - Pausing and resuming an email schedule is saved as one change.
+- Deleting a client no longer rebuilds the whole database inside the web request, which failed for want of
+  room in Docker and left the client's data readable on disk while saying it was erased. The delete is
+  quick, and the worker erases the last copies in the background, rebuilding the file only when there's
+  room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
+  it's tried again every hour.
 
 ## 2.1.0 (2026-10-10)
 
