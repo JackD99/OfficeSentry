@@ -230,10 +230,12 @@ def seeded(tmp_path_factory):
 
 
 def check_rule(result) -> list[str]:
-    if not (isinstance(result, tuple) and len(result) in (3, 4)):
-        return [f"returned {result!r}, not (status, summary, findings[, advice])"]
-    status, summary, found, *advice = result
-    problems = [f"advice {advice[0]!r}"] if advice and not isinstance(advice[0], str) else []
+    if not (isinstance(result, tuple) and len(result) in (3, 4, 5)):
+        return [f"returned {result!r}, not (status, summary, findings[, advice[, keep]])"]
+    status, summary, found, *extra = result
+    problems = [f"advice {extra[0]!r}"] if extra and not isinstance(extra[0], (str, type(None))) else []
+    if len(extra) > 1 and not (isinstance(extra[1], list) and all(isinstance(k, str) for k in extra[1])):
+        problems.append(f"keep {extra[1]!r}")
     if status not in ("pass", "fail", "unavailable"):
         problems.append(f"status {status!r}")
     if not isinstance(summary, str):

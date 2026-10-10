@@ -9,33 +9,50 @@ from ..snapshot import TenantSnapshot
 from ..text import every, plural, verb
 from .base import Finding, _subjects, _unavailable, rule
 
+NOT_RUN = "Domain checks haven't run yet, or the tenant has no custom domains"
+DNS_FAILED = "The DNS lookups for this failed on every domain; the next collection tries again"
+
 
 def _domain_rule(snap: TenantSnapshot, area: str):
+    """Findings, the stored rows and the domains whose lookups for ``area`` failed (unknown, not fine), or
+    None when domains haven't been checked."""
     rows = snap.objects("domain_health", "domain")
     if not rows:
         return None
-    findings = []
+    findings, unknown = [], []
     for row in rows:
         health = dnscheck.DomainHealth.from_dict(row)
+        if health.unknown(area):
+            unknown.append(health.domain)
+            continue
         for issue in dnscheck.issues(health, transport=True):
             if issue.area == area:
                 findings.append(Finding(issue.severity, health.domain, issue.detail, f"{health.domain}:{area}"))
-    return findings, rows
+    return findings, rows, unknown
+
+
+def _result(status: str, summary: str, findings: list, unknown: list[str], area: str) -> tuple:
+    """A check's result that names the domains it couldn't check and leaves their findings as they are."""
+    if unknown:
+        summary += f"; couldn't check {', '.join(sorted(unknown))} (DNS lookup failed)"
+    return status, summary, findings, None, [f"{d}:{area}" for d in unknown]
 
 
 def _transport_rule(snap: TenantSnapshot, area: str):
-    """Findings and the mail domains checked for MTA-STS/TLS-RPT, or None and why not."""
+    """Findings, the mail domains checked for MTA-STS/TLS-RPT and the domains that couldn't be, or None and
+    why not."""
     result = _domain_rule(snap, area)
     if result is None:
-        return None, "Domain checks haven't run yet, or the tenant has no custom domains"
-    findings, rows = result
-    mail = [h for h in map(dnscheck.DomainHealth.from_dict, rows) if h.sends_mail]
+        return None, NOT_RUN
+    findings, rows, unknown = result
+    healths = list(map(dnscheck.DomainHealth.from_dict, rows))
+    mail = [h for h in healths if h.sends_mail and not h.unknown(area)]
     if not mail:
-        return None, "No domain receives mail"
+        return None, DNS_FAILED if unknown else "No domain receives mail"
     checked = [h for h in mail if h.transport_checked]
     if not checked:
         return None, "Domains haven't been checked for MTA-STS yet; refresh Email domains on the tenant page"
-    return (findings, checked), ""
+    return (findings, checked, unknown), ""
 
 
 @rule(
@@ -52,17 +69,19 @@ def mta_sts(snap: TenantSnapshot, now: datetime):
     result, reason = _transport_rule(snap, "MTA-STS")
     if result is None:
         return _unavailable(reason)
-    findings, mail = result
+    findings, mail, unknown = result
     return (
-        (
+        _result(
             "fail",
             f"{_subjects(findings)} of {plural(len(mail), 'mail domain')} "
             + verb(_subjects(findings), "doesn't", "don't")
             + " fully enforce MTA-STS",
             findings,
+            unknown,
+            "MTA-STS",
         )
         if findings
-        else ("pass", f"MTA-STS is enforced on {every(len(mail), 'mail domain')}", [])
+        else _result("pass", f"MTA-STS is enforced on {every(len(mail), 'mail domain')}", [], unknown, "MTA-STS")
     )
 
 
@@ -78,18 +97,26 @@ def tls_rpt(snap: TenantSnapshot, now: datetime):
     result, reason = _transport_rule(snap, "TLS-RPT")
     if result is None:
         return _unavailable(reason)
-    findings, mail = result
+    findings, mail, unknown = result
     scope = [h for h in mail if h.mta_sts or h.tls_rpt]
     if not scope:
         return _unavailable("TLS-RPT is checked on mail domains that use MTA-STS, and none do yet")
     return (
-        ("fail", f"{_subjects(findings)} of {plural(len(scope), 'domain')} without working TLS-RPT", findings)
+        _result(
+            "fail",
+            f"{_subjects(findings)} of {plural(len(scope), 'domain')} without working TLS-RPT",
+            findings,
+            unknown,
+            "TLS-RPT",
+        )
         if findings
-        else (
+        else _result(
             "pass",
-            f"TLS-RPT reports are set up on {every(len(scope), 'domain')} "
-            f"that {verb(len(scope), 'uses', 'use')} MTA-STS or TLS-RPT",
+            f"TLS-RPT reports are set up on {every(len(scope), 'domain')} that "
+            f"{verb(len(scope), 'uses', 'use')} MTA-STS or TLS-RPT",
             [],
+            unknown,
+            "TLS-RPT",
         )
     )
 
@@ -105,12 +132,14 @@ def tls_rpt(snap: TenantSnapshot, now: datetime):
 def spf_record(snap: TenantSnapshot, now: datetime):
     result = _domain_rule(snap, "SPF")
     if result is None:
-        return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
-    findings, rows = result
+        return _unavailable(NOT_RUN)
+    findings, rows, unknown = result
+    if len(unknown) == len(rows):
+        return _unavailable(DNS_FAILED)
     return (
-        ("fail", f"{plural(_subjects(findings), 'domain')} with SPF problems", findings)
+        _result("fail", f"{plural(_subjects(findings), 'domain')} with SPF problems", findings, unknown, "SPF")
         if findings
-        else ("pass", f"SPF is correct on {every(len(rows), 'domain')}", [])
+        else _result("pass", f"SPF is correct on {every(len(rows) - len(unknown), 'domain')}", [], unknown, "SPF")
     )
 
 
@@ -124,12 +153,16 @@ def spf_record(snap: TenantSnapshot, now: datetime):
 def dmarc_policy(snap: TenantSnapshot, now: datetime):
     result = _domain_rule(snap, "DMARC")
     if result is None:
-        return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
-    findings, rows = result
+        return _unavailable(NOT_RUN)
+    findings, rows, unknown = result
+    if len(unknown) == len(rows):
+        return _unavailable(DNS_FAILED)
     return (
-        ("fail", f"{plural(_subjects(findings), 'domain')} without DMARC enforcement", findings)
+        _result(
+            "fail", f"{plural(_subjects(findings), 'domain')} without DMARC enforcement", findings, unknown, "DMARC"
+        )
         if findings
-        else ("pass", f"DMARC is enforced on {every(len(rows), 'domain')}", [])
+        else _result("pass", f"DMARC is enforced on {every(len(rows) - len(unknown), 'domain')}", [], unknown, "DMARC")
     )
 
 
@@ -143,13 +176,13 @@ def dmarc_policy(snap: TenantSnapshot, now: datetime):
 def dkim_enabled(snap: TenantSnapshot, now: datetime):
     result = _domain_rule(snap, "DKIM")
     if result is None:
-        return _unavailable("Domain checks haven't run yet, or the tenant has no custom domains")
-    findings, rows = result
-    checked = [r for r in rows if dnscheck.DomainHealth.from_dict(r).microsoft_365]
+        return _unavailable(NOT_RUN)
+    findings, rows, unknown = result
+    checked = [h for h in map(dnscheck.DomainHealth.from_dict, rows) if h.microsoft_365 and not h.unknown("DKIM")]
     if not checked:
-        return _unavailable("No domain receives mail through Microsoft 365")
+        return _unavailable(DNS_FAILED if unknown else "No domain receives mail through Microsoft 365")
     return (
-        ("fail", f"{plural(len(findings), 'mail domain')} without DKIM", findings)
+        _result("fail", f"{plural(len(findings), 'mail domain')} without DKIM", findings, unknown, "DKIM")
         if findings
-        else ("pass", f"DKIM is on for {every(len(checked), 'Microsoft 365 mail domain')}", [])
+        else _result("pass", f"DKIM is on for {every(len(checked), 'Microsoft 365 mail domain')}", [], unknown, "DKIM")
     )

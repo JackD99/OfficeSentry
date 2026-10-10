@@ -429,14 +429,14 @@ def test_deleting_a_tenant_deletes_its_month_end_rows(db, two_tenants):
         assert [r[0] for r in db.execute(f"SELECT tenant_id FROM {table}")] == [bravo]
 
 
-def _auto_plan(db, tenant_id, mode="auto", delivery_="email", now=None):
+def _auto_plan(db, tenant_id, mode="auto", delivery_="email", now=None, day=1):
     plan_id = month_end.save_plan(
         db,
         {
             "name": "P",
             "reports": ["review"],
             "include_xlsx": 0,
-            "day_of_month": 1,
+            "day_of_month": day,
             "hour": 0,
             "timezone": "UTC",
             "subject": "",
@@ -525,3 +525,37 @@ def test_switching_a_plan_to_automatic_does_not_email_an_unapproved_month(
     assert s["on_approval"] == 0 and s["last_period"] == "2026-10"
     db.execute("UPDATE runs SET finished_at = ?", (oct5.strftime("%Y-%m-%dT%H:%M:%SZ"),))
     assert delivery.tick(app, db, vault, cfg, oct5) == 0 and sends() == []
+
+
+def test_send_now_after_an_early_approval_does_not_send_the_month_again(app, db, two_tenants, vault, cfg, monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    seed_tenant(db, alpha)
+    _smtp_ready(db)
+    delivery.add_contact(db, alpha, "", "it@alpha.com")
+    schedule = _auto_plan(db, alpha, now=datetime(2026, 9, 15, tzinfo=UTC), day=28)
+    tenant = store.get_tenant(db, alpha)
+    # October is approved and sent early, on the 5th; on the 10th someone presses Send now.
+    assert (
+        month_end.approve(app, db, vault, tenant, "2026-10", "admin", now=datetime(2026, 10, 5, 9, 0, tzinfo=UTC))
+        is None
+    )
+    assert (
+        delivery.send_schedule(
+            app,
+            db,
+            vault,
+            db.execute("SELECT * FROM email_schedules").fetchone(),
+            user="admin",
+            now=datetime(2026, 10, 10, 9, 0, tzinfo=UTC),
+        )
+        is None
+    )
+    assert len(sends()) == 2
+    assert (
+        db.execute("SELECT last_period FROM email_schedules WHERE id = ?", (schedule["id"],)).fetchone()[0] == "2026-10"
+    )
+    # On the 28th the timer has nothing to send: October went out, reviewed, on the 5th.
+    oct28 = datetime(2026, 10, 28, 9, 0, tzinfo=UTC)
+    db.execute("UPDATE runs SET finished_at = ?", (oct28.strftime("%Y-%m-%dT%H:%M:%SZ"),))
+    assert delivery.tick(app, db, vault, cfg, oct28) == 0 and len(sends()) == 2

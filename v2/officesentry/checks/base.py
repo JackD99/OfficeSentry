@@ -6,8 +6,10 @@ Each check returns ``(status, summary, findings)``, where status is
   unavailable  the data isn't there (collector never ran, or the tenant's
                licence doesn't provide it); the reason says which
 
-and may add advice that replaces the default recommendation. Checks never
-call Graph; they only read stored snapshots.
+and may add advice that replaces the default recommendation (None keeps it),
+then the object ids it couldn't check this time (``RuleResult.keep``), whose
+stored findings stay as they are. Checks never call Graph; they only read
+stored snapshots.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ class RuleResult:
     summary: str
     recommendation: str = ""
     findings: list[Finding] = field(default_factory=list)
+    keep: list[str] = field(default_factory=list)  # object ids that couldn't be checked: findings left as they are
 
     @property
     def severity(self) -> str | None:
@@ -127,12 +130,15 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
     for r in RULES:
         # A check returns (status, summary, findings) and may add advice that replaces the default.
         try:
-            status, summary, findings, *advice = r.check(snap, now)
+            status, summary, findings, *extra = r.check(snap, now)
             findings.sort(key=lambda f: (SEVERITY_RANK[f.severity], f.subject.lower()))
         except Exception as exc:  # one broken check mustn't blank the whole report
             logging.getLogger(__name__).exception("Check %s failed", r.key)
-            status, summary, findings, advice = "unavailable", f"This check couldn't run: {type(exc).__name__}", [], []
+            status, summary, findings, extra = "unavailable", f"This check couldn't run: {type(exc).__name__}", [], []
+        advice = extra[0] if extra and extra[0] is not None else r.recommendation
         results.append(
-            RuleResult(r.key, r.title, r.category, status, summary, advice[0] if advice else r.recommendation, findings)
+            RuleResult(
+                r.key, r.title, r.category, status, summary, advice, findings, list(extra[1]) if len(extra) > 1 else []
+            )
         )
     return results

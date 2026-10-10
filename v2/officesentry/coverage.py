@@ -70,8 +70,43 @@ def grants(policy: dict) -> set[str]:
     return controls
 
 
+# Excluding these from an all-apps policy leaves every sign-in to Microsoft 365 covered: device enrolment, as
+# Microsoft's Windows Autopilot guidance does.
+BENIGN_EXCLUDED_APPS = {"d4ebce55-015a-49b5-a083-c84d1797ae8c"}  # Microsoft Intune Enrollment
+APP_NAMES = {
+    "Office365": "Office 365",
+    "00000002-0000-0ff1-ce00-000000000000": "Exchange Online",
+    "00000003-0000-0ff1-ce00-000000000000": "SharePoint Online",
+    "MicrosoftAdminPortals": "Microsoft admin portals",
+}
+
+
 def all_apps(policy: dict) -> bool:
     return "All" in (((policy.get("conditions") or {}).get("applications") or {}).get("includeApplications") or [])
+
+
+def excluded_apps(policy: dict) -> list[str]:
+    """Apps an all-apps policy leaves out, other than the benign ones: sign-ins to them skip the policy."""
+    apps = (policy.get("conditions") or {}).get("applications") or {}
+    return [a for a in apps.get("excludeApplications") or [] if isinstance(a, str) and a not in BENIGN_EXCLUDED_APPS]
+
+
+def app_label(app_id: str, names: dict[str, str] | None = None) -> str:
+    return APP_NAMES.get(app_id) or (names or {}).get(app_id) or f"app {app_id[:8]}"
+
+
+def apps_left_out(policies: list[dict], control: str, names: dict[str, str] | None = None) -> str:
+    """Why enabled all-users policies with ``control`` ("mfa", "block") still don't count: the apps they
+    exclude, as a sentence ("" when none do)."""
+    out = []
+    for p in policies:
+        users = ((p.get("conditions") or {}).get("users") or {}).get("includeUsers") or []
+        if p.get("state") != "enabled" or "All" not in users or not all_apps(p) or control not in grants(p):
+            continue
+        left = excluded_apps(p)
+        if left and narrowing_conditions(p) == ["excluded apps"]:
+            out.append(f'"{policy_name(p)}" leaves out {", ".join(app_label(a, names) for a in left)}')
+    return ("; ".join(out) + ", so sign-ins to those apps skip it.") if out else ""
 
 
 # Conditions that need Entra ID P2. On a tenant without P2 a policy using them never fires.
@@ -84,7 +119,7 @@ P2_CONDITIONS = {
 
 
 def narrowing_conditions(policy: dict) -> list[str]:
-    """Conditions that limit when a policy fires (risk, location, platform, device filter).
+    """Conditions that limit when a policy fires (risk, location, platform, device filter, excluded apps).
 
     A policy with any of them only applies to some sign-ins, so it doesn't
     enforce anything for everyone even if it targets all users and apps.
@@ -101,6 +136,8 @@ def narrowing_conditions(policy: dict) -> list[str]:
         out.append("device filter")
     if cond.get("authenticationFlows"):
         out.append("authentication flow")
+    if excluded_apps(policy):  # "every app except Exchange Online" leaves mailbox sign-ins out
+        out.append("excluded apps")
     return out
 
 

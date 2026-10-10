@@ -189,9 +189,10 @@ def _mfa_everyone(snap: TenantSnapshot, results: dict[str, RuleResult]):
     if not covering:
         report_only = [p for p in policies if p.get("state") == "enabledForReportingButNotEnforced"]
         tail = f" {plural(len(report_only), 'policy')} only in report-only mode." if report_only else ""
+        left_out = coverage.apps_left_out(policies, "mfa", _names(snap))
         return NO, (
             "No enabled Conditional Access policy requires MFA for all users and apps, and Security "
-            "Defaults are off." + tail + registered
+            "Defaults are off." + (f" {left_out}" if left_out else "") + tail + registered
         )
     names, users = _names(snap), _users(snap)
     people, groups = {}, {}

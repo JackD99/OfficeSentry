@@ -154,8 +154,30 @@ copied collection reads back exactly as its snapshot.
   only for the fields it uses, so nothing it relies on is being retired; reports and stored history are
   unchanged.
 
+### Fixed
+
+- A domain with several problems in one area (an SPF record ending in `+all` that also uses `ptr`, say)
+  was stored on the Findings tab, in alerts and in the month-end count at its least serious problem. It is
+  now stored at its worst, with every problem listed.
+- A Conditional Access policy for all apps that excludes some (every app except Exchange Online, say) no
+  longer counts as MFA, or a legacy sign-in block, for everyone; the check names the apps it leaves out.
+  Excluding Microsoft Intune Enrollment, as Windows Autopilot needs, still counts.
+- A DNS lookup that fails (a timeout, or a resolver answering SERVFAIL or REFUSED) no longer reads as the
+  domain having no records: the domain shows "Couldn't check", its findings stay as they were, and the
+  mail domain count isn't recorded as zero that night.
+- Send now or Retry on a monthly report no longer moves the schedule back from a month that was approved
+  and sent early, which made the timer email that month again, unreviewed.
+- Editing a paused email schedule keeps it paused.
+- Collections no longer fail with "database is locked" when other work writes to the database at the same
+  moment: every write transaction now waits its turn.
+- The page a client approves access from (*What Office Sentry reads*) and the consent pack now say what is
+  kept from the sign-in and audit logs, and for how long, list every Exchange command, and mention the
+  MTA-STS policy file fetched over HTTPS.
+
 ### Security
 
+- Client users no longer see the MSP team's email addresses on the tenant's Emails page: alert emails are
+  left out, and report emails show only the client's own contacts.
 - Encrypted off-site backups with restic to any S3-compatible storage, a weekly restore drill that proves
   the newest one opens, and the keys kept in a volume of their own, apart from the data and its backups.
 - Wrong guesses at the current password on the change-password form now count towards the account's

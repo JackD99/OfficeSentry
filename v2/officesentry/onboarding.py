@@ -575,7 +575,9 @@ CLIENT_WORDS: dict[str, str] = {
     "Organization.Read.All": "Your organisation's name, domains and which licences you have.",
     "User.Read.All": "User and guest accounts: names, email addresses, licences and password age. Never passwords.",
     "Directory.Read.All": "Groups and their members, devices, domains, subscriptions and recently deleted accounts.",
-    "AuditLog.Read.All": "Sign-in records: when each account last signed in, and from where.",
+    "AuditLog.Read.All": "Sign-in and audit logs: who signed in, when, from where and with which app, and changes "
+    "made in Entra ID. Kept beyond Microsoft's 30 days: every sign-in for 180 days and every "
+    "audit event for 7 years, unless your IT provider sets otherwise.",
     "Reports.Read.All": "Microsoft 365 usage reports: who uses email, Teams, OneDrive and the Office apps.",
     "Policy.Read.All": "Sign-in policies such as Conditional Access and Security Defaults, and guest settings.",
     "RoleManagement.Read.Directory": "Who holds each admin role.",
@@ -587,7 +589,8 @@ CLIENT_WORDS: dict[str, str] = {
     "SharePointTenantSettings.Read.All": "SharePoint's sharing settings.",
     "Sites.Read.All": "Names, sizes and sharing of files in SharePoint and OneDrive. Never what's inside them.",
     "MailboxSettings.Read": "Mailbox settings such as inbox rules. Never emails.",
-    "Exchange.ManageAsApp": "Mailbox settings from Exchange Online, using read-only commands only.",
+    "Exchange.ManageAsApp": "Mailbox settings, phones that sync mail and distribution lists from Exchange Online, "
+    "using read-only commands only.",
 }
 NEVER_READS = (
     "Email, attachments, calendars or contacts.",

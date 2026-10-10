@@ -45,7 +45,9 @@ class DomainHealth(Collector):
                 ctx.warn(f"DNS lookups failed for {name}: {health.errors[0]}")
             rows.append((name, health.to_dict()))
         ctx.objects("domain", rows)
-        mail = [dnscheck.DomainHealth.from_dict(r) for _, r in rows]
-        mail = [h for h in mail if h.sends_mail]
+        healths = [dnscheck.DomainHealth.from_dict(r) for _, r in rows]
+        if any("MX" in h.failed for h in healths):
+            return  # which domains receive mail isn't known tonight; a zero would read as a real drop
+        mail = [h for h in healths if h.sends_mail]
         ctx.metric("domains.mail", len(mail))
         ctx.metric("domains.dmarc_enforced", sum(h.dmarc_policy in ("quarantine", "reject") for h in mail))

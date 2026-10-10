@@ -35,7 +35,10 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
 
 
 @contextmanager
-def transaction(conn: sqlite3.Connection, immediate: bool = False) -> Iterator[sqlite3.Connection]:
+def transaction(conn: sqlite3.Connection, immediate: bool = True) -> Iterator[sqlite3.Connection]:
+    """A write transaction that takes the write lock at the start (``BEGIN IMMEDIATE``), so it waits its turn
+    behind other writers. A deferred one that reads first is refused at once, with "database is locked" and no
+    wait, when another connection commits before its first write; pass ``immediate=False`` only to read."""
     conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
     try:
         yield conn

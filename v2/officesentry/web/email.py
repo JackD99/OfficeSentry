@@ -127,9 +127,13 @@ def tenant_emails(tenant_id: int):
         _decorate(s) for s in g.db.execute("SELECT * FROM email_schedules WHERE tenant_id = ? ORDER BY id", (t["id"],))
     ]
     last = _last_errors([s["id"] for s in schedules])
+    contacts = delivery.tenant_contacts(g.db, t["id"])
+    kinds = "" if staff else " AND kind = 'report'"  # alerts go to the team only
     deliveries = g.db.execute(
-        "SELECT * FROM email_deliveries WHERE tenant_id = ? ORDER BY id DESC LIMIT 25", (t["id"],)
+        f"SELECT * FROM email_deliveries WHERE tenant_id = ?{kinds} ORDER BY id DESC LIMIT 25", (t["id"],)
     ).fetchall()
+    if not staff:
+        deliveries = [c for c in (_client_copy(d, contacts) for d in deliveries) if c]
     alert = _decorate_alert(g.db.execute("SELECT * FROM email_alerts WHERE tenant_id = ?", (t["id"],)).fetchone())
     upcoming = sorted((s for s in schedules if s["next"] and s["recipients"]), key=lambda s: s["next"])
     failing = [s for s in schedules if s["last_status"] == "failed"]
@@ -142,16 +146,24 @@ def tenant_emails(tenant_id: int):
         last=last,
         deliveries=deliveries,
         alert=alert,
-        contacts=delivery.tenant_contacts(g.db, t["id"]),
+        contacts=contacts,
         team=delivery.team_contacts(g.db),
         upcoming=upcoming[0] if upcoming else None,
         failing=failing,
         mail_ready=mailer.is_configured(settings),
         sent_30=g.db.execute(
-            "SELECT COUNT(*) FROM email_deliveries WHERE tenant_id = ? AND status = 'sent' AND created_at >= ?",
+            f"SELECT COUNT(*) FROM email_deliveries WHERE tenant_id = ? AND status = 'sent' AND created_at >= ?{kinds}",
             (t["id"], _days_ago(30)),
         ).fetchone()[0],
     )
+
+
+def _client_copy(d, contacts) -> dict | None:
+    """A delivery as a client may see it: only their own contacts' addresses, never the team's. None for an
+    email that went to none of them."""
+    own = {c["email"].lower() for c in contacts}
+    shown = [a.strip() for a in (d["recipients"] or "").split(",") if a.strip().lower() in own]
+    return {**dict(d), "recipients": ", ".join(shown), "bcc": "", "error": None} if shown else None
 
 
 @bp.get("/tenants/<int:tenant_id>/report-history")
@@ -214,7 +226,6 @@ def _form_values(kind: str) -> dict:
         "hour": f.get("hour", type=int, default=-1),
         "timezone": f.get("timezone", "").strip(),
         "message": f.get("message", "").strip()[:1000],
-        "enabled": 1 if f.get("enabled", "1") == "1" else 0,
         # A digest can cover one tenant group (tenant_groups.py); report emails are one tenant's already.
         "group_id": f.get("group_id", type=int) if kind == "digest" else None,
     }
@@ -343,6 +354,8 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
     kind = existing["kind"] if existing else ("report" if tenant else "digest")
     tenant_id = tenant["id"] if tenant else None
     values = _form_values(kind)
+    # Pausing and resuming is the toggle's job: an edit keeps a paused schedule paused.
+    values["enabled"] = existing["enabled"] if existing is not None else 1
     if coming_up or (existing is not None and delivery.is_upcoming(existing)):
         values["reports"] = [delivery.upcoming.KEY]  # a digest schedule that sends the Coming up email
         values["group_id"] = None  # Coming up always covers every tenant
