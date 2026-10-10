@@ -27,11 +27,13 @@ The same docs are on the website with search: [officesentry.co.uk/docs](https://
 1. **Update first.** Fixes only go into the newest release ([CHANGELOG.md](CHANGELOG.md) lists them). The
    version is at the foot of the portal's menu and in `/health`.
 2. **Check Troubleshooting** for the error text. Most setup problems are there with the fix.
-3. **Get the support package.** In the portal, open **Settings** and download the support package: one zip
-   with the versions, health, settings, database and disk sizes and the recent log of your install. Every
-   secret, key, tenant name, domain, email address and IP address is stripped before it's written, so it's
-   safe to attach to a public issue. (Older versions don't have it; the bug form asks for the same facts by
-   hand instead.)
+3. **Get the support package.** In the portal, open **Settings → Support** and download the support
+   package: one zip with the versions, health, settings, database and disk sizes and the recent log of your
+   install. `python -m officesentry support-package` makes the same zip from the shell. It contains no
+   secrets or client names unless you tick *Include client identifiers* (leave that off for a public issue).
+   If a page showed "Something went wrong on our side", note the reference it gave: it's also on the error's
+   log line and in the `X-Request-ID` header, and the bug form has a field for it. (Older versions don't have
+   the package; the bug form asks for the same facts by hand instead.)
 4. **Open the bug form** and attach the package. Say what you did, what you saw and what you expected,
    and paste the error from the run's page or `docker compose logs web` / `docker compose logs worker`.
 

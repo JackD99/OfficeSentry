@@ -52,12 +52,21 @@ body:
     attributes:
       label: Support package
       description: |
-        Attach the support package: the zip Office Sentry makes from **Settings** in the portal, with the versions,
-        health, settings and recent log of your install and every secret, tenant name and address stripped out
-        ([SUPPORT.md](https://github.com/JackD99/OfficeSentry/blob/main/SUPPORT.md) says where). Drag the file into
-        this box. It answers most of the questions we would otherwise ask. If your version doesn't have it yet,
-        say so and fill in the fields below instead.
+        Attach the support package: the zip from **Settings → Support** in the portal (or
+        `python -m officesentry support-package` from the shell). It holds the versions, health, settings and
+        recent log of your install, and it contains no secrets or client names unless you ticked
+        *Include client identifiers*, so it's safe to attach here. Drag the file into this box. It answers most
+        of the questions we would otherwise ask. If your version doesn't have it yet, say so and fill in the
+        fields below instead.
       placeholder: Drag the support-package zip here, or write "not available in my version".
+  - type: input
+    id: error_reference
+    attributes:
+      label: Error reference
+      description: >-
+        If a page showed "Something went wrong on our side", the reference it gave. The same reference is on
+        the error's log line and in the `X-Request-ID` response header, so it points us straight at the log entry.
+      placeholder: e.g. 7f3a9c2e
   - type: dropdown
     id: cloud
     attributes:
