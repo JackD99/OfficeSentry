@@ -72,6 +72,8 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
         report_only = [p for p in policies if p.get("state") == "enabledForReportingButNotEnforced"
                        and "mfa" in _grants(p)]
         detail = "No enabled policy requires MFA for all users and apps, and Security Defaults are off."
+        if left_out := coverage.apps_left_out(policies, "mfa", _names(snap)):
+            detail += f" {left_out}"
         if report_only:
             n = len(report_only)
             detail += f" {plural(n, 'MFA policy')} {verb(n, 'is', 'are')} in report-only mode."
@@ -110,8 +112,10 @@ def legacy_auth_blocked(snap: TenantSnapshot, now: datetime):
     for p in policies:
         if _enabled(p) and _all_users_all_apps(p) and coverage.blocks_legacy(p):
             return ("pass", f"Blocked by \"{p.get('displayName')}\"", [])
-    return ("fail", "Legacy authentication is allowed",
-            [Finding("high", "Tenant", "No enabled policy blocks legacy authentication for all users")])
+    detail = "No enabled policy blocks legacy authentication for all users"
+    if left_out := coverage.apps_left_out(policies, "block", _names(snap)):
+        detail += f". {left_out}"
+    return ("fail", "Legacy authentication is allowed", [Finding("high", "Tenant", detail)])
 
 
 def _privileged_users(snap: TenantSnapshot) -> list[dict] | None:

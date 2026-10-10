@@ -21,6 +21,7 @@ MTA_STS_MAX_BYTES = 64 * 1024  # RFC 8461: senders may ignore larger policies
 MTA_STS_MAX_AGE = 31557600  # RFC 8461 maximum, one year
 MTA_STS_MODES = ("enforce", "testing", "none")
 TRANSPORT_AREAS = ("MTA-STS", "TLS-RPT")  # encrypted delivery to the domain, not spoofing
+UNKNOWN = "Couldn't check"  # a table's word for an area whose DNS lookups failed
 
 
 class DnsError(Exception):
@@ -34,7 +35,9 @@ class FetchError(Exception):
 def lookup(name: str, rdtype: str) -> list[str]:
     """Records as text: TXT strings joined, MX as 'host' (lowest preference first), CNAME targets.
 
-    Returns [] when the name or record type doesn't exist.
+    Returns [] when the name or record type doesn't exist. Raises DnsError when the answer is unknown: a
+    timeout, or a resolver that answered SERVFAIL or REFUSED or couldn't be reached (dnspython's
+    NoNameservers), which says nothing about the domain's records.
     """
     import dns.exception
     import dns.resolver
@@ -43,7 +46,7 @@ def lookup(name: str, rdtype: str) -> list[str]:
     resolver.lifetime = 8
     try:
         answer = resolver.resolve(name, rdtype)
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
         return []
     except dns.exception.DNSException as exc:
         raise DnsError(f"{name} {rdtype}: {exc}") from exc
@@ -131,6 +134,7 @@ class DomainHealth:
     tls_rpt_reports: bool = False  # rua= has a mailto: or https: address
     transport_checked: bool = False  # MTA-STS policy and TLS-RPT were checked (not in older snapshots)
     errors: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)  # areas whose lookups failed ("MX", "SPF", ...): unknown
 
     @property
     def sends_mail(self) -> bool:
@@ -139,6 +143,15 @@ class DomainHealth:
     @property
     def microsoft_365(self) -> bool:
         return any(h.endswith(M365_MX) for h in self.mx)
+
+    def unknown(self, area: str) -> bool:
+        """Whether a failed lookup leaves this area unknown. Without the MX records nothing is known, since
+        whether the domain receives mail decides what it should publish."""
+        if "MX" in self.failed or area in self.failed:
+            return True
+        # One failed MTA-STS or TLS-RPT lookup stops both being checked (``transport_checked``).
+        return area in TRANSPORT_AREAS and not self.transport_checked and any(a in self.failed
+                                                                              for a in TRANSPORT_AREAS)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -202,15 +215,17 @@ def check_domain(domain: str, resolve=None, fetch=None) -> DomainHealth:
     resolve = resolve or lookup
     h = DomainHealth(domain.lower())
 
-    def safe(name, rdtype):
+    def safe(name, rdtype, area):
         try:
             return resolve(name, rdtype)
         except DnsError as exc:
             h.errors.append(str(exc))
+            if area not in h.failed:
+                h.failed.append(area)
             return []
 
-    h.mx = safe(h.domain, "MX")
-    spf = _spf_record(safe(h.domain, "TXT"))
+    h.mx = safe(h.domain, "MX", "MX")
+    spf = _spf_record(safe(h.domain, "TXT", "SPF"))
     h.spf_records = len(spf)
     if spf:
         h.spf = spf[0]
@@ -219,7 +234,7 @@ def check_domain(domain: str, resolve=None, fetch=None) -> DomainHealth:
         if h.spf_all is None and any(t.startswith("redirect=") for t in terms):
             h.spf_all = "redirect"
         h.spf_lookups = count_spf_lookups(h.spf, resolve, missing=h.spf_missing_includes)
-    dmarc = [r for r in safe(f"_dmarc.{h.domain}", "TXT") if r.lower().startswith("v=dmarc1")]
+    dmarc = [r for r in safe(f"_dmarc.{h.domain}", "TXT", "DMARC") if r.lower().startswith("v=dmarc1")]
     h.dmarc_records = len(dmarc)
     if dmarc:
         h.dmarc = dmarc[0]
@@ -229,13 +244,13 @@ def check_domain(domain: str, resolve=None, fetch=None) -> DomainHealth:
         h.dmarc_pct = int(pct) if pct and pct.isdigit() else 100
         h.dmarc_reports = bool(_tag(h.dmarc, "rua"))
     for selector in DKIM_SELECTORS:
-        h.dkim[selector] = bool(safe(f"{selector}._domainkey.{h.domain}", "CNAME"))
+        h.dkim[selector] = bool(safe(f"{selector}._domainkey.{h.domain}", "CNAME", "DKIM"))
     failed = len(h.errors)
-    sts = [r for r in safe(f"_mta-sts.{h.domain}", "TXT") if r.lower().startswith("v=stsv1")]
+    sts = [r for r in safe(f"_mta-sts.{h.domain}", "TXT", "MTA-STS") if r.lower().startswith("v=stsv1")]
     h.mta_sts, h.mta_sts_records = bool(sts), len(sts)
     if sts:
         h.mta_sts_id = _tag(sts[0], "id")
-    rpt = [r for r in safe(f"_smtp._tls.{h.domain}", "TXT") if r.lower().startswith("v=tlsrptv1")]
+    rpt = [r for r in safe(f"_smtp._tls.{h.domain}", "TXT", "TLS-RPT") if r.lower().startswith("v=tlsrptv1")]
     h.tls_rpt_records = len(rpt)
     if rpt:
         h.tls_rpt = rpt[0]
@@ -316,7 +331,7 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
             out.append(Issue("low", "SPF", "Doesn't receive mail but has no \"v=spf1 -all\" record to stop spoofing"))
         if h.dmarc_policy != "reject":
             out.append(Issue("low", "DMARC", "Doesn't receive mail but has no DMARC p=reject record"))
-        return out
+        return [i for i in out if not h.unknown(i.area)]
 
     if h.spf_records == 0:
         out.append(Issue("high", "SPF", "No SPF record: anyone can send as this domain"))
@@ -360,7 +375,7 @@ def issues(h: DomainHealth, transport: bool = False) -> list[Issue]:
     if transport and h.transport_checked:
         out += _transport_issues(h)
     rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    return sorted(out, key=lambda i: rank[i.severity])
+    return sorted((i for i in out if not h.unknown(i.area)), key=lambda i: rank[i.severity])
 
 
 def _valid_sts_record(h: DomainHealth) -> bool:
@@ -408,22 +423,26 @@ def _transport_issues(h: DomainHealth) -> list[Issue]:
 
 
 def summary(h: DomainHealth) -> dict[str, str]:
-    """One plain word per area, for tables: Pass / Weak / Missing / n/a."""
+    """One plain word per area, for tables: Pass / Weak / Missing / n/a, or Couldn't check."""
     found: dict[str, str] = {}
     for i in issues(h):  # most serious first
         found.setdefault(i.area, i.severity)
 
     def word(area: str, present: bool) -> str:
+        if h.unknown(area):
+            return UNKNOWN
         if not present:
             return "Missing"
         return {"high": "Fail", "medium": "Weak", "low": "OK"}.get(found.get(area), "Pass")
 
-    dkim = "n/a" if not h.microsoft_365 else word("DKIM", any(h.dkim.values()))
+    dkim = "n/a" if not h.microsoft_365 and not h.unknown("DKIM") else word("DKIM", any(h.dkim.values()))
     return {"SPF": word("SPF", bool(h.spf)), "DMARC": word("DMARC", bool(h.dmarc)), "DKIM": dkim}
 
 
 def transport_summary(h: DomainHealth) -> dict[str, str]:
     """MTA-STS (Enforced / Testing / Off / Fail / Missing) and TLS-RPT (Pass / Fail / Missing), for tables."""
+    if "MX" in h.failed:
+        return {"MTA-STS": UNKNOWN, "TLS-RPT": UNKNOWN}
     if not h.transport_checked:
         return {"MTA-STS": "Not checked", "TLS-RPT": "Not checked"}
     if not h.sends_mail:

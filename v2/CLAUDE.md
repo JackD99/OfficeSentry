@@ -94,7 +94,11 @@ needing goes in those lists.
   `checks/__init__.py` (checks are listed in import order). `rules.py` only keeps
   old imports working; import from `checks`. Checks read `TenantSnapshot` only,
   never Graph, and return `unavailable` (with the reason) when data or the
-  tenant's licence is missing, rather than passing or failing.
+  tenant's licence is missing, rather than passing or failing. A check that
+  can judge some objects but not others (a domain whose DNS lookup failed)
+  returns their object ids as a fifth element (`RuleResult.keep`): the
+  findings sync leaves those as they are. Several findings with one object id
+  are stored as one, at the worst severity (`findings.by_key`).
 - A check's title is its goal ("No inactive accounts"); its summary is what was
   found ("4 accounts inactive for 90+ days") and leads wherever a failing check
   is listed, with `RuleResult.action` (the recommendation's first instruction)
@@ -370,7 +374,10 @@ a period there, with a dry-run count for the page, and deletes in batches. A sid
 (`worker.Liveness`: the main loop came round in the last 10 minutes, no run
 has gone for 4 hours and no task for 1), so a wedged loop or thread shows as down. A failing
 housekeeping pass (say "database is locked") is logged, rolled back and
-retried the next minute; it never ends the worker. Don't add Celery or Redis.
+retried the next minute; it never ends the worker. `db.transaction` (and
+`store.atomic`) begin with `BEGIN IMMEDIATE`, so a write that reads first waits
+for other writers instead of failing at once; pass `immediate=False` only for
+a read. Don't add Celery or Redis.
 
 Office Sentry's own health is `system_health.assess()` (database, schema
 version, worker heartbeat, last collection and whether most tenants failed

@@ -904,7 +904,7 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     """Send a report or digest schedule now. Returns an error message or None."""
     now = now or datetime.now(UTC)
     default_tz = _cfg(app).timezone
-    period, due = schedule_slot(schedule, default_tz, now)
+    period, _due = schedule_slot(schedule, default_tz, now)
     contacts = recipients(conn, "schedule", schedule["id"])
     built: list[Built] = []
     tenant = None
@@ -925,7 +925,7 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
     # Everything the send changes is written at once, so a worker that stops after sending doesn't leave the
     # period looking unsent (and send it again).
     with store.atomic(conn):
-        _after_send(conn, schedule, email, transport, error, period=period, due=due, trigger=trigger, user=user,
+        _after_send(conn, schedule, email, transport, error, period=period, trigger=trigger, user=user,
                     now=now, fallback=fallback, archive=built[-1].email if error is None and built else None,
                     tenant=tenant)
     if error is None and built:
@@ -940,7 +940,7 @@ def report_ready(app, conn, vault, tenant, period: str | None, titles: list[str]
     alerts.report_ready(conn, alerts.Alerting(_cfg(app).base_url, vault), tenant, period, titles, emailed=emailed)
 
 
-def _after_send(conn, schedule, email, transport, error, *, period: str, due: datetime, trigger: str,
+def _after_send(conn, schedule, email, transport, error, *, period: str, trigger: str,
                 user: str | None, now: datetime, fallback: str, archive: Email | None, tenant) -> None:
     record(conn, kind=schedule["kind"], email=email, subject=email.subject if email else fallback, error=error,
             transport=transport, trigger=trigger, user=user, schedule_id=schedule["id"],
@@ -962,14 +962,13 @@ def _after_send(conn, schedule, email, transport, error, *, period: str, due: da
                              " WHERE id = ?",
                              (attempts, (now + RETRY_DELAYS[attempts - 1]).strftime(ISO), schedule["id"]))
     elif error is None:
-        # Sent by hand after this period's send time: that counts as this period's email.
-        done = due <= now
-        conn.execute(
-            "UPDATE email_schedules SET last_status = 'sent', last_sent_at = ?,"
-            " last_period = CASE WHEN ? THEN ? ELSE last_period END,"
-            " attempts = CASE WHEN ? THEN 0 ELSE attempts END,"
-            " retry_at = CASE WHEN ? THEN NULL ELSE retry_at END WHERE id = ?",
-            (ts, done, period, done, done, schedule["id"]))
+        # Sent by hand: that counts as the latest send time's email, but never moves the schedule back from a
+        # later period already done (a month approved and sent early), or the timer would send that again.
+        last = conn.execute("SELECT last_period FROM email_schedules WHERE id = ?", (schedule["id"],)).fetchone()
+        last = last["last_period"] if last else None
+        conn.execute("UPDATE email_schedules SET last_status = 'sent', last_sent_at = ?, last_period = ?,"
+                     " attempts = 0, retry_at = NULL WHERE id = ?",
+                     (ts, last if period_done(last, period) else period, schedule["id"]))
     else:
         conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
 

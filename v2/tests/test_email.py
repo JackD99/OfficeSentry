@@ -577,11 +577,17 @@ def test_client_sees_their_emails_but_not_internal_details(client, db, two_tenan
     db.execute("INSERT INTO email_deliveries (kind, schedule_id, tenant_id, subject, recipients, bcc, status, error,"
                " created_at) VALUES ('report', ?, ?, 'S', 'it@client.com', 'tech@msp.com', 'failed',"
                " 'smtp.internal refused', '2026-10-01T00:00:00Z')", (sid, alpha))
+    # The team in the To line (no client contact then), and an alert, which only ever goes to the team.
+    for kind, to in (("report", "it@client.com, lead@msp.com"), ("report", "night@msp.com"),
+                     ("alert", "oncall@msp.com")):
+        db.execute("INSERT INTO email_deliveries (kind, schedule_id, tenant_id, subject, recipients, status,"
+                   " created_at) VALUES (?, ?, ?, 'S', ?, 'sent', '2026-10-02T00:00:00Z')", (kind, sid, alpha, to))
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     page = client.get(f"/tenants/{alpha}/schedules").get_data(as_text=True)
     assert "Client IT" in page
     assert "tech@msp.com" not in page and "Secret Tech" not in page and "smtp.internal" not in page
+    assert "@msp.com" not in page and page.count('class="wrap small">it@client.com<') == 2
     assert client.get(f"/tenants/{bravo}/schedules").status_code == 404
     assert client.get(f"/tenants/{alpha}/schedules/new").status_code == 403
     assert client.post(f"/schedules/{sid}/send").status_code == 403
@@ -617,6 +623,11 @@ def test_pause_resume_edit_and_delete(client, db, two_tenants):
     client.post(f"/schedules/{sid}/toggle")
     assert _row(db, "email_schedules", sid)["enabled"] == 0
     assert "Paused" in client.get(f"/tenants/{alpha}/schedules").get_data(as_text=True)
+    # Editing a paused schedule keeps it paused.
+    client.post(f"/schedules/{sid}/edit", data={
+        "reports": ["review"], "frequency": "monthly", "day_of_week": "0", "day_of_month": "2", "hour": "7",
+        "contacts": [str(c["id"]) for c in delivery.tenant_contacts(db, alpha)]})
+    assert (_row(db, "email_schedules", sid)["enabled"], _row(db, "email_schedules", sid)["day_of_month"]) == (0, 2)
     client.post(f"/schedules/{sid}/toggle")
     assert _row(db, "email_schedules", sid)["enabled"] == 1
     assert client.get(f"/schedules/{sid}/edit").status_code == 200

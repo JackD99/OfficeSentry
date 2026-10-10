@@ -1,5 +1,10 @@
 """Email domain health: DNS parsing, issues, collector and checks."""
 
+from unittest.mock import patch
+
+import dns.resolver
+import pytest
+
 from officesentry import dnscheck, store
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
@@ -93,3 +98,58 @@ def test_domains_detail_report(db, two_tenants):
     rows = report.sections[0].rows
     assert rows[0][:5] == ["x.com", "Microsoft 365", "Pass", "Weak", "Weak"]
     assert rows[1][1] == "Doesn't receive mail"
+
+
+def test_a_resolver_that_fails_is_an_error_not_a_missing_record():
+    # SERVFAIL, REFUSED or an unreachable resolver: dnspython raises NoNameservers, which says nothing
+    # about the domain's records.
+    with patch.object(dns.resolver.Resolver, "resolve", side_effect=dns.resolver.NoNameservers()):
+        with pytest.raises(dnscheck.DnsError):
+            dnscheck.lookup("x.com", "MX")
+    with patch.object(dns.resolver.Resolver, "resolve", side_effect=dns.resolver.NXDOMAIN()):
+        assert dnscheck.lookup("x.com", "MX") == []
+
+
+def failing(records, *broken):
+    def resolve(name, rdtype):
+        if (name, rdtype) in broken:
+            raise dnscheck.DnsError(f"{name} {rdtype}: All nameservers failed to answer the query.")
+        return list(records.get((name, rdtype), []))
+    return resolve
+
+
+def test_a_failed_mx_lookup_is_unknown_not_a_parked_domain():
+    records = {("m.com", "TXT"): ["v=spf1 +all"], ("_dmarc.m.com", "TXT"): ["v=DMARC1; p=none"]}
+    h = dnscheck.DomainHealth.from_dict(dnscheck.check_domain("m.com", failing(records, ("m.com", "MX"))).to_dict())
+    assert h.failed == ["MX"] and not h.sends_mail
+    assert dnscheck.issues(h, transport=True) == []  # not two low "doesn't receive mail" findings
+    assert set(dnscheck.summary(h).values()) == set(dnscheck.transport_summary(h).values()) == {"Couldn't check"}
+    # Only the area whose lookup failed is unknown.
+    h = dnscheck.check_domain("m.com", failing({**records, ("m.com", "MX"): ["mx.m.com"]}, ("_dmarc.m.com", "TXT")))
+    assert {i.area for i in dnscheck.issues(h)} == {"SPF"} and dnscheck.summary(h)["DMARC"] == "Couldn't check"
+
+
+def test_findings_keep_the_worst_problem_and_survive_a_failed_lookup(db, two_tenants):
+    alpha, _ = two_tenants
+    # SPF ending in +all (high) that also uses ptr (low); DMARC at p=none (medium) with no rua (low).
+    records = {**gd.DNS, ("x.com", "TXT"): ["v=spf1 ptr +all"], ("_dmarc.x.com", "TXT"): ["v=DMARC1; p=none"]}
+    seed_tenant(db, alpha, dns=failing(records))
+
+    def stored():
+        return {r["object_id"]: (r["severity"], r["detail"], r["resolved_at"]) for r in db.execute(
+            "SELECT * FROM findings WHERE tenant_id = ? AND object_id LIKE 'x.com:%'", (alpha,))}
+
+    before = stored()
+    assert before["x.com:SPF"][0] == "high" and before["x.com:DMARC"][0] == "medium"
+    assert "+all" in before["x.com:SPF"][1] and "ptr" in before["x.com:SPF"][1]  # every problem, worst first
+    assert before["x.com:SPF"][1].index("+all") < before["x.com:SPF"][1].index("ptr")
+    mail = db.execute("SELECT value FROM metrics WHERE tenant_id = ? AND key = 'domains.mail'", (alpha,)).fetchall()
+
+    # The next night the resolver fails for x.com: its findings stay as they were, not two low parked-domain ones.
+    seed_tenant(db, alpha, dns=failing(records, ("x.com", "MX")))
+    assert stored() == before
+    snap = TenantSnapshot(db, store.get_tenant(db, alpha))
+    r = {x.key: x for x in evaluate(snap)}
+    assert "couldn't check x.com" in r["spf_record"].summary and r["spf_record"].keep == ["x.com:SPF"]
+    assert db.execute("SELECT value FROM metrics WHERE tenant_id = ? AND key = 'domains.mail'",
+                      (alpha,)).fetchall() == mail  # no drop to zero mail domains

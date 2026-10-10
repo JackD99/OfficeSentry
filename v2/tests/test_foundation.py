@@ -32,6 +32,31 @@ def test_failed_migration_rolls_back(tmp_path, monkeypatch):
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'a'").fetchone() is None
 
 
+def test_a_transaction_that_reads_first_waits_for_other_writers(tmp_path):
+    """Collectors read before they write (store.add_objects) while other threads commit: the write must wait
+    for its turn, not fail at once with "database is locked"."""
+    import threading
+    import time
+
+    path = tmp_path / "x.db"
+    dbmod.migrate(dbmod.connect(path))
+    mine = dbmod.connect(path)
+
+    def other_writer():
+        other = dbmod.connect(path)
+        other.execute("INSERT INTO settings VALUES ('b', '2')")
+        other.close()
+
+    with dbmod.transaction(mine):
+        mine.execute("SELECT COUNT(*) FROM settings").fetchone()
+        meanwhile = threading.Thread(target=other_writer)
+        meanwhile.start()
+        time.sleep(0.2)  # the other connection commits now, unless it has to wait for this one
+        mine.execute("INSERT INTO settings VALUES ('a', '1')")
+    meanwhile.join(timeout=30)
+    assert {r[0] for r in mine.execute("SELECT key FROM settings WHERE key IN ('a', 'b')")} == {"a", "b"}
+
+
 def _migrate_at(path, barrier, results):
     try:
         barrier.wait(timeout=60)

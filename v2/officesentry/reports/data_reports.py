@@ -714,9 +714,13 @@ def domains(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         found = dnscheck.issues(h, transport=True)
         words = dnscheck.summary(h)
         delivery = dnscheck.transport_summary(h)
-        via = "Microsoft 365" if h.microsoft_365 else (h.mx[0] if h.sends_mail else "Doesn't receive mail")
+        via = "Microsoft 365" if h.microsoft_365 else (h.mx[0] if h.sends_mail else dnscheck.UNKNOWN
+                                                        if "MX" in h.failed else "Doesn't receive mail")
+        what = "" if "MX" in h.failed else f" for {' and '.join(h.failed)}"
+        fix = [i.detail for i in found] + ([f"The DNS lookup{what} failed; the next collection tries again"]
+                                           if h.failed else [])
         overview.add([h.domain, via, words["SPF"], words["DMARC"], words["DKIM"], delivery["MTA-STS"],
-                      delivery["TLS-RPT"], "; ".join(i.detail for i in found) or "Nothing"],
+                      delivery["TLS-RPT"], "; ".join(fix) or "Nothing"],
                      found[0].severity if found else None)
         records.add([h.domain, h.spf or "None", h.spf_lookups if h.spf else "", h.dmarc or "None", _mta_sts_text(h),
                      h.tls_rpt or ("None" if h.transport_checked else "Not checked"),

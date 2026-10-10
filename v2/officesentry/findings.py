@@ -5,17 +5,18 @@
     (and are reopened if they had been resolved);
   * open findings no longer reported are marked resolved.
 Checks that are "unavailable" leave their findings untouched, so missing data
-never looks like a fix.
+never looks like a fix; so does a check for the objects it lists in ``keep``.
+Several findings for one object are stored as one, at the worst severity.
 It returns counts, plus ``opened``: the ids of findings new or reopened by
 this sync (for alerts).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
-from .checks import evaluate
+from .checks import SEVERITY_RANK, evaluate
 from .db import transaction
 from .snapshot import TenantSnapshot
 
@@ -24,6 +25,21 @@ ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 def finding_key(f) -> str:
     return f.object_id or f.subject
+
+
+def by_key(findings) -> dict:
+    """One finding per key. A check can report several things about one object (a domain's SPF ending in
+    +all and needing too many lookups); the stored finding takes the worst severity and lists every detail,
+    worst first, so a less serious problem never hides a worse one."""
+    out: dict = {}
+    for f in sorted(findings, key=lambda f: SEVERITY_RANK.get(f.severity, len(SEVERITY_RANK))):
+        key = finding_key(f)
+        first = out.get(key)
+        if first is None:
+            out[key] = f
+        elif f.detail and f.detail not in first.detail.split("; "):
+            out[key] = replace(first, detail=f"{first.detail}; {f.detail}" if first.detail else f.detail)
+    return out
 
 
 def sync(conn, tenant, now: datetime | None = None) -> dict:
@@ -36,7 +52,7 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
         for r in results:
             if r.status == "unavailable":
                 continue
-            current = {finding_key(f): f for f in r.findings}
+            current = by_key(r.findings)
             existing = {row["object_id"]: row for row in conn.execute(
                 "SELECT * FROM findings WHERE tenant_id = ? AND rule_key = ?", (tenant["id"], r.key))}
             for key, f in current.items():
@@ -59,7 +75,7 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
                     if reopened:
                         opened.append(row["id"])
             for key, row in existing.items():
-                if key not in current and row["resolved_at"] is None:
+                if key not in current and key not in r.keep and row["resolved_at"] is None:
                     conn.execute("UPDATE findings SET resolved_at = ? WHERE id = ?", (ts, row["id"]))
                     stats["resolved"] += 1
     return {**stats, "opened": opened}

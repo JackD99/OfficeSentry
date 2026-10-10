@@ -54,6 +54,32 @@ def test_legacy_auth(seeded, db, two_tenants):
     assert results(db, two_tenants[1])["legacy_auth_blocked"].status == "pass"
 
 
+def _excluding(policy: dict, *apps: str) -> dict:
+    cond = policy["conditions"]
+    apps_ = {**cond["applications"], "excludeApplications": list(apps)}
+    return {**policy, "conditions": {**cond, "applications": apps_}}
+
+
+def test_policies_that_exclude_apps_dont_count_as_everywhere(db, two_tenants):
+    from officesentry.reports.evidence import build as evidence
+
+    exchange = "00000002-0000-0ff1-ce00-000000000000"
+    seed_tenant(db, two_tenants[0], ca=[_excluding(gd.CA_MFA_ALL, exchange), _excluding(gd.CA_BLOCK_LEGACY, exchange)])
+    res = results(db, two_tenants[0])
+    for key in ("mfa_enforced", "legacy_auth_blocked"):
+        assert res[key].status == "fail" and res[key].findings[0].severity == "high"
+        assert "leaves out Exchange Online" in res[key].findings[0].detail
+    pack = evidence(db, store.get_tenant(db, two_tenants[0]), NOW)
+    answer = next(a for a in pack.answers if a.key == "mfa_remote")
+    assert answer.answer == "No" and "leaves out Exchange Online" in answer.why
+
+    # Leaving out Intune enrolment (Windows Autopilot) still covers every Microsoft 365 sign-in.
+    seed_tenant(db, two_tenants[1], ca=[_excluding(gd.CA_MFA_ALL, "d4ebce55-015a-49b5-a083-c84d1797ae8c"),
+                                        gd.CA_BLOCK_LEGACY])
+    res = results(db, two_tenants[1])
+    assert res["mfa_enforced"].findings[0].subject == "bg@x.com" and res["legacy_auth_blocked"].status == "pass"
+
+
 def test_admin_mfa_flags_unregistered_admin(seeded):
     r = seeded["admin_mfa"]
     assert r.status == "fail"

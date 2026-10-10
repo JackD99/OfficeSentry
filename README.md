@@ -246,9 +246,10 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
 - **Tenant isolation.** Deny by default: people see only the tenants they're granted, every tenant page goes
   through one access check, and anything else returns 404. Clients see only their own reports.
-- **The portal itself:** two-step sign-in for staff, lockout after failed attempts, server-side sessions,
-  CSRF protection, a strict Content Security Policy with no external assets, and encrypted secrets with key
-  rotation.
+- **The portal itself:** two-step sign-in for everyone on new installs, client accounts included; wrong passwords
+  slow down the address they come from rather than locking the account, so nobody can lock a colleague out;
+  server-side sessions, CSRF protection, a strict Content Security Policy with no external assets, and encrypted
+  secrets with key rotation.
 
 Details are in [SECURITY.md](SECURITY.md) and the [technical reference](v2/README.md#what-it-does-differently-from-v1).
 
