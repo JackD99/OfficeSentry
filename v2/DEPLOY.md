@@ -883,9 +883,10 @@ builds from the code again.
 ### Uptime monitor
 
 The firewall only lets your own addresses reach the portal, so an outside
-monitor can't open it. Instead the server tells a monitor every 5 minutes that
-the portal answers, and the monitor emails you when the pings stop (the
-server, Docker or the portal is down):
+monitor can't open it. Instead the server asks the portal's `/health/ready`
+every 5 minutes and tells a monitor the answer, and the monitor emails you
+when the pings fail or stop (the server, Docker or the portal is down, or the
+database, the worker or the disk has a problem):
 
 1. Sign up at [Healthchecks.io](https://healthchecks.io) (free for 20 checks).
 2. *Add Check*: name `Office Sentry portal`, period **5 minutes**, grace
