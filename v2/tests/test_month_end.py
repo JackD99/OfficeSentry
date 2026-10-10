@@ -559,3 +559,32 @@ def test_send_now_after_an_early_approval_does_not_send_the_month_again(app, db,
     oct28 = datetime(2026, 10, 28, 9, 0, tzinfo=UTC)
     db.execute("UPDATE runs SET finished_at = ?", (oct28.strftime("%Y-%m-%dT%H:%M:%SZ"),))
     assert delivery.tick(app, db, vault, cfg, oct28) == 0 and len(sends()) == 2
+
+
+def test_reissue_after_a_report_left_the_plan_sends_only_the_plans_files(app, db, two_tenants, vault, cfg, monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    seed_tenant(db, alpha)
+    _smtp_ready(db)
+    delivery.add_contact(db, alpha, "", "it@alpha.com")
+    schedule = _auto_plan(db, alpha, mode="approval", now=datetime(2026, 9, 15, tzinfo=UTC))
+    db.execute(
+        "UPDATE report_plans SET reports = ? WHERE id = ?", ('["review", "data:mailboxes"]', schedule["plan_id"])
+    )
+    tenant = store.get_tenant(db, alpha)
+    oct5 = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
+    assert month_end.approve(app, db, vault, tenant, "2026-10", "admin", now=oct5) is None
+    ((_, _, first, _),) = sends()
+    assert len(list(first.iter_attachments())) == 2
+    # Mailboxes leaves the plan, the tenant is renamed, and the month is issued again.
+    db.execute("UPDATE report_plans SET reports = '[\"review\"]' WHERE id = ?", (schedule["plan_id"],))
+    db.execute("UPDATE tenants SET name = 'Alpha Group' WHERE id = ?", (alpha,))
+    tenant = store.get_tenant(db, alpha)
+    assert (
+        month_end.approve(app, db, vault, tenant, "2026-10", "admin", reason="Renamed", now=oct5.replace(hour=10))
+        is None
+    )
+    second = sends()[-1][2]
+    names = [p.get_filename() for p in second.iter_attachments()]
+    assert names == ["security-review-alpha-group.pdf"]
+    assert [f["filename"] for f in month_end.frozen_files(db, alpha, "2026-10")] == names
