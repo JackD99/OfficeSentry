@@ -629,7 +629,8 @@ a.bar.on .bar-track .gap { fill: var(--accent-soft); }
   .bar-track { grid-column: 1 / -1; grid-row: 2; }
 }
 /* Sparklines beside headline figures (charts.sparkline): a muted line, the latest point in the accent. */
-.value.has-spark { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.value.has-spark { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--space-2); }
+.value.has-spark > span { white-space: nowrap; }  /* "68.0 GB" stays on one line; the line drops below instead */
 svg.spark { flex: none; overflow: visible; }
 .kpi-cell { display: inline-flex; flex-direction: column; align-items: flex-end; gap: var(--space-0-5); }
 @media (max-width: 640px) { .kpi-cell { flex-direction: row; align-items: center; gap: var(--space-2); } }
