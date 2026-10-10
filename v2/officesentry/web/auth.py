@@ -375,7 +375,7 @@ def two_step_setup():
 
     if request.method == "POST" and user["totp_pending_enc"] and signed_in and not confirm_password():
         # From the account page, adding an authenticator needs the password: a stolen session isn't enough.
-        return _setup_page(user, signed_in)
+        return _setup_page(user, signed_in, fresh=False)
     if request.method == "POST" and user["totp_pending_enc"]:
         attempt = None
         if not signed_in and (attempt := _reserve_attempt(user)) is None:
@@ -417,12 +417,14 @@ def two_step_setup():
         flash(
             "That code didn't match. Check your phone's clock is set automatically, then try the newest code.", "error"
         )
-    return _setup_page(user, signed_in)
+    return _setup_page(user, signed_in, fresh=request.method != "POST")
 
 
-def _setup_page(user, signed_in: bool):
+def _setup_page(user, signed_in: bool, fresh: bool):
+    """The QR code to scan. Every visit (``fresh``) makes a new secret, so whoever saw the page before (with a
+    stolen session, say) doesn't know the one the person goes on to add; a wrong code shows the same one."""
     vault = _vault()
-    if user["totp_pending_enc"]:
+    if user["totp_pending_enc"] and not fresh:
         secret = vault.decrypt(user["totp_pending_enc"])
     else:
         secret = totp.new_secret()

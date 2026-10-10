@@ -193,6 +193,27 @@ def test_turn_on_and_off_from_account_page(client, db, vault, staff_mfa):
     assert db.execute("SELECT totp_enabled_at FROM users").fetchone()[0] is None
 
 
+def test_every_visit_to_two_step_setup_makes_a_new_secret(app, db, vault, staff_mfa):
+    """Someone who opened the setup page earlier (with a stolen session, say) doesn't learn the secret the
+    person goes on to add: each visit makes a new one, and codes from an earlier one don't enrol."""
+    make_user(db, "client", role="client")
+    person, thief = app.test_client(), app.test_client()
+    login(person, "client")
+    login(thief, "client")
+    assert thief.get("/two-step/setup").status_code == 200
+    seen = pending_secret(db, vault, "client")
+    person.get("/two-step/setup")
+    secret = pending_secret(db, vault, "client")
+    assert secret != seen
+    # A wrong code shows the same secret again, so the person doesn't have to scan a new one.
+    page = person.post("/two-step/setup", data={"code": totp.code(seen), "password": PASSWORD})
+    assert "That code didn&#39;t match" in page.get_data(as_text=True)
+    assert pending_secret(db, vault, "client") == secret
+    assert db.execute("SELECT totp_enabled_at FROM users").fetchone()[0] is None
+    person.post("/two-step/setup", data={"code": totp.code(secret), "password": PASSWORD})
+    assert vault.decrypt(db.execute("SELECT totp_secret_enc FROM users").fetchone()[0]) == secret
+
+
 NEW_PASSWORD = "my own long passphrase"
 
 

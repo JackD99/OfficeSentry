@@ -196,6 +196,8 @@ copied collection reads back exactly as its snapshot.
 - Recovery codes are stored as an HMAC under a random key kept encrypted with your encryption key, rather
   than a plain SHA-256, so a copy of the database alone can't be used to guess them. Codes made before this
   release keep working; making new ones on the account page stores them the new way.
+- The two-step setup page makes a new authenticator secret each time it's opened, so someone who saw the
+  page earlier (with a stolen session, say) doesn't know the secret the person goes on to add.
 
 ## 2.0.0 (2026-10-09)
 
