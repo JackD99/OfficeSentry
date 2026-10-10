@@ -46,6 +46,20 @@ Yes (migration 37: Microsoft account links on users, how each session was starte
 - The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
 - The plain-text part of a report email leads with the verdict and says when the data is old.
 - Pausing and resuming an email schedule is saved as one change.
+- The collection check and its alert no longer clear on a night every client failed just because one
+  client's report refresh ran since.
+- A system alert or certificate warning that no email or webhook took is tried again after 15 minutes,
+  rather than being marked sent.
+- Turning off off-site backups no longer leaves the Backups check warning for good: the nightly job and the
+  restore drill record that they aren't set up.
+- The server's uptime ping asks `/health/ready`, so the monitor hears when the worker stops or the disk
+  fills, not only when the portal is down.
+- `restore` now works over a damaged database: the damaged file is moved aside whole as
+  `backups/pre-restore-<time>-damaged.db` and the backup goes in. A locked database, or no room for the
+  safety copy, makes it refuse and say why, changing nothing. `deploy/jobs.sh restore` leaves the portal
+  and worker stopped when the restore fails, rather than starting them over an empty database.
+- A nightly backup whose activity history copy failed says the database was copied and what failed, rather
+  than "No backup made", and still removes old copies.
 
 ## 2.1.0 (2026-10-10)
 
