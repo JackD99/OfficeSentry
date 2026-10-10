@@ -21,7 +21,7 @@ from ..mailflow import is_external, tenant_domains
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
-from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
+from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups, refused
 
 # Microsoft's usage reports. v1.0 only returns CSV; beta returns JSON.
 REPORT_PERIOD = "D30"
@@ -279,11 +279,9 @@ class SharedFiles(Collector):
         try:
             drives = self._drives(ctx, catalog)
         except PermissionMissing as exc:
-            ctx.warn(
-                "Reading files needs the Sites.Read.All permission. Re-send the consent link from the tenant "
-                f"page to add it. ({exc.message})"
-            )
-            ctx.objects("scan_status", [("status", {"available": False, "reason": "permission"})])
+            reason, why = refused(ctx, "reading files", exc)
+            ctx.warn(why)
+            ctx.objects("scan_status", [("status", {"available": False, "reason": reason})])
             return
 
         snap = TenantSnapshot(ctx.conn, ctx.tenant)

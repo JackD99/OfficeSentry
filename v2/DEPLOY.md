@@ -125,8 +125,16 @@ to give to an outside service; it never names a tenant.
 
 To let the monitor see *why* it failed, make a monitoring token on
 *Settings → System status* ("Create monitoring token"). The page shows the
-link with the token once; copy it into the monitor's URL. With the token the
-address returns every check as JSON:
+token once; set the monitor to send it as a header,
+`Authorization: Bearer <token>` (in Uptime Kuma, under **Headers**). The token
+only works as that header, never in the address, since addresses end up in
+proxy and monitor logs. To try it:
+
+```
+curl -H "Authorization: Bearer <token>" https://<your domain>/health/ready
+```
+
+With the token the address returns every check as JSON:
 
 ```json
 {"ok": true, "status": "warn", "version": "2.0.0", "checked_at": "2026-10-09T17:40:00Z",
@@ -136,10 +144,8 @@ address returns every check as JSON:
 
 `status` is `ok`, `warn` (needs attention; still 200) or `fail` (503). In
 Uptime Kuma, the **HTTP(s) - Json Query** type with the query `status` and
-expected value `ok` alerts on warnings too. A monitor that can send headers
-can send `Authorization: Bearer <token>` instead of putting the token in the
-address (addresses end up in logs). Replace or remove the token on the same
-page.
+expected value `ok` alerts on warnings too. A monitor that can't send headers
+still gets the 200 or 503. Replace or remove the token on the same page.
 
 **Healthchecks.io** works the other way round: something on the server pings
 it, and it alerts when the pings stop. Add a check with a 5-minute period,
@@ -151,6 +157,39 @@ then add this line with `crontab -e` on the server (your check's ping URL):
 
 It pings only while Office Sentry is ready, so you hear when the server, the
 portal or the worker stops.
+
+### Signed webhooks
+
+With a signing secret saved under *Settings → Alerts*, every webhook request
+carries three headers, so your own receiver can tell it came from Office
+Sentry and isn't a copy of an earlier one sent again:
+
+- `X-OfficeSentry-Timestamp`: when it was sent, in seconds since 1970 (UTC).
+- `X-OfficeSentry-Signature`: `v1=` and the hex HMAC-SHA256, with the secret
+  as the key, of the timestamp, a full stop (`.`) and the request body exactly
+  as received.
+- `X-OfficeSentry-Key-Id`: the first 8 hex characters of the SHA-256 of the
+  secret. To change the secret, let the receiver accept both secrets, picking
+  the one whose key id matches, then save the new one in Office Sentry and
+  remove the old one from the receiver.
+
+Refuse a request whose signature doesn't match or whose timestamp is more than
+five minutes from your clock. In Python:
+
+```python
+import hashlib, hmac, time
+
+
+def genuine(headers, body: bytes, secret: str) -> bool:
+    stamp = headers.get("X-OfficeSentry-Timestamp", "")
+    if not stamp.isdigit() or abs(time.time() - int(stamp)) > 300:
+        return False
+    mac = hmac.new(secret.encode(), stamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(headers.get("X-OfficeSentry-Signature", ""), "v1=" + mac)
+```
+
+Before 2.1.0 the signature was `sha256=` and the HMAC of the body alone, with
+no timestamp, so a copied request could be sent again.
 
 ## Sign-in protection
 

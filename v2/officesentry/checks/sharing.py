@@ -16,6 +16,12 @@ SHARING_LEVELS = {
     "externalUserSharingOnly": "New and existing guests",
     "externalUserAndGuestSharing": "Anyone, including anonymous links",
 }
+# authorizationPolicy.allowInvitesFrom values that pass, in words ("everyone" fails).
+INVITE_LEVELS = {
+    "none": "Nobody can invite guests",
+    "adminsAndGuestInviters": "Only admins can invite guests",
+    "adminsGuestInvitersAndAllMembers": "Members and admins can invite guests",
+}
 
 
 @rule(
@@ -49,20 +55,18 @@ def guest_invites(snap: TenantSnapshot, now: datetime):
     policy = _authorization_policy(snap)
     if policy is None:
         return _unavailable("Guest settings haven't been collected yet")
-    if policy.get("allowInvitesFrom") == "everyone":
+    setting = policy.get("allowInvitesFrom")
+    if setting == "everyone":
         return (
             "fail",
             "Anyone, including guests, can invite guests",
             [Finding("low", "Tenant", "Guests can invite other guests")],
         )
-    return (
-        "pass",
-        {
-            "none": "Nobody can invite guests",
-            "adminsAndGuestInviters": "Only admins can invite guests",
-        }.get(policy.get("allowInvitesFrom"), "Members and admins can invite guests"),
-        [],
-    )
+    if not isinstance(setting, str) or setting not in INVITE_LEVELS:
+        if setting is None:
+            return _unavailable("Microsoft didn't return who can invite guests")
+        return _unavailable(f"Unrecognised guest invitation setting {setting}")
+    return ("pass", INVITE_LEVELS[setting], [])
 
 
 @rule(
