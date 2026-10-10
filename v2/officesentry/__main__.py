@@ -224,11 +224,16 @@ def cmd_backup(args, cfg):
     """Write a consistent copy of the database, safe while the portal is running."""
     from pathlib import Path
 
-    from .backups import backup, record_status
+    from .backups import BackupIncomplete, backup, record_status
 
     # The outcome goes in backup-status.json for the health check and the "backup failed" alert.
     try:
         dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
+    except BackupIncomplete as exc:
+        # The database copy is sound, but the backup as a whole isn't: the alert should say exactly that.
+        error = f"The database was copied to {exc.dest.name}, but {exc}."
+        record_status(cfg.data_dir, "local", False, error)
+        sys.exit(error)
     except OSError as exc:
         record_status(cfg.data_dir, "local", False, f"No backup made: {exc.strerror or exc}.")
         sys.exit(f"No backup made: {exc.strerror or exc}.")
@@ -265,7 +270,12 @@ def cmd_restore(args, cfg):
         result = restore(cfg.db_path, Path(args.file), worker_running=running, force=args.force)
     except RestoreError as exc:
         sys.exit(f"Not restored: {exc}")
-    if result["saved"]:
+    if result.get("damaged"):
+        print(
+            f"The database it replaced was damaged, so it couldn't be copied: it was moved aside whole as "
+            f"{result['saved']}."
+        )
+    elif result["saved"]:
         print(f"The database it replaced is saved as {result['saved']}.")
     print(f"Restored {args.file} (database version {result['version']}).")
     if result.get("events"):
@@ -284,9 +294,9 @@ def cmd_backup_status(args, cfg):
     from .backups import read_status, record_status
 
     if args.record:
-        if args.ok == args.failed:
-            sys.exit("Say --ok or --failed with --record.")
-        record_status(cfg.data_dir, args.record, args.ok, args.error or None, detail=args.detail or None)
+        if args.ok + args.failed + args.off != 1:
+            sys.exit("Say --ok, --failed or --off with --record.")
+        record_status(cfg.data_dir, args.record, args.ok, args.error or None, detail=args.detail or None, off=args.off)
         return
     jobs = read_status(cfg.data_dir)
     if args.json:
@@ -296,7 +306,9 @@ def cmd_backup_status(args, cfg):
         print("No backup has been recorded yet.")
     for name, job in sorted(jobs.items()):
         label = {"local": "Database copy", "offsite": "Off-site copy", "restore_check": "Restore check"}.get(name, name)
-        if job.get("ok"):
+        if job.get("off"):
+            print(f"{label}: not set up, so skipped at {job.get('last_attempt')}")
+        elif job.get("ok"):
             print(f"{label}: OK at {job.get('last_attempt')}" + (f" ({job['detail']})" if job.get("detail") else ""))
         else:
             print(
@@ -564,6 +576,7 @@ def main(argv=None):
     )
     status.add_argument("--ok", action="store_true")
     status.add_argument("--failed", action="store_true")
+    status.add_argument("--off", action="store_true", help="the job isn't set up, so it skipped")
     status.add_argument("--detail", default="", help="what it did, in a few words")
     status.add_argument("--error", default="", help="why it failed, in a few words")
     status.set_defaults(func=cmd_backup_status)

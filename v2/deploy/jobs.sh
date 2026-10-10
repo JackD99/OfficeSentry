@@ -32,7 +32,7 @@ setting() { sed -n "s/^$1=//p" "${2:-.env.backup}" 2>/dev/null | tail -n 1 | sed
 offsite_on() { [ -n "$(setting RESTIC_REPOSITORY)" ]; }
 last_line() { grep -v '^[[:space:]]*$' <<<"$1" | tail -n 1; }
 
-record() {  # part ok|failed words
+record() {  # part ok|failed|off words
   local text=--detail
   [ "$2" = failed ] && text=--error
   docker compose exec -T web python -m officesentry backup-status --record "$1" "--$2" "$text" "$3" \
@@ -91,6 +91,8 @@ local_copy() {  # force?
 offsite_copy() {
   if ! offsite_on; then
     echo "Off-site backups aren't set up (no RESTIC_REPOSITORY in .env.backup)."
+    # Said in backup-status.json too, so an entry from when they were set up isn't read as overdue.
+    record offsite off "not set up"
     return 0
   fi
   open_repository offsite || return 1
@@ -133,6 +135,7 @@ fetch_newest() {  # part
 drill() {
   if ! offsite_on; then
     echo "Off-site backups aren't set up, so there's nothing to restore from."
+    record restore_check off "off-site backups aren't set up"
     return 0
   fi
   open_repository restore_check || return 1
@@ -156,22 +159,28 @@ drill() {
 restore_offsite() {
   offsite_on || { echo "Off-site backups aren't set up (no RESTIC_REPOSITORY in .env.backup)."; return 1; }
   open_repository restore_check || return 1
-  local file ok=0
+  local file
   file=$(fetch_newest restore_check) || return 1
   docker compose stop web worker
-  # restore checks the backup, keeps the database it replaces as backups/pre-restore-*.db.gz, and refuses
-  # a backup from a newer Office Sentry.
-  docker compose run --rm --no-deps -T -v "$SCRATCH:/restore" web python -m officesentry restore "$file" || ok=1
+  # restore checks the backup, keeps the database it replaces as backups/pre-restore-*.db.gz (or moves a
+  # damaged one aside whole), and refuses a backup from a newer Office Sentry.
+  if ! docker compose run --rm --no-deps -T -v "$SCRATCH:/restore" web python -m officesentry restore "$file"; then
+    docker volume rm -f "$SCRATCH" > /dev/null
+    # Starting now would run the portal on whatever is left, or on a new empty database if the damaged one
+    # was moved aside, and the worker would start collecting into it.
+    echo "FAILED: the restore didn't finish (the reason is above), so the portal and worker are left stopped."
+    echo "Once the problem is fixed, run this again, or start them as they are with: docker compose up -d"
+    return 1
+  fi
   docker volume rm -f "$SCRATCH" > /dev/null
   docker compose up -d
-  return $ok
 }
 
 uptime_ping() {
   local url
   url=$(setting UPTIME_PING_URL .env.uptime)
   [ -n "$url" ] || return 0
-  if curl -fsS -m 10 -o /dev/null http://127.0.0.1:8000/health; then
+  if curl -fsS -m 10 -o /dev/null http://127.0.0.1:8000/health/ready; then
     ping_monitor "$url" ok
   else
     ping_monitor "$url" fail
@@ -209,7 +218,7 @@ case "$action" in
     ;;
   restore)
     locked
-    restore_offsite
+    restore_offsite || exit 1
     ;;
   drill)
     locked
