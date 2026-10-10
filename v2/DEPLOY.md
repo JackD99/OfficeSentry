@@ -511,7 +511,11 @@ client asks for their data to be erased.
    It checks that the file is a sound Office Sentry database, saves the
    database it replaces as `/data/backups/pre-restore-<time>.db.gz`, and copies
    the backup in with SQLite's backup API (no stale `-wal` or `-shm` files are
-   left behind).
+   left behind). When the database it replaces is too damaged to copy (the
+   usual reason for a restore), it's moved aside whole instead, as
+   `/data/backups/pre-restore-<time>-damaged.db` with its `-wal` file, and the
+   restore goes ahead. If anything goes wrong it says so and names the copy
+   of the old database.
 3. Put back the `secrets.json` from the same time as the backup if the keys
    changed since: with `secrets.json` in the current folder,
 
@@ -556,7 +560,10 @@ Office Sentry's own scripts.
 
    It fetches the newest database copy from the storage, stops the portal and
    worker, restores it (keeping the empty database it replaces as
-   `pre-restore-*`) and starts them. Sign in with your usual account.
+   `pre-restore-*`) and starts them. Sign in with your usual account. If the
+   restore fails, it says why and leaves the portal and worker stopped, so
+   nothing starts on a missing or half-restored database; fix the problem and
+   run it again.
 5. Point your domain at the new server (step 4 of the Hetzner steps), if
    you haven't yet.
 
@@ -883,9 +890,10 @@ builds from the code again.
 ### Uptime monitor
 
 The firewall only lets your own addresses reach the portal, so an outside
-monitor can't open it. Instead the server tells a monitor every 5 minutes that
-the portal answers, and the monitor emails you when the pings stop (the
-server, Docker or the portal is down):
+monitor can't open it. Instead the server asks the portal's `/health/ready`
+every 5 minutes and tells a monitor the answer, and the monitor emails you
+when the pings fail or stop (the server, Docker or the portal is down, or the
+database, the worker or the disk has a problem):
 
 1. Sign up at [Healthchecks.io](https://healthchecks.io) (free for 20 checks).
 2. *Add Check*: name `Office Sentry portal`, period **5 minutes**, grace
