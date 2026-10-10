@@ -208,6 +208,9 @@ copied collection reads back exactly as its snapshot.
   release keep working; making new ones on the account page stores them the new way.
 - The two-step setup page makes a new authenticator secret each time it's opened, so someone who saw the
   page earlier (with a stolen session, say) doesn't know the secret the person goes on to add.
+- Changing an app connection's client ID (a different app registration) no longer leaves its tenants marked
+  as consented: each one needs the client to approve the new app, links already sent are marked not sent
+  (they name the old app), and the page says how many clients must approve again.
 
 ## 2.0.0 (2026-10-09)
 
