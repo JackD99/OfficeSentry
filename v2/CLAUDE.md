@@ -49,9 +49,10 @@ overview and DEPLOY.md for running it on a server.
   own container, network and memory-only folder, never with the portal's
   `.env`, data or secrets. A new POST route is refused there automatically;
   `tests/test_public_demo.py` opens every page as the visitor.
-- **Audit with `db.audit()`**; it records the visitor's address. Repeated
-  anonymous events go through `db.audit_counted()` (one row per address and
-  hour), and never store what a stranger typed. Sign-in noise is in
+- **Audit with `db.audit()`**; it records the visitor's address (never on
+  the public demo, where every visitor is a stranger). Repeated anonymous
+  events go through `db.audit_counted()` (one row per address and hour), and
+  never store what a stranger typed. Sign-in noise is in
   `db.AUDIT_NOISE` and pruned after 90 days. Admins read it at `/admin/activity`.
 - **No import cycles.** `tests/test_imports.py` fails on a module-level cycle;
   put what two modules share in a third (as `checks/base.py` and
@@ -190,6 +191,8 @@ needing goes in those lists.
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
   `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
   time-driven; "No check-in for N days" in a cell is compared without its number.
+  A section names its columns that drift every night with use (sizes, file and
+  item counts) in `Section(drifts=(...))`, and those are ignored too.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and

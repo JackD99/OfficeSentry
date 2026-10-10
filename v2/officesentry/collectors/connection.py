@@ -15,6 +15,7 @@ client's admin, from the instructions shown.
 
 from __future__ import annotations
 
+from .. import store
 from ..entra import EXCHANGE_APP_ID, EXCHANGE_PERMISSIONS, GRAPH_APP_ID, GRAPH_PERMISSIONS
 from ..graph import PermissionMissing
 from ..text import plural
@@ -159,3 +160,13 @@ class ConnectionHealth(Collector):
         )
         if not result["global_reader"]:
             ctx.warn("The app doesn't hold the Global Reader role, so mailbox data can't be collected")
+
+
+def granted(ctx: RunContext, permission: str) -> bool | None:
+    """Whether the tenant granted ``permission``, from the last connection check (None when not known)."""
+    run = store.latest_run(ctx.conn, ctx.tenant["id"], "connection")
+    rows = store.run_objects(ctx.conn, run["id"], "connection") if run else []
+    result = rows[0] if rows else {}
+    if not result.get("permissions_checked"):
+        return None
+    return permission in (result.get("granted") or [])

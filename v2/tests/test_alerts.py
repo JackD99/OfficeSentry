@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import socket
+import time
 from unittest.mock import patch
 
 import pytest
@@ -131,7 +132,7 @@ def test_teams_payload_groups_findings_into_one_card(db, vault, alerting, two_te
     assert card["body"][3]["text"] == "And 3 more."
     assert card["actions"][0]["url"] == f"http://localhost:8000/tenants/{alpha}"
     assert responses.calls[0].request.headers["Content-Type"] == "application/json"
-    assert "X-OfficeSentry-Signature" not in responses.calls[0].request.headers
+    assert not {h for h in responses.calls[0].request.headers if h.startswith("X-OfficeSentry")}  # no secret saved
     sent = audit_rows(db, "alert_sent")
     assert len(sent) == 1 and sent[0]["tenant_id"] == alpha and "TOPSECRET" not in sent[0]["detail"]
 
@@ -183,8 +184,24 @@ def test_generic_payload_and_signature(db, vault, alerting, two_tenants):
     assert body["findings_total"] == 1 and body["findings_more"] == 0
     f = body["findings"][0]
     assert (f["severity"], f["check"], f["subject"], f["id"]) == ("critical", "guest_admins", "g#EXT#@x.com", fid)
-    expected = "sha256=" + hmac.new(b"s3cret-key", request.body, hashlib.sha256).hexdigest()
+    # Signed over the timestamp and the body, so a receiver that refuses old timestamps can't be replayed to.
+    stamp = request.headers["X-OfficeSentry-Timestamp"]
+    assert abs(int(stamp) - time.time()) < 60
+    signed = stamp.encode() + b"." + request.body
+    expected = "v1=" + hmac.new(b"s3cret-key", signed, hashlib.sha256).hexdigest()
     assert request.headers["X-OfficeSentry-Signature"] == expected
+    assert request.headers["X-OfficeSentry-Key-Id"] == hashlib.sha256(b"s3cret-key").hexdigest()[:8]
+
+
+def test_signature_changes_with_the_timestamp_and_names_the_key():
+    body = b'{"event":"findings.new"}'
+    first, later = alerts.sign("one", body, 1_700_000_000), alerts.sign("one", body, 1_700_000_300)
+    assert first["X-OfficeSentry-Signature"] != later["X-OfficeSentry-Signature"]
+    assert first["X-OfficeSentry-Timestamp"] == "1700000000"
+    # The body alone (the old scheme) isn't what's signed.
+    assert first["X-OfficeSentry-Signature"] != "v1=" + hmac.new(b"one", body, hashlib.sha256).hexdigest()
+    assert first["X-OfficeSentry-Key-Id"] == later["X-OfficeSentry-Key-Id"] != alerts.key_id("two")
+    assert "one" not in json.dumps(first)
 
 
 @responses.activate

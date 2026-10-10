@@ -98,35 +98,40 @@ def test_anyone_sees_only_whether_it_is_ready(client, db, two_tenants):
     assert client.get("/health/ready", headers={"Authorization": "Bearer wrong"}).json == {"ok": True}
 
 
+def test_the_token_only_works_as_a_header(client, db):
+    """In the address it would end up in proxy and monitor logs, so there it's ignored."""
+    worker.beat(db)
+    token = system_health.new_token(db)
+    assert client.get(f"/health/ready?token={token}").json == {"ok": True}
+    assert "checks" in client.get("/health/ready", headers={"Authorization": f"Bearer {token}"}).json
+
+
 def test_the_token_or_an_admin_sees_every_check(client, db, two_tenants):
     worker.beat(db)
     token = system_health.new_token(db)
     stored = db.execute("SELECT value FROM settings WHERE key = ?", (system_health.TOKEN_KEY,)).fetchone()[0]
     assert token not in stored and len(stored) == 64  # only its hash
-    for resp in (
-        client.get(f"/health/ready?token={token}"),
-        client.get("/health/ready", headers={"Authorization": f"Bearer {token}"}),
-    ):
-        body = resp.json
-        assert resp.status_code == 200 and body["ok"] is True and body["status"] in ("ok", "warn")
-        assert set(body["checks"]) == {
-            "database",
-            "schema",
-            "worker",
-            "collection",
-            "backup",
-            "disk",
-            "certificates",
-            "erase",
-        }
-        assert body["checks"]["schema"]["version"] == latest_version()
-        assert body["checks"]["worker"]["status"] == "ok" and body["checks"]["worker"]["age_seconds"] < 60
-        assert body["checks"]["disk"]["used_percent"] == 40.0
-        assert body["checks"]["collection"]["tenants"] == 2
-        text = json.dumps(body)
-        assert "Alpha" not in text and "alpha.onmicrosoft.com" not in text and token not in text
+    resp = client.get("/health/ready", headers={"Authorization": f"Bearer {token}"})
+    body = resp.json
+    assert resp.status_code == 200 and body["ok"] is True and body["status"] in ("ok", "warn")
+    assert set(body["checks"]) == {
+        "database",
+        "schema",
+        "worker",
+        "collection",
+        "backup",
+        "disk",
+        "certificates",
+        "erase",
+    }
+    assert body["checks"]["schema"]["version"] == latest_version()
+    assert body["checks"]["worker"]["status"] == "ok" and body["checks"]["worker"]["age_seconds"] < 60
+    assert body["checks"]["disk"]["used_percent"] == 40.0
+    assert body["checks"]["collection"]["tenants"] == 2
+    text = json.dumps(body)
+    assert "Alpha" not in text and "alpha.onmicrosoft.com" not in text and token not in text
     system_health.remove_token(db)
-    assert client.get(f"/health/ready?token={token}").json == {"ok": True}
+    assert client.get("/health/ready", headers={"Authorization": f"Bearer {token}"}).json == {"ok": True}
     make_user(db, "admin")
     login(client, "admin")
     assert "checks" in client.get("/health/ready").json
@@ -581,8 +586,10 @@ def test_monitoring_token_is_shown_once(client, db):
     make_user(db, "admin")
     login(client, "admin")
     page = client.post("/admin/status/token").get_data(as_text=True)
-    token = page.split("/health/ready?token=")[1].split("<")[0]
+    assert "?token=" not in page
+    token = page.split('curl -H "Authorization: Bearer ')[1].split('"')[0]
     assert token.startswith("osh_") and system_health.token_matches(db, token)
+    assert "/health/ready</p>" in page
     page = client.get("/admin/status").get_data(as_text=True)
     assert token not in page and "A monitoring token is set" in page
     client.post("/admin/status/token/remove")

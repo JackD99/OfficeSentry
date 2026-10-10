@@ -77,10 +77,10 @@
   <p class="muted small">So you hear when the server itself is down, point a free uptime monitor (Uptime Kuma, UptimeRobot, Better Stack) at this address. It answers <strong>200</strong> while Office Sentry works and <strong>503</strong> when the database, the worker or the disk has a problem.</p>
   <p class="secret">{{ ready_url }}</p>
   {% if new_token %}
-  <div class="callout warn"><span><strong>Copy this link now: it isn't shown again.</strong> With the token, the address also returns every check as JSON. A monitor can send it as an <span class="mono">Authorization: Bearer</span> header instead.</span></div>
-  <p class="secret">{{ ready_url }}?token={{ new_token }}</p>
+  <div class="callout warn"><span><strong>Copy this token now: it isn't shown again.</strong> A monitor that sends it as an <span class="mono">Authorization: Bearer</span> header also gets every check as JSON. It only works as a header, never in the address, since addresses end up in logs. For example:</span></div>
+  <p class="secret">curl -H "Authorization: Bearer {{ new_token }}" {{ ready_url }}</p>
   {% elif has_token %}
-  <p class="muted small">A monitoring token is set: monitors that send it also get every check as JSON.</p>
+  <p class="muted small">A monitoring token is set: monitors that send it as an <span class="mono">Authorization: Bearer</span> header also get every check as JSON.</p>
   <div class="form-actions">
     <form method="post" action="{{ url_for('system.create_token') }}" data-confirm="Make a new token? Monitors using the old one only see whether Office Sentry is ready until you update them.">{{ csrf() }}<button class="sm">Replace token</button></form>
     <form method="post" action="{{ url_for('system.remove_token') }}" data-confirm="Remove the monitoring token?">{{ csrf() }}<button class="sm ghost danger">Remove</button></form>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
@@ -475,6 +476,16 @@ def findings_download(tenant_id: int, ext: str, resolved: bool):
     return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{name}.{ext}"'})
 
 
+def _real_date(text: str) -> bool:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
 def _finding_or_404(finding_id: int):
     row = g.db.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
     if row is None:
@@ -491,8 +502,9 @@ def accept_finding(finding_id: int):
     until = request.form.get("until", "").strip()
     if not note:
         flash("Give a reason for accepting the risk.", "error")
-    elif until and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", until):
-        abort(400)
+    elif until and not _real_date(until):
+        # A date like 2026-02-31 would never come round, so the finding would stay hidden for good.
+        flash("The review date isn't a real date. Pick one from the calendar.", "error")
     else:
         findings.accept(g.db, row["id"], g.user["username"], note, f"{until}T00:00:00Z" if until else None)
         audit(g.db, g.user["username"], "finding_accepted", row["tenant_id"], f"{row['rule_key']}:{row['subject']}")
