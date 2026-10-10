@@ -102,7 +102,7 @@
     var list = document.querySelector('.picker-list');
     var open = list && list.querySelector('a[aria-current]');
     if (open && list.scrollHeight > list.clientHeight) {
-      var below = open.offsetTop - list.offsetTop - list.clientHeight / 3;
+      var below = Math.round(open.offsetTop - list.offsetTop - list.clientHeight / 3);
       if (below > 0) list.scrollTop = below;
     }
   }
@@ -110,6 +110,9 @@
     head = document.querySelector('.tenant-head[data-pin]');
     measure();
     picker();
+    // Web fonts change line heights, so measure again once they're in: the open report's place in the
+    // picker (and the pinned bar's height) then come out the same on every load.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { measure(); picker(); });
   }
   window.officeSentryHead = start;
   var ticking = false;
