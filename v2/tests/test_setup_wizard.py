@@ -428,7 +428,7 @@ def test_page_warns_when_opened_at_another_address_than_consent_links_use(app, d
         client.post("/login", data={"username": "admin", "password": PASSWORD}, base_url=address)
         page = client.get("/admin/connections", base_url=address).get_data(as_text=True)
         assert ("Office Sentry's address doesn't match this one." in page) is warned
-        assert ("portal.example.com" in page) is warned
+        assert (page.count("portal.example.com") > 0) is warned
 
 
 def test_tenant_input_is_checked():

@@ -168,7 +168,7 @@ def test_rollover_end_to_end(client, db, vault, cfg, connection_id, two_tenants)
     assert x509.load_der_x509_certificate(der).fingerprint(hashes.SHA1()).hex().upper() == new  # noqa: S303
     page = client.get("/admin/connections").get_data(as_text=True)
     assert "Replacing the certificate" in page and new in page
-    assert "alpha.onmicrosoft.com" in page  # suggested tenant to test against
+    assert page.count("alpha.onmicrosoft.com") >= 1  # suggested tenant to test against
 
     # Switching before a test is refused: the new certificate may not be on the app registration yet.
     page = client.post(f"/admin/connections/{connection_id}/replace/switch", follow_redirects=True).get_data(

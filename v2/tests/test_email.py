@@ -431,7 +431,7 @@ def test_failed_sends_retry_with_backoff_then_give_up(app, db, two_tenants, vaul
     assert s["last_period"] == "2026-10" and s["last_status"] == "failed" and s["attempts"] == 0
     assert db.execute("SELECT COUNT(*) FROM email_deliveries WHERE status = 'failed'").fetchone()[0] == 4
     error = db.execute("SELECT error FROM email_deliveries").fetchone()[0]
-    assert "smtp.example.com" in error and "connection refused" in error
+    assert error.count("smtp.example.com") == 1 and "connection refused" in error
     # The Retry button sends it again and clears the failure.
     FakeSMTP.fail_with = None
     failed = db.execute("SELECT * FROM email_deliveries ORDER BY id DESC").fetchone()
