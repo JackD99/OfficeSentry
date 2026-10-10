@@ -148,3 +148,37 @@ def test_csrf_enforced_when_enabled(cfg, db):
     make_user(db, "admin")
     resp = app.test_client().post("/login", data={"username": "admin", "password": PASSWORD})
     assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "words"),
+    [
+        ("GET", "/logout", "be opened this way"),  # 405: sign-out is a form
+        ("POST", "/login", "too large"),  # 413: over MAX_CONTENT_LENGTH
+    ],
+)
+def test_error_pages_are_the_portals_own(client, db, method, url, words):
+    make_user(db, "admin")
+    data = {"username": "admin", "password": "x" * (2 * 1024 * 1024)} if words == "too large" else None
+    resp = client.open(url, method=method, data=data)
+    page = resp.data.decode()
+    assert resp.status_code == (405 if method == "GET" else 413)
+    assert words in page and "error-page" in page and "Sign in" in page  # the portal's page, not Werkzeug's
+    assert "Werkzeug" not in page and "Method Not Allowed" not in page
+
+
+def test_server_errors_show_the_portals_page(cfg, db):
+    from officesentry.web import create_app
+
+    app = create_app(cfg)
+    app.config["PROPAGATE_EXCEPTIONS"] = False  # as in production: the test config propagates them
+
+    @app.get("/boom")
+    def boom():
+        raise RuntimeError("deliberate")
+
+    resp = app.test_client().get("/boom")
+    page = resp.data.decode()
+    assert resp.status_code == 500
+    assert "Something went wrong" in page and "error-page" in page
+    assert "deliberate" not in page and "Traceback" not in page

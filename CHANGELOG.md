@@ -50,6 +50,15 @@ No.
 - A nightly backup whose activity history copy failed says the database was copied and what failed, rather
   than "No backup made", and still removes old copies.
 
+### Security
+
+- The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
+  page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
+  so a client account probing for other clients' data is visible under *Settings → Activity log*.
+- Form-token, wrong-method, oversized-upload and server-error responses use the portal's own error page with
+  plain wording, instead of the web server's.
+
+
 ## 2.1.0 (2026-10-10)
 
 The first release from the public repository. The headlines: home pages for technicians and account
