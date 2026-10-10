@@ -6,7 +6,13 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
-## 2.1.0 (unreleased)
+## 2.1.0 (2026-10-10)
+
+The first release from the public repository. The headlines: home pages for technicians and account
+managers, onboarding many clients at once, answers for insurance and supplier questionnaires and Cyber
+Essentials, client reports built from blocks, four Exchange reports, sign-in and audit history kept beyond
+Microsoft's 30 days, and every report shown as the tenant was on any earlier day. Read **Action required**
+before updating: the keys move to a volume of their own.
 
 ### Action required
 
@@ -114,7 +120,8 @@ copied collection reads back exactly as its snapshot.
   tenant (a block with nothing to show for a client is left out), opens from the tenant's Reports tab as a
   page and a PDF, and a report plan or email schedule can send it like the monthly review.
 - Four Exchange reports (Reports → Email): **Mobile devices** (phones and tablets syncing mail, with which
-  app, when each last synced, leavers' devices still connected and ones waiting for approval),
+  app, when each last synced, leavers' devices still connected, devices left over from mailboxes that
+  no longer exist and ones waiting for approval),
   **Automatic replies** (who is sending an out-of-office reply, who outside hears it, and replies on so
   long they look forgotten), **Distribution lists** (members, owners, outside senders, and empty,
   ownerless or unused lists, from a count of the message trace kept per day) and **Mailbox size trend**
