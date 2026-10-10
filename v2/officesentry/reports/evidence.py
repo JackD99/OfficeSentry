@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .. import coverage
-from ..rules import RuleResult
+from ..checks import RuleResult
+from ..checks.auth_methods import admin_phishing_resistant
 from ..snapshot import TenantSnapshot
 from ..text import WHOLE_ORGANISATION
 from . import evidence_answers, questionnaires
@@ -114,7 +115,6 @@ def _extra_evidence(key: str, snap: TenantSnapshot, now: datetime | None = None)
         return out
     if key == "mfa_admins":
         # Phishing-resistant MFA goes beyond the question, so it's evidence, not part of the answer.
-        from ..auth_rules import admin_phishing_resistant
         try:
             status, summary, *_ = admin_phishing_resistant(snap, now)
         except Exception:  # damaged data: leave the line out rather than the whole pack

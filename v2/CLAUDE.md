@@ -53,6 +53,9 @@ overview and DEPLOY.md for running it on a server.
   anonymous events go through `db.audit_counted()` (one row per address and
   hour), and never store what a stranger typed. Sign-in noise is in
   `db.AUDIT_NOISE` and pruned after 90 days. Admins read it at `/admin/activity`.
+- **No import cycles.** `tests/test_imports.py` fails on a module-level cycle;
+  put what two modules share in a third (as `checks/base.py` and
+  `reports/registry.py` do) rather than importing late or at the bottom.
 - **Every PDF goes through `reports/export.to_pdf()`**, which makes tagged
   PDF/UA files (`export.PDF_VARIANT`) and whose URL fetcher only
   loads files under `web/static/` and `data:` URIs. Never call WeasyPrint
@@ -84,8 +87,12 @@ needing goes in those lists.
 
 ## Adding a check or report
 
-- Checks go in `rules.py` with `@rule(...)`, or in a module imported at the
-  bottom of `rules.py` (see `sharepoint_rules.py`). They read `TenantSnapshot` only,
+- Checks live in the `checks/` package: `checks/base.py` is the framework
+  (`@rule(...)`, `RULES`, `evaluate()`, `Finding`, `RuleResult`) and each other
+  module is one area's checks, decorated `@rule(...)`. A new check goes in its
+  area's module; a new area is a new module imported at the end of
+  `checks/__init__.py` (checks are listed in import order). `rules.py` only keeps
+  old imports working; import from `checks`. Checks read `TenantSnapshot` only,
   never Graph, and return `unavailable` (with the reason) when data or the
   tenant's licence is missing, rather than passing or failing.
 - A check's title is its goal ("No inactive accounts"); its summary is what was
@@ -107,14 +114,19 @@ needing goes in those lists.
   (`project_status`). Conditions no check covers (a missing licence) are
   `signals` on the project. Merging a project away needs a migration for its
   statuses and an entry in `projects.MERGED`.
-- Detail reports are builders in `reports/data_reports.py` returning
-  `Section`s of rows; register them in `REPORTS` and they get a page, a tab
-  and XLSX, CSV and PDF exports. Add the key to a menu group in
-  `data_reports.GROUPS`; one left out shows under "More reports".
-- Detail reports can also live in their own module (see `reports/sharepoint.py`)
-  and register in `reports/__init__.py`. A builder can set `tiles` (headline
-  figures), `chart`, `notice` (something the admin must fix first) and use
-  `Link` cells; the page and XLSX render them.
+- A detail report is a builder filling a `DataReport` with `Section`s of rows,
+  declared once with `@report(key, title, description, collectors, group=,
+  order=, keywords=, uses=)` (`reports/registry.py`). That one declaration gives
+  it a page, a place in its menu group (`group` from `registry.GROUP_TITLES`,
+  `order` spaced by 10; none shows under "More reports"), the report library
+  and its search (`keywords`: words people type that aren't in the title or
+  description), jobs in `library.USES` (`uses`), XLSX, CSV and PDF exports,
+  a rollup, What changed and the schedule form. Builders live in a module per
+  area (`data_reports.py`, `reports/sharepoint.py`, ...); a new module is
+  imported in `reports/__init__.py`. Everything reads `data_reports.REPORTS`,
+  `GROUPS` and `grouped()`, which the declarations build. A builder can set
+  `tiles` (headline figures), `chart`, `notice` (something the admin must fix
+  first) and use `Link` cells; the page and XLSX render them.
 - Headline figures open the rows behind them: give a `Tile` or `Highlight`
   `rows=Rows("<table title>", {"<column>": value or [values]}, age=(col, "gt90"),
   flagged=True)`. A figure named exactly like a table links to it without that.
@@ -135,9 +147,9 @@ needing goes in those lists.
   open findings grouped by check, then accepted risks, with saved views (report
   keys `findings` and `findings-resolved`) and PDF, XLSX and CSV downloads. It
   isn't in `REPORTS`, since it isn't built from a snapshot.
-- The Reports page (`/reports`) lists every registered report. Add a new key to
-  the jobs in `reports/library.USES` and search words to `KEYWORDS` if its
-  title doesn't contain what people would type.
+- The Reports page (`/reports`) lists every declared report, with its
+  `keywords` searchable. A job in `reports/library.USES` lists its reports most
+  useful first; a report joining one later says so with `uses=`.
 - Every detail report automatically gets a cross-tenant rollup (`reports/rollups.py`,
   `/across/<key>`) and is compared in the month-over-month change report
   (`reports/month_changes.py`, `/changes`, `/tenants/<id>/changes`). Rollup
@@ -216,7 +228,7 @@ needing goes in those lists.
 
 ## Robustness contract
 
-`tests/test_robustness.py` fuzzes every check in `rules.RULES`, every report in
+`tests/test_robustness.py` fuzzes every check in `checks.RULES`, every report in
 `data_reports.REPORTS` and every `changes.*_changes` feed against degraded
 snapshots (a field removed or null, a list where text is expected and the other
 way round, timestamps of `""`, `"0001-01-01T00:00:00Z"`, `"not-a-date"` or
@@ -226,7 +238,7 @@ run, so new checks and reports are fuzzed as soon as they exist.
 - Missing fields, nulls, odd timestamps and empty collections happen with real
   Microsoft data, so every check, report and change feed handles them itself.
 - Wrong types can't come from Graph; for those it's enough that the guards
-  contain the crash: `rules.evaluate()` shows the check as "couldn't run",
+  contain the crash: `checks.evaluate()` shows the check as "couldn't run",
   `data_reports.build()` shows the report as unavailable and
   `changes.all_changes()` leaves out that feed. Nothing returns a malformed result.
 - Use the shared helpers: `devices.parse_ts` / `devices.parse_day` for any
@@ -234,11 +246,14 @@ run, so new checks and reports are fuzzed as soon as they exist.
 
 ## One page per account
 
-`reports/user_profile.py` builds `/tenants/<id>/users/<object id>` (and the
-Users tab, `directory()`) from stored snapshots. Each area is a function
-decorated `@part(order)` returning a `Part` (facts, `Section` tables, a short
-summary); call `person.flag(severity, text, part_key)` for "Needs attention".
-Orders are spaced by 10, so a new area slots in without touching the others.
+The `reports/profile/` package builds `/tenants/<id>/users/<object id>`
+(`page.build()`, and the Users tab, `directory()`) from stored snapshots. Each
+area is its own module with a function decorated `@part(order)` (`base.py`)
+returning a `Part` (facts, `Section` tables, a short summary); call
+`person.flag(severity, text, part_key)` for "Needs attention". Orders are
+spaced by 10, so a new area slots in without touching the others; import its
+module in `profile/__init__.py`. `reports/user_profile.py` only keeps old
+imports working.
 `history()` diffs the account across retained snapshots. Detail report cells
 that are exactly an account's sign-in name or address become `UserLink`s in
 `data_reports.build()` (a `str` with `page_href`), so builders don't need to do
@@ -283,7 +298,10 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
   under one gets its own key, mapped to that tab in `TAB_OF`, and a link in
   the tab's second row (`.tab-pages`), rather than a new tab.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
-  ISO strings. Licence flags go through the `capability` filter.
+  ISO strings. Licence flags go through the `capability` filter. Python code
+  outside `web/` (reports, emails) uses the same functions from
+  `formatting.py` (`money`, `when`, `day`, `capability`); reports and checks
+  never import `web` (`tests/test_imports.py`).
 - Tables that people read on phones get `class="stack-sm"` and a
   `data-label` on every cell after the first.
 - Scripts need `nonce="{{ csp_nonce }}"`; there are no external assets.

@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
+from ..checks import RULES
 from ..db import audit, transaction, utcnow
 from ..reports import (
     branding,
@@ -24,7 +25,6 @@ from ..reports import (
     workbook,
 )
 from ..reports.monthly_review import build as build_review
-from ..rules import RULES
 from .access import login_required, roles_required, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response

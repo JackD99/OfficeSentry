@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from ..changes import Change, all_changes
+from ..checks import RULES
 from ..findings import resolved_since
-from ..rules import RULES
 from ..snapshot import TenantSnapshot
 from . import data_reports
 from .precomputed import Rows

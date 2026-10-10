@@ -557,10 +557,11 @@ officesentry/
   store.py       tenants, connections, runs, objects, metrics, pruning
   collectors/    one module per data source; @register adds it
   snapshot.py    latest successful data per collector, for rules/reports
-  rules.py       checks: snapshot -> pass / fail with findings / unavailable
+  checks/        checks, one module per area: snapshot -> pass / fail with findings / unavailable
   licences.py    SKU names, prices, licence-waste maths
   usage.py       per-person Microsoft 365 usage and licence right-sizing rules
-  reports/       report builders (data only), SVG charts, XLSX/PDF export
+  formatting.py  money, dates and labels as people read them, for pages, reports and emails
+  reports/       report builders (data only, one @report declaration each), SVG charts, XLSX/PDF export
   findings.py    findings lifecycle (new, resolved, reopened, accepted)
   changes.py     snapshot diffs for "since last month"
   mailer.py      sends a finished email over SMTP or Graph sendMail
