@@ -2,8 +2,9 @@ name: ui
 # Screenshots and accessibility checks in a real browser (v2/tests/browser/README.md): about 34 pages at a
 # laptop and a phone width, light and dark, compared with the baselines in the repo, and axe-core on each.
 #
-# It costs minutes on GitHub Free, so it runs only on pull requests that touch what a page looks like, weekly
-# (while the repo is private; nightly once public), and by hand. Screenshots are uploaded only when a
+# It costs minutes on GitHub Free, so it runs only on pull requests that touch what a page shows (templates,
+# styles, the web views and the report builders behind them), weekly (while the repo is private; nightly
+# once public), and by hand. Screenshots are uploaded only when a
 # comparison fails, and kept for three days.
 #
 # To refresh the baselines after an intended change: Actions > ui > Run workflow, pick the branch, tick
@@ -11,10 +12,12 @@ name: ui
 on:
   pull_request:
     paths:
-      - 'v2/officesentry/web/templates/**'
-      - 'v2/officesentry/web/static/**'
-      - 'v2/officesentry/web/styleguide.py'
-      - 'v2/officesentry/reports/charts.py'
+      # What a page looks like comes from the templates and styles, but also from what the view and the
+      # report builder put on it, so a change to either runs the screenshots too.
+      - 'v2/officesentry/web/**'
+      - 'v2/officesentry/reports/**'
+      - 'v2/officesentry/home.py'
+      - 'v2/officesentry/month_end.py'
       - 'v2/scripts/screenshots.py'
       - 'v2/scripts/demo_data.py'
       - 'v2/tests/browser/**'

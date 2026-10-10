@@ -100,10 +100,18 @@ Python 3.12 run measures coverage and fails under 90%;
   baselines, and axe-core); `v2/tests/browser/README.md` says how to run them
   and how to refresh the baselines after a change you meant.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
-  replacing the client class.
+  replacing the client class. `tests/seed.py` answers every list a page at
+  a time with a next link, as Microsoft does, so a collector that reads one
+  page loses most of the seed and its tests fail.
+- Tests ignore any `OFFICESENTRY_*` variables in your shell, fail if they
+  leave a database connection open, and fail after two minutes if they
+  hang. Coverage counts branches as well as lines.
 - Never add a write call to a tenant or a non-read-only permission.
 - Every route needs a login check, and tenant pages go through the access
-  gate in `web/access.py`.
+  gate in `web/access.py`. `tests/test_isolation_walk.py` opens every
+  tenant route with another tenant's IDs; a new POST route goes in its
+  `FORMS` (the form the route accepts) so the walk sends a form the route
+  would act on, not an empty one.
 
 ## Signing off your commits
 
@@ -129,19 +137,21 @@ The same gates apply to every change, whoever wrote it:
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
 - CI runs `ruff check` and `ruff format --check`, the full test suite on
-  Python 3.11, 3.12 and 3.13 (with a 90% coverage floor), a Windows subset,
-  a Docker build and `pip-audit` over every lock file on every pull
-  request, and a pull request isn't merged until it's green. The pull
-  request template's checklist covers migrations, new permissions, the
-  access gate and read-only access.
+  Python 3.11, 3.12 and 3.13 (with a 90% floor on line and branch
+  coverage), a Windows subset, a Docker build and `pip-audit` over every
+  lock file on every pull request, and a pull request isn't merged until
+  it's green. The pull request template's checklist covers migrations, new
+  permissions, the access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
   `tests/test_live_fixture.py` replays responses recorded from a real
   Microsoft 365 Business Premium test tenant (names, emails, domains and IDs
   scrubbed), so collectors are checked against what Microsoft actually
   returns.
 - Rules that matter for safety are enforced by tests, not just by review:
-  every page requires a login, tenant pages go through the access gate,
-  and the Graph client has no write methods.
+  every page requires a login, tenant pages go through the access gate
+  (walked with another tenant's IDs, by GET and by POST with a valid form,
+  against a second tenant whose data is marked so that any of it showing
+  up is caught), and the Graph client has no write methods.
 - Pages and reports that change are checked in a real browser, with
   screenshots, before they're merged, and CI compares about 34 pages with
   their screenshots and runs an accessibility check on them.

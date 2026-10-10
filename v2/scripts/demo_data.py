@@ -26,6 +26,7 @@ import re
 import secrets
 import sys
 import zlib
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -1374,30 +1375,31 @@ def main() -> None:
     from officesentry.db import connect, migrate
 
     cfg = load_config(data_dir=args.data_dir)
-    db = connect(cfg.db_path)
-    migrate(db)
-    if db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]:
-        sys.exit(f"{args.data_dir} already has tenants; use a new data directory.")
-    ids = populate(db, Vault(cfg.encryption_keys))
-    if args.public:
-        from officesentry.web import public_demo
+    with closing(connect(cfg.db_path)) as db:
+        migrate(db)
+        if db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]:
+            sys.exit(f"{args.data_dir} already has tenants; use a new data directory.")
+        ids = populate(db, Vault(cfg.encryption_keys))
+        if args.public:
+            from officesentry.web import public_demo
 
-        # Nobody signs in with a password: visitors are this account without one (public_demo.py).
+            # Nobody signs in with a password: visitors are this account without one (public_demo.py).
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, all_tenants, created_at)"
+                " VALUES (?, ?, 'analyst', 1, ?)",
+                (public_demo.USERNAME, generate_password_hash(secrets.token_urlsafe(32)), utcnow()),
+            )
+            db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
+            print(f"Added {len(ids)} demo tenants to {cfg.db_path} for the public demo site")
+            return
+        password = args.password or secrets.token_urlsafe(12)
         db.execute(
-            "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'analyst', 1, ?)",
-            (public_demo.USERNAME, generate_password_hash(secrets.token_urlsafe(32)), utcnow()),
+            "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
+            (args.admin, generate_password_hash(password), utcnow()),
         )
-        db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
-        print(f"Added {len(ids)} demo tenants to {cfg.db_path} for the public demo site")
-        return
-    password = args.password or secrets.token_urlsafe(12)
-    db.execute(
-        "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
-        (args.admin, generate_password_hash(password), utcnow()),
-    )
-    print(f"Added {len(ids)} demo tenants to {cfg.db_path}")
-    print(f"Sign in as {args.admin} / {password}")
-    print(f"Start the portal: OFFICESENTRY_DATA_DIR={args.data_dir} python -m officesentry web")
+        print(f"Added {len(ids)} demo tenants to {cfg.db_path}")
+        print(f"Sign in as {args.admin} / {password}")
+        print(f"Start the portal: OFFICESENTRY_DATA_DIR={args.data_dir} python -m officesentry web")
 
 
 if __name__ == "__main__":

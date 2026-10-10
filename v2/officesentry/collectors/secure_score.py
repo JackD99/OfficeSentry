@@ -29,9 +29,9 @@ class SecureScore(Collector):
     permissions = ("SecurityEvents.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
-        # One snapshot per day, newest first. A single page of 90 covers what
-        # Microsoft keeps; older history lives in our own metrics.
-        scores = ctx.graph.get("/security/secureScores", params={"$top": "90"}).get("value", [])
+        # One snapshot per day, newest first: the 90 days Microsoft keeps, however it pages them; older
+        # history lives in our own metrics.
+        scores = ctx.graph.get_all("/security/secureScores", params={"$top": "90"}, max_pages=10).items
         if not scores:
             ctx.warn("Microsoft returned no Secure Score for this tenant yet")
             return

@@ -25,7 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 # PDF export. Needs Pango (the Docker image installs it).
 pdf = ["weasyprint>=63"]
-dev = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.6", "responses>=0.25", "ruff>=0.6", "weasyprint>=63"]
+dev = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.6", "pytest-timeout>=2.3", "responses>=0.25", "ruff>=0.6", "weasyprint>=63"]
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -43,6 +43,28 @@ officesentry = ["migrations/*.sql", "web/templates/*.html", "web/templates/repor
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# A test that hangs (a lock never released, a thread never joined, a mock never answered) fails after two
+# minutes with every thread's stack, instead of the whole run waiting for the CI job's limit. The slowest
+# test takes about 15 seconds on a loaded runner.
+timeout = 120
+filterwarnings = [
+    # A thread that dies with an exception, or an exception Python could only print (from a __del__, a
+    # callback), fails the test it happened in rather than passing with a note.
+    "error::pytest.PytestUnhandledThreadExceptionWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
+
+[tool.coverage.run]
+# Branches too: a line is run, but was the other way through the `if` ever taken? CI's floor (v2.yml) is
+# on the combined figure, so an untested branch counts like an untested line.
+branch = true
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
 
 [tool.ruff]
 line-length = 120

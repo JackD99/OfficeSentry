@@ -1,5 +1,7 @@
 """Who must use two-step sign-in: everyone on new installs, unchanged on existing ones, visible to admins."""
 
+from contextlib import closing
+
 import pytest
 
 from officesentry import db as dbmod
@@ -25,9 +27,9 @@ def _client_signs_in(cfg, conn):
 
 
 def test_new_installs_require_two_step_for_client_accounts_too(plain_cfg):
-    conn = connect(plain_cfg.db_path)
-    migrate(conn)  # a fresh database: nobody has signed up yet
-    assert _client_signs_in(plain_cfg, conn).endswith("/two-step/setup")
+    with closing(connect(plain_cfg.db_path)) as conn:
+        migrate(conn)  # a fresh database: nobody has signed up yet
+        assert _client_signs_in(plain_cfg, conn).endswith("/two-step/setup")
 
 
 def test_existing_installs_keep_their_policy(plain_cfg, monkeypatch):
@@ -40,14 +42,15 @@ def test_existing_installs_keep_their_policy(plain_cfg, monkeypatch):
     monkeypatch.setattr(dbmod, "migration_files", lambda: everything)
     migrate(conn)  # ...upgrades: its client accounts aren't suddenly asked to enrol
     assert _client_signs_in(plain_cfg, conn) == "/"
+    conn.close()
 
 
 def test_the_environment_setting_wins(plain_cfg, monkeypatch):
     monkeypatch.setenv("OFFICESENTRY_REQUIRE_MFA", "staff")
     cfg = load_config(data_dir=plain_cfg.data_dir, testing=True, secure_cookies=False, extra={"disable_csrf": True})
-    conn = connect(cfg.db_path)
-    migrate(conn)
-    assert _client_signs_in(cfg, conn) == "/"
+    with closing(connect(cfg.db_path)) as conn:
+        migrate(conn)
+        assert _client_signs_in(cfg, conn) == "/"
 
 
 def test_users_page_shows_who_must_use_two_step(cfg, db, client):

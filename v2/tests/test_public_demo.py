@@ -3,6 +3,7 @@
 import importlib.util
 import re
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -46,8 +47,8 @@ def test_visitors_are_the_demo_user(demo_app):
     # Nothing to sign in to, and no session row per visitor.
     assert client.get("/login").status_code == 302
     assert demo_app.extensions["officesentry.config"].public_demo
-    db = connect(demo_app.extensions["officesentry.config"].db_path)
-    assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
+    with closing(connect(demo_app.extensions["officesentry.config"].db_path)) as db:
+        assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize("case", ["setting off", "no marker", "admin", "disabled"])
@@ -133,9 +134,9 @@ def test_demo_data_public_makes_no_admin(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["demo_data.py", "--data-dir", str(tmp_path), "--public"])
     demo_data.main()
     assert "Sign in as" not in capsys.readouterr().out
-    db = connect(load_config(data_dir=tmp_path).db_path)
-    assert [tuple(r) for r in db.execute("SELECT username, role FROM users")] == [("demo", "analyst")]
-    assert db.execute("SELECT value FROM settings WHERE key = ?", (public_demo.MARKER,)).fetchone()[0] == "1"
+    with closing(connect(load_config(data_dir=tmp_path).db_path)) as db:
+        assert [tuple(r) for r in db.execute("SELECT username, role FROM users")] == [("demo", "analyst")]
+        assert db.execute("SELECT value FROM settings WHERE key = ?", (public_demo.MARKER,)).fetchone()[0] == "1"
 
 
 def test_demo_container_has_no_way_out():

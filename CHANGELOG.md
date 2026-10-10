@@ -35,6 +35,8 @@ No.
 - The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
 - The plain-text part of a report email leads with the verdict and says when the data is old.
 - Pausing and resuming an email schedule is saved as one change.
+- On Windows without Docker, a person's page opens once their sign-in history exists; four dates on it
+  used a format Windows rejects.
 
 ## 2.1.0 (2026-10-10)
 

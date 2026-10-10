@@ -4,6 +4,8 @@ daily summaries, retention, tenant deletion and isolation, backups, and the Acti
 import csv
 import io
 import json
+import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
@@ -303,9 +305,7 @@ def test_tenants_never_see_each_others_events_and_deletion_is_clean(db, two_tena
     assert removed["history_signins"] == len(a_rows)
     assert events.counts(db, bravo)["signins"] == len(b_rows)
     for path in (events.root(db)).rglob("*.db"):
-        import sqlite3
-
-        with sqlite3.connect(path) as raw:
+        with closing(sqlite3.connect(path)) as raw:  # `with` on a connection alone commits, never closes
             table = events.TABLE[path.parent.name]
             assert not raw.execute(f"SELECT 1 FROM {table} WHERE tenant = ?", (alpha_key,)).fetchone()
             assert not raw.execute("SELECT 1 FROM label WHERE value LIKE 'ann@%'").fetchone()

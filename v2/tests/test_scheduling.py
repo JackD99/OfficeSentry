@@ -2,6 +2,7 @@
 
 import gzip
 import os
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -321,8 +322,8 @@ def test_backup_command(cfg, db, two_tenants, monkeypatch, tmp_path):
     assert 1 <= len(files) <= 2
     plain = tmp_path / "copy.db"
     plain.write_bytes(gzip.decompress(files[-1].read_bytes()))
-    copy = connect(plain)
-    assert copy.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
+    with closing(connect(plain)) as copy:
+        assert copy.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
     if os.name != "nt":  # Windows has no Unix file modes
         assert oct(files[-1].stat().st_mode & 0o777) == "0o600"
 

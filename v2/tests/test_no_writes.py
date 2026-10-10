@@ -108,6 +108,6 @@ def test_a_full_collection_only_reads(db, connection_id):
     for method, url, body in calls:
         if method == "GET":
             continue
-        assert method == "POST" and re.search(r"/adminapi/beta/[^/]+/InvokeCommand$", url), (method, url)
+        assert method == "POST" and re.search(r"/adminapi/beta/[^/]+/InvokeCommand(\?|$)", url), (method, url)
         cmdlet = json.loads(body)["CmdletInput"]["CmdletName"]
         assert cmdlet.startswith("Get-") and cmdlet in READ_ONLY_CMDLETS, cmdlet

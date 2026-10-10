@@ -631,11 +631,14 @@ def run_worker(
     liveness = Liveness()
     if once:
         # Tests and one-off use: housekeeping, then drain the queues in this thread.
-        _housekeeping(app, conn, vault, cfg)
-        _daily(conn, cfg)
-        while (run := _claim(conn)) is not None:
-            _execute(conn, run, graph_factory, exchange_factory, alerting, liveness)
-        tasks.drain(app, conn, vault, cfg)
+        try:
+            _housekeeping(app, conn, vault, cfg)
+            _daily(conn, cfg)
+            while (run := _claim(conn)) is not None:
+                _execute(conn, run, graph_factory, exchange_factory, alerting, liveness)
+            tasks.drain(app, conn, vault, cfg)
+        finally:
+            conn.close()
         return
 
     if threading.current_thread() is threading.main_thread():
@@ -674,4 +677,6 @@ def run_worker(
         clear_heartbeat(conn)
     except sqlite3.Error:
         log.warning("Could not clear the worker heartbeat", exc_info=True)
+    finally:
+        conn.close()
     log.info("Worker stopped")
