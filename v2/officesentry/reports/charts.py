@@ -268,8 +268,9 @@ def bars(items: list[Bar], *, label: str, series: list[tuple[str, str]] | None =
         title = escape(b.detail or f"{b.label}: {b.text}")
         if b.href:
             hint = "show every row" if b.active else "show these rows"
-            out.append(f'<li><a class="bar{" on" if b.active else ""}" href="{escape(b.href)}" data-view '
-                       f'aria-pressed="{"true" if b.active else "false"}" title="{title}. Click to {hint}.">'
+            current = ' aria-current="true"' if b.active else ""  # the bar the table is filtered to
+            out.append(f'<li><a class="bar{" on" if b.active else ""}" href="{escape(b.href)}" data-view'
+                       f'{current} title="{title}. Click to {hint}.">'
                        f'{body}</a></li>')
         else:
             out.append(f'<li><div class="bar" title="{title}">{body}</div></li>')

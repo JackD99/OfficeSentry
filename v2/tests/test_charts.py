@@ -51,7 +51,7 @@ def test_bars_escape_text_and_carry_a_legend_for_two_series():
                        label='Chart "one"', series=[("Yes", "1"), ("No", "bad")], title="By thing")
     assert "<b>" not in html and "&lt;b&gt;A&lt;/b&gt;" in html and 'aria-label="Chart &quot;one&quot;"' in html
     assert 'class="legend"' in html and "Yes" in html and "No" in html
-    assert 'href="/x?f=a&amp;b"' in html and 'aria-pressed="false"' in html
+    assert 'href="/x?f=a&amp;b"' in html and "aria-current" not in html and "aria-pressed" not in html
     assert 'class="zero"' in html  # a zero bar still shows where it would start
     assert html.count('class="gap"') == 1  # 2px between the two parts of A, none before the first
 
@@ -83,7 +83,7 @@ def test_bars_link_to_their_rows_and_the_chart_follows_the_filter():
     view = views.View.parse("f=sign-ins-by-country/country:GB")
     tv = views.table_view(report, 0, view, "/r")
     assert _bars(tv.chart) == [("GB", "100")] and len(tv.rows) == 1
-    assert 'class="bar on"' in tv.chart and 'aria-pressed="true"' in tv.chart
+    assert 'class="bar on"' in tv.chart and 'aria-current="true"' in tv.chart  # links can't be aria-pressed
     assert _hrefs(tv.chart) == ["/r#t-sign-ins-by-country"]  # clicking it again shows every row
     # The download applies the same view, so its chart is the filtered one too.
     assert _bars(views.apply(report, view).sections[0].figure) == [("GB", "100")]
