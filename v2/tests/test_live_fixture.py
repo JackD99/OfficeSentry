@@ -33,25 +33,12 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 10, 2, 47, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 10, 19, 30, tzinfo=UTC)
 
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
-STAND_INS: dict[str, dict] = {
-    # Mobile devices, automatic replies and distribution lists (added 10 Oct 2026). The test tenant has no phone
-    # syncing mail and no distribution list; both mailboxes have automatic replies off.
-    "Get-MobileDevice": {"value": []},
-    "Get-DistributionGroup": {"value": []},
-    "/v1.0/users/{id}/mailboxSettings/automaticRepliesSetting": {
-        "status": "disabled",
-        "externalAudience": "all",
-        "scheduledStartDateTime": {"dateTime": "2026-10-09T22:00:00.0000000", "timeZone": "UTC"},
-        "scheduledEndDateTime": {"dateTime": "2026-10-10T22:00:00.0000000", "timeZone": "UTC"},
-        "internalReplyMessage": "",
-        "externalReplyMessage": "",
-    },
-}
+STAND_INS: dict[str, dict] = {}
 NEW_FIELDS: frozenset[str] = frozenset()
 
 

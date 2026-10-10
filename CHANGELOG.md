@@ -134,6 +134,10 @@ copied collection reads back exactly as its snapshot.
   still reads) and checked against each one as it's written, so a tenant can be shown as it was on any day.
   Kept for 25 months by default (Settings → Data retention, "Daily history"); about 2.5 MB a night at 200
   tenants ([v2/DEPLOY.md, "How long data is kept"](v2/DEPLOY.md#how-long-data-is-kept)).
+- Reports as of any date: every detail report can show the tenant as it was on an earlier day (its downloads
+  too), read from the daily history when that day's snapshot has gone, and What changed compares any two
+  dates instead of only "now against N days ago". Sign-in detail, which retention keeps for less time, says
+  when it's no longer held.
 
 ### Changed
 
@@ -149,6 +153,10 @@ copied collection reads back exactly as its snapshot.
   it gave the count and the list below showed different items.
 - Sizes from 1 TB to 10 TB show two decimals ("1.28 TB of 1.45 TB"), so used, free and total add up on
   the SharePoint storage report.
+- The sign-in log and shared files' sharing are read without the fields Microsoft has retired (it marked
+  both calls with a sunset date because of them, the sign-in log's on 31 August 2026). Office Sentry now asks
+  only for the fields it uses, so nothing it relies on is being retired; reports and stored history are
+  unchanged.
 
 ### Fixed
 

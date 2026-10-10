@@ -42,15 +42,17 @@
 
 {# The Views menu: a person's saved views of this page (saved_views rows), and saving the current one.
    key: the saved_views report key; tenant: the tenant the page is for. #}
-{% macro saved_views(saved, view_query, key, tenant, placeholder='e.g. Forwarding outside') -%}
+{#- base: the page the views apply to, when it carries its own query (a past day, ?on=...). -#}
+{% macro saved_views(saved, view_query, key, tenant, placeholder='e.g. Forwarding outside', base='') -%}
+{% set base = base or request.path %}{% set sep = '&' if '?' in base else '?' %}
 {% set current = saved|selectattr('query', 'equalto', view_query)|first if view_query else none %}
 <details class="menu" id="views-menu">
   <summary class="btn sm{{ ' on' if view_query }}" title="Save the filters, columns and sort you use often">{{ icon('eye') }} {{ current.name if current else ('Custom view' if view_query else 'Views') }}</summary>
   <div class="menu-panel right">
-    <div class="menu-head"><strong>Saved views</strong>{% if view_query %}<a href="{{ request.path }}" data-view>Reset</a>{% endif %}</div>
+    <div class="menu-head"><strong>Saved views</strong>{% if view_query %}<a href="{{ base }}" data-view>Reset</a>{% endif %}</div>
     {% for v in saved %}
     <div class="view-row{{ ' on' if current and current.id == v.id }}">
-      <a href="{{ request.path }}?{{ v.query }}" data-view>{{ v.name }}</a>
+      <a href="{{ base }}{{ sep }}{{ v.query }}" data-view>{{ v.name }}</a>
       <form method="post" action="{{ url_for('views.delete', view_id=v.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="link faint" title="Delete this view" aria-label="Delete {{ v.name }}">×</button></form>
     </div>
     {% else %}

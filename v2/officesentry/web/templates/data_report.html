@@ -15,13 +15,27 @@
   {% if not report.unavailable %}
   <div class="toolbar-actions">
     {% if current_user.role != 'client' %}<a class="btn sm" href="{{ url_for('across.rollup', key=report.key) }}" title="Compare this report across every tenant">{{ icon('tenants') }} All tenants</a>{% endif %}
-    {{ saved_views(saved, view_query, report.key, tenant) }}
-    {% set q = ('?' ~ view_query) if view_query else '' %}
-    {{ downloads([('PDF', url_for('reports.data_report_pdf', tenant_id=tenant.id, key=report.key) ~ q, 'The rows and columns shown, as a PDF' if q else 'The whole report as a PDF'),
-                  ('XLSX', url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key) ~ q, 'The rows and columns shown, one sheet per table' if q else 'Every table, one sheet each')]) }}
+    {{ saved_views(saved, view_query, report.key, tenant, base=base) }}
+    {% set shown = [day_query, view_query]|select|join('&') %}{% set q = ('?' ~ shown) if shown else '' %}
+    {{ downloads([('PDF', url_for('reports.data_report_pdf', tenant_id=tenant.id, key=report.key) ~ q, 'The rows and columns shown, as a PDF' if view_query else 'The whole report as a PDF'),
+                  ('XLSX', url_for('reports.data_report_xlsx', tenant_id=tenant.id, key=report.key) ~ q, 'The rows and columns shown, one sheet per table' if view_query else 'Every table, one sheet each')]) }}
   </div>
   {% endif %}
 </div>
+{% if day.earliest %}
+{#- Any day the data reaches back to: the report as the tenant was at the end of it. Filters stay. -#}
+<form class="date-pick" method="get" action="{{ request.path }}">
+  {% for k, v in request.args.items(multi=True) if k != 'on' %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <label>Show this tenant as it was on <input type="date" name="on" value="{{ (day.on or day.today).isoformat() }}" min="{{ day.earliest.isoformat() }}" max="{{ day.today.isoformat() }}" required></label>
+  <button class="sm">Show</button>
+</form>
+{% endif %}
+{% if day.on %}
+<div class="callout as-of">{{ icon('clock') }}<div><strong>As it was on {{ day.label }}</strong>
+  <p class="m0">{{ day.note or 'This is the data Office Sentry held for this tenant at the end of that day.' }}
+    <a href="{{ request.path }}{{ ('?' ~ view_query) if view_query }}">Back to today</a> ·
+    <a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, **{'from': day.on.isoformat()}) }}">What changed since then</a></p></div></div>
+{% endif %}
 
 {% if report.unavailable %}
 <div class="card empty"><h3>Not available</h3><p>{{ report.unavailable }}</p></div>
@@ -67,7 +81,7 @@
   <p>{{ tv.section.empty }}</p>
 </section>
 {% else %}
-{{ report_table(tv, url_for('across.data_report_csv', tenant_id=tenant.id, key=report.key, section=loop.index) ~ ('&' ~ view_query if view_query)) }}
+{{ report_table(tv, url_for('across.data_report_csv', tenant_id=tenant.id, key=report.key, section=loop.index, **day.query) ~ ('&' ~ view_query if view_query)) }}
 {% endif %}
 {% endfor %}
 {% endif %}

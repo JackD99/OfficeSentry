@@ -246,12 +246,13 @@ def compare_report(
     return result
 
 
-def _figures(conn, tenant_id: int, since: str) -> list[Figure]:
+def _figures(conn, tenant_id: int, since: str, until: str | None = None) -> list[Figure]:
     out = []
     for key, label, unit, better in FIGURES:
         latest = conn.execute(
-            "SELECT value FROM metrics WHERE tenant_id = ? AND key = ? ORDER BY captured_at DESC, rowid DESC LIMIT 1",
-            (tenant_id, key),
+            "SELECT value FROM metrics WHERE tenant_id = ? AND key = ? AND captured_at <= ?"
+            " ORDER BY captured_at DESC, rowid DESC LIMIT 1",
+            (tenant_id, key, until or "9999"),
         ).fetchone()
         if latest is None:
             continue
@@ -264,28 +265,51 @@ def _figures(conn, tenant_id: int, since: str) -> list[Figure]:
     return out
 
 
-def _new_findings(conn, tenant_id: int, since: str) -> list:
-    """Findings opened or reopened since ``since`` that are still open."""
+def _new_findings(conn, tenant_id: int, since: str, until: str | None = None) -> list:
+    """Findings opened or reopened since ``since`` that are still open (or, with ``until``, that were opened
+    or reopened between the two and still open at ``until``)."""
+    if until is None:
+        return conn.execute(
+            "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
+            " AND (first_seen >= ? OR reopened_at >= ?)",
+            (tenant_id, since, since),
+        ).fetchall()
     return conn.execute(
-        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND (first_seen >= ? OR reopened_at >= ?)",
-        (tenant_id, since, since),
+        "SELECT * FROM findings WHERE tenant_id = ? AND (resolved_at IS NULL OR resolved_at > ?)"
+        " AND ((first_seen >= ? AND first_seen <= ?) OR (reopened_at >= ? AND reopened_at <= ?))",
+        (tenant_id, until, since, until, since, until),
     ).fetchall()
 
 
-def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None) -> TenantChanges:
-    now = now or datetime.now(UTC)
-    since = now - timedelta(days=days)
+def _fixed(conn, tenant_id: int, since: str, until: str | None) -> list:
+    rows = resolved_since(conn, tenant_id, since)
+    return [r for r in rows if r["resolved_at"] <= until] if until else list(rows)
+
+
+def build(
+    conn,
+    tenant,
+    days: int = DEFAULT_DAYS,
+    now: datetime | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> TenantChanges:
+    """What changed over the last ``days``, or between ``since`` and ``until``: any two dates, the end one read
+    as the data stood then (``TenantSnapshot(as_of=until)``)."""
+    now = until or now or datetime.now(UTC)
+    since = since or now - timedelta(days=days)
     since_iso = since.strftime(ISO)
+    until_iso = until.strftime(ISO) if until else None
     tenant = dict(tenant)
     notes = []
 
     old_snap = TenantSnapshot(conn, tenant, as_of=since)
-    new_snap = TenantSnapshot(conn, tenant)
+    new_snap = TenantSnapshot(conn, tenant, as_of=until)
     finished = [r["finished_at"] for r in old_snap.runs.values() if r["finished_at"]]
     baseline = min(finished) if finished else None
 
-    new_findings = _new_findings(conn, tenant["id"], since_iso)
-    fixed = list(resolved_since(conn, tenant["id"], since_iso))
+    new_findings = _new_findings(conn, tenant["id"], since_iso, until_iso)
+    fixed = _fixed(conn, tenant["id"], since_iso, until_iso)
     if baseline is None:
         # Collection started inside the period: everything it found is a first look, not a change.
         new_findings = []
@@ -297,7 +321,7 @@ def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None) -
     order = lambda r: (SEV_RANK.get(r["severity"], 9), r["rule_key"], r["subject"])  # noqa: E731
 
     try:
-        key_changes = all_changes(conn, tenant["id"], since_iso)
+        key_changes = all_changes(conn, tenant["id"], since_iso, until_iso)
     except Exception as exc:  # a curated feed that breaks on odd data mustn't blank the report
         logging.getLogger(__name__).exception("Change feeds failed for tenant %s", tenant["id"])
         key_changes = []
@@ -313,7 +337,7 @@ def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None) -
                 ReportChanges(key, data_reports.REPORTS[key][0], note=f"Couldn't be compared ({type(exc).__name__}).")
             )
 
-    figures = _figures(conn, tenant["id"], since_iso)
+    figures = _figures(conn, tenant["id"], since_iso, until_iso)
     figures.sort(key=lambda f: not f.delta)  # what moved first
     return TenantChanges(
         tenant,

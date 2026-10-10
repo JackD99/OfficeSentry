@@ -2,7 +2,8 @@
 
 One row per app that has signed in (Microsoft keeps only the latest sign-in of each kind), keyed by app ID so
 the Unused apps report can match it to the service principals Apps and consents stores. An app with no row
-has no sign-in on record.
+has no sign-in on record. Whether the report was readable is ``app_sign_in_status``: not ``sign_in_status``,
+which is the Sign-ins collector's detail that the daily history leaves out, so past days can read it too.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 from ..graph import LicenseRequired, PermissionMissing
 from .base import Collector, RunContext, register
 
+STATUS = "app_sign_in_status"
 # Graph's names for the four kinds of sign-in, and ours.
 KINDS = {
     "delegatedClientSignInActivity": "delegatedClient",  # signed a person in
@@ -43,9 +45,9 @@ class AppSignIns(Collector):
         except (LicenseRequired, PermissionMissing) as exc:
             reason = "licence" if isinstance(exc, LicenseRequired) else "permission"
             ctx.warn(f"App sign-in activity wasn't readable: {exc.message}")
-            ctx.objects("sign_in_status", [("status", {"available": False, "reason": reason})])
+            ctx.objects(STATUS, [("status", {"available": False, "reason": reason})])
             return
         apps = {r["appId"]: summarise(r) for r in rows if isinstance(r.get("appId"), str) and r["appId"]}
         ctx.objects("app_activity", list(apps.items()))
-        ctx.objects("sign_in_status", [("status", {"available": True, "apps": len(apps)})])
+        ctx.objects(STATUS, [("status", {"available": True, "apps": len(apps)})])
         ctx.metric("apps.with_sign_ins", len(apps))

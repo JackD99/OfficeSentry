@@ -9,7 +9,10 @@ from . import store
 
 
 class TenantSnapshot:
-    """The latest successful run of each collector for one tenant.
+    """The latest successful run of each collector for one tenant, or the last one by ``as_of``.
+
+    The latest data is read from the snapshots. An earlier date reads each run's snapshot while retention
+    keeps it, and the daily history (``state_history``) once it doesn't, so any recorded day can be shown.
 
     ``objects(collector, kind)`` returns ``None`` when the collector has never
     run successfully, so callers can tell "no data" from "nothing found".
@@ -24,15 +27,11 @@ class TenantSnapshot:
 
     @cached_property
     def runs(self) -> dict:
-        # An older snapshot skips runs whose objects the retention policy has removed.
-        cutoff = (
-            (
-                " AND finished_at <= ? AND (object_count = 0 OR EXISTS"
-                " (SELECT 1 FROM objects o WHERE o.run_id = runs.id))"
-            )
-            if self.as_of
-            else ""
-        )
+        # An older snapshot skips runs that can't be read: retention removed their objects, and they aren't
+        # in the daily history (state_history.py).
+        from . import state_history  # here: it imports the worker's schedule, which imports this
+
+        cutoff = f" AND finished_at <= ? AND {state_history.READABLE}" if self.as_of else ""
         rows = self.conn.execute(
             f"""
             SELECT r.* FROM runs r JOIN (
@@ -71,7 +70,10 @@ class TenantSnapshot:
             return None
         key = (collector, kind)
         if key not in self._objects:
-            self._objects[key] = store.run_objects(self.conn, run["id"], kind)
+            from . import state_history
+
+            read = state_history.objects_of if self.as_of else store.run_objects
+            self._objects[key] = read(self.conn, run["id"], kind)
         return self._objects[key]
 
     def metric(self, key: str) -> float | None:

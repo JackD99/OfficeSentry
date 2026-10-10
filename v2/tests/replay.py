@@ -81,7 +81,7 @@ def mock(
             missing.append(label)
             return 404, {}, json.dumps({"error": {"code": "NotRecorded", "message": f"not in fixture: {label}"}})
         e = recorded.pop(0) if len(recorded) > 1 else recorded[0]
-        return e["status"], {}, json.dumps(e["body"]) if e["body"] is not None else ""
+        return e["status"], e.get("headers") or {}, json.dumps(e["body"]) if e["body"] is not None else ""
 
     patterns = [
         (

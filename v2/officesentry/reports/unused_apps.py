@@ -81,7 +81,10 @@ def _consent(grants: list[dict]) -> str:
     "clean up cleanup",
 )
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
-    status = (snap.objects("app_sign_ins", "sign_in_status") or [None])[0]
+    # Collections before the status had its own kind stored it as "sign_in_status".
+    status = (
+        snap.objects("app_sign_ins", "app_sign_in_status") or snap.objects("app_sign_ins", "sign_in_status") or [None]
+    )[0]
     principals = snap.objects("app_consents", "service_principal")
     if status is None:
         report.unavailable = NOT_COLLECTED
