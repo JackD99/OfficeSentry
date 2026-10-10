@@ -35,6 +35,14 @@ No.
 - The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
 - The plain-text part of a report email leads with the verdict and says when the data is old.
 - Pausing and resuming an email schedule is saved as one change.
+- The collection check and its alert no longer clear on a night every client failed just because one
+  client's report refresh ran since.
+- A system alert or certificate warning that no email or webhook took is tried again after 15 minutes,
+  rather than being marked sent.
+- Turning off off-site backups no longer leaves the Backups check warning for good: the nightly job and the
+  restore drill record that they aren't set up.
+- The server's uptime ping asks `/health/ready`, so the monitor hears when the worker stops or the disk
+  fills, not only when the portal is down.
 - One huge client can't make the worker look down. The shared-files scan has a night's share of pages and
   time (about a million items or two hours); the libraries left over keep their last results and are
   scanned first the next night. The daily pass (retention, the dashboard rows) runs beside the worker's main
