@@ -199,7 +199,8 @@ needing goes in those lists.
   Question sets (`reports/questionnaires.py`: cyber insurance, supplier
   questionnaire, Cyber Essentials by Danzell number) word those topics the
   way each form does, with text to paste; topics Microsoft 365 can't answer
-  (`evidence_topics.py`, `gap()`) carry a fill-in text with `[brackets]`.
+  (`evidence_topics.py`, `gap()`; shared parts in `evidence_base.py`) carry a
+  fill-in text with `[brackets]`.
   An override is per topic, so one written answer fills every set. A new set
   (or a framework pack) is a `QuestionSet` passed to `questionnaires.register()`,
   which refuses unknown topics; the page (`?set=`), PDF answer sheet, XLSX,

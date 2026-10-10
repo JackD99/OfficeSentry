@@ -19,7 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .evidence_answers import BLANK, KEYS, NO, NOT_KNOWN, PARTLY, YES, Answer
+from .evidence_answers import KEYS
+from .evidence_base import BLANK, NO, NOT_KNOWN, PARTLY, YES, Answer
 
 # What a row shows: the answer, or that the engineer has to answer it.
 INPUT, ANSWERED = "Your input", "Answered"

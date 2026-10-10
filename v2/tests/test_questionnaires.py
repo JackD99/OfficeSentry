@@ -8,7 +8,7 @@ from openpyxl import load_workbook
 
 from officesentry import store
 from officesentry.reports import evidence, evidence_answers, export, questionnaires
-from officesentry.reports.evidence_answers import NOT_KNOWN, YES
+from officesentry.reports.evidence_base import BLANK, NOT_KNOWN, YES
 from officesentry.reports.questionnaires import INPUT, SETS
 from tests import graphdata as gd
 from tests.conftest import login, make_user
@@ -39,7 +39,7 @@ def test_every_question_names_a_topic_and_every_gap_has_a_template():
     for q in topics.values():
         assert q.kind in ("yesno", "text")
         if q.outside:
-            assert q.template and evidence_answers.BLANK.search(q.template), q.key
+            assert q.template and BLANK.search(q.template), q.key
     used = {i.topic for s in SETS.values() for i in s.items}
     assert used == set(topics), f"topics no question set asks: {set(topics) - used}"
 

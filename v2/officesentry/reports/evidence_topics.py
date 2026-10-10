@@ -17,11 +17,11 @@ from collections import Counter
 from datetime import UTC, datetime
 
 from .. import devices, dnscheck, hybrid
+from ..checks.identity import _privileged_users
 from ..licences import sku_name
-from ..rules import _privileged_users
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .evidence_answers import (
+from .evidence_base import (
     NOT_KNOWN,
     PARTLY,
     YES,

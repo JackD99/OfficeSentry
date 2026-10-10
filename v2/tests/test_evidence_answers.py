@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from officesentry import store
 from officesentry.db import MIGRATIONS_DIR
 from officesentry.reports import evidence, evidence_answers, export
-from officesentry.reports.evidence_answers import NO, NOT_KNOWN, PARTLY, YES
+from officesentry.reports.evidence_base import NO, NOT_KNOWN, PARTLY, YES
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
