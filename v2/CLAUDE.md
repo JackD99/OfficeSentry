@@ -424,7 +424,7 @@ never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
-`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`) and
+`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`), `erase` (`lifecycle.py`) and
 `precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
@@ -560,7 +560,11 @@ change is audited; note text is never put in the audit log.
 - A new table with a `tenant_id` gets `REFERENCES tenants(id) ON DELETE
   CASCADE`. `lifecycle.delete_tenant` deletes with foreign keys on and refuses
   (rolls back) if any table with a `tenant_id` still has rows for the tenant;
-  only `audit_log` is kept on purpose (`lifecycle.KEPT`).
+  only `audit_log` is kept on purpose (`lifecycle.KEPT`). The request only
+  deletes (with `secure_delete` on); the `erase` task (`lifecycle.erase`) then
+  removes the tenant's activity history, writes the WAL back and VACUUMs when
+  there's room. `erase.state` in `settings` tracks a delete still to erase; a
+  failure is the `erase` health check and system alert, and is retried hourly.
 - Connection health (`tenant_health.assess`) is built from stored state only:
   the `connection` collector reads the app's own service principal, granted
   app roles and directory roles (GET only). Pages never call Graph for it;
