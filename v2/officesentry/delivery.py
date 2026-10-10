@@ -43,6 +43,7 @@ from .mailer import Email, MailError
 from .reports import (
     branding,
     data_reports,
+    designs,
     evidence,
     export,
     findings_report,
@@ -94,25 +95,31 @@ class ReportOption:
     xlsx: bool
 
 
-def catalog() -> list[ReportOption]:
-    """Every report a schedule can include. Detail reports registered later appear automatically."""
+def catalog(conn=None) -> list[ReportOption]:
+    """Every report a schedule can include. Detail reports registered later appear automatically, and with
+    ``conn`` the MSP's report designs (``design:<id>``, PDF only) too."""
     options = [
         ReportOption("review", monthly_review.TITLE,
                      "Key figures, what needs attention, what changed and licence waste.", True, True),
         ReportOption("evidence", "Insurance evidence pack",
                      "The controls cyber-insurance questionnaires ask about, answered from the data.", True, True),
     ]
+    if conn is not None:
+        for row in designs.list_designs(conn):
+            options.append(ReportOption(designs.key_of(row["id"]), row["name"],
+                                        row["description"] or "A report design: blocks you chose, as a PDF.",
+                                        True, False))
     for key, (title, description, _collectors, _builder) in data_reports.REPORTS.items():
         options.append(ReportOption(f"data:{key}", title, description, False, True))
     return options
 
 
-def catalog_map() -> dict[str, ReportOption]:
-    return {o.key: o for o in catalog()}
+def catalog_map(conn=None) -> dict[str, ReportOption]:
+    return {o.key: o for o in catalog(conn)}
 
 
-def report_titles(reports_json: str) -> list[str]:
-    known = catalog_map()
+def report_titles(reports_json: str, conn=None) -> list[str]:
+    known = catalog_map(conn)
     return [known[k].title for k in json.loads(reports_json or "[]") if k in known]
 
 
@@ -120,11 +127,12 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "tenant"
 
 
-def attachment_plan(tenant, keys: list[str], include_xlsx: bool) -> list[tuple[str, str]]:
-    """(report key, filename) for every file a bundle attaches, in order. Builds nothing."""
+def attachment_plan(tenant, keys: list[str], include_xlsx: bool, conn=None) -> list[tuple[str, str]]:
+    """(report key, filename) for every file a bundle attaches, in order. Builds nothing. A report design
+    (``design:<id>``) is a PDF, so it needs WeasyPrint and ``conn`` to be known."""
     slug = _slug(tenant["name"])
     pdf = export.pdf_available()
-    known = catalog_map()
+    known = catalog_map(conn)
     out = []
     for key in keys:
         if key not in known:
@@ -135,6 +143,9 @@ def attachment_plan(tenant, keys: list[str], include_xlsx: bool) -> list[tuple[s
                 out.append((key, f"{stem}-{slug}.pdf"))
             if include_xlsx or not pdf:
                 out.append((key, f"{stem}-{slug}.xlsx"))
+        elif designs.id_of(key) is not None:
+            if pdf:
+                out.append((key, f"{_slug(known[key].title)}-{slug}.pdf"))
         else:
             out.append((key, f"{key[5:]}-{slug}.xlsx"))
     return out
@@ -469,7 +480,7 @@ def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None,
     (``chosen_views``) come after the reports."""
     files, built = [], {}
     brand = branding.load(conn)
-    for key, filename in attachment_plan(tenant, keys, include_xlsx):
+    for key, filename in attachment_plan(tenant, keys, include_xlsx, conn):
         if key == "review":
             report = built.setdefault(key, review or monthly_review.build(conn, tenant, now))
             data = _pdf(app, "reports/monthly_review.html", report=report, **(review_context or {})) \
@@ -479,6 +490,11 @@ def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None,
             pack = built.setdefault(key, evidence.build(conn, tenant, now))
             data = _pdf(app, "reports/evidence.html", pack=pack) if filename.endswith(".pdf") \
                 else evidence.to_xlsx(pack, brand=brand)
+        elif (design_id := designs.id_of(key)) is not None:
+            row = designs.get(conn, design_id)
+            me = (review_context or {}).get("month_end") or {}
+            data = _pdf(app, "reports/design.html",
+                        **designs.context(conn, tenant, row, now, brand=brand, month_end=me))
         else:
             data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now), brand=brand)
         files.append((filename, "application/pdf" if filename.endswith(".pdf") else XLSX, data))
@@ -511,8 +527,8 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
     label = period_label(schedule["frequency"], local)
     review = monthly_review.build(conn, tenant, now)
-    known = catalog_map()
-    plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]))
+    known = catalog_map(conn)
+    plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]), conn)
     chosen = schedule_views(conn, schedule["id"])
     files = [(known[k].title, name) for k, name in plan] + \
         [(v.title, name) for v, name in view_attachments(tenant["name"], chosen)]
@@ -682,7 +698,7 @@ def schedule_titles(schedule, conn=None) -> list[str]:
     """What the schedule sends, for lists. With ``conn`` its saved views are named too."""
     chosen = [v.title for v in schedule_views(conn, schedule["id"])] if conn is not None else []
     if schedule["kind"] == "report":
-        return report_titles(schedule["reports"]) + chosen
+        return report_titles(schedule["reports"], conn) + chosen
     if is_views(schedule):
         return chosen or ["Saved views"]
     return [upcoming.TITLE] if is_upcoming(schedule) else ["Tenant digest"]
@@ -904,7 +920,7 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
 
         def build():
             return builder(app, conn, schedule, contacts, now=now)
-        fallback = schedule_titles(schedule)[0]
+        fallback = schedule_titles(schedule, conn)[0]
     email, transport, error = _attempt(conn, vault, build, schedule["kind"])
     # Everything the send changes is written at once, so a worker that stops after sending doesn't leave the
     # period looking unsent (and send it again).
@@ -997,9 +1013,9 @@ def _archive(conn, schedule, tenant, email: Email, *, period: str, trigger: str,
              now: str) -> None:
     """Keep a copy of every file a sent report email attached (``issued.py``). Never fails the send."""
     try:
-        known = catalog_map()
-        plan = {name: (key, known[key].title) for key, name in attachment_plan(
-            tenant, json.loads(schedule["reports"] or "[]"), bool(schedule["include_xlsx"]))}
+        known = catalog_map(conn)
+        plan = {name: (key, known[key].title if key in known else name) for key, name in attachment_plan(
+            tenant, json.loads(schedule["reports"] or "[]"), bool(schedule["include_xlsx"]), conn)}
         plan |= {name: (f"view:{v.report_key}", v.title)
                  for v, name in view_attachments(tenant["name"], schedule_views(conn, schedule["id"]))}
         files = [issued.IssuedFile(*plan.get(filename, ("", filename)), filename, content_type, data)

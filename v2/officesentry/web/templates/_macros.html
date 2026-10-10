@@ -13,6 +13,7 @@
   'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M21.5 20a6.5 6.5 0 00-4-6"/>',
   'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
   'download': '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  'grip': '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>',
   'refresh': '<path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/>',
   'copy': '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/>',
   'doc': '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
@@ -68,7 +69,7 @@
 
 {# Tab that each tenant page key highlights. Keys not listed are tabs themselves. #}
 {% set TAB_OF = {
-  'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports',
+  'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'collection': 'settings', 'manage': 'settings',
   'activity': 'changes',
 } %}
@@ -107,6 +108,7 @@
   {% set _ = pages.append(('data', 'Detail reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('evidence', 'Questionnaires', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('review', 'Monthly review', url_for('reports.tenant_report', tenant_id=tenant.id))) %}
+  {% if staff %}{% set _ = pages.append(('designs', 'Custom reports', url_for('designs.tenant_designs', tenant_id=tenant.id))) %}{% endif %}
 {% elif tab == 'changes' and staff %}
   {% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('activity', 'Activity history', url_for('history.activity', tenant_id=tenant.id))) %}

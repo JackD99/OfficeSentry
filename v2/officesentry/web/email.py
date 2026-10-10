@@ -173,7 +173,7 @@ def _blank(kind: str, reports=None) -> dict:
 
 def _form_values(kind: str) -> dict:
     f = request.form
-    valid = {o.key for o in delivery.catalog()}
+    valid = {o.key for o in delivery.catalog(g.db)}
     values = {
         "kind": kind,
         "reports": [k for k in dict.fromkeys(f.getlist("reports")) if k in valid] if kind == "report" else [],
@@ -273,7 +273,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
     zones = list(dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] +
                                ([values["timezone"]] if values["timezone"] else [])))
     return render_template(
-        "schedule_form.html", tenant=tenant, s=values, chosen=chosen, catalog=delivery.catalog(),
+        "schedule_form.html", tenant=tenant, s=values, chosen=chosen, catalog=delivery.catalog(g.db),
         report_groups=report_groups(),
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [], team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES, days=delivery.DAYS, zones=zones, default_tz=cfg.timezone,

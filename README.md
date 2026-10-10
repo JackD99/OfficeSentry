@@ -47,6 +47,11 @@ passed. It is a web page, a branded PDF and a spreadsheet, and reads well on a p
   </tr>
 </table>
 
+**Report designs** let an account manager build their own client report without code: drag in blocks (a
+verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
+set each one up, see it on a real client as you go, and send it with a report plan. Start from an executive
+summary, a full review or a licensing review.
+
 ### SharePoint storage: why it's full and what to clean up
 
 When a client's SharePoint fills up, the storage report shows how full the tenant is (its quota worked out from

@@ -71,6 +71,12 @@ views a scheduled email sends.
   client's report email goes out or a month-end report is published (Settings → Alerts, "A client's report
   is ready"; off until you tick it). The post links to the client's report history and never carries the
   files, so only people signed in with access to that client can open them.
+- Report designs (Month-end → Report designs): client reports built from blocks in the portal, without code.
+  Drag in a status verdict, key figures, failing checks, what changed, licences, a table from any detail
+  report, your own text and more; set each block up in its panel; see it on a real client as you go. Start
+  from an executive summary, a full review, a licensing review or a blank page. A design works for every
+  tenant (a block with nothing to show for a client is left out), opens from the tenant's Reports tab as a
+  page and a PDF, and a report plan or email schedule can send it like the monthly review.
 
 ### Changed
 

@@ -271,6 +271,23 @@ tenants synced from on-premises AD: directory sync running, password hash sync
 on, and admin accounts that are cloud-only. The [check catalogue](docs/checks.md)
 lists every check with the data it reads and what it needs.
 
+### Report designs: your own client reports
+
+**Month-end → Report designs** builds a client report from blocks, the way a website builder builds a
+page. Drag a block in from the list (a status verdict, key figures, checks by severity, the Secure Score
+trend, recommended next steps, failing checks, what changed, licences, a table from any detail report,
+the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
+page break), set it up in its panel (which severities, how many rows, the heading), put two blocks side
+by side, and watch the preview on a real client update as you go. Start from an executive summary, a
+full security review, a licensing review or a blank page.
+
+A design belongs to the MSP and works for every tenant: a block with nothing to show for a client (no
+accepted risks, no commentary yet) is left out of that client's report. Each tenant's **Reports →
+Custom reports** lists every design as a page and a PDF, and a report plan or a tenant's email schedule
+can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
+`{month}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
+call, and it comes out of any plan or schedule that sent it.
+
 ### Exchange data
 
 Mailbox forwarding, permissions and mail settings come from the Exchange
