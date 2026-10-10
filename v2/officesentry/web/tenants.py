@@ -102,7 +102,7 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
 @login_required
 @group_aware
 def dashboard():
-    from ..reports.monthly_review import rollup_row, setting
+    from ..reports.monthly_review import dashboard_trends, rollup_row, setting
 
     if g.user["role"] == "client":
         from . import client_home
@@ -121,6 +121,7 @@ def dashboard():
         "avg_score": sum(scores) / len(scores) if scores else None,
         "scored": len(scores),
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
+        **dashboard_trends(g.db, rows),
     }
     return render_template("dashboard.html", rows=rows, summary=summary, currency=setting(g.db, "currency", "GBP"))
 

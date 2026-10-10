@@ -66,7 +66,7 @@
         {%- set delta_text = ('↑ ' if k.delta > 0 else '↓ ') ~ amount ~ ' <span class="vs">since ' ~ since ~ '</span>' -%}
       {%- elif k.previous is not none -%}{% set delta_text = 'No change since ' ~ since %}
       {%- else -%}{% set delta_text = '' %}{%- endif -%}
-      {{ ui.kpi(k.label, value, delta_text, trend, k.note, k.value if k.unit == '%' else none) }}
+      {{ ui.kpi(k.label, value, delta_text, trend, k.note, k.value if k.unit == '%' else none, k.spark, k.spark_label) }}
     {% endfor %}
   </div>
   {% set failing = report.failing %}

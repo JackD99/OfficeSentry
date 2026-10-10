@@ -27,6 +27,7 @@ from .charts import line_chart
 TITLE = "Monthly Security & Licensing Review"
 STALE_AFTER = timedelta(hours=36)  # data older than this is flagged in the report
 PERIOD = timedelta(days=28)
+SPARK_DAYS = 90  # how far back a figure's sparkline goes
 # Findings first seen this soon after a tenant's first collection are its baseline, not "new".
 BASELINE = timedelta(days=1)
 ISO = "%Y-%m-%dT%H:%M:%SZ"
@@ -41,6 +42,20 @@ class Kpi:
     previous: float | None = None
     better: str = "up"  # which direction is good: up | down
     note: str = ""
+    history: list = field(default_factory=list)  # [[day, value], ...] for a sparkline: the last 90 days, oldest first
+
+    @property
+    def spark(self) -> list[float]:
+        return [v for _, v in self.history]
+
+    @property
+    def spark_label(self) -> str:
+        if len(self.history) < 3:
+            return ""
+        unit = "%" if self.unit == "%" else ""
+        first, last = self.history[0], self.history[-1]
+        day = date.fromisoformat(first[0])
+        return f"{self.label} since {day.day} {day:%b %Y}: from {first[1]:g}{unit} to {last[1]:g}{unit}"
 
     @property
     def delta(self) -> float | None:
@@ -114,7 +129,9 @@ def _kpi(snap: TenantSnapshot, key: str, label: str, now: datetime, **kwargs) ->
     history = snap.history(key)
     value = history[-1][1] if history else None
     previous = _value_on_or_before(history, now - timedelta(days=28))
-    return Kpi(key, label, value, previous=previous, **kwargs)
+    since = (now - timedelta(days=SPARK_DAYS)).strftime(ISO)
+    daily = {ts[:10]: v for ts, v in history if ts >= since}  # each day's last value
+    return Kpi(key, label, value, previous=previous, history=[[d, daily[d]] for d in sorted(daily)], **kwargs)
 
 
 def _secure_score_points(snap: TenantSnapshot) -> list[tuple[date, float]]:
@@ -300,3 +317,52 @@ def _stale(conn, tenant_id: int, now: datetime) -> bool:
         {**{f"k{i}": k for i, k in enumerate(keys)}, "t": tenant_id}).fetchall()
     cutoff = (now - STALE_AFTER).strftime(ISO)
     return any(not r["at"] or r["at"] < cutoff for r in rows)
+
+
+def dashboard_trends(conn, rows: list[dict], now: datetime | None = None) -> dict:
+    """Weekly sparklines for the dashboard's tiles, over the last ``SPARK_DAYS``: the average Secure Score of
+    the tenants shown (each tenant's latest score at each week) and their open critical and high findings
+    (from the findings table's dates, leaving out accepted risks, from the first collection on), ending on
+    today's figures."""
+    from .data_reports import Trend
+
+    now = now or datetime.now(UTC)
+    weeks = [now - timedelta(days=7 * n) for n in range(SPARK_DAYS // 7, -1, -1)]
+
+    def since(when: datetime) -> str:
+        return f"{when.day} {when:%b %Y}"
+
+    out = {}
+    scores: list[tuple[datetime, float]] = []
+    for when in weeks:
+        day = when.date().isoformat()
+        known = [next((v for d, v in reversed(r["kpis"]["secure_score.pct"].history) if d <= day), None)
+                 for r in rows]
+        known = [v for v in known if v is not None]
+        if known:
+            scores.append((when, round(sum(known) / len(known), 1)))
+    if len(scores) >= 3:
+        out["score_trend"] = Trend([v for _, v in scores], f"{scores[0][1]:.0f}%", f"{scores[-1][1]:.0f}%",
+                                   since(scores[0][0]))
+
+    ids = [r["tenant"]["id"] for r in rows]
+    if not ids:
+        return out
+    marks = ",".join("?" * len(ids))
+    first = conn.execute(f"SELECT MIN(finished_at) FROM runs WHERE tenant_id IN ({marks})", ids).fetchone()[0]
+    found = conn.execute(
+        f"SELECT first_seen, resolved_at, accepted_at, accepted_until FROM findings WHERE tenant_id IN ({marks})"
+        " AND severity IN ('critical', 'high') AND (resolved_at IS NULL OR resolved_at >= ?)",
+        (*ids, weeks[0].strftime(ISO))).fetchall()
+
+    def open_at(at: str) -> int:
+        return sum(1 for f in found if f["first_seen"] <= at and (f["resolved_at"] is None or f["resolved_at"] > at)
+                   and not (f["accepted_at"] and f["accepted_at"] <= at
+                            and (f["accepted_until"] is None or f["accepted_until"] > at)))
+
+    shown = [w for w in weeks[:-1] if first and w.strftime(ISO) >= first]
+    counts = [float(open_at(w.strftime(ISO))) for w in shown]
+    counts.append(float(sum(r["counts"].get("critical", 0) + r["counts"].get("high", 0) for r in rows)))
+    if len(counts) >= 3:
+        out["severe_trend"] = Trend(counts, f"{counts[0]:,.0f}", f"{counts[-1]:,.0f}", since(shown[0]))
+    return out

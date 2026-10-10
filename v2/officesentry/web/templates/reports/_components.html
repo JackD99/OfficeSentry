@@ -13,11 +13,13 @@
 </div>
 {%- endmacro %}
 
-{# A KPI tile. value: preformatted string or none; delta_text: preformatted change; trend: better|worse|flat #}
-{% macro kpi(label, value, delta_text='', trend='flat', note='', meter_value=none) -%}
+{# A KPI tile. value: preformatted string or none; delta_text: preformatted change; trend: better|worse|flat;
+   spark: values for a sparkline beside the value (three or more), spark_label: what it shows, in words #}
+{% macro kpi(label, value, delta_text='', trend='flat', note='', meter_value=none, spark=none, spark_label='') -%}
+{% set line = sparkline(spark, label=spark_label) if spark and value is not none else '' %}
 <div class="kpi">
   <div class="label">{{ label }}</div>
-  {% if value is none %}<div class="value none">Not available</div>{% else %}<div class="value">{{ value }}</div>{% endif %}
+  {% if value is none %}<div class="value none">Not available</div>{% else %}<div class="value{{ ' has-spark' if line }}"><span>{{ value }}</span>{{ line|safe }}</div>{% endif %}
   {% if meter_value is not none %}{{ meter(meter_value, color=brand.accent)|safe }}{% endif %}
   {% if delta_text %}<div class="delta {{ trend }}">{{ delta_text|safe }}</div>{% endif %}
   {% if note %}<div class="note">{{ note }}</div>{% endif %}

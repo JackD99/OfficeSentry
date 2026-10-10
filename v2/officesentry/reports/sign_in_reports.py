@@ -15,7 +15,7 @@ from .. import signins
 from ..signins import REPEATED_FAILURES, SPRAY_ACCOUNTS
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import Chart, DataReport, Rows, Section, Tile
+from .data_reports import Chart, DataReport, Rows, Section, Tile, metric_trend
 
 NOT_COLLECTED = "Sign-in activity hasn't been collected yet. Refresh \"Sign-in activity\" on the tenant page."
 NO_P1 = ("Sign-in activity comes from the Entra ID sign-in log, which needs Entra ID P1 (included in Microsoft 365 "
@@ -253,19 +253,19 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     rate = failed / attempts if attempts > 0 else 0
     report.tiles = [
         Tile("Sign-ins", total, f"Interactive, last {days} days, by {plural(len(accounts), 'account')}",
-             rows=Rows(EVERYONE)),
+             rows=Rows(EVERYONE), trend=metric_trend(snap, "signins.total", now)),
         Tile("Failure rate", _share(failed, attempts) or "0%",
              f"{plural(failed, 'failed sign-in')}; {plural(interrupted, 'MFA or other prompt')} not counted",
              "warn" if rate >= 0.1 else None, Rows(REASONS, {"Kind": "Failure"})),
         Tile("Repeated failures", len(repeated.rows), f"Accounts with {REPEATED_FAILURES}+ failed sign-ins",
              ("bad" if repeated.flagged and "high" in repeated.flags else "warn") if repeated.rows else "ok",
-             Rows(REPEATED)),
+             Rows(REPEATED), metric_trend(snap, "signins.repeated_failures", now)),
         Tile("Countries", len(countries), f"{plural(len(unusual), 'country')} unusual for this tenant",
              rows=Rows(COUNTRIES)),
         Tile("Unusual countries", len(rare_accounts), "Accounts that signed in from one",
              "warn" if rare_accounts else "ok", Rows(UNUSUAL)),
         Tile("Without MFA", single_count, f"Successful sign-ins by {plural(len(single.rows), 'account')}",
-             "warn" if single_count else "ok", Rows(NO_MFA)),
+             "warn" if single_count else "ok", Rows(NO_MFA), metric_trend(snap, "signins.single_factor", now)),
     ]
     if risk_visible:
         report.tiles.append(Tile("Risky sign-ins", len(risky.rows), f"{risky_ok} succeeded",

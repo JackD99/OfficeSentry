@@ -13,8 +13,8 @@ from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import nouns
-from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date
-from .sharepoint import GROWTH_DAYS, _growth, size, storage_points
+from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date, metric_trend
+from .sharepoint import GROWTH_DAYS, _growth, forecast, size, storage_chart, storage_points
 
 SHOW_FOLDERS = 50
 SHOW_FILES = 100
@@ -125,12 +125,19 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile("Older versions", size(versions), f"{_percent(versions, used) or '0%'} of storage",
              "warn" if used and versions / used >= 0.25 else None, Rows("Files with the most version history")),
         Tile("Recycle bins", size(recycle), "Freed when emptied", "warn" if used and recycle / used >= 0.1 else None,
-             Rows("Largest items in recycle bins")),
+             Rows("Largest items in recycle bins"),
+             metric_trend(snap, "sharepoint.storage.recycle_bin_bytes", now, size)),
         Tile(f"Untouched for {years} years", size(stale_bytes), f"{stale_files:,} {nouns(stale_files, 'file')}",
-             rows=Rows(f"Largest files untouched for {years} years")),
+             rows=Rows(f"Largest files untouched for {years} years"),
+             trend=metric_trend(snap, "sharepoint.storage.stale_bytes", now, size)),
     ]
-    # No storage chart here: the SharePoint sites report has it, and the breakdown below matters more
-    # on the first page of the client's PDF.
+    # Storage over time and where it's heading, against the tenant's limit: the question a client with full
+    # SharePoint asks first ("when do we run out?").
+    report.chart = storage_chart(points, "SharePoint storage over time and forecast", now,
+                                 quota.total if quota else None)
+    report.chart_title = ("Storage over time, and where it's heading at the last "
+                          f"{GROWTH_DAYS} days' rate" if forecast(points, now, quota.total if quota else None)
+                          else "Storage over time")
     if not status.get("complete"):
         report.notes.append("Some sites or libraries were too large to read in full, so their figures are partial. "
                             "The last SharePoint storage run on the tenant page says which.")

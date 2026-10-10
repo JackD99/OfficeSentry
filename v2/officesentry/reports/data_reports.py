@@ -187,7 +187,7 @@ class Trend:
 TREND_DAYS = 90
 
 
-def trend(snap: TenantSnapshot, key: str, now: datetime, fmt: Callable[[float], str] | None = None,
+def metric_trend(snap: TenantSnapshot, key: str, now: datetime, fmt: Callable[[float], str] | None = None,
           days: int = TREND_DAYS) -> Trend | None:
     """The last ``days`` of a metric (``ctx.metric`` keys), the day's last value each day, for a sparkline.
 
@@ -214,7 +214,7 @@ class Tile:
     foot: str = ""
     tone: str | None = None
     rows: Rows | None = None  # what clicking it shows; a figure named like a table links to that table
-    trend: Trend | None = None  # a sparkline of its history (``trend()``)
+    trend: Trend | None = None  # a sparkline of its history (``metric_trend()``)
 
 
 @dataclass

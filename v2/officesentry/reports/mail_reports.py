@@ -12,7 +12,17 @@ from datetime import datetime, timedelta
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, tenant_domains
 from ..snapshot import TenantSnapshot
-from .data_reports import Chart, DataReport, Highlight, Rows, Section, _describe_actions, _describe_conditions, _type
+from .data_reports import (
+    Chart,
+    DataReport,
+    Highlight,
+    Rows,
+    Section,
+    _describe_actions,
+    _describe_conditions,
+    _type,
+    metric_trend,
+)
 
 NOT_COLLECTED = "Mailbox data hasn't been collected yet. Refresh Mailboxes on the tenant page."
 RESOURCE_TYPES = {"SharedMailbox": "Shared", "RoomMailbox": "Room", "EquipmentMailbox": "Equipment"}
@@ -308,9 +318,9 @@ def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                     flag)
     report.highlights = [
         Highlight("Total size", _size(total) or "0 bytes", f"Across {_plural(len(sizes), 'mailbox')}",
-                  rows=Rows(section.title)),
+                  rows=Rows(section.title), trend=metric_trend(snap, "mail.storage_bytes", now, _size)),
         Highlight("Over 90% of quota", near, "Sending stops at 100%", "bad" if near else "ok",
-                  Rows(section.title, flagged=True)),
+                  Rows(section.title, flagged=True), metric_trend(snap, "mail.mailboxes_near_quota", now)),
         Highlight("Largest", _size(max((s.get("totalBytes") or 0 for s in sizes), default=0)) or "0 bytes",
                   rows=Rows(section.title)),
     ]

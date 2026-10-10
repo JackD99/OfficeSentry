@@ -27,7 +27,7 @@ from ..licences import (
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart
-from .data_reports import Chart, DataReport, Highlight, Rows, Section
+from .data_reports import Chart, DataReport, Highlight, Rows, Section, metric_trend
 from .monthly_review import _secure_score_points, setting
 
 NEVER_SIGNED_IN_GRACE = 30  # days after creation before "never signed in" counts as inactive (see licences.is_stale)
@@ -427,7 +427,8 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                   rows=Rows(privileged.title, {"Kind": ["User", "Guest"],
                                                      "How assigned": ["Permanent", "Permanent and Eligible (PIM)"]})),
         Highlight("Global Administrators", gas, "Keep between 2 and 4", None if 2 <= gas <= 4 else "warn",
-                  Rows(privileged.title, {"Roles": "Global Administrator"})),
+                  Rows(privileged.title, {"Roles": "Global Administrator"}),
+                  metric_trend(snap, "admins.global_admins", now)),
         Highlight("Admins without MFA", no_mfa if not reg.note else "Not checked", "Not set up at all",
                   "bad" if no_mfa else None, Rows(privileged.title, {"MFA set up": "No"})),
         Highlight("Break-glass accounts", len(glass.rows) or "None found",
@@ -807,7 +808,8 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                          None if not delta else ("ok" if delta > 0 else "bad"), Rows(months.title))
 
     report.highlights = [
-        Highlight("Secure Score", f"{pct:g}%", f"{current:g} of {maximum:g} points", rows=Rows(months.title)),
+        Highlight("Secure Score", f"{pct:g}%", f"{current:g} of {maximum:g} points", rows=Rows(months.title),
+                  trend=metric_trend(snap, "secure_score.pct", now, lambda v: f"{v:g}%")),
         trend("Change in 30 days", d30, since30),
         trend("Change in 90 days", d90, since90),
         Highlight("Points available", f"{remaining:g}" if profiles else "Unknown",
