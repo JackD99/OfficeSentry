@@ -6,6 +6,11 @@ isn't set means today's behaviour, so nothing changes on upgrade:
 * snapshots: the last run of each of ``keep_daily`` days and ``keep_monthly``
   months per tenant and data source (defaults from ``OFFICESENTRY_KEEP_DAILY``
   and ``OFFICESENTRY_KEEP_MONTHLY``, 30 and 12);
+* daily history (``state_history.py``, each object stored once per version):
+  ``state_months``, 25 by default, the same as daily sign-in summaries below.
+  It's backfilled from the snapshots above, so it holds no more than they did
+  on the day of the upgrade and reaches 25 months as it grows. Each data
+  source's latest state is always kept;
 * sign-in detail (accounts, addresses, countries and cities from the sign-in
   logs): as long as the snapshot it's in, unless a shorter period is set;
 * resolved findings: forever;
@@ -68,10 +73,11 @@ LIMITS = {
     "history_signin_days": (30, 3650),
     "history_daily_months": (1, 120),
     "history_audit_years": (1, 100),
+    "state_months": (1, 1200),
 }
 # Which settings may be "keep forever" (or, for sign-in detail, "as long as the snapshot").
 OPEN_ENDED = {"keep_monthly", "signin_days", "findings_days", "run_log_days", "audit_days", "issued_days",
-              "history_daily_months", "history_audit_years"}
+              "history_daily_months", "history_audit_years", "state_months"}
 FOREVER_MONTHS = 10**6  # snapshots_to_keep's limit for "every month"
 
 
@@ -88,6 +94,7 @@ class Policy:
     history_signin_days: int = 180
     history_daily_months: int | None = 25  # None: daily sign-in summaries kept forever
     history_audit_years: int | None = 7    # None: directory audit events kept forever
+    state_months: int | None = 25          # daily history (state_history.py); None: kept forever
 
 
 def defaults(cfg) -> Policy:
@@ -155,9 +162,10 @@ LABELS = {
     "history_signin_days": "Sign-in history",
     "history_daily_months": "Daily sign-in summaries",
     "history_audit_years": "Directory audit history",
+    "state_months": "Daily history",
 }
 UNITS = {"keep_daily": "day", "keep_monthly": "month", "history_daily_months": "month",
-         "history_audit_years": "year"}
+         "history_audit_years": "year", "state_months": "month"}
 
 
 def describe(key: str, value) -> str:
@@ -294,6 +302,16 @@ HISTORY_STORES = {"history_signin_days": "signins", "history_daily_months": "dai
                   "history_audit_years": "audits"}
 
 
+def prune_state(conn, months: int | None, now: datetime | None = None, dry_run: bool = False) -> int:
+    """Forget (or count) the daily history from more than ``months`` ago. Returns recorded runs removed."""
+    from . import state_history
+
+    if months is None:
+        return 0
+    before = _months_ago(now or datetime.now(UTC), months).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return state_history.prune(conn, before, dry_run=dry_run)
+
+
 def prune_history(conn, policy: Policy, now: datetime | None = None, dry_run: bool = False) -> dict[str, int]:
     """Delete (or count) activity history older than its period, per setting."""
     out = {}
@@ -309,6 +327,7 @@ def dry_run(conn, policy: Policy, tz: str = "UTC", now: datetime | None = None) 
         "snapshots": snapshots,
         "signin_days": _signin_count(conn, policy.signin_days, now),
         "findings_days": 0, "audit_days": 0, "issued_days": 0,
+        "state_months": prune_state(conn, policy.state_months, now, dry_run=True),
         "run_log_days": 0 if policy.run_log_days is None else store.run_logs_to_prune(conn, policy.run_log_days, now),
         **prune_history(conn, policy, now, dry_run=True),
     }
@@ -331,6 +350,7 @@ def apply(conn, cfg, now: datetime | None = None) -> dict[str, int]:
     if done["snapshots"]:
         log.info("Retention: removed the stored objects of %s", plural(done["snapshots"], "older run"))
     steps = (
+        ("state_months", lambda: prune_state(conn, policy.state_months, now), "collection from the daily history"),
         ("signin_days", lambda: prune_signin_detail(conn, policy.signin_days, now=now), "sign-in detail row"),
         ("findings_days", lambda: prune_findings(conn, policy.findings_days, now=now), "resolved finding"),
         ("run_log_days", lambda: 0 if policy.run_log_days is None

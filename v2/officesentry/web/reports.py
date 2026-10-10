@@ -224,9 +224,15 @@ def evidence_text(tenant_id: int):
 @bp.get("/tenants/<int:tenant_id>/data")
 @login_required
 def data_index(tenant_id: int):
-    """The Detail reports tab, and the report picker on phones: ``?key=`` or the first report."""
+    """The Reports tab, and the report picker on phones: ``?key=`` or the first report."""
     t = tenant_or_404(tenant_id)
     key = request.args.get("key", "")
+    if key == "review":
+        return redirect(url_for("reports.tenant_report", tenant_id=t["id"]))
+    if key == "evidence":
+        return redirect(url_for("reports.evidence_pack", tenant_id=t["id"]))
+    if key == "designs":
+        return redirect(url_for("designs.tenant_designs", tenant_id=t["id"]))
     if key not in data_reports.REPORTS:
         key = data_reports.grouped()[0].reports[0][0]
     return redirect(url_for("reports.data_report", tenant_id=t["id"], key=key))

@@ -148,11 +148,7 @@ def index():
     return render_template(
         "styleguide.html", groups=groups(), tenant=_tenant(), report=report,
         tables=views.table_views(report, view, path), links=views.headline_links(report, path),
-        three_days_ago=(datetime.now(UTC) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        report_groups=[SimpleNamespace(key="identity", title="Identity and access",
-                                       reports=[("mfa", "MFA coverage", ""), ("admins", "Admins and roles", "")]),
-                       SimpleNamespace(key="email", title="Email",
-                                       reports=[("mailboxes", "Mail forwarding", "")])])
+        three_days_ago=(datetime.now(UTC) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
 
 @bp.get("/styleguide/report")

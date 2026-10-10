@@ -1,8 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, tenant_header with context %}
+{% from "_macros.html" import icon, tenant_header, report_picker with context %}
 {% block title %}Custom reports · {{ tenant.name }}{% endblock %}
 {% block content %}
 {% call tenant_header(tenant, 'designs') %}{% endcall %}
+<div class="report-layout">
+{{ report_picker(tenant, 'designs') }}
+<div class="report-main" id="report" tabindex="-1">
 <section class="card flush">
   <div class="card-head toolbar"><div><h2>Custom reports</h2>
     <span class="meta">Every report design, on {{ tenant.name }}'s data. Designs are made under <a href="{{ url_for('designs.index') }}">Month-end → Report designs</a>.</span></div></div>
@@ -28,4 +31,6 @@
     <a class="btn primary" href="{{ url_for('designs.index') }}">{{ icon('plus') }} Make one</a></div>
   {% endif %}
 </section>
+</div>
+</div>
 {% endblock %}

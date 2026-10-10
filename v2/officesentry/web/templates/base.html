@@ -34,6 +34,7 @@
     <label>{{ icon('search') }}<span class="sr-only">Search all tenants</span>
       <input type="search" name="q" placeholder="Search all tenants" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
   </form>
+  {{ nav_link('home.index', 'Home', 'home', ('home.today', 'home.clients')) }}
   {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant')) }}
   {{ nav_link('reports.overview', 'Reports', 'library') }}
   {{ nav_link('across.index', 'All tenants', 'grid', ('across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
@@ -74,7 +75,7 @@
 {%- endmacro %}
 {#- The MSP's logo, or the shield and its name (Office Sentry until branding is set up). -#}
 {% macro brand_mark() -%}
-<a class="brand" href="{{ url_for('tenants.dashboard') if current_user else url_for('auth.login') }}">
+<a class="brand" href="{{ url_for('home.index') if current_user else url_for('auth.login') }}">
 {%- if brand.logo %}<span class="logo-chip"><img src="{{ url_for('branding.logo', v=brand.version) }}" alt="{{ brand.display_name }}"></span>
 {%- else %}<span class="logo">{{ icon('logo') }}</span>{{ brand.display_name }}{% endif %}</a>
 {%- endmacro %}

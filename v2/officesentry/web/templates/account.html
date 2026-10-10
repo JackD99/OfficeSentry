@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import ts %}
+{% from "_macros.html" import ts, csrf %}
 {% block title %}Your account · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Your account</h1>
@@ -58,6 +58,24 @@
   </form>
 </section>
 </div>
+
+{% if current_user.role in ('admin', 'analyst') %}
+<section class="card" id="home-page">
+  <h2>Home page</h2>
+  <p class="muted">What opens when you sign in and when you select the logo. Either is a click away under Home in the menu.</p>
+  <form method="post" action="{{ url_for('home.choose') }}">{{ csrf() }}
+    <input type="hidden" name="next" value="{{ url_for('auth.account') }}#home-page">
+    <fieldset class="choices">
+      <legend class="sr-only">Home page</legend>
+    {% for key, (label, about) in homes.items() %}
+      <label class="choice"><input type="radio" name="home" value="{{ key }}"{% if key == home_choice %} checked{% endif %}>
+        <span><span class="choice-title">{{ label }}</span><span class="hint">{{ about }}</span></span></label>
+    {% endfor %}
+    </fieldset>
+    <div class="form-actions"><button class="primary">Save</button></div>
+  </form>
+</section>
+{% endif %}
 
 <section class="card flush">
   <div class="card-head"><h2>Where you're signed in</h2>

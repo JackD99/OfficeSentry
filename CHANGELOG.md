@@ -37,12 +37,26 @@ assign, and automatic replies use `MailboxSettings.Read`, already granted, so no
 
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
 have been read up to, migration 0031 adds `summary_cache` for the precomputed rows under Changed, and
-migration 0034 adds `onboarding` (each new client's contact and how far their consent has got). The
-portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
-tenant; until then the pages build them as before. Migration 0033 adds `email_schedule_views`, the saved
-views a scheduled email sends.
+migration 0032 adds `report_designs` (the client reports built from blocks under Month-end → Report designs),
+migration 0033 adds `email_schedule_views`, the saved views a scheduled email sends, migration 0034 adds
+`onboarding` (each new client's contact and how far their consent has got) and migration 0035 adds each
+person's home page to `users`. The portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows
+fill in as the worker gets to each tenant; until then the pages build them as before.
+
+Migration 0036 adds five empty tables for the daily history (`state_*`): the upgrade is instant and changes
+no existing rows. The worker then copies the snapshots retention kept into the history in the background, a
+few seconds a minute, oldest first, pausing while the disk is over 85% full. At 200 tenants that took about
+12 minutes of worker time and 0.07 GB. To see the room it needs first, run `python -m officesentry history
+--dry-run` (it writes nothing); `history` shows how far it has got, and `history --verify` checks that every
+copied collection reads back exactly as its snapshot.
 
 ### Added
+
+- Home pages by role, each opening with one sentence that says what needs attention. **Today**, for
+  technicians: the clients that need someone today and why (new critical and high findings, failed
+  collections, access not granted, anything due this week). **Clients**, for account managers: licence
+  waste, renewals in the next 30 days, reports to approve and projects to propose, per client. Pick yours in
+  Account settings; Home in the menu and the logo open it, and staff land on it when they sign in.
 
 - Onboarding many clients (Settings → Client tenants → Onboarding): import tenants from a CSV (name, tenant ID
   or domain, group, contact; a preview first, nothing added until you confirm), then a tracker of every
@@ -115,8 +129,18 @@ views a scheduled email sends.
   levels deep), and dynamic groups with their rules, flagging paused ones.
 - A "Directory clean-up" job on the Reports page that groups these with Inactive accounts and the recycle bin.
 
+- Daily history: each collected object is stored once per version, with the collections it was valid
+  between, instead of a full copy per collection. It's written alongside the snapshots (which every page
+  still reads) and checked against each one as it's written, so a tenant can be shown as it was on any day.
+  Kept for 25 months by default (Settings → Data retention, "Daily history"); about 2.5 MB a night at 200
+  tenants ([v2/DEPLOY.md, "How long data is kept"](v2/DEPLOY.md#how-long-data-is-kept)).
+
 ### Changed
 
+- Tenant pages and reports are shorter to reach: the Reports tab lists every report (summaries and detail
+  reports) in one searchable list beside the report on laptops and in one menu on phones, instead of three
+  rows of buttons, and the tab bar stays at the top of the window as you scroll. On a laptop screen a
+  report's first table rows now show without scrolling.
 - What changed across all tenants and the All tenants check matrix open in a fraction of a second at 200
   tenants (What changed took about 30 seconds). The worker works out each tenant's line after its
   collection and once a day; the pages read those lines, and rebuild any line whose data has changed since.

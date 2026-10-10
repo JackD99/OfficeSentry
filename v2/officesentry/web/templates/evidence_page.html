@@ -1,10 +1,13 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, downloads, csrf with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, report_picker, csrf with context %}
 {% block title %}Questionnaires · {{ pack.tenant.name }}{% endblock %}
 {% set TONE = {'In place': 'ok', 'Partly in place': 'warn', 'Not in place': 'bad', 'Not assessed': ''} %}
 {% set ANSWER_TONE = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad', 'input': 'accent'} %}
 {% block content %}
 {{ tenant_header(pack.tenant, 'evidence', title='Questionnaires and evidence') }}
+<div class="report-layout">
+{{ report_picker(pack.tenant, 'evidence') }}
+<div class="report-main" id="report" tabindex="-1">
 <nav class="seg evidence-sets" aria-label="Question set">
   {% for key, s in sets.items() %}<a href="{{ url_for('reports.evidence_pack', tenant_id=pack.tenant.id, set=key if key != 'insurance' else none) }}"{% if view == key %} aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}
   <a href="{{ url_for('reports.evidence_pack', tenant_id=pack.tenant.id, set='controls') }}"{% if view == 'controls' %} aria-current="page"{% endif %}>Controls</a>
@@ -125,4 +128,6 @@
 </section>
 <p class="footnote">Oldest data used: {{ ts(pack.oldest_data, 'not collected yet') }}. Accepted risks count as documented exceptions.</p>
 {% endif %}
+</div>
+</div>
 {% endblock %}

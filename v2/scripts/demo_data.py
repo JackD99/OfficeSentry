@@ -721,7 +721,7 @@ def metric_history(db, tenant_id: int, now: datetime, first_days: int = 35) -> N
 
 def backdate(db, tenant_id: int, days: int) -> None:
     for table, cols in (("runs", ("created_at", "started_at", "finished_at")), ("metrics", ("captured_at",)),
-                        ("findings", ("first_seen", "last_seen"))):
+                        ("findings", ("first_seen", "last_seen")), ("state_runs", ("finished_at",))):
         sets = ", ".join(f"{c} = strftime('%Y-%m-%dT%H:%M:%SZ', {c}, '-{days} days')" for c in cols)
         db.execute(f"UPDATE {table} SET {sets} WHERE tenant_id = ?", (tenant_id,))
 

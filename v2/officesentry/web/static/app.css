@@ -674,22 +674,66 @@ td.tenant-col { min-width: 190px; }
 .connection-form { margin: var(--space-4) 0 0; }
 .connection-form > label { flex: 1 1 200px; }
 
-/* -- Detail report menu: groups, then the reports in the open group ------------------ */
-.report-nav { margin-bottom: var(--space-5); }
-.report-groups-bar { display: flex; gap: var(--space-0-5); padding: 3px; margin-bottom: var(--space-2-5); width: max-content; max-width: 100%; overflow-x: auto; scrollbar-width: none;
-  background: var(--sunken); border: 1px solid var(--border); border-radius: 9px; }
-.report-groups-bar a { display: inline-flex; align-items: center; gap: var(--space-1-5); padding: 5px 12px; border-radius: 7px; color: var(--muted); font-weight: 500; font-size: var(--fs-base); white-space: nowrap; }
-.report-groups-bar a:hover { color: var(--text); text-decoration: none; }
-.report-groups-bar a.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-.report-groups-bar .n { font-size: var(--fs-2xs); color: var(--faint); font-variant-numeric: tabular-nums; }
-.report-nav .subtabs a { font-size: var(--fs-sm); padding: 4px 11px; }
-.report-nav-sm { display: none; margin: 0 0 var(--space-4); }
-.report-nav-sm select { width: 100%; min-width: 0; font-weight: 600; }
-.toolbar.report-title { align-items: flex-end; padding-top: var(--space-1); border-top: 1px solid var(--border); padding-top: var(--space-4); }
+/* -- Reports tab: one report picker (report_picker) beside the report ----------------
+   A searchable list on the left on wide screens, kept in view as the page scrolls; a select above the
+   report on narrower ones. */
+.report-layout { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+.report-main { min-width: 0; }
+.report-menu { position: sticky; top: calc(var(--pin-h, 0px) + var(--space-4)); display: flex; flex-direction: column; max-height: calc(100vh - var(--pin-h, 0px) - var(--space-8)); margin-top: var(--space-0-5); }
+.picker-search { position: relative; flex: none; }
+.picker-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--decor); pointer-events: none; }
+.picker-search input[type=search] { margin: 0; padding: 6px 10px 6px 31px; font-size: var(--fs-sm); }
+.picker-list { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: var(--space-2) calc(-1 * var(--space-1)) 0; padding: 0 var(--space-1) var(--space-2); }
+.picker-list ul { list-style: none; margin: 0; padding: 0; }
+.picker-label { margin: var(--space-3) var(--space-2) var(--space-1); font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.report-group:first-child .picker-label { margin-top: var(--space-1); }
+.picker-list .report-group li a { display: block; padding: 5px var(--space-2); border-radius: var(--radius-sm); color: var(--text-2); font-size: var(--fs-sm); font-weight: 400; line-height: 1.35; }
+.picker-list .report-group li a:hover { background: var(--sunken); color: var(--text); text-decoration: none; }
+.picker-list .report-group li a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.report-menu .no-match { margin: var(--space-2) var(--space-2) 0; color: var(--muted); font-size: var(--fs-sm); }
+.skip-picker { position: absolute; left: -9999px; }
+.skip-picker:focus { position: static; display: block; margin-bottom: var(--space-2); padding: var(--space-1-5) var(--space-2-5); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); font-weight: 600; }
+.report-main:focus { outline: none; }
+/* Links to a place on the page land below the pinned tab bar. */
+:root { scroll-padding-top: calc(var(--pin-h, 0px) + var(--space-2)); }
+.report-menu-sm { display: none; margin: 0 0 var(--space-4); }
+.report-menu-sm label { font-weight: 500; }
+.report-menu-sm select { flex: 1; min-width: 0; font-weight: 600; }
+.toolbar.report-title { align-items: flex-end; }
+/* The title and its description share a row with the report's buttons, which keep to the right. */
+.report-main > .toolbar.report-title { flex-wrap: nowrap; align-items: flex-start; margin-bottom: var(--space-3-5); }
+.report-main > .toolbar.report-title > div:first-child { flex: 1 1 auto; min-width: 0; max-width: 620px; }
+.report-main > .toolbar.report-title .toolbar-actions { flex: none; justify-content: flex-end; padding-top: var(--space-0-5); }
+/* Headline figures sit in one row beside the picker, so the table starts higher. */
+.report-main .tiles { grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: var(--space-2-5); margin-bottom: var(--space-4); }
+.report-main .tile { padding: var(--space-3) var(--space-3-5); }
+.report-main .tile .value { font-size: var(--fs-2xl); white-space: nowrap; }
+.report-main .tile .value.wordy { white-space: normal; }
+@media (max-width: 1279px) {
+  .report-layout { display: block; }
+  .report-main > .toolbar.report-title { flex-wrap: wrap; }
+  .report-main > .toolbar.report-title .toolbar-actions { flex: 1 1 auto; justify-content: flex-start; }
+  .report-menu { display: none; }
+  .report-menu-sm { display: flex; }
+}
 @media (max-width: 640px) {
-  .report-nav { display: none; }
-  .report-nav-sm { display: flex; }
-  .toolbar.report-title { border-top: 0; padding-top: 0; }
+  .report-main .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* -- Tenant header: on laptops the tab bar stays pinned at the top as the page scrolls ----------------
+   app.js sets --head-top (minus the height above the tabs, less a little space) and --pin-h (what stays in view), adds .pinned,
+   and .stuck while the bar is pinned, when the tenant's name shows in it. */
+.tenant-head .page-head { margin-bottom: var(--space-4); }
+.head-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); min-width: 0; }
+.head-title .sub { margin-top: 0; }
+.tenant-head .tabs { margin-bottom: var(--space-6); }
+.pin-name { display: none; }
+@media (min-width: 961px) {
+  .tenant-head.pinned { position: sticky; top: var(--head-top, 0); z-index: 20; margin: 0 -32px var(--space-6); padding: 0 32px; background: var(--bg); }
+  .tenant-head.pinned .tabs { margin-bottom: 0; }
+  .tenant-head.stuck { box-shadow: var(--shadow); }
+  .tenant-head.stuck .tabs { border-bottom-color: transparent; }
+  .tenant-head.stuck .pin-name { display: block; align-self: center; max-width: 260px; margin-right: var(--space-3); padding-right: var(--space-4); border-right: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); }
 }
 
 /* -- One Download control per page --------------------------------------------------- */
@@ -808,7 +852,7 @@ details.menu[open] > summary { margin: 0; background: var(--sunken); }
 /* The card lets menus overflow; the scroll box clips the table to the card's corners instead. */
 .card.flush.table-card { overflow: visible; }
 .table-scroll { overflow-x: auto; border-radius: 0 0 var(--radius) var(--radius); }
-.table-scroll.tall { max-height: max(420px, calc(100vh - 140px)); overflow: auto; overscroll-behavior: contain; }
+.table-scroll.tall { max-height: max(420px, calc(100vh - 140px - var(--pin-h, 0px))); overflow: auto; overscroll-behavior: contain; }
 .table-scroll thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
 th a.sort { color: inherit; display: inline-flex; align-items: center; gap: var(--space-1); }
 th a.sort:hover { color: var(--text); text-decoration: none; }
@@ -1156,6 +1200,23 @@ dd.sg-row { margin-bottom: 0; }
 @media (max-width: 640px) {
   .sg-name { min-width: 0; }
   .sg-type li { flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+}
+.sg-frame .report-menu { position: static; max-height: 360px; }
+/* -- Home pages by role (home_today.html, home_clients.html) --------------------------------------------- */
+.home-switch { margin: 0; }
+.make-home { align-self: center; }
+.make-home button.link { font-size: var(--fs-sm); }
+.today-list { list-style: none; margin: 0; padding: 0; }
+.today-client { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: var(--space-2) var(--space-5); padding: var(--space-3-5) var(--space-5); border-top: 1px solid var(--border); }
+.today-client:first-child { border-top: 0; }
+.today-name { display: flex; align-items: baseline; gap: var(--space-2); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.today-name .dot { flex: none; }
+.today-reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.today-reasons a { font-weight: 500; }
+.today-reasons .pill { margin-left: var(--space-1); vertical-align: 1px; }
+@media (max-width: 640px) {
+  .today-client { grid-template-columns: 1fr; padding: var(--space-3) var(--space-4); }
+  .page-head .actions .home-switch { order: -1; }
 }
 
 /* -- Report design editor (designer.js, design_editor.html): blocks on the left, the layout in the middle,

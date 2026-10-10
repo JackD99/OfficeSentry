@@ -27,6 +27,7 @@ from . import (
     filters,
     groups,
     history,
+    home,
     onboarding,
     people,
     projects,
@@ -121,10 +122,12 @@ def create_app(cfg: Config | None = None) -> Flask:
         return resp
 
     from .. import cert_lifecycle, clouds
+    from ..reports import library
 
-    # National clouds (clouds.py): the choices for tenant and app connection forms, and a label for any key.
+    # National clouds (clouds.py): the choices for tenant and app connection forms, and a label for any key;
+    # every report under its area, for the Reports tab's picker (_macros.report_picker).
     app.jinja_env.globals.update(cloud_choices=clouds.CHOICES, cloud_label=lambda key: clouds.get(key).label,
-                                 cloud_of=clouds.of)
+                                 cloud_of=clouds.of, report_catalogue=library.catalogue)
 
     @app.context_processor
     def _inject():
@@ -173,6 +176,7 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(tenants.bp)
+    app.register_blueprint(home.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(projects.bp)

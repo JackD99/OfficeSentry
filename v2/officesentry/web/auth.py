@@ -19,12 +19,13 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, current_app, flash, g, make_response, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .. import throttle, totp
+from .. import home, throttle, totp
 from ..config import clear_setup_token, setup_token
 from ..db import audit, audit_counted, transaction, utcnow
 from ..text import plural
 from . import sessions
 from .access import login_required, safe_next
+from .home import home_url
 
 bp = Blueprint("auth", __name__)
 
@@ -152,7 +153,9 @@ def _pending_user(enroll: bool, change: bool = False):
 
 def _finish_login(user, next_url: str | None = None) -> str:
     """Create the server-side session. Returns where to go next."""
-    next_url = safe_next(next_url or (session.get("pending") or {}).get("next"))
+    # Signing in at the front door ("/" or no page asked for) opens the person's home page (web/home.py).
+    target = next_url or (session.get("pending") or {}).get("next")
+    next_url = safe_next(target) if target and target != "/" else home_url(user)
     g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = ? WHERE id = ?",
                  (utcnow(), user["id"]))
     sessions.start(user)
@@ -459,6 +462,7 @@ def account():
     return render_template(
         "account.html", min_password=MIN_PASSWORD, sessions=sessions.list_for(g.user["id"]),
         codes_left=codes_left, two_step_required=_cfg().mfa_required(g.user["role"], g.db),
+        homes=home.HOMES, home_choice=home.home_of(g.user),
     )
 
 

@@ -236,6 +236,7 @@ are overwritten in the database file where that costs no extra I/O
 | Data | Default (today's behaviour) | Can be set to |
 |---|---|---|
 | Snapshots (every user, mailbox, device and policy from a run) | the last run of each of the last **30 days** (`OFFICESENTRY_KEEP_DAILY`) and of the last **12 months** (`OFFICESENTRY_KEEP_MONTHLY`) | any number of days and months, or every month forever |
+| Daily history (each collected object, stored once per version, so any day can be rebuilt) | **25 months** (each data source's latest collection is always kept) | 1 to 1,200 months, or forever |
 | Sign-in detail (accounts, IP addresses, countries and cities from the sign-in logs) | as long as its snapshot: about 13 months | 30 days or more |
 | Activity history: every sign-in | **180 days** | 30 days to 10 years |
 | Activity history: daily sign-in summaries | **25 months** | 1 to 120 months, or forever |
@@ -254,6 +255,15 @@ tenant's latest file of each issued report (month-end reporting compares
 against it) are never deleted by retention. The activity log can't be set
 under a year because it's the record of who changed what and signed in from
 where, which security reviews and investigations look back over.
+
+The **daily history** keeps every collection, not one a day or a month, at a
+fraction of the size of snapshots: an object is stored again only when it
+changes. Measured with `scripts/scale_data.py --history` at 200 tenants
+(about 22,000 accounts): backfilling 40 days of snapshots took 12 minutes and
+0.07 GB (the snapshots take 0.80 GB), and each night adds about 2.5 MB, so 25
+months comes to about 2 GB. The command `python -m officesentry history
+--dry-run` estimates it for your own data before you upgrade, and `history`
+shows how far the backfill has got.
 
 The **activity history** is each tenant's sign-in and directory audit logs,
 kept beyond the 30 days Microsoft keeps them (7 days for audit events without
