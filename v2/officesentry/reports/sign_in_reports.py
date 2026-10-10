@@ -15,7 +15,7 @@ from .. import signins
 from ..signins import REPEATED_FAILURES, SPRAY_ACCOUNTS
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import DataReport, Rows, Section, Tile
+from .data_reports import Chart, DataReport, Rows, Section, Tile, metric_trend
 from .registry import report
 
 NOT_COLLECTED = "Sign-in activity hasn't been collected yet. Refresh \"Sign-in activity\" on the tenant page."
@@ -226,6 +226,8 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
                                      "Unusual"], compare=False,
                          intro="Where sign-ins came from, by Microsoft's location for the address. Flagged: "
                                "countries the tenant rarely signs in from.", empty="No sign-ins.")
+    by_country.chart = Chart("Country", ("Succeeded", "Failed"), total="Sign-ins", tones=("1", "bad"),
+                             rest="Prompts")
     for c in sorted(countries, key=lambda c: -_n(c.get("signIns"))):
         odd = _text(c.get("country")) in unusual
         by_country.add([signins.country(c.get("country")), _n(c.get("signIns")), _n(c.get("succeeded")),
@@ -236,6 +238,7 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     by_app = Section(APPS, ["App", "Sign-ins", "Succeeded", "Failed", "Without MFA", "Accounts"], compare=False,
                      intro="What people signed in to. \"Without MFA\" counts successful sign-ins that needed only a "
                            "password.", empty="No sign-ins.")
+    by_app.chart = Chart("App", ("Succeeded", "Failed"), total="Sign-ins", tones=("1", "bad"), rest="Prompts")
     for a in sorted(_rows(snap, "sign_in_app"), key=lambda a: -_n(a.get("signIns"))):
         by_app.add([a.get("app") or "Unknown app", _n(a.get("signIns")), _n(a.get("succeeded")), _n(a.get("failed")),
                     _n(a.get("singleFactor")), _n(a.get("accounts"))])
@@ -262,19 +265,19 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     rate = failed / attempts if attempts > 0 else 0
     report.tiles = [
         Tile("Sign-ins", total, f"Interactive, last {days} days, by {plural(len(accounts), 'account')}",
-             rows=Rows(EVERYONE)),
+             rows=Rows(EVERYONE), trend=metric_trend(snap, "signins.total", now)),
         Tile("Failure rate", _share(failed, attempts) or "0%",
              f"{plural(failed, 'failed sign-in')}; {plural(interrupted, 'MFA or other prompt')} not counted",
              "warn" if rate >= 0.1 else None, Rows(REASONS, {"Kind": "Failure"})),
         Tile("Repeated failures", len(repeated.rows), f"Accounts with {REPEATED_FAILURES}+ failed sign-ins",
              ("bad" if repeated.flagged and "high" in repeated.flags else "warn") if repeated.rows else "ok",
-             Rows(REPEATED)),
+             Rows(REPEATED), metric_trend(snap, "signins.repeated_failures", now)),
         Tile("Countries", len(countries), f"{plural(len(unusual), 'country')} unusual for this tenant",
              rows=Rows(COUNTRIES)),
         Tile("Unusual countries", len(rare_accounts), "Accounts that signed in from one",
              "warn" if rare_accounts else "ok", Rows(UNUSUAL)),
         Tile("Without MFA", single_count, f"Successful sign-ins by {plural(len(single.rows), 'account')}",
-             "warn" if single_count else "ok", Rows(NO_MFA)),
+             "warn" if single_count else "ok", Rows(NO_MFA), metric_trend(snap, "signins.single_factor", now)),
     ]
     if risk_visible:
         report.tiles.append(Tile("Risky sign-ins", len(risky.rows), f"{risky_ok} succeeded",

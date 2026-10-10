@@ -13,9 +13,9 @@ from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import nouns
-from .data_reports import DataReport, Link, Rows, Section, Tile, _date
+from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date, metric_trend
 from .registry import report
-from .sharepoint import GROWTH_DAYS, _growth, size, storage_points
+from .sharepoint import GROWTH_DAYS, _growth, forecast, size, storage_chart, storage_points
 
 SHOW_FOLDERS = 50
 SHOW_FILES = 100
@@ -136,12 +136,19 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile("Older versions", size(versions), f"{_percent(versions, used) or '0%'} of storage",
              "warn" if used and versions / used >= 0.25 else None, Rows("Files with the most version history")),
         Tile("Recycle bins", size(recycle), "Freed when emptied", "warn" if used and recycle / used >= 0.1 else None,
-             Rows("Largest items in recycle bins")),
+             Rows("Largest items in recycle bins"),
+             metric_trend(snap, "sharepoint.storage.recycle_bin_bytes", now, size)),
         Tile(f"Untouched for {years} years", size(stale_bytes), f"{stale_files:,} {nouns(stale_files, 'file')}",
-             rows=Rows(f"Largest files untouched for {years} years")),
+             rows=Rows(f"Largest files untouched for {years} years"),
+             trend=metric_trend(snap, "sharepoint.storage.stale_bytes", now, size)),
     ]
-    # No storage chart here: the SharePoint sites report has it, and the breakdown below matters more
-    # on the first page of the client's PDF.
+    # Storage over time and where it's heading, against the tenant's limit: the question a client with full
+    # SharePoint asks first ("when do we run out?").
+    report.chart = storage_chart(points, "SharePoint storage over time and forecast", now,
+                                 quota.total if quota else None)
+    report.chart_title = ("Storage over time, and where it's heading at the last "
+                          f"{GROWTH_DAYS} days' rate" if forecast(points, now, quota.total if quota else None)
+                          else "Storage over time")
     if not status.get("complete"):
         report.notes.append("Some sites or libraries were too large to read in full, so their figures are partial. "
                             "The last SharePoint storage run on the tenant page says which.")
@@ -150,6 +157,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                     intro="Everything stored in SharePoint sites, by what it is." +
                           (f" The tenant has about {size(quota.total)} ({quota.explained})." if quota else ""),
                     empty="No SharePoint storage in use.")
+    parts.chart = Chart("Part", ("Size",), ranked=False, title="By part")
     other = max(used - current - versions - recycle - hold, 0)
     for label, value, key in sorted([("Current files", current, "current"), ("Older versions of files", versions,
                                                                              "versions"),
@@ -163,6 +171,8 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                                            f"Untouched {years}+ years", "Site limit", "Last change"],
                       intro="Largest first. Storage used includes versions, the recycle bin and everything else on "
                             "the site.", empty="No sites.")
+    by_site.chart = Chart("Site", ("Current files", "Older versions", "Recycle bin"), total="Storage used",
+                          title="Largest sites")
     for s in sorted(sites, key=lambda s: -(s.get("used") or 0)):
         limit = s.get("limit")
         state = s.get("state")

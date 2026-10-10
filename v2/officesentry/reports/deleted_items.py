@@ -15,7 +15,7 @@ from ..devices import parse_ts
 from ..licences import sku_name
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import DataReport, Rows, Section, Tile
+from .data_reports import DataReport, Rows, Section, Tile, metric_trend
 from .registry import report
 
 USERS = "Deleted users"
@@ -92,10 +92,10 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if status.get("users"):
         guests = sum(1 for r in users.rows if r[2] == "Guest")
         report.tiles.append(Tile(USERS, len(users.rows), f"{plural(guests, 'guest')} among them",
-                                 rows=Rows(USERS)))
+                                 rows=Rows(USERS), trend=metric_trend(snap, "deleted.users", now)))
     if status.get("groups"):
         report.tiles.append(Tile("Deleted groups and teams", len(groups.rows), f"{plural(teams, 'team')} among them",
-                                 rows=Rows(GROUPS)))
+                                 rows=Rows(GROUPS), trend=metric_trend(snap, "deleted.groups", now)))
     # Link to a table that's on the page: the one with accounts ending soon, else whichever was read.
     target = (USERS if soon_users else GROUPS if soon_groups
               else USERS if status.get("users") else GROUPS if status.get("groups") else None)

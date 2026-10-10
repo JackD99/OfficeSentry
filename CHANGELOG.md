@@ -74,6 +74,13 @@ views a scheduled email sends.
   Questions Microsoft 365 can't answer (backups, firewalls, plans) show a text to complete, with the
   missing parts in brackets; an answer written once fills every form that asks it. Downloads: a PDF answer
   sheet, XLSX, CSV and plain text per form.
+- Charts on the busiest report tables (sign-ins by country and by app, licences, MFA methods, admin roles,
+  security gaps, device compliance, mailbox and site storage): each bar opens the rows behind it, and the
+  chart follows the table's filters, on the page and in the PDF.
+- Small trend lines beside headline figures (the last 90 days) on the dashboard, the detail reports and
+  the monthly review's key figures.
+- The SharePoint storage report has a chart of storage over time with where it's heading at the last 30
+  days' rate, up to the date it reaches the tenant's storage limit.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
 - Scheduled emails can send saved views: a report with your filters, columns and sort, as a PDF, XLSX or

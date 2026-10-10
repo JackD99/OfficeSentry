@@ -8,7 +8,8 @@ No Microsoft tenant is needed: every collector runs against the recorded-style
 Graph responses in ``tests/`` (as ``tests/seed.py`` does), with the fixtures'
 people ("Ann", "bob@x.com") and domains swapped for each tenant's own, and
 extra staff added so tables are a realistic length. Each tenant is collected
-twice, five weeks apart, so "What changed" and the trends have history. MSP
+twice, five weeks apart, so "What changed" and the trends have history, with
+weekly figures for the twelve weeks before for the sparklines. MSP
 branding (name, colour, contact and, with Pillow installed, a logo) and an
 admin account are set up; the admin password is printed. With ``--public`` there is no admin, only the
 read-only account every visitor of the public demo site becomes (``deploy/public/``).
@@ -568,6 +569,30 @@ def activity_history(db, tenant_id: int, t: dict, now: datetime, days: int = 120
         events.save_coverage(db, tenant_id, cov)
 
 
+def metric_history(db, tenant_id: int, now: datetime, first_days: int = 35) -> None:
+    """Weekly figures for the twelve weeks behind the two collections, so sparklines and trend lines have a
+    shape: between the two collections the figures move from one to the other, and before the first they
+    drift back a little. Whole numbers stay whole and percentages stay under 100."""
+    rng = random.Random(f"metrics-{tenant_id}")  # noqa: S311 (demo data, not security)
+    first_run = db.execute("SELECT MIN(run_id) FROM metrics WHERE tenant_id = ?", (tenant_id,)).fetchone()[0]
+    keys = [r[0] for r in db.execute("SELECT DISTINCT key FROM metrics WHERE tenant_id = ?", (tenant_id,))]
+    for key in keys:
+        rows = db.execute("SELECT value, captured_at FROM metrics WHERE tenant_id = ? AND key = ?"
+                          " ORDER BY captured_at", (tenant_id, key)).fetchall()
+        start, end = rows[0][0], rows[-1][0]
+        whole = all(float(r[0]).is_integer() for r in rows)
+        slope = (end - start) / first_days
+        for back in (84, 77, 70, 63, 56, 49, 42, 28, 21, 14, 7):
+            value = start - slope * (back - first_days) * 0.5 if back > first_days else end - slope * back
+            value += (abs(start) + abs(end)) / 2 * rng.uniform(-0.04, 0.04)
+            value = max(value, 0)
+            if key.endswith("_pct"):
+                value = min(value, 100)
+            value = round(value) if whole else round(value, 1)
+            db.execute("INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (?, ?, ?, ?, ?)",
+                       (first_run, tenant_id, key, value, _iso(now - timedelta(days=back, hours=2))))
+
+
 def backdate(db, tenant_id: int, days: int) -> None:
     for table, cols in (("runs", ("created_at", "started_at", "finished_at")), ("metrics", ("captured_at",)),
                         ("findings", ("first_seen", "last_seen"))):
@@ -624,6 +649,7 @@ def populate(db, vault, *, msp: str = "Harbour IT", accent: str = "#0d7a5f",
         backdate(db, tid, 35)
         activity_history(db, tid, t, now)
         collect(db, tid, t, now, first=False)
+        metric_history(db, tid, now)
         ids.append(tid)
     groups(db, ids)
     for part, price in PRICES.items():
