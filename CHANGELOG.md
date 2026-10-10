@@ -12,6 +12,12 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 
 None.
 
+### Added
+
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
+
 ### New Microsoft permissions
 
 None.

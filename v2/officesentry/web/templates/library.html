@@ -11,7 +11,7 @@
 <div class="page-head">
   <div>
     <h1>Reports</h1>
-    <div class="sub">{{ total }} reports{% if staff %}, for one tenant or across all {{ tenants|length }}{% endif %}. Search, or pick the job you're doing.</div>
+    <div class="sub">{{ total }} reports{% if staff and tenants %}, for one tenant or across all {{ tenants|length }}{% endif %}. Search, or pick the job you're doing.</div>
   </div>
 </div>
 

@@ -465,7 +465,10 @@ Create the first admin:
 2. Choose a username and password, then scan the QR code with an authenticator
    app (Microsoft Authenticator works) and save the recovery codes.
 
-Then:
+Your home page then shows a **Get started** checklist (`first_run.py`): the app
+connection, your first client, its consent and its first collection, each read
+from what Office Sentry has stored, so it ticks itself off as you go and
+disappears after the first collection. Then:
 
 1. Create the app: **Settings → App connection → Sign in to Microsoft**. The
    page shows a code and Microsoft's link; sign in there as an admin of *your*

@@ -173,14 +173,13 @@ does the work. To make a release:
 3. The run checks the version matches `__version__` and the changelog, and
    that the commit passed its full v2 run on `main` (so release from `main`
    once that run is green; the release reuses it rather than testing again).
-   It builds the amd64 and arm64 images (arm64 only once the repository is
-   public) with an SBOM and build provenance, starts each once, scans them,
-   signs their provenance (public repository only), publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
+   It builds the amd64 and arm64 images (arm64 natively on GitHub's Arm
+   runner) with an SBOM and build provenance, starts each once, scans them,
+   signs their provenance, publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
    `2` and `latest`), creates the `v2.1.0` tag and the GitHub release with
    the notes and install files, and removes images older than the last three
    releases. Nothing is published until the checks and the scan have passed.
-   While the repository is private, a run costs about 5 of GitHub Free's
-   2,000 Actions minutes a month.
+   A run takes about 5 Actions minutes, which are free for a public repository.
 4. Open a pull request that moves `__version__` on to the next development
    version (`2.2.0.dev0`) and adds a `## 2.2.0 (unreleased)` section.
 

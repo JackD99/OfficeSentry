@@ -23,7 +23,9 @@ errors and their fixes.
 - **The app connection is ready.** *Settings → App connection* shows the
   connection as *Ready* once it has a certificate and the app's client ID.
   You set this up once for all clients: press *Sign in to Microsoft* there and
-  Office Sentry creates the app, then offers to add your first tenant.
+  Office Sentry creates the app, then offers to add your first tenant. On a
+  fresh install, the *Get started* checklist on the admin's home page walks
+  through this, the first client, its consent and its first collection.
 - **You are an Office Sentry admin.** Only admins can add tenants, see consent
   links and change or delete tenants. Analysts can see connection health and
   press *Check connection now*.
