@@ -232,6 +232,24 @@ def test_password_change_signs_out_other_browsers(app, db):
     assert phone.get("/").status_code == 302
 
 
+def test_guessing_the_current_password_locks_the_account(app, db):
+    """A stolen session can't be used to guess the password on the change-password form."""
+    from officesentry.web.auth import MAX_FAILURES
+
+    make_user(db, "admin")
+    client = app.test_client()
+    login(client, "admin")
+    before = db.execute("SELECT password_hash FROM users WHERE username = 'admin'").fetchone()[0]
+    new = "a much longer new password"
+    for _ in range(MAX_FAILURES):
+        client.post("/account/password", data={"current": "wrong guess", "password": new, "confirm": new})
+    resp = client.post("/account/password", data={"current": PASSWORD, "password": new, "confirm": new},
+                       follow_redirects=True)
+    assert "Too many wrong passwords" in resp.get_data(as_text=True)
+    row = db.execute("SELECT locked_until, password_hash FROM users WHERE username = 'admin'").fetchone()
+    assert row["locked_until"] and row["password_hash"] == before
+
+
 def test_idle_session_expires(client, db, cfg):
     make_user(db, "admin")
     login(client, "admin")

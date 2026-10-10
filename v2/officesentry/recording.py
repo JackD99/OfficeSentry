@@ -146,6 +146,21 @@ class Scrubber:
         self.phones: dict[str, str] = {}
         self.drive_ids: set[str] = set()
         self.outlook_ids: dict[str, str] = {}
+        self.places: dict[str, str] = {}
+
+    def place(self, value: dict) -> dict:
+        """A sign-in's town, region and map position together say where someone was, so the town and
+        region become numbered placeholders and the position goes; the country stays for the checks."""
+        out = dict(value)
+        for key, label in (("city", "Town"), ("state", "County")):
+            real = value.get(key)
+            if isinstance(real, str) and real:
+                if real not in self.places:
+                    self.places[real] = f"{label} {sum(v.startswith(label) for v in self.places.values()) + 1}"
+                out[key] = self.places[real]
+        if isinstance(value.get("geoCoordinates"), dict):
+            out["geoCoordinates"] = dict.fromkeys(value["geoCoordinates"])
+        return out
 
     def phone(self, value: str) -> str:
         key = re.sub(r"\D", "", value)
@@ -249,6 +264,8 @@ class Scrubber:
 
 
     def _field(self, key: str, value, device: bool):
+        if key == "location" and isinstance(value, dict) and "geoCoordinates" in value:
+            return self.place(value)
         if device and key in DEVICE_KEYS and isinstance(value, str):
             return "redacted"
         if key.lower() in REDACTED_KEYS and isinstance(value, str) and value:
@@ -386,7 +403,7 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     fixture = {"tenant_id": s.guid(tenant_id.lower()), "client_id": s.guid(client_id.lower()), "entries": entries}
     # URLs are checked for IDs and domains only: a person named "admin" isn't leaked by /admin/sharepoint.
     text = "\n".join(v for v in _strings(fixture) if not v.startswith("https://"))
-    leaks = find_leaks(text, [*names, *personal])
+    leaks = find_leaks(text, [*names, *personal, *s.places])
     leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites,
                                               *s.drive_ids, *s.outlook_ids])
     leaks += phone_leaks(fixture)

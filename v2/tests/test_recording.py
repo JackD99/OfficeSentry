@@ -38,6 +38,8 @@ def raw_log():
         _graph("/v1.0/auditLogs/signIns", {"value": [{
             "userId": JANE, "userDisplayName": "Jane Smithson", "userPrincipalName": "jane.smithson@contoso.com",
             "ipAddress": "81.2.69.160", "clientAppUsed": "Browser",
+            "location": {"city": "Kilmarnock", "state": "East Ayrshire", "countryOrRegion": "GB",
+                         "geoCoordinates": {"altitude": None, "latitude": 55.611, "longitude": -4.495}},
         }, {
             "userId": JANE, "userDisplayName": "Jane Smithson", "userPrincipalName": "jane.smithson@contoso.com",
             "ipAddress": "2a00:23c5:1234::1",
@@ -64,7 +66,8 @@ def raw_log():
 
 
 SENSITIVE = ["Jane", "Smithson", "jsmithson", "contoso", "Contoso Widgets", "Finance Team", TENANT, CLIENT, JANE,
-             GROUP, "81.2.69.160", "2a00:23c5", "7700", "7946", "555-7788", "MS=ms12345678"]
+             GROUP, "81.2.69.160", "2a00:23c5", "7700", "7946", "555-7788", "MS=ms12345678",
+             "Kilmarnock", "Ayrshire", "55.611", "4.495"]
 
 
 @pytest.fixture(scope="module")
@@ -122,6 +125,26 @@ def test_ips_become_documentation_addresses(fixture):
     first, second = fixture["entries"][3]["body"]["value"]
     assert first["ipAddress"].startswith("203.0.113.")
     assert second["ipAddress"].startswith("2001:db8::")
+
+
+def test_sign_in_places_become_numbered_placeholders(fixture):
+    first, second = fixture["entries"][3]["body"]["value"]
+    assert first["location"] == {"city": "Town 1", "state": "County 1", "countryOrRegion": "GB",
+                                 "geoCoordinates": {"altitude": None, "latitude": None, "longitude": None}}
+    assert "location" not in second
+
+
+def test_committed_fixture_has_no_sign_in_places():
+    from pathlib import Path
+
+    from officesentry.recording import _objects
+
+    path = Path(__file__).parent / "fixtures" / "live_tenant.json"
+    for place in _objects(json.loads(path.read_text(encoding="utf-8"))):
+        if "geoCoordinates" in place:
+            assert not any((place["geoCoordinates"] or {}).values()), place
+            assert re.fullmatch(r"(Town \d+)?", place.get("city") or ""), place["city"]
+            assert re.fullmatch(r"(County \d+)?", place.get("state") or ""), place["state"]
 
 
 def test_personal_onedrive_urls_and_dns_tokens(fixture):

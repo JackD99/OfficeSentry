@@ -74,12 +74,12 @@ ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
 
-CI runs the same on Python 3.12 for every pull request, with a Docker image
-build and a dependency audit (`pip-audit`); pushes to main add Python 3.11
-and 3.13, and a weekly run adds a subset on Windows. Changes that only touch
-Markdown, `docs/` or `examples/` skip CI. The Python 3.12 run measures
-coverage and fails under 90%; `pytest -n auto --cov=officesentry` shows it
-locally.
+CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request, with
+a Docker image build, a dependency audit (`pip-audit`) and a subset on
+Windows. Changes that only touch Markdown, `docs/`, `examples/` or
+`website/` skip the tests, and the **CI passed** check sums it all up. The
+Python 3.12 run measures coverage and fails under 90%;
+`pytest -n auto --cov=officesentry` shows it locally.
 
 - Keep changes small and finished end to end; update `v2/CLAUDE.md` and
   `v2/README.md` in the same pull request when behaviour changes.
@@ -98,18 +98,34 @@ locally.
 - Every route needs a login check, and tenant pages go through the access
   gate in `web/access.py`.
 
+## Signing off your commits
+
+Office Sentry uses the [Developer Certificate of Origin](https://developercertificate.org)
+(DCO): by adding a `Signed-off-by` line to a commit, you confirm you wrote
+it, or otherwise have the right to submit it, under the project's licence
+(AGPL-3.0). There is no agreement to sign. Add the line with `-s`:
+
+```bash
+git commit -s -m "Add a column for the mailbox's archive size"
+```
+
+It must name the commit's author email. The **Sign-off (DCO)** check on your
+pull request lists any commit without one; to fix them all at once, run
+`git rebase --signoff origin/main` and push again with
+`git push --force-with-lease`. Pull requests from the maintainer don't need
+it.
+
 ## How changes are checked
 
 The same gates apply to every change, whoever wrote it:
 
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
-- CI runs `ruff`, the full test suite on Python 3.12 (with a 90% coverage
-  floor), a Docker build and `pip-audit` on every pull request, and a pull
-  request isn't merged until it's green. After merging, `main` also runs
-  the suite on Python 3.11 and 3.13, and a weekly run a Windows subset. The pull request
-  template's checklist covers migrations, new permissions, the access gate
-  and read-only access.
+- CI runs `ruff`, the full test suite on Python 3.11, 3.12 and 3.13 (with
+  a 90% coverage floor), a Windows subset, a Docker build and `pip-audit`
+  on every pull request, and a pull request isn't merged until it's green.
+  The pull request template's checklist covers migrations, new permissions,
+  the access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
   `tests/test_live_fixture.py` replays responses recorded from a real
   Microsoft 365 Business Premium test tenant (names, emails, domains and IDs
@@ -149,13 +165,14 @@ does the work. To make a release:
 3. The run checks the version matches `__version__` and the changelog, and
    that the commit passed its full v2 run on `main` (so release from `main`
    once that run is green; the release reuses it rather than testing again).
-   It builds the amd64 image with an SBOM and build provenance, starts it
-   once, scans it, publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
+   It builds the amd64 and arm64 images (arm64 only once the repository is
+   public) with an SBOM and build provenance, starts each once, scans them,
+   signs their provenance (public repository only), publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
    `2` and `latest`), creates the `v2.1.0` tag and the GitHub release with
    the notes and install files, and removes images older than the last three
    releases. Nothing is published until the checks and the scan have passed.
-   A run costs about 5 of GitHub Free's 2,000 private Actions minutes a
-   month; arm64 images come when the repository is public.
+   While the repository is private, a run costs about 5 of GitHub Free's
+   2,000 Actions minutes a month.
 4. Open a pull request that moves `__version__` on to the next development
    version (`2.2.0.dev0`) and adds a `## 2.2.0 (unreleased)` section.
 

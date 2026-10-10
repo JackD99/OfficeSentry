@@ -52,3 +52,31 @@ def test_rotation_refuses_values_it_doesnt_know(db, cfg, vault):
         reencrypt_all(db, Vault([Fernet.generate_key().decode(), *cfg.encryption_keys]))
     # Nothing changed: it stops before re-encrypting anything.
     assert db.execute("SELECT value FROM settings WHERE key = 'smtp_password_enc'").fetchone()[0] == smtp
+
+
+def test_new_keys_are_saved_before_anything_is_reencrypted(db, cfg, vault, monkeypatch):
+    """A crash part way through rotate-keys --new leaves every value readable with what's in secrets.json."""
+    import json
+    from types import SimpleNamespace
+
+    from officesentry import __main__ as cli
+    from officesentry.config import write_private
+
+    smtp = vault.encrypt("pw")
+    db.execute("INSERT INTO settings (key, value) VALUES ('smtp_password_enc', ?)", (smtp,))
+    db.commit()
+    write_private(cfg.secrets_path, json.dumps({"secret_key": cfg.secret_key,
+                                                "encryption_keys": list(cfg.encryption_keys)}))
+
+    def crash(conn, new_vault):
+        reencrypt_all(conn, new_vault)
+        raise KeyboardInterrupt  # stopped after re-encrypting, before the final write
+
+    monkeypatch.setattr(cli, "reencrypt_all", crash)
+    with pytest.raises(KeyboardInterrupt):
+        cli.cmd_rotate_keys(SimpleNamespace(new=True), cfg)
+    saved = json.loads(cfg.secrets_path.read_text(encoding="utf-8"))
+    assert saved["secret_key"] == cfg.secret_key
+    assert saved["encryption_keys"][1:] == list(cfg.encryption_keys)
+    stored = db.execute("SELECT value FROM settings WHERE key = 'smtp_password_enc'").fetchone()[0]
+    assert stored != smtp and Vault(saved["encryption_keys"]).decrypt(stored) == "pw"
