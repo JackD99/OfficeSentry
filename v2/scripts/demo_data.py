@@ -127,8 +127,8 @@ def renamer(t: dict):
             for pattern, repl in subs:
                 value = pattern.sub(repl, value)
             return value
-        if isinstance(value, dict):
-            return {rename(k): rename(v) for k, v in value.items()}
+        if isinstance(value, dict):  # "Guest" is the fixture guest's name, but also a userType to keep
+            return {rename(k): v if k == "userType" else rename(v) for k, v in value.items()}
         if isinstance(value, list):
             return [rename(v) for v in value]
         if isinstance(value, tuple):
