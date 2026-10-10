@@ -1135,7 +1135,8 @@ def _seen(value: str | None, now: datetime) -> str:
     days = devices.days_since(value, now)
     if days is None:
         return "Never"
-    return "Today" if days == 0 else f"{_date(value)} ({days}d)"
+    # Always a date first, so the last-30-days filter and date sorting read "today" too.
+    return f"{_date(value)} (today)" if days == 0 else f"{_date(value)} ({days}d)"
 
 
 @report(

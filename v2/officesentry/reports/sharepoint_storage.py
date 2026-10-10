@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..collectors.sharepoint_lookup import DENIED_TEXT
 from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
@@ -108,6 +109,8 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         report.unavailable = (
             "This tenant has no SharePoint licence."
             if status.get("reason") == "no_sharepoint"
+            else DENIED_TEXT
+            if status.get("reason") == "denied"
             else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
             "permission: open the tenant page, send the consent link to the client's Global "
             "Admin again and ask them to accept."

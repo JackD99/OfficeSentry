@@ -215,6 +215,23 @@ def test_users_skip_activity_when_tenant_known_without_p1(db, two_tenants, facto
 
 
 @responses.activate
+def test_unknown_p1_is_tried_like_a_tenant_with_p1(db, two_tenants, factory):
+    """A licence flag the profile couldn't decide is unknown, and every collector treats unknown the same:
+    it asks for the P1 data and lets Microsoft's licence error decide, rather than quietly skipping it."""
+    alpha, _ = two_tenants
+    store.set_capabilities(db, alpha, {"entra_p1": None})
+    responses.get(f"{V1}/users", json={"value": []})
+    _run(db, alpha, "users", factory)
+    assert "signInActivity" in responses.calls[0].request.url
+    responses.get(f"{V1}/reports/authenticationMethods/userRegistrationDetails", json={"value": []})
+    _run(db, alpha, "mfa_registration", factory)
+    assert any("userRegistrationDetails" in c.request.url for c in responses.calls)
+    calls = len(responses.calls)
+    _, status = _run(db, alpha, "per_user_mfa", factory)
+    assert status == "succeeded" and len(responses.calls) == calls  # per-user MFA is only for tenants without P1
+
+
+@responses.activate
 def test_permission_error_fails_run_with_reason(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(

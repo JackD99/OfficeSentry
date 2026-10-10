@@ -110,8 +110,11 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
                 "privileged": False,
                 "privileged_active": False,
                 "global_admin": False,
+                "groups": [],
             },
         )
+        if r.get("viaGroup") and r["viaGroup"] not in p["groups"]:
+            p["groups"].append(r["viaGroup"])
         name = (r.get("roleName") or "Unknown role") + (
             "" if r.get("directoryScopeId") in (None, "/") else " (limited scope)"
         )
@@ -123,6 +126,13 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
             p["privileged_active"] |= r.get("assignment") == "active"
         p["global_admin"] |= r.get("roleName") == "Global Administrator" and r.get("assignment") == "active"
     return out
+
+
+def _through(p: dict) -> str:
+    """ "Through the group Tenant admins": how a member of a role group holds its roles."""
+    if not p["groups"]:
+        return ""
+    return f"Through the group{'s' if len(p['groups']) > 1 else ''} {', '.join(p['groups'])}"
 
 
 def _admin_role_names(roles: dict[str, dict] | None) -> dict[str, list[str]]:
@@ -313,7 +323,11 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         return
     reg = Registration(snap)
     enf = Enforcement(snap)
-    roles = _admin_role_names(_roles(snap))
+    held = _roles(snap)
+    roles = _admin_role_names(held)
+    # Severity follows the admin checks: only an active privileged role makes a gap an admin's gap, not a
+    # read-only role (Directory Readers) or one that must first be activated through PIM.
+    privileged = {pid for pid, p in (held or {}).items() if p["privileged_active"]}
     report.notes += [n for n in (reg.note, enf.note) if n]
 
     how = Section(
@@ -359,7 +373,7 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             continue
         members += 1
         registered = reg.registered(uid)
-        admin = uid in roles
+        admin = uid in privileged
         if registered and required:
             counts["protected"] += 1
             protected.add([label, roles.get(uid), _methods(reg.get(uid)), required_text])
@@ -511,8 +525,6 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         if not p["privileged"]:
             others.add([p["label"], kind, role_text, how])
             continue
-        if p["type"] == "servicePrincipal" and (p.get("appId") or "").lower() in snap.own_app_ids:
-            continue  # Office Sentry's own read-only app
         problems: list[tuple[str, str]] = []
         registered = reg.registered(p["id"]) if p["type"] == "user" else None
         required_text = ""
@@ -557,7 +569,7 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                     required_text,
                     _sign_in(user) if p["type"] == "user" else "",
                     (bool(user.get("onPremisesSyncEnabled")) if user else "Unknown") if p["type"] == "user" else "",
-                    "; ".join(t for _, t in problems) or "Nothing",
+                    "; ".join([t for _, t in problems] + ([_through(p)] if p["groups"] else [])) or "Nothing",
                 ],
                 severity,
             )
@@ -569,7 +581,8 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.sections = [privileged, glass, others]
 
     people = [p for p in roles.values() if p["privileged_active"] and p["type"] == "user"]
-    gas = sum(p["global_admin"] for p in roles.values() if p["type"] == "user")
+    # Matches the check: enabled people only, not apps, groups or disabled accounts.
+    gas = sum(p["global_admin"] for p in roles.values() if p["type"] == "user" and p["enabled"] is not False)
     eligible = {p["id"] for p in roles.values() if p["eligible"]}
     report.highlights = [
         Highlight(

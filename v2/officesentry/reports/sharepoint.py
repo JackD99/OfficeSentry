@@ -10,6 +10,7 @@ import math
 from datetime import date, datetime, timedelta
 
 from .. import store
+from ..collectors.sharepoint_lookup import DENIED_TEXT
 from ..devices import parse_day
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
@@ -536,6 +537,8 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         report.unavailable = (
             "This tenant has no SharePoint licence."
             if status.get("reason") == "no_sharepoint"
+            else DENIED_TEXT
+            if status.get("reason") == "denied"
             else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
             "permission: open the tenant page, send the consent link to the client's Global "
             "Admin again and ask them to accept. The other SharePoint reports work without it."
@@ -618,7 +621,7 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                 bool(lk) and all(x.get("password") for x in lk),
                 _date(i.get("lastModified")),
             ],
-            flagged(i, "medium" if i.get("neverExpires") else "low"),
+            flagged(i, "medium"),  # as the anyone-links check rates it: an expiry date doesn't stop forwarding
         )
 
     b = Section(
