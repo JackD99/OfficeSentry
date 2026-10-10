@@ -32,6 +32,8 @@
   {% endif %}
   <label>New password <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
     <span class="hint">Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.</span></label>
+  <label>Your password <span class="faint">(only to set a new password)</span><input type="password" name="admin_password" autocomplete="current-password">
+    <span class="hint">Your own password, asked again before you change someone's password.</span></label>
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
   <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>
@@ -45,14 +47,23 @@
     {% if locked %}<dt>Status</dt><dd><span class="pill warn">Two-step locked</span> <span class="muted small">Too many wrong two-step codes, which needs their password. Unlocks by itself {{ user.locked_until|ago }}; consider resetting their password.</span></dd>{% endif %}
     {% if failures[0] %}<dt>Failed sign-ins</dt><dd>{{ failures[0]|plural('wrong password') }} from {{ failures[1]|plural('address', 'addresses') }} in the last 15 minutes. <span class="muted small">Those addresses are slowed down; {{ user.username }} can still sign in from anywhere else.</span></dd>{% endif %}
   </dl>
-  <div class="form-actions wrap">
-    {% if locked or failures[0] %}<form method="post" action="{{ url_for('admin.unlock_user', user_id=user.id) }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Unlock now</button></form>{% endif %}
-    {% if sessions %}<form method="post" action="{{ url_for('admin.sign_out_user', user_id=user.id) }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Sign out everywhere{{ ' else' if user.id == current_user.id else '' }}</button></form>{% endif %}
-    {% if user.totp_enabled_at %}<form method="post" action="{{ url_for('admin.reset_two_step', user_id=user.id) }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Reset two-step sign-in for {{ user.username }}? They'll be signed out and set it up again with their new phone.">Reset two-step sign-in</button></form>{% endif %}
-  </div>
+  {% set unlock = locked or failures[0] %}
+  {% if unlock %}<form method="post" id="unlock-user" action="{{ url_for('admin.unlock_user', user_id=user.id) }}" hidden>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>{% endif %}
+  {% if sessions or user.totp_enabled_at %}
+  <form method="post" action="{{ url_for('admin.sign_out_user' if sessions else 'admin.reset_two_step', user_id=user.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Your password <input type="password" name="admin_password" autocomplete="current-password" required>
+      <span class="hint">Your own password, asked again before you sign {{ 'yourself' if user.id == current_user.id else user.username }} out or reset two-step sign-in.</span></label>
+    <div class="form-actions wrap">
+      {% if unlock %}<button form="unlock-user">Unlock now</button>{% endif %}
+      {% if sessions %}<button formaction="{{ url_for('admin.sign_out_user', user_id=user.id) }}">Sign out everywhere{{ ' else' if user.id == current_user.id else '' }}</button>{% endif %}
+      {% if user.totp_enabled_at %}<button formaction="{{ url_for('admin.reset_two_step', user_id=user.id) }}" data-confirm="Reset two-step sign-in for {{ user.username }}? They'll be signed out and set it up again with their new phone.">Reset two-step sign-in</button>{% endif %}
+    </div>
+  </form>
+  {% elif unlock %}
+  <div class="form-actions wrap"><button form="unlock-user">Unlock now</button></div>
+  {% endif %}
   <p class="footnote">Lost phone? Reset two-step sign-in. They'll set it up again with the new phone when they next sign in.</p>
 </section>
 {% if user.id != current_user.id %}

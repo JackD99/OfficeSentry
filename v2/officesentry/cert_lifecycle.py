@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from . import alerts, mailer, store
 from .certs import GeneratedCert, generate_certificate
@@ -38,6 +38,8 @@ log = logging.getLogger(__name__)
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 WARN_DAYS = (60, 30, 7)  # a warning when a certificate gets this close to expiring, then one when it has
 RANK = {None: 0, "60": 1, "30": 2, "7": 3, "expired": 4}
+RETRY = timedelta(minutes=15)  # after a warning no channel took
+RETRY_PREFIX = "cert_warn_retry."  # settings: when a warning that reached nobody may be tried again
 
 
 class RolloverError(Exception):
@@ -327,7 +329,8 @@ def _message(base_url: str, e: Expiry) -> alerts.Message:
 
 
 def _email(app, conn, vault, e: Expiry) -> str | None:
-    """Email the MSP's team contacts. Returns the error, or None (also when there's no one to send to)."""
+    """Email the MSP's team contacts. Returns the error, "" when it went, or None when there was no one to send
+    it to or no way to send it."""
     from . import delivery
 
     team = [c["email"] for c in delivery.team_contacts(conn)]
@@ -353,7 +356,11 @@ def _email(app, conn, vault, e: Expiry) -> str | None:
     delivery.record(
         conn, kind="alert", email=email, subject=subject, error=error, transport=used, trigger="schedule", user=None
     )
-    return error
+    return error or ""
+
+
+def _retry_key(e: Expiry) -> str:
+    return RETRY_PREFIX + (f"connection.{e.id}" if e.kind == "connection" else f"mail.{e.thumbprint}")
 
 
 def warn(app, conn, vault, base_url: str, now: datetime | None = None) -> int:
@@ -364,20 +371,34 @@ def warn(app, conn, vault, base_url: str, now: datetime | None = None) -> int:
     for e in expiring(conn, now):
         if RANK[e.level] <= RANK[_warned(conn, e)]:
             continue
+        retry = conn.execute("SELECT value FROM settings WHERE key = ?", (_retry_key(e),)).fetchone()
+        if retry and (at := parse_ts(retry["value"])) and now < at:
+            continue  # the last try reached nobody; wait before the next
         error = _email(app, conn, vault, e)
         hooked = None
         if s.get("alerts.enabled") == "1" and s.get("alerts.url_enc"):
             hooked = alerts._deliver(conn, alerts.Alerting(base_url, vault, app), s, _message(base_url, e))
-        _mark_warned(conn, e)
+        # Marked warned once a channel took it, or when none is set up (the banner is all there is). When every
+        # channel set up refused it, it goes again after RETRY instead of never.
+        nobody = (error is not None or hooked is not None) and error != "" and not hooked
+        if nobody:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (_retry_key(e), (now + RETRY).strftime(ISO)),
+            )
+        else:
+            _mark_warned(conn, e)
+            conn.execute("DELETE FROM settings WHERE key = ?", (_retry_key(e),))
         audit(
             conn,
             None,
             "certificate_expiry_warned",
             detail=f"{e.name} {e.thumbprint}: {e.level}"
             + (f"; email failed: {error}"[:300] if error else "")
-            + ("" if hooked is None else f"; webhook {'sent' if hooked else 'failed'}"),
+            + ("" if hooked is None else f"; webhook {'sent' if hooked else 'failed'}")
+            + ("; trying again in 15 minutes" if nobody else ""),
         )
-        sent += 1
+        sent += 0 if nobody else 1
     return sent
 
 

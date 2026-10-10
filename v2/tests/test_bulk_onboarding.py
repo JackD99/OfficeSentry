@@ -187,6 +187,37 @@ def test_states_from_stored_data(db, two_tenants):
     assert onboarding.state(t(), row(), {"roles_checked": True, "global_reader": True}).key == "connected"
 
 
+def test_a_new_client_id_needs_every_tenant_to_approve_again(client, db, vault, two_tenants, connection_id):
+    """Consent given to the old app says nothing about the new one, and links already sent name the old one."""
+    from officesentry.certs import generate_certificate
+
+    alpha, bravo = two_tenants
+    other = store.create_connection(db, vault, "Other app", generate_certificate("o"), client_id=GUID)
+    charlie = store.create_tenant(db, "Charlie", "charlie.onmicrosoft.com", other)
+    db.execute("UPDATE tenants SET consented_at = '2026-01-01T00:00:00Z' WHERE id = ?", (charlie,))
+    onboarding.mark_sent(db, [alpha, charlie], "admin")
+    db.execute("UPDATE onboarding SET approved_at = '2026-10-09T10:00:00Z'")
+    _admin(client, db)
+    url = f"/admin/connections/{connection_id}/client-id"
+    page = client.post(url, data={"client_id": "11111111-2222-3333-4444-555555555555"}, follow_redirects=True)
+    assert "must approve" not in page.get_data(as_text=True)  # the same ID again changes nothing
+    assert db.execute("SELECT COUNT(*) FROM tenants WHERE consented_at IS NULL").fetchone()[0] == 0
+
+    new = "12345678-1234-1234-1234-123456789abc"
+    page = client.post(url, data={"client_id": new}, follow_redirects=True).get_data(as_text=True)
+    assert "Client ID saved." in page and "so 2 client tenants must approve the app again" in page
+    for tenant_id in (alpha, bravo):
+        t = store.get_tenant(db, tenant_id)
+        assert t["consented_at"] is None
+        assert onboarding.state(t, onboarding.row_for(db, tenant_id), None).key == "not_sent"
+    # Another app's tenant keeps its consent and where its onboarding got to.
+    assert store.get_tenant(db, charlie)["consented_at"]
+    assert onboarding.row_for(db, charlie)["approved_at"]
+    reset = db.execute("SELECT tenant_id, detail FROM audit_log WHERE action = 'tenant_consent_reset'").fetchall()
+    assert sorted(r["tenant_id"] for r in reset) == [alpha, bravo]
+    assert "11111111-2222-3333-4444-555555555555" in reset[0]["detail"]
+
+
 def test_client_link_is_stable_and_never_records_consent_itself(app, client, db, two_tenants):
     alpha, _ = two_tenants
     db.execute("UPDATE tenants SET consented_at = NULL")

@@ -323,6 +323,36 @@ def test_one_warning_per_threshold_by_email_and_webhook(
     assert store.get_connection(db, connection_id)["expiry_warned"] == "7"
 
 
+def test_a_warning_nobody_received_is_sent_again(cfg, db, vault, connection_id, two_tenants, public_dns, monkeypatch):
+    app = create_app(cfg)
+    _mail_and_hook(db, vault)
+    monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
+    now = datetime.now(UTC)
+    _expires_in(db, connection_id, 25, now)
+    with responses.RequestsMock() as rsps:
+        rsps.post("https://graph.microsoft.com/v1.0/users/reports@msp.com/sendMail", status=503)
+        rsps.post(HOOK, status=500)
+        assert cert_lifecycle.warn(app, db, vault, cfg.base_url, now) == 0
+        assert store.get_connection(db, connection_id)["expiry_warned"] is None  # not counted as warned
+        assert cert_lifecycle.warn(app, db, vault, cfg.base_url, now + timedelta(minutes=5)) == 0
+        assert len([c for c in rsps.calls if c.request.url.startswith("https://hooks.")]) == 1  # waited
+    with responses.RequestsMock() as rsps:
+        rsps.post("https://graph.microsoft.com/v1.0/users/reports@msp.com/sendMail", status=202)
+        rsps.post(HOOK, status=202)
+        assert cert_lifecycle.warn(app, db, vault, cfg.base_url, now + cert_lifecycle.RETRY) == 1
+    assert store.get_connection(db, connection_id)["expiry_warned"] == "30"
+    details = [r[0] for r in db.execute("SELECT detail FROM audit_log WHERE action = 'certificate_expiry_warned'")]
+    assert details[0].endswith("webhook failed; trying again in 15 minutes") and details[1].endswith("webhook sent")
+    assert not db.execute("SELECT 1 FROM settings WHERE key LIKE 'cert_warn_retry.%'").fetchone()
+
+
+def test_without_a_channel_the_banner_is_the_warning(cfg, db, vault, connection_id, two_tenants):
+    now = datetime.now(UTC)
+    _expires_in(db, connection_id, 25, now)
+    assert cert_lifecycle.warn(None, db, vault, cfg.base_url, now) == 1  # nothing to retry through
+    assert store.get_connection(db, connection_id)["expiry_warned"] == "30"
+
+
 def test_worker_runs_the_expiry_job(cfg, db, vault, connection_id, two_tenants, monkeypatch):
     from officesentry import schedule, worker
 

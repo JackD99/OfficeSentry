@@ -18,8 +18,10 @@ The worker checks the last three once a minute (the ``system_alerts`` periodic j
 Certificate expiry has its own warnings at 60, 30 and 7 days (``cert_lifecycle``).
 
 Each problem alerts once when it starts, again every ``REMIND`` while it lasts, and once
-when it clears. Its state is a ``settings`` row (``system_alert.<key>``) changed in a
-write transaction before anything is sent, so two web processes never both send.
+when it clears. An alert that reached none of the channels set up (the mail server or the
+webhook refused it) isn't counted as sent: it's tried again after ``RETRY``. Its state is a
+``settings`` row (``system_alert.<key>``) changed in a write transaction before anything is
+sent, so two web processes never both send.
 The admin turns these on or off with ``alerts.system`` on the Alerts page.
 """
 
@@ -43,6 +45,7 @@ log = logging.getLogger(__name__)
 
 WORKER_GRACE = timedelta(minutes=10)
 REMIND = timedelta(hours=24)
+RETRY = timedelta(minutes=15)  # after an alert no channel took
 DISK_CLEAR = 80  # percent: a disk alert clears below this
 STATE_PREFIX = "system_alert."
 WORKER_KEYS = ("backup", "disk", "collection")  # checked by the worker
@@ -182,13 +185,18 @@ def _decide(conn, key: str, health, now: datetime) -> tuple[str, Problem | None,
         state["title"] = problem.title
         sent = parse_ts(state.get("sent_at"))
         since = parse_ts(state.get("since")) or now
+        retry = parse_ts(state.get("retry_at"))
         action = None
-        if sent is None and (key != "worker" or now - since >= WORKER_GRACE):
+        if retry and now < retry:
+            pass  # the last try reached nobody; wait before the next
+        elif sent is None and (key != "worker" or now - since >= WORKER_GRACE):
             action = "start"
         elif sent is not None and now - sent >= REMIND:
             action = "reminder"
         if action:
+            state["previous_sent_at"] = state.get("sent_at")
             state["sent_at"] = stamp
+            state.pop("retry_at", None)
         _save(conn, key, state)
         return (action, problem, state) if action else None
 
@@ -206,9 +214,24 @@ def update(app, conn, vault, cfg, keys, now: datetime | None = None) -> list[tup
             continue
         if decided:
             action, problem, state = decided
-            _send(app, conn, vault, cfg, key, action, problem, state, now)
+            if _send(app, conn, vault, cfg, key, action, problem, state, now) is False and action != "resolved":
+                _not_sent(conn, key, state, now)
             done.append((key, action))
     return done
+
+
+def _not_sent(conn, key: str, state: dict, now: datetime) -> None:
+    """Every channel set up refused the alert: undo "sent", so it goes again after ``RETRY``."""
+    try:
+        with transaction(conn, immediate=True):
+            current = _load(conn, key)
+            if current is None or current.get("sent_at") != state.get("sent_at"):
+                return  # cleared, or another process sent it since
+            current["sent_at"] = current.pop("previous_sent_at", None)
+            current["retry_at"] = (now + RETRY).strftime(ISO)
+            _save(conn, key, current)
+    except Exception:
+        log.exception("Recording that a %s system alert wasn't sent failed", key)
 
 
 # -- Sending -------------------------------------------------------------------------------------
@@ -271,20 +294,27 @@ def _email(app, conn, vault, cfg, key: str, action: str, problem: Problem | None
 
 def _send(
     app, conn, vault, cfg, key: str, action: str, problem: Problem | None, state: dict | None, now: datetime
-) -> None:
-    """Send one system alert by email and webhook. Never raises."""
+) -> bool | None:
+    """Send one system alert by email and webhook. Never raises. Returns True when a channel took it, False
+    when every channel set up failed (or sending broke), and None when there was nothing to send it through."""
     try:
         s = alerts.settings(conn)
         if s.get("alerts.system") != "1":
-            return
+            return None
         message = _message(cfg, key, action, problem, state, now)
-        outcome = [_email(app, conn, vault, cfg, key, action, problem, message)]
+        mailed = _email(app, conn, vault, cfg, key, action, problem, message)
+        outcome, tried, took = [mailed], mailed != "email not set up", mailed == "email sent"
         if s.get("alerts.enabled") == "1" and s.get("alerts.url_enc"):
             hooked = alerts._deliver(conn, alerts.Alerting(cfg.base_url, vault, app), s, message)
             outcome.append(f"webhook {'sent' if hooked else 'failed'}")
+            tried, took = True, took or bool(hooked)
+        if tried and not took:
+            outcome.append(f"trying again in {duration(RETRY.total_seconds())}")
         audit(conn, None, "system_alert", detail=f"{LABELS[key]}, {action}: {'; '.join(outcome)}"[:500])
+        return took if tried else None
     except Exception:
         log.exception("Sending a %s system alert failed", key)
+        return False
 
 
 @periodic("system_alerts")

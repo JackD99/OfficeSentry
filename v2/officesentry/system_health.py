@@ -187,24 +187,41 @@ def collection_interval(cfg, now: datetime) -> timedelta:
     return max(gap, timedelta(days=1)) + COLLECTION_GRACE
 
 
-def last_slot(conn, newer_than: datetime) -> Slot | None:
-    """The newest scheduled collection slot after ``newer_than``.
+SLOTS_BACK = 3  # schedule slots to look back through for the newest one that queued anything
 
-    A tenant counts as failed when more than half of its runs in the slot failed (a
-    single collector that keeps failing for one tenant doesn't). Reads only the runs
-    created since the slot, walking the newest rows by id, so it stays fast on years of history.
+
+def last_slot(conn, cfg, now: datetime, newer_than: datetime) -> Slot | None:
+    """The newest scheduled collection slot after ``newer_than`` that queued runs.
+
+    The slot times come from the collection schedule, as ``worker.schedule_tick`` makes them, never from the
+    newest run carrying a ``scheduled_for``: a report's refresh runs carry the report's own due time, and one
+    tenant's refresh must not stand in for a night every tenant failed. (A slot can queue nothing when every
+    collector was still fresh; the one before it counts then.) A tenant counts as failed when more than half
+    of its runs in the slot failed (a single collector that keeps failing for one tenant doesn't). Reads only
+    the runs created since the slot, walking the newest rows by id, so it stays fast on years of history.
     """
-    row = conn.execute(
-        "SELECT scheduled_for FROM runs WHERE scheduled_for IS NOT NULL ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    if row is None or row["scheduled_for"] <= newer_than.strftime(ISO):
-        return None
-    at = row["scheduled_for"]
+    fire = now
+    for _ in range(SLOTS_BACK):
+        try:
+            fire = schedule.previous_fire(cfg.collect_cron, cfg.timezone, fire)
+        except Exception:  # an invalid cron is refused at start-up
+            return None
+        if fire <= newer_than:
+            return None
+        if slot := _slot(conn, fire.strftime(ISO)):
+            return slot
+        fire -= timedelta(seconds=1)
+    return None
+
+
+def _slot(conn, at: str) -> Slot | None:
     floor = conn.execute("SELECT id FROM runs WHERE created_at < ? ORDER BY id DESC LIMIT 1", (at,)).fetchone()
     rows = conn.execute(
-        "SELECT tenant_id, status, error FROM runs WHERE id > ? AND scheduled_for = ?",
+        "SELECT tenant_id, status, error FROM runs WHERE id > ? AND scheduled_for = ? AND trigger = 'schedule'",
         (floor["id"] if floor else 0, at),
     ).fetchall()
+    if not rows:
+        return None
     per: dict[int, list] = {}
     for r in rows:
         per.setdefault(r["tenant_id"], []).append(r)
@@ -243,7 +260,7 @@ def check_collection(conn, cfg, now) -> Check:
     ).fetchone()
     last = parse_ts(row["finished_at"]) if row else None
     interval = collection_interval(cfg, now)
-    slot = last_slot(conn, now - interval)
+    slot = last_slot(conn, cfg, now, now - interval)
     data = {
         "last_success": _iso(last),
         "age_hours": _hours(now - last) if last else None,
@@ -313,7 +330,7 @@ BACKUP_JOBS = {
 
 
 def check_backup(conn, cfg, now) -> Check:
-    jobs = backups.read_status(cfg.data_dir)
+    jobs = {name: j for name, j in backups.read_status(cfg.data_dir).items() if not j.get("off")}
     if "local" not in jobs and (newest := backups.newest_backup(cfg.data_dir / "backups")):
         # Backups made before the status file existed, into the default folder.
         made = datetime.fromtimestamp(newest.stat().st_mtime, UTC).strftime(ISO)

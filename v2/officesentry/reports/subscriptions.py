@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..devices import parse_ts
-from ..licences import Assignment, assignment_error, assignments, is_free, load_prices, sku_name
+from ..licences import Assignment, assignment_error, assignments, is_free, load_prices, sku_name, trial_seats
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import Chart, DataReport, Highlight, Rows, Section
@@ -222,6 +222,7 @@ def _subscriptions(skus, subs, names, prices, currency, now):
     next_dates = _next_dates(subs, now)
     trials = {s.get("skuId") for s in subs if s.get("isTrial") is True and _status(s.get("status")) != "Ended"}
     paid_subs = {s.get("skuId") for s in subs if s.get("isTrial") is not True and _status(s.get("status")) != "Ended"}
+    free_seats = trial_seats(subs)  # active trials' licences are in the purchased count, but cost nothing
     cost, priced, unpriced, assigned, bought = 0.0, False, 0, 0, 0
     rows = []
     for s in skus:
@@ -233,12 +234,13 @@ def _subscriptions(skus, subs, names, prices, currency, now):
         trial = sid in trials and sid not in paid_subs
         status = _status(s.get("capabilityStatus"), trial)
         price = None if free else prices.get(part)
+        paid = max(purchased - free_seats.get(sid, 0), 0)
         if not free and status != "Ended":
             if price is None:
-                unpriced += purchased > 0
+                unpriced += paid > 0
             else:
                 priced = True
-                cost += purchased * price
+                cost += paid * price
             if per_user and status not in LAPSING[1:]:  # suspended licences aren't in use
                 assigned, bought = assigned + used, bought + purchased + grace
         when = next_dates.get(sid)
@@ -254,10 +256,12 @@ def _subscriptions(skus, subs, names, prices, currency, now):
             flag = "medium"
         if free:
             each, total = "Free", ""
+        elif purchased and not paid:
+            each, total = "Trial", ""  # nothing to pay until the trial is bought
         elif price is None:
             each = total = "Not priced"
         else:
-            each, total = Money(price, currency), Money(purchased * price, currency)
+            each, total = Money(price, currency), Money(paid * price, currency)
         rows.append(
             (
                 (free, status not in LAPSING and not trial, names[sid].lower()),
@@ -285,15 +289,17 @@ def _subscriptions(skus, subs, names, prices, currency, now):
 def _renewals(subs, by_sku, now, known):
     section = Section(
         RENEWALS,
+        # The subscription ID comes second so What changed tells two subscriptions of one licence apart (it
+        # matches rows on the first column, or the first two when the first repeats).
         [
             "Licence",
+            "Subscription ID",
             "Status",
             "Licences",
             "Started",
             "Next renewal or end",
             "Ends within",
             "What happens",
-            "Subscription ID",
         ],
         intro="Each subscription and the date it next renews, lapses or is deleted. Trials and "
         "subscriptions in their grace period, suspended or locked come first.",
@@ -328,6 +334,7 @@ def _renewals(subs, by_sku, now, known):
                 (status not in NEEDS_ACTION, status == "Ended", days if days is not None else 10**6, name.lower()),
                 [
                     name,
+                    s.get("commerceSubscriptionId") or s.get("_id") or "",
                     status,
                     total if isinstance(total, int) else "",
                     started.strftime("%Y-%m-%d") if started else "",
@@ -338,7 +345,6 @@ def _renewals(subs, by_sku, now, known):
                     else WHAT_HAPPENS.get(status, "")
                     if when or status != "Active"
                     else "",
-                    s.get("commerceSubscriptionId") or s.get("_id") or "",
                 ],
                 flag,
             )

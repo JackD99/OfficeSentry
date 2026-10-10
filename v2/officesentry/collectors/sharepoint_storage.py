@@ -26,7 +26,7 @@ from ..graph import GraphError, PermissionMissing
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
-from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
+from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups, refused
 
 ITEM_FIELDS = "FileLeafRef,FileRef,FSObjType,SMTotalSize,SMTotalFileStreamSize,SMTotalFileCount,_UIVersionString"
 ITEM_PARAMS = {
@@ -223,11 +223,9 @@ class SharePointStorage(Collector):
         try:
             sites = catalog.sites()
         except PermissionMissing as exc:
-            ctx.warn(
-                "Reading storage needs the Sites.Read.All permission. Re-send the consent link from the client "
-                f"page to add it. ({exc.message})"
-            )
-            ctx.objects("storage_status", [("status", {"available": False, "reason": "permission"})])
+            reason, why = refused(ctx, "reading storage", exc)
+            ctx.warn(why)
+            ctx.objects("storage_status", [("status", {"available": False, "reason": reason})])
             return
 
         scan = _Scan(datetime.now(UTC))
