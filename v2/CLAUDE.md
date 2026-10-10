@@ -300,6 +300,9 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 - The root README's screenshots (`docs/screenshots/`) and `examples/` come from
   `python scripts/screenshots.py` (demo data from `scripts/demo_data.py`); re-run
   it when the UI or reports change, and look at the images before committing.
+  The website's copies are retaken on every deploy (website/README.md); a new
+  page shown there needs a `Shot` in `SHOTS`. `tests/test_demo_samples.py`
+  checks the demo's reports add up.
 
 ## Background work
 
