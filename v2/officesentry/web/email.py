@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -86,9 +87,11 @@ def _decorate(s) -> dict:
     d["next"] = None if s["on_approval"] else delivery.next_send(s, _cfg().timezone)
     d["titles"] = delivery.schedule_titles(s, g.db)
     d["upcoming"] = delivery.is_upcoming(s)
+    d["views"] = delivery.is_views(s)
     if d["kind"] == "digest" and not d["upcoming"]:
         group = tenant_groups.get(g.db, s["group_id"])
-        d["titles"] = [f"Tenant digest · {group['name']}" if group else "Tenant digest · every tenant"]
+        what = " + ".join(d["titles"]) if d["views"] else "Tenant digest"
+        d["titles"] = [f"{what} · {group['name']}" if group else f"{what} · every tenant"]
     d["due_now"] = d["next"] is not None and d["next"] <= datetime.now(UTC)
     return d
 
@@ -213,10 +216,60 @@ def _chosen_contacts(tenant_id: int | None) -> tuple[list[int], list[str]]:
     return list(dict.fromkeys(ids)), errors
 
 
+def _my_views(across: bool) -> dict[int, dict]:
+    """The signed-in person's saved views that a schedule can send, by id."""
+    rows = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? ORDER BY name COLLATE NOCASE",
+                        (g.user["id"],)).fetchall()
+    return {r["id"]: dict(r) for r in rows if delivery.can_schedule_view(r["report_key"], across)}
+
+
+def _view_value(v: delivery.ScheduledView, mine: dict) -> str:
+    """The form value of a view on a schedule: "s<saved view id>" for one of the person's own saved views,
+    "k<id>" to keep the schedule's copy (someone else's view, or one since deleted)."""
+    return f"s{v.saved_view_id}" if v.saved_view_id in mine else f"k{v.id}"
+
+
+def _view_options(schedule_id: int | None, across: bool) -> list[dict]:
+    """The saved views the form offers, by report: the person's own, then copies the schedule already sends."""
+    mine = _my_views(across)
+    options = [{"value": f"s{r['id']}", "name": r["name"], "report": delivery.view_report_title(r["report_key"]),
+                "note": ""} for r in mine.values()]
+    for v in delivery.schedule_views(g.db, schedule_id):
+        if _view_value(v, mine).startswith("k"):
+            options.append({"value": f"k{v.id}", "name": v.name, "report": v.report_title,
+                            "note": "saved by someone else" if v.saved_view_id else "its saved view was deleted"})
+    return sorted(options, key=lambda o: (o["report"].lower(), o["name"].lower()))
+
+
+def _chosen_views(schedule_id: int | None, across: bool) -> list[delivery.ScheduledView]:
+    """The saved views ticked on the form, each copied with its format. Only the person's own saved views,
+    or copies the schedule already had, count."""
+    mine = _my_views(across)
+    kept = {v.id: v for v in delivery.schedule_views(g.db, schedule_id)}
+    out = []
+    for value in dict.fromkeys(request.form.getlist("views")):
+        fmt = request.form.get(f"view_format_{value}", "pdf")
+        if fmt not in delivery.VIEW_FORMATS:
+            abort(400)
+        kind, raw = value[:1], value[1:]
+        if not raw.isdigit():
+            continue
+        if kind == "s" and int(raw) in mine:
+            r = mine[int(raw)]
+            out.append(delivery.ScheduledView(r["report_key"], r["name"], r["query"], fmt, r["id"]))
+        elif kind == "k" and int(raw) in kept:
+            out.append(dataclasses.replace(kept[int(raw)], format=fmt))
+    return out
+
+
 def _render_form(tenant, values: dict, chosen: set[int], errors=()):
     for e in errors:
         flash(e, "error")
     cfg = _cfg()
+    across = values["kind"] == "digest"
+    sends_views = not across or delivery.VIEWS_KEY in values["reports"]
+    mine = _my_views(across)
+    view_values = {_view_value(v, mine): v.format for v in values.get("views", [])}
     zones = list(dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] +
                                ([values["timezone"]] if values["timezone"] else [])))
     return render_template(
@@ -225,23 +278,32 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [], team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES, days=delivery.DAYS, zones=zones, default_tz=cfg.timezone,
         ordinal=delivery.ordinal, pdf_available=delivery.export.pdf_available(),
-        recipients_limit=mailer.MAX_RECIPIENTS, groups=tenant_groups.all_groups(g.db) if not tenant else [])
+        recipients_limit=mailer.MAX_RECIPIENTS, groups=tenant_groups.all_groups(g.db) if not tenant else [],
+        view_options=_view_options(values.get("id"), across) if sends_views else [],
+        view_values=view_values, view_formats=delivery.VIEW_FORMATS)
 
 
-def _save_schedule(tenant, existing=None, coming_up: bool = False):
+def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: bool = False):
     kind = existing["kind"] if existing else ("report" if tenant else "digest")
     tenant_id = tenant["id"] if tenant else None
     values = _form_values(kind)
     if coming_up or (existing is not None and delivery.is_upcoming(existing)):
         values["reports"] = [delivery.upcoming.KEY]  # a digest schedule that sends the Coming up email
         values["group_id"] = None  # Coming up always covers every tenant
+    views_email = saved_views or (existing is not None and delivery.is_views(existing))
+    if views_email:
+        values["reports"] = [delivery.VIEWS_KEY]  # a digest schedule that sends saved views across tenants
+    sends_views = kind == "report" or views_email
+    values["views"] = _chosen_views(existing["id"] if existing else None, kind == "digest") if sends_views else []
     with transaction(g.db):
         ids, errors = _chosen_contacts(tenant_id)
         if kind == "digest":
             team_ids = {c["id"] for c in delivery.team_contacts(g.db)}
             ids = [i for i in ids if i in team_ids]
-        if kind == "report" and not values["reports"]:
-            errors.append("Choose at least one report to send.")
+        if kind == "report" and not values["reports"] and not values["views"]:
+            errors.append("Choose at least one report or saved view to send.")
+        if views_email and not values["views"]:
+            errors.append("Choose at least one saved view to send.")
         if not ids:
             errors.append("Choose at least one person to send it to.")
         if len(ids) > mailer.MAX_RECIPIENTS:
@@ -274,9 +336,13 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False):
                              (fresh_period, schedule_id))
             action = "email_schedule_updated"
         delivery.set_recipients(g.db, "schedule", schedule_id, ids)
+        if sends_views:
+            delivery.set_schedule_views(g.db, schedule_id, values["views"])
+        what = "coming up" if delivery.upcoming.KEY in values["reports"] else "saved views" if views_email else kind
+        views_note = f" with {plural(len(values['views']), 'saved view')}" if values["views"] and not views_email \
+            else ""
         audit(g.db, g.user["username"], action, tenant_id,
-              f"{'coming up' if delivery.upcoming.KEY in values['reports'] else kind} {values['frequency']} to"
-              f" {plural(len(ids), 'recipient')}")
+              f"{what} {values['frequency']}{views_note} to {plural(len(ids), 'recipient')}")
     s = g.db.execute("SELECT * FROM email_schedules WHERE id = ?", (schedule_id,)).fetchone()
     nxt = delivery.next_send(s, _cfg().timezone)
     flash("Saved. " + (f"Next email: {datefmt(nxt, '%a %-d %b, %H:%M')} ({nxt.tzname()})." if nxt
@@ -291,7 +357,14 @@ def new_schedule(tenant_id: int):
     if request.method == "POST":
         return _save_schedule(t)
     team_default = {c["id"] for c in delivery.tenant_contacts(g.db, t["id"])}
-    return _render_form(t, _blank("report"), team_default)
+    values = _blank("report")
+    # "Email this view" from a report's Views menu: start with that view, as a PDF, and no other report.
+    picked = _my_views(False).get(request.args.get("view", type=int) or 0)
+    if picked:
+        values["reports"] = []
+        values["views"] = [delivery.ScheduledView(picked["report_key"], picked["name"], picked["query"], "pdf",
+                                                  picked["id"])]
+    return _render_form(t, values, team_default)
 
 
 @bp.route("/emails/digests/new", methods=["GET", "POST"])
@@ -315,6 +388,20 @@ def new_upcoming():
     return _render_form(None, values, {c["id"] for c in delivery.team_contacts(g.db)})
 
 
+@bp.route("/emails/views/new", methods=["GET", "POST"])
+@roles_required("admin")
+def new_views():
+    """Saved views across every tenant, or one group, for the team (``delivery.build_views_email``)."""
+    if request.method == "POST":
+        return _save_schedule(None, saved_views=True)
+    values = _blank("digest", [delivery.VIEWS_KEY])
+    picked = _my_views(True).get(request.args.get("view", type=int) or 0)
+    if picked:
+        values["views"] = [delivery.ScheduledView(picked["report_key"], picked["name"], picked["query"], "csv",
+                                                  picked["id"])]
+    return _render_form(None, values, {c["id"] for c in delivery.team_contacts(g.db)})
+
+
 @bp.route("/schedules/<int:schedule_id>/edit", methods=["GET", "POST"])
 @roles_required(*STAFF)
 def edit_schedule(schedule_id: int):
@@ -324,6 +411,7 @@ def edit_schedule(schedule_id: int):
         return _save_schedule(tenant, s)
     values = dict(s)
     values["reports"] = json.loads(s["reports"] or "[]")
+    values["views"] = delivery.schedule_views(g.db, s["id"])
     chosen = {c["id"] for c in delivery.recipients(g.db, "schedule", s["id"])}
     return _render_form(tenant, values, chosen)
 
@@ -384,8 +472,7 @@ def _build_preview(s):
     if s["kind"] == "report":
         tenant = tenant_or_404(s["tenant_id"])
         return delivery.build_report_email(current_app, g.db, s, tenant, contacts, attach=False)
-    builder = delivery.build_upcoming_email if delivery.is_upcoming(s) else delivery.build_digest_email
-    return builder(current_app, g.db, s, contacts, attach=False)
+    return delivery.digest_builder(s)(current_app, g.db, s, contacts, attach=False)
 
 
 @bp.get("/schedules/<int:schedule_id>/preview")
@@ -592,6 +679,7 @@ def overview():
     digests = [_decorate(s) for s in g.db.execute(
         "SELECT * FROM email_schedules WHERE kind = 'digest' ORDER BY id")] if admin else []
     coming_up = [s for s in digests if s["upcoming"]]
+    view_emails = [s for s in digests if s["views"]]
     scope = f"tenant_id IN ({marks})" + (" OR tenant_id IS NULL" if admin else "")
     deliveries = g.db.execute(f"SELECT * FROM email_deliveries WHERE {scope} ORDER BY id DESC LIMIT 30",
                               ids).fetchall()
@@ -606,7 +694,8 @@ def overview():
     tenant_alerts = g.db.execute(f"SELECT COUNT(*) FROM email_alerts WHERE enabled = 1 AND tenant_id IN ({marks})",
                                  ids).fetchone()[0]
     return render_template(
-        "emails.html", schedules=schedules, digests=[s for s in digests if not s["upcoming"]], coming_up=coming_up,
+        "emails.html", schedules=schedules, digests=[s for s in digests if not s["upcoming"] and not s["views"]],
+        coming_up=coming_up, view_emails=view_emails,
         deliveries=deliveries, tenants=tenants,
         failing=failing, last=_last_errors([s["id"] for s in failing]), upcoming=upcoming[0] if upcoming else None,
         sent=stats["sent"] or 0, failed=stats["failed"] or 0, team=delivery.team_contacts(g.db),

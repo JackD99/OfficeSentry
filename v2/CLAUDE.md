@@ -136,7 +136,9 @@ needing goes in those lists.
   string (`f=`, `age=`, `hide=`, `sort=`, keyed by table and column slugs), and
   the page, PDF, XLSX and CSV apply the same view (`views.apply`). Pass lists
   for list cells (they become `Many`, so a filter offers each item). Saved
-  views are per person, per report key (`saved_views` table, `web/saved_views.py`).
+  views are per person, per report key (`saved_views` table, `web/saved_views.py`);
+  save them with `saved_views.store`, which also updates the copies scheduled
+  emails keep (see "Email delivery").
   A `Section` can also name its flag column (`flag_name`), group rows under
   collapsible headings by a column (`group`, anchors in `group_ids`), always
   offer a value filter on some columns (`filter_columns`), carry a key per row
@@ -421,7 +423,20 @@ and retries failed alert emails. A report schedule's send time is a cron slot
 (the Teams/Slack/webhook alert event after each findings sync) calls
 `delivery.after_sync()`, so both go out on the same findings. Schedules store their own timezone and the last period they finished
 ("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
-show up in the schedule form automatically. Email templates live in
+show up in the schedule form automatically. A schedule can also send saved views
+(`email_schedule_views`, `delivery.ScheduledView`): a copy of the view's name and
+query with a format (PDF, XLSX, or CSV with one file per table the view shapes,
+`delivery.view_plan`), kept in step through `saved_views.store` and kept when the
+saved view is deleted. The form only offers the signed-in person's own views (or
+copies the schedule already has). Report schedules attach them after the reports
+and archive them as kind `view:<report key>`; a digest whose `reports` is
+`["views"]` (`delivery.is_views`, `build_views_email`, `/emails/views/new`, admin)
+stacks every active tenant's rows, or one group's, with `rollups.all_rows` and goes
+to the team only. `delivery.digest_builder` picks a digest's builder. When a
+tenant's report email goes out (`send_schedule`, after its commit) or a month-end
+month is sent or published (`month_end.deliver`), `delivery.report_ready` posts
+`alerts.report_ready` if the admin ticked `alerts.on_reports`: a link to the
+report history and the file names, never the files. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 

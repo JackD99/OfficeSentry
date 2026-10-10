@@ -3,14 +3,37 @@
 {% from "_email.html" import contact_checks, busy_script with context %}
 {% set digest = s.kind == 'digest' %}
 {% set coming_up = digest and 'upcoming' in s.reports %}
+{% set views_email = digest and 'views' in s.reports %}
 {% set editing = s.id %}
-{% set heading = ('Edit ' if editing else 'New ') ~ ('Coming up email' if coming_up else ('digest' if digest else 'scheduled email')) %}
+{% set heading = ('Edit ' if editing else 'New ') ~ ('Coming up email' if coming_up else ('saved view email' if views_email else ('digest' if digest else 'scheduled email'))) %}
 {% block title %}{{ heading }} · Office Sentry{% endblock %}
 {% macro choice(o) -%}
 <label class="choice"><input type="checkbox" name="reports" value="{{ o.key }}" {% if o.key in s.reports %}checked{% endif %}>
   <span class="grow"><span class="choice-title">{{ o.title }}
     {% if o.pdf and pdf_available %}<span class="fmt">PDF</span>{% endif %}{% if o.xlsx and (not o.pdf or not pdf_available) %}<span class="fmt">XLSX</span>{% endif %}</span>
     <span class="hint">{{ o.description }}</span></span></label>
+{%- endmacro %}
+{#- The saved views a schedule can send (email._view_options), each with its format. -#}
+{% macro view_choices(options) -%}
+{% if options %}
+<fieldset class="choices view-choices">
+  <legend class="sr-only">Saved views</legend>
+  {% for o in options %}
+  <div class="view-choice">
+    <label class="choice"><input type="checkbox" name="views" value="{{ o.value }}" {% if o.value in view_values %}checked{% endif %}>
+      <span class="grow"><span class="choice-title">{{ o.name }}</span>
+        <span class="hint">{{ o.report }}{% if o.note %} · {{ o.note }}{% endif %}</span></span></label>
+    <select name="view_format_{{ o.value }}" aria-label="Send {{ o.name }} as">
+      {% for k, label in view_formats.items() %}<option value="{{ k }}" {% if view_values.get(o.value, 'csv' if digest else 'pdf') == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  {% endfor %}
+</fieldset>
+{% if not pdf_available %}<p class="footnote m0">This server can't make PDFs, so a view chosen as PDF goes as a spreadsheet (XLSX).</p>{% endif %}
+{% else %}
+<div class="empty compact"><p>{% if digest %}You haven't saved a view of a detail report yet.{% else %}You haven't saved any views yet.{% endif %} Open a report, filter, sort or hide columns, then choose <strong>Views</strong> and save it. It can then be sent here.</p>
+  <a class="btn sm" href="{{ url_for('across.index') if digest else url_for('reports.data_index', tenant_id=tenant.id) }}">Open {{ 'All tenants' if digest else 'detail reports' }}</a></div>
+{% endif %}
 {%- endmacro %}
 {% block content %}
 <div class="crumbs">
@@ -20,7 +43,7 @@
 </div>
 <div class="page-head">
   <div><h1>{{ heading }}</h1>
-    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every tenant.{% elif digest %}One email to your team summarising every tenant, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
+    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every tenant.{% elif views_email %}Your saved views of a report, with every tenant's rows (or one group's), for your team.{% elif digest %}One email to your team summarising every tenant, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
 </div>
 
 <form method="post" class="schedule-form narrow-lg" id="schedule-form">
@@ -30,6 +53,17 @@
     {% if coming_up %}
     <p class="muted small">What needs attention now, then what's due in the next 30, 60 and 90 days: subscription renewals and trials, app secrets and certificates (Office Sentry's own too), mailboxes filling up, accepted risks to review, and domains whose DMARC is still at p=none. Soonest first. <a href="{{ url_for('upcoming.index') }}">See it now</a>.</p>
     <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every item</label>
+    {% elif views_email %}
+    {% if groups %}
+    <label>Tenants
+      <select name="group_id">
+        <option value="">Every tenant</option>
+        {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('tenant') }})</option>{% endfor %}
+      </select>
+      <span class="hint">Each view stacks these tenants' rows under a Tenant column, like the All tenants report.</span></label>
+    {% endif %}
+    <div class="label-sm">Your saved views <span class="muted">· PDF and XLSX have the tables the view shapes; CSV is one file per table</span></div>
+    {{ view_choices(view_options) }}
     {% elif digest %}
     <p class="muted small">Which tenants need attention, what's new and what's been fixed, with each tenant's Secure Score. Worst tenants first.</p>
     {% if groups %}
@@ -58,6 +92,8 @@
       </fieldset>
     </details>
     {% endfor %}
+    <div class="label-sm">Saved views <span class="muted">· a report with your filters, columns and sort</span></div>
+    {{ view_choices(view_options) }}
     {% if pdf_available %}<label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Also attach spreadsheet (XLSX) versions of the review and evidence pack</label>{% endif %}
     {% endif %}
   </section>
@@ -98,7 +134,7 @@
         <label>Email <input name="new_email" type="email" placeholder="{{ 'you@msp.com' if digest else 'sam@client.com' }}" autocomplete="off"></label>
       </div>
     </details>
-    <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets this email' if coming_up else 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
+    <div class="label-sm">Your team <span class="muted">· {{ 'only your team gets this email' if coming_up or views_email else 'only your team gets digests' if digest else 'get a hidden copy, so clients never see them' }}</span></div>
     {{ contact_checks(team, chosen, 'No team members yet.' if not digest else 'No team members yet. Add one above.') }}
     {% if not team and not digest and current_user.role == 'admin' %}<p class="footnote m0"><a href="{{ url_for('email.overview') }}#team">Add your team</a> to copy them in on client emails.</p>{% endif %}
   </section>
@@ -111,7 +147,7 @@
   </section>
 
   <div class="sticky-actions form-actions">
-    <button class="primary">{{ 'Save changes' if editing else ('Create email' if coming_up else 'Create digest' if digest else 'Schedule email') }}</button>
+    <button class="primary">{{ 'Save changes' if editing else ('Create email' if coming_up or views_email else 'Create digest' if digest else 'Schedule email') }}</button>
     <a class="btn ghost" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') }}">Cancel</a>
     <span class="muted small summary" id="summary" aria-live="polite"></span>
   </div>

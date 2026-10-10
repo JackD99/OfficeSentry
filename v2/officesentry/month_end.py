@@ -547,6 +547,8 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
             with store.atomic(conn):
                 update_review(conn, tenant["id"], period, user, error=error[:1000])
                 audit(conn, user, "report_send_failed", tenant["id"], period)
+        else:
+            delivery.report_ready(app, conn, vault, tenant, period, list(dict.fromkeys(r["title"] for r in rows)))
         return error
     with store.atomic(conn):
         if schedule is not None:
@@ -554,6 +556,8 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
             conn.execute(f"UPDATE email_schedules SET last_period = {delivery.LATER_PERIOD}, attempts = 0,"
                          " retry_at = NULL WHERE id = ?", (period, period, schedule["id"]))
         sent(conn)
+    delivery.report_ready(app, conn, vault, tenant, period, list(dict.fromkeys(r["title"] for r in rows)),
+                          emailed=False)
     return None
 
 

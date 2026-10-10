@@ -39,6 +39,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   for everything at once):
   - Send any mix of reports (the monthly review, the evidence pack, any detail
     report) weekly, monthly or quarterly, at a time in the schedule's own timezone.
+  - **Saved views** too: a report with your filters, columns and sort, as a PDF,
+    XLSX or CSV, for one client, or with every tenant's rows (or one group's)
+    for your team.
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
   - A cross-tenant **digest** for your team, worst tenants first.
@@ -54,7 +57,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
 - **Alerts** (Admin → Alerts): a Microsoft Teams (Workflows), Slack or generic
   JSON webhook message when a tenant gets new findings at or above a chosen
   severity (one message per tenant per collection), when a collection fails
-  after working last time, and optionally when it works again. The webhook URL
+  after working last time, optionally when it works again, and optionally when a
+  client's report is ready ("The October 2026 report for Contoso is ready", a
+  link to the report history, never the files). The webhook URL
   and optional HMAC signing secret are stored encrypted; only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).

@@ -36,7 +36,8 @@ None. The sign-in and directory audit logs were already read; they're now read i
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
 have been read up to, and migration 0031 adds `summary_cache` for the precomputed rows under Changed. The
 portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
-tenant; until then the pages build them as before.
+tenant; until then the pages build them as before. Migration 0033 adds `email_schedule_views`, the saved
+views a scheduled email sends.
 
 ### Added
 
@@ -62,6 +63,14 @@ tenant; until then the pages build them as before.
   sheet, XLSX, CSV and plain text per form.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
+- Scheduled emails can send saved views: a report with your filters, columns and sort, as a PDF, XLSX or
+  CSV. Tick them on a client's scheduled email, or choose **Email this view on a schedule** from a report's
+  Views menu. Email reports → Saved views sends a view with every tenant's rows (or one group's) to your
+  team, like the All tenants "every row" page. A scheduled view keeps working if its saved view is deleted.
+- Alerts can post "The October 2026 report for Contoso is ready" to Teams, Slack or your webhook when a
+  client's report email goes out or a month-end report is published (Settings → Alerts, "A client's report
+  is ready"; off until you tick it). The post links to the client's report history and never carries the
+  files, so only people signed in with access to that client can open them.
 - Report designs (Month-end → Report designs): client reports built from blocks in the portal, without code.
   Drag in a status verdict, key figures, failing checks, what changed, licences, a table from any detail
   report, your own text and more; set each block up in its panel; see it on a real client as you go. Start
