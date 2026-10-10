@@ -54,6 +54,13 @@ tenant; until then the pages build them as before.
 - A tenant's Activity history page (Changes → Activity history, staff only): how far back each log is
   detailed from, the last 30 days, sign-ins per day, each month with a CSV of every sign-in, and admin
   changes worth a second look.
+- Charts on the busiest report tables (sign-ins by country and by app, licences, MFA methods, admin roles,
+  security gaps, device compliance, mailbox and site storage): each bar opens the rows behind it, and the
+  chart follows the table's filters, on the page and in the PDF.
+- Small trend lines beside headline figures (the last 90 days) on the dashboard, the detail reports and
+  the monthly review's key figures.
+- The SharePoint storage report has a chart of storage over time with where it's heading at the last 30
+  days' rate, up to the date it reaches the tenant's storage limit.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
 
