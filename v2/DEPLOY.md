@@ -607,7 +607,9 @@ docker compose up -d
 The portal upgrades the database on start, before the worker starts, after
 saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
 portal is down from `up -d` until the copy and the upgrade finish: seconds
-for a small database, minutes for a large one, so update at a quiet time. The version now
+for a small database, minutes for a large one, so update at a quiet time. The portal's health check
+allows it 15 minutes to come up before Docker calls it unhealthy, and the Deploy workflow waits as long
+and then starts the worker if `up -d` gave up on it. The version now
 running shows at the foot of the menu and at `/health`.
 
 If the release notes change `docker-compose.yml` or `Caddyfile`, download
