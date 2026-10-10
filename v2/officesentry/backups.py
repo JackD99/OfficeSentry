@@ -265,10 +265,12 @@ def restore_events(copies: Path, folder: Path) -> int:
 #                "detail": "", "error": "restic couldn't reach the bucket"}}
 #
 # ``ok`` is the last attempt's outcome; ``last_success`` is null until one works. Times are UTC ISO 8601
-# with a Z. ``detail`` and ``error`` are short plain words with no secrets.
+# with a Z. ``detail`` and ``error`` are short plain words with no secrets. ``off`` is true when the job last
+# found itself not set up (the off-site copy and the drill without RESTIC_REPOSITORY), so an entry from when it
+# was isn't read as overdue.
 
 STATUS_FILE = "backup-status.json"
-STATUS_KEYS = ("ok", "last_attempt", "last_success", "detail", "error")
+STATUS_KEYS = ("ok", "last_attempt", "last_success", "detail", "error", "off")
 
 
 def _raw_status(data_dir: Path) -> dict:
@@ -292,16 +294,23 @@ def record_status(
     file: Path | None = None,
     detail: str | None = None,
     now: datetime | None = None,
+    off: bool = False,
 ) -> None:
     """Record one attempt of ``job``, keeping the other jobs' entries. ``detail`` (short plain words, no
-    secrets) is stored as given; without it a successful ``file`` is described by name and size. Never
-    raises: a backup's outcome matters more than its record."""
+    secrets) is stored as given; without it a successful ``file`` is described by name and size. ``off``
+    records that the job isn't set up, so it skipped. Never raises: a backup's outcome matters more than its
+    record."""
     stamp = (now or datetime.now(UTC)).strftime("%Y-%m-%dT%H:%M:%SZ")
     path = Path(data_dir) / STATUS_FILE
     try:
         status = _raw_status(data_dir)
         entry = status.get(job) if isinstance(status.get(job), dict) else {}
         entry.update(ok=bool(ok), last_attempt=stamp, error="" if ok else str(error or "")[:500])
+        if off:
+            entry.update(ok=None, error="", detail=str(detail or "not set up")[:300], off=True)
+            ok, detail = False, None  # neither a success nor a new detail
+        else:
+            entry.pop("off", None)
         entry.setdefault("last_success", None)
         entry.setdefault("detail", "")
         if ok:

@@ -32,7 +32,7 @@ setting() { sed -n "s/^$1=//p" "${2:-.env.backup}" 2>/dev/null | tail -n 1 | sed
 offsite_on() { [ -n "$(setting RESTIC_REPOSITORY)" ]; }
 last_line() { grep -v '^[[:space:]]*$' <<<"$1" | tail -n 1; }
 
-record() {  # part ok|failed words
+record() {  # part ok|failed|off words
   local text=--detail
   [ "$2" = failed ] && text=--error
   docker compose exec -T web python -m officesentry backup-status --record "$1" "--$2" "$text" "$3" \
@@ -91,6 +91,8 @@ local_copy() {  # force?
 offsite_copy() {
   if ! offsite_on; then
     echo "Off-site backups aren't set up (no RESTIC_REPOSITORY in .env.backup)."
+    # Said in backup-status.json too, so an entry from when they were set up isn't read as overdue.
+    record offsite off "not set up"
     return 0
   fi
   open_repository offsite || return 1
@@ -133,6 +135,7 @@ fetch_newest() {  # part
 drill() {
   if ! offsite_on; then
     echo "Off-site backups aren't set up, so there's nothing to restore from."
+    record restore_check off "off-site backups aren't set up"
     return 0
   fi
   open_repository restore_check || return 1
@@ -177,7 +180,7 @@ uptime_ping() {
   local url
   url=$(setting UPTIME_PING_URL .env.uptime)
   [ -n "$url" ] || return 0
-  if curl -fsS -m 10 -o /dev/null http://127.0.0.1:8000/health; then
+  if curl -fsS -m 10 -o /dev/null http://127.0.0.1:8000/health/ready; then
     ping_monitor "$url" ok
   else
     ping_monitor "$url" fail

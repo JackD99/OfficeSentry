@@ -217,6 +217,41 @@ def test_backup_status(cfg, db):
     assert backups.read_status(cfg.data_dir)["restore_check"]["detail"] == "officesentry-20261009-034500.db.gz"
 
 
+def test_off_site_backups_turned_off_stop_warning(cfg, db, capsys, monkeypatch):
+    monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
+    backups.record_status(cfg.data_dir, "local", True, now=NOW)
+    backups.record_status(cfg.data_dir, "offsite", True, now=NOW - timedelta(days=10))  # from when it was set up
+    assert system_health.check_backup(db, cfg, NOW).summary == "No off-site backup for 10 days"
+    # The nightly job finds RESTIC_REPOSITORY gone and says so (deploy/jobs.sh, offsite_copy).
+    main(["backup-status", "--record", "offsite", "--off", "--detail", "not set up"])
+    check = system_health.check_backup(db, cfg, NOW)
+    assert check.status == "ok" and "offsite" not in check.data["jobs"]
+    entry = backups.read_status(cfg.data_dir)["offsite"]
+    assert entry["off"] is True and entry["ok"] is None and entry["last_success"] == _iso(NOW - timedelta(days=10))
+    capsys.readouterr()
+    main(["backup-status"])
+    assert "Off-site copy: not set up, so skipped at" in capsys.readouterr().out
+    # Set up again: its next result counts as before.
+    main(["backup-status", "--record", "offsite", "--failed", "--error", "wrong password"])
+    assert not backups.read_status(cfg.data_dir)["offsite"]["off"]
+    assert system_health.check_backup(db, cfg, NOW).summary == "The last off-site backup failed"
+    with pytest.raises(SystemExit, match="--ok, --failed or --off"):
+        main(["backup-status", "--record", "offsite", "--ok", "--off"])
+
+
+def test_the_jobs_script_records_skipped_off_site_steps():
+    from pathlib import Path
+
+    script = (Path(system_health.__file__).parent.parent / "deploy" / "jobs.sh").read_text(encoding="utf-8")
+    offsite = script[script.index("offsite_copy() {") :]
+    drill = script[script.index("drill() {") :]
+    assert 'record offsite off "not set up"' in offsite[: offsite.index("open_repository")]
+    assert "record restore_check off" in drill[: drill.index("open_repository")]
+    # The uptime ping asks the deep check, so a dead worker or a full disk fails it too.
+    ping = script[script.index("uptime_ping() {") :]
+    assert "http://127.0.0.1:8000/health/ready;" in ping[: ping.index("schedule() {")]
+
+
 def test_backups_from_before_the_status_file_count(cfg, db):
     folder = cfg.data_dir / "backups"
     folder.mkdir(parents=True)
@@ -268,7 +303,7 @@ def test_most_tenants_failing_the_last_slot(cfg, db, two_tenants, connection_id)
     _run(db, charlie, "failed", "mfa", slot, error="Exchange needs Global Reader")  # one of two: not failed
     _run(db, charlie, "succeeded", "devices", slot)
 
-    result = system_health.last_slot(db, NOW - timedelta(days=2))
+    result = system_health.last_slot(db, cfg, NOW, NOW - timedelta(days=2))
     assert (result.tenants, result.failed, result.pending) == (3, 2, 0) and result.mass_failure
     assert result.top_error == "Sign-in failed: the certificate has expired"
     check = system_health.check_collection(db, cfg, NOW)
@@ -277,9 +312,36 @@ def test_most_tenants_failing_the_last_slot(cfg, db, two_tenants, connection_id)
     assert "expired" not in json.dumps(check.data)  # errors stay out of the JSON
 
     queued = _run(db, charlie, "queued", "teams", slot)
-    assert not system_health.last_slot(db, NOW - timedelta(days=2)).mass_failure  # not finished yet
+    assert not system_health.last_slot(db, cfg, NOW, NOW - timedelta(days=2)).mass_failure  # not finished yet
     db.execute("DELETE FROM runs WHERE id = ?", (queued,))
-    assert system_health.last_slot(db, NOW) is None  # nothing newer than now
+    assert system_health.last_slot(db, cfg, NOW, NOW) is None  # nothing newer than now
+
+
+def test_a_report_refresh_does_not_hide_a_night_every_tenant_failed(cfg, db, two_tenants):
+    # Every tenant failed at 02:00 and the alert went out. Then Alpha's report fell due at 08:00 and its
+    # refresh runs, scheduled for 08:00, failed for the same reason: one tenant, one failure. That's not the
+    # last collection slot, so the warning stays.
+    alpha, bravo = two_tenants
+    _run(db, alpha, "succeeded", created=_iso(NOW - timedelta(days=1, hours=9)))  # the night before
+    night = _iso(NOW - timedelta(hours=10))
+    for tenant in (alpha, bravo):
+        for collector in ("users", "mfa"):
+            _run(db, tenant, "failed", collector, night, error="Sign-in failed: the certificate has expired")
+    report_due = NOW - timedelta(hours=4)
+    for collector in ("users", "mfa"):
+        _run(db, alpha, "failed", collector, _iso(report_due), created=_iso(report_due), error="Sign-in failed")
+    check = system_health.check_collection(db, cfg, NOW)
+    assert check.status == "warn" and check.summary == "The last scheduled collection failed for 2 of 2 tenants"
+    assert check.data["last_slot"]["at"] == night
+
+
+def test_a_slot_that_queued_nothing_falls_back_to_the_one_before(cfg, db, two_tenants):
+    alpha, bravo = two_tenants
+    night_before = _iso(NOW - timedelta(days=1, hours=10))
+    for tenant in (alpha, bravo):
+        _run(db, tenant, "failed", "users", night_before, created=night_before, error="Sign-in failed")
+    slot = system_health.last_slot(db, cfg, NOW, NOW - timedelta(days=2))  # last night's queued nothing
+    assert slot.at == night_before and slot.mass_failure
 
 
 def test_collection_ok_and_stale(cfg, db, two_tenants):
@@ -401,6 +463,56 @@ def test_mass_failure_alert_waits_for_the_worker(cfg, db, vault, channels, two_t
         _, hooks = _sent(rsps)
     assert hooks[0]["title"] == "The last scheduled collection failed for 2 of 2 tenants"
     assert "the app was deleted" in hooks[0]["text"]
+
+
+def test_an_alert_nobody_received_is_sent_again(cfg, db, vault, channels, monkeypatch):
+    app = create_app(cfg)
+    _disk(monkeypatch, 90)
+    with responses.RequestsMock() as rsps:
+        rsps.post(SEND_MAIL, status=503)
+        rsps.post(HOOK, status=500)
+        assert system_alerts.update(app, db, vault, cfg, ("disk",), NOW) == [("disk", "start")]
+        assert system_alerts.states(db)["disk"]["sent_at"] is None  # the page says "not sent yet"
+        assert system_alerts.update(app, db, vault, cfg, ("disk",), NOW + timedelta(minutes=5)) == []
+    with responses.RequestsMock() as rsps:
+        rsps.post(SEND_MAIL, status=202)
+        rsps.post(HOOK, status=202)
+        later = NOW + system_alerts.RETRY
+        assert system_alerts.update(app, db, vault, cfg, ("disk",), later) == [("disk", "start")]
+        assert len(_sent(rsps)[0]) == 1
+    assert system_alerts.states(db)["disk"]["sent_at"] == _iso(later)
+    rows = [r[0] for r in db.execute("SELECT detail FROM audit_log WHERE action = 'system_alert' ORDER BY id")]
+    assert rows[0].startswith("Disk over 85% full, start: email failed") and rows[0].endswith(
+        "webhook failed; trying again in 15 minutes"
+    )
+    assert rows[1] == "Disk over 85% full, start: email sent; webhook sent"
+
+
+def test_one_channel_taking_the_alert_is_enough(cfg, db, vault, channels, monkeypatch):
+    app = create_app(cfg)
+    _disk(monkeypatch, 90)
+    with responses.RequestsMock() as rsps:
+        rsps.post(SEND_MAIL, status=503)
+        rsps.post(HOOK, status=202)
+        assert system_alerts.update(app, db, vault, cfg, ("disk",), NOW) == [("disk", "start")]
+    assert system_alerts.states(db)["disk"]["sent_at"] == _iso(NOW)
+
+
+def test_a_failed_reminder_is_tried_again(cfg, db, vault, channels, monkeypatch):
+    _disk(monkeypatch, 90)
+    with responses.RequestsMock() as rsps:
+        rsps.post(HOOK, status=202)
+        system_alerts.update(None, db, vault, cfg, ("disk",), NOW)
+    with responses.RequestsMock() as rsps:
+        rsps.post(HOOK, status=500)
+        assert system_alerts.update(None, db, vault, cfg, ("disk",), NOW + system_alerts.REMIND) == [
+            ("disk", "reminder")
+        ]
+    assert system_alerts.states(db)["disk"]["sent_at"] == _iso(NOW)  # still the last one that arrived
+    with responses.RequestsMock() as rsps:
+        rsps.post(HOOK, status=202)
+        at = NOW + system_alerts.REMIND + system_alerts.RETRY
+        assert system_alerts.update(None, db, vault, cfg, ("disk",), at) == [("disk", "reminder")]
 
 
 def test_turned_off_sends_nothing(cfg, db, vault, channels, monkeypatch):

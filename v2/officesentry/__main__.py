@@ -292,9 +292,9 @@ def cmd_backup_status(args, cfg):
     from .backups import read_status, record_status
 
     if args.record:
-        if args.ok == args.failed:
-            sys.exit("Say --ok or --failed with --record.")
-        record_status(cfg.data_dir, args.record, args.ok, args.error or None, detail=args.detail or None)
+        if args.ok + args.failed + args.off != 1:
+            sys.exit("Say --ok, --failed or --off with --record.")
+        record_status(cfg.data_dir, args.record, args.ok, args.error or None, detail=args.detail or None, off=args.off)
         return
     jobs = read_status(cfg.data_dir)
     if args.json:
@@ -304,7 +304,9 @@ def cmd_backup_status(args, cfg):
         print("No backup has been recorded yet.")
     for name, job in sorted(jobs.items()):
         label = {"local": "Database copy", "offsite": "Off-site copy", "restore_check": "Restore check"}.get(name, name)
-        if job.get("ok"):
+        if job.get("off"):
+            print(f"{label}: not set up, so skipped at {job.get('last_attempt')}")
+        elif job.get("ok"):
             print(f"{label}: OK at {job.get('last_attempt')}" + (f" ({job['detail']})" if job.get("detail") else ""))
         else:
             print(
@@ -570,6 +572,7 @@ def main(argv=None):
     )
     status.add_argument("--ok", action="store_true")
     status.add_argument("--failed", action="store_true")
+    status.add_argument("--off", action="store_true", help="the job isn't set up, so it skipped")
     status.add_argument("--detail", default="", help="what it did, in a few words")
     status.add_argument("--error", default="", help="why it failed, in a few words")
     status.set_defaults(func=cmd_backup_status)
