@@ -211,6 +211,8 @@ copied collection reads back exactly as its snapshot.
 - Changing an app connection's client ID (a different app registration) no longer leaves its tenants marked
   as consented: each one needs the client to approve the new app, links already sent are marked not sent
   (they name the old app), and the page says how many clients must approve again.
+- The public demo no longer keeps a visitor's address in the activity log when they open or download a
+  report; what was opened is still recorded.
 
 ## 2.0.0 (2026-10-09)
 

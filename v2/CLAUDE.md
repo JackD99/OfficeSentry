@@ -49,9 +49,10 @@ overview and DEPLOY.md for running it on a server.
   own container, network and memory-only folder, never with the portal's
   `.env`, data or secrets. A new POST route is refused there automatically;
   `tests/test_public_demo.py` opens every page as the visitor.
-- **Audit with `db.audit()`**; it records the visitor's address. Repeated
-  anonymous events go through `db.audit_counted()` (one row per address and
-  hour), and never store what a stranger typed. Sign-in noise is in
+- **Audit with `db.audit()`**; it records the visitor's address (never on
+  the public demo, where every visitor is a stranger). Repeated anonymous
+  events go through `db.audit_counted()` (one row per address and hour), and
+  never store what a stranger typed. Sign-in noise is in
   `db.AUDIT_NOISE` and pruned after 90 days. Admins read it at `/admin/activity`.
 - **No import cycles.** `tests/test_imports.py` fails on a module-level cycle;
   put what two modules share in a third (as `checks/base.py` and
