@@ -60,7 +60,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   after working last time, optionally when it works again, and optionally when a
   client's report is ready ("The October 2026 report for Contoso is ready", a
   link to the report history, never the files). The webhook URL
-  and optional HMAC signing secret are stored encrypted; only https URLs that
+  and optional HMAC signing secret are stored encrypted; signed requests carry
+  a timestamp and key id, so a receiver can refuse a replayed one (DEPLOY.md,
+  "Signed webhooks"); only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
 - **System status and system alerts** (Settings → System status): whether the

@@ -30,6 +30,12 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   now only works as a header, since addresses end up in proxy logs. Set the monitor to send
   `Authorization: Bearer <token>` and take the token out of its URL; until then it sees only whether Office
   Sentry is ready (200 or 503), not the checks ([v2/DEPLOY.md, "Is it working?"](v2/DEPLOY.md#is-it-working)).
+- **Webhooks that check the signature** (a signing secret under *Settings → Alerts*): the signature now covers
+  a timestamp, so a copied request can't be sent again. `X-OfficeSentry-Signature` is `v1=` and the HMAC-SHA256
+  of `X-OfficeSentry-Timestamp`, a full stop and the body, instead of `sha256=` and the HMAC of the body, and
+  `X-OfficeSentry-Key-Id` says which secret signed it. Change your receiver to check the new signature when you
+  upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
+  webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
 
 ### New Microsoft permissions
 

@@ -158,6 +158,39 @@ then add this line with `crontab -e` on the server (your check's ping URL):
 It pings only while Office Sentry is ready, so you hear when the server, the
 portal or the worker stops.
 
+### Signed webhooks
+
+With a signing secret saved under *Settings → Alerts*, every webhook request
+carries three headers, so your own receiver can tell it came from Office
+Sentry and isn't a copy of an earlier one sent again:
+
+- `X-OfficeSentry-Timestamp`: when it was sent, in seconds since 1970 (UTC).
+- `X-OfficeSentry-Signature`: `v1=` and the hex HMAC-SHA256, with the secret
+  as the key, of the timestamp, a full stop (`.`) and the request body exactly
+  as received.
+- `X-OfficeSentry-Key-Id`: the first 8 hex characters of the SHA-256 of the
+  secret. To change the secret, let the receiver accept both secrets, picking
+  the one whose key id matches, then save the new one in Office Sentry and
+  remove the old one from the receiver.
+
+Refuse a request whose signature doesn't match or whose timestamp is more than
+five minutes from your clock. In Python:
+
+```python
+import hashlib, hmac, time
+
+
+def genuine(headers, body: bytes, secret: str) -> bool:
+    stamp = headers.get("X-OfficeSentry-Timestamp", "")
+    if not stamp.isdigit() or abs(time.time() - int(stamp)) > 300:
+        return False
+    mac = hmac.new(secret.encode(), stamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(headers.get("X-OfficeSentry-Signature", ""), "v1=" + mac)
+```
+
+Before 2.1.0 the signature was `sha256=` and the HMAC of the body alone, with
+no timestamp, so a copied request could be sent again.
+
 ## Sign-in protection
 
 Wrong passwords never lock an account, so nobody can keep you out just by
