@@ -235,7 +235,7 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   Office Sentry" stays small in the footer), the support contact clients see,
   and an optional note printed at the end of every report. The name is also
   the email sender's name unless Email delivery sets one.
-- **Data retention** (`/admin/retention`): how long snapshots, sign-in detail
+- **Data retention** (`/admin/retention`): how long snapshots, the daily history, sign-in detail
   (IP addresses and locations), the activity history, resolved findings, run
   logs, the activity log and issued reports are kept, with a count of what the next daily pass would
   delete. Defaults keep today's behaviour; see DEPLOY.md.
@@ -339,7 +339,10 @@ These areas have no real recording and are tested with simulated data only:
   and "all tenants" analysts excepted). Hidden tenants return 404.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
-  snapshots for the last 30 days plus one per month for 12 months.
+  snapshots for the last 30 days plus one per month for 12 months. The daily
+  history also keeps every run for 25 months, storing each object once per
+  version (`state_history.py`), written alongside the snapshots and checked
+  against them.
 - **One worker process, no Redis/Celery.** It collects on a cron schedule in
   your timezone, skips data that is already fresh, refreshes stale data before
   an emailed report, and prunes old snapshots. Month-end approvals and report
