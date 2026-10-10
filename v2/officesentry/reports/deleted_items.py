@@ -16,6 +16,7 @@ from ..licences import sku_name
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile
+from .registry import report
 
 USERS = "Deleted users"
 GROUPS = "Deleted teams and groups"
@@ -43,6 +44,18 @@ def _group_kind(g: dict) -> str:
     return "Security group"
 
 
+@report(
+    "deleted-items",
+    "Deleted users and groups",
+    "Users, teams and Microsoft 365 groups in the recycle bin, with the licences they held and "
+    f"the days left to restore each before Microsoft deletes it for good after {RETENTION_DAYS} "
+    "days.",
+    ("deleted_items", "tenant_profile"),
+    group="identity",
+    order=90,
+    keywords="recycle bin restore undelete recover soft-deleted removed accounts leavers deleted teams "
+    "deleted mailbox 30 days purge",
+)
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("deleted_items", "deleted_status") or [None])[0]
     if status is None:
@@ -142,12 +155,3 @@ def _groups(rows: list[dict], now: datetime) -> Section:
     for _, row, flag in sorted(out, key=lambda r: r[0]):
         section.add(row, flag)
     return section
-
-
-REPORTS = {
-    "deleted-items": ("Deleted users and groups",
-                      "Users, teams and Microsoft 365 groups in the recycle bin, with the licences they held and "
-                      f"the days left to restore each before Microsoft deletes it for good after {RETENTION_DAYS} "
-                      "days.",
-                      ("deleted_items", "tenant_profile"), build),
-}

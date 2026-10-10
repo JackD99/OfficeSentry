@@ -1,13 +1,13 @@
-"""Checks over the sign-in log summaries. Registered into ``rules.RULES`` on import."""
+"""Checks over the sign-in log summaries."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from . import signins
-from .rules import Finding, _unavailable, rule
-from .snapshot import TenantSnapshot
-from .text import plural
+from .. import signins
+from ..snapshot import TenantSnapshot
+from ..text import plural
+from .base import Finding, _unavailable, rule
 
 
 @rule("risky_sign_ins", "No risky sign-ins succeeded", "Identity",
