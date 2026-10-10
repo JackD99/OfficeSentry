@@ -38,7 +38,7 @@ have been read up to, and migration 0031 adds `summary_cache` for the precompute
 portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
 tenant; until then the pages build them as before.
 
-Migration 0032 adds five empty tables for the daily history (`state_*`): the upgrade is instant and changes
+Migration 0036 adds five empty tables for the daily history (`state_*`): the upgrade is instant and changes
 no existing rows. The worker then copies the snapshots retention kept into the history in the background, a
 few seconds a minute, oldest first, pausing while the disk is over 85% full. At 200 tenants that took about
 12 minutes of worker time and 0.07 GB. To see the room it needs first, run `python -m officesentry history

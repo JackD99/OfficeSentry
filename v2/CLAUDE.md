@@ -582,7 +582,7 @@ the worker (the `compact` command does it all and shrinks the file). So:
 
 ## Daily history (state history)
 
-`state_history.py` (schema in `migrations/0032`) stores each collected object
+`state_history.py` (schema in `migrations/0036`) stores each collected object
 once per version instead of a copy per run: `state_versions` rows (per
 `state_series`: tenant, collector, kind) say from which recorded run an
 object's content held and until which (`to_run`, NULL while current), and the
