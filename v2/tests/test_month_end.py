@@ -491,6 +491,8 @@ def test_issuing_an_earlier_month_never_moves_the_schedule_back(app, db, two_ten
         month_end.freeze(app, db, tenant, "2026-09", "admin", now=oct5)
         assert month_end.deliver(app, db, vault, tenant, "2026-09", "admin", now=oct5) is None
     assert len(sends()) == 1
+    # Approved in October, but it's September's report and says so.
+    assert sends()[0][2]["Subject"] == "Alpha Ltd security report · September 2026"
     assert [r[0] for r in db.execute("SELECT last_period FROM email_schedules ORDER BY tenant_id")] == [
         "2026-10",
         "2026-10",

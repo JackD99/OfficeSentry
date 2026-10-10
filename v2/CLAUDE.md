@@ -479,6 +479,14 @@ month is sent or published (`month_end.deliver`), `delivery.report_ready` posts
 report history and the file names, never the files. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
+An email names the period of its schedule's latest send time
+(`delivery.email_period`, `period_label`), never the clock's, so a retry after
+midnight or a Retry next week still says, and carries the commentary of, the
+month it was for; a month-end send passes its `period`. A report schedule
+never emails a tenant nothing has been collected for (`nothing_collected`: the
+send fails with the reason and retries), and Send now and Retry refuse while
+the timer's `send_schedule` task for the period is queued or running
+(`being_sent`), so nobody sends a period twice.
 
 **Coming up** (`upcoming.py`, page `/upcoming` in `web/upcoming.py`, admin and analyst) lists what falls
 due in the next 90 days across the visible, active tenants: subscription renewals and trials (lapsing ones

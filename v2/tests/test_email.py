@@ -106,6 +106,12 @@ def _schedule(
     return sid
 
 
+def _collected(db, tenant_id, finished="2026-10-01T00:00:00Z"):
+    """One finished collection, so the tenant has a report to send (``delivery.nothing_collected``)."""
+    run_id = store.enqueue_run(db, tenant_id, "users")
+    db.execute("UPDATE runs SET status = 'succeeded', finished_at = ? WHERE id = ?", (finished, run_id))
+
+
 def _row(db, table, row_id):
     return db.execute(f"SELECT * FROM {table} WHERE id = ?", (row_id,)).fetchone()
 
@@ -262,6 +268,7 @@ def test_unconfigured_email_records_failure(client, db, two_tenants):
     login(client, "admin")
     cid = delivery.add_contact(db, alpha, "IT", "it@client.com")
     sid = _schedule(db, alpha, [cid])
+    _collected(db, alpha)
     client.post(f"/schedules/{sid}/send")
     row = db.execute("SELECT status, error FROM email_deliveries").fetchone()
     assert row["status"] == "failed" and "isn't set up" in row["error"]
@@ -411,6 +418,7 @@ def test_failed_sends_retry_with_backoff_then_give_up(app, db, two_tenants, vaul
     alpha, _ = two_tenants
     _smtp_ready(db)
     sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], hour=0)
+    _collected(db, alpha)
     FakeSMTP.fail_with = OSError("connection refused")
     now = datetime(2026, 10, 2, 9, 0, tzinfo=UTC)
     assert delivery.tick(app, db, vault, cfg, now) == 1
@@ -445,6 +453,7 @@ def test_build_error_is_recorded_not_raised(app, db, two_tenants, vault, cfg, mo
     alpha, _ = two_tenants
     _smtp_ready(db)
     sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], hour=0)
+    _collected(db, alpha)
 
     def boom(*a, **k):
         raise ValueError("bad data")
@@ -814,3 +823,214 @@ def test_migration_carries_over_monthly_schedules(cfg, monkeypatch):
     assert sorted(c["email"] for c in delivery.recipients(conn, "schedule", s["id"])) == ["a@x.com", "b@y.com"]
     assert conn.execute("SELECT status FROM email_deliveries").fetchone()[0] == "sent"
     conn.close()
+
+
+# -- Month boundaries, retries and duplicate sends ---------------------------------------------
+
+
+def _capture_pdfs(monkeypatch) -> list[str]:
+    html = []
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda page, base: html.append(page) or b"%PDF-1.7")
+    return html
+
+
+def test_a_report_sent_again_later_keeps_its_own_period_and_commentary(app, db, two_tenants, vault, cfg, monkeypatch):
+    from officesentry import month_end
+
+    alpha, _ = two_tenants
+    pdfs = _capture_pdfs(monkeypatch)
+    _smtp_ready(db)
+    _collected(db, alpha)
+    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], day_of_month=28, hour=9)
+    month_end.update_review(db, alpha, "2026-10", "admin", commentary="October went well.")
+    month_end.update_review(db, alpha, "2026-11", "admin", commentary="November notes, not ready yet.")
+    # October's email failed on the 28th and is sent again on 3 November, before November's send time.
+    s = _row(db, "email_schedules", sid)
+    nov3 = datetime(2026, 11, 3, 10, 0, tzinfo=UTC)
+    assert delivery.send_schedule(app, db, vault, s, trigger="retry", user="admin", now=nov3) is None
+    ((_, _, msg, _),) = sends()
+    assert msg["Subject"] == "Alpha Ltd security report · October 2026"
+    assert "security report for October 2026" in msg.get_body(("plain",)).get_content()
+    assert any("October went well." in page for page in pdfs)
+    assert not any("November notes" in page for page in pdfs)
+    row = db.execute("SELECT period FROM email_deliveries").fetchone()
+    assert row["period"] == "2026-10"
+
+
+def test_a_weekly_retry_after_midnight_names_the_week_it_was_for(app, db, two_tenants, vault, cfg):
+    alpha, _ = two_tenants
+    _smtp_ready(db)
+    _collected(db, alpha)
+    db.execute("UPDATE tenants SET connection_id = NULL")  # nothing to refresh first
+    contact = delivery.add_contact(db, alpha, "", "a@x.com")
+    sid = _schedule(
+        db, alpha, [contact], reports=(), frequency="weekly", day_of_week=6, hour=23, timezone="Europe/London"
+    )
+    # Sunday 11 October, 23:00 in London. The first three tries fail; the third retry runs at 01:35 on Monday.
+    FakeSMTP.fail_with = OSError("connection refused")
+    for at in ("2026-10-11T22:00", "2026-10-11T22:05", "2026-10-11T22:35"):
+        assert delivery.tick(app, db, vault, cfg, datetime.fromisoformat(at + "+00:00")) == 1
+    assert _row(db, "email_schedules", sid)["retry_at"] == "2026-10-12T00:35:00Z"
+    FakeSMTP.fail_with = None
+    assert delivery.tick(app, db, vault, cfg, datetime(2026, 10, 12, 0, 35, tzinfo=UTC)) == 1
+    ((_, _, msg, _),) = sends()
+    assert msg["Subject"].endswith("week of 5 Oct 2026")  # Monday 12 October's own email would say "12 Oct"
+    assert _row(db, "email_schedules", sid)["last_period"] == "2026-W41"
+
+
+def test_period_labels():
+    assert delivery.period_label("2026-10") == "October 2026"
+    assert delivery.period_label("2026-W01") == "week of 29 Dec 2025"
+    assert delivery.period_label("2026-W53") == "week of 28 Dec 2026"
+    assert delivery.period_label("2026-Q4") == "Q4 2026"
+
+
+def test_clocks_going_back_or_forward_send_once(app, db, two_tenants, vault, cfg):
+    alpha, bravo = two_tenants
+    _smtp_ready(db)
+    db.execute("UPDATE tenants SET connection_id = NULL")
+    for tenant_id in (alpha, bravo):
+        _collected(db, tenant_id)
+    # 01:00 on 25 October 2026 happens twice in London; 02:00 on 8 March 2026 never happens in New York.
+    london = _schedule(
+        db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], day_of_month=25, hour=1, timezone="Europe/London"
+    )
+    new_york = _schedule(
+        db,
+        bravo,
+        [delivery.add_contact(db, bravo, "", "b@x.com")],
+        day_of_month=8,
+        hour=2,
+        timezone="America/New_York",
+    )
+    db.execute("UPDATE email_schedules SET last_period = '2026-02'")
+    sent = [
+        delivery.tick(app, db, vault, cfg, datetime(2026, 3, 8, 5, 0, tzinfo=UTC) + timedelta(minutes=m))
+        for m in range(0, 240, 15)
+    ]
+    assert sum(sent) == 1 and _row(db, "email_schedules", new_york)["last_period"] == "2026-03"
+    db.execute("UPDATE email_schedules SET last_period = '2026-10' WHERE id = ?", (new_york,))
+    db.execute("UPDATE email_schedules SET last_period = '2026-09' WHERE id = ?", (london,))
+    sent = [
+        delivery.tick(app, db, vault, cfg, datetime(2026, 10, 25, 0, 0, tzinfo=UTC) + timedelta(minutes=m))
+        for m in range(0, 180, 15)
+    ]
+    assert sum(sent) == 1 and _row(db, "email_schedules", london)["last_period"] == "2026-10"
+    assert len(sends()) == 2
+
+
+def test_a_tenant_with_no_data_is_not_sent_an_empty_report(app, db, two_tenants, vault, cfg):
+    alpha, _ = two_tenants
+    _smtp_ready(db)
+    db.execute("UPDATE tenants SET connection_id = NULL")
+    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], hour=0)
+    assert delivery.tick(app, db, vault, cfg, datetime(2026, 10, 2, 9, tzinfo=UTC)) == 1
+    assert sends() == []
+    row = db.execute("SELECT * FROM email_deliveries").fetchone()
+    assert row["status"] == "failed" and row["error"].startswith("Nothing has been collected for Alpha Ltd yet")
+    assert _row(db, "email_schedules", sid)["retry_at"]  # tried again, in case a collection lands
+    _collected(db, alpha)
+    assert delivery.tick(app, db, vault, cfg, datetime(2026, 10, 2, 9, 5, tzinfo=UTC)) == 1
+    assert len(sends()) == 1
+
+
+def test_plain_text_leads_with_the_verdict_and_says_when_data_is_old(app, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    sid = _schedule(db, alpha, [], reports=())
+    s, t = _row(db, "email_schedules", sid), store.get_tenant(db, alpha)
+    fresh = delivery.build_report_email(app, db, s, t, [], attach=False).email
+    verdict = delivery.summary.monthly(delivery.monthly_review.build(db, t)).verdict
+    assert f"{verdict.label}: {verdict.headline}" in fresh.text
+    assert fresh.text.index(verdict.headline) < fresh.text.index("Needs attention")
+    assert "more than 36 hours old" not in fresh.text
+    db.execute("UPDATE runs SET finished_at = '2026-01-01T00:00:00Z'")
+    old = delivery.build_report_email(app, db, s, t, [], attach=False).email
+    assert "more than 36 hours old" in old.text and "more than 36 hours old" in old.html
+
+
+def test_digest_count_leaves_out_accepted_risks_like_its_list(db, two_tenants):
+    alpha, _ = two_tenants
+    now = datetime(2026, 10, 10, 9, 0, tzinfo=UTC)
+    new = "2026-10-08T02:00:00Z"
+    _finding(db, alpha, "admin_mfa", "critical", new, "open")
+    accepted = _finding(db, alpha, "admin_mfa", "high", new, "accepted", accepted=True)
+    lapsed = _finding(db, alpha, "admin_mfa", "high", new, "lapsed", accepted=True)
+    db.execute("UPDATE findings SET accepted_until = '2026-10-09T00:00:00Z' WHERE id = ?", (lapsed,))
+    d = delivery.digest_data(db, "weekly", now)
+    assert d["new_severe"] == len(d["new_findings"]) == 2
+    assert accepted not in {f["id"] for f in d["new_findings"]}
+
+
+def test_pausing_and_resuming_is_one_change(client, db, two_tenants, monkeypatch):
+    from officesentry.web import email as email_pages
+
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")], last_period="2026-01")
+    client.post(f"/schedules/{sid}/toggle")
+    assert _row(db, "email_schedules", sid)["enabled"] == 0
+
+    def crash(*a, **k):
+        raise RuntimeError("stopped half way")
+
+    monkeypatch.setattr(email_pages, "audit", crash)
+    with pytest.raises(RuntimeError):
+        client.post(f"/schedules/{sid}/toggle")
+    s = _row(db, "email_schedules", sid)
+    assert (s["enabled"], s["last_period"]) == (0, "2026-01")  # nothing half done
+    monkeypatch.undo()
+    client.post(f"/schedules/{sid}/toggle")
+    s = _row(db, "email_schedules", sid)
+    assert s["enabled"] == 1 and s["last_period"] > "2026-01"  # the paused months count as done
+
+
+def test_send_now_logs_a_failure_as_a_failure(client, db, two_tenants):
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    _collected(db, alpha)
+    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")])
+    client.post(f"/schedules/{sid}/send")  # email isn't set up
+    actions = [r[0] for r in db.execute("SELECT action FROM audit_log WHERE action LIKE 'email_%'")]
+    assert actions == ["email_send_failed"]
+    _smtp_ready(db)
+    client.post(f"/schedules/{sid}/send")
+    actions = [r[0] for r in db.execute("SELECT action FROM audit_log WHERE action LIKE 'email_%' ORDER BY id")]
+    assert actions == ["email_send_failed", "email_sent"] and len(sends()) == 1
+
+
+def test_send_now_and_retry_wait_while_the_timer_is_sending(app, client, db, two_tenants, vault, cfg):
+    from officesentry import tasks
+
+    alpha, _ = two_tenants
+    make_user(db, "admin")
+    login(client, "admin")
+    _smtp_ready(db)
+    _collected(db, alpha)
+    db.execute("UPDATE tenants SET connection_id = NULL")
+    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "", "a@x.com")])
+    s = _row(db, "email_schedules", sid)
+    period, _ = delivery.schedule_slot(s, cfg.timezone, datetime.now(UTC))
+    tasks.enqueue(db, "send_schedule", key=delivery.send_key(s, period), tenant_id=alpha, payload={"schedule_id": sid})
+    page = client.post(f"/schedules/{sid}/send", follow_redirects=True).get_data(as_text=True)
+    assert "being sent on its schedule right now" in page and sends() == []
+    failed = delivery.record(
+        db,
+        kind="report",
+        email=None,
+        subject="x",
+        error="boom",
+        transport=None,
+        trigger="schedule",
+        user=None,
+        schedule_id=sid,
+        tenant_id=alpha,
+        period=period,
+    )
+    assert delivery.retry_delivery(app, db, vault, _row(db, "email_deliveries", failed), "admin") == delivery.BEING_SENT
+    assert sends() == []
+    db.execute("UPDATE tasks SET status = 'succeeded'")
+    client.post(f"/schedules/{sid}/send")
+    assert len(sends()) == 1
