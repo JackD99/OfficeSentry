@@ -33,10 +33,10 @@ def exchange_callback(data):
         body = json.loads(request.body)["CmdletInput"]
         name, params = body["CmdletName"], body.get("Parameters") or {}
         result = data.get(name, [])
-        if isinstance(result, tuple):  # (status, error body)
-            return result[0], {}, json.dumps(result[1])
         if isinstance(result, dict):  # keyed by Identity (or Mailbox)
             result = result.get(params.get("Identity") or params.get("Mailbox"), [])
+        if isinstance(result, tuple):  # (status, error body)
+            return result[0], {}, json.dumps(result[1])
         return 200, {}, json.dumps({"value": result})
 
     return callback
