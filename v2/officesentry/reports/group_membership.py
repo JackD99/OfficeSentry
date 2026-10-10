@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ..checks.groups import m365_groups
 from ..collectors.groups import GROUP_LIMIT, MEMBER_IDS_KEPT
-from ..rules import m365_groups
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import VISIBILITY, DataReport, Rows, Section, Tile, _owner_names

@@ -13,19 +13,13 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
 from .. import adminactivity, coverage, devices, dnscheck, hybrid
+from ..checks.apps import app_risks, user_consent_level
+from ..checks.groups import group_owner_problem, group_type, m365_groups
+from ..checks.sharing import SHARING_LEVELS
+from ..checks.tenant_settings import GUEST_ROLES, admin_consent_missing
 from ..collectors import REGISTRY
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
-from ..rules import (
-    GUEST_ROLES,
-    SHARING_LEVELS,
-    admin_consent_missing,
-    app_risks,
-    group_owner_problem,
-    group_type,
-    m365_groups,
-    user_consent_level,
-)
 from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from . import workbook

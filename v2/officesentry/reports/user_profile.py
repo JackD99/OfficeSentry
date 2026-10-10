@@ -20,6 +20,8 @@ from datetime import UTC, datetime, timedelta
 
 from .. import adminactivity, authmethods, devices, identity_protection, signins, store
 from .. import events as events_store
+from ..checks import RULES
+from ..checks.apps import SENSITIVE_DELEGATED
 from ..formatting import day
 from ..formatting import when as at_time
 from ..licences import (
@@ -33,7 +35,6 @@ from ..licences import (
     sku_name,
 )
 from ..mailflow import inbox_rule_risk, is_external, mailbox_forwarding, tenant_domains
-from ..rules import SENSITIVE_DELEGATED
 from ..snapshot import TenantSnapshot
 from ..text import plural as _plural
 from .data_reports import (
@@ -1585,7 +1586,6 @@ def find_user(snap: TenantSnapshot, user_id: str) -> dict | None:
 
 
 def _findings(snap: TenantSnapshot, person: Person) -> list[dict]:
-    from ..rules import RULES
     titles = {r.key: r.title for r in RULES}
     rows = snap.conn.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL",
                              (snap.tenant["id"],)).fetchall()

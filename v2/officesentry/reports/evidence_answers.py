@@ -21,8 +21,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .. import coverage
+from ..checks import RuleResult
+from ..checks.base import _names
+from ..checks.identity import _ca_data, _privileged_users, mfa_for_all_policies
 from ..db import audit, transaction, utcnow
-from ..rules import RuleResult, _ca_data, _names, _privileged_users, mfa_for_all_policies
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .identity_reports import BREAK_GLASS_NAME
