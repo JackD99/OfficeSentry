@@ -2,7 +2,10 @@
 
 All code lives in `v2/`. Its [README](v2/README.md) covers what the product
 does and [CLAUDE.md](v2/CLAUDE.md) covers the conventions (adding
-collectors, checks, reports and migrations).
+collectors, checks, reports and migrations). New here? Start with the
+[developer guide](DEVELOPING.md): running it locally, how it fits together,
+tests and simulated Microsoft responses. What's planned is in
+[ROADMAP.md](ROADMAP.md).
 
 ## Development setup
 
