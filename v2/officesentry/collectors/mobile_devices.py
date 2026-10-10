@@ -5,6 +5,10 @@ synced is only in Get-MobileDeviceStatistics, one call per mailbox that has a de
 use the same rotating window as other per-mailbox reads (``mailbox_window``): on very big tenants a
 mailbox not read this run keeps its devices' last sync from the run that read it.
 
+A partnership can outlive its mailbox (a mailbox deleted or recreated under a new name keeps its old
+devices listed). Exchange answers 404 for that mailbox's statistics, so those devices are marked
+``mailboxGone`` instead of counting as a failed read.
+
 Device phone numbers, IMEIs and wipe recovery passwords are never stored.
 """
 
@@ -87,9 +91,15 @@ class MobileDevices(Collector):
             if name:
                 owners.setdefault(mailbox_id, {"_id": mailbox_id, "ident": (box or {}).get("Guid") or name})
 
-        synced = self._statistics(ctx, list(owners.values()))
+        synced, gone = self._statistics(ctx, list(owners.values()))
         for device_id, row in rows:
             row.update(synced.get(device_id) or synced.get(str(row.get("identity"))) or {})
+            if row["mailboxId"] in gone:
+                row["mailboxGone"] = True
+        if gone:
+            left = sum(row["mailboxId"] in gone for _, row in rows)
+            ctx.log(f"{plural(left, 'device')} {'belongs' if left == 1 else 'belong'} to a mailbox that no longer "
+                    "exists, so Exchange has no sync times for them")
         ctx.objects("mobile_device", rows)
 
         data = [r for _, r in rows]
@@ -97,18 +107,22 @@ class MobileDevices(Collector):
         ctx.metric("mobile.blocked", sum(r.get("DeviceAccessState") in ("Blocked", "Quarantined") for r in data))
 
     @staticmethod
-    def _statistics(ctx: RunContext, owners: list[dict]) -> dict[str, dict]:
-        """Each device's last sync, by device ID and identity: read this run, or kept from an earlier run."""
+    def _statistics(ctx: RunContext, owners: list[dict]) -> tuple[dict[str, dict], set[str]]:
+        """Each device's last sync, by device ID and identity: read this run, or kept from an earlier run. And
+        the mailboxes Exchange no longer finds (404), whose devices are left over."""
         window = mailbox_window.plan(ctx, MobileDevices.key, "mobile_device_sync", owners, lambda o: o["_id"],
                                      "mobile device sync times")
-        found, failed = [], 0
+        found, failed, gone = [], 0, set()
         for owner in window.mailboxes:
             try:
                 stats = ctx.exchange.invoke("Get-MobileDeviceStatistics", {"Mailbox": owner["ident"]})
             except ExchangeAccessDenied:
                 raise
-            except ExchangeError:
-                failed += 1
+            except ExchangeError as exc:
+                if exc.status == 404:
+                    gone.add(owner["_id"])
+                else:
+                    failed += 1
                 continue
             for s in stats:
                 row = {f: s.get(f) for f in SYNC_FIELDS}
@@ -125,4 +139,4 @@ class MobileDevices(Collector):
             out[device_id] = sync
             if row.get("identity"):
                 out.setdefault(str(row["identity"]), sync)
-        return out
+        return out, gone

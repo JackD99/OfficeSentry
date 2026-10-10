@@ -166,6 +166,37 @@ def test_every_device_row(db, tenant):
     assert platforms == {"iOS": [3, 1, 2, 2], "Android": [1, 0, 1, 0]}
 
 
+def test_device_left_from_a_removed_mailbox(db, two_tenants):
+    """Exchange keeps a partnership after its mailbox is deleted or recreated under a new name, then answers
+    404 for that mailbox's statistics (seen on the live test tenant). That's a leftover device, not a failed read."""
+    alpha, _ = two_tenants
+    old = xd._device("OldName", "d-5", "MNO345", "iPhone 11", "iOS 15.1 19B74")
+    not_found = (404, {"error": {"code": "NotFound", "message": "|Microsoft.Exchange.Configuration.Tasks."
+                                 "ManagementObjectNotFoundException|The operation couldn't be performed because "
+                                 "Identity:\"CN=OldName,OU=x.onmicrosoft.com\" couldn't be found."}})
+    data = {**gd.EXCHANGE, "Get-MobileDevice": [*xd.DEVICES, old],
+            "Get-MobileDeviceStatistics": {**xd.DEVICE_STATS, "OldName": not_found}}
+    seed_tenant(db, alpha, users=USERS, exchange=data)
+    run = db.execute("SELECT status FROM runs WHERE tenant_id = ? AND collector = 'mobile_devices'",
+                     (alpha,)).fetchone()
+    assert run["status"] == "succeeded"
+    _, s = _report(db, store.get_tenant(db, alpha), "mobile-devices")
+    row = next(r for r in s["Every device"].rows if r[1] == "iPhone 11")
+    assert row[0] == "OldName" and row[7] == "" and row[8] == "Mailbox no longer exists"
+    why = next(r for r in s["Devices that need attention"].rows if r[1] == "iPhone 11")[2]
+    assert "Remove-MobileDevice" in str(why)
+
+
+def test_a_failed_statistics_read_still_warns(db, two_tenants):
+    alpha, _ = two_tenants
+    busy = (500, {"error": {"code": "InternalServerError", "message": "Try again later."}})
+    seed_tenant(db, alpha, users=USERS, exchange={**gd.EXCHANGE, "Get-MobileDeviceStatistics":
+                                                  {**xd.DEVICE_STATS, "u2": busy}})
+    run = db.execute("SELECT id, status FROM runs WHERE tenant_id = ? AND collector = 'mobile_devices'",
+                     (alpha,)).fetchone()
+    assert run["status"] == "partial"
+
+
 def test_platform_names():
     assert [platform(v) for v in ("iOS 17", "Android 14", "Windows 10.0", "", None, "BlackBerry")] == [
         "iOS", "Android", "Windows", "Other", "Other", "Other"]
