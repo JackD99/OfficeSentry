@@ -1,0 +1,60 @@
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{%- set n = sheet.counts -%}
+{%- set TONE = {'Yes': 'yes', 'Answered': 'yes', 'Partly': 'partly', 'No': 'no', 'Your input': 'not-known', 'Not known': 'not-known'} -%}
+
+{% block doc_title %}{{ sheet.qset.title }}{% endblock %}
+{% block client %}{{ sheet.tenant.name }}{% endblock %}
+{% block toolbar %}
+  <a class="back" href="{{ url_for('reports.evidence_pack', tenant_id=sheet.tenant.id, set=sheet.qset.key) }}">&larr; {{ sheet.tenant.name }}</a>
+{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', sheet.generated_at.day ~ ' ' ~ sheet.generated_at.strftime('%B %Y')) }}
+  {{ ui.meta('Evidence date', sheet.oldest_data|day if sheet.oldest_data else 'Not collected yet') }}
+  {{ ui.meta('Microsoft 365 tenant', sheet.tenant.tenant_ref) }}
+{% endblock %}
+{% block contents %}
+  <li><a href="#summary">Summary</a></li>
+  {% for part, rows in sheet.parts %}<li><a href="#part-{{ loop.index }}">{{ part }}</a></li>{% endfor %}
+  <li><a href="#about">About these answers</a></li>
+{% endblock %}
+
+{% block body %}
+<section id="summary" class="keep">
+  <h2>Summary</h2>
+  <div class="summary-text">
+    <p>{{ sheet.qset.intro }}</p>
+    <p>Of {{ sheet.rows|length|plural('question') }}, {{ n.data }} {{ 'is' if n.data == 1 else 'are' }} answered from Microsoft 365 data{% if n.team %} and {{ n.team }} by {{ brand.display_name }}{% endif %}{% if n.attention %}; {{ n.attention }} of those {{ 'is' if n.attention == 1 else 'are' }} Partly or No{% endif %}.{% if n.input %} {{ n.input|plural('question') }} {{ 'needs' if n.input == 1 else 'need' }} information Microsoft 365 can't show, marked "Your input", with a text to complete.{% endif %}</p>
+  </div>
+  {{ ui.breakdown(sheet.rows|length ~ ' questions', sheet.breakdown) }}
+</section>
+
+{% for part, rows in sheet.parts %}
+<section id="part-{{ loop.index }}">
+  <h2>{{ part }}</h2>
+  <table class="answers-table">
+    <thead><tr><th>Question</th><th>Answer</th><th>Text to paste</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    {% set a = r.answer %}
+    <tr>
+      <td class="q">{% if r.item.ref %}<strong>{{ r.item.ref }}</strong> {% endif %}{{ r.item.question }}{% if r.item.autofail %} <span class="set-by">(auto-fail)</span>{% endif %}</td>
+      <td><span class="answer answer-{{ TONE.get(r.state, 'not-known') }}">{{ r.state }}</span></td>
+      <td>{{ a.text }}
+        {%- if a.override %}<div class="source">Set by {{ a.override.set_by }} on {{ a.override.set_at|day }}.</div>
+        {%- elif r.based_on %}<div class="source">{{ 'Why: ' if a.needs_input else 'Based on: ' }}{{ r.based_on }}</div>{% endif %}
+        {%- if a.source and not a.needs_input %}<div class="source">Evidence: {{ a.source.label }}{% if a.source.report %} report{% endif %}{% if a.as_of and not a.override %}, Microsoft 365 data from {{ a.as_of|day }}{% endif %}.</div>{% endif %}
+        {%- if r.beyond %}<div class="source">Still to check: {{ r.beyond }}</div>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
+<footer class="about keep" id="about">
+  <h2>About these answers</h2>
+  <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Answers marked as suggested come from Microsoft 365 settings and accounts read with read-only access; nothing was changed. The oldest data used was collected {{ sheet.oldest_data|when if sheet.oldest_data else 'never' }}. "Your input" marks questions Microsoft 365 can't show (such as backups, firewalls and plans): complete the [parts in brackets] before using the text.{% if sheet.qset.source %} {{ sheet.qset.source }}{% endif %}</p>
+</footer>
+{% endblock %}

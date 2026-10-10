@@ -1,4 +1,4 @@
-"""One page per account (``reports/user_profile.py``) and the Users tab that lists them."""
+"""One page per account (``reports/profile/``) and the Users tab that lists them."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import re
 from flask import Blueprint, Response, abort, g, render_template, request
 
 from ..db import audit
-from ..reports import branding, data_reports, user_profile
+from ..reports import branding, data_reports
+from ..reports import profile as profiles
 from .access import login_required, tenant_or_404
 from .printing import pdf_response
 
@@ -20,7 +21,7 @@ def _slug(text: str) -> str:
 
 def _profile(tenant_id: int, user_id: str):
     t = tenant_or_404(tenant_id)
-    profile = user_profile.build(g.db, t, user_id)
+    profile = profiles.build(g.db, t, user_id)
     if profile is None:
         abort(404)
     return t, profile
@@ -30,7 +31,7 @@ def _profile(tenant_id: int, user_id: str):
 @login_required
 def people(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    found = user_profile.directory(g.db, t)
+    found = profiles.directory(g.db, t)
     rows, tiles = found if found else ([], [])
     return render_template("people.html", tenant=t, rows=rows, tiles=tiles, collected=found is not None)
 
@@ -40,7 +41,7 @@ def people(tenant_id: int):
 def person(tenant_id: int, user_id: str):
     t = tenant_or_404(tenant_id)
     # ?leaver=1 shows the leaver checklist for an account whose sign-in is still allowed.
-    profile = user_profile.build(g.db, t, user_id, leaver=request.args.get("leaver") == "1")
+    profile = profiles.build(g.db, t, user_id, leaver=request.args.get("leaver") == "1")
     if profile is None:
         abort(404)
     return render_template("user.html", tenant=t, profile=profile)
@@ -72,7 +73,7 @@ def person_xlsx(tenant_id: int, user_id: str):
 def leaver_pdf(tenant_id: int, user_id: str):
     """The 'Before you close this account' checklist on one page, for the client to sign off."""
     t = tenant_or_404(tenant_id)
-    sheet = user_profile.leaver_sheet(g.db, t, user_id)
+    sheet = profiles.leaver_sheet(g.db, t, user_id)
     if sheet is None:
         abort(404)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "leaver.pdf")

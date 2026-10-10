@@ -12,10 +12,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .. import coverage
-from ..rules import RuleResult
+from ..checks import RuleResult
+from ..checks.auth_methods import admin_phishing_resistant
 from ..snapshot import TenantSnapshot
 from ..text import WHOLE_ORGANISATION
-from . import evidence_answers
+from . import evidence_answers, questionnaires
 from .evidence_answers import Answer
 from .monthly_review import build as build_review
 from .workbook import Book, Cover
@@ -114,7 +115,6 @@ def _extra_evidence(key: str, snap: TenantSnapshot, now: datetime | None = None)
         return out
     if key == "mfa_admins":
         # Phishing-resistant MFA goes beyond the question, so it's evidence, not part of the answer.
-        from ..auth_rules import admin_phishing_resistant
         try:
             status, summary, *_ = admin_phishing_resistant(snap, now)
         except Exception:  # damaged data: leave the line out rather than the whole pack
@@ -191,14 +191,25 @@ def answer_rows(pack: EvidencePack) -> list[list[str]]:
     return rows
 
 
-def to_xlsx(pack: EvidencePack, brand=None) -> bytes:
+def to_xlsx(pack: EvidencePack, brand=None, only: str | None = None) -> bytes:
+    """Every question set as its own sheet, then the controls; or just question set ``only``."""
     book = Book(brand.accent if brand else "")
-    book.table("Questionnaire", ANSWER_COLUMNS, answer_rows(pack),
-               description="Answers to the questions cyber insurers ask, worded as they ask them")
+    sheets = [questionnaires.sheet(pack, k) for k in ([only] if only else questionnaires.SETS)]
+    for name, rows, description in questionnaires.to_xlsx_tables(sheets):
+        book.table(name, questionnaires.COLUMNS, rows, description=description)
+    if only:
+        n = sheets[0].counts
+        return book.save(_cover(pack, brand, sheets[0].qset.title, [
+            ("Answered from Microsoft 365", n["data"], ""), ("Answered by your team", n["team"], ""),
+            ("Need attention", n["attention"], "Partly or No"), ("Your input needed", n["input"], "")]))
     book.table("Controls", ["Question", "Status", "What we found", "Gaps"],
                [[c.control.question, c.status, "\n".join(c.evidence), "\n".join(g.strip() for g in c.gaps)]
                 for c in pack.controls], description="Each control insurers ask about, with the evidence")
-    facts = [(status, n, "") for status, n in pack.counts.items()]
+    return book.save(_cover(pack, brand, "Security controls evidence"))
+
+
+def _cover(pack: EvidencePack, brand, title: str, facts=None) -> Cover:
+    facts = facts or [(status, n, "") for status, n in pack.counts.items()]
     if pack.secure_score is not None:
         facts.append(("Microsoft Secure Score", f"{pack.secure_score:g}%", "Microsoft's own measure"))
     notes = []
@@ -207,8 +218,9 @@ def to_xlsx(pack: EvidencePack, brand=None) -> bytes:
         notes.append(("Oldest data used", f"{oldest.day} {oldest:%b %Y, %H:%M} UTC"))
     notes.append(("How to read it", "Partly in place means the control exists but has the gaps listed. Not assessed "
                                     "means Microsoft 365 can't show it, so evidence has to come from elsewhere."))
-    cover = Cover("Security controls evidence", pack.tenant["name"], pack.generated_at,
-                  brand.display_name if brand else "", pack.tenant["tenant_ref"], brand.accent if brand else "",
-                  "Answers to the security questions cyber insurers ask, from Microsoft 365 data read with "
-                  "read-only access.", facts, notes)
-    return book.save(cover)
+    notes.append(("Your input", "Questions Microsoft 365 can't answer have a text to complete: fill in the "
+                                "[parts in brackets] before you paste it."))
+    return Cover(title, pack.tenant["name"], pack.generated_at, brand.display_name if brand else "",
+                 pack.tenant["tenant_ref"], brand.accent if brand else "",
+                 "Answers to security questionnaires, from Microsoft 365 data read with read-only access.", facts,
+                 notes)

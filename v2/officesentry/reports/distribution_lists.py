@@ -16,6 +16,7 @@ from ..snapshot import TenantSnapshot
 from ..text import day, plural, verb
 from .data_reports import DataReport, Rows, Section, Tile
 from .mail_reports import _no_exchange
+from .registry import report
 
 NOT_COLLECTED = "Distribution lists haven't been collected yet. Refresh Distribution lists on the tenant page."
 RECENT_DAYS = 30
@@ -73,7 +74,18 @@ def _recent(entry: dict, now: datetime, days: int) -> int:
     return sum(n for d, n in counts.items() if isinstance(n, int) and isinstance(d, str) and d >= since)
 
 
-def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
+@report(
+    "distribution-lists",
+    "Distribution lists",
+    "Every distribution list with its members and owners, who can mail it, and empty, "
+    "ownerless or unused lists.",
+    ("distribution_lists", "mailboxes", "users"),
+    group="email",
+    order=64,
+    keywords="dl dls distribution groups mailing lists email groups members owners inactive unused",
+    uses=("offboarding", "storage"),
+)
+def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     lists = snap.objects("distribution_lists", "distribution_list")
     if lists is None:
         out.unavailable = NOT_COLLECTED
@@ -182,10 +194,3 @@ def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     ]
     out.sections = [attention, every, members]
 
-
-REPORTS = {
-    "distribution-lists": ("Distribution lists",
-                           "Every distribution list with its members and owners, who can mail it, and empty, "
-                           "ownerless or unused lists.",
-                           ("distribution_lists", "mailboxes", "users"), report),
-}

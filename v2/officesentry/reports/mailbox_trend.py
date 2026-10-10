@@ -16,6 +16,7 @@ from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import DataReport, Rows, Section, Tile, _type
 from .mail_reports import _no_exchange, _size
+from .registry import report
 from .sharepoint import storage_chart
 
 NOT_COLLECTED = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the tenant page."
@@ -71,7 +72,18 @@ def _monthly(points: list[tuple[date, float]]) -> list[tuple[str, float]]:
     return sorted(months.items())
 
 
-def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
+@report(
+    "mailbox-trend",
+    "Mailbox size trend",
+    "How each mailbox has grown over the last one and three months, which will fill up and when, "
+    "and the tenant's total mailbox size month by month.",
+    ("mailbox_usage",),
+    group="email",
+    order=55,
+    keywords="growth growing history over time forecast quota full storage",
+    uses=("storage",),
+)
+def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     current = snap.objects("mailbox_usage", "mailbox_size")
     if current is None:
         out.unavailable = NOT_COLLECTED
@@ -156,10 +168,3 @@ def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     ]
     out.sections = [growth, months]
 
-
-REPORTS = {
-    "mailbox-trend": ("Mailbox size trend",
-                      "How each mailbox has grown over the last one and three months, which will fill up and when, "
-                      "and the tenant's total mailbox size month by month.",
-                      ("mailbox_usage",), report),
-}

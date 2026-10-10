@@ -56,6 +56,12 @@ tenant; until then the pages build them as before.
 - A tenant's Activity history page (Changes → Activity history, staff only): how far back each log is
   detailed from, the last 30 days, sign-ins per day, each month with a CSV of every sign-in, and admin
   changes worth a second look.
+- Questionnaires and evidence (a tenant's Reports → Questionnaires): answers for cyber insurance proposal
+  forms, supplier security questionnaires and Cyber Essentials (IASME's Danzell set, by question number), in
+  each form's wording and ready to copy and paste, with the Microsoft 365 data and date behind each one.
+  Questions Microsoft 365 can't answer (backups, firewalls, plans) show a text to complete, with the
+  missing parts in brackets; an answer written once fills every form that asks it. Downloads: a PDF answer
+  sheet, XLSX, CSV and plain text per form.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
 - Four Exchange reports (Reports → Email): **Mobile devices** (phones and tablets syncing mail, with which

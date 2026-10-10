@@ -18,6 +18,7 @@ from .charts import line_chart
 from .data_reports import DataReport, Highlight, Section, Tile
 from .identity_reports import Money, _day, _parse
 from .monthly_review import setting
+from .registry import report
 
 NOT_COLLECTED = ("Microsoft 365 usage hasn't been collected yet. Refresh \"Microsoft 365 usage\" on the tenant "
                  "page.")
@@ -99,6 +100,16 @@ def active_points(snap: TenantSnapshot) -> list[tuple[date, float]]:
 # -- Usage ----------------------------------------------------------------------------------
 
 
+@report(
+    "usage",
+    "Microsoft 365 usage",
+    "Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was "
+    "last active.",
+    ("m365_usage",),
+    group="tenant",
+    order=50,
+    keywords="adoption activity active users teams onedrive outlook office apps copilot",
+)
 def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     loaded = _load(snap, report)
     if loaded is None:
@@ -178,6 +189,16 @@ def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
 # -- Right-sizing ---------------------------------------------------------------------------
 
 
+@report(
+    "licence-rightsizing",
+    "Licence right-sizing",
+    "People who could move to a cheaper licence, and services people are licensed for but "
+    "don't use.",
+    ("m365_usage", "users", "tenant_profile", "mailbox_usage"),
+    group="tenant",
+    order=40,
+    keywords="licenses downgrade cheaper plan savings cost copilot business basic standard e1 e3",
+)
 def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     loaded = _load(snap, report)
     if loaded is None:
@@ -256,13 +277,3 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
                   "warn" if people_moving else "ok"),
         Highlight("Not using a service", len(unused.rows), f"In the last {ACTIVE_DAYS} days"),
     ]
-
-
-REPORTS = {
-    "usage": ("Microsoft 365 usage",
-              "Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was "
-              "last active.", ("m365_usage",), usage_report),
-    "licence-rightsizing": ("Licence right-sizing",
-                            "People who could move to a cheaper licence, and services people are licensed for but "
-                            "don't use.", ("m365_usage", "users", "tenant_profile", "mailbox_usage"), rightsizing),
-}

@@ -15,6 +15,7 @@ from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import DataReport, Rows, Section, Tile, _type
 from .mail_reports import _no_exchange
+from .registry import report
 
 NOT_COLLECTED = "Automatic replies haven't been collected yet. Refresh Automatic replies on the tenant page."
 FORGOTTEN_DAYS = 30
@@ -80,7 +81,18 @@ def first_seen(snap: TenantSnapshot, now: datetime) -> dict[str, str]:
     return seen
 
 
-def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
+@report(
+    "auto-replies",
+    "Automatic replies",
+    "Mailboxes answering mail with an out-of-office reply, who outside hears it, and replies "
+    "that have been on so long they look forgotten.",
+    ("auto_replies", "users"),
+    group="email",
+    order=62,
+    keywords="out of office ooo away holiday vacation automatic reply autoreply",
+    uses=("offboarding",),
+)
+def auto_replies_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     rows = snap.objects("auto_replies", "auto_reply")
     if rows is None:
         out.unavailable = NOT_COLLECTED
@@ -147,10 +159,3 @@ def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
                     "the reply on; it can't go back further than the snapshots kept.")
     out.sections = [every]
 
-
-REPORTS = {
-    "auto-replies": ("Automatic replies",
-                     "Mailboxes answering mail with an out-of-office reply, who outside hears it, and replies "
-                     "that have been on so long they look forgotten.",
-                     ("auto_replies", "users"), report),
-}

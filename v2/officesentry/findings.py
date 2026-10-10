@@ -15,8 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from .checks import evaluate
 from .db import transaction
-from .rules import evaluate
 from .snapshot import TenantSnapshot
 
 ISO = "%Y-%m-%dT%H:%M:%SZ"

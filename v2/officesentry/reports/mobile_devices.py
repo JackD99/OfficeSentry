@@ -14,6 +14,7 @@ from ..snapshot import TenantSnapshot
 from ..text import plural, verb
 from .data_reports import DataReport, Rows, Section, Tile
 from .mail_reports import _no_exchange
+from .registry import report
 
 NOT_COLLECTED = "Mobile devices haven't been collected yet. Refresh Mobile devices on the tenant page."
 ACTIVE_DAYS = 30
@@ -59,7 +60,18 @@ def _account(user: dict | None) -> str:
     return "Active" if user.get("accountEnabled") is not False else "Sign-in blocked"
 
 
-def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
+@report(
+    "mobile-devices",
+    "Mobile devices",
+    "Phones and tablets that sync mail, with which app, when each last synced, and leavers' "
+    "devices that are still connected.",
+    ("mobile_devices", "mailboxes", "users"),
+    group="email",
+    order=66,
+    keywords="phones iphone android tablets activesync eas outlook mobile sync wipe quarantine",
+    uses=("offboarding", "compromise"),
+)
+def devices_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     found = snap.objects("mobile_devices", "mobile_device")
     if found is None:
         out.unavailable = NOT_COLLECTED
@@ -145,10 +157,3 @@ def report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     ]
     out.sections = [attention, every, platforms]
 
-
-REPORTS = {
-    "mobile-devices": ("Mobile devices",
-                       "Phones and tablets that sync mail, with which app, when each last synced, and leavers' "
-                       "devices that are still connected.",
-                       ("mobile_devices", "mailboxes", "users"), report),
-}

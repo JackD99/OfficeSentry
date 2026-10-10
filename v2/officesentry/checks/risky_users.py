@@ -1,14 +1,14 @@
-"""Checks over Entra ID Protection's risky users. Registered into ``rules.RULES`` on import."""
+"""Checks over Entra ID Protection's risky users."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from . import clouds
-from . import identity_protection as ip
-from .rules import Finding, _unavailable, rule
-from .snapshot import TenantSnapshot
-from .text import plural
+from .. import clouds
+from .. import identity_protection as ip
+from ..snapshot import TenantSnapshot
+from ..text import plural
+from .base import Finding, _unavailable, rule
 
 
 @rule("risky_users", "No accounts are at risk in Entra ID Protection", "Identity",

@@ -14,6 +14,7 @@
   'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
   'download': '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   'refresh': '<path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/>',
+  'copy': '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/>',
   'doc': '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
   'shield': '<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/>',
   'plus': '<path d="M12 5v14M5 12h14"/>',
@@ -104,7 +105,7 @@
 {% set pages = [] %}
 {% if tab == 'reports' %}
   {% set _ = pages.append(('data', 'Detail reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
-  {% set _ = pages.append(('evidence', 'Insurance evidence', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('evidence', 'Questionnaires', url_for('reports.evidence_pack', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('review', 'Monthly review', url_for('reports.tenant_report', tenant_id=tenant.id))) %}
 {% elif tab == 'changes' and staff %}
   {% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
