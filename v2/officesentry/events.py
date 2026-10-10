@@ -881,9 +881,38 @@ class Log:
     page_size: int
     write: Callable[[Path, int, list], Added]
     daily: bool = False  # keeps daily summaries
+    select: str = ""  # the fields asked for; empty asks for all of them
 
 
-SIGNIN_LOG = Log("signins", "/auditLogs/signIns", "beta", "createdDateTime", 1000, add_signins, daily=True)
+# Beta, for authenticationRequirement (whether a sign-in needed MFA or only a password), which v1.0 doesn't
+# have. Ask for only what ``_signin_row`` stores: Microsoft sends Deprecation and Sunset headers (sunset 31 August
+# 2026, for fields it retired from beta sign-ins) when every field comes back, and none when these are selected.
+SIGNIN_FIELDS = ",".join(
+    (
+        "id",
+        "createdDateTime",
+        "userPrincipalName",
+        "userId",
+        "userDisplayName",
+        "appDisplayName",
+        "appId",
+        "clientAppUsed",
+        "ipAddress",
+        "location",
+        "deviceDetail",
+        "status",
+        "authenticationRequirement",
+        "conditionalAccessStatus",
+        "riskLevelDuringSignIn",
+        "riskState",
+        "riskDetail",
+        "riskEventTypes_v2",
+        "isInteractive",
+    )
+)
+SIGNIN_LOG = Log(
+    "signins", "/auditLogs/signIns", "beta", "createdDateTime", 1000, add_signins, daily=True, select=SIGNIN_FIELDS
+)
 AUDIT_LOG = Log("audits", "/auditLogs/directoryAudits", "v1.0", "activityDateTime", 999, add_audits)
 
 
@@ -959,6 +988,8 @@ class _Reader:
         flt = f"{f} ge {_iso(lo)}" + ("" if open_top else f" and {f} le {_iso(hi)}")
         url: str | None = self.src.path
         params: dict | None = {"$filter": flt, "$top": str(self.src.page_size)}
+        if self.src.select:
+            params["$select"] = self.src.select
         while url:
             if self.result.pages >= self.budget:
                 raise _Budget

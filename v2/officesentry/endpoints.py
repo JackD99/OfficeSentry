@@ -82,7 +82,9 @@ class Endpoint:
     or the cmdlet name (Exchange). ``limits`` are names in ``LIMITS``; every Graph call also
     counts against ``graph``. ``cost`` is the resource units it uses where its limits count
     units (SharePoint, directory), else 1. ``select`` makes the entry match only when the
-    request's ``$select`` includes that field."""
+    request's ``$select`` includes that field. ``beta`` says why a Graph call uses beta, what v1.0 lacks;
+    ``tests/test_endpoints.py`` fails on a beta entry without one, and the run telemetry tests on a beta call
+    that isn't listed as beta."""
 
     path: str
     versions: tuple[str, ...]
@@ -92,6 +94,7 @@ class Endpoint:
     fallback: str = ""
     select: str = ""
     api: str = "graph"
+    beta: str = ""
     pattern: re.Pattern = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -133,7 +136,8 @@ GRAPH: tuple[Endpoint, ...] = (
         BETA,
         "Policy.Read.All",
         ("directory",),
-        fallback="Beta only; per-user MFA shows as unknown if it fails",
+        fallback="Per-user MFA shows as unknown if it fails",
+        beta="Per-user MFA state is only in beta",
     ),
     Endpoint("/groups", V1, "Directory.Read.All", ("directory",)),
     Endpoint("/groups/{id}", V1, "Directory.Read.All", ("directory",)),
@@ -149,7 +153,7 @@ GRAPH: tuple[Endpoint, ...] = (
         BOTH,
         "Organization.Read.All",
         ("directory",),
-        fallback="Beta is used only for onPremisesLastPasswordSyncDateTime",
+        beta="Only for onPremisesLastPasswordSyncDateTime, which v1.0 doesn't have",
     ),
     Endpoint("/subscribedSkus", V1, "Organization.Read.All", ("directory",)),
     Endpoint("/directory/subscriptions", V1, "Organization.Read.All", ("directory",)),
@@ -188,7 +192,9 @@ GRAPH: tuple[Endpoint, ...] = (
         BOTH,
         "AuditLog.Read.All",
         ("identity_reports_tenant", "identity_reports"),
-        fallback="Beta for authenticationRequirement; timeouts split into one-day windows",
+        fallback="Timeouts split into one-day windows",
+        beta="authenticationRequirement (MFA or password only) is only in beta; asks for events.SIGNIN_FIELDS "
+        "only, since returning every field brings Microsoft's Deprecation and Sunset headers",
     ),
     Endpoint("/auditLogs/directoryAudits", V1, "AuditLog.Read.All", ("identity_reports_tenant", "identity_reports")),
     Endpoint(
@@ -203,7 +209,8 @@ GRAPH: tuple[Endpoint, ...] = (
         BETA,
         "AuditLog.Read.All",
         ("identity_reports_tenant", "identity_reports"),
-        fallback="Beta only; Unused apps shows why when the tenant's licence or consent doesn't allow it",
+        fallback="Unused apps shows why when the tenant's licence or consent doesn't allow it",
+        beta="App sign-in activity is only in beta",
     ),
     Endpoint(
         "/identityProtection/riskyUsers",
@@ -219,7 +226,7 @@ GRAPH: tuple[Endpoint, ...] = (
             BETA,
             "Reports.Read.All",
             ("usage_reports",),
-            fallback="Beta only for JSON; v1.0 would need CSV parsing",
+            beta="v1.0 returns CSV only; beta returns JSON",
         )
         for name in (
             "getOffice365ActiveUserDetail(period={period})",
@@ -239,6 +246,7 @@ GRAPH: tuple[Endpoint, ...] = (
         "Reports.Read.All",
         ("usage_reports",),
         fallback="Skipped when the tenant has no Copilot licences",
+        beta="Copilot usage is only in beta",
     ),
     # Security and devices.
     Endpoint("/security/secureScores", V1, "SecurityEvents.Read.All", ("secure_score",)),
@@ -272,7 +280,8 @@ GRAPH: tuple[Endpoint, ...] = (
         "Sites.Read.All",
         ("sharepoint",),
         cost=SP_MANY,
-        fallback="Beta only; the recycle bin's size still comes from the site's quota",
+        fallback="The recycle bin's size still comes from the site's quota",
+        beta="Listing a site's recycle bin is only in beta",
     ),
     Endpoint(
         "/users/{id}/drive",

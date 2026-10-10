@@ -74,6 +74,13 @@ overview and DEPLOY.md for running it on a server.
    permission, Microsoft's throttling limits and resource-unit cost,
    fallback). The shared limiter paces calls by it and run telemetry names
    them by it; `tests/test_ratelimit.py` fails on a call it doesn't list.
+   Prefer v1.0; a beta entry needs `beta=` saying what v1.0 lacks
+   (`tests/test_endpoints.py` checks).
+6. Ask for the fields you read with `$select`. Without it Microsoft also
+   returns fields it has retired and marks the whole call with `Deprecation`
+   and `Sunset` headers (it did on the beta sign-in log and on drive item
+   permissions until they were narrowed to `events.SIGNIN_FIELDS` and
+   `sharepoint.PERMISSION_FIELDS`).
 
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.

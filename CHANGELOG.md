@@ -153,6 +153,10 @@ copied collection reads back exactly as its snapshot.
   it gave the count and the list below showed different items.
 - Sizes from 1 TB to 10 TB show two decimals ("1.28 TB of 1.45 TB"), so used, free and total add up on
   the SharePoint storage report.
+- The sign-in log and shared files' sharing are read without the fields Microsoft has retired (it marked
+  both calls with a sunset date because of them, the sign-in log's on 31 August 2026). Office Sentry now asks
+  only for the fields it uses, so nothing it relies on is being retired; reports and stored history are
+  unchanged.
 
 ### Security
 
