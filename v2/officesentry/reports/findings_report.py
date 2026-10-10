@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from ..rules import RULES, SEVERITY_RANK
+from ..checks import RULES, SEVERITY_RANK
 from ..snapshot import TenantSnapshot
 from .data_reports import DataReport, Rows, Section, Tile, UserLink, people_index, user_path
 

@@ -23,10 +23,10 @@ import textwrap
 import types
 from collections.abc import Callable
 
+from officesentry.checks import RULES
 from officesentry.collectors import REGISTRY
 from officesentry.entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
 from officesentry.reports.data_reports import REPORTS
-from officesentry.rules import RULES
 
 PACKAGE = "officesentry"
 SNAPSHOT_READS = {"objects", "has"}

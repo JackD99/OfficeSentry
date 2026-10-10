@@ -405,7 +405,7 @@ def test_evaluate_reports_a_crashing_check_as_unavailable(seeded, caplog):
     def broken(snap, now):
         raise KeyError("principalId")
 
-    with patch("officesentry.rules.RULES", [*RULES, Rule("broken", "Broken check", "Test", "Fix it", broken)]):
+    with patch("officesentry.checks.base.RULES", [*RULES, Rule("broken", "Broken check", "Test", "Fix it", broken)]):
         with caplog.at_level(logging.ERROR, logger="officesentry.rules"):
             results = {r.key: r for r in evaluate(TenantSnapshot(seeded.conn, seeded.tenant), seeded.now)}
     assert results["broken"].status == "unavailable"
@@ -419,7 +419,7 @@ def test_findings_without_a_name_fall_back_to_their_id(seeded):
     def unnamed(snap, now):
         return ("fail", "2 problems", [Finding("high", None, "No name", "u1"), Finding("low", ["a"], "List", ["b"])])
 
-    with patch("officesentry.rules.RULES", [Rule("unnamed", "Unnamed", "Test", "", unnamed)]):
+    with patch("officesentry.checks.base.RULES", [Rule("unnamed", "Unnamed", "Test", "", unnamed)]):
         [result] = evaluate(TenantSnapshot(seeded.conn, seeded.tenant), seeded.now)
     assert result.status == "fail"
     assert [(f.subject, f.object_id) for f in result.findings] == [("u1", "u1"), ("Unknown", "")]
@@ -454,7 +454,7 @@ def test_guarded_crash_leaves_findings_untouched(db, connection_id):
 
     rules = [Rule(r.key, r.title, r.category, r.recommendation, broken if r.key == "device_compliance" else r.check)
              for r in RULES]
-    with patch("officesentry.rules.RULES", rules):
+    with patch("officesentry.checks.base.RULES", rules):
         stats = findings.sync(db, tenant)
     assert stats["resolved"] == 0  # a crash is "couldn't run", never "fixed"
     assert db.execute("SELECT COUNT(*) FROM findings WHERE rule_key = 'device_compliance'"
@@ -484,7 +484,7 @@ def test_device_checks_and_report_survive_lists_where_text_belongs(db, connectio
             data = {k: [v] if isinstance(v, str) else v for k, v in json.loads(row["data"]).items()}
             db.execute("UPDATE objects SET data = ? WHERE run_id = ? AND kind = ? AND object_id = ?",
                        (json.dumps(data), row["run_id"], kind, row["object_id"]))
-    with patch("officesentry.rules.logging") as log:
+    with patch("officesentry.checks.base.logging") as log:
         results = {r.key: r for r in evaluate(TenantSnapshot(db, tenant))}
     log.getLogger.assert_not_called()  # nothing crashed
     for key in ("device_compliance", "device_encryption", "supported_windows", "intune_enrolled",
