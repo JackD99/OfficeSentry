@@ -87,29 +87,82 @@ def mfa_enforced(snap: TenantSnapshot, now: datetime):
         detail = "No enabled policy requires MFA for all users and apps, and Security Defaults are off."
         if left_out := coverage.apps_left_out(policies, "mfa", _names(snap)):
             detail += f" {left_out}"
+        if optional := coverage.mfa_optional(policies):
+            detail += f" {optional}"
         if report_only:
             n = len(report_only)
             detail += f" {plural(n, 'MFA policy')} {verb(n, 'is', 'are')} in report-only mode."
         return ("fail", "MFA is not enforced", [Finding("high", "Tenant", detail)])
     names = _names(snap)
-    # One finding per excluded account or group, naming every policy it's excluded from.
+    roles = {
+        r.get("templateId") or r["_id"]: r.get("displayName")
+        for r in snap.objects("admin_roles", "role_definition") or []
+    }
+    # One finding per excluded account, group, role or guests, naming every policy it's excluded from.
     excluded: dict[str, tuple[str, str, list[str]]] = {}
     for p in covering:
         spec = (p.get("conditions") or {}).get("users") or {}
+        name = p.get("displayName", "?")
         for uid in spec.get("excludeUsers") or []:
-            excluded.setdefault(uid, (names.get(uid, uid), "Excluded from", []))[2].append(p.get("displayName", "?"))
+            if uid == "GuestsOrExternalUsers":
+                excluded.setdefault("guests", ("Guests and external users", "Excluded from", []))[2].append(name)
+            else:
+                excluded.setdefault(uid, (names.get(uid, uid), "Excluded from", []))[2].append(name)
+        if spec.get("excludeGuestsOrExternalUsers"):
+            excluded.setdefault("guests", ("Guests and external users", "Excluded from", []))[2].append(name)
         for gid in spec.get("excludeGroups") or []:
-            excluded.setdefault(gid, (names.get(gid, f"Group {gid}"), "Group excluded from", []))[2].append(
-                p.get("displayName", "?")
-            )
+            excluded.setdefault(gid, (names.get(gid, f"Group {gid}"), "Group excluded from", []))[2].append(name)
     findings = [
         Finding("medium", label, f"{what} " + ", ".join(f'"{n}"' for n in pols), oid)
         for oid, (label, what, pols) in excluded.items()
     ]
+    findings += _role_exclusions(snap, covering, policies, roles, names)
     policy_names = ", ".join(coverage.policy_name(p) for p in covering)
     if findings:
         return ("fail", f"Enforced by {policy_names}, with {plural(len(findings), 'exclusion')} to review", findings)
     return ("pass", f"Enforced by {policy_names}", [])
+
+
+def _role_exclusions(
+    snap: TenantSnapshot, covering: list[dict], policies: list[dict], roles: dict, names: dict[str, str]
+) -> list[Finding]:
+    """A finding per MFA policy that leaves out roles whose holders no other policy requires MFA of.
+
+    Excluding admin roles from the all-users policy is common when a stricter admin policy covers them,
+    so a role exclusion is only a gap for the people it actually leaves without MFA.
+    """
+    d = coverage.directory(snap)
+    if d is None:
+        return []
+    users = {u["_id"]: u for u in snap.objects("users", "user") or []}
+    out = []
+    for p in covering:
+        spec = (p.get("conditions") or {}).get("users") or {}
+        excluded = set(spec.get("excludeRoles") or [])
+        if not excluded:
+            continue
+        by_name = set(spec.get("excludeUsers") or [])  # listed on their own already
+        uncovered = sorted(
+            names.get(uid, uid)
+            for uid, held in d.user_roles.items()
+            if held & excluded
+            and uid not in by_name
+            and (users.get(uid) or {}).get("accountEnabled") is not False
+            and not coverage.coverage_for(uid, names.get(uid, uid), "Member", policies, d).mfa
+        )
+        if uncovered:
+            left_out = ", ".join(roles.get(r) or f"role {r[:8]}" for r in sorted(excluded))
+            out.append(
+                Finding(
+                    "medium",
+                    coverage.policy_name(p),
+                    f"Leaves out {left_out}, so {', '.join(uncovered)} "
+                    + verb(len(uncovered), "isn't", "aren't")
+                    + " required to use MFA by any policy",
+                    f"roles:{p.get('id')}",
+                )
+            )
+    return out
 
 
 @rule(
@@ -145,15 +198,43 @@ def legacy_auth_blocked(snap: TenantSnapshot, now: datetime):
     return ("fail", "Legacy authentication is allowed", [Finding("high", "Tenant", detail)])
 
 
-def _privileged_users(snap: TenantSnapshot) -> list[dict] | None:
+def _privileged_users(snap: TenantSnapshot, eligible: bool = False) -> list[dict] | None:
+    """Privileged role assignments with a principal: active ones, and PIM-eligible ones too when asked.
+
+    Members of a group that holds a role have rows of their own, marked with the group (``viaGroup``).
+    """
     rows = snap.objects("admin_roles", "role_assignment")
     if rows is None:
         return None
     return [
         dict(r, roleName=r.get("roleName") or "Unknown role")
         for r in rows
-        if r.get("privileged") and r.get("assignment") == "active" and r.get("principalId")
+        if r.get("privileged") and (eligible or r.get("assignment") == "active") and r.get("principalId")
     ]
+
+
+def _role(a: dict) -> str:
+    """ "Global Administrator", "Global Administrator through Tenant admins", and "(eligible)" under PIM."""
+    text = a.get("roleName") or "Unknown role"
+    if a.get("viaGroup"):
+        text += f" through {a['viaGroup']}"
+    return f"{text} (eligible)" if a.get("assignment") == "eligible" else text
+
+
+def _by_principal(admins: list[dict]) -> dict[str, list[dict]]:
+    """Assignments grouped by who holds them, so one account with several roles is one finding naming all."""
+    out: dict[str, list[dict]] = {}
+    for a in admins:
+        out.setdefault(a["principalId"], []).append(a)
+    return out
+
+
+def _roles_text(assignments: list[dict]) -> str:
+    texts = []
+    for a in assignments:
+        if (t := _role(a)) not in texts:
+            texts.append(t)
+    return ", ".join(texts)
 
 
 @rule(
@@ -178,9 +259,9 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
             continue
         seen.add(pid)
         if registered.get(pid) is False:
-            findings.append(Finding("critical", _label(a), f"{a['roleName']} with no MFA method registered", pid))
+            findings.append(Finding("critical", _label(a), f"{_role(a)} with no MFA method registered", pid))
         elif pid not in registered:
-            findings.append(Finding("low", _label(a), f"{a['roleName']}: MFA registration unknown", pid))
+            findings.append(Finding("low", _label(a), f"{_role(a)}: MFA registration unknown", pid))
     missing = sum(f.severity == "critical" for f in findings)
     unknown = len(findings) - missing
     if missing:
@@ -203,21 +284,33 @@ def admin_mfa(snap: TenantSnapshot, now: datetime):
     "Move day-to-day work to narrower roles such as User or Exchange Administrator.",
 )
 def global_admin_count(snap: TenantSnapshot, now: datetime):
-    admins = _privileged_users(snap)
+    admins = _privileged_users(snap, eligible=True)
     if admins is None:
         return _unavailable("Admin role data hasn't been collected yet")
-    gas = {a["principalId"]: a for a in admins if a.get("roleName") == "Global Administrator"}
+    # People who can sign in as Global Administrator now: enabled user accounts, directly or through a
+    # group. Apps, groups themselves, disabled accounts and PIM-eligible holders don't count.
+    held = [a for a in admins if a.get("roleName") == "Global Administrator" and a.get("principalType") == "user"]
+    gas = {
+        a["principalId"]: a for a in held if a.get("assignment") == "active" and a.get("accountEnabled") is not False
+    }
     n = len(gas)
     if n > 4:
         return (
             "fail",
             f"{n} Global Administrators",
-            [Finding("medium", _label(a), "Global Administrator", pid) for pid, a in gas.items()],
+            [Finding("medium", _label(a), _role(a), pid) for pid, a in gas.items()],
         )
+    if n == 0:
+        eligible = {a["principalId"] for a in held if a.get("assignment") == "eligible"}
+        detail = "No enabled account holds Global Administrator permanently"
+        if eligible:
+            detail += f" ({plural(len(eligible), 'account')} can activate it through PIM)"
+        detail += ", so there is no break-glass account to recover access"
+        return ("fail", "No active Global Administrator", [Finding("medium", "Tenant", detail)])
     if n < 2:
         return (
             "fail",
-            f"{plural(n, 'Global Administrator')}",
+            "1 Global Administrator",
             [
                 Finding(
                     "low", "Tenant", "Only one Global Administrator; there is no break-glass account to recover access"
@@ -235,16 +328,15 @@ def global_admin_count(snap: TenantSnapshot, now: datetime):
     "member account in this tenant protected by MFA.",
 )
 def guest_admins(snap: TenantSnapshot, now: datetime):
-    admins = _privileged_users(snap)
+    admins = _privileged_users(snap, eligible=True)
     if admins is None:
         return _unavailable("Admin role data hasn't been collected yet")
+    guests = _by_principal([a for a in admins if a.get("userType") == "Guest"])
     findings = [
-        Finding("high", _label(a), f"Guest holding {a['roleName']}", a["principalId"])
-        for a in admins
-        if a.get("userType") == "Guest"
+        Finding("high", _label(held[0]), f"Guest holding {_roles_text(held)}", pid) for pid, held in guests.items()
     ]
     return (
-        ("fail", f"{plural(len(findings), 'guest admin assignment')}", findings)
+        ("fail", f"{plural(len(findings), 'guest')} with admin roles", findings)
         if findings
         else ("pass", "No guest holds a privileged role", [])
     )
@@ -258,15 +350,21 @@ def guest_admins(snap: TenantSnapshot, now: datetime):
     "with an admin role bypasses MFA entirely.",
 )
 def service_principal_admins(snap: TenantSnapshot, now: datetime):
-    admins = _privileged_users(snap)
+    admins = _privileged_users(snap, eligible=True)
     if admins is None:
         return _unavailable("Admin role data hasn't been collected yet")
     own = snap.own_app_ids
+    apps = _by_principal(
+        [
+            a
+            for a in admins
+            if a.get("principalType") == "servicePrincipal"
+            and not ((a.get("appId") or "").lower() in own and a.get("roleName") == "Global Reader")
+        ]
+    )
     findings = [
-        Finding("medium", a.get("displayName") or a["principalId"], f"App holding {a['roleName']}", a["principalId"])
-        for a in admins
-        if a.get("principalType") == "servicePrincipal"
-        and not ((a.get("appId") or "").lower() in own and a.get("roleName") == "Global Reader")
+        Finding("medium", held[0].get("displayName") or pid, f"App holding {_roles_text(held)}", pid)
+        for pid, held in apps.items()
     ]
     return (
         ("fail", f"{plural(len(findings), 'app')} with privileged roles", findings)
@@ -354,16 +452,42 @@ def licensed_disabled(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")
     if users is None:
         return _unavailable("User data hasn't been collected yet")
+    needs = _shared_needing_licence(snap)
     findings = [
         Finding("medium", _label(u), f"Disabled, holding {plural(len(u.get('skuIds') or []), 'licence')}", u["_id"])
         for u in users
-        if not u.get("accountEnabled") and u.get("licensed")
+        if not u.get("accountEnabled") and u.get("licensed") and u["_id"] not in needs
     ]
-    return (
-        ("fail", f"{plural(len(findings), 'disabled account')} still licensed", findings)
-        if findings
-        else ("pass", "No disabled account holds a licence", [])
+    n = len(needs)
+    kept = (
+        f" (not counting {plural(n, 'shared mailbox', 'shared mailboxes')} that {verb(n, 'needs', 'need')} one)"
+        if n
+        else ""
     )
+    return (
+        ("fail", f"{plural(len(findings), 'disabled account')} still licensed{kept}", findings)
+        if findings
+        else ("pass", f"No disabled account holds a licence{kept}", [])
+    )
+
+
+SHARED_FREE_BYTES = 50 * 1024**3
+
+
+def _shared_needing_licence(snap: TenantSnapshot) -> set[str]:
+    """Shared mailboxes that must keep a licence although their account is blocked from sign-in (as it
+    should be): over 50 GB, with an archive or on litigation hold. Their directory object ids."""
+    sizes = {r.get("mailboxId") or r["_id"]: r for r in snap.objects("mail_usage", "mailbox_size") or []}
+    out = set()
+    for m in snap.objects("mailboxes", "mailbox") or []:
+        if m.get("RecipientTypeDetails") != "SharedMailbox" or not m.get("ExternalDirectoryObjectId"):
+            continue
+        size = sizes.get(m["_id"]) or {}
+        archive = m.get("ArchiveStatus") not in (None, "", "None")
+        big = isinstance(size.get("totalBytes"), int) and size["totalBytes"] > SHARED_FREE_BYTES
+        if archive or m.get("LitigationHoldEnabled") or big:
+            out.add(m["ExternalDirectoryObjectId"])
+    return out
 
 
 @rule(
@@ -376,7 +500,8 @@ def unassigned_licences(snap: TenantSnapshot, now: datetime):
     skus = snap.objects("tenant_profile", "subscribed_sku")
     if skus is None:
         return _unavailable("Licence data hasn't been collected yet")
-    summary = licence_summary(skus, None, load_prices(snap.conn), now)
+    subscriptions = snap.objects("tenant_profile", "company_subscription")
+    summary = licence_summary(skus, None, load_prices(snap.conn), now, subscriptions)
     row = snap.conn.execute("SELECT value FROM settings WHERE key = 'currency'").fetchone()
     currency = row["value"] if row else "GBP"
     findings = []
@@ -425,7 +550,7 @@ def admins_ca_mfa(snap: TenantSnapshot, now: datetime):
         c = coverage.coverage_for(pid, _label(a), a.get("userType") or "Member", policies, d)
         if not c.mfa:
             why = f"excluded from {', '.join(c.excluded_from)}" if c.excluded_from else "no MFA policy applies"
-            findings.append(Finding("high", c.label, f"{a['roleName']}: {why}", pid))
+            findings.append(Finding("high", c.label, f"{_role(a)}: {why}", pid))
     if findings and no_p1:
         return ("fail", f"{plural(len(findings), 'admin')} not covered by MFA", findings, SECURITY_DEFAULTS_ADVICE)
     return (

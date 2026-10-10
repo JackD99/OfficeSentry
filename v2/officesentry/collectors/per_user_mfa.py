@@ -23,7 +23,7 @@ class PerUserMfa(Collector):
     permissions = ("Policy.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
-        if ctx.capabilities.get("entra_p1", True):
+        if ctx.capabilities.get("entra_p1") is not False:
             ctx.log("Tenant has Entra ID P1, so MFA is enforced with Conditional Access; per-user MFA not read")
             ctx.objects("per_user_mfa_status", [("status", {"checked": False, "reason": "entra_p1"})])
             return

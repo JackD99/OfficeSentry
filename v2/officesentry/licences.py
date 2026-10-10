@@ -114,12 +114,15 @@ class SkuLine:
     on_stale_users: int = 0
     monthly_price: float | None = None
     free: bool = False
+    trial: int = 0  # of the purchased licences, how many are an active trial's (free until it ends)
 
     @property
     def wasted_units(self) -> int:
         if self.free:
             return 0
-        return self.unassigned + self.on_disabled_users + self.on_stale_users
+        wasted = self.unassigned + self.on_disabled_users + self.on_stale_users
+        # Trial licences cost nothing, so at most the paid ones are wasted.
+        return min(wasted, max(self.purchased - self.trial, 0)) if self.trial else wasted
 
     @property
     def monthly_waste(self) -> float | None:
@@ -146,12 +149,30 @@ class LicenceSummary:
         return sum(line.wasted_units for line in self.lines if line.monthly_price is None)
 
 
+def trial_seats(subscriptions: list[dict] | None) -> dict[str, int]:
+    """Licences of active trial subscriptions, by SKU ID: included in a SKU's purchased count, but free."""
+    out: dict[str, int] = {}
+    for s in subscriptions or []:
+        total, sid = s.get("totalLicenses"), s.get("skuId")
+        if s.get("isTrial") is True and s.get("status") == "Enabled" and isinstance(sid, str):
+            if isinstance(total, int) and not isinstance(total, bool) and total > 0:
+                out[sid] = out.get(sid, 0) + total
+    return out
+
+
 def licence_summary(
-    skus: list[dict], users: list[dict] | None, prices: dict[str, float], now: datetime | None = None
+    skus: list[dict],
+    users: list[dict] | None,
+    prices: dict[str, float],
+    now: datetime | None = None,
+    subscriptions: list[dict] | None = None,
 ) -> LicenceSummary:
+    """Licences bought, assigned and wasted per SKU. Pass the tenant's subscriptions (company_subscription
+    objects) so trial licences aren't counted as bought and unused."""
     now = now or datetime.now(UTC)
     summary = LicenceSummary()
     by_id: dict[str, SkuLine] = {}
+    trials = trial_seats(subscriptions)
     for s in skus:
         if s.get("appliesTo") != "User":
             continue
@@ -160,15 +181,17 @@ def licence_summary(
         if (purchased == 0 and not assigned) or not s.get("skuId"):
             continue  # expired or suspended subscription with nothing assigned
         part = s.get("skuPartNumber") or ""
+        trial = min(trials.get(s["skuId"], 0), purchased)
         line = SkuLine(
             sku_id=s["skuId"],
             part_number=part,
             name=sku_name(part),
             purchased=purchased,
             assigned=assigned,
-            unassigned=max(purchased - assigned, 0),
+            unassigned=max(purchased - trial - assigned, 0),  # unused paid licences: trial ones are free
             monthly_price=prices.get(part),
             free=part in FREE_SKUS or purchased >= FREE_UNIT_THRESHOLD,
+            trial=trial,
         )
         by_id[line.sku_id] = line
     for u in users or []:

@@ -6,7 +6,7 @@ from datetime import datetime
 
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .apps import _authorization_policy, user_consent_level
+from .apps import _authorization_policy, custom_consent_policies, user_consent_level
 from .base import Finding, _unavailable, rule
 
 GUEST_ROLES = {
@@ -159,8 +159,12 @@ def admin_consent_workflow(snap: TenantSnapshot, now: datetime):
         # Microsoft's default for new tenants: worth turning on, but not a standing failure.
         return (
             "pass",
-            "Users can consent to low-risk apps themselves; admin consent requests are off, so they "
-            "can't ask for anything else",
+            (
+                "Users can consent to some apps under a custom policy"
+                if custom_consent_policies(policy)
+                else "Users can consent to low-risk apps themselves"
+            )
+            + "; admin consent requests are off, so they can't ask for anything else",
             [],
         )
     return (

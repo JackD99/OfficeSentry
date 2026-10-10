@@ -36,7 +36,7 @@ def test_health_and_the_menu_say_which_version_is_running(client, db):
     make_user(db, "ann")
     login(client, "ann")
     page = client.get("/").get_data(as_text=True)
-    assert f"Office Sentry {__version__}</p>" in page
+    assert f'Office Sentry <span class="app-version">{__version__}</span></p>' in page
 
 
 def test_the_database_remembers_the_release_and_pre_upgrade_copies_name_it(cfg, monkeypatch):
