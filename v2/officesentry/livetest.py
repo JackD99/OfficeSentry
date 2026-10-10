@@ -54,8 +54,9 @@ _QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"')
 def doh_lookup(name: str, rdtype: str, session: requests.Session | None = None) -> list[str]:
     """``dnscheck.lookup`` over DNS-over-HTTPS (JSON), with the same answers and errors."""
     try:
-        resp = (session or requests).get(DOH_URL, params={"name": name, "type": rdtype},
-                                         headers={"Accept": "application/dns-json"}, timeout=10)
+        resp = (session or requests).get(
+            DOH_URL, params={"name": name, "type": rdtype}, headers={"Accept": "application/dns-json"}, timeout=10
+        )
         resp.raise_for_status()
         data = resp.json()
     except (requests.RequestException, ValueError) as exc:
@@ -77,8 +78,9 @@ def github_oidc_token() -> str:
     """A fresh OIDC token from GitHub Actions for Entra (needs ``permissions: id-token: write``)."""
     url, bearer = (os.environ[k] for k in GITHUB_OIDC)
     try:
-        resp = requests.get(url, params={"audience": OIDC_AUDIENCE}, headers={"Authorization": f"bearer {bearer}"},
-                            timeout=30)
+        resp = requests.get(
+            url, params={"audience": OIDC_AUDIENCE}, headers={"Authorization": f"bearer {bearer}"}, timeout=30
+        )
         resp.raise_for_status()
         return resp.json()["value"]
     except (requests.RequestException, ValueError, KeyError) as exc:
@@ -97,12 +99,19 @@ def _wrap(provider, error_cls):
             return provider()
         except TokenError as exc:
             raise error_cls(401, exc.code, exc.message) from exc
+
     return token
 
 
-def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
-        record: Path | None = None, connection_id: int | None = None, dns_over_https: bool = False,
-        canary: Path | None = None) -> int:
+def run(
+    cfg: Config,
+    only: list[str] | None = None,
+    out_dir: Path | None = None,
+    record: Path | None = None,
+    connection_id: int | None = None,
+    dns_over_https: bool = False,
+    canary: Path | None = None,
+) -> int:
     federated = not os.environ.get(ENV[2]) and all(os.environ.get(k) for k in GITHUB_OIDC)
     missing = [k for k in ENV if not os.environ.get(k) and not (federated and k == ENV[2])]
     if missing:
@@ -132,15 +141,25 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
     if row and connection_id is not None and row["connection_id"] is None:
         conn.execute("UPDATE tenants SET connection_id = ? WHERE id = ?", (connection_id, tenant_id))
     # The test app is Office Sentry's own, so checks shouldn't flag it. Its client ID isn't secret.
-    conn.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)"
-                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (client_id,))
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)"
+        " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (client_id,),
+    )
 
     log: list = []
     session = recording.RecordingSession(log) if record or canary else None
-    graph = GraphClient(_wrap(_token_provider(tenant_ref, client_id, secret, cloud.graph, cloud.key), GraphError),
-                        session=session, cloud=cloud.key)
-    exo = ExchangeClient(tenant_ref, _wrap(_token_provider(tenant_ref, client_id, secret, cloud.exchange, cloud.key),
-                                           ExchangeError), session=session, cloud=cloud.key)
+    graph = GraphClient(
+        _wrap(_token_provider(tenant_ref, client_id, secret, cloud.graph, cloud.key), GraphError),
+        session=session,
+        cloud=cloud.key,
+    )
+    exo = ExchangeClient(
+        tenant_ref,
+        _wrap(_token_provider(tenant_ref, client_id, secret, cloud.exchange, cloud.key), ExchangeError),
+        session=session,
+        cloud=cloud.key,
+    )
     real_lookup = dnscheck.lookup
     answers: list = []
     dnscheck.lookup = recording.recording_lookup(answers, doh_lookup if dns_over_https else real_lookup)
@@ -165,8 +184,10 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
             failures.append(key)
     dnscheck.lookup = real_lookup
     if answers and not any(a["answer"] for a in answers):
-        print("\nEvery DNS lookup came back empty, so the domain checks are wrong. If this machine's DNS is "
-              "blocked, run again with --dns-over-https.")
+        print(
+            "\nEvery DNS lookup came back empty, so the domain checks are wrong. If this machine's DNS is "
+            "blocked, run again with --dns-over-https."
+        )
     if len(failures) == len(keys) and consented is None:
         # Nothing came back, so there may be no admin consent yet; the portal says "Awaiting consent".
         conn.execute("UPDATE tenants SET consented_at = NULL WHERE id = ?", (tenant_id,))
@@ -183,8 +204,9 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
             canary.write_text(f"**The canary couldn't check the responses.** {exc}\n", encoding="utf-8")
             print(exc)
             return 1
-        found = compare(json.loads(FIXTURE.read_text(encoding="utf-8")), current,
-                        [f"{REGISTRY[k].title} (`{k}`)" for k in failures])
+        found = compare(
+            json.loads(FIXTURE.read_text(encoding="utf-8")), current, [f"{REGISTRY[k].title} (`{k}`)" for k in failures]
+        )
         canary.write_text(found.markdown(), encoding="utf-8")
         print(f"\nCanary: {'something changed' if found.failed else 'nothing changed'}; report in {canary}")
         return 1 if found.failed else 0

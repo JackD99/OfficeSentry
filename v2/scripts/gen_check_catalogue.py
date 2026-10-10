@@ -87,10 +87,15 @@ def collectors_read(fn: Callable) -> list[str]:
     keys = set()
     for _, tree in _walk(fn, set()):
         for node in ast.walk(tree):
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                    and node.func.attr in SNAPSHOT_READS and node.args
-                    and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
-                    and node.args[0].value in REGISTRY):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in SNAPSHOT_READS
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and node.args[0].value in REGISTRY
+            ):
                 keys.add(node.args[0].value)
     return sorted(keys)
 
@@ -103,8 +108,12 @@ def licence_notes(fn: Callable) -> list[str]:
             continue
         verdicts = {id(c) for node in ast.walk(tree) if _is_verdict(node) for c in ast.walk(node)}
         for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in verdicts \
-                    and LICENCE_RE.search(node.value):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in verdicts
+                and LICENCE_RE.search(node.value)
+            ):
                 notes.add(node.value.strip())
     return sorted(notes)
 
@@ -113,8 +122,12 @@ def _is_verdict(node: ast.AST) -> bool:
     """A finding or a ``("pass" | "fail", ...)`` result: its text is a result, not a "not checked" reason."""
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
         return node.func.id == "Finding"
-    return isinstance(node, ast.Tuple) and bool(node.elts) and isinstance(node.elts[0], ast.Constant) \
+    return (
+        isinstance(node, ast.Tuple)
+        and bool(node.elts)
+        and isinstance(node.elts[0], ast.Constant)
         and node.elts[0].value in ("pass", "fail")
+    )
 
 
 def _cell(text: object) -> str:
@@ -157,33 +170,54 @@ def render() -> str:
     for r in RULES:
         categories.setdefault(r.category, []).append(r)
     for category in sorted(categories):
-        out += [f"### {category}", "", "| Check | Reads data from | Licence note | Recommendation |",
-                "|---|---|---|---|"]
+        out += [
+            f"### {category}",
+            "",
+            "| Check | Reads data from | Licence note | Recommendation |",
+            "|---|---|---|---|",
+        ]
         for r in sorted(categories[category], key=lambda r: r.key):
             notes = "; ".join(licence_notes(r.check))
-            out.append(f"| **{_cell(r.title)}**<br>`{r.key}` | {_codes(collectors_read(r.check))} "
-                       f"| {_cell(notes)} | {_cell(r.recommendation)} |")
+            out.append(
+                f"| **{_cell(r.title)}**<br>`{r.key}` | {_codes(collectors_read(r.check))} "
+                f"| {_cell(notes)} | {_cell(r.recommendation)} |"
+            )
         out.append("")
 
-    out += ["## Data sources (collectors)", "",
-            "Each collector reads one area of a tenant and stores a snapshot. They run every night unless marked "
-            "*on demand*.", "",
-            "| Key | Title | What it reads | Permissions |", "|---|---|---|---|"]
+    out += [
+        "## Data sources (collectors)",
+        "",
+        "Each collector reads one area of a tenant and stores a snapshot. They run every night unless marked "
+        "*on demand*.",
+        "",
+        "| Key | Title | What it reads | Permissions |",
+        "|---|---|---|---|",
+    ]
     for key, cls in sorted(REGISTRY.items()):
         title = _cell(cls.title) + ("" if cls.nightly else " (*on demand*)")
         out.append(f"| `{key}` | {title} | {_cell(cls.description)} | {_codes(cls.permissions)} |")
     out.append("")
 
-    out += ["## Detail reports", "",
-            "Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.", "",
-            "| Key | Title | Description | Data from |", "|---|---|---|---|"]
+    out += [
+        "## Detail reports",
+        "",
+        "Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.",
+        "",
+        "| Key | Title | Description | Data from |",
+        "|---|---|---|---|",
+    ]
     for key, (title, description, sources, _builder) in sorted(REPORTS.items()):
         out.append(f"| `{key}` | {_cell(title)} | {_cell(description)} | {_codes(sorted(sources))} |")
     out.append("")
 
-    out += ["## Permissions", "",
-            "Every application permission the app requests (all read-only) and the collectors that use it.", "",
-            "| Permission | API | Purpose | Used by |", "|---|---|---|---|"]
+    out += [
+        "## Permissions",
+        "",
+        "Every application permission the app requests (all read-only) and the collectors that use it.",
+        "",
+        "| Permission | API | Purpose | Used by |",
+        "|---|---|---|---|",
+    ]
     users = permission_users()
     for permission in sorted(users):
         if permission in GRAPH_PERMISSIONS:

@@ -243,8 +243,9 @@ def test_guessing_the_current_password_locks_the_account(app, db):
     new = "a much longer new password"
     for _ in range(MAX_FAILURES):
         client.post("/account/password", data={"current": "wrong guess", "password": new, "confirm": new})
-    resp = client.post("/account/password", data={"current": PASSWORD, "password": new, "confirm": new},
-                       follow_redirects=True)
+    resp = client.post(
+        "/account/password", data={"current": PASSWORD, "password": new, "confirm": new}, follow_redirects=True
+    )
     assert "Too many wrong passwords" in resp.get_data(as_text=True)
     row = db.execute("SELECT locked_until, password_hash FROM users WHERE username = 'admin'").fetchone()
     assert row["locked_until"] and row["password_hash"] == before
@@ -298,10 +299,20 @@ def test_setup_link_is_logged_and_private(cfg, db, caplog):
 # -- Redirects, cookies, proxies -------------------------------------------------------
 
 
-@pytest.mark.parametrize("target", [
-    "//evil.example/x", "/\\evil.example", "/\t/evil.example", "/\n/evil.example", "https://evil.example",
-    "javascript:alert(1)", "", None, "evil.example",
-])
+@pytest.mark.parametrize(
+    "target",
+    [
+        "//evil.example/x",
+        "/\\evil.example",
+        "/\t/evil.example",
+        "/\n/evil.example",
+        "https://evil.example",
+        "javascript:alert(1)",
+        "",
+        None,
+        "evil.example",
+    ],
+)
 def test_next_must_stay_on_site(target):
     app = Flask(__name__)
     app.add_url_rule("/", "tenants.dashboard", lambda: "")

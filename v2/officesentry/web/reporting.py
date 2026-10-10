@@ -58,9 +58,20 @@ def report_extras(tenant, *, page: bool) -> dict:
 
 
 def _blank_plan() -> dict:
-    return {"id": None, "name": "Monthly security report", "reports": ["review"], "include_xlsx": 1,
-            "day_of_month": 1, "hour": 8, "timezone": "", "subject": month_end.DEFAULT_SUBJECT, "message": "",
-            "mode": "approval", "delivery": "email", "bcc_team": 0}
+    return {
+        "id": None,
+        "name": "Monthly security report",
+        "reports": ["review"],
+        "include_xlsx": 1,
+        "day_of_month": 1,
+        "hour": 8,
+        "timezone": "",
+        "subject": month_end.DEFAULT_SUBJECT,
+        "message": "",
+        "mode": "approval",
+        "delivery": "email",
+        "bcc_team": 0,
+    }
 
 
 def _plan_values() -> dict:
@@ -79,8 +90,12 @@ def _plan_values() -> dict:
         "delivery": f.get("delivery", ""),
         "bcc_team": 1 if f.get("bcc_team") else 0,
     }
-    if not 1 <= values["day_of_month"] <= 28 or not 0 <= values["hour"] <= 23 \
-            or values["mode"] not in month_end.MODES or values["delivery"] not in month_end.DELIVERIES:
+    if (
+        not 1 <= values["day_of_month"] <= 28
+        or not 0 <= values["hour"] <= 23
+        or values["mode"] not in month_end.MODES
+        or values["delivery"] not in month_end.DELIVERIES
+    ):
         abort(400)
     if values["timezone"] and not delivery.valid_timezone(values["timezone"]):
         abort(400)
@@ -89,18 +104,35 @@ def _plan_values() -> dict:
 
 def _render_plan(values: dict, chosen: set[int]):
     cfg = _cfg()
-    zones = list(dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] +
-                               ([values["timezone"]] if values["timezone"] else [])))
+    zones = list(
+        dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] + ([values["timezone"]] if values["timezone"] else []))
+    )
     tenants = [t for t in visible_tenants(g.db, g.user)]
-    on_plan = {r["tenant_id"]: r["name"] for r in g.db.execute(
-        "SELECT pt.tenant_id, p.name FROM report_plan_tenants pt JOIN report_plans p ON p.id = pt.plan_id"
-        " WHERE p.id IS NOT ?", (values["id"],))}
+    on_plan = {
+        r["tenant_id"]: r["name"]
+        for r in g.db.execute(
+            "SELECT pt.tenant_id, p.name FROM report_plan_tenants pt JOIN report_plans p ON p.id = pt.plan_id"
+            " WHERE p.id IS NOT ?",
+            (values["id"],),
+        )
+    }
     contacts = {t["id"]: len(delivery.tenant_contacts(g.db, t["id"])) for t in tenants}
     return render_template(
-        "report_plan_form.html", p=values, chosen=chosen, tenants=tenants, on_plan=on_plan, contacts=contacts,
-        catalog=delivery.catalog(g.db), report_groups=report_groups(), zones=zones, default_tz=cfg.timezone,
-        ordinal=delivery.ordinal, modes=month_end.MODES, deliveries=month_end.DELIVERIES,
-        pdf_available=delivery.export.pdf_available())
+        "report_plan_form.html",
+        p=values,
+        chosen=chosen,
+        tenants=tenants,
+        on_plan=on_plan,
+        contacts=contacts,
+        catalog=delivery.catalog(g.db),
+        report_groups=report_groups(),
+        zones=zones,
+        default_tz=cfg.timezone,
+        ordinal=delivery.ordinal,
+        modes=month_end.MODES,
+        deliveries=month_end.DELIVERIES,
+        pdf_available=delivery.export.pdf_available(),
+    )
 
 
 def _save_plan(existing=None):
@@ -125,9 +157,13 @@ def _save_plan(existing=None):
         for tenant_id in dropped:
             month_end.remove_from_plan(g.db, tenant_id)
         applied = month_end.apply_plan(g.db, plan, chosen, user, _cfg().timezone)
-        audit(g.db, user, "report_plan_saved" if existing else "report_plan_created",
-              detail=f"{values['name']}: {month_end.MODES[values['mode']].lower()}, applied to"
-                     f" {plural(applied, 'tenant')}" + (f", {len(dropped)} removed" if dropped else ""))
+        audit(
+            g.db,
+            user,
+            "report_plan_saved" if existing else "report_plan_created",
+            detail=f"{values['name']}: {month_end.MODES[values['mode']].lower()}, applied to"
+            f" {plural(applied, 'tenant')}" + (f", {len(dropped)} removed" if dropped else ""),
+        )
     flash(f"Saved. {plural(applied, 'client')} on “{values['name']}”.", "success")
     return redirect(url_for("reporting.plans"))
 
@@ -136,11 +172,18 @@ def _save_plan(existing=None):
 @roles_required("admin")
 def plans():
     tenants = visible_tenants(g.db, g.user)
-    return render_template("report_plans.html", plans=month_end.plans(g.db), modes=month_end.MODES,
-                           deliveries=month_end.DELIVERIES, coverage=month_end.coverage(g.db, tenants),
-                           describe=lambda p: f"Monthly on the {delivery.ordinal(p['day_of_month'])} at "
-                                              f"{p['hour']:02d}:00 ({p['timezone'] or _cfg().timezone})",
-                           titles=lambda p: delivery.report_titles(p["reports"], g.db))
+    return render_template(
+        "report_plans.html",
+        plans=month_end.plans(g.db),
+        modes=month_end.MODES,
+        deliveries=month_end.DELIVERIES,
+        coverage=month_end.coverage(g.db, tenants),
+        describe=lambda p: (
+            f"Monthly on the {delivery.ordinal(p['day_of_month'])} at "
+            f"{p['hour']:02d}:00 ({p['timezone'] or _cfg().timezone})"
+        ),
+        titles=lambda p: delivery.report_titles(p["reports"], g.db),
+    )
 
 
 @bp.route("/reporting/plans/new", methods=["GET", "POST"])
@@ -199,16 +242,37 @@ def queue(period: str):
     if show not in FILTERS:
         show = ""
     rows = month_end.queue(g.db, scoped_tenants(), period)
-    counts = {"": len(rows), "mine": sum(r.reviewer == g.user["username"] for r in rows),
-              "review": sum(r.state in ("draft", "in_review") for r in rows), "ready": sum(r.ready for r in rows)}
-    shown = [r for r in rows if show == "" or (show == "mine" and r.reviewer == g.user["username"])
-             or (show == "review" and r.state in ("draft", "in_review")) or (show == "ready" and r.ready)]
+    counts = {
+        "": len(rows),
+        "mine": sum(r.reviewer == g.user["username"] for r in rows),
+        "review": sum(r.state in ("draft", "in_review") for r in rows),
+        "ready": sum(r.ready for r in rows),
+    }
+    shown = [
+        r
+        for r in rows
+        if show == ""
+        or (show == "mine" and r.reviewer == g.user["username"])
+        or (show == "review" and r.state in ("draft", "in_review"))
+        or (show == "ready" and r.ready)
+    ]
     return render_template(
-        "reporting_queue.html", period=period, label=month_end.issued.period_label(period), rows=shown,
-        all_rows=rows, show=show, filters=FILTERS, counts=counts, states=month_end.STATES,
-        prev=month_end.shift_period(period, -1), next=month_end.shift_period(period, 1),
-        current=_period_now(), admin=g.user["role"] == "admin", bulk=_bulk_progress(period, rows),
-        worker_running=worker.is_alive(g.db))
+        "reporting_queue.html",
+        period=period,
+        label=month_end.issued.period_label(period),
+        rows=shown,
+        all_rows=rows,
+        show=show,
+        filters=FILTERS,
+        counts=counts,
+        states=month_end.STATES,
+        prev=month_end.shift_period(period, -1),
+        next=month_end.shift_period(period, 1),
+        current=_period_now(),
+        admin=g.user["role"] == "admin",
+        bulk=_bulk_progress(period, rows),
+        worker_running=worker.is_alive(g.db),
+    )
 
 
 def _bulk_progress(period: str, rows) -> dict | None:
@@ -221,8 +285,12 @@ def _bulk_progress(period: str, rows) -> dict | None:
         return None
     names = {r.tenant["id"]: r.tenant["name"] for r in rows}
     failures = [(tenant_id, names.get(tenant_id, "A client"), error) for tenant_id, error in progress.failures]
-    return {"batch": batch, "p": progress, "failures": failures,
-            "url": url_for("reporting.progress", period=period, batch=batch)}
+    return {
+        "batch": batch,
+        "p": progress,
+        "failures": failures,
+        "url": url_for("reporting.progress", period=period, batch=batch),
+    }
 
 
 @bp.post("/reporting/<period>/approve")
@@ -240,8 +308,11 @@ def approve_many(period: str):
     with transaction(g.db, immediate=True):
         for tenant_id in ids:
             t = visible[tenant_id]
-            if month_end.state_of(g.db, tenant_id, period) in ("approved", "sent") or not t["enabled"] \
-                    or not month_end.plan_for(g.db, tenant_id)[0]:
+            if (
+                month_end.state_of(g.db, tenant_id, period) in ("approved", "sent")
+                or not t["enabled"]
+                or not month_end.plan_for(g.db, tenant_id)[0]
+            ):
                 skipped += 1  # bulk approval never re-issues; that needs a reason, one client at a time
             elif tasks.pending(g.db, month_end.approval_key(tenant_id, period)):
                 busy += 1
@@ -252,8 +323,11 @@ def approve_many(period: str):
         flash(f"{plural(busy, 'client')} {'was' if busy == 1 else 'were'} already being approved.", "warning")
     if skipped:
         flash(f"Skipped {skipped}: already approved or sent, or the client is paused.", "warning")
-    return redirect(url_for("reporting.queue", period=period, show=request.form.get("show", "") or None,
-                            batch=batch if queued else None))
+    return redirect(
+        url_for(
+            "reporting.queue", period=period, show=request.form.get("show", "") or None, batch=batch if queued else None
+        )
+    )
 
 
 def _approve(tenant, period: str, reason: str | None = None) -> str | None:
@@ -282,8 +356,7 @@ def progress(period: str):
         t = tenant_or_404(tenant_id)
         task = month_end.approval_task(g.db, t["id"], period)
         pending = bool(task and task["status"] in tasks.PENDING)
-        return jsonify(pending=int(pending), finished=not pending,
-                       text=_task_text(task) if pending else "")
+        return jsonify(pending=int(pending), finished=not pending, text=_task_text(task) if pending else "")
     batch = request.args.get("batch", "")
     if not batch.startswith(f"approve:{period}:"):
         abort(404)
@@ -320,21 +393,42 @@ def review(period: str, tenant_id: int):
     state = month_end.state_of(g.db, t["id"], period, r)
     severe, flags = month_end.flags_for(g.db, t, report, period, datetime.now(UTC))
     taken = {a["rule_key"] for a in month_end.actions(g.db, t["id"]) if a["rule_key"]}
-    staff_users = [u["username"] for u in g.db.execute(
-        "SELECT username FROM users WHERE role IN ('admin', 'analyst') AND disabled = 0"
-        " ORDER BY username COLLATE NOCASE")]
+    staff_users = [
+        u["username"]
+        for u in g.db.execute(
+            "SELECT username FROM users WHERE role IN ('admin', 'analyst') AND disabled = 0"
+            " ORDER BY username COLLATE NOCASE"
+        )
+    ]
     return render_template(
-        "reporting_review.html", tenant=t, plan=plan, period=period, label=month_end.issued.period_label(period),
-        report=report, verdict=summary.monthly(report).verdict, review=r, state=state, states=month_end.STATES,
-        severe=severe, flags=flags, actions=month_end.actions(g.db, t["id"]), statuses=month_end.ACTION_STATUSES,
+        "reporting_review.html",
+        tenant=t,
+        plan=plan,
+        period=period,
+        label=month_end.issued.period_label(period),
+        report=report,
+        verdict=summary.monthly(report).verdict,
+        review=r,
+        state=state,
+        states=month_end.STATES,
+        severe=severe,
+        flags=flags,
+        actions=month_end.actions(g.db, t["id"]),
+        statuses=month_end.ACTION_STATUSES,
         suggestions=[s for s in month_end.suggestions(g.db, t) if s["rule_key"] not in taken],
-        notes=month_end.notes(g.db, t["id"], staff=True), visibility=month_end.VISIBILITY,
-        frozen=month_end.frozen_files(g.db, t["id"], period), staff_users=staff_users,
-        task=month_end.approval_task(g.db, t["id"], period), task_text=_task_text, pending=tasks.PENDING,
+        notes=month_end.notes(g.db, t["id"], staff=True),
+        visibility=month_end.VISIBILITY,
+        frozen=month_end.frozen_files(g.db, t["id"], period),
+        staff_users=staff_users,
+        task=month_end.approval_task(g.db, t["id"], period),
+        task_text=_task_text,
+        pending=tasks.PENDING,
         worker_running=worker.is_alive(g.db),
         emailed=month_end.emailed(plan, g.db, t["id"]) if plan else False,
-        months=[month_end.shift_period(period, i) for i in range(0, 7)], admin=g.user["role"] == "admin",
-        period_label=month_end.issued.period_label)
+        months=[month_end.shift_period(period, i) for i in range(0, 7)],
+        admin=g.user["role"] == "admin",
+        period_label=month_end.issued.period_label,
+    )
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/commentary")
@@ -359,8 +453,12 @@ def assign(period: str, tenant_id: int):
     who = request.form.get("reviewer", "").strip()
     if who == "me":
         who = g.user["username"]
-    if who and not g.db.execute("SELECT 1 FROM users WHERE username = ? AND role IN ('admin', 'analyst')",
-                                (who,)).fetchone():
+    if (
+        who
+        and not g.db.execute(
+            "SELECT 1 FROM users WHERE username = ? AND role IN ('admin', 'analyst')", (who,)
+        ).fetchone()
+    ):
         abort(400)
     with transaction(g.db):
         month_end.update_review(g.db, t["id"], period, g.user["username"], reviewer=who or None)
@@ -447,8 +545,15 @@ def add_action(tenant_id: int):
         flash("Write the recommendation first.", "error")
         return _back_to_review(t["id"], "actions")
     with transaction(g.db):
-        month_end.add_action(g.db, t["id"], title, detail, g.user["username"], rule_key=rule_key,
-                             target_month=_target(request.form.get("target_month", "")))
+        month_end.add_action(
+            g.db,
+            t["id"],
+            title,
+            detail,
+            g.user["username"],
+            rule_key=rule_key,
+            target_month=_target(request.form.get("target_month", "")),
+        )
         audit(g.db, g.user["username"], "report_action_added", t["id"], rule_key or "custom")
     return _back_to_review(t["id"], "actions")
 
@@ -476,8 +581,15 @@ def update_action(action_id: int):
             if status not in month_end.ACTION_STATUSES:
                 abort(400)
             month_end.update_action(g.db, a, status, _target(request.form.get("target_month", "")))
-        audit(g.db, g.user["username"], f"report_action_{'moved' if op in ('up', 'down') else op + 'd'}"
-              if op != "save" else "report_action_updated", a["tenant_id"], str(a["id"]))
+        audit(
+            g.db,
+            g.user["username"],
+            f"report_action_{'moved' if op in ('up', 'down') else op + 'd'}"
+            if op != "save"
+            else "report_action_updated",
+            a["tenant_id"],
+            str(a["id"]),
+        )
     return _back_to_review(a["tenant_id"], "actions")
 
 
@@ -494,10 +606,19 @@ def add_note(tenant_id: int):
         flash("Write the note first.", "error")
         return _back_to_review(t["id"], f"check-{rule_key}")
     with transaction(g.db):
-        g.db.execute("INSERT INTO finding_notes (tenant_id, rule_key, subject, body, visibility, created_by,"
-                     " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                     (t["id"], rule_key, request.form.get("subject", "").strip()[:300], body, visibility,
-                      g.user["username"], utcnow()))
+        g.db.execute(
+            "INSERT INTO finding_notes (tenant_id, rule_key, subject, body, visibility, created_by,"
+            " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                t["id"],
+                rule_key,
+                request.form.get("subject", "").strip()[:300],
+                body,
+                visibility,
+                g.user["username"],
+                utcnow(),
+            ),
+        )
         # The note itself can name the client's people, so the log says only where and who can see it.
         audit(g.db, g.user["username"], "finding_note_added", t["id"], f"{rule_key} ({visibility})")
     return _back_to_review(t["id"], f"check-{rule_key}")

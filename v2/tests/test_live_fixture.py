@@ -49,8 +49,13 @@ def cfg(tmp_path_factory):
     with pytest.MonkeyPatch.context() as mp:
         for var in ("SECRET_KEY", "ENCRYPTION_KEYS", "DATA_DIR"):
             mp.delenv("OFFICESENTRY_" + var, raising=False)
-        return load_config(data_dir=tmp_path_factory.mktemp("live") / "data", testing=True, secure_cookies=False,
-                           require_mfa="off", extra={"disable_csrf": True})
+        return load_config(
+            data_dir=tmp_path_factory.mktemp("live") / "data",
+            testing=True,
+            secure_cookies=False,
+            require_mfa="off",
+            extra={"disable_csrf": True},
+        )
 
 
 @pytest.fixture(scope="module")
@@ -68,9 +73,11 @@ def live(db):
     graph = lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
     exo = lambda t, c: ExchangeClient(t["tenant_ref"], lambda: "t", sleep=lambda s: None)  # noqa: E731
     # The sign-in and audit logs are read up to "now" into the activity history: the recording's now.
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)), \
-            patch("officesentry.events.clock", lambda: RECORDED):
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)),
+        patch("officesentry.events.clock", lambda: RECORDED),
+    ):
         missing = replay.mock(rsps, FIXTURE, STAND_INS, NEW_FIELDS)
         statuses = {}
         for key in REGISTRY:
@@ -97,8 +104,15 @@ def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
     # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered.
-    nothing_to_check = {"tls_rpt", "device_compliance", "device_encryption", "intune_enrolled",
-                        "device_checkin", "risky_sign_ins", "risky_users"}
+    nothing_to_check = {
+        "tls_rpt",
+        "device_compliance",
+        "device_encryption",
+        "intune_enrolled",
+        "device_checkin",
+        "risky_sign_ins",
+        "risky_users",
+    }
     assert {k for k, r in results.items() if r.status == "unavailable"} == nothing_to_check
     assert results["legacy_auth_blocked"].status == "pass"
     assert results["admins_ca_mfa"].status == "pass"
@@ -134,8 +148,9 @@ def test_risk_based_policy_isnt_mfa_for_everyone(db, live):
 
 def test_p2_conditions_and_authentication_strength_are_described(db, live):
     report = data_reports.build(db, live, "conditional-access", RECORDED)
-    policies = {row[0]: (row, flag) for row, flag in zip(report.sections[0].rows, report.sections[0].flags,
-                                                          strict=True)}
+    policies = {
+        row[0]: (row, flag) for row, flag in zip(report.sections[0].rows, report.sections[0].flags, strict=True)
+    }
     ca010 = next(v for k, v in policies.items() if k.startswith("CA010"))
     ca002 = next(v for k, v in policies.items() if k.startswith("CA002"))
     ca001 = next(v for k, v in policies.items() if k.startswith("CA001"))
@@ -161,8 +176,9 @@ def test_inbox_rule_folder_names_on_real_data(db, live):
 def test_conditional_access_exclusion_group_on_real_data(db, live):
     snap = TenantSnapshot(db, live)
     assert [g["members"] for g in snap.objects("conditional_access", "ca_group")] == [[]]  # an empty group
-    policies = next(s for s in data_reports.build(db, live, "conditional-access", RECORDED).sections
-                    if s.title == "Policies")
+    policies = next(
+        s for s in data_reports.build(db, live, "conditional-access", RECORDED).sections if s.title == "Policies"
+    )
     assert any(g["displayName"] in r[3] for r in policies.rows for g in snap.objects("conditional_access", "ca_group"))
 
 
@@ -199,10 +215,20 @@ def test_pages_and_downloads(client, db, live):
     make_user(db, "boss", all_tenants=True)
     login(client, "boss")
     t = f"/tenants/{live['id']}"
-    pages = ["/", t, f"{t}/report", f"{t}/evidence", f"{t}/findings", f"{t}/collection", f"{t}/schedules",
-             f"{t}/report.xlsx", f"{t}/evidence.xlsx"]
-    pages += [f"{t}/data/{key}" for key in data_reports.REPORTS] + \
-        [f"{t}/data/{key}.xlsx" for key in data_reports.REPORTS]
+    pages = [
+        "/",
+        t,
+        f"{t}/report",
+        f"{t}/evidence",
+        f"{t}/findings",
+        f"{t}/collection",
+        f"{t}/schedules",
+        f"{t}/report.xlsx",
+        f"{t}/evidence.xlsx",
+    ]
+    pages += [f"{t}/data/{key}" for key in data_reports.REPORTS] + [
+        f"{t}/data/{key}.xlsx" for key in data_reports.REPORTS
+    ]
     if export.pdf_available():
         pages += [f"{t}/report.pdf", f"{t}/evidence.pdf"]
     for url in pages:

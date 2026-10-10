@@ -11,30 +11,62 @@ from . import mailbox_window
 from .base import Collector, RunContext, register
 
 MAILBOX_FIELDS = (
-    "ExternalDirectoryObjectId", "Guid", "UserPrincipalName", "PrimarySmtpAddress", "DisplayName",
-    "RecipientTypeDetails", "ForwardingSmtpAddress", "ForwardingAddress", "DeliverToMailboxAndForward",
-    "GrantSendOnBehalfTo", "HiddenFromAddressListsEnabled", "AuditEnabled", "WhenMailboxCreated",
-    "Name", "Alias", "ArchiveStatus", "LitigationHoldEnabled",
-    "IssueWarningQuota", "ProhibitSendQuota", "ProhibitSendReceiveQuota",
+    "ExternalDirectoryObjectId",
+    "Guid",
+    "UserPrincipalName",
+    "PrimarySmtpAddress",
+    "DisplayName",
+    "RecipientTypeDetails",
+    "ForwardingSmtpAddress",
+    "ForwardingAddress",
+    "DeliverToMailboxAndForward",
+    "GrantSendOnBehalfTo",
+    "HiddenFromAddressListsEnabled",
+    "AuditEnabled",
+    "WhenMailboxCreated",
+    "Name",
+    "Alias",
+    "ArchiveStatus",
+    "LitigationHoldEnabled",
+    "IssueWarningQuota",
+    "ProhibitSendQuota",
+    "ProhibitSendReceiveQuota",
 )
 # Per-mailbox client access: which old protocols and SMTP AUTH each mailbox allows.
 CAS_FIELDS = (
-    "ExternalDirectoryObjectId", "Guid", "PrimarySmtpAddress", "SmtpClientAuthenticationDisabled",
-    "PopEnabled", "ImapEnabled", "ActiveSyncEnabled", "EwsEnabled", "MAPIEnabled", "OWAEnabled",
+    "ExternalDirectoryObjectId",
+    "Guid",
+    "PrimarySmtpAddress",
+    "SmtpClientAuthenticationDisabled",
+    "PopEnabled",
+    "ImapEnabled",
+    "ActiveSyncEnabled",
+    "EwsEnabled",
+    "MAPIEnabled",
+    "OWAEnabled",
 )
 SELF = "NT AUTHORITY\\SELF"
 # Built-in Exchange objects whose permissions aren't people's access: the Discovery Search
 # mailbox, the role group that owns it, and the per-plan "ExchangeOnline*" objects
 # that grant Send As to NULL SID.
-SYSTEM_MAILBOX_TYPES = {"DiscoveryMailbox", "ArbitrationMailbox", "AuditLogMailbox", "MonitoringMailbox",
-                        "AuxAuditLogMailbox", "SupervisoryReviewPolicyMailbox"}
+SYSTEM_MAILBOX_TYPES = {
+    "DiscoveryMailbox",
+    "ArbitrationMailbox",
+    "AuditLogMailbox",
+    "MonitoringMailbox",
+    "AuxAuditLogMailbox",
+    "SupervisoryReviewPolicyMailbox",
+}
 SYSTEM_TRUSTEES = {"NULL SID", "Discovery Management", "NT AUTHORITY\\SYSTEM", "NT AUTHORITY\\NETWORK SERVICE"}
 
 
 def is_system_entry(identity: str | None, trustee: str | None) -> bool:
     trustee = trustee or ""
-    return (trustee in SYSTEM_TRUSTEES or trustee.startswith("S-1-5-")
-            or (identity or "").startswith(("ExchangeOnline", "DiscoverySearchMailbox")))
+    return (
+        trustee in SYSTEM_TRUSTEES
+        or trustee.startswith("S-1-5-")
+        or (identity or "").startswith(("ExchangeOnline", "DiscoverySearchMailbox"))
+    )
 
 
 def _pick(row: dict, fields) -> dict:
@@ -59,9 +91,20 @@ class Mailboxes(Collector):
             return
         exo = ctx.exchange
         domains = exo.invoke("Get-AcceptedDomain")
-        ctx.objects("accepted_domain", [(d.get("DomainName", "?").lower(), {
-            "DomainName": (d.get("DomainName") or "").lower(), "DomainType": d.get("DomainType"),
-            "Default": d.get("Default")}) for d in domains])
+        ctx.objects(
+            "accepted_domain",
+            [
+                (
+                    d.get("DomainName", "?").lower(),
+                    {
+                        "DomainName": (d.get("DomainName") or "").lower(),
+                        "DomainType": d.get("DomainType"),
+                        "Default": d.get("Default"),
+                    },
+                )
+                for d in domains
+            ],
+        )
 
         mailboxes = exo.invoke("Get-Mailbox", {"ResultSize": "Unlimited"})
         rows = []
@@ -75,31 +118,65 @@ class Mailboxes(Collector):
         ctx.objects("mailbox", rows)
 
         self._full_access(ctx, [r for _, r in rows])
-        send_as = [p for p in exo.invoke("Get-RecipientPermission", {"ResultSize": "Unlimited"})
-                   if p.get("Trustee") != SELF and not p.get("IsInherited")
-                   and not is_system_entry(p.get("Identity"), p.get("Trustee"))]
-        ctx.objects("send_as", [(f"{p.get('Identity')}|{p.get('Trustee')}", {
-            "Identity": p.get("Identity"), "Trustee": p.get("Trustee"),
-            "AccessRights": p.get("AccessRights") or []}) for p in send_as])
+        send_as = [
+            p
+            for p in exo.invoke("Get-RecipientPermission", {"ResultSize": "Unlimited"})
+            if p.get("Trustee") != SELF
+            and not p.get("IsInherited")
+            and not is_system_entry(p.get("Identity"), p.get("Trustee"))
+        ]
+        ctx.objects(
+            "send_as",
+            [
+                (
+                    f"{p.get('Identity')}|{p.get('Trustee')}",
+                    {
+                        "Identity": p.get("Identity"),
+                        "Trustee": p.get("Trustee"),
+                        "AccessRights": p.get("AccessRights") or [],
+                    },
+                )
+                for p in send_as
+            ],
+        )
 
         self._client_access(ctx)
 
         org = (exo.invoke("Get-OrganizationConfig") or [{}])[0]
         transport = (exo.invoke("Get-TransportConfig") or [{}])[0]
-        ctx.objects("mail_settings", [("org", {
-            "AuditDisabled": org.get("AuditDisabled"),
-            "SmtpClientAuthenticationDisabled": transport.get("SmtpClientAuthenticationDisabled"),
-        })])
-        ctx.objects("outbound_spam_policy", [(p.get("Name", "?"), _pick(p, (
-            "Name", "AutoForwardingMode", "IsDefault"))) for p in exo.invoke("Get-HostedOutboundSpamFilterPolicy")])
-        ctx.objects("remote_domain", [(d.get("Name", "?"), _pick(d, (
-            "Name", "DomainName", "AutoForwardEnabled"))) for d in exo.invoke("Get-RemoteDomain")])
+        ctx.objects(
+            "mail_settings",
+            [
+                (
+                    "org",
+                    {
+                        "AuditDisabled": org.get("AuditDisabled"),
+                        "SmtpClientAuthenticationDisabled": transport.get("SmtpClientAuthenticationDisabled"),
+                    },
+                )
+            ],
+        )
+        ctx.objects(
+            "outbound_spam_policy",
+            [
+                (p.get("Name", "?"), _pick(p, ("Name", "AutoForwardingMode", "IsDefault")))
+                for p in exo.invoke("Get-HostedOutboundSpamFilterPolicy")
+            ],
+        )
+        ctx.objects(
+            "remote_domain",
+            [
+                (d.get("Name", "?"), _pick(d, ("Name", "DomainName", "AutoForwardEnabled")))
+                for d in exo.invoke("Get-RemoteDomain")
+            ],
+        )
 
         data = [r for _, r in rows]
         ctx.metric("mailboxes.total", len(data))
         ctx.metric("mailboxes.shared", sum(r["RecipientTypeDetails"] == "SharedMailbox" for r in data))
-        ctx.metric("mailboxes.forwarding", sum(bool(r["ForwardingSmtpAddress"] or r["ForwardingAddress"])
-                                               for r in data))
+        ctx.metric(
+            "mailboxes.forwarding", sum(bool(r["ForwardingSmtpAddress"] or r["ForwardingAddress"]) for r in data)
+        )
 
     @staticmethod
     def _client_access(ctx: RunContext) -> None:
@@ -110,8 +187,9 @@ class Mailboxes(Collector):
         except ExchangeError as exc:
             ctx.warn(f"Could not read mailbox protocol settings: {exc.message}")
             return
-        ctx.objects("cas_mailbox", [(_mailbox_id(c), _pick(c, CAS_FIELDS)) for c in cas
-                                    if c.get("ExternalDirectoryObjectId")])  # system mailboxes have none
+        ctx.objects(
+            "cas_mailbox", [(_mailbox_id(c), _pick(c, CAS_FIELDS)) for c in cas if c.get("ExternalDirectoryObjectId")]
+        )  # system mailboxes have none
 
     @staticmethod
     def _recipient(ctx: RunContext, identity: str) -> dict | None:
@@ -125,13 +203,15 @@ class Mailboxes(Collector):
         if not found:
             return None
         r = found[0]
-        return {"PrimarySmtpAddress": r.get("PrimarySmtpAddress"), "RecipientType": r.get("RecipientType"),
-                "ExternalEmailAddress": r.get("ExternalEmailAddress")}
+        return {
+            "PrimarySmtpAddress": r.get("PrimarySmtpAddress"),
+            "RecipientType": r.get("RecipientType"),
+            "ExternalEmailAddress": r.get("ExternalEmailAddress"),
+        }
 
     def _full_access(self, ctx: RunContext, mailboxes: list[dict]) -> None:
         mailboxes = [m for m in mailboxes if m.get("RecipientTypeDetails") not in SYSTEM_MAILBOX_TYPES]
-        window = mailbox_window.plan(ctx, self.key, "mailbox_permission", mailboxes, _mailbox_id,
-                                     "mailbox permissions")
+        window = mailbox_window.plan(ctx, self.key, "mailbox_permission", mailboxes, _mailbox_id, "mailbox permissions")
         rows, failed = [], 0
         for m in window.mailboxes:
             ident = m.get("Guid") or m.get("PrimarySmtpAddress")
@@ -146,10 +226,18 @@ class Mailboxes(Collector):
                 user = p.get("User") or ""
                 if user == SELF or p.get("IsInherited") or p.get("Deny") or is_system_entry(None, user):
                     continue
-                rows.append((f"{_mailbox_id(m)}|{user}", {
-                    "mailboxId": _mailbox_id(m), "mailbox": m.get("PrimarySmtpAddress"),
-                    "mailboxType": m.get("RecipientTypeDetails"), "User": user,
-                    "AccessRights": p.get("AccessRights") or []}))
+                rows.append(
+                    (
+                        f"{_mailbox_id(m)}|{user}",
+                        {
+                            "mailboxId": _mailbox_id(m),
+                            "mailbox": m.get("PrimarySmtpAddress"),
+                            "mailboxType": m.get("RecipientTypeDetails"),
+                            "User": user,
+                            "AccessRights": p.get("AccessRights") or [],
+                        },
+                    )
+                )
         if failed:
             ctx.warn(f"Could not read permissions on {plural(failed, 'mailbox')}")
         ctx.objects("mailbox_permission", rows + window.carried)

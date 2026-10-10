@@ -14,5 +14,20 @@ from . import identity, email, apps, tenant_settings, sharing, domains, groups, 
 from . import admin_activity, sharepoint, auth_methods, licences, sign_ins, risky_users
 # isort: on
 
-AREAS = (identity, email, apps, tenant_settings, sharing, domains, groups, devices, hybrid, admin_activity,
-         sharepoint, auth_methods, licences, sign_ins, risky_users)
+AREAS = (
+    identity,
+    email,
+    apps,
+    tenant_settings,
+    sharing,
+    domains,
+    groups,
+    devices,
+    hybrid,
+    admin_activity,
+    sharepoint,
+    auth_methods,
+    licences,
+    sign_ins,
+    risky_users,
+)

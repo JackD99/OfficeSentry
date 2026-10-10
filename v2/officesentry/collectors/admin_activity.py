@@ -28,9 +28,11 @@ def _at(ts: int) -> str:
 class AdminActivity(Collector):
     key = "admin_activity"
     title = "Admin activity"
-    description = ("Admin role, Conditional Access, app credential, consent, domain and account changes from "
-                   "the directory audit log, kept in the activity history (Microsoft keeps 30 days with Entra ID "
-                   "P1, otherwise 7).")
+    description = (
+        "Admin role, Conditional Access, app credential, consent, domain and account changes from "
+        "the directory audit log, kept in the activity history (Microsoft keeps 30 days with Entra ID "
+        "P1, otherwise 7)."
+    )
     permissions = ("AuditLog.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
@@ -38,14 +40,19 @@ class AdminActivity(Collector):
         start = now - timedelta(days=WINDOW_DAYS)
         since = start.strftime("%Y-%m-%dT%H:%M:%SZ")
         p1 = ctx.capabilities.get("entra_p1")
-        window = {"requested_days": WINDOW_DAYS, "since": since,
-                  "retention_days": None if p1 is None else (WINDOW_DAYS if p1 else FREE_RETENTION_DAYS)}
+        window = {
+            "requested_days": WINDOW_DAYS,
+            "since": since,
+            "retention_days": None if p1 is None else (WINDOW_DAYS if p1 else FREE_RETENTION_DAYS),
+        }
         try:
-            got = events.ingest(ctx, events.AUDIT_LOG, FREE_RETENTION_DAYS if p1 is False else WINDOW_DAYS,
-                                PAGE_BUDGET)
+            got = events.ingest(ctx, events.AUDIT_LOG, FREE_RETENTION_DAYS if p1 is False else WINDOW_DAYS, PAGE_BUDGET)
         except (LicenseRequired, PermissionMissing) as exc:
-            why = "the tenant's licence doesn't include it" if isinstance(exc, LicenseRequired) \
+            why = (
+                "the tenant's licence doesn't include it"
+                if isinstance(exc, LicenseRequired)
                 else "AuditLog.Read.All consent missing"
+            )
             ctx.warn(f"The directory audit log wasn't readable ({why}): {exc.message}")
             ctx.objects("audit_window", [("window", {**window, "available": False, "reason": exc.message})])
             return
@@ -56,20 +63,39 @@ class AdminActivity(Collector):
         if missing:
             ranges = ", ".join(f"{_at(lo)} to {_at(hi)}" for lo, hi in missing[:3])
             ctx.truncated = got.budget_hit
-            ctx.warn(f"Directory audit events from {ranges} haven't been read yet"
-                     + (f" (more than {PAGE_BUDGET * events.AUDIT_LOG.page_size:,} events in one run)"
-                        if got.budget_hit else " (Microsoft timed out)")
-                     + "; the next run carries on from there")
+            ctx.warn(
+                f"Directory audit events from {ranges} haven't been read yet"
+                + (
+                    f" (more than {PAGE_BUDGET * events.AUDIT_LOG.page_size:,} events in one run)"
+                    if got.budget_hit
+                    else " (Microsoft timed out)"
+                )
+                + "; the next run carries on from there"
+            )
         ctx.log(f"Read {plural(got.read, 'directory audit event')} from Microsoft ({got.new:,} new)")
 
         stored = list(events.audits_between(ctx.conn, ctx.tenant["id"], start, now))
         times = sorted(e["activityDateTime"] for e in stored if isinstance(e.get("activityDateTime"), str))
         kept = [(e["id"], normalise(e)) for e in stored if e.get("id") and kind_of(e)]
         history = got.coverage.detailed_from
-        ctx.objects("audit_window", [("window", {
-            **window, "available": True, "capped": bool(missing), "read": len(stored), "kept": len(kept),
-            "oldest": times[0] if times else None, "newest": times[-1] if times else None,
-            "historyFrom": _at(history) if history is not None else None})])
+        ctx.objects(
+            "audit_window",
+            [
+                (
+                    "window",
+                    {
+                        **window,
+                        "available": True,
+                        "capped": bool(missing),
+                        "read": len(stored),
+                        "kept": len(kept),
+                        "oldest": times[0] if times else None,
+                        "newest": times[-1] if times else None,
+                        "historyFrom": _at(history) if history is not None else None,
+                    },
+                )
+            ],
+        )
         ctx.objects("admin_event", kept)
 
         done = [e for _, e in kept if e["result"] == "success"]

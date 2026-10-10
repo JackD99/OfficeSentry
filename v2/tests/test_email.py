@@ -53,9 +53,16 @@ def sends():
 
 
 def _configure(client, **overrides):
-    data = {"mail_transport": "smtp", "smtp_host": "smtp.example.com", "smtp_port": "587",
-            "smtp_security": "starttls", "smtp_user": "reports@msp.com", "smtp_password": "s3cret",
-            "smtp_from": "reports@msp.com", "msp_name": "Contoso IT"}
+    data = {
+        "mail_transport": "smtp",
+        "smtp_host": "smtp.example.com",
+        "smtp_port": "587",
+        "smtp_security": "starttls",
+        "smtp_user": "reports@msp.com",
+        "smtp_password": "s3cret",
+        "smtp_from": "reports@msp.com",
+        "msp_name": "Contoso IT",
+    }
     data.update(overrides)
     return client.post("/admin/email", data=data)
 
@@ -65,13 +72,36 @@ def _smtp_ready(db):
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
 
 
-def _schedule(db, tenant_id, contacts, kind="report", reports=("review",), frequency="monthly", day_of_week=0,
-              day_of_month=1, hour=8, include_xlsx=1, last_period=None, timezone="UTC"):
+def _schedule(
+    db,
+    tenant_id,
+    contacts,
+    kind="report",
+    reports=("review",),
+    frequency="monthly",
+    day_of_week=0,
+    day_of_month=1,
+    hour=8,
+    include_xlsx=1,
+    last_period=None,
+    timezone="UTC",
+):
     sid = db.execute(
         "INSERT INTO email_schedules (kind, tenant_id, reports, include_xlsx, frequency, day_of_week, day_of_month,"
         " hour, timezone, last_period, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '2026-01-01T00:00:00Z')",
-        (kind, tenant_id, json.dumps(list(reports)), include_xlsx, frequency, day_of_week, day_of_month, hour,
-         timezone, last_period)).lastrowid
+        (
+            kind,
+            tenant_id,
+            json.dumps(list(reports)),
+            include_xlsx,
+            frequency,
+            day_of_week,
+            day_of_month,
+            hour,
+            timezone,
+            last_period,
+        ),
+    ).lastrowid
     delivery.set_recipients(db, "schedule", sid, contacts)
     return sid
 
@@ -142,17 +172,22 @@ def test_no_password_over_an_unencrypted_connection(client, db, vault):
 def test_graph_settings_keep_secret_only_for_the_same_app(client, db, vault):
     make_user(db, "admin")
     login(client, "admin")
-    form = {"mail_transport": "graph", "graph_tenant": "msp.onmicrosoft.com",
-            "graph_client_id": "11111111-2222-3333-4444-555555555555", "graph_sender": "reports@msp.com",
-            "graph_secret": "shh"}
+    form = {
+        "mail_transport": "graph",
+        "graph_tenant": "msp.onmicrosoft.com",
+        "graph_client_id": "11111111-2222-3333-4444-555555555555",
+        "graph_sender": "reports@msp.com",
+        "graph_secret": "shh",
+    }
     client.post("/admin/email", data=form)
     s = mailer.mail_settings(db)
     assert mailer.transport(s) == "graph" and mailer.is_configured(s)
     assert vault.decrypt(s["graph_secret_enc"]) == "shh"
     client.post("/admin/email", data=form | {"graph_secret": ""})
     assert vault.decrypt(mailer.mail_settings(db)["graph_secret_enc"]) == "shh"
-    client.post("/admin/email", data=form | {"graph_secret": "", "graph_client_id":
-                                             "99999999-2222-3333-4444-555555555555"})
+    client.post(
+        "/admin/email", data=form | {"graph_secret": "", "graph_client_id": "99999999-2222-3333-4444-555555555555"}
+    )
     assert mailer.mail_settings(db)["graph_secret_enc"] == ""
 
 
@@ -169,9 +204,13 @@ def test_test_email_is_logged(client, db):
 
 
 def _graph_db(db, vault):
-    for key, value in {"mail_transport": "graph", "graph_tenant": "msp.onmicrosoft.com",
-                       "graph_client_id": "11111111-2222-3333-4444-555555555555",
-                       "graph_secret_enc": vault.encrypt("shh"), "graph_sender": "reports@msp.com"}.items():
+    for key, value in {
+        "mail_transport": "graph",
+        "graph_tenant": "msp.onmicrosoft.com",
+        "graph_client_id": "11111111-2222-3333-4444-555555555555",
+        "graph_secret_enc": vault.encrypt("shh"),
+        "graph_sender": "reports@msp.com",
+    }.items():
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
 
 
@@ -180,8 +219,14 @@ def test_graph_send_mail(db, vault, monkeypatch):
     monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
     _graph_db(db, vault)
     responses.post("https://graph.microsoft.com/v1.0/users/reports@msp.com/sendMail", status=202)
-    email = mailer.Email(to=["it@client.com"], bcc=["me@msp.com"], subject="Hi", text="t", html="<p>h</p>",
-                         attachments=[("r.pdf", "application/pdf", b"%PDF-1")])
+    email = mailer.Email(
+        to=["it@client.com"],
+        bcc=["me@msp.com"],
+        subject="Hi",
+        text="t",
+        html="<p>h</p>",
+        attachments=[("r.pdf", "application/pdf", b"%PDF-1")],
+    )
     assert mailer.send(db, vault, email) == "graph"
     req = responses.calls[0].request
     assert req.headers["Authorization"] == "Bearer mail-token"
@@ -196,12 +241,16 @@ def test_graph_send_mail(db, vault, monkeypatch):
 def test_graph_errors_explain_what_to_fix(db, vault, monkeypatch):
     monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
     _graph_db(db, vault)
-    responses.post("https://graph.microsoft.com/v1.0/users/reports@msp.com/sendMail", status=403,
-                   json={"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}})
+    responses.post(
+        "https://graph.microsoft.com/v1.0/users/reports@msp.com/sendMail",
+        status=403,
+        json={"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}},
+    )
     with pytest.raises(mailer.MailError, match="Mail.Send"):
         mailer.send(db, vault, mailer.Email(to=["a@x.com"], subject="s", text="t"))
-    big = mailer.Email(to=["a@x.com"], subject="s", text="t", attachments=[("x.pdf", "application/pdf",
-                                                                              b"0" * 3_000_000)])
+    big = mailer.Email(
+        to=["a@x.com"], subject="s", text="t", attachments=[("x.pdf", "application/pdf", b"0" * 3_000_000)]
+    )
     with pytest.raises(mailer.MailError, match="3 MB"):
         mailer.send(db, vault, big)
     assert len(responses.calls) == 1  # too-large mail never leaves
@@ -242,13 +291,18 @@ def test_next_send(db, two_tenants):
     alpha, _ = two_tenants
     now = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
     sid = _schedule(db, alpha, [], frequency="quarterly", day_of_month=3, last_period="2026-Q4")
-    assert delivery.next_send(_row(db, "email_schedules", sid), "UTC", now) == \
-        datetime(2027, 1, 3, 8, tzinfo=UTC)
+    assert delivery.next_send(_row(db, "email_schedules", sid), "UTC", now) == datetime(2027, 1, 3, 8, tzinfo=UTC)
     sid = _schedule(db, alpha, [], frequency="weekly", day_of_week=2, hour=9, last_period="2026-W41")
     assert delivery.next_send(_row(db, "email_schedules", sid), "UTC", now) == datetime(2026, 10, 14, 9, tzinfo=UTC)
     # Saved now, so September's send time doesn't count: next is 20 October.
-    sid = _schedule(db, alpha, [], frequency="monthly", day_of_month=20,
-                    last_period=delivery.initial_period("monthly", 0, 20, 8, "UTC", now))
+    sid = _schedule(
+        db,
+        alpha,
+        [],
+        frequency="monthly",
+        day_of_month=20,
+        last_period=delivery.initial_period("monthly", 0, 20, 8, "UTC", now),
+    )
     assert delivery.next_send(_row(db, "email_schedules", sid), "UTC", now) == datetime(2026, 10, 20, 8, tzinfo=UTC)
     assert delivery.describe(_row(db, "email_schedules", sid)) == "Monthly on the 20th at 08:00"
     # A send time that was missed (the worker was down) is due now.
@@ -265,10 +319,22 @@ def test_create_schedule_from_form(client, db, two_tenants):
     login(client, "admin")
     team = delivery.add_contact(db, None, "Me", "me@msp.com")
     assert client.get(f"/tenants/{alpha}/schedules/new").status_code == 200
-    resp = client.post(f"/tenants/{alpha}/schedules/new", data={
-        "reports": ["review", "data:mailboxes", "bogus"], "include_xlsx": "1", "frequency": "weekly",
-        "day_of_week": "0", "day_of_month": "1", "hour": "0", "timezone": "Europe/London",
-        "contacts": [str(team)], "new_name": "Sam", "new_email": "sam@client.com", "message": "Hello"})
+    resp = client.post(
+        f"/tenants/{alpha}/schedules/new",
+        data={
+            "reports": ["review", "data:mailboxes", "bogus"],
+            "include_xlsx": "1",
+            "frequency": "weekly",
+            "day_of_week": "0",
+            "day_of_month": "1",
+            "hour": "0",
+            "timezone": "Europe/London",
+            "contacts": [str(team)],
+            "new_name": "Sam",
+            "new_email": "sam@client.com",
+            "message": "Hello",
+        },
+    )
     assert resp.status_code == 302
     s = db.execute("SELECT * FROM email_schedules").fetchone()
     assert json.loads(s["reports"]) == ["review", "data:mailboxes"]
@@ -285,13 +351,17 @@ def test_schedule_form_requires_reports_and_people(client, db, two_tenants):
     alpha, _ = two_tenants
     make_user(db, "admin")
     login(client, "admin")
-    resp = client.post(f"/tenants/{alpha}/schedules/new", data={
-        "frequency": "monthly", "day_of_week": "0", "day_of_month": "1", "hour": "8"})
+    resp = client.post(
+        f"/tenants/{alpha}/schedules/new",
+        data={"frequency": "monthly", "day_of_week": "0", "day_of_month": "1", "hour": "8"},
+    )
     page = resp.get_data(as_text=True)
     assert resp.status_code == 200 and "Choose at least one report" in page and "Choose at least one person" in page
     assert db.execute("SELECT COUNT(*) FROM email_schedules").fetchone()[0] == 0
-    bad = client.post(f"/tenants/{alpha}/schedules/new", data={
-        "reports": "review", "frequency": "monthly", "day_of_month": "31", "hour": "8"})
+    bad = client.post(
+        f"/tenants/{alpha}/schedules/new",
+        data={"reports": "review", "frequency": "monthly", "day_of_month": "31", "hour": "8"},
+    )
     assert bad.status_code == 400
 
 
@@ -305,7 +375,7 @@ def test_send_now_delivers_bundle_with_hidden_copy(client, db, two_tenants):
     team = delivery.add_contact(db, None, "Me", "me@msp.com")
     sid = _schedule(db, alpha, [client_contact, team], reports=("review", "data:mailboxes"))
     client.post(f"/schedules/{sid}/send")
-    (_, _, msg, to_addrs), = sends()
+    ((_, _, msg, to_addrs),) = sends()
     assert msg["To"] == "it@client.com" and "me@msp.com" not in str(msg)  # hidden copy is not in any header
     assert set(to_addrs) == {"it@client.com", "me@msp.com"}
     assert "Alpha Ltd" in msg["Subject"]
@@ -378,6 +448,7 @@ def test_build_error_is_recorded_not_raised(app, db, two_tenants, vault, cfg, mo
 
     def boom(*a, **k):
         raise ValueError("bad data")
+
     monkeypatch.setattr(delivery.monthly_review, "build", boom)
     assert delivery.tick(app, db, vault, cfg, datetime(2026, 10, 2, 9, tzinfo=UTC)) == 1
     row = db.execute("SELECT * FROM email_deliveries").fetchone()
@@ -395,14 +466,22 @@ def test_digest_goes_to_team_only(client, db, two_tenants):
     _configure(client)
     team = delivery.add_contact(db, None, "Me", "me@msp.com")
     outsider = delivery.add_contact(db, alpha, "Client", "it@client.com")
-    resp = client.post("/emails/digests/new", data={
-        "frequency": "weekly", "day_of_week": "0", "day_of_month": "1", "hour": "7", "include_xlsx": "1",
-        "contacts": [str(team), str(outsider)]})
+    resp = client.post(
+        "/emails/digests/new",
+        data={
+            "frequency": "weekly",
+            "day_of_week": "0",
+            "day_of_month": "1",
+            "hour": "7",
+            "include_xlsx": "1",
+            "contacts": [str(team), str(outsider)],
+        },
+    )
     assert resp.status_code == 302
     sid = db.execute("SELECT id FROM email_schedules WHERE kind = 'digest'").fetchone()[0]
     assert [c["email"] for c in delivery.recipients(db, "schedule", sid)] == ["me@msp.com"]
     client.post(f"/schedules/{sid}/send")
-    (_, _, msg, to_addrs), = sends()
+    ((_, _, msg, to_addrs),) = sends()
     assert to_addrs == ["me@msp.com"] and msg["Subject"].startswith("Tenant digest")
     html = msg.get_body(("html",)).get_content()
     assert "Alpha Ltd" in html and "Bravo Inc" in html
@@ -430,8 +509,18 @@ def _finding(db, tenant_id, key, severity, first_seen, object_id="x", reopened_a
     return db.execute(
         "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen, last_seen,"
         " reopened_at, accepted_at) VALUES (?, ?, ?, ?, ?, 'detail', ?, ?, ?, ?)",
-        (tenant_id, key, object_id, severity, f"subject {object_id}", first_seen, first_seen, reopened_at,
-         first_seen if accepted else None)).lastrowid
+        (
+            tenant_id,
+            key,
+            object_id,
+            severity,
+            f"subject {object_id}",
+            first_seen,
+            first_seen,
+            reopened_at,
+            first_seen if accepted else None,
+        ),
+    ).lastrowid
 
 
 def _alerting(app, cfg, vault):
@@ -453,11 +542,13 @@ def test_alert_email_on_new_critical_finding(app, client, db, two_tenants, vault
     # Webhook alerts are off; the email still goes out on the same event.
     assert alerts.after_sync(db, alerting, tenant, {"opened": [first]}) is None
     assert sends() == []  # the tenant's first scan never emails
-    ids = [_finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "new-one"),
-           _finding(db, alpha, "admin_mfa", "high", "2026-10-02T02:00:00Z", "only-high"),
-           _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "accepted", accepted=True)]
+    ids = [
+        _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "new-one"),
+        _finding(db, alpha, "admin_mfa", "high", "2026-10-02T02:00:00Z", "only-high"),
+        _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T02:00:00Z", "accepted", accepted=True),
+    ]
     alerts.after_sync(db, alerting, tenant, {"opened": ids})
-    (_, _, msg, to_addrs), = sends()
+    ((_, _, msg, to_addrs),) = sends()
     assert to_addrs == ["me@msp.com"] and msg["Subject"] == "1 new critical finding in Alpha Ltd"
     html = msg.get_body(("html",)).get_content()
     assert "subject new-one" in html and "subject only-high" not in html and "subject accepted" not in html
@@ -475,35 +566,53 @@ def test_alert_email_on_new_critical_finding(app, client, db, two_tenants, vault
 def test_global_alert_emails_each_tenant(app, db, two_tenants, vault, cfg):
     alpha, bravo = two_tenants
     _smtp_ready(db)
-    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at)"
-                     " VALUES (NULL, 'high', '2026-10-01T00:00:00Z')").lastrowid
+    aid = db.execute(
+        "INSERT INTO email_alerts (tenant_id, min_severity, created_at) VALUES (NULL, 'high', '2026-10-01T00:00:00Z')"
+    ).lastrowid
     delivery.set_recipients(db, "alert", aid, [delivery.add_contact(db, None, "", "me@msp.com")])
     alerting = _alerting(app, cfg, vault)
     for t in (alpha, bravo):
         _finding(db, t, "admin_mfa", "low", "2026-09-01T00:00:00Z", "old")
         new = _finding(db, t, "admin_mfa", "high", "2026-10-02T00:00:00Z", f"new-{t}")
         alerts.after_sync(db, alerting, store.get_tenant(db, t), {"opened": [new]})
-    assert [m[2]["Subject"] for m in sends()] == ["1 new critical or high finding in Alpha Ltd",
-                                                   "1 new critical or high finding in Bravo Inc"]
+    assert [m[2]["Subject"] for m in sends()] == [
+        "1 new critical or high finding in Alpha Ltd",
+        "1 new critical or high finding in Bravo Inc",
+    ]
 
 
 @responses.activate
 def test_webhook_and_email_alerts_share_one_event(app, db, two_tenants, vault, cfg, monkeypatch):
     alpha, _ = two_tenants
-    monkeypatch.setattr(socket, "getaddrinfo",
-                        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))])
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))],
+    )
     hook = "https://hooks.example.com/run"
     responses.add(responses.POST, hook, status=202)
-    alerts.save_settings(db, {"alerts.enabled": "1", "alerts.format": "slack", "alerts.min_severity": "high",
-                              "alerts.url_enc": vault.encrypt(hook)})
+    alerts.save_settings(
+        db,
+        {
+            "alerts.enabled": "1",
+            "alerts.format": "slack",
+            "alerts.min_severity": "high",
+            "alerts.url_enc": vault.encrypt(hook),
+        },
+    )
     _smtp_ready(db)
-    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at)"
-                     " VALUES (?, 'critical', '2026-10-01T00:00:00Z')", (alpha,)).lastrowid
+    aid = db.execute(
+        "INSERT INTO email_alerts (tenant_id, min_severity, created_at) VALUES (?, 'critical', '2026-10-01T00:00:00Z')",
+        (alpha,),
+    ).lastrowid
     delivery.set_recipients(db, "alert", aid, [delivery.add_contact(db, alpha, "", "it@alpha.com")])
     _finding(db, alpha, "admin_mfa", "low", "2026-09-01T00:00:00Z", "old")
     new = _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T00:00:00Z", "new")
-    run = db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at)"
-                     " VALUES (?, 'users', 'succeeded', 'schedule', '2026-10-02T00:00:00Z')", (alpha,)).lastrowid
+    run = db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at)"
+        " VALUES (?, 'users', 'succeeded', 'schedule', '2026-10-02T00:00:00Z')",
+        (alpha,),
+    ).lastrowid
     assert alerts.after_sync(db, _alerting(app, cfg, vault), store.get_tenant(db, alpha), {"opened": [new]}, run)
     assert len(responses.calls) == 1 and len(sends()) == 1
     events = [r[0] for r in db.execute("SELECT message FROM run_events WHERE run_id = ?", (run,))]
@@ -514,8 +623,10 @@ def test_failed_alert_email_retries_then_gives_up(app, db, two_tenants, vault, c
     alpha, _ = two_tenants
     tenant = store.get_tenant(db, alpha)
     _smtp_ready(db)
-    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at)"
-                     " VALUES (?, 'critical', '2026-10-01T00:00:00Z')", (alpha,)).lastrowid
+    aid = db.execute(
+        "INSERT INTO email_alerts (tenant_id, min_severity, created_at) VALUES (?, 'critical', '2026-10-01T00:00:00Z')",
+        (alpha,),
+    ).lastrowid
     delivery.set_recipients(db, "alert", aid, [delivery.add_contact(db, alpha, "", "it@alpha.com")])
     _finding(db, alpha, "admin_mfa", "low", "2026-09-01T00:00:00Z", "old")
     new = _finding(db, alpha, "admin_mfa", "critical", "2026-10-02T00:00:00Z", "new")
@@ -547,8 +658,7 @@ def test_preview_renders_email_in_a_locked_down_frame(client, db, two_tenants):
     seed_tenant(db, alpha)
     make_user(db, "admin")
     login(client, "admin")
-    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "IT", "it@client.com")],
-                    reports=("review", "evidence"))
+    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "IT", "it@client.com")], reports=("review", "evidence"))
     page = client.get(f"/schedules/{sid}/preview")
     assert page.status_code == 200 and page.headers["X-Frame-Options"] == "DENY"
     text = page.get_data(as_text=True)
@@ -572,11 +682,20 @@ def test_overview_page(client, db, two_tenants):
 
 def test_client_sees_their_emails_but_not_internal_details(client, db, two_tenants):
     alpha, bravo = two_tenants
-    sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "Client IT", "it@client.com"),
-                                delivery.add_contact(db, None, "Secret Tech", "tech@msp.com")])
-    db.execute("INSERT INTO email_deliveries (kind, schedule_id, tenant_id, subject, recipients, bcc, status, error,"
-               " created_at) VALUES ('report', ?, ?, 'S', 'it@client.com', 'tech@msp.com', 'failed',"
-               " 'smtp.internal refused', '2026-10-01T00:00:00Z')", (sid, alpha))
+    sid = _schedule(
+        db,
+        alpha,
+        [
+            delivery.add_contact(db, alpha, "Client IT", "it@client.com"),
+            delivery.add_contact(db, None, "Secret Tech", "tech@msp.com"),
+        ],
+    )
+    db.execute(
+        "INSERT INTO email_deliveries (kind, schedule_id, tenant_id, subject, recipients, bcc, status, error,"
+        " created_at) VALUES ('report', ?, ?, 'S', 'it@client.com', 'tech@msp.com', 'failed',"
+        " 'smtp.internal refused', '2026-10-01T00:00:00Z')",
+        (sid, alpha),
+    )
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     page = client.get(f"/tenants/{alpha}/schedules").get_data(as_text=True)
@@ -601,9 +720,17 @@ def test_analyst_is_kept_to_granted_tenants(client, db, two_tenants):
     assert client.post(f"/contacts/{bravo_contact}/delete").status_code == 404
     # Another tenant's contact can't be slipped into this tenant's email.
     own = delivery.add_contact(db, alpha, "", "a@alpha.com")
-    client.post(f"/tenants/{alpha}/schedules/new", data={
-        "reports": "review", "frequency": "monthly", "day_of_week": "0", "day_of_month": "1", "hour": "8",
-        "contacts": [str(own), str(bravo_contact)]})
+    client.post(
+        f"/tenants/{alpha}/schedules/new",
+        data={
+            "reports": "review",
+            "frequency": "monthly",
+            "day_of_week": "0",
+            "day_of_month": "1",
+            "hour": "8",
+            "contacts": [str(own), str(bravo_contact)],
+        },
+    )
     sid = db.execute("SELECT id FROM email_schedules WHERE tenant_id = ?", (alpha,)).fetchone()[0]
     assert [c["email"] for c in delivery.recipients(db, "schedule", sid)] == ["a@alpha.com"]
     assert "b@bravo.com" not in client.get("/emails").get_data(as_text=True)
@@ -620,9 +747,17 @@ def test_pause_resume_edit_and_delete(client, db, two_tenants):
     client.post(f"/schedules/{sid}/toggle")
     assert _row(db, "email_schedules", sid)["enabled"] == 1
     assert client.get(f"/schedules/{sid}/edit").status_code == 200
-    client.post(f"/schedules/{sid}/edit", data={
-        "reports": ["evidence"], "frequency": "quarterly", "day_of_week": "0", "day_of_month": "5", "hour": "6",
-        "contacts": [str(c["id"]) for c in delivery.tenant_contacts(db, alpha)]})
+    client.post(
+        f"/schedules/{sid}/edit",
+        data={
+            "reports": ["evidence"],
+            "frequency": "quarterly",
+            "day_of_week": "0",
+            "day_of_month": "5",
+            "hour": "6",
+            "contacts": [str(c["id"]) for c in delivery.tenant_contacts(db, alpha)],
+        },
+    )
     s = _row(db, "email_schedules", sid)
     assert s["frequency"] == "quarterly" and json.loads(s["reports"]) == ["evidence"] and s["enabled"] == 1
     client.post(f"/schedules/{sid}/delete")
@@ -639,10 +774,14 @@ def test_migration_carries_over_monthly_schedules(cfg, monkeypatch):
     monkeypatch.setattr(db_module, "migration_files", lambda: [m for m in every if m[0] <= 4])
     migrate(conn)
     conn.execute("INSERT INTO tenants (name, tenant_ref, created_at) VALUES ('A', 'a.onmicrosoft.com', 'x')")
-    conn.execute("INSERT INTO report_schedules (tenant_id, recipients, day_of_month, hour, last_period, created_at)"
-                 " VALUES (1, 'a@x.com, b@y.com', 3, 9, '2026-09', '2026-01-01T00:00:00Z')")
-    conn.execute("INSERT INTO report_deliveries (schedule_id, tenant_id, recipients, sent_at, status)"
-                 " VALUES (1, 1, 'a@x.com, b@y.com', '2026-09-03T09:00:00Z', 'sent')")
+    conn.execute(
+        "INSERT INTO report_schedules (tenant_id, recipients, day_of_month, hour, last_period, created_at)"
+        " VALUES (1, 'a@x.com, b@y.com', 3, 9, '2026-09', '2026-01-01T00:00:00Z')"
+    )
+    conn.execute(
+        "INSERT INTO report_deliveries (schedule_id, tenant_id, recipients, sent_at, status)"
+        " VALUES (1, 1, 'a@x.com, b@y.com', '2026-09-03T09:00:00Z', 'sent')"
+    )
     monkeypatch.setattr(db_module, "migration_files", lambda: every)
     migrate(conn)
     s = conn.execute("SELECT * FROM email_schedules").fetchone()

@@ -66,8 +66,14 @@ def clients():
     period = month_end.current_period(cfg.timezone)
     currency = setting(g.db, "currency", "GBP")
     data = home.clients(g.db, scoped_tenants(), period, period_label(period), currency)
-    return render_template("home_clients.html", data=data, homes=home.HOMES, mine=home.home_of(g.user),
-                           sentence=data.sentence(lambda v: money(v, currency)), states=month_end.STATES)
+    return render_template(
+        "home_clients.html",
+        data=data,
+        homes=home.HOMES,
+        mine=home.home_of(g.user),
+        sentence=data.sentence(lambda v: money(v, currency)),
+        states=month_end.STATES,
+    )
 
 
 @bp.post("/account/home")

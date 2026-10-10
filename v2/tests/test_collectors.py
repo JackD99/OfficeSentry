@@ -14,31 +14,75 @@ from tests.licencedata import state
 V1 = f"{GRAPH_ROOT}/v1.0"
 
 SKUS = [
-    {"skuId": "sku-bp", "skuPartNumber": "SPB", "appliesTo": "User", "capabilityStatus": "Enabled",
-     "prepaidUnits": {"enabled": 10}, "consumedUnits": 7,
-     "servicePlans": [{"servicePlanName": "AAD_PREMIUM", "provisioningStatus": "Success"},
-                      {"servicePlanName": "INTUNE_A", "provisioningStatus": "Success"},
-                      {"servicePlanName": "EXCHANGE_S_STANDARD", "provisioningStatus": "Success"},
-                      {"servicePlanName": "SHAREPOINTSTANDARD", "provisioningStatus": "Success"}]},
-    {"skuId": "sku-old", "skuPartNumber": "OLD", "appliesTo": "User", "capabilityStatus": "Suspended",
-     "prepaidUnits": {"enabled": 0}, "consumedUnits": 0,
-     "servicePlans": [{"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}]},
+    {
+        "skuId": "sku-bp",
+        "skuPartNumber": "SPB",
+        "appliesTo": "User",
+        "capabilityStatus": "Enabled",
+        "prepaidUnits": {"enabled": 10},
+        "consumedUnits": 7,
+        "servicePlans": [
+            {"servicePlanName": "AAD_PREMIUM", "provisioningStatus": "Success"},
+            {"servicePlanName": "INTUNE_A", "provisioningStatus": "Success"},
+            {"servicePlanName": "EXCHANGE_S_STANDARD", "provisioningStatus": "Success"},
+            {"servicePlanName": "SHAREPOINTSTANDARD", "provisioningStatus": "Success"},
+        ],
+    },
+    {
+        "skuId": "sku-old",
+        "skuPartNumber": "OLD",
+        "appliesTo": "User",
+        "capabilityStatus": "Suspended",
+        "prepaidUnits": {"enabled": 0},
+        "consumedUnits": 0,
+        "servicePlans": [{"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}],
+    },
 ]
 
 # Ann has Business Premium directly and from the All Staff group; Bob only from the group, with no usage location.
 # Ann's manager is Bob, whose sign-in is blocked.
 USERS = [
-    {"id": "u1", "displayName": "Ann", "userPrincipalName": "ann@x.com", "userType": "Member",
-     "accountEnabled": True, "assignedLicenses": [{"skuId": "sku-bp"}],
-     "licenseAssignmentStates": [state("sku-bp"), state("sku-bp", "s1")], "usageLocation": "GB",
-     "signInActivity": {"lastSignInDateTime": "2026-09-30T10:00:00Z"}, "department": "Sales",
-     "jobTitle": "Sales lead", "manager": {"@odata.type": "#microsoft.graph.user", "id": "u2", "displayName": "Bob",
-                                          "userPrincipalName": "bob@x.com", "accountEnabled": False}},
-    {"id": "u2", "displayName": "Bob", "userPrincipalName": "bob@x.com", "userType": "Member",
-     "accountEnabled": False, "assignedLicenses": [{"skuId": "sku-bp"}],
-     "licenseAssignmentStates": [state("sku-bp", "s1")], "usageLocation": None, "signInActivity": {}},
-    {"id": "u3", "displayName": "Guest", "userPrincipalName": "g#EXT#@x.com", "userType": "Guest",
-     "accountEnabled": True, "assignedLicenses": [], "licenseAssignmentStates": [], "usageLocation": None},
+    {
+        "id": "u1",
+        "displayName": "Ann",
+        "userPrincipalName": "ann@x.com",
+        "userType": "Member",
+        "accountEnabled": True,
+        "assignedLicenses": [{"skuId": "sku-bp"}],
+        "licenseAssignmentStates": [state("sku-bp"), state("sku-bp", "s1")],
+        "usageLocation": "GB",
+        "signInActivity": {"lastSignInDateTime": "2026-09-30T10:00:00Z"},
+        "department": "Sales",
+        "jobTitle": "Sales lead",
+        "manager": {
+            "@odata.type": "#microsoft.graph.user",
+            "id": "u2",
+            "displayName": "Bob",
+            "userPrincipalName": "bob@x.com",
+            "accountEnabled": False,
+        },
+    },
+    {
+        "id": "u2",
+        "displayName": "Bob",
+        "userPrincipalName": "bob@x.com",
+        "userType": "Member",
+        "accountEnabled": False,
+        "assignedLicenses": [{"skuId": "sku-bp"}],
+        "licenseAssignmentStates": [state("sku-bp", "s1")],
+        "usageLocation": None,
+        "signInActivity": {},
+    },
+    {
+        "id": "u3",
+        "displayName": "Guest",
+        "userPrincipalName": "g#EXT#@x.com",
+        "userType": "Guest",
+        "accountEnabled": True,
+        "assignedLicenses": [],
+        "licenseAssignmentStates": [],
+        "usageLocation": None,
+    },
 ]
 
 
@@ -68,8 +112,12 @@ def test_tenant_profile_detects_capabilities(db, two_tenants, factory):
     caps = store.tenant_capabilities(store.get_tenant(db, alpha))
     assert caps["entra_p1"] and caps["intune"] and caps["exchange"]
     assert not caps["entra_p2"]  # only on a suspended SKU
-    assert _metrics(db, run_id) == {"licences.purchased": 10, "licences.assigned": 7, "licences.unassigned": 3,
-                                    "licences.trials": 0}
+    assert _metrics(db, run_id) == {
+        "licences.purchased": 10,
+        "licences.assigned": 7,
+        "licences.unassigned": 3,
+        "licences.trials": 0,
+    }
     subs = {s["_id"]: s for s in store.run_objects(db, run_id, "company_subscription")}
     assert subs["sub-old"]["status"] == "Suspended" and subs["sub-old"]["isTrial"] is True
     assert subs["sub-bp"]["skuPartNumber"] == "SPB" and subs["sub-bp"]["nextLifecycleDateTime"]
@@ -82,8 +130,11 @@ def test_unreadable_subscriptions_leave_the_rest_of_the_profile(db, two_tenants,
     alpha, _ = two_tenants
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": SKUS})
-    responses.get(f"{V1}/directory/subscriptions", status=403, json={"error": {
-        "code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{V1}/directory/subscriptions",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     run_id, status = _run(db, alpha, "tenant_profile", factory)
     assert status == "partial"
     assert len(store.run_objects(db, run_id, "subscribed_sku")) == 2
@@ -100,10 +151,14 @@ def test_users_with_sign_in_activity(db, two_tenants, factory):
     assert "signInActivity" in responses.calls[0].request.url
     users = {u["_id"]: u for u in store.run_objects(db, run_id, "user")}
     assert users["u1"]["lastSignInDateTime"] == "2026-09-30T10:00:00Z"
-    assert "licenseAssignmentStates" in responses.calls[0].request.url and "usageLocation" in \
-        responses.calls[0].request.url
+    assert (
+        "licenseAssignmentStates" in responses.calls[0].request.url
+        and "usageLocation" in responses.calls[0].request.url
+    )
     assert [(s["skuId"], s["group"], s["state"], s["error"]) for s in users["u1"]["licenceStates"]] == [
-        ("sku-bp", None, "Active", None), ("sku-bp", "s1", "Active", None)]
+        ("sku-bp", None, "Active", None),
+        ("sku-bp", "s1", "Active", None),
+    ]
     assert users["u1"]["usageLocation"] == "GB" and users["u2"]["usageLocation"] is None
     assert users["u2"]["signInActivityAvailable"] is True and users["u2"]["lastSignInDateTime"] is None
     m = _metrics(db, run_id)
@@ -119,8 +174,13 @@ def test_users_licence_assignment_errors(db, two_tenants, factory):
     run_id, status = _run(db, alpha, "users", factory)
     assert status == "succeeded"
     users = {u["_id"]: u for u in store.run_objects(db, run_id, "user")}
-    assert users["u8"]["licenceStates"][0] == {"skuId": "sku-bp", "group": "l1", "state": "Error",
-                                               "error": "CountViolation", "updated": "2026-09-01T10:00:00Z"}
+    assert users["u8"]["licenceStates"][0] == {
+        "skuId": "sku-bp",
+        "group": "l1",
+        "state": "Error",
+        "error": "CountViolation",
+        "updated": "2026-09-01T10:00:00Z",
+    }
     assert users["u8"]["skuIds"] == ["sku-exo"]  # a failed group licence isn't assigned
     assert users["u0"]["licenceStates"] is None  # not returned: unknown, not "no licences"
     assert _metrics(db, run_id)["licences.assignment_errors"] == 2
@@ -129,8 +189,11 @@ def test_users_licence_assignment_errors(db, two_tenants, factory):
 @responses.activate
 def test_users_fall_back_without_p1(db, two_tenants, factory):
     alpha, _ = two_tenants
-    responses.get(f"{V1}/users", status=403, json={"error": {
-        "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant", "message": "premium license"}})
+    responses.get(
+        f"{V1}/users",
+        status=403,
+        json={"error": {"code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant", "message": "premium license"}},
+    )
     plain = [{k: v for k, v in u.items() if k != "signInActivity"} for u in USERS]
     responses.get(f"{V1}/users", json={"value": plain})
     run_id, status = _run(db, alpha, "users", factory)
@@ -154,8 +217,11 @@ def test_users_skip_activity_when_tenant_known_without_p1(db, two_tenants, facto
 @responses.activate
 def test_permission_error_fails_run_with_reason(db, two_tenants, factory):
     alpha, _ = two_tenants
-    responses.get(f"{V1}/organization", status=403, json={"error": {
-        "code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{V1}/organization",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     run_id, status = _run(db, alpha, "tenant_profile", factory)
     assert status == "failed"
     assert "Insufficient privileges" in db.execute("SELECT error FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
@@ -213,8 +279,10 @@ def test_schedule_queues_each_slot_once(db, cfg, two_tenants):
     # Even after the runs finish, the same slot is not queued again.
     db.execute("UPDATE runs SET status = 'succeeded'")
     assert schedule_tick(db, cfg, now) == 0
-    order = [r["collector"] for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? ORDER BY id",
-                                                (two_tenants[0],))]
+    order = [
+        r["collector"]
+        for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? ORDER BY id", (two_tenants[0],))
+    ]
     # Capabilities first, then the connection check, then users.
     assert order[:3] == ["tenant_profile", "connection", "users"]
 
@@ -243,6 +311,7 @@ def test_objects_are_stored_compressed(db, two_tenants):
 @responses.activate
 def test_deleted_items_reads_the_recycle_bin(db, two_tenants, factory):
     from tests import graphdata as gd
+
     alpha, _ = two_tenants
     responses.get(f"{V1}/directory/deletedItems/microsoft.graph.user", json={"value": gd.DELETED_USERS})
     responses.get(f"{V1}/directory/deletedItems/microsoft.graph.group", json={"value": gd.DELETED_GROUPS})
@@ -263,8 +332,11 @@ def test_deleted_items_reads_the_recycle_bin(db, two_tenants, factory):
 @responses.activate
 def test_deleted_items_warn_when_unreadable(db, two_tenants, factory):
     alpha, _ = two_tenants
-    responses.get(f"{V1}/directory/deletedItems/microsoft.graph.user", status=403, json={"error": {
-        "code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{V1}/directory/deletedItems/microsoft.graph.user",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     responses.get(f"{V1}/directory/deletedItems/microsoft.graph.group", json={"value": []})
     run_id, status = _run(db, alpha, "deleted_items", factory)
     assert status == "partial"

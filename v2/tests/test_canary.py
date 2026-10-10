@@ -36,10 +36,15 @@ def _users(*users) -> dict:
 
 
 def test_shape_lists_every_field_with_its_types_and_keeps_kinds_of_object_apart():
-    body = {"@odata.context": "x", "@odata.nextLink": "y", "value": [
-        {"@odata.type": "#microsoft.graph.user", "id": "a", "tags": [], "size": 3},
-        {"@odata.type": "#microsoft.graph.group", "id": "b", "mail": None},
-        {"7c1e5f0a-3b9d-4e62-9a51-2f6c0d8e4b17": True}]}
+    body = {
+        "@odata.context": "x",
+        "@odata.nextLink": "y",
+        "value": [
+            {"@odata.type": "#microsoft.graph.user", "id": "a", "tags": [], "size": 3},
+            {"@odata.type": "#microsoft.graph.group", "id": "b", "mail": None},
+            {"7c1e5f0a-3b9d-4e62-9a51-2f6c0d8e4b17": True},
+        ],
+    }
     found = canary.shape(body)
     assert found["value[]<user>.size"] == {"number"}
     assert found["value[]<group>.mail"] == {"null"}
@@ -51,27 +56,35 @@ def test_shape_lists_every_field_with_its_types_and_keeps_kinds_of_object_apart(
 
 def test_the_same_shape_is_no_change_whatever_the_values():
     a = _users({"id": "1", "displayName": "Ann", "accountEnabled": True})
-    b = _users({"id": "2", "displayName": "Bob", "accountEnabled": False}, {"id": "3", "displayName": None,
-                                                                            "accountEnabled": True})
+    b = _users(
+        {"id": "2", "displayName": "Bob", "accountEnabled": False},
+        {"id": "3", "displayName": None, "accountEnabled": True},
+    )
     report = canary.compare(a, b)
     assert not report.failed and report.compared == 1
     assert "Nothing changed" in report.markdown()
 
 
 def test_missing_fields_type_changes_and_refusals_are_changes():
-    before = {"entries": [
-        *_users({"id": "1", "displayName": "Ann", "accountEnabled": True})["entries"],
-        _graph("/v1.0/domains", {"value": [{"id": "x.example", "isVerified": True}]}),
-    ]}
-    after = {"entries": [
-        *_users({"id": "1", "accountEnabled": "yes", "jobTitle": "Nurse"})["entries"],
-        _graph("/v1.0/domains", {"error": {"code": "Authorization_RequestDenied", "message": "no"}}, status=403),
-    ]}
+    before = {
+        "entries": [
+            *_users({"id": "1", "displayName": "Ann", "accountEnabled": True})["entries"],
+            _graph("/v1.0/domains", {"value": [{"id": "x.example", "isVerified": True}]}),
+        ]
+    }
+    after = {
+        "entries": [
+            *_users({"id": "1", "accountEnabled": "yes", "jobTitle": "Nurse"})["entries"],
+            _graph("/v1.0/domains", {"error": {"code": "Authorization_RequestDenied", "message": "no"}}, status=403),
+        ]
+    }
     report = canary.compare(before, after)
     users = "v1.0 /users ($select=accountEnabled,displayName,id)"
     assert report.failed
-    assert report.changes[users] == ["`value[].accountEnabled` was true/false, now text",
-                                     "`value[].displayName` no longer comes back"]
+    assert report.changes[users] == [
+        "`value[].accountEnabled` was true/false, now text",
+        "`value[].displayName` no longer comes back",
+    ]
     assert report.changes["v1.0 /domains"] == ["used to answer, now fails (403, Authorization_RequestDenied)"]
     assert report.info[users] == ["new fields: `value[].jobTitle`"]  # Microsoft adding a field breaks nothing
 
@@ -90,25 +103,40 @@ def test_new_retirement_notices_fail_and_recorded_ones_are_listed():
     after = {"entries": [_graph(path, {"value": []}, headers=sunset)]}
     report = canary.compare(before, after)
     key = "v1.0 /drives/{drive}/items/{item}/permissions"
-    assert report.failed and report.notices[key] == [f"Deprecation: {sunset['Deprecation']}",
-                                                     f"Sunset: {sunset['Sunset']}"]
+    assert report.failed and report.notices[key] == [
+        f"Deprecation: {sunset['Deprecation']}",
+        f"Sunset: {sunset['Sunset']}",
+    ]
     # Re-recording keeps the headers, which acknowledges them.
     report = canary.compare(after, after)
     assert not report.failed
-    assert report.info[key] == [f"known retirement notice, Deprecation: {sunset['Deprecation']}",
-                                f"known retirement notice, Sunset: {sunset['Sunset']}"]
+    assert report.info[key] == [
+        f"known retirement notice, Deprecation: {sunset['Deprecation']}",
+        f"known retirement notice, Sunset: {sunset['Sunset']}",
+    ]
 
 
 def test_calls_not_recorded_yet_and_calls_that_now_answer_are_for_information():
     refused = {"entries": [_graph("/v1.0/domains", {"error": {"code": "Forbidden"}}, status=403)]}
-    answered = {"entries": [_graph("/v1.0/domains", {"value": []}),
-                            {"api": "exchange", "url": "https://outlook.office365.com/adminapi/beta/t/InvokeCommand",
-                             "status": 200, "body": {"value": []}, "cmdlet": {"CmdletName": "Get-Mailbox"}},
-                            {"api": "dns", "name": "x.example", "rdtype": "MX", "answer": []}]}
+    answered = {
+        "entries": [
+            _graph("/v1.0/domains", {"value": []}),
+            {
+                "api": "exchange",
+                "url": "https://outlook.office365.com/adminapi/beta/t/InvokeCommand",
+                "status": 200,
+                "body": {"value": []},
+                "cmdlet": {"CmdletName": "Get-Mailbox"},
+            },
+            {"api": "dns", "name": "x.example", "rdtype": "MX", "answer": []},
+        ]
+    }
     report = canary.compare(refused, answered)
     assert not report.failed
-    assert report.info == {"v1.0 /domains": ["used to fail, now answers"],
-                           "Exchange Get-Mailbox": ["not in the recording yet (re-record to cover it)"]}
+    assert report.info == {
+        "v1.0 /domains": ["used to fail, now answers"],
+        "Exchange Get-Mailbox": ["not in the recording yet (re-record to cover it)"],
+    }
 
 
 def test_the_committed_fixture_matches_itself():
@@ -167,9 +195,11 @@ def _run_canary(cfg, monkeypatch, served: dict, tmp_path) -> tuple[int, str]:
     # has its own tests (test_recording.py), so here the recording is compared as it comes.
     monkeypatch.setattr(livetest.recording, "scrub", lambda log, tenant, client: {"entries": log})
     report = tmp_path / "canary.md"
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", replay.fake_dns(served)), \
-            patch("officesentry.events.clock", lambda: datetime(2026, 10, 9, 22, 26, tzinfo=UTC)):
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", replay.fake_dns(served)),
+        patch("officesentry.events.clock", lambda: datetime(2026, 10, 9, 22, 26, tzinfo=UTC)),
+    ):
         # Calls added since the recording get the live replay's stand-ins; the canary lists them as not recorded.
         replay.mock(rsps, served, STAND_INS, NEW_FIELDS)
         code = livetest.run(cfg, canary=report)
@@ -202,9 +232,11 @@ def test_canary_stops_when_scrubbing_finds_something(cfg, db, monkeypatch, tmp_p
     monkeypatch.setattr(livetest.recording, "scrub", refuse)
     for k in livetest.ENV:
         monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")
-    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: (lambda: "tok"))
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)):
+    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: lambda: "tok")
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", replay.fake_dns(FIXTURE)),
+    ):
         replay.mock(rsps, FIXTURE)
         assert livetest.run(cfg, ["tenant_profile"], canary=tmp_path / "r.md") == 1
     assert "couldn't check the responses" in (tmp_path / "r.md").read_text(encoding="utf-8")
@@ -237,8 +269,9 @@ def test_github_oidc_token_is_asked_for_with_entras_audience(monkeypatch):
 def test_federated_sign_in_sends_the_assertion_instead_of_a_secret():
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         tokens = _mock_sign_in(rsps, "https://login.microsoftonline.com")
-        provider = msauth.federated_token_provider(TENANT, "app-id", lambda: "github-jwt",
-                                                   "https://graph.microsoft.com")
+        provider = msauth.federated_token_provider(
+            TENANT, "app-id", lambda: "github-jwt", "https://graph.microsoft.com"
+        )
         assert provider() == "tok"
     body = parse_qs(tokens[0].body)
     assert body["client_assertion"] == ["github-jwt"]
@@ -249,11 +282,15 @@ def test_federated_sign_in_sends_the_assertion_instead_of_a_secret():
 def test_federated_sign_in_failure_is_a_token_error():
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         # Registered first, so it answers before _mock_sign_in's token endpoint: Entra refusing the assertion.
-        rsps.post(f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/token", status=400,
-                  json={"error": "invalid_client", "error_description": "AADSTS70021: no matching federated identity"})
+        rsps.post(
+            f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/token",
+            status=400,
+            json={"error": "invalid_client", "error_description": "AADSTS70021: no matching federated identity"},
+        )
         _mock_sign_in(rsps, "https://login.microsoftonline.com")
-        provider = msauth.federated_token_provider(TENANT, "app-id", lambda: "github-jwt",
-                                                   "https://graph.microsoft.com")
+        provider = msauth.federated_token_provider(
+            TENANT, "app-id", lambda: "github-jwt", "https://graph.microsoft.com"
+        )
         with pytest.raises(msauth.TokenError, match="invalid_client"):
             provider()
 
@@ -263,15 +300,20 @@ def test_recording_keeps_retirement_headers(monkeypatch):
 
     log = []
     with responses.RequestsMock() as rsps:
-        rsps.get("https://graph.microsoft.com/beta/auditLogs/signIns", json={"value": []},
-                 headers={"Deprecation": "Sat, 31 Aug 2024 23:59:59 GMT", "Sunset": "Mon, 31 Aug 2026 23:59:59 GMT"})
+        rsps.get(
+            "https://graph.microsoft.com/beta/auditLogs/signIns",
+            json={"value": []},
+            headers={"Deprecation": "Sat, 31 Aug 2024 23:59:59 GMT", "Sunset": "Mon, 31 Aug 2026 23:59:59 GMT"},
+        )
         rsps.get("https://graph.microsoft.com/v1.0/users", json={"value": []})
         session = recording.RecordingSession(log)
         session.get("https://graph.microsoft.com/beta/auditLogs/signIns")
         session.get("https://graph.microsoft.com/v1.0/users")
     fixture = recording.scrub(log, TENANT, "11111111-2222-3333-4444-555555555555")
-    assert fixture["entries"][0]["headers"] == {"Deprecation": "Sat, 31 Aug 2024 23:59:59 GMT",
-                                                "Sunset": "Mon, 31 Aug 2026 23:59:59 GMT"}
+    assert fixture["entries"][0]["headers"] == {
+        "Deprecation": "Sat, 31 Aug 2024 23:59:59 GMT",
+        "Sunset": "Mon, 31 Aug 2026 23:59:59 GMT",
+    }
     assert "headers" not in fixture["entries"][1]
     assert json.dumps(fixture)  # still plain JSON
 

@@ -64,8 +64,9 @@ def page_title(title: str) -> str:
 
 @bp.record_once
 def _globals(state):
-    state.app.jinja_env.globals.update(summary=summary, stacked_bar=charts.stacked_bar, meter=charts.meter,
-                                       sparkline=charts.sparkline)
+    state.app.jinja_env.globals.update(
+        summary=summary, stacked_bar=charts.stacked_bar, meter=charts.meter, sparkline=charts.sparkline
+    )
     state.app.jinja_env.filters["page_title"] = page_title
 
 
@@ -93,8 +94,10 @@ def logo():
 def _save(values: dict[str, str]) -> None:
     with transaction(g.db):
         for key, value in values.items():
-            g.db.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                         " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+            g.db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
         audit(g.db, g.user["username"], "branding_updated", detail=", ".join(sorted(values)))
 
 
@@ -108,7 +111,7 @@ def settings():
             "brand_support_name": request.form.get("support_name", "").strip()[:80],
             "brand_support_email": request.form.get("support_email", "").strip()[:254],
             "brand_support_phone": request.form.get("support_phone", "").strip()[:40],
-            "brand_report_footer": " ".join(request.form.get("report_footer", "").split())[:branding.MAX_FOOTER],
+            "brand_report_footer": " ".join(request.form.get("report_footer", "").split())[: branding.MAX_FOOTER],
         }
         if values["brand_support_email"] and not valid_email(values["brand_support_email"]):
             flash("Enter a support email like help@harbourit.example.", "error")
@@ -131,5 +134,10 @@ def settings():
         flash("Branding saved. The portal, new reports and emails use it straight away.", "success")
         return redirect(url_for("branding.settings"))
     sample = g.db.execute("SELECT id FROM tenants ORDER BY name LIMIT 1").fetchone()
-    return render_template("branding.html", b=current_brand(), default_accent=branding.DEFAULT_ACCENT,
-                           max_footer=branding.MAX_FOOTER, sample_tenant=sample["id"] if sample else None)
+    return render_template(
+        "branding.html",
+        b=current_brand(),
+        default_accent=branding.DEFAULT_ACCENT,
+        max_footer=branding.MAX_FOOTER,
+        sample_tenant=sample["id"] if sample else None,
+    )

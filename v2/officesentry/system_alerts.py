@@ -67,8 +67,12 @@ RESOLVED = {
     "disk": f"Office Sentry's disk is under {DISK_CLEAR}% full again",
     "collection": "Collection is working again",
 }
-LABELS = {"worker": "Worker stopped", "backup": "Backup failed", "disk": f"Disk over {system_health.DISK_WARN}% full",
-          "collection": "Most tenants failed to collect"}
+LABELS = {
+    "worker": "Worker stopped",
+    "backup": "Backup failed",
+    "disk": f"Disk over {system_health.DISK_WARN}% full",
+    "collection": "Most tenants failed to collect",
+}
 
 
 # -- Detecting ---------------------------------------------------------------------------------
@@ -82,32 +86,54 @@ def detect(key: str, health: system_health.Health, state: dict | None, now: date
         if check.status == system_health.OK:
             return None
         seen = parse_ts(check.data.get("last_seen"))
-        text = (f"It last checked in {duration((now - seen).total_seconds())} ago." if seen
-                else "It isn't checking in.") + (" Until it runs again, no tenant is collected and no scheduled "
-                                                 "report, email alert or certificate warning goes out.")
-        return Problem(key, "Office Sentry's background worker has stopped", text, system_health.WORKER_FIX,
-                       since=seen, data=check.data)
+        text = (
+            f"It last checked in {duration((now - seen).total_seconds())} ago." if seen else "It isn't checking in."
+        ) + (
+            " Until it runs again, no tenant is collected and no scheduled "
+            "report, email alert or certificate warning goes out."
+        )
+        return Problem(
+            key,
+            "Office Sentry's background worker has stopped",
+            text,
+            system_health.WORKER_FIX,
+            since=seen,
+            data=check.data,
+        )
     if key == "disk":
         used = check.data.get("used_percent") or 0
         if used < system_health.DISK_WARN and not (state and used >= DISK_CLEAR):
             return None
-        return Problem(key, f"Office Sentry's disk is {used:.0f}% full",
-                       f"{check.summary}. When it fills, collections, backups and database upgrades fail.",
-                       system_health.DISK_FIX, data=check.data)
+        return Problem(
+            key,
+            f"Office Sentry's disk is {used:.0f}% full",
+            f"{check.summary}. When it fills, collections, backups and database upgrades fail.",
+            system_health.DISK_FIX,
+            data=check.data,
+        )
     if key == "backup":
         if check.status == system_health.OK or not check.data.get("configured"):
             return None  # an install that never set up backups sees it on the page, not in a nightly alert
-        return Problem(key, "Office Sentry's backup needs attention: " + check.summary[0].lower() + check.summary[1:],
-                       "Without a recent backup, a failed disk or a bad update loses data.", check.fix,
-                       data=check.data)
+        return Problem(
+            key,
+            "Office Sentry's backup needs attention: " + check.summary[0].lower() + check.summary[1:],
+            "Without a recent backup, a failed disk or a bad update loses data.",
+            check.fix,
+            data=check.data,
+        )
     if key == "collection":
         if check.status == system_health.OK or check.data.get("last_success") is None:
             return None  # nothing ever collected is onboarding, not an outage
         running = health.check("worker")
         if running is not None and running.status != system_health.OK:
             return None  # the worker alert already says why
-        return Problem(key, check.summary, "Reports and checks show older data until collection works again.",
-                       check.fix, data=check.data)
+        return Problem(
+            key,
+            check.summary,
+            "Reports and checks show older data until collection works again.",
+            check.fix,
+            data=check.data,
+        )
     return None
 
 
@@ -123,9 +149,10 @@ def _load(conn, key: str) -> dict | None:
 
 
 def _save(conn, key: str, state: dict) -> None:
-    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                 (STATE_PREFIX + key, json.dumps(state)))
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (STATE_PREFIX + key, json.dumps(state)),
+    )
 
 
 def states(conn) -> dict[str, dict]:
@@ -133,7 +160,7 @@ def states(conn) -> dict[str, dict]:
     out = {}
     for row in conn.execute("SELECT key, value FROM settings WHERE key LIKE ?", (STATE_PREFIX + "%",)):
         try:
-            out[row["key"][len(STATE_PREFIX):]] = json.loads(row["value"])
+            out[row["key"][len(STATE_PREFIX) :]] = json.loads(row["value"])
         except ValueError:
             continue
     return out
@@ -187,22 +214,29 @@ def update(app, conn, vault, cfg, keys, now: datetime | None = None) -> list[tup
 # -- Sending -------------------------------------------------------------------------------------
 
 
-def _message(cfg, key: str, action: str, problem: Problem | None, state: dict | None,
-             now: datetime) -> alerts.Message:
+def _message(cfg, key: str, action: str, problem: Problem | None, state: dict | None, now: datetime) -> alerts.Message:
     link = cfg.base_url.rstrip("/") + STATUS_PATH
     if action == "resolved":
         since = parse_ts((state or {}).get("since"))
         lasted = f" It lasted about {duration((now - since).total_seconds())}." if since else ""
-        return alerts.Message(f"system.{key}.resolved", RESOLVED[key],
-                              f"Resolved: {(state or {}).get('title') or LABELS[key]}.{lasted}", link,
-                              extra={"system": {"problem": key, "state": "resolved"}})
+        return alerts.Message(
+            f"system.{key}.resolved",
+            RESOLVED[key],
+            f"Resolved: {(state or {}).get('title') or LABELS[key]}.{lasted}",
+            link,
+            extra={"system": {"problem": key, "state": "resolved"}},
+        )
     title = ("Still not fixed: " if action == "reminder" else "") + problem.title
-    return alerts.Message(f"system.{key}", title, f"{problem.text} {problem.fix}", link,
-                          extra={"system": {"problem": key, "state": action, **problem.data}})
+    return alerts.Message(
+        f"system.{key}",
+        title,
+        f"{problem.text} {problem.fix}",
+        link,
+        extra={"system": {"problem": key, "state": action, **problem.data}},
+    )
 
 
-def _email(app, conn, vault, cfg, key: str, action: str, problem: Problem | None,
-           message: alerts.Message) -> str:
+def _email(app, conn, vault, cfg, key: str, action: str, problem: Problem | None, message: alerts.Message) -> str:
     """Email the team contacts. Returns what happened, for the audit log."""
     from . import delivery
 
@@ -211,22 +245,33 @@ def _email(app, conn, vault, cfg, key: str, action: str, problem: Problem | None
         return "email not set up"
     look, inline = delivery.email_brand(conn)
     subject = ("Resolved: " if action == "resolved" else "Action needed: ") + message.title
-    html = delivery.render(app, "emails/system.html", subject=subject, action=action, title=message.title,
-                           text=problem.text if problem else message.text, fix=problem.fix if problem else "",
-                           href=message.link, **look)
-    email = mailer.Email(to=team, subject=subject, html=html, inline=inline,
-                         text=f"{message.title}\n\n{message.text}\n\n{message.link}")
+    html = delivery.render(
+        app,
+        "emails/system.html",
+        subject=subject,
+        action=action,
+        title=message.title,
+        text=problem.text if problem else message.text,
+        fix=problem.fix if problem else "",
+        href=message.link,
+        **look,
+    )
+    email = mailer.Email(
+        to=team, subject=subject, html=html, inline=inline, text=f"{message.title}\n\n{message.text}\n\n{message.link}"
+    )
     try:
         used, error = mailer.send(conn, vault, email), None
     except mailer.MailError as exc:
         used, error = None, str(exc)
-    delivery.record(conn, kind="alert", email=email, subject=subject, error=error, transport=used,
-                    trigger="schedule", user=None)
+    delivery.record(
+        conn, kind="alert", email=email, subject=subject, error=error, transport=used, trigger="schedule", user=None
+    )
     return f"email failed: {error}"[:200] if error else "email sent"
 
 
-def _send(app, conn, vault, cfg, key: str, action: str, problem: Problem | None, state: dict | None,
-          now: datetime) -> None:
+def _send(
+    app, conn, vault, cfg, key: str, action: str, problem: Problem | None, state: dict | None, now: datetime
+) -> None:
     """Send one system alert by email and webhook. Never raises."""
     try:
         s = alerts.settings(conn)

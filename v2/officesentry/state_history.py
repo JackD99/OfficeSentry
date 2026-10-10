@@ -111,7 +111,7 @@ def _packs(lines: dict[str, bytes]) -> list[tuple[list[str], bytes]]:
     """(object ids, compressed blob) of each pack of ``lines`` ({object id: line}), in object id order."""
     ids, start, out = sorted(lines), 0, []
     for _first, n, blob in store._pack_rows(lines):
-        out.append((ids[start:start + n], blob))
+        out.append((ids[start : start + n], blob))
         start += n
     return out
 
@@ -128,9 +128,11 @@ def _moving_at(conn, series_id: int, run_id: int) -> tuple[dict[str, dict], int]
     state: dict[str, dict] = {}
     rows = 0
     for row in conn.execute(
-            "SELECT full, data FROM state_volatile WHERE series_id = ? AND run_id <= ? AND run_id >= COALESCE("
-            "(SELECT MAX(run_id) FROM state_volatile WHERE series_id = ? AND run_id <= ? AND full = 1), 0)"
-            " ORDER BY run_id", (series_id, run_id, series_id, run_id)):
+        "SELECT full, data FROM state_volatile WHERE series_id = ? AND run_id <= ? AND run_id >= COALESCE("
+        "(SELECT MAX(run_id) FROM state_volatile WHERE series_id = ? AND run_id <= ? AND full = 1), 0)"
+        " ORDER BY run_id",
+        (series_id, run_id, series_id, run_id),
+    ):
         if row["full"]:
             state, rows = {}, 0
         for line in store.pack_lines(row["data"]):
@@ -154,8 +156,10 @@ def _write_moving(conn, series_id: int, run_id: int, previous: int | None, movin
     if not changed:
         return
     full = not rows or rows >= KEYFRAME_ROWS or 2 * len(changed) > len(moving)
-    conn.execute("INSERT INTO state_volatile (series_id, run_id, full, data) VALUES (?, ?, ?, ?)",
-                 (series_id, run_id, int(full), _compress_moving(moving if full else changed)))
+    conn.execute(
+        "INSERT INTO state_volatile (series_id, run_id, full, data) VALUES (?, ?, ?, ?)",
+        (series_id, run_id, int(full), _compress_moving(moving if full else changed)),
+    )
 
 
 def _line_id(line: bytes) -> str:
@@ -166,20 +170,27 @@ def _line_id(line: bytes) -> str:
 def _snapshot(conn, run_id: int) -> dict[str, dict[str, object]]:
     """{kind: {object id: data}} of what a run stored, sign-in detail left out."""
     skip = _skipped()
-    kinds = [r[0] for r in conn.execute("SELECT DISTINCT kind FROM objects WHERE run_id = ? ORDER BY kind",
-                                        (run_id,)) if r[0] not in skip]
-    return {kind: dict(json.loads(line) for line in store.stored_lines(conn, run_id, kind).values())
-            for kind in kinds}
+    kinds = [
+        r[0]
+        for r in conn.execute("SELECT DISTINCT kind FROM objects WHERE run_id = ? ORDER BY kind", (run_id,))
+        if r[0] not in skip
+    ]
+    return {kind: dict(json.loads(line) for line in store.stored_lines(conn, run_id, kind).values()) for kind in kinds}
 
 
 def _series(conn, tenant_id: int, collector: str) -> dict[str, int]:
-    return {r["kind"]: r["id"] for r in conn.execute(
-        "SELECT id, kind FROM state_series WHERE tenant_id = ? AND collector = ?", (tenant_id, collector))}
+    return {
+        r["kind"]: r["id"]
+        for r in conn.execute(
+            "SELECT id, kind FROM state_series WHERE tenant_id = ? AND collector = ?", (tenant_id, collector)
+        )
+    }
 
 
 def _last_recorded(conn, tenant_id: int, collector: str) -> int | None:
-    return conn.execute("SELECT MAX(run_id) FROM state_runs WHERE tenant_id = ? AND collector = ?",
-                        (tenant_id, collector)).fetchone()[0]
+    return conn.execute(
+        "SELECT MAX(run_id) FROM state_runs WHERE tenant_id = ? AND collector = ?", (tenant_id, collector)
+    ).fetchone()[0]
 
 
 def record_run(conn, run, objects: dict[str, dict[str, object]] | None = None) -> bool:
@@ -191,8 +202,9 @@ def record_run(conn, run, objects: dict[str, dict[str, object]] | None = None) -
     """
     if objects is None:
         objects = _snapshot(conn, run["id"])
-    versions = {kind: {oid: _version(kind, oid, data) for oid, data in items.items()}
-                for kind, items in objects.items()}
+    versions = {
+        kind: {oid: _version(kind, oid, data) for oid, data in items.items()} for kind, items in objects.items()
+    }
     tenant_id, collector, run_id = run["tenant_id"], run["collector"], run["id"]
     with store.atomic(conn):
         last = _last_recorded(conn, tenant_id, collector)
@@ -200,36 +212,51 @@ def record_run(conn, run, objects: dict[str, dict[str, object]] | None = None) -
             return False
         series = _series(conn, tenant_id, collector)
         for kind in sorted(versions.keys() - series.keys()):
-            series[kind] = conn.execute("INSERT INTO state_series (tenant_id, collector, kind) VALUES (?, ?, ?)",
-                                        (tenant_id, collector, kind)).lastrowid
+            series[kind] = conn.execute(
+                "INSERT INTO state_series (tenant_id, collector, kind) VALUES (?, ?, ?)", (tenant_id, collector, kind)
+            ).lastrowid
         ends, starts = [], []
         for kind, series_id in sorted(series.items()):
             now = versions.get(kind, {})
-            current = {r["object_id"]: (r["from_run"], r["hash"]) for r in conn.execute(
-                "SELECT object_id, from_run, hash FROM state_versions WHERE series_id = ? AND to_run IS NULL",
-                (series_id,))}
-            ends += [(run_id, series_id, oid, from_run) for oid, (from_run, digest) in current.items()
-                     if oid not in now or now[oid][0] != digest]
+            current = {
+                r["object_id"]: (r["from_run"], r["hash"])
+                for r in conn.execute(
+                    "SELECT object_id, from_run, hash FROM state_versions WHERE series_id = ? AND to_run IS NULL",
+                    (series_id,),
+                )
+            }
+            ends += [
+                (run_id, series_id, oid, from_run)
+                for oid, (from_run, digest) in current.items()
+                if oid not in now or now[oid][0] != digest
+            ]
             new = {oid: v[1] for oid, v in now.items() if oid not in current or current[oid][1] != v[0]}
             for ids, blob in _packs(new):
-                pack = conn.execute("INSERT INTO state_packs (tenant_id, run_id, kind, data) VALUES (?, ?, ?, ?)",
-                                    (tenant_id, run_id, kind, blob)).lastrowid
+                pack = conn.execute(
+                    "INSERT INTO state_packs (tenant_id, run_id, kind, data) VALUES (?, ?, ?, ?)",
+                    (tenant_id, run_id, kind, blob),
+                ).lastrowid
                 starts += [(series_id, oid, run_id, now[oid][0], pack) for oid in ids]
             _write_moving(conn, series_id, run_id, last, {oid: v[2] for oid, v in now.items() if v[2] is not None})
-        conn.executemany("UPDATE state_versions SET to_run = ? WHERE series_id = ? AND object_id = ? AND from_run = ?",
-                         ends)
-        conn.executemany("INSERT INTO state_versions (series_id, object_id, from_run, hash, pack_id)"
-                         " VALUES (?, ?, ?, ?, ?)", starts)
-        conn.execute("INSERT INTO state_runs (run_id, tenant_id, collector, finished_at, objects)"
-                     " VALUES (?, ?, ?, ?, ?)", (run_id, tenant_id, collector, run["finished_at"],
-                                                 sum(len(items) for items in objects.values())))
+        conn.executemany(
+            "UPDATE state_versions SET to_run = ? WHERE series_id = ? AND object_id = ? AND from_run = ?", ends
+        )
+        conn.executemany(
+            "INSERT INTO state_versions (series_id, object_id, from_run, hash, pack_id) VALUES (?, ?, ?, ?, ?)", starts
+        )
+        conn.execute(
+            "INSERT INTO state_runs (run_id, tenant_id, collector, finished_at, objects) VALUES (?, ?, ?, ?, ?)",
+            (run_id, tenant_id, collector, run["finished_at"], sum(len(items) for items in objects.values())),
+        )
     return True
 
 
 # -- Reading ---------------------------------------------------------------------------------------
 
-_VALID = ("SELECT object_id, pack_id FROM state_versions WHERE series_id = ? AND from_run <= ?"
-          " AND (to_run IS NULL OR to_run > ?)")
+_VALID = (
+    "SELECT object_id, pack_id FROM state_versions WHERE series_id = ? AND from_run <= ?"
+    " AND (to_run IS NULL OR to_run > ?)"
+)
 
 
 class _Reader:
@@ -277,8 +304,9 @@ def run_objects(conn, run_id: int, kind: str | None = None, limit: int | None = 
     if kind:
         kinds = [kind]
     else:
-        stored_skipped = {r[0] for r in conn.execute("SELECT DISTINCT kind FROM objects WHERE run_id = ?", (run_id,))
-                          if r[0] in skip}
+        stored_skipped = {
+            r[0] for r in conn.execute("SELECT DISTINCT kind FROM objects WHERE run_id = ?", (run_id,)) if r[0] in skip
+        }
         kinds = sorted(series.keys() | stored_skipped)
     out: list[dict] = []
     for name in kinds:
@@ -304,40 +332,61 @@ def find_object(conn, run_id: int, kind: str, object_id: str):
 def _runs(conn, tenant_id: int, collector: str) -> list[tuple[int, str, bool]]:
     """(run ID, finished at, recorded) of a data source's runs that can be read: the recorded ones, then the
     successful runs since that aren't recorded yet and still hold their snapshot."""
-    rows = [(r["run_id"], r["finished_at"], True) for r in conn.execute(
-        "SELECT run_id, finished_at FROM state_runs WHERE tenant_id = ? AND collector = ? ORDER BY run_id",
-        (tenant_id, collector))]
+    rows = [
+        (r["run_id"], r["finished_at"], True)
+        for r in conn.execute(
+            "SELECT run_id, finished_at FROM state_runs WHERE tenant_id = ? AND collector = ? ORDER BY run_id",
+            (tenant_id, collector),
+        )
+    ]
     after = rows[-1][0] if rows else 0
-    rows += [(r["id"], r["finished_at"], False) for r in conn.execute(
-        "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
-        f" AND id > ? AND {HOLDS_OBJECTS} ORDER BY id", (tenant_id, collector, after))]
+    rows += [
+        (r["id"], r["finished_at"], False)
+        for r in conn.execute(
+            "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = ?"
+            " AND status IN ('succeeded', 'partial')"
+            f" AND id > ? AND {HOLDS_OBJECTS} ORDER BY id",
+            (tenant_id, collector, after),
+        )
+    ]
     return rows
 
 
 def object_copies(conn, tenant_id: int, collector: str, kind: str, object_id: str) -> list[tuple[str, dict]]:
     """``store.object_copies`` from the history: (finished at, data) of one object in each run that held it."""
     if kind in _skipped():
-        return [(at, d) for run_id, at, _ in _runs(conn, tenant_id, collector)
-                if (d := _stored_object(conn, run_id, kind, object_id)) is not None]
+        return [
+            (at, d)
+            for run_id, at, _ in _runs(conn, tenant_id, collector)
+            if (d := _stored_object(conn, run_id, kind, object_id)) is not None
+        ]
     series_id = _series(conn, tenant_id, collector).get(kind)
-    versions = [] if series_id is None else conn.execute(
-        "SELECT from_run, to_run, pack_id FROM state_versions WHERE series_id = ? AND object_id = ? ORDER BY from_run",
-        (series_id, object_id)).fetchall()
+    versions = (
+        []
+        if series_id is None
+        else conn.execute(
+            "SELECT from_run, to_run, pack_id FROM state_versions WHERE series_id = ? AND object_id = ?"
+            " ORDER BY from_run",
+            (series_id, object_id),
+        ).fetchall()
+    )
     reader, out = _Reader(conn), []
     for run_id, at, is_recorded in _runs(conn, tenant_id, collector):
         if not is_recorded:
             data = _stored_object(conn, run_id, kind, object_id)
         else:
-            held = next((v for v in versions
-                         if v["from_run"] <= run_id and (v["to_run"] is None or v["to_run"] > run_id)), None)
+            held = next(
+                (v for v in versions if v["from_run"] <= run_id and (v["to_run"] is None or v["to_run"] > run_id)), None
+            )
             data = reader.object(series_id, run_id, object_id, held["pack_id"]) if held else None
         if data is not None:
             out.append((at, data))
     return out
 
 
-def matching_objects(conn, tenant_id: int, collector: str, kind: str, field: str,
-                     value: str) -> list[tuple[str, str, int, dict]]:
+def matching_objects(
+    conn, tenant_id: int, collector: str, kind: str, field: str, value: str
+) -> list[tuple[str, str, int, dict]]:
     """``store.matching_objects`` from the history: (object id, finished at, run ID, data) of every object of
     the kind whose ``field`` is ``value``, oldest run first, then by object id."""
     skip = kind in _skipped()
@@ -345,8 +394,10 @@ def matching_objects(conn, tenant_id: int, collector: str, kind: str, field: str
     reader, out = _Reader(conn), []
     for run_id, at, is_recorded in _runs(conn, tenant_id, collector):
         if skip or not is_recorded:
-            found = ((o["_id"], {k: v for k, v in o.items() if k not in ("_kind", "_id")})
-                     for o in _stored_objects(conn, run_id, kind))
+            found = (
+                (o["_id"], {k: v for k, v in o.items() if k not in ("_kind", "_id")})
+                for o in _stored_objects(conn, run_id, kind)
+            )
         elif series_id is None:
             continue
         else:
@@ -361,17 +412,23 @@ def matching_objects(conn, tenant_id: int, collector: str, kind: str, field: str
 def verify_run(conn, run_id: int) -> list[str] | None:
     """Kinds whose objects the history rebuilds differently from the run's snapshot ([] when they all match),
     or None when that can't be checked: the run isn't recorded, or retention removed its snapshot."""
-    if recorded(conn, run_id) is None or not conn.execute(
-            f"SELECT 1 FROM runs WHERE id = ? AND {HOLDS_OBJECTS}", (run_id,)).fetchone():
+    if (
+        recorded(conn, run_id) is None
+        or not conn.execute(f"SELECT 1 FROM runs WHERE id = ? AND {HOLDS_OBJECTS}", (run_id,)).fetchone()
+    ):
         return None
-    expected = {kind: {oid: store._line(oid, data) for oid, data in items.items()}
-                for kind, items in _snapshot(conn, run_id).items()}
+    expected = {
+        kind: {oid: store._line(oid, data) for oid, data in items.items()}
+        for kind, items in _snapshot(conn, run_id).items()
+    }
     skip = _skipped()
     differ = []
     for kind in sorted(expected.keys() | {k for k in _series_of_run(conn, run_id) if k not in skip}):
         try:
-            got = {o["_id"]: store._line(o["_id"], {k: v for k, v in o.items() if k not in ("_kind", "_id")})
-                   for o in run_objects(conn, run_id, kind)}
+            got = {
+                o["_id"]: store._line(o["_id"], {k: v for k, v in o.items() if k not in ("_kind", "_id")})
+                for o in run_objects(conn, run_id, kind)
+            }
         except (KeyError, TypeError, ValueError, zlib.error):  # a damaged pack reads as a difference
             got = None
         if got != expected.get(kind, {}):
@@ -382,8 +439,11 @@ def verify_run(conn, run_id: int) -> list[str] | None:
 def _series_of_run(conn, run_id: int) -> set[str]:
     """Kinds with a version valid at a recorded run."""
     run = recorded(conn, run_id)
-    return {kind for kind, series_id in _series(conn, run["tenant_id"], run["collector"]).items()
-            if conn.execute(_VALID + " LIMIT 1", (series_id, run_id, run_id)).fetchone()}
+    return {
+        kind
+        for kind, series_id in _series(conn, run["tenant_id"], run["collector"]).items()
+        if conn.execute(_VALID + " LIMIT 1", (series_id, run_id, run_id)).fetchone()
+    }
 
 
 def _check(conn, run_id: int) -> None:
@@ -403,8 +463,10 @@ def _setting(conn, key: str) -> str | None:
 
 
 def _set(conn, key: str, value: str) -> None:
-    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
 
 
 # -- Recording as runs finish, and catching up -------------------------------------------------------
@@ -428,9 +490,11 @@ def record_finished(conn, run_id: int) -> bool:
     if run is None or run["status"] not in SUCCESS or not room(conn):
         return False
     last = _last_recorded(conn, run["tenant_id"], run["collector"])
-    if conn.execute("SELECT 1 FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
-                    f" AND id > ? AND id < ? AND {HOLDS_OBJECTS} LIMIT 1",
-                    (run["tenant_id"], run["collector"], last or 0, run_id)).fetchone():
+    if conn.execute(
+        "SELECT 1 FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
+        f" AND id > ? AND id < ? AND {HOLDS_OBJECTS} LIMIT 1",
+        (run["tenant_id"], run["collector"], last or 0, run_id),
+    ).fetchone():
         return False
     if not record_run(conn, run):
         return False
@@ -438,8 +502,12 @@ def record_finished(conn, run_id: int) -> bool:
     return True
 
 
-def catch_up(conn, seconds: float | None = SECONDS_PER_TICK, clock: Callable[[], float] = time.monotonic,
-             report: Callable[[int], None] | None = None) -> tuple[int, bool]:
+def catch_up(
+    conn,
+    seconds: float | None = SECONDS_PER_TICK,
+    clock: Callable[[], float] = time.monotonic,
+    report: Callable[[int], None] | None = None,
+) -> tuple[int, bool]:
     """Record finished runs that aren't recorded yet, oldest first, for about ``seconds`` (None: until done).
 
     Runs whose snapshot retention removed are passed over: what's left of them is the run row. Progress is
@@ -455,7 +523,9 @@ def catch_up(conn, seconds: float | None = SECONDS_PER_TICK, clock: Callable[[],
                 return done, False
             rows = conn.execute(
                 "SELECT id, tenant_id, collector, status, finished_at, object_count FROM runs WHERE id > ?"
-                " ORDER BY id LIMIT ?", (position, RUNS_PER_QUERY)).fetchall()
+                " ORDER BY id LIMIT ?",
+                (position, RUNS_PER_QUERY),
+            ).fetchall()
             if not rows:
                 return done, not held
             for run in rows:
@@ -463,8 +533,11 @@ def catch_up(conn, seconds: float | None = SECONDS_PER_TICK, clock: Callable[[],
                     return done, False
                 if run["status"] in ("queued", "running"):
                     held = True
-                elif run["status"] in SUCCESS and recorded(conn, run["id"]) is None and conn.execute(
-                        f"SELECT 1 FROM runs WHERE id = ? AND {HOLDS_OBJECTS}", (run["id"],)).fetchone():
+                elif (
+                    run["status"] in SUCCESS
+                    and recorded(conn, run["id"]) is None
+                    and conn.execute(f"SELECT 1 FROM runs WHERE id = ? AND {HOLDS_OBJECTS}", (run["id"],)).fetchone()
+                ):
                     if record_run(conn, run):
                         done += 1
                         _check(conn, run["id"])
@@ -503,13 +576,18 @@ def _cuts(conn, before: str) -> list[tuple[int, str, int, int]]:
     finished before ``before``. The runs from the first one finished since are kept, and each data source's
     latest recorded run always is: like the latest snapshot, it's the current state."""
     out = []
-    for r in conn.execute("SELECT tenant_id, collector, MIN(CASE WHEN finished_at >= ? THEN run_id END) AS cut,"
-                          " MAX(run_id) AS latest, MIN(run_id) AS first, COUNT(*) AS n FROM state_runs"
-                          " GROUP BY tenant_id, collector", (before,)):
+    for r in conn.execute(
+        "SELECT tenant_id, collector, MIN(CASE WHEN finished_at >= ? THEN run_id END) AS cut,"
+        " MAX(run_id) AS latest, MIN(run_id) AS first, COUNT(*) AS n FROM state_runs"
+        " GROUP BY tenant_id, collector",
+        (before,),
+    ):
         cut = r["cut"] or r["latest"]
         if r["first"] < cut:
-            old = conn.execute("SELECT COUNT(*) FROM state_runs WHERE tenant_id = ? AND collector = ? AND run_id < ?",
-                               (r["tenant_id"], r["collector"], cut)).fetchone()[0]
+            old = conn.execute(
+                "SELECT COUNT(*) FROM state_runs WHERE tenant_id = ? AND collector = ? AND run_id < ?",
+                (r["tenant_id"], r["collector"], cut),
+            ).fetchone()[0]
             out.append((r["tenant_id"], r["collector"], cut, old))
     return out
 
@@ -529,20 +607,27 @@ def prune(conn, before: str, dry_run: bool = False) -> int:
             for series_id in _series(conn, tenant_id, collector).values():
                 conn.execute("DELETE FROM state_versions WHERE series_id = ? AND to_run <= ?", (series_id, cut))
                 # The first run kept gets a full row of fast-changing fields, so it reads without the older rows.
-                if conn.execute("SELECT 1 FROM state_volatile WHERE series_id = ? AND run_id < ? LIMIT 1",
-                                (series_id, cut)).fetchone():
+                if conn.execute(
+                    "SELECT 1 FROM state_volatile WHERE series_id = ? AND run_id < ? LIMIT 1", (series_id, cut)
+                ).fetchone():
                     moving, _ = _moving_at(conn, series_id, cut)
                     conn.execute("DELETE FROM state_volatile WHERE series_id = ? AND run_id <= ?", (series_id, cut))
                     if moving:
-                        conn.execute("INSERT INTO state_volatile (series_id, run_id, full, data) VALUES (?, ?, 1, ?)",
-                                     (series_id, cut, _compress_moving(moving)))
-            conn.execute("DELETE FROM state_runs WHERE tenant_id = ? AND collector = ? AND run_id < ?",
-                         (tenant_id, collector, cut))
+                        conn.execute(
+                            "INSERT INTO state_volatile (series_id, run_id, full, data) VALUES (?, ?, 1, ?)",
+                            (series_id, cut, _compress_moving(moving)),
+                        )
+            conn.execute(
+                "DELETE FROM state_runs WHERE tenant_id = ? AND collector = ? AND run_id < ?",
+                (tenant_id, collector, cut),
+            )
     for tenant_id in sorted({c[0] for c in cuts}):
         with store.atomic(conn):  # then the packs no version of the tenant points at any more
-            conn.execute("DELETE FROM state_packs WHERE tenant_id = ? AND id NOT IN (SELECT v.pack_id"
-                         " FROM state_versions v JOIN state_series s ON s.id = v.series_id WHERE s.tenant_id = ?)",
-                         (tenant_id, tenant_id))
+            conn.execute(
+                "DELETE FROM state_packs WHERE tenant_id = ? AND id NOT IN (SELECT v.pack_id"
+                " FROM state_versions v JOIN state_series s ON s.id = v.series_id WHERE s.tenant_id = ?)",
+                (tenant_id, tenant_id),
+            )
     return sum(n for *_, n in cuts)
 
 
@@ -554,7 +639,8 @@ def _pending(conn) -> tuple[int, int]:
     row = conn.execute(
         "SELECT COUNT(*), COALESCE(SUM(object_count), 0) FROM runs WHERE id > ? AND status IN ('succeeded', 'partial')"
         f" AND {HOLDS_OBJECTS} AND NOT EXISTS (SELECT 1 FROM state_runs s WHERE s.run_id = runs.id)",
-        (int(_setting(conn, WATERMARK) or 0),)).fetchone()
+        (int(_setting(conn, WATERMARK) or 0),),
+    ).fetchone()
     return row[0], row[1]
 
 
@@ -583,6 +669,7 @@ ROW_BYTES = 40  # a version row's room beside its object ID, measured with scrip
 @dataclass
 class Estimate:
     """What recording the pending runs would take, from a sample of data sources (``estimate``)."""
+
     pending: int = 0
     pending_objects: int = 0
     sampled_runs: int = 0
@@ -605,8 +692,9 @@ class Estimate:
         return self.seconds / self.share if self.share else 0.0
 
 
-def estimate(conn, seconds: float = 20.0, clock: Callable[[], float] = time.monotonic,
-             rng: random.Random | None = None) -> Estimate:
+def estimate(
+    conn, seconds: float = 20.0, clock: Callable[[], float] = time.monotonic, rng: random.Random | None = None
+) -> Estimate:
     """The dry run: the room and time recording every pending run would take, worked out without writing
     anything. Whole data sources (each run of one tenant's collector) are recorded in memory, chosen at
     random, for about ``seconds``, and the totals scaled up by their share of the pending objects."""
@@ -616,9 +704,14 @@ def estimate(conn, seconds: float = 20.0, clock: Callable[[], float] = time.mono
     if not est.pending:
         return est
     mark = int(_setting(conn, WATERMARK) or 0)
-    sources = [(r["tenant_id"], r["collector"]) for r in conn.execute(
-        "SELECT DISTINCT tenant_id, collector FROM runs WHERE id > ? AND status IN ('succeeded', 'partial')"
-        " AND NOT EXISTS (SELECT 1 FROM state_runs s WHERE s.run_id = runs.id)", (mark,))]
+    sources = [
+        (r["tenant_id"], r["collector"])
+        for r in conn.execute(
+            "SELECT DISTINCT tenant_id, collector FROM runs WHERE id > ? AND status IN ('succeeded', 'partial')"
+            " AND NOT EXISTS (SELECT 1 FROM state_runs s WHERE s.run_id = runs.id)",
+            (mark,),
+        )
+    ]
     rng.shuffle(sources)
     start = clock()
     for tenant_id, collector in sources:
@@ -626,13 +719,18 @@ def estimate(conn, seconds: float = 20.0, clock: Callable[[], float] = time.mono
             break
         current = {}
         for kind, series_id in _series(conn, tenant_id, collector).items():
-            current[kind] = {r["object_id"]: r["hash"] for r in conn.execute(
-                "SELECT object_id, hash FROM state_versions WHERE series_id = ? AND to_run IS NULL", (series_id,))}
+            current[kind] = {
+                r["object_id"]: r["hash"]
+                for r in conn.execute(
+                    "SELECT object_id, hash FROM state_versions WHERE series_id = ? AND to_run IS NULL", (series_id,)
+                )
+            }
         runs = conn.execute(
             "SELECT id, object_count FROM runs WHERE tenant_id = ? AND collector = ? AND id > ?"
             f" AND status IN ('succeeded', 'partial') AND {HOLDS_OBJECTS}"
             " AND NOT EXISTS (SELECT 1 FROM state_runs s WHERE s.run_id = runs.id) ORDER BY id",
-            (tenant_id, collector, _last_recorded(conn, tenant_id, collector) or 0)).fetchall()
+            (tenant_id, collector, _last_recorded(conn, tenant_id, collector) or 0),
+        ).fetchall()
         for run in runs:
             objects = _snapshot(conn, run["id"])
             for kind in current.keys() | objects.keys():

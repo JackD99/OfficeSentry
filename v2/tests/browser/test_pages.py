@@ -59,10 +59,14 @@ def test_page(spec, viewport, theme, site, contexts, request):
 def _check_screenshot(page, name: str, viewport: str, spec, config) -> str | None:
     height = page.evaluate("document.documentElement.scrollHeight")
     width = VIEWPORTS[viewport]["width"]
-    png = page.screenshot(full_page=True, animations="disabled", caret="hide",
-                          clip={"x": 0, "y": 0, "width": width,
-                                "height": height if spec.full else min(height, MAX_HEIGHT[viewport])},
-                          mask=[page.locator(s) for s in ALWAYS_MASK + spec.mask], mask_color=MASK_COLOUR)
+    png = page.screenshot(
+        full_page=True,
+        animations="disabled",
+        caret="hide",
+        clip={"x": 0, "y": 0, "width": width, "height": height if spec.full else min(height, MAX_HEIGHT[viewport])},
+        mask=[page.locator(s) for s in ALWAYS_MASK + spec.mask],
+        mask_color=MASK_COLOUR,
+    )
     baseline = BASELINES / f"{name}.png"
     if config.getoption("--save-all"):
         _save(name, png)
@@ -117,7 +121,7 @@ def _save(name: str, png: bytes, expected=None, changed=None) -> None:
         expected.save(OUTPUT / f"{name}.baseline.png")
     if changed is not None:
         # The actual page, faded, with what changed in red.
-        faded = Image.blend(Image.open(BytesIO(png)).convert("RGB"), Image.new("RGB", expected.size, "white"), .7)
+        faded = Image.blend(Image.open(BytesIO(png)).convert("RGB"), Image.new("RGB", expected.size, "white"), 0.7)
         faded.paste(Image.new("RGB", expected.size, (220, 30, 30)), mask=changed)
         faded.save(OUTPUT / f"{name}.diff.png")
 
@@ -128,9 +132,14 @@ def _axe(page) -> list[str]:
     violations = page.evaluate(
         "tags => axe.run(document, {runOnly: {type: 'tag', values: tags}, resultTypes: ['violations']})"
         ".then(r => r.violations.map(v => ({id: v.id, impact: v.impact, help: v.help,"
-        " targets: v.nodes.map(n => n.target.join(' ')).slice(0, 3), count: v.nodes.length})))", AXE_TAGS)
-    return [f"axe {v['impact']} {v['id']}: {v['help']} ({v['count']}x, e.g. {'; '.join(v['targets'])})"
-            for v in violations if v["impact"] in ("serious", "critical")]
+        " targets: v.nodes.map(n => n.target.join(' ')).slice(0, 3), count: v.nodes.length})))",
+        AXE_TAGS,
+    )
+    return [
+        f"axe {v['impact']} {v['id']}: {v['help']} ({v['count']}x, e.g. {'; '.join(v['targets'])})"
+        for v in violations
+        if v["impact"] in ("serious", "critical")
+    ]
 
 
 def test_every_baseline_belongs_to_a_page():

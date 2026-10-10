@@ -28,8 +28,21 @@ PASSWORD = "nightly upgrade check"  # noqa: S105 (a throwaway demo database)
 def _tags() -> list[str]:
     if os.environ.get("NIGHTLY_RELEASES"):
         return os.environ["NIGHTLY_RELEASES"].split()
-    out = subprocess.run(["git", "-c", "versionsort.suffix=-", "tag", "--list", "v2*",  # noqa: S603, S607
-                          "--sort=v:refname"], cwd=ROOT, check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "git",
+            "-c",
+            "versionsort.suffix=-",
+            "tag",
+            "--list",
+            "v2*",
+            "--sort=v:refname",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
     return out.split()
 
 
@@ -37,14 +50,30 @@ def _release_database(tag: str, tmp: Path) -> Path:
     """A demo data folder written by ``tag``'s code (its database and secrets.json)."""
     src = tmp / "src"
     src.mkdir()
-    archive = subprocess.run(["git", "archive", "--format=tar", tag, "v2"], cwd=ROOT, check=True,  # noqa: S603, S607
-                             capture_output=True).stdout
+    archive = subprocess.run(  # noqa: S603
+        ["git", "archive", "--format=tar", tag, "v2"],  # noqa: S607
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
     subprocess.run(["tar", "-x", "-C", str(src)], input=archive, check=True)  # noqa: S603, S607
     data = tmp / "data"
     env = {k: v for k, v in os.environ.items() if not k.startswith("OFFICESENTRY_")}
     env["PYTHONPATH"] = str(src / "v2")  # the release's own officesentry package, not this one
-    done = subprocess.run([sys.executable, "scripts/demo_data.py", "--data-dir", str(data),  # noqa: S603
-                           "--password", PASSWORD], cwd=src / "v2", env=env, capture_output=True, text=True)
+    done = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            "scripts/demo_data.py",
+            "--data-dir",
+            str(data),
+            "--password",
+            PASSWORD,
+        ],
+        cwd=src / "v2",
+        env=env,
+        capture_output=True,
+        text=True,
+    )
     assert done.returncode == 0, f"{tag}'s demo_data.py failed:\n{done.stdout[-2000:]}\n{done.stderr[-4000:]}"
     return data
 
@@ -65,7 +94,6 @@ def test_release_database_upgrades_and_every_page_opens(tag, tmp_path, summary):
 
     _, client = portal(data, "demo", PASSWORD)
     opened, problems = crawl(client, ["/", *(f"/tenants/{t}" for t in tenants)])
-    summary.append(f"- Upgrade from {tag}: schema {before} to {after}, {opened} pages opened, "
-                   f"{len(problems)} problems")
+    summary.append(f"- Upgrade from {tag}: schema {before} to {after}, {opened} pages opened, {len(problems)} problems")
     assert opened > 100, f"only {opened} pages opened: is the crawl signed in?"
     assert not problems, f"after upgrading {tag}'s database:\n" + "\n".join(problems[:40])

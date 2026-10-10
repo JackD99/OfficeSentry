@@ -31,8 +31,9 @@ def portal(data_dir: Path, username: str, password: str):
     from officesentry.config import load_config
     from officesentry.web import create_app
 
-    cfg = load_config(data_dir=data_dir, testing=True, secure_cookies=False, require_mfa="off",
-                      extra={"disable_csrf": True})
+    cfg = load_config(
+        data_dir=data_dir, testing=True, secure_cookies=False, require_mfa="off", extra={"disable_csrf": True}
+    )
     client = create_app(cfg).test_client()
     resp = client.post("/login", data={"username": username, "password": password})
     assert resp.status_code == 302 and "/login" not in resp.headers.get("Location", ""), "couldn't sign in"

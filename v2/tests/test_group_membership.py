@@ -39,14 +39,22 @@ def test_seeded_report(db, two_tenants):
     report = data_reports.build(db, _tenant(db, alpha), "group-membership")
     assert report.unavailable is None
     tiles = {t.label: t.value for t in report.tiles}
-    assert tiles == {"Teams and groups checked": 5, "People in at least one": 4, "People in none": 1,
-                     "Guests in teams": 2}
+    assert tiles == {
+        "Teams and groups checked": 5,
+        "People in at least one": 4,
+        "People in none": 1,
+        "Guests in teams": 2,
+    }
 
     people, section = _table(report, "By person")
     by_account = {str(p["Account"]): p for p in people}
     ann = by_account["ann@x.com"]
-    assert ann["Teams and groups"] == 4 and list(ann["Member of"].parts) == ["Board", "Marketing", "Provisioned",
-                                                                            "Sales"]
+    assert ann["Teams and groups"] == 4 and list(ann["Member of"].parts) == [
+        "Board",
+        "Marketing",
+        "Provisioned",
+        "Sales",
+    ]
     assert ann["Type"] == "Member" and ann["Account status"] == "Enabled"
     # A disabled leaver still in a team is flagged.
     bob = people.index(by_account["bob@x.com"])
@@ -104,12 +112,31 @@ def _build(groups, users):
 
 
 def test_truncated_and_unexamined_groups_are_noted():
-    users = [{"_id": "u1", "userPrincipalName": "ann@x.com", "displayName": "Ann", "userType": "Member",
-              "accountEnabled": True}]
+    users = [
+        {
+            "_id": "u1",
+            "userPrincipalName": "ann@x.com",
+            "displayName": "Ann",
+            "userType": "Member",
+            "accountEnabled": True,
+        }
+    ]
     groups = [
-        {"_id": "big", "displayName": "Everyone", "kind": "microsoft365", "isTeam": True, "visibility": "Public",
-         "examined": True, "memberIds": ["u1"], "memberIdsComplete": False, "memberCount": MEMBER_IDS_KEPT + 10,
-         "owners": [], "ownerCount": 0, "guests": [], "guestCount": 0},
+        {
+            "_id": "big",
+            "displayName": "Everyone",
+            "kind": "microsoft365",
+            "isTeam": True,
+            "visibility": "Public",
+            "examined": True,
+            "memberIds": ["u1"],
+            "memberIdsComplete": False,
+            "memberCount": MEMBER_IDS_KEPT + 10,
+            "owners": [],
+            "ownerCount": 0,
+            "guests": [],
+            "guestCount": 0,
+        },
         {"_id": "late", "displayName": "Zeta", "kind": "microsoft365", "isTeam": False, "examined": False},
         {"_id": "sec", "displayName": "VPN", "kind": "security"},
     ]
@@ -117,8 +144,10 @@ def test_truncated_and_unexamined_groups_are_noted():
     rows, _ = _table(report, "By team or group")
     assert [r["Name"] for r in rows] == ["Everyone", "Zeta"]  # security groups aren't included
     big, late = rows
-    assert "Member list cut" in big["Note"] and f"{MEMBER_IDS_KEPT + 9} more members not listed" in \
-        big["Member list"].parts
+    assert (
+        "Member list cut" in big["Note"]
+        and f"{MEMBER_IDS_KEPT + 9} more members not listed" in big["Member list"].parts
+    )
     assert late["Members"] == "Not checked" and str(GROUP_LIMIT) in late["Note"]
     notes = " ".join(report.notes)
     assert "Everyone" in notes and "1 of 2" in notes
@@ -127,11 +156,31 @@ def test_truncated_and_unexamined_groups_are_noted():
 
 
 def test_guest_in_many_groups_is_flagged():
-    users = [{"_id": "gx", "userPrincipalName": "pat_s.com#EXT#@x.com", "mail": "pat@s.com", "userType": "Guest",
-              "accountEnabled": True}]
-    groups = [{"_id": f"g{i}", "displayName": f"G{i}", "kind": "microsoft365", "examined": True,
-               "memberIds": ["gx"], "memberIdsComplete": True, "memberCount": 1, "guests": ["pat@s.com"],
-               "guestCount": 1, "owners": [], "ownerCount": 0} for i in range(group_membership.GUEST_MANY)]
+    users = [
+        {
+            "_id": "gx",
+            "userPrincipalName": "pat_s.com#EXT#@x.com",
+            "mail": "pat@s.com",
+            "userType": "Guest",
+            "accountEnabled": True,
+        }
+    ]
+    groups = [
+        {
+            "_id": f"g{i}",
+            "displayName": f"G{i}",
+            "kind": "microsoft365",
+            "examined": True,
+            "memberIds": ["gx"],
+            "memberIdsComplete": True,
+            "memberCount": 1,
+            "guests": ["pat@s.com"],
+            "guestCount": 1,
+            "owners": [],
+            "ownerCount": 0,
+        }
+        for i in range(group_membership.GUEST_MANY)
+    ]
     report = _build(groups, users)
     rows, section = _table(report, "By person")
     assert len(rows) == 1 and rows[0]["Teams and groups"] == group_membership.GUEST_MANY

@@ -81,8 +81,9 @@ def test_stale_users(seeded):
 
 
 def test_stale_users_unavailable_without_p1(db, two_tenants):
-    no_p1 = [dict(s, servicePlans=[p for p in s["servicePlans"] if p["servicePlanName"] != "AAD_PREMIUM"])
-             for s in SKUS]
+    no_p1 = [
+        dict(s, servicePlans=[p for p in s["servicePlans"] if p["servicePlanName"] != "AAD_PREMIUM"]) for s in SKUS
+    ]
     seed_tenant(db, two_tenants[0], skus=no_p1)
     r = results(db, two_tenants[0])["stale_users"]
     assert r.status == "unavailable" and "P1" in r.summary
@@ -104,13 +105,26 @@ def test_unassigned_licences_with_price(db, two_tenants):
 def test_licence_summary_counts_waste():
     users = [
         {"accountEnabled": False, "skuIds": ["sku-bp"]},
-        {"accountEnabled": True, "skuIds": ["sku-bp"], "signInActivityAvailable": True,
-         "lastSignInDateTime": "2026-01-01T00:00:00Z"},
-        {"accountEnabled": True, "skuIds": ["sku-bp"], "signInActivityAvailable": True,
-         "lastSignInDateTime": "2026-10-01T00:00:00Z"},
+        {
+            "accountEnabled": True,
+            "skuIds": ["sku-bp"],
+            "signInActivityAvailable": True,
+            "lastSignInDateTime": "2026-01-01T00:00:00Z",
+        },
+        {
+            "accountEnabled": True,
+            "skuIds": ["sku-bp"],
+            "signInActivityAvailable": True,
+            "lastSignInDateTime": "2026-10-01T00:00:00Z",
+        },
     ]
-    free = {"skuId": "free", "skuPartNumber": "FLOW_FREE", "appliesTo": "User", "prepaidUnits": {"enabled": 10000},
-            "consumedUnits": 3}
+    free = {
+        "skuId": "free",
+        "skuPartNumber": "FLOW_FREE",
+        "appliesTo": "User",
+        "prepaidUnits": {"enabled": 10000},
+        "consumedUnits": 3,
+    }
     summary = licence_summary(SKUS + [free], users, {"SPB": 20.0}, NOW)
     bp = next(line for line in summary.lines if line.part_number == "SPB")
     assert (bp.unassigned, bp.on_disabled_users, bp.on_stale_users) == (3, 1, 1)
@@ -120,8 +134,10 @@ def test_licence_summary_counts_waste():
 
 
 def test_without_p1_advice_is_security_defaults(db, two_tenants):
-    no_p1 = [dict(s, servicePlans=[p for p in s["servicePlans"] if not p["servicePlanName"].startswith("AAD_PREMIUM")])
-             for s in SKUS]
+    no_p1 = [
+        dict(s, servicePlans=[p for p in s["servicePlans"] if not p["servicePlanName"].startswith("AAD_PREMIUM")])
+        for s in SKUS
+    ]
     seed_tenant(db, two_tenants[0], skus=no_p1)
     res = results(db, two_tenants[0])
     for key in ("mfa_enforced", "legacy_auth_blocked"):

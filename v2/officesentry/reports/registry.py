@@ -34,11 +34,39 @@ GROUP_TITLES: tuple[tuple[str, str], ...] = (
 # The order ``REPORTS`` lists these reports in, which What changed follows within each area. It predates
 # declarations; a report that isn't listed comes after these, in menu order, so new reports leave it alone.
 LISTED_ORDER: tuple[str, ...] = (
-    "mailboxes", "inbox-rules", "mailbox-permissions", "shared-mailboxes", "mailbox-size", "legacy-auth",
-    "mailbox-holds", "admin-activity", "apps", "conditional-access", "tenant-settings", "domains", "guests",
-    "deleted-items", "groups", "group-membership", "devices", "hybrid", "mfa", "auth-methods", "admins",
-    "subscriptions", "licences", "usage", "licence-rightsizing", "inactive", "sign-ins", "risky-users",
-    "secure-score", "sharepoint", "sharepoint-storage", "onedrive", "shared-files",
+    "mailboxes",
+    "inbox-rules",
+    "mailbox-permissions",
+    "shared-mailboxes",
+    "mailbox-size",
+    "legacy-auth",
+    "mailbox-holds",
+    "admin-activity",
+    "apps",
+    "conditional-access",
+    "tenant-settings",
+    "domains",
+    "guests",
+    "deleted-items",
+    "groups",
+    "group-membership",
+    "devices",
+    "hybrid",
+    "mfa",
+    "auth-methods",
+    "admins",
+    "subscriptions",
+    "licences",
+    "usage",
+    "licence-rightsizing",
+    "inactive",
+    "sign-ins",
+    "risky-users",
+    "secure-score",
+    "sharepoint",
+    "sharepoint-storage",
+    "onedrive",
+    "shared-files",
 )
 
 
@@ -69,8 +97,17 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = []  # (group key, title, report
 KEYWORDS: dict[str, str] = {}  # report key: extra search words for the library
 
 
-def report(key: str, title: str, description: str, collectors: tuple[str, ...], *, group: str | None = None,
-           order: int = 0, uses: tuple[str, ...] = (), keywords: str = ""):
+def report(
+    key: str,
+    title: str,
+    description: str,
+    collectors: tuple[str, ...],
+    *,
+    group: str | None = None,
+    order: int = 0,
+    uses: tuple[str, ...] = (),
+    keywords: str = "",
+):
     """Declare a detail report; see the module docstring."""
     if group is not None and group not in dict(GROUP_TITLES):
         raise ValueError(f"Report {key!r} names an unknown menu group {group!r}")
@@ -78,10 +115,12 @@ def report(key: str, title: str, description: str, collectors: tuple[str, ...], 
     def decorator(builder):
         if key in DECLARED:
             raise ValueError(f"Report {key!r} is declared twice")
-        DECLARED[key] = Declaration(key, title, description, tuple(collectors), builder, group, order,
-                                    tuple(uses), keywords)
+        DECLARED[key] = Declaration(
+            key, title, description, tuple(collectors), builder, group, order, tuple(uses), keywords
+        )
         _rebuild()
         return builder
+
     return decorator
 
 
@@ -95,8 +134,10 @@ def _rebuild() -> None:
     ordered = sorted(DECLARED.values(), key=lambda d: (listed.get(d.key, len(listed)), _menu_position(d)))
     REPORTS.clear()
     REPORTS.update((d.key, (d.title, d.description, d.collectors, d.builder)) for d in ordered)
-    GROUPS[:] = [(g, title, tuple(d.key for d in sorted(DECLARED.values(), key=_menu_position) if d.group == g))
-                 for g, title in GROUP_TITLES]
+    GROUPS[:] = [
+        (g, title, tuple(d.key for d in sorted(DECLARED.values(), key=_menu_position) if d.group == g))
+        for g, title in GROUP_TITLES
+    ]
     KEYWORDS.clear()
     KEYWORDS.update((d.key, d.keywords) for d in DECLARED.values() if d.keywords)
 

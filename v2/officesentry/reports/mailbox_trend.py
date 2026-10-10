@@ -41,12 +41,17 @@ def _sizes_at(snap: TenantSnapshot, now: datetime) -> list[tuple[datetime, dict[
     runs = snap.conn.execute(
         "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = 'mailbox_usage'"
         " AND status IN ('succeeded', 'partial') AND finished_at <= ? AND object_count > 0"
-        " ORDER BY finished_at, id", (snap.tenant["id"], cutoff)).fetchall()
+        " ORDER BY finished_at, id",
+        (snap.tenant["id"], cutoff),
+    ).fetchall()
     out = []
     for run in runs:
         when = parse_ts(run["finished_at"])
-        sizes = {m["_id"]: m["totalBytes"] for m in store.run_objects(snap.conn, run["id"], "mailbox_size")
-                 if isinstance(m.get("totalBytes"), int)}
+        sizes = {
+            m["_id"]: m["totalBytes"]
+            for m in store.run_objects(snap.conn, run["id"], "mailbox_size")
+            if isinstance(m.get("totalBytes"), int)
+        }
         if when and sizes:
             out.append((when, sizes))
     return out
@@ -97,9 +102,22 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     month_base = bases[SPANS[0]]
     span = (latest - month_base[0]).days if month_base else 0
 
-    growth = Section(GROWTH, ["Mailbox", "Type", "Size now", f"{SPANS[0]} days ago", f"{SPANS[0]}-day change",
-                              f"{SPANS[1]} days ago", "Growth a month", "Stops sending at", "Forecast full"],
-                     empty="No mailboxes.", compare=False)
+    growth = Section(
+        GROWTH,
+        [
+            "Mailbox",
+            "Type",
+            "Size now",
+            f"{SPANS[0]} days ago",
+            f"{SPANS[0]}-day change",
+            f"{SPANS[1]} days ago",
+            "Growth a month",
+            "Stops sending at",
+            "Forecast full",
+        ],
+        empty="No mailboxes.",
+        compare=False,
+    )
     entries = []
     soon = 0
     fastest: tuple[float, str] | None = None
@@ -124,15 +142,27 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
             soon += 1
         if per_month and per_month > 0 and (fastest is None or per_month > fastest[0]):
             fastest = (per_month, name)
-        entries.append(((-(per_month or 0), -(size or 0)), [
-            name, _type(m.get("mailboxType")), _size(size), _size(before[SPANS[0]]),
-            "" if change is None else _signed(change), _size(before[SPANS[1]]),
-            "" if per_month is None else _signed(per_month), _size(quota) or "No limit", forecast], flag))
+        entries.append(
+            (
+                (-(per_month or 0), -(size or 0)),
+                [
+                    name,
+                    _type(m.get("mailboxType")),
+                    _size(size),
+                    _size(before[SPANS[0]]),
+                    "" if change is None else _signed(change),
+                    _size(before[SPANS[1]]),
+                    "" if per_month is None else _signed(per_month),
+                    _size(quota) or "No limit",
+                    forecast,
+                ],
+                flag,
+            )
+        )
     for _, row, flag in sorted(entries, key=lambda e: e[0]):
         growth.add(row, flag)
 
-    totals = [(d, v) for d, v in ((parse_ts(at), v) for at, v in snap.history("mail.storage_bytes"))
-              if d is not None]
+    totals = [(d, v) for d, v in ((parse_ts(at), v) for at, v in snap.history("mail.storage_bytes")) if d is not None]
     points = sorted({d.date(): v for d, v in totals}.items())
     months = Section(MONTHS, ["Month", "Total size", "Change"], empty="No collections yet.", compare=False)
     previous = None
@@ -144,27 +174,50 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
 
     size_now = sum(m.get("totalBytes") for m in current if isinstance(m.get("totalBytes"), int))
     if not month_base:
-        out.notice = ("The trend needs a collection at least a week old to compare with"
-                      + (f"; the first was on {history[0][0].date().isoformat()}" if history else "")
-                      + ". Sizes show now and growth fills in as nightly collections build up.")
-    growth.intro = (f"Each mailbox now, against Office Sentry's collection from {span} days earlier"
-                    f" ({month_base[0].date().isoformat()}), fastest-growing first. " if month_base else
-                    "Each mailbox now. ") + (
+        out.notice = (
+            "The trend needs a collection at least a week old to compare with"
+            + (f"; the first was on {history[0][0].date().isoformat()}" if history else "")
+            + ". Sizes show now and growth fills in as nightly collections build up."
+        )
+    growth.intro = (
+        f"Each mailbox now, against Office Sentry's collection from {span} days earlier"
+        f" ({month_base[0].date().isoformat()}), fastest-growing first. "
+        if month_base
+        else "Each mailbox now. "
+    ) + (
         f"{plural(soon, 'mailbox')} {verb(soon, 'is', 'are')} full or forecast to fill within {WATCH_DAYS} days at "
         "its current rate: turn on the archive (or auto-expanding archiving) or clear old mail before sending "
-        "stops." if soon else f"None is forecast to fill within {WATCH_DAYS} days.")
+        "stops."
+        if soon
+        else f"None is forecast to fill within {WATCH_DAYS} days."
+    )
     months.intro = "The tenant's total mailbox size at the last collection of each month."
     out.chart = storage_chart(points, "Mailbox storage over time")
     out.chart_title = "Mailbox storage over time" if out.chart else ""
     out.tiles = [
-        Tile("Total mailbox size", _size(size_now) or "0 bytes", f"Across {plural(len(current), 'mailbox')}",
-             rows=Rows(GROWTH)),
-        Tile("Change in the last month", _signed(size_now - sum(month_base[1].values())) if month_base else "Not yet",
-             f"Since {month_base[0].date().isoformat()}" if month_base else "Needs a week of history"),
-        Tile("Fastest growing", f"{_signed(fastest[0])} a month" if fastest else "None",
-             fastest[1] if fastest else "No mailbox grew", rows=Rows(GROWTH)),
-        Tile(f"Full within {WATCH_DAYS} days", soon, "At the current rate, or full now", "bad" if soon else "ok",
-             Rows(GROWTH, flagged=True)),
+        Tile(
+            "Total mailbox size",
+            _size(size_now) or "0 bytes",
+            f"Across {plural(len(current), 'mailbox')}",
+            rows=Rows(GROWTH),
+        ),
+        Tile(
+            "Change in the last month",
+            _signed(size_now - sum(month_base[1].values())) if month_base else "Not yet",
+            f"Since {month_base[0].date().isoformat()}" if month_base else "Needs a week of history",
+        ),
+        Tile(
+            "Fastest growing",
+            f"{_signed(fastest[0])} a month" if fastest else "None",
+            fastest[1] if fastest else "No mailbox grew",
+            rows=Rows(GROWTH),
+        ),
+        Tile(
+            f"Full within {WATCH_DAYS} days",
+            soon,
+            "At the current rate, or full now",
+            "bad" if soon else "ok",
+            Rows(GROWTH, flagged=True),
+        ),
     ]
     out.sections = [growth, months]
-

@@ -44,8 +44,13 @@ def client_link(t, connection) -> str | None:
     if not connection or not connection["client_id"] or cloud_mismatch(clouds.of(t).key, connection):
         return None
     state = _client_serializer().dumps({"t": t["id"], "c": t["created_at"]})
-    return admin_consent_url(connection["client_id"], t["tenant_ref"],
-                             _cfg().base_url + url_for("tenants.consent_callback"), state, clouds.of(t).key)
+    return admin_consent_url(
+        connection["client_id"],
+        t["tenant_ref"],
+        _cfg().base_url + url_for("tenants.consent_callback"),
+        state,
+        clouds.of(t).key,
+    )
 
 
 def client_link_tenant(state: str):
@@ -67,20 +72,29 @@ def client_returned(t):
 
     error = request.args.get("error")
     approved = not error and request.args.get("admin_consent", "").lower() == "true"
-    audit_counted(g.db, "client_consent_returned" if approved else "client_consent_not_granted",
-                  (request.remote_addr or "")[:64])
+    audit_counted(
+        g.db, "client_consent_returned" if approved else "client_consent_not_granted", (request.remote_addr or "")[:64]
+    )
     if approved and not t["archived_at"] and not public_demo.active(g.db):
         onboarding.client_approved(g.db, t)
     if g.get("user") is not None and g.user["role"] == "admin":
         # An admin opened the client's link themselves: back to the tenant, as their own link would.
-        flash("Approved. Office Sentry is signing in to confirm; this page updates once it has."
-              if approved else "Consent was not granted.", "success" if approved else "error")
+        flash(
+            "Approved. Office Sentry is signing in to confirm; this page updates once it has."
+            if approved
+            else "Consent was not granted.",
+            "success" if approved else "error",
+        )
         return redirect(url_for("onboarding.send", tenant_id=t["id"]))
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     problem = explain(request.args.get("error_description", "")) if error else None
-    return render_template("consent_returned.html", approved=approved, problem=problem,
-                           app=onboarding.app_name(connection, tenant_health.connection_result(g.db, t["id"])),
-                           cloud=clouds.of(t))
+    return render_template(
+        "consent_returned.html",
+        approved=approved,
+        problem=problem,
+        app=onboarding.app_name(connection, tenant_health.connection_result(g.db, t["id"])),
+        cloud=clouds.of(t),
+    )
 
 
 # -- The tracker -------------------------------------------------------------------------------
@@ -96,12 +110,21 @@ def index():
     state = request.args.get("state", "")
     state = state if state in onboarding.STATES or state == "client" else ""
     wanted = ON_CLIENT if state == "client" else {state}
-    entries = [e for e in everything if (show == "all" or e.state.key != "connected")
-               and (not state or e.state.key in wanted)]
+    entries = [
+        e for e in everything if (show == "all" or e.state.key != "connected") and (not state or e.state.key in wanted)
+    ]
     links = {e.tenant["id"]: client_link(e.tenant, e.connection) for e in entries if not e.tenant["consented_at"]}
-    return render_template("onboarding.html", entries=entries, counts=counts, total=len(everything), show=show,
-                           state=state, filters=FILTERS,
-                           states=onboarding.STATES, links=links)
+    return render_template(
+        "onboarding.html",
+        entries=entries,
+        counts=counts,
+        total=len(everything),
+        show=show,
+        state=state,
+        filters=FILTERS,
+        states=onboarding.STATES,
+        links=links,
+    )
 
 
 @bp.post("/bulk")
@@ -114,17 +137,23 @@ def bulk():
         flash("Tick at least one tenant first.", "error")
     elif action in ("sent", "unsent"):
         n = onboarding.mark_sent(g.db, [t["id"] for t in tenants], g.user["username"], sent=action == "sent")
-        flash(f"Marked {n} {'tenant' if n == 1 else 'tenants'} as {'sent' if action == 'sent' else 'not sent'}.",
-              "success")
+        flash(
+            f"Marked {n} {'tenant' if n == 1 else 'tenants'} as {'sent' if action == 'sent' else 'not sent'}.",
+            "success",
+        )
     elif action == "check":
         waiting = [t for t in tenants if not t["consented_at"] and not t["archived_at"]]
         for t in waiting:
             onboarding.queue_check(g.db, t["id"], priority=store.PRIORITY_WAITING, user=g.user["username"])
         if waiting:
             audit(g.db, g.user["username"], "consent_check_requested", detail=f"{len(waiting)} tenants")
-        flash(f"Checking {len(waiting)} {'tenant' if len(waiting) == 1 else 'tenants'} by signing in to each. "
-              "Reload the page in a minute to see the results." if waiting else
-              "Every tenant you ticked has already consented.", "success")
+        flash(
+            f"Checking {len(waiting)} {'tenant' if len(waiting) == 1 else 'tenants'} by signing in to each. "
+            "Reload the page in a minute to see the results."
+            if waiting
+            else "Every tenant you ticked has already consented.",
+            "success",
+        )
     else:
         abort(400)
     return redirect(url_for("onboarding.index", show=request.form.get("show") or None))
@@ -138,14 +167,28 @@ def export():
     for e in onboarding.tracker(g.db, visible_tenants(g.db, g.user)):
         if e.tenant["consented_at"]:
             continue
-        rows.append([e.tenant["name"], e.tenant["tenant_ref"], e.row["contact_name"] if e.row else "",
-                     e.row["contact_email"] if e.row else "", e.state.label,
-                     client_link(e.tenant, e.connection) or "", e.app])
-    table = tables.Table("Consent links", ["Client", "Tenant", "Contact name", "Contact email", "State",
-                                           "Consent link", "App name"], rows)
+        rows.append(
+            [
+                e.tenant["name"],
+                e.tenant["tenant_ref"],
+                e.row["contact_name"] if e.row else "",
+                e.row["contact_email"] if e.row else "",
+                e.state.label,
+                client_link(e.tenant, e.connection) or "",
+                e.app,
+            ]
+        )
+    table = tables.Table(
+        "Consent links",
+        ["Client", "Tenant", "Contact name", "Contact email", "State", "Consent link", "App name"],
+        rows,
+    )
     audit(g.db, g.user["username"], "report_downloaded", detail="onboarding consent links (CSV)")
-    return Response(tables.to_csv(table), mimetype="text/csv",
-                    headers={"Content-Disposition": 'attachment; filename="consent-links.csv"'})
+    return Response(
+        tables.to_csv(table),
+        mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="consent-links.csv"'},
+    )
 
 
 # -- Importing ---------------------------------------------------------------------------------
@@ -154,8 +197,11 @@ def export():
 @bp.get("/template.csv")
 @roles_required("admin")
 def template():
-    return Response("﻿" + onboarding.TEMPLATE, mimetype="text/csv",
-                    headers={"Content-Disposition": 'attachment; filename="tenants-to-import.csv"'})
+    return Response(
+        "﻿" + onboarding.TEMPLATE,
+        mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="tenants-to-import.csv"'},
+    )
 
 
 @bp.route("/import", methods=["GET", "POST"])
@@ -173,8 +219,10 @@ def import_tenants():
     parsed = onboarding.parse(g.db, text)
     if request.form.get("confirm") == "1" and not parsed.error and parsed.new:
         ids = onboarding.create(g.db, parsed, g.user["username"])
-        flash(f"Added {len(ids)} {'tenant' if len(ids) == 1 else 'tenants'}. Next: send each client their "
-              "consent link.", "success")
+        flash(
+            f"Added {len(ids)} {'tenant' if len(ids) == 1 else 'tenants'}. Next: send each client their consent link.",
+            "success",
+        )
         return redirect(url_for("onboarding.index", show="waiting"))
     clouds_used = sorted({r.cloud for r in parsed.new})
     uses = {c: onboarding.connection_for(connections, c) for c in clouds_used}
@@ -185,11 +233,23 @@ def import_tenants():
     for name in {grp for r in parsed.new for grp in r.groups}:
         gid = group_ids.get(name.lower())
         if gid is not None:
-            granted[name] = [u["username"] for u in g.db.execute(
-                "SELECT u.username FROM users u JOIN user_tenant_groups ug ON ug.user_id = u.id"
-                " WHERE ug.group_id = ? AND u.role = 'analyst' ORDER BY u.username COLLATE NOCASE", (gid,))]
-    return render_template("onboarding_import.html", parsed=parsed, text=text if not parsed.error else "",
-                           connections=connections, uses=uses, cloud_of=clouds.get, granted=granted)
+            granted[name] = [
+                u["username"]
+                for u in g.db.execute(
+                    "SELECT u.username FROM users u JOIN user_tenant_groups ug ON ug.user_id = u.id"
+                    " WHERE ug.group_id = ? AND u.role = 'analyst' ORDER BY u.username COLLATE NOCASE",
+                    (gid,),
+                )
+            ]
+    return render_template(
+        "onboarding_import.html",
+        parsed=parsed,
+        text=text if not parsed.error else "",
+        connections=connections,
+        uses=uses,
+        cloud_of=clouds.get,
+        granted=granted,
+    )
 
 
 # -- One client: the link, the email and the pack ----------------------------------------------
@@ -199,9 +259,16 @@ def _send_context(t):
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     result = tenant_health.connection_result(g.db, t["id"])
     row = onboarding.row_for(g.db, t["id"])
-    return {"tenant": t, "connection": connection, "row": row, "state": onboarding.state(t, row, result),
-            "link": client_link(t, connection), "app": onboarding.app_name(connection, result),
-            "cloud": clouds.of(t), "today": datetime.now(UTC)}
+    return {
+        "tenant": t,
+        "connection": connection,
+        "row": row,
+        "state": onboarding.state(t, row, result),
+        "link": client_link(t, connection),
+        "app": onboarding.app_name(connection, result),
+        "cloud": clouds.of(t),
+        "today": datetime.now(UTC),
+    }
 
 
 @bp.get("/<int:tenant_id>")
@@ -211,8 +278,9 @@ def send(tenant_id: int):
     ctx = _send_context(t)
     email = render_template("emails/consent_request.txt", brand=current_brand(), **ctx)
     subject, _, body = email.partition("\n")
-    return render_template("onboarding_send.html", subject=subject.removeprefix("Subject: ").strip(),
-                           body=body.strip(), **ctx)
+    return render_template(
+        "onboarding_send.html", subject=subject.removeprefix("Subject: ").strip(), body=body.strip(), **ctx
+    )
 
 
 @bp.post("/<int:tenant_id>/contact")
@@ -238,8 +306,10 @@ def mark_sent(tenant_id: int):
     t = tenant_or_404(tenant_id)
     sent = request.form.get("sent", "1") == "1"
     onboarding.mark_sent(g.db, [t["id"]], g.user["username"], sent=sent)
-    flash("Marked as sent. The tracker checks for consent every hour from now on." if sent else
-          "Marked as not sent.", "success")
+    flash(
+        "Marked as sent. The tracker checks for consent every hour from now on." if sent else "Marked as not sent.",
+        "success",
+    )
     return redirect(url_for("onboarding.send", tenant_id=t["id"]))
 
 
@@ -265,5 +335,10 @@ def pack(tenant_id: int):
     words = onboarding.CLIENT_WORDS
     permissions = [(p, words[p]) for p in (*GRAPH_PERMISSIONS, *EXCHANGE_PERMISSIONS)]
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "consent pack.pdf")
-    return pdf_response("reports/consent_pack.html", f"approve-office-sentry-{tables.slug(t['name'])}",
-                        permissions=permissions, never=onboarding.NEVER_READS, **ctx)
+    return pdf_response(
+        "reports/consent_pack.html",
+        f"approve-office-sentry-{tables.slug(t['name'])}",
+        permissions=permissions,
+        never=onboarding.NEVER_READS,
+        **ctx,
+    )

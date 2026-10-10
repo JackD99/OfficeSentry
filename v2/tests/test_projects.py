@@ -44,8 +44,14 @@ def test_effort():
     assert projects.Effort(each=1, most=3).hours([user] * 10) == 3
     assert projects.Effort(fixed=0.5).hours([]) == 0.5 and projects.Effort(each=0.5).hours([]) == 0.5
     assert [projects.effort_label(h) for h in (0.5, 1, 4.4, 7.9, 8, 12, 20)] == [
-        "Under an hour", "About 1 hour", "About 4 hours", "About 8 hours", "About 1 day", "About 1½ days",
-        "About 2½ days"]
+        "Under an hour",
+        "About 1 hour",
+        "About 4 hours",
+        "About 8 hours",
+        "About 1 day",
+        "About 1½ days",
+        "About 2½ days",
+    ]
 
 
 def test_seeded_tenant_gets_projects_and_quick_fixes(db, seeded):
@@ -79,13 +85,16 @@ def test_one_small_fix_is_never_a_project(db, seeded, monkeypatch):
     real = projects.evaluate
 
     def only(*keys):
-        monkeypatch.setattr(projects, "evaluate", lambda snap, now: [
-            r for r in real(snap, now) if r.status != "fail" or r.key in keys])
+        monkeypatch.setattr(
+            projects, "evaluate", lambda snap, now: [r for r in real(snap, now) if r.status != "fail" or r.key in keys]
+        )
         return projects.assess(db, store.get_tenant(db, seeded))
 
     found = only("admin_mfa")
     assert found.projects == [] and [q.key for q in found.quick_fixes] == [
-        "admin_mfa", "signal:missing_defender_o365_p1"]
+        "admin_mfa",
+        "signal:missing_defender_o365_p1",
+    ]
     # Enough identity work adds up to a project; the urgent admin fix stays a quick fix.
     found = only("admin_mfa", "legacy_auth_blocked", "admin_phishing_resistant", "users_mfa_registered")
     assert [r.project.key for r in found.projects] == ["identity"]
@@ -102,8 +111,10 @@ def test_no_conditional_access_calls_for_identity_project(db, seeded):
     snap = TenantSnapshot(db, tenant)
     run = snap.runs["conditional_access"]["id"]
     db.execute("DELETE FROM objects WHERE run_id = ? AND kind = 'ca_policy'", (run,))
-    db.execute("INSERT INTO metrics (tenant_id, run_id, key, value, captured_at) VALUES (?, ?, ?, 0, ?)",
-               (seeded, run, "ca.policies_enabled", "2099-01-01T00:00:00Z"))
+    db.execute(
+        "INSERT INTO metrics (tenant_id, run_id, key, value, captured_at) VALUES (?, ?, ?, 0, ?)",
+        (seeded, run, "ca.policies_enabled", "2099-01-01T00:00:00Z"),
+    )
     identity = _recs(db, seeded)["identity"]
     assert identity.reasons[0].title == "No Conditional Access policies"
     assert {r.check for r in identity.reasons} >= {"mfa_enforced", "legacy_auth_blocked"}
@@ -124,8 +135,10 @@ def test_accepted_risks_dont_count(db, seeded):
     tenant = store.get_tenant(db, seeded)
     findings.sync(db, tenant)
     assert "identity" in _recs(db, seeded)
-    for row in db.execute("SELECT id FROM findings WHERE tenant_id = ? AND rule_key IN"
-                          " ('legacy_auth_blocked', 'supported_windows')", (seeded,)).fetchall():
+    for row in db.execute(
+        "SELECT id FROM findings WHERE tenant_id = ? AND rule_key IN ('legacy_auth_blocked', 'supported_windows')",
+        (seeded,),
+    ).fetchall():
         findings.accept(db, row["id"], "ann", "Being replaced next month", None)
     found = projects.assess(db, tenant)
     # Without legacy authentication to block, what's left of identity is under half a day: quick fixes.
@@ -174,14 +187,16 @@ def test_pages(client, db, seeded, two_tenants):
     page = client.get(f"/tenants/{seeded}/projects").get_data(as_text=True)
     assert "Legacy authentication is allowed" in page and "About 6 hours" in page
     assert f"/tenants/{seeded}/findings#check-legacy_auth_blocked" in page
-    quick = page[page.index('id="quick-fixes"'):]
+    quick = page[page.index('id="quick-fixes"') :]
     assert "Every admin has MFA registered" in quick and "Have each listed admin register a strong method" in quick
     assert f"/tenants/{seeded}/findings#check-admin_mfa" in quick
     resp = client.post(f"/tenants/{seeded}/projects/identity", data={"status": "proposed", "note": "Quote sent"})
     assert resp.status_code == 302 and resp.headers["Location"].endswith("#project-identity")
     assert "Quote sent" in client.get(f"/tenants/{seeded}/projects").get_data(as_text=True)
-    resp = client.post(f"/tenants/{seeded}/projects/email_security",
-                       data={"status": "declined", "back": "all", "project": "email_security"})
+    resp = client.post(
+        f"/tenants/{seeded}/projects/email_security",
+        data={"status": "declined", "back": "all", "project": "email_security"},
+    )
     assert resp.headers["Location"].endswith("/projects?project=email_security")
     assert "Alpha Ltd" in client.get("/projects?view=declined").get_data(as_text=True)
     audit = db.execute("SELECT detail FROM audit_log WHERE action = 'project_status_changed'").fetchall()
@@ -224,14 +239,25 @@ def test_merged_projects_keep_their_statuses(db, two_tenants):
     from officesentry.db import _split_statements, migration_files
 
     alpha, bravo = two_tenants
-    rows = [(alpha, "admin_hardening", "agreed", "Keys ordered"), (alpha, "identity", "proposed", "Quote sent"),
-            (bravo, "teams_governance", "declined", ""), (bravo, "storage", "proposed", "")]
-    db.executemany("INSERT INTO project_status (tenant_id, project_key, status, note, updated_by, updated_at)"
-                   " VALUES (?, ?, ?, ?, 'ann', '2026-10-01T00:00:00Z')", rows)
+    rows = [
+        (alpha, "admin_hardening", "agreed", "Keys ordered"),
+        (alpha, "identity", "proposed", "Quote sent"),
+        (bravo, "teams_governance", "declined", ""),
+        (bravo, "storage", "proposed", ""),
+    ]
+    db.executemany(
+        "INSERT INTO project_status (tenant_id, project_key, status, note, updated_by, updated_at)"
+        " VALUES (?, ?, ?, ?, 'ann', '2026-10-01T00:00:00Z')",
+        rows,
+    )
     path = dict(migration_files())[28]
     for stmt in _split_statements(path.read_text(encoding="utf-8")):
         db.execute(stmt)
-    got = {(r["tenant_id"], r["project_key"]): (r["status"], r["note"])
-           for r in db.execute("SELECT * FROM project_status")}
-    assert got == {(alpha, "identity"): ("proposed", "Quote sent Keys ordered"),
-                   (bravo, "external_sharing"): ("declined", ""), (bravo, "storage"): ("proposed", "")}
+    got = {
+        (r["tenant_id"], r["project_key"]): (r["status"], r["note"]) for r in db.execute("SELECT * FROM project_status")
+    }
+    assert got == {
+        (alpha, "identity"): ("proposed", "Quote sent Keys ordered"),
+        (bravo, "external_sharing"): ("declined", ""),
+        (bravo, "storage"): ("proposed", ""),
+    }

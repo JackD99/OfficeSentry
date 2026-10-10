@@ -26,8 +26,13 @@ def serve(cfg: Config, host: str = "127.0.0.1", port: int = 8000, threads: int =
 
     from gunicorn.app.base import BaseApplication
 
-    options = {"bind": f"{host}:{port}", "workers": workers, "threads": max(1, threads // workers),
-               "timeout": 120, "accesslog": "-"}
+    options = {
+        "bind": f"{host}:{port}",
+        "workers": workers,
+        "threads": max(1, threads // workers),
+        "timeout": 120,
+        "accesslog": "-",
+    }
 
     class Gunicorn(BaseApplication):
         def load_config(self):

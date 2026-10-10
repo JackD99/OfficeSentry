@@ -12,15 +12,20 @@ GROUP_FIELDS = (
 )
 OWNER_FIELDS = "id,displayName,userPrincipalName,accountEnabled,userType"
 MEMBER_FIELDS = "id,userType,accountEnabled,userPrincipalName,mail"
-GROUP_LIMIT = 1000     # Microsoft 365 groups whose owners and members are read (two or more calls each)
-MEMBER_PAGES = 100     # 999 members a page
-OWNERS_KEPT = 20       # owner names stored per group; the counts are always complete
-GUESTS_KEPT = 50       # guest addresses stored per group
+GROUP_LIMIT = 1000  # Microsoft 365 groups whose owners and members are read (two or more calls each)
+MEMBER_PAGES = 100  # 999 members a page
+OWNERS_KEPT = 20  # owner names stored per group; the counts are always complete
+GUESTS_KEPT = 50  # guest addresses stored per group
 MEMBER_IDS_KEPT = 5000  # member object IDs stored per group, for each person's page
 
 # Microsoft's defaults when the tenant has never saved a Group.Unified setting.
-DEFAULT_SETTINGS = {"EnableGroupCreation": True, "GroupCreationAllowedGroupId": "", "AllowGuestsToAccessGroups": True,
-                    "AllowToAddGuests": True, "UsageGuidelinesUrl": ""}
+DEFAULT_SETTINGS = {
+    "EnableGroupCreation": True,
+    "GroupCreationAllowedGroupId": "",
+    "AllowGuestsToAccessGroups": True,
+    "AllowToAddGuests": True,
+    "UsageGuidelinesUrl": "",
+}
 
 
 def group_kind(group: dict) -> str:
@@ -44,18 +49,24 @@ def _summary(group: dict) -> dict:
         "dynamic": "DynamicMembership" in (group.get("groupTypes") or []) or bool(group.get("membershipRule")),
         "synced": bool(group.get("onPremisesSyncEnabled")),
         # Licences the group gives its members (group-based licensing).
-        "licenceSkuIds": [lic.get("skuId") for lic in group.get("assignedLicenses") or []
-                          if isinstance(lic, dict) and lic.get("skuId")],
+        "licenceSkuIds": [
+            lic.get("skuId")
+            for lic in group.get("assignedLicenses") or []
+            if isinstance(lic, dict) and lic.get("skuId")
+        ],
         "examined": False,
     }
 
 
 def _owner(o: dict) -> dict:
     kind = (o.get("@odata.type") or "").rsplit(".", 1)[-1] or "unknown"
-    return {"name": o.get("displayName") or o.get("userPrincipalName") or o.get("id"),
-            "upn": o.get("userPrincipalName"), "type": kind,
-            # An enabled user account: an app or a disabled leaver can't look after a group.
-            "enabled": kind == "user" and o.get("accountEnabled") is not False}
+    return {
+        "name": o.get("displayName") or o.get("userPrincipalName") or o.get("id"),
+        "upn": o.get("userPrincipalName"),
+        "type": kind,
+        # An enabled user account: an app or a disabled leaver can't look after a group.
+        "enabled": kind == "user" and o.get("accountEnabled") is not False,
+    }
 
 
 def _setting_value(value) -> bool | str:
@@ -67,18 +78,24 @@ def _setting_value(value) -> bool | str:
 class Groups(Collector):
     key = "groups"
     title = "Groups and Teams"
-    description = ("Every group, the owners, members and guests of each team and Microsoft 365 group, "
-                   "who can create them and whether unused ones expire.")
+    description = (
+        "Every group, the owners, members and guests of each team and Microsoft 365 group, "
+        "who can create them and whether unused ones expire."
+    )
     permissions = ("Directory.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
         groups = ctx.paged(ctx.graph.get_all("/groups", params={"$select": GROUP_FIELDS, "$top": "999"}))
         rows = {g["id"]: _summary(g) for g in groups}
-        m365 = sorted((gid for gid, g in rows.items() if g["kind"] == "microsoft365"),
-                      key=lambda gid: (not rows[gid]["isTeam"], (rows[gid]["displayName"] or "").lower()))
+        m365 = sorted(
+            (gid for gid, g in rows.items() if g["kind"] == "microsoft365"),
+            key=lambda gid: (not rows[gid]["isTeam"], (rows[gid]["displayName"] or "").lower()),
+        )
         if len(m365) > GROUP_LIMIT:
-            ctx.warn(f"Read owners and members for the first {GROUP_LIMIT} of {len(m365)} teams and Microsoft 365 "
-                     "groups (teams first)")
+            ctx.warn(
+                f"Read owners and members for the first {GROUP_LIMIT} of {len(m365)} teams and Microsoft 365 "
+                "groups (teams first)"
+            )
         for gid in m365[:GROUP_LIMIT]:
             try:
                 rows[gid].update(self._people(ctx, gid))
@@ -101,12 +118,20 @@ class Groups(Collector):
 
     @staticmethod
     def _people(ctx: RunContext, gid: str) -> dict:
-        owners = [_owner(o) for o in ctx.paged(ctx.graph.get_all(
-            f"/groups/{gid}/owners", params={"$select": OWNER_FIELDS, "$top": "999"}))]
-        members = ctx.paged(ctx.graph.get_all(f"/groups/{gid}/members", params={
-            "$select": MEMBER_FIELDS, "$top": "999"}, max_pages=MEMBER_PAGES))
-        guests = sorted(m.get("mail") or m.get("userPrincipalName") or m["id"] for m in members
-                        if m.get("userType") == "Guest")
+        owners = [
+            _owner(o)
+            for o in ctx.paged(
+                ctx.graph.get_all(f"/groups/{gid}/owners", params={"$select": OWNER_FIELDS, "$top": "999"})
+            )
+        ]
+        members = ctx.paged(
+            ctx.graph.get_all(
+                f"/groups/{gid}/members", params={"$select": MEMBER_FIELDS, "$top": "999"}, max_pages=MEMBER_PAGES
+            )
+        )
+        guests = sorted(
+            m.get("mail") or m.get("userPrincipalName") or m["id"] for m in members if m.get("userType") == "Guest"
+        )
         return {
             "examined": True,
             "ownerCount": len(owners),
@@ -130,19 +155,32 @@ class Groups(Collector):
         unified = next((s for s in settings if s.get("displayName") == "Group.Unified"), None)
         values = dict(DEFAULT_SETTINGS)
         if unified is not None:
-            values.update({v["name"]: _setting_value(v.get("value")) for v in unified.get("values") or []
-                           if v.get("name") in DEFAULT_SETTINGS})
+            values.update(
+                {
+                    v["name"]: _setting_value(v.get("value"))
+                    for v in unified.get("values") or []
+                    if v.get("name") in DEFAULT_SETTINGS
+                }
+            )
         allowed = values["GroupCreationAllowedGroupId"] or None
-        ctx.objects("group_settings", [("Group.Unified", {
-            "available": True,
-            "source": "tenant" if unified is not None else "default",
-            "enableGroupCreation": values["EnableGroupCreation"] is not False,
-            "allowedGroupId": allowed,
-            "allowedGroupName": (rows.get(allowed) or {}).get("displayName") if allowed else None,
-            "allowGuestsToAccessGroups": values["AllowGuestsToAccessGroups"] is not False,
-            "allowToAddGuests": values["AllowToAddGuests"] is not False,
-            "usageGuidelinesUrl": values["UsageGuidelinesUrl"] or None,
-        })])
+        ctx.objects(
+            "group_settings",
+            [
+                (
+                    "Group.Unified",
+                    {
+                        "available": True,
+                        "source": "tenant" if unified is not None else "default",
+                        "enableGroupCreation": values["EnableGroupCreation"] is not False,
+                        "allowedGroupId": allowed,
+                        "allowedGroupName": (rows.get(allowed) or {}).get("displayName") if allowed else None,
+                        "allowGuestsToAccessGroups": values["AllowGuestsToAccessGroups"] is not False,
+                        "allowToAddGuests": values["AllowToAddGuests"] is not False,
+                        "usageGuidelinesUrl": values["UsageGuidelinesUrl"] or None,
+                    },
+                )
+            ],
+        )
 
     @staticmethod
     def _expiration(ctx: RunContext) -> None:
@@ -153,9 +191,17 @@ class Groups(Collector):
             ctx.objects("expiration_policy", [("expiration", {"available": False})])
             return
         policy = policies[0] if policies else {}
-        ctx.objects("expiration_policy", [("expiration", {
-            "available": True,
-            "managedGroupTypes": policy.get("managedGroupTypes") or "None",
-            "groupLifetimeInDays": policy.get("groupLifetimeInDays"),
-            "alternateNotificationEmails": policy.get("alternateNotificationEmails") or None,
-        })])
+        ctx.objects(
+            "expiration_policy",
+            [
+                (
+                    "expiration",
+                    {
+                        "available": True,
+                        "managedGroupTypes": policy.get("managedGroupTypes") or "None",
+                        "groupLifetimeInDays": policy.get("groupLifetimeInDays"),
+                        "alternateNotificationEmails": policy.get("alternateNotificationEmails") or None,
+                    },
+                )
+            ],
+        )

@@ -89,6 +89,9 @@ SECTIONS = [
         Doc("SECURITY.md", "security", "Security",
             blurb="The security model, and how to report a vulnerability privately."),
         Doc("CHANGELOG.md", "changelog", "What's new", blurb="What changed in each release."),
+        Doc("ROADMAP.md", "roadmap", "Roadmap", blurb="What's planned next, and what's out of scope."),
+        Doc("DEVELOPING.md", "developing", "Developer guide",
+            blurb="Running it locally, how it fits together, tests and simulated Microsoft responses."),
         Doc("CONTRIBUTING.md", "contributing", "Contributing",
             blurb="Setting up for development, and how changes are built and checked."),
     ]),
@@ -283,9 +286,11 @@ def example_title(name: str) -> str:
 
 
 def version() -> str:
-    """The newest released version in CHANGELOG.md, if there is one."""
-    found = re.search(r"^## \[?v?(\d+\.\d+\.\d+)\]?", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M)
-    return found[1] if found else ""
+    """The newest released version in CHANGELOG.md, if there is one (not the "unreleased" section above it)."""
+    for found in re.finditer(r"^## \[?v?(\d+\.\d+\.\d+)\]?(.*)$", (ROOT / "CHANGELOG.md").read_text("utf-8"), re.M):
+        if "unreleased" not in found[2].lower():
+            return found[1]
+    return ""
 
 
 # -- Build ----------------------------------------------------------------------------------------------------

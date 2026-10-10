@@ -18,8 +18,9 @@ PASSWORD_HASH = generate_password_hash(PASSWORD, method="pbkdf2:sha256:1")
 def pytest_addoption(parser):
     # tests/browser: screenshots and accessibility in a real browser (tests/browser/README.md).
     parser.addoption("--ui", action="store_true", help="run the browser tests in tests/browser")
-    parser.addoption("--update", action="store_true",
-                     help="with --ui or --nightly: save new screenshot or PDF page baselines")
+    parser.addoption(
+        "--update", action="store_true", help="with --ui or --nightly: save new screenshot or PDF page baselines"
+    )
     parser.addoption("--save-all", action="store_true", help="with --ui: save every capture in tests/browser/output")
     # tests/nightly: release upgrades, PDF snapshots and the 200-tenant timing run (tests/nightly/README.md).
     parser.addoption("--nightly", action="store_true", help="run the slow scheduled suite in tests/nightly")
@@ -48,8 +49,9 @@ def cfg(tmp_path, monkeypatch):
         monkeypatch.delenv("OFFICESENTRY_" + var, raising=False)
     # Two-step sign-in is off here so other tests can sign in with a password;
     # tests/test_login_security.py turns it on.
-    return load_config(data_dir=tmp_path / "data", testing=True, secure_cookies=False, require_mfa="off",
-                       extra={"disable_csrf": True})
+    return load_config(
+        data_dir=tmp_path / "data", testing=True, secure_cookies=False, require_mfa="off", extra={"disable_csrf": True}
+    )
 
 
 @pytest.fixture
@@ -91,8 +93,9 @@ def login(client, username, password=PASSWORD):
 
 @pytest.fixture
 def connection_id(db, vault):
-    cid = store.create_connection(db, vault, "Test app", generate_certificate("test"),
-                                  client_id="11111111-2222-3333-4444-555555555555")
+    cid = store.create_connection(
+        db, vault, "Test app", generate_certificate("test"), client_id="11111111-2222-3333-4444-555555555555"
+    )
     return cid
 
 

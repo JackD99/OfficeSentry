@@ -44,8 +44,17 @@ SMTP_KEYS = ("smtp_host", "smtp_port", "smtp_security", "smtp_user", "smtp_passw
 GRAPH_KEYS = ("graph_tenant", "graph_client_id", "graph_secret_enc", "graph_sender")
 # The mail app's certificate (made by Office Sentry; only the public part is ever downloaded), its cloud,
 # when the admin confirmed it's limited to one mailbox, and the last expiry warning sent for it.
-GRAPH_CERT_KEYS = ("graph_auth", "graph_cert_pem", "graph_key_enc", "graph_thumbprint", "graph_cert_not_after",
-                   "graph_cloud", "graph_scoped_at", "graph_scoped_by", "graph_cert_warned")
+GRAPH_CERT_KEYS = (
+    "graph_auth",
+    "graph_cert_pem",
+    "graph_key_enc",
+    "graph_thumbprint",
+    "graph_cert_not_after",
+    "graph_cloud",
+    "graph_scoped_at",
+    "graph_scoped_by",
+    "graph_cert_warned",
+)
 SETTING_KEYS = ("mail_transport", "msp_name", *SMTP_KEYS, *GRAPH_KEYS, *GRAPH_CERT_KEYS)
 ENCRYPTED_KEYS = ("smtp_password_enc", "graph_secret_enc", "graph_key_enc")
 
@@ -114,8 +123,9 @@ def graph_cloud(settings: dict) -> clouds.Cloud:
 
 def is_configured(settings: dict) -> bool:
     if transport(settings) == "graph":
-        credential = ("graph_key_enc", "graph_thumbprint") if graph_auth(settings) == "certificate" \
-            else ("graph_secret_enc",)
+        credential = (
+            ("graph_key_enc", "graph_thumbprint") if graph_auth(settings) == "certificate" else ("graph_secret_enc",)
+        )
         return all(settings.get(k) for k in ("graph_tenant", "graph_client_id", "graph_sender", *credential))
     return bool(settings.get("smtp_host") and settings.get("smtp_from"))
 
@@ -169,8 +179,14 @@ def to_mime(email: Email, sender: str) -> EmailMessage:
             html_part = msg.get_body(("html",))
             for cid, mimetype, data in email.inline:
                 maintype, subtype = mimetype.split("/", 1)
-                html_part.add_related(data, maintype=maintype, subtype=subtype, cid=f"<{cid}>",
-                                      disposition="inline", filename=f"{cid}.{subtype}")
+                html_part.add_related(
+                    data,
+                    maintype=maintype,
+                    subtype=subtype,
+                    cid=f"<{cid}>",
+                    disposition="inline",
+                    filename=f"{cid}.{subtype}",
+                )
     for filename, mimetype, data in email.attachments:
         maintype, subtype = mimetype.split("/", 1)
         msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
@@ -205,8 +221,10 @@ def _send_smtp(s: dict, vault, email: Email) -> None:
             if security == "starttls":
                 server.starttls(context=context)
             if s.get("smtp_user") and security == "none" and not is_loopback(s["smtp_host"]):
-                raise MailError("Office Sentry won't send the mail server password unencrypted. Choose STARTTLS "
-                                "or SSL/TLS under Email delivery, or remove the username for a relay without sign-in")
+                raise MailError(
+                    "Office Sentry won't send the mail server password unencrypted. Choose STARTTLS "
+                    "or SSL/TLS under Email delivery, or remove the username for a relay without sign-in"
+                )
             if s.get("smtp_user"):
                 password = vault.decrypt(s["smtp_password_enc"]) if s.get("smtp_password_enc") else ""
                 server.login(s["smtp_user"], password)
@@ -236,31 +254,38 @@ def _graph_token(s: dict, vault) -> str:
     else:
         secret = vault.decrypt(s["graph_secret_enc"])
         credential = f"secret|{secret}"
-    cache_key = hashlib.sha256(f"{cloud.key}|{s['graph_tenant']}|{s['graph_client_id']}|{credential}".encode()
-                               ).hexdigest()
+    cache_key = hashlib.sha256(
+        f"{cloud.key}|{s['graph_tenant']}|{s['graph_client_id']}|{credential}".encode()
+    ).hexdigest()
     provider = _token_providers.get(cache_key)
     if provider is None:
         if graph_auth(s) == "certificate":
-            provider = certificate_token_provider(s["graph_tenant"], s["graph_client_id"], key_pem,
-                                                  s["graph_thumbprint"], cloud.graph, cloud.key)
+            provider = certificate_token_provider(
+                s["graph_tenant"], s["graph_client_id"], key_pem, s["graph_thumbprint"], cloud.graph, cloud.key
+            )
         else:
-            provider = secret_token_provider(s["graph_tenant"], s["graph_client_id"], secret, cloud.graph,
-                                             cloud.key)
+            provider = secret_token_provider(s["graph_tenant"], s["graph_client_id"], secret, cloud.graph, cloud.key)
         _token_providers[cache_key] = provider
     try:
         return provider()
     except TokenError as exc:
-        what = "certificate (upload the .cer from Email delivery to the mail app)" \
-            if graph_auth(s) == "certificate" else "client secret"
-        raise MailError(f"Couldn't sign in to Microsoft 365 to send mail ({exc.code}). "
-                        f"Check the tenant ID, client ID and {what}.") from exc
+        what = (
+            "certificate (upload the .cer from Email delivery to the mail app)"
+            if graph_auth(s) == "certificate"
+            else "client secret"
+        )
+        raise MailError(
+            f"Couldn't sign in to Microsoft 365 to send mail ({exc.code}). Check the tenant ID, client ID and {what}."
+        ) from exc
 
 
 def graph_payload(email: Email) -> dict:
     size = sum(len(data) for _, _, data in email.attachments + email.inline)
     if size > GRAPH_MAX_ATTACHMENT_BYTES:
-        raise MailError(f"The attachments are {size / 1_000_000:.1f} MB, more than Microsoft 365 accepts in one "
-                        "message (about 3 MB). Turn off spreadsheets, send fewer reports, or use an SMTP server.")
+        raise MailError(
+            f"The attachments are {size / 1_000_000:.1f} MB, more than Microsoft 365 accepts in one "
+            "message (about 3 MB). Turn off spreadsheets, send fewer reports, or use an SMTP server."
+        )
 
     def addr(a):
         return {"emailAddress": {"address": a}}
@@ -271,13 +296,23 @@ def graph_payload(email: Email) -> dict:
         "toRecipients": [addr(a) for a in email.to],
         "bccRecipients": [addr(a) for a in email.bcc],
         "attachments": [
-            {"@odata.type": "#microsoft.graph.fileAttachment", "name": name, "contentType": mimetype,
-             "contentBytes": base64.b64encode(data).decode()}
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": name,
+                "contentType": mimetype,
+                "contentBytes": base64.b64encode(data).decode(),
+            }
             for name, mimetype, data in email.attachments
-        ] + [
-            {"@odata.type": "#microsoft.graph.fileAttachment", "name": f"{cid}.{mimetype.split('/')[-1]}",
-             "contentType": mimetype, "contentBytes": base64.b64encode(data).decode(), "isInline": True,
-             "contentId": cid}
+        ]
+        + [
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": f"{cid}.{mimetype.split('/')[-1]}",
+                "contentType": mimetype,
+                "contentBytes": base64.b64encode(data).decode(),
+                "isInline": True,
+                "contentId": cid,
+            }
             for cid, mimetype, data in (email.inline if email.html else [])
         ],
     }
@@ -300,11 +335,14 @@ def _send_graph(s: dict, vault, email: Email) -> None:
     except ValueError:
         code, message = "", resp.text[:200]
     if resp.status_code in (401, 403):
-        hint = ("The mail app needs the Mail.Send application permission with admin consent, "
-                "and must be allowed to send as this mailbox.")
+        hint = (
+            "The mail app needs the Mail.Send application permission with admin consent, "
+            "and must be allowed to send as this mailbox."
+        )
     elif resp.status_code == 404 or code in ("ErrorInvalidUser", "MailboxNotEnabledForRESTAPI"):
         hint = f"Check that {s['graph_sender']} is a mailbox in your tenant."
     else:
         hint = ""
-    raise MailError(" ".join(p for p in (f"Microsoft 365 refused to send ({resp.status_code} {code}).",
-                                         message[:200], hint) if p))
+    raise MailError(
+        " ".join(p for p in (f"Microsoft 365 refused to send ({resp.status_code} {code}).", message[:200], hint) if p)
+    )

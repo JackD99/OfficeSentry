@@ -14,14 +14,24 @@ def hours_ago(n: float) -> str:
 
 
 # Entra Connect with password hash sync, last run 20 minutes ago.
-ORGANIZATION = {**gd.ORGANIZATION, "onPremisesSyncEnabled": True,
-                "onPremisesLastSyncDateTime": hours_ago(0.3), "onPremisesLastPasswordSyncDateTime": hours_ago(0.3)}
+ORGANIZATION = {
+    **gd.ORGANIZATION,
+    "onPremisesSyncEnabled": True,
+    "onPremisesLastSyncDateTime": hours_ago(0.3),
+    "onPremisesLastPasswordSyncDateTime": hours_ago(0.3),
+}
 
 
 def _domain(name, auth="Managed", default=False, services=("Email",), expiry=2147483647):
-    return {"id": name, "authenticationType": auth, "isVerified": True, "isDefault": default,
-            "supportedServices": list(services), "passwordValidityPeriodInDays": expiry,
-            "passwordNotificationWindowInDays": 14}
+    return {
+        "id": name,
+        "authenticationType": auth,
+        "isVerified": True,
+        "isDefault": default,
+        "supportedServices": list(services),
+        "passwordValidityPeriodInDays": expiry,
+        "passwordNotificationWindowInDays": 14,
+    }
 
 
 DOMAINS = [
@@ -38,10 +48,16 @@ HYBRID_DOMAINS = [
 
 
 def _user(uid, name, upn, synced, user_type="Member", enabled=True):
-    return {"id": uid, "displayName": name, "userPrincipalName": upn, "userType": user_type,
-            "accountEnabled": enabled, "assignedLicenses": [{"skuId": "sku-bp"}] if user_type == "Member" else [],
-            "onPremisesSyncEnabled": True if synced else None,
-            "signInActivity": {"lastSignInDateTime": hours_ago(24)}}
+    return {
+        "id": uid,
+        "displayName": name,
+        "userPrincipalName": upn,
+        "userType": user_type,
+        "accountEnabled": enabled,
+        "assignedLicenses": [{"skuId": "sku-bp"}] if user_type == "Member" else [],
+        "onPremisesSyncEnabled": True if synced else None,
+        "signInActivity": {"lastSignInDateTime": hours_ago(24)},
+    }
 
 
 # Ann (Global Administrator) and Eve (eligible Global Administrator) come from AD;

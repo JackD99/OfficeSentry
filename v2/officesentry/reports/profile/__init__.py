@@ -38,5 +38,21 @@ from .page import build, find_user  # noqa: F401
 from .timeline import TIMELINE_DAYS, TIMELINE_LIMIT  # noqa: F401
 
 # Every module of the package, for ``user_profile``.
-MODULES = ("base", "page", "history", "directory", "apps", "devices", "groups", "leavers", "licences", "mailbox", "mfa",
-           "onedrive", "roles", "sign_ins", "timeline", "usage")
+MODULES = (
+    "base",
+    "page",
+    "history",
+    "directory",
+    "apps",
+    "devices",
+    "groups",
+    "leavers",
+    "licences",
+    "mailbox",
+    "mfa",
+    "onedrive",
+    "roles",
+    "sign_ins",
+    "timeline",
+    "usage",
+)

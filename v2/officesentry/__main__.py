@@ -112,11 +112,18 @@ def unregistered_encrypted(conn) -> list[str]:
     known = {(t, c) for t, _k, c in ENCRYPTED_COLUMNS}
     found = []
     for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
-        found += [f"{table}.{c['name']}" for c in conn.execute(f"PRAGMA table_info({table})").fetchall()
-                  if c["name"].endswith("_enc") and (table, c["name"]) not in known]
-    found += [f"settings {r[0]}" for r in conn.execute(
-        "SELECT key FROM settings WHERE key LIKE '%\\_enc' ESCAPE '\\' AND value <> ''").fetchall()
-        if r[0] not in ENCRYPTED_SETTINGS]
+        found += [
+            f"{table}.{c['name']}"
+            for c in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            if c["name"].endswith("_enc") and (table, c["name"]) not in known
+        ]
+    found += [
+        f"settings {r[0]}"
+        for r in conn.execute(
+            "SELECT key FROM settings WHERE key LIKE '%\\_enc' ESCAPE '\\' AND value <> ''"
+        ).fetchall()
+        if r[0] not in ENCRYPTED_SETTINGS
+    ]
     return found
 
 
@@ -129,8 +136,11 @@ def reencrypt_all(conn, vault) -> int:
     count = 0
     with transaction(conn, immediate=True):
         if missing := unregistered_encrypted(conn):
-            raise RuntimeError("rotate-keys doesn't know how to re-encrypt " + ", ".join(missing)
-                               + "; add it to ENCRYPTED_COLUMNS or ENCRYPTED_SETTINGS. Nothing was changed.")
+            raise RuntimeError(
+                "rotate-keys doesn't know how to re-encrypt "
+                + ", ".join(missing)
+                + "; add it to ENCRYPTED_COLUMNS or ENCRYPTED_SETTINGS. Nothing was changed."
+            )
         for table, key, column in ENCRYPTED_COLUMNS:
             rows = conn.execute(f"SELECT {key}, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")
             for row in rows.fetchall():
@@ -138,8 +148,9 @@ def reencrypt_all(conn, vault) -> int:
                 count += 1
         # Mail passwords and secrets, and the alert webhook, are encrypted with the same keys.
         secrets = conn.execute(
-            f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(ENCRYPTED_SETTINGS))})"
-            " AND value <> ''", ENCRYPTED_SETTINGS).fetchall()
+            f"SELECT key, value FROM settings WHERE key IN ({','.join('?' * len(ENCRYPTED_SETTINGS))}) AND value <> ''",
+            ENCRYPTED_SETTINGS,
+        ).fetchall()
         for row in secrets:
             conn.execute("UPDATE settings SET value = ? WHERE key = ?", (vault.rotate(row["value"]), row["key"]))
             count += 1
@@ -159,9 +170,11 @@ def cmd_rotate_keys(args, cfg):
     if args.new:
         from_env = bool(os.environ.get("OFFICESENTRY_SECRET_KEY") or os.environ.get("OFFICESENTRY_ENCRYPTION_KEYS"))
         if from_env:
-            sys.exit("Your keys come from environment variables, so change them there: put a new key first in "
-                     "OFFICESENTRY_ENCRYPTION_KEYS (keep the old one after it), run rotate-keys, then remove the "
-                     "old key. Set a new OFFICESENTRY_SECRET_KEY to sign everyone out.")
+            sys.exit(
+                "Your keys come from environment variables, so change them there: put a new key first in "
+                "OFFICESENTRY_ENCRYPTION_KEYS (keep the old one after it), run rotate-keys, then remove the "
+                "old key. Set a new OFFICESENTRY_SECRET_KEY to sign everyone out."
+            )
         fresh = new_secrets()
         keys = fresh["encryption_keys"] + keys
         # Saved next to the old keys before anything is re-encrypted, so a crash or a failed write part way
@@ -173,12 +186,16 @@ def cmd_rotate_keys(args, cfg):
         sys.exit(str(exc))
     if args.new:
         # Only now the data is readable with the new key alone is the old one dropped.
-        write_private(cfg.secrets_path, json.dumps({"secret_key": fresh["secret_key"],
-                                                    "encryption_keys": fresh["encryption_keys"]}))
+        write_private(
+            cfg.secrets_path,
+            json.dumps({"secret_key": fresh["secret_key"], "encryption_keys": fresh["encryption_keys"]}),
+        )
         conn.execute("DELETE FROM sessions")
         audit(conn, "cli", "keys_rotated", detail=f"{plural(count, 'value')} re-encrypted")
-        print(f"New keys written to {cfg.secrets_path} and {plural(count, 'value')} re-encrypted. "
-              "Restart the web and worker processes; everyone will need to sign in again.")
+        print(
+            f"New keys written to {cfg.secrets_path} and {plural(count, 'value')} re-encrypted. "
+            "Restart the web and worker processes; everyone will need to sign in again."
+        )
         return
     audit(conn, "cli", "keys_reencrypted", detail=plural(count, "value"))
     print(f"Re-encrypted {plural(count, 'value')}. Old keys can now be removed from the configuration.")
@@ -218,8 +235,10 @@ def cmd_backup(args, cfg):
         raise
     record_status(cfg.data_dir, "local", True, file=dest)
     print(f"Saved {dest}" + (f" (removed {plural(len(old), 'older backup')})" if old else ""))
-    print("Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
-          " without it the stored certificates can't be decrypted.")
+    print(
+        "Also keep a copy of secrets.json (or your OFFICESENTRY_ENCRYPTION_KEYS) somewhere safe:"
+        " without it the stored certificates can't be decrypted."
+    )
 
 
 def cmd_restore(args, cfg):
@@ -251,8 +270,10 @@ def cmd_restore(args, cfg):
         print(f"Put back {plural(result['events'], 'missing activity history file')} from the backup folder.")
     if result["version"] < latest_version():
         print(f"It's upgraded to version {latest_version()} when the portal starts.")
-    print("Put back the secrets.json (or OFFICESENTRY_ENCRYPTION_KEYS) from the same time as the backup, "
-          "then start the portal and the worker.")
+    print(
+        "Put back the secrets.json (or OFFICESENTRY_ENCRYPTION_KEYS) from the same time as the backup, "
+        "then start the portal and the worker."
+    )
 
 
 def cmd_backup_status(args, cfg):
@@ -276,8 +297,10 @@ def cmd_backup_status(args, cfg):
         if job.get("ok"):
             print(f"{label}: OK at {job.get('last_attempt')}" + (f" ({job['detail']})" if job.get("detail") else ""))
         else:
-            print(f"{label}: FAILED at {job.get('last_attempt')} "
-                  f"(last worked {job.get('last_success') or 'never'}): {job.get('error') or 'no details'}")
+            print(
+                f"{label}: FAILED at {job.get('last_attempt')} "
+                f"(last worked {job.get('last_success') or 'never'}): {job.get('error') or 'no details'}"
+            )
 
 
 def cmd_check_backup(args, cfg):
@@ -295,12 +318,13 @@ def cmd_check_backup(args, cfg):
             record_status(cfg.data_dir, "restore_check", False, f"{source.name}: {exc}")
         sys.exit(f"Check failed: {exc}")
     newest = (found["newest_run"] or "none")[:16].replace("T", " ")
-    summary = (f"database version {found['version']}, {plural(found['tenants'], 'tenant')}, "
-               f"newest collection {newest}")
+    summary = f"database version {found['version']}, {plural(found['tenants'], 'tenant')}, newest collection {newest}"
     if args.record:
         record_status(cfg.data_dir, "restore_check", True, detail=f"{source.name}: {summary}")
-    print(f"OK: {source.name} opens and passes SQLite's integrity check; {summary}, "
-          f"{found['bytes'] / 2**20:,.1f} MB unpacked.")
+    print(
+        f"OK: {source.name} opens and passes SQLite's integrity check; {summary}, "
+        f"{found['bytes'] / 2**20:,.1f} MB unpacked."
+    )
 
 
 def cmd_compact(args, cfg):
@@ -345,16 +369,22 @@ def cmd_history(args, cfg):
                 print("Nothing to record: every run with a snapshot is in the daily history.")
                 return
             free = shutil.disk_usage(cfg.db_path.parent).free
-            print(f"Dry run, nothing written. {plural(est.pending, 'run')} ({est.pending_objects:,} objects) to "
-                  f"record; sampled {plural(est.sampled_sources, 'data source')} ({est.share:.0%} of the objects) "
-                  f"in {_duration(est.seconds)}.")
+            print(
+                f"Dry run, nothing written. {plural(est.pending, 'run')} ({est.pending_objects:,} objects) to "
+                f"record; sampled {plural(est.sampled_sources, 'data source')} ({est.share:.0%} of the objects) "
+                f"in {_duration(est.seconds)}."
+            )
             print(f"  Room needed: about {_size(est.total_bytes)}; {_size(free)} free next to the database.")
-            print(f"  Time: about {_duration(est.total_seconds)} with `history --backfill`, or about "
-                  f"{_duration(est.total_seconds * 60 / state_history.SECONDS_PER_TICK)} in the worker's background "
-                  f"({state_history.SECONDS_PER_TICK:.0f} seconds a minute).")
+            print(
+                f"  Time: about {_duration(est.total_seconds)} with `history --backfill`, or about "
+                f"{_duration(est.total_seconds * 60 / state_history.SECONDS_PER_TICK)} in the worker's background "
+                f"({state_history.SECONDS_PER_TICK:.0f} seconds a minute)."
+            )
             if est.total_bytes * 2 > free:
-                print("  There isn't twice that room free: free some disk space first. The worker pauses the "
-                      "backfill while the disk is over 85% full.")
+                print(
+                    "  There isn't twice that room free: free some disk space first. The worker pauses the "
+                    "backfill while the disk is over 85% full."
+                )
             return
         if args.backfill:
             if not state_history.room(conn):
@@ -365,8 +395,10 @@ def cmd_history(args, cfg):
                 print(f"  {n:,} runs recorded ({_duration(time.monotonic() - started)})", flush=True)
 
             done, finished = state_history.catch_up(conn, seconds=None, report=progress)
-            print(f"Recorded {plural(done, 'run')} in {_duration(time.monotonic() - started)}."
-                  + ("" if finished else " Some runs are still queued or running; the worker records them."))
+            print(
+                f"Recorded {plural(done, 'run')} in {_duration(time.monotonic() - started)}."
+                + ("" if finished else " Some runs are still queued or running; the worker records them.")
+            )
         if args.verify:
             checked = bad = 0
             for (run_id,) in conn.execute("SELECT run_id FROM state_runs ORDER BY run_id").fetchall():
@@ -377,18 +409,24 @@ def cmd_history(args, cfg):
                 if differ:
                     bad += 1
                     print(f"  run {run_id}: {', '.join(differ)} differ from the snapshot")
-            print(f"Checked {plural(checked, 'run')} that still have their snapshot: "
-                  + (f"{plural(bad, 'run')} differ." if bad else "every one reads back exactly."))
+            print(
+                f"Checked {plural(checked, 'run')} that still have their snapshot: "
+                + (f"{plural(bad, 'run')} differ." if bad else "every one reads back exactly.")
+            )
             if bad:
                 sys.exit(1)
             return
         st = state_history.status(conn)
-        print(f"Daily history: {plural(st['runs'], 'run')} recorded ({st['objects']:,} objects as {st['versions']:,} "
-              f"versions), {_size(st['bytes'])}; the snapshots take {_size(st['snapshot_bytes'])}.")
+        print(
+            f"Daily history: {plural(st['runs'], 'run')} recorded ({st['objects']:,} objects as {st['versions']:,} "
+            f"versions), {_size(st['bytes'])}; the snapshots take {_size(st['snapshot_bytes'])}."
+        )
         if st["oldest"]:
             print(f"  Reaches back to {st['oldest'][:10]}.")
-        print(f"  {plural(st['pending'], 'run')} still to record" + (" (the worker records them a few seconds a "
-                                                                      "minute)." if st["pending"] else "."))
+        print(
+            f"  {plural(st['pending'], 'run')} still to record"
+            + (" (the worker records them a few seconds a minute)." if st["pending"] else ".")
+        )
         if st["mismatches"]:
             print(f"  {plural(st['mismatches'], 'run')} didn't read back as stored; last: {st['last_mismatch']}.")
     finally:
@@ -406,14 +444,18 @@ def cmd_delete_tenant(args, cfg):
         sys.exit(f"No tenant with id {args.tenant_id}. The id is the number in the tenant's address (/tenants/<id>).")
     stored = lifecycle.stored(conn, tenant["id"])
     clients = lifecycle.client_only_users(conn, tenant["id"])
-    print(f"{tenant['name']} ({tenant['tenant_ref']}): {plural(stored['runs'], 'collection run')}, "
-          f"{plural(stored['objects'], 'stored item')}, {plural(stored['findings'], 'finding')}, "
-          f"{plural(stored['schedules'], 'emailed report')}, {plural(stored['contacts'], 'contact')}, "
-          f"access for {plural(stored['access'], 'user')}.")
+    print(
+        f"{tenant['name']} ({tenant['tenant_ref']}): {plural(stored['runs'], 'collection run')}, "
+        f"{plural(stored['objects'], 'stored item')}, {plural(stored['findings'], 'finding')}, "
+        f"{plural(stored['schedules'], 'emailed report')}, {plural(stored['contacts'], 'contact')}, "
+        f"access for {plural(stored['access'], 'user')}."
+    )
     if clients:
         names = ", ".join(u["username"] for u in clients)
-        print(f"Client accounts with no other tenant: {names}"
-              + (" (deleted too)" if args.delete_client_users else " (kept; add --delete-client-users to delete)"))
+        print(
+            f"Client accounts with no other tenant: {names}"
+            + (" (deleted too)" if args.delete_client_users else " (kept; add --delete-client-users to delete)")
+        )
     print("This can't be undone. Back up first with: python -m officesentry backup")
     if not args.yes:
         answer = input(f"Type the tenant's name ({tenant['name']}) to delete it: ")
@@ -424,8 +466,11 @@ def cmd_delete_tenant(args, cfg):
         removed = lifecycle.delete_tenant(conn, tenant, "cli", users)
     except lifecycle.DeleteError as exc:
         sys.exit(f"Nothing was deleted: {exc}")
-    print(f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
-          + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "") + ".")
+    print(
+        f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
+        + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "")
+        + "."
+    )
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
 
@@ -435,9 +480,17 @@ def cmd_live_test(args, cfg):
 
     from .livetest import run
 
-    sys.exit(run(cfg, args.collector or None, Path(args.out) if args.out else None,
-                 Path(args.record) if args.record else None, args.connection, args.dns_over_https,
-                 Path(args.canary) if args.canary else None))
+    sys.exit(
+        run(
+            cfg,
+            args.collector or None,
+            Path(args.out) if args.out else None,
+            Path(args.record) if args.record else None,
+            args.connection,
+            args.dns_over_https,
+            Path(args.canary) if args.canary else None,
+        )
+    )
 
 
 def main(argv=None):
@@ -449,8 +502,11 @@ def main(argv=None):
     web.add_argument("--port", type=int, default=8000)
     web.set_defaults(func=cmd_web)
 
-    serve = sub.add_parser("serve", help="run the web portal on a production server (waitress on Windows, "
-                                         "gunicorn elsewhere), for running without Docker")
+    serve = sub.add_parser(
+        "serve",
+        help="run the web portal on a production server (waitress on Windows, "
+        "gunicorn elsewhere), for running without Docker",
+    )
     serve.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this machine only)")
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--threads", type=int, default=8, help="requests handled at once")
@@ -470,13 +526,18 @@ def main(argv=None):
     app = sub.add_parser("create-app", help="create the read-only multi-tenant Entra app")
     app.add_argument("--name", default="Office Sentry (read-only)")
     app.add_argument("--tenant", default="organizations", help="your tenant ID or domain")
-    app.add_argument("--cloud", default="commercial", choices=["commercial", "gcc_high", "dod", "china"],
-                     help="the Microsoft cloud to register the app in (each national cloud needs its own app)")
+    app.add_argument(
+        "--cloud",
+        default="commercial",
+        choices=["commercial", "gcc_high", "dod", "china"],
+        help="the Microsoft cloud to register the app in (each national cloud needs its own app)",
+    )
     app.set_defaults(func=cmd_create_app)
 
     rotate = sub.add_parser("rotate-keys", help="re-encrypt credentials with the newest key")
-    rotate.add_argument("--new", action="store_true",
-                        help="replace the keys in secrets.json with new ones (signs everyone out)")
+    rotate.add_argument(
+        "--new", action="store_true", help="replace the keys in secrets.json with new ones (signs everyone out)"
+    )
     rotate.set_defaults(func=cmd_rotate_keys)
 
     link = sub.add_parser("setup-link", help="print the one-time link for creating the first admin")
@@ -494,8 +555,9 @@ def main(argv=None):
 
     status = sub.add_parser("backup-status", help="show what each backup job last did")
     status.add_argument("--json", action="store_true", help="print backup-status.json")
-    status.add_argument("--record", choices=["offsite", "restore_check"],
-                        help="record a backup job's result (for deploy/jobs.sh)")
+    status.add_argument(
+        "--record", choices=["offsite", "restore_check"], help="record a backup job's result (for deploy/jobs.sh)"
+    )
     status.add_argument("--ok", action="store_true")
     status.add_argument("--failed", action="store_true")
     status.add_argument("--detail", default="", help="what it did, in a few words")
@@ -512,40 +574,56 @@ def main(argv=None):
     restore.add_argument("--force", action="store_true", help="restore even if the worker seems to be running")
     restore.set_defaults(func=cmd_restore)
 
-    compact = sub.add_parser("compact", help="compress old snapshot data now and shrink the database file "
-                                             "(the worker compresses it gradually anyway)")
+    compact = sub.add_parser(
+        "compact",
+        help="compress old snapshot data now and shrink the database file (the worker compresses it gradually anyway)",
+    )
     compact.set_defaults(func=cmd_compact)
 
-    history = sub.add_parser("history", help="show how far the daily history has been recorded (the worker records "
-                                             "it in the background)")
+    history = sub.add_parser(
+        "history", help="show how far the daily history has been recorded (the worker records it in the background)"
+    )
     what = history.add_mutually_exclusive_group()
-    what.add_argument("--dry-run", action="store_true",
-                      help="estimate the room and time recording the rest needs, writing nothing")
-    what.add_argument("--backfill", action="store_true",
-                      help="record everything left now rather than in the background")
-    what.add_argument("--verify", action="store_true",
-                      help="check every recorded run that still has its snapshot reads back exactly as stored")
+    what.add_argument(
+        "--dry-run", action="store_true", help="estimate the room and time recording the rest needs, writing nothing"
+    )
+    what.add_argument(
+        "--backfill", action="store_true", help="record everything left now rather than in the background"
+    )
+    what.add_argument(
+        "--verify",
+        action="store_true",
+        help="check every recorded run that still has its snapshot reads back exactly as stored",
+    )
     history.add_argument("--seconds", type=float, default=20, help="with --dry-run: how long to sample for")
     history.set_defaults(func=cmd_history)
 
     delete = sub.add_parser("delete-tenant", help="delete a client tenant and everything stored for it")
     delete.add_argument("tenant_id", type=int, help="the number in the tenant's address, /tenants/<id>")
-    delete.add_argument("--delete-client-users", action="store_true",
-                        help="also delete client accounts that have no other tenant")
+    delete.add_argument(
+        "--delete-client-users", action="store_true", help="also delete client accounts that have no other tenant"
+    )
     delete.add_argument("--yes", action="store_true", help="don't ask for the tenant's name (for scripts)")
     delete.set_defaults(func=cmd_delete_tenant)
 
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")
     live.add_argument("--out", help="also write XLSX exports to this folder")
-    live.add_argument("--connection", type=int,
-                      help="app connection to link the tenant to (default: the only one, if there's one)")
+    live.add_argument(
+        "--connection", type=int, help="app connection to link the tenant to (default: the only one, if there's one)"
+    )
     live.add_argument("--record", help="save the responses, scrubbed of names, emails and IDs, as a test fixture")
-    live.add_argument("--canary", metavar="REPORT",
-                      help="compare the responses' shape with tests/fixtures/live_tenant.json and write a report "
-                           "(Markdown) here; exits 1 if Microsoft changed something")
-    live.add_argument("--dns-over-https", action="store_true",
-                      help="look DNS records up over HTTPS, where this machine's DNS is blocked")
+    live.add_argument(
+        "--canary",
+        metavar="REPORT",
+        help="compare the responses' shape with tests/fixtures/live_tenant.json and write a report "
+        "(Markdown) here; exits 1 if Microsoft changed something",
+    )
+    live.add_argument(
+        "--dns-over-https",
+        action="store_true",
+        help="look DNS records up over HTTPS, where this machine's DNS is blocked",
+    )
     live.set_defaults(func=cmd_live_test)
 
     args = parser.parse_args(argv)

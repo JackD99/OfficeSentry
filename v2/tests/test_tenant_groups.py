@@ -57,16 +57,21 @@ def test_admin_creates_fills_renames_and_deletes_a_group(client, db, two_tenants
     assert db.execute("SELECT COUNT(*) FROM tenant_groups").fetchone()[0] == 1
     assert "Alpha Ltd" in _text(client.get(f"/admin/groups/{group['id']}"))
 
-    client.post(f"/admin/groups/{group['id']}", data={"name": "North", "category": "Region", "description": "Leeds",
-                                                      "tenants": [str(alpha), "99999"]})
+    client.post(
+        f"/admin/groups/{group['id']}",
+        data={"name": "North", "category": "Region", "description": "Leeds", "tenants": [str(alpha), "99999"]},
+    )
     assert tenant_groups.members(db, group["id"]) == {alpha}
     page = _text(client.get("/admin/groups"))
     assert "North" in page and "Region" in page and "Leeds" in page
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action LIKE 'tenant_group_%'").fetchone()[0] == 2
 
     # A digest on the group covers every tenant once the group is gone; the tenants stay.
-    db.execute("INSERT INTO email_schedules (kind, reports, frequency, hour, group_id, created_at)"
-               " VALUES ('digest', '[]', 'weekly', 8, ?, '2026-01-01T00:00:00Z')", (group["id"],))
+    db.execute(
+        "INSERT INTO email_schedules (kind, reports, frequency, hour, group_id, created_at)"
+        " VALUES ('digest', '[]', 'weekly', 8, ?, '2026-01-01T00:00:00Z')",
+        (group["id"],),
+    )
     resp = client.post(f"/admin/groups/{group['id']}/delete", follow_redirects=True)
     assert "1 digest now covers every tenant" in _text(resp)
     assert db.execute("SELECT group_id FROM email_schedules").fetchone()[0] is None
@@ -98,16 +103,25 @@ def test_tenant_groups_from_manage_and_new_tenant(client, db, three, connection_
     assert tenant_groups.of_tenants(db, [bravo])[bravo] == []
 
     assert "Silver" in _text(client.get("/tenants/new"))
-    client.post("/tenants/new", data={"name": "Delta", "tenant_ref": "delta.onmicrosoft.com",
-                                      "connection_id": str(connection_id), "groups": [str(silver)]})
+    client.post(
+        "/tenants/new",
+        data={
+            "name": "Delta",
+            "tenant_ref": "delta.onmicrosoft.com",
+            "connection_id": str(connection_id),
+            "groups": [str(silver)],
+        },
+    )
     delta = db.execute("SELECT id FROM tenants WHERE name = 'Delta'").fetchone()[0]
     assert tenant_groups.members(db, silver) == {delta}
 
 
 def test_deleting_a_tenant_takes_it_out_of_its_groups(db, three):
     alpha, _, _, gold = three
-    assert lifecycle.delete_tenant(db, db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone(),
-                                   "admin") is not None
+    assert (
+        lifecycle.delete_tenant(db, db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone(), "admin")
+        is not None
+    )
     assert alpha not in tenant_groups.members(db, gold)
 
 
@@ -194,9 +208,20 @@ def test_check_matrix_and_every_row_follow_the_group(client, db, three):
 def test_month_end_queue_follows_the_group(client, db, three):
     alpha, bravo, charlie, gold = three
     _admin(client, db)
-    client.post("/reporting/plans/new", data={
-        "name": "Monthly", "reports": ["review"], "day_of_month": "1", "hour": "8", "timezone": "UTC",
-        "subject": "{client}", "mode": "approval", "delivery": "email", "tenants": [str(alpha), str(bravo)]})
+    client.post(
+        "/reporting/plans/new",
+        data={
+            "name": "Monthly",
+            "reports": ["review"],
+            "day_of_month": "1",
+            "hour": "8",
+            "timezone": "UTC",
+            "subject": "{client}",
+            "mode": "approval",
+            "delivery": "email",
+            "tenants": [str(alpha), str(bravo)],
+        },
+    )
     assert month_end.plan_for(db, alpha)[0] is not None
     client.get(f"/?group={gold}")
     page = _text(client.get(f"/reporting/{PERIOD}"))
@@ -223,26 +248,55 @@ def test_a_digest_can_cover_one_group(client, db, three):
     _configure(client)
     team = delivery.add_contact(db, None, "Me", "me@msp.com")
     assert "Gold (2 tenants)" in _text(client.get("/emails/digests/new"))
-    assert client.post("/emails/digests/new", data={
-        "frequency": "weekly", "day_of_week": "0", "day_of_month": "1", "hour": "7", "include_xlsx": "1",
-        "contacts": [str(team)], "group_id": "31337"}).status_code == 400
-    client.post("/emails/digests/new", data={
-        "frequency": "weekly", "day_of_week": "0", "day_of_month": "1", "hour": "7", "include_xlsx": "1",
-        "contacts": [str(team)], "group_id": str(gold)})
+    assert (
+        client.post(
+            "/emails/digests/new",
+            data={
+                "frequency": "weekly",
+                "day_of_week": "0",
+                "day_of_month": "1",
+                "hour": "7",
+                "include_xlsx": "1",
+                "contacts": [str(team)],
+                "group_id": "31337",
+            },
+        ).status_code
+        == 400
+    )
+    client.post(
+        "/emails/digests/new",
+        data={
+            "frequency": "weekly",
+            "day_of_week": "0",
+            "day_of_month": "1",
+            "hour": "7",
+            "include_xlsx": "1",
+            "contacts": [str(team)],
+            "group_id": str(gold),
+        },
+    )
     s = db.execute("SELECT * FROM email_schedules WHERE kind = 'digest'").fetchone()
     assert s["group_id"] == gold
     assert "Tenant digest · Gold" in _text(client.get("/emails"))
     client.post(f"/schedules/{s['id']}/send")
-    (_, _, msg, _), = sends()
+    ((_, _, msg, _),) = sends()
     assert msg["Subject"].startswith("Tenant digest · Gold · ")
     html = msg.get_body(("html",)).get_content()
     assert "Alpha Ltd" in html and "Bravo Inc" not in html and "Tenant digest: Gold" in html
     assert [p.get_filename() for p in msg.iter_attachments()][0].startswith("tenant-digest-gold-")
     # Editing keeps the group; choosing "Every tenant" clears it.
-    assert 'selected>Tier: Gold' in _text(client.get(f"/schedules/{s['id']}/edit"))
-    client.post(f"/schedules/{s['id']}/edit", data={
-        "frequency": "weekly", "day_of_week": "0", "day_of_month": "1", "hour": "7", "contacts": [str(team)],
-        "group_id": ""})
+    assert "selected>Tier: Gold" in _text(client.get(f"/schedules/{s['id']}/edit"))
+    client.post(
+        f"/schedules/{s['id']}/edit",
+        data={
+            "frequency": "weekly",
+            "day_of_week": "0",
+            "day_of_month": "1",
+            "hour": "7",
+            "contacts": [str(team)],
+            "group_id": "",
+        },
+    )
     assert db.execute("SELECT group_id FROM email_schedules WHERE id = ?", (s["id"],)).fetchone()[0] is None
 
 

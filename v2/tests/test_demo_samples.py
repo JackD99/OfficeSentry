@@ -10,7 +10,7 @@ from officesentry.reports.monthly_review import build
 
 from .conftest import login, make_user
 
-UNITS = {"bytes": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 ** 4}
+UNITS = {"bytes": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 
 
 def _populate(db, vault) -> list[int]:

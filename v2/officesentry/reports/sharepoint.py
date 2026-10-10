@@ -24,19 +24,31 @@ GROWTH_DAYS = 30
 CONCEALED_NOTICE = (
     "Microsoft is hiding site and people's names in this tenant's usage reports, so they show as codes. "
     "To show names: sign in to admin.microsoft.com as a Global Admin, open Settings, then Org settings, "
-    "then Reports on the Services tab. Untick \"Display concealed user, group, and site names in all "
-    "reports\" and save. Names appear after the next collection."
+    'then Reports on the Services tab. Untick "Display concealed user, group, and site names in all '
+    'reports" and save. Names appear after the next collection.'
 )
 
 # rootWebTemplate values for sites Microsoft creates for itself.
 SYSTEM_TEMPLATES = {
-    "Compliance Policy Center", "Basic Search Center", "Search Center", "Enterprise Search Center",
-    "My Site Host", "Tenant Admin Site", "SharePoint Online Tenant Fundamental Site", "Redirect Site",
-    "App Catalog Site", "Point Publishing Hub", "Point Publishing Personal", "Point Publishing Topic",
+    "Compliance Policy Center",
+    "Basic Search Center",
+    "Search Center",
+    "Enterprise Search Center",
+    "My Site Host",
+    "Tenant Admin Site",
+    "SharePoint Online Tenant Fundamental Site",
+    "Redirect Site",
+    "App Catalog Site",
+    "Point Publishing Hub",
+    "Point Publishing Personal",
+    "Point Publishing Topic",
 }
 TEMPLATES = {
-    "Group": "Group or Team site", "Team Site": "Team site (no group)", "Site Page Publishing": "Communication site",
-    "Team Channel": "Teams channel site", "Publishing Site": "Publishing site",
+    "Group": "Group or Team site",
+    "Team Site": "Team site (no group)",
+    "Site Page Publishing": "Communication site",
+    "Team Channel": "Teams channel site",
+    "Publishing Site": "Publishing site",
 }
 
 
@@ -111,21 +123,28 @@ def storage_points(snap: TenantSnapshot, area: str) -> list[tuple[date, float]]:
     return sorted(points.items())
 
 
-def storage_chart(points: list[tuple[date, float]], label: str, now: datetime | None = None,
-                  quota: float | None = None) -> str:
+def storage_chart(
+    points: list[tuple[date, float]], label: str, now: datetime | None = None, quota: float | None = None
+) -> str:
     """Storage over time. With ``now``, the line carries on dashed at the last ``GROWTH_DAYS`` days' rate (to
     when it reaches ``quota``, at most a year ahead, or three months without a quota), and the quota is a line."""
     if len(points) < 2:
         return ""
     ahead = forecast(points, now, quota) if now else []
     top = max([v for _, v in points] + [v for _, v in ahead] + ([quota] if quota else []))
-    unit, div = next(((u, d) for u, d in ((" TB", 1024 ** 4), (" GB", 1024 ** 3), (" MB", 1024 ** 2))
-                      if top >= d), (" MB", 1024 ** 2))
+    unit, div = next(
+        ((u, d) for u, d in ((" TB", 1024**4), (" GB", 1024**3), (" MB", 1024**2)) if top >= d), (" MB", 1024**2)
+    )
     digits = 2 if top / div < 10 else 1
     scaled = [(d, round(v / div, digits)) for d, v in points]
-    return line_chart(scaled, label=label, unit=unit, y_max=nice_max(top / div),
-                      forecast=[(d, round(v / div, digits)) for d, v in ahead],
-                      limit=(round(quota / div, digits), "Storage limit") if quota else None)
+    return line_chart(
+        scaled,
+        label=label,
+        unit=unit,
+        y_max=nice_max(top / div),
+        forecast=[(d, round(v / div, digits)) for d, v in ahead],
+        limit=(round(quota / div, digits), "Storage limit") if quota else None,
+    )
 
 
 def forecast(points: list[tuple[date, float]], now: datetime, quota: float | None = None) -> list[tuple[date, float]]:
@@ -162,8 +181,9 @@ def _usage(snap: TenantSnapshot, report: DataReport) -> dict | None:
     """Usage status, setting ``report.unavailable`` or the concealed notice as needed."""
     status = (snap.objects("sharepoint_usage", "usage_status") or [None])[0]
     if status is None:
-        report.unavailable = ("SharePoint usage hasn't been collected yet. Refresh \"SharePoint and OneDrive "
-                              "usage\" on the tenant page.")
+        report.unavailable = (
+            'SharePoint usage hasn\'t been collected yet. Refresh "SharePoint and OneDrive usage" on the tenant page.'
+        )
         return None
     if not status.get("available"):
         report.unavailable = "This tenant has no SharePoint licence."
@@ -193,9 +213,14 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = _usage(snap, report)
     if status is None:
         return
-    rows = [{**_counts(r, "anyoneLinks", "guestLinks", "companyLinks", "files", "storageUsed"),
-             "externalSharing": r.get("externalSharing") or "Unknown"}
-            for r in snap.objects("sharepoint_usage", "site") or [] if not r.get("deleted")]
+    rows = [
+        {
+            **_counts(r, "anyoneLinks", "guestLinks", "companyLinks", "files", "storageUsed"),
+            "externalSharing": r.get("externalSharing") or "Unknown",
+        }
+        for r in snap.objects("sharepoint_usage", "site") or []
+        if not r.get("deleted")
+    ]
     before = _objects_before(snap, "sharepoint_usage", "site", now - timedelta(days=GROWTH_DAYS - 2))
     user_sites = [r for r in rows if site_type(r) != "System"]
 
@@ -210,53 +235,112 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     guest = sum(r["guestLinks"] for r in rows)
     stale = [r for r in user_sites if inactive(r)]
     report.tiles = [
-        Tile("Sites", len(user_sites), f"plus {plural(len(rows) - len(user_sites), 'system site')}",
-             rows=Rows("All sites", {"Type": sorted({site_type(r) for r in user_sites})})),
-        Tile("Storage used", size(total), (f"{_signed_size(growth)} in {GROWTH_DAYS} days"
-                                           if growth is not None else ""), rows=Rows("All sites"),
-             trend=metric_trend(snap, "sharepoint.storage_bytes", now, size)),
-        Tile("Anyone links", anyone, "No sign-in needed to open", "bad" if anyone else "ok", SHARED_SITES,
-             metric_trend(snap, "sharepoint.links.anyone", now)),
-        Tile("Guest links", guest, "Shared with named people outside", rows=SHARED_SITES,
-             trend=metric_trend(snap, "sharepoint.links.guest", now)),
+        Tile(
+            "Sites",
+            len(user_sites),
+            f"plus {plural(len(rows) - len(user_sites), 'system site')}",
+            rows=Rows("All sites", {"Type": sorted({site_type(r) for r in user_sites})}),
+        ),
+        Tile(
+            "Storage used",
+            size(total),
+            (f"{_signed_size(growth)} in {GROWTH_DAYS} days" if growth is not None else ""),
+            rows=Rows("All sites"),
+            trend=metric_trend(snap, "sharepoint.storage_bytes", now, size),
+        ),
+        Tile(
+            "Anyone links",
+            anyone,
+            "No sign-in needed to open",
+            "bad" if anyone else "ok",
+            SHARED_SITES,
+            metric_trend(snap, "sharepoint.links.anyone", now),
+        ),
+        Tile(
+            "Guest links",
+            guest,
+            "Shared with named people outside",
+            rows=SHARED_SITES,
+            trend=metric_trend(snap, "sharepoint.links.guest", now),
+        ),
         Tile("Inactive sites", len(stale), f"No activity in {INACTIVE_DAYS} days", "warn" if stale else None),
     ]
     _, quota = tenant_storage(snap)
     report.chart = storage_chart(points, "SharePoint storage over time", now, quota.total if quota else None)
     report.chart_title = "SharePoint storage over time"
 
-    shared = Section("Sites shared outside the organisation",
-                     ["Site", "Anyone links", "Guest links", "Organisation links", "External sharing on",
-                      "Last activity"],
-                     intro="Sharing links on each site, from Microsoft's count. Anyone links open without signing "
-                           "in. The Shared files report lists the files behind them." + _as_of(status),
-                     empty="No site has anyone or guest links.")
+    shared = Section(
+        "Sites shared outside the organisation",
+        ["Site", "Anyone links", "Guest links", "Organisation links", "External sharing on", "Last activity"],
+        intro="Sharing links on each site, from Microsoft's count. Anyone links open without signing "
+        "in. The Shared files report lists the files behind them." + _as_of(status),
+        empty="No site has anyone or guest links.",
+    )
     for r in sorted(rows, key=lambda r: (-r["anyoneLinks"], -r["guestLinks"], site_label(r))):
         if r["anyoneLinks"] or r["guestLinks"]:
-            shared.add([site_cell(r), r["anyoneLinks"], r["guestLinks"], r["companyLinks"], r["externalSharing"],
-                        _date(r.get("lastActivityDate")) or "None recorded"],
-                       "high" if r["anyoneLinks"] else "medium")
+            shared.add(
+                [
+                    site_cell(r),
+                    r["anyoneLinks"],
+                    r["guestLinks"],
+                    r["companyLinks"],
+                    r["externalSharing"],
+                    _date(r.get("lastActivityDate")) or "None recorded",
+                ],
+                "high" if r["anyoneLinks"] else "medium",
+            )
 
-    idle = Section("Inactive sites", ["Site", "Type", "Owner", "Last activity", "Storage", "Files"],
-                   intro=f"Sites nobody has used in {INACTIVE_DAYS} days. Archive or delete them, or confirm "
-                         "someone still owns the content.",
-                   empty=f"Every site has been used in the last {INACTIVE_DAYS} days.")
+    idle = Section(
+        "Inactive sites",
+        ["Site", "Type", "Owner", "Last activity", "Storage", "Files"],
+        intro=f"Sites nobody has used in {INACTIVE_DAYS} days. Archive or delete them, or confirm "
+        "someone still owns the content.",
+        empty=f"Every site has been used in the last {INACTIVE_DAYS} days.",
+    )
     for r in sorted(stale, key=lambda r: (r.get("lastActivityDate") or "", site_label(r))):
-        idle.add([site_cell(r), site_type(r), r.get("ownerPrincipalName") or r.get("owner"),
-                  _date(r.get("lastActivityDate")) or "None recorded", size(r["storageUsed"]), r["files"]], "low")
+        idle.add(
+            [
+                site_cell(r),
+                site_type(r),
+                r.get("ownerPrincipalName") or r.get("owner"),
+                _date(r.get("lastActivityDate")) or "None recorded",
+                size(r["storageUsed"]),
+                r["files"],
+            ],
+            "low",
+        )
 
-    every = Section("All sites", ["Site", "Type", "Owner", "Storage", f"{GROWTH_DAYS}-day change", "Files",
-                                  "Last activity", "External sharing on"],
-                    intro="Largest first." + ("" if before is not None else
-                                              f" Growth appears once Office Sentry has {GROWTH_DAYS} days of "
-                                              "history."),
-                    empty="No sites.")
+    every = Section(
+        "All sites",
+        [
+            "Site",
+            "Type",
+            "Owner",
+            "Storage",
+            f"{GROWTH_DAYS}-day change",
+            "Files",
+            "Last activity",
+            "External sharing on",
+        ],
+        intro="Largest first."
+        + ("" if before is not None else f" Growth appears once Office Sentry has {GROWTH_DAYS} days of history."),
+        empty="No sites.",
+    )
     every.chart = Chart("Site", ("Storage",), title="Largest sites")
     for r in sorted(rows, key=lambda r: -r["storageUsed"]):
         prev = (before or {}).get(r["_id"]) if not r.get("concealed") else None
-        every.add([site_cell(r), site_type(r), r.get("ownerPrincipalName") or r.get("owner"), size(r["storageUsed"]),
-                   _signed_size(r["storageUsed"] - prev["storageUsed"]) if prev else "", r["files"],
-                   _date(r.get("lastActivityDate")) or "None recorded", r["externalSharing"]])
+        every.add(
+            [
+                site_cell(r),
+                site_type(r),
+                r.get("ownerPrincipalName") or r.get("owner"),
+                size(r["storageUsed"]),
+                _signed_size(r["storageUsed"] - prev["storageUsed"]) if prev else "",
+                r["files"],
+                _date(r.get("lastActivityDate")) or "None recorded",
+                r["externalSharing"],
+            ]
+        )
     report.sections = [shared, idle, every]
 
 
@@ -281,8 +365,11 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = _usage(snap, report)
     if status is None:
         return
-    rows = [_counts(r, "storageUsed", "storageAllocated", "files", "activeFiles")
-            for r in snap.objects("sharepoint_usage", "onedrive") or [] if not r.get("deleted")]
+    rows = [
+        _counts(r, "storageUsed", "storageAllocated", "files", "activeFiles")
+        for r in snap.objects("sharepoint_usage", "onedrive") or []
+        if not r.get("deleted")
+    ]
     users = {(u.get("userPrincipalName") or "").lower(): u for u in snap.objects("users", "user") or []}
     hidden = any(r.get("concealed") for r in rows)
 
@@ -304,56 +391,98 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     growth = _growth(points, now)
     report.tiles = [
         Tile("OneDrives", len(rows), rows=Rows("All OneDrives"), trend=metric_trend(snap, "onedrive.accounts", now)),
-        Tile("Storage used", size(sum(r["storageUsed"] for r in rows)),
-             f"{_signed_size(growth)} in {GROWTH_DAYS} days" if growth is not None else "", rows=Rows("All OneDrives"),
-             trend=metric_trend(snap, "onedrive.storage_bytes", now, size)),
-        Tile("Belong to people who've left", len(left) if not hidden else "?", "Disabled or deleted accounts",
-             "warn" if left else None, Rows("OneDrives of people who've left")),
-        Tile("Files shared outside", len({s["_id"] for s in personal if s.get("exposure") in ("anyone", "external")})
-             if shared is not None else "?",
-             "Anyone links or people outside" if shared is not None else "Needs the Shared files scan",
-             rows=Rows("Sharing by person")),
+        Tile(
+            "Storage used",
+            size(sum(r["storageUsed"] for r in rows)),
+            f"{_signed_size(growth)} in {GROWTH_DAYS} days" if growth is not None else "",
+            rows=Rows("All OneDrives"),
+            trend=metric_trend(snap, "onedrive.storage_bytes", now, size),
+        ),
+        Tile(
+            "Belong to people who've left",
+            len(left) if not hidden else "?",
+            "Disabled or deleted accounts",
+            "warn" if left else None,
+            Rows("OneDrives of people who've left"),
+        ),
+        Tile(
+            "Files shared outside",
+            len({s["_id"] for s in personal if s.get("exposure") in ("anyone", "external")})
+            if shared is not None
+            else "?",
+            "Anyone links or people outside" if shared is not None else "Needs the Shared files scan",
+            rows=Rows("Sharing by person"),
+        ),
     ]
     report.chart = storage_chart(points, "OneDrive storage over time", now)
     report.chart_title = "OneDrive storage over time"
 
     sections = []
-    gone = Section("OneDrives of people who've left", ["Person", "Account", "Storage", "Files", "Last activity"],
-                   intro="Files here may include client data nobody is looking after. Move what's still needed to a "
-                         "shared site, then remove the account.",
-                   empty="Every OneDrive belongs to an enabled account." if not hidden else
-                   "Can't match OneDrives to accounts while Microsoft hides names (see above).")
+    gone = Section(
+        "OneDrives of people who've left",
+        ["Person", "Account", "Storage", "Files", "Last activity"],
+        intro="Files here may include client data nobody is looking after. Move what's still needed to a "
+        "shared site, then remove the account.",
+        empty="Every OneDrive belongs to an enabled account."
+        if not hidden
+        else "Can't match OneDrives to accounts while Microsoft hides names (see above).",
+    )
     for r in sorted(left, key=lambda r: -r["storageUsed"]):
-        gone.add([person(r), account(r), size(r["storageUsed"]), r["files"],
-                  _date(r.get("lastActivityDate")) or "None recorded"], "low")
+        gone.add(
+            [
+                person(r),
+                account(r),
+                size(r["storageUsed"]),
+                r["files"],
+                _date(r.get("lastActivityDate")) or "None recorded",
+            ],
+            "low",
+        )
     sections.append(gone)
 
     if shared is not None:
         per: dict[str, dict] = {}
         for s in personal:
-            p = per.setdefault((s.get("owner") or s.get("site") or "?").lower(),
-                               {"anyone": 0, "external": set(), "org": 0, "items": 0})
+            p = per.setdefault(
+                (s.get("owner") or s.get("site") or "?").lower(), {"anyone": 0, "external": set(), "org": 0, "items": 0}
+            )
             p["anyone"] += s.get("exposure") == "anyone"
             p["external"].update(s.get("externalPeople") or [])
             p["org"] += (s.get("orgLinks") or 0) > 0
             p["items"] += 1
-        out = Section("Sharing by person", ["Person", "Anyone links", "People outside", "Organisation-wide",
-                                            "Shared items"],
-                      intro="Files and folders each person shares from their OneDrive beyond specific colleagues.",
-                      empty="Nobody shares OneDrive files with anyone, the whole organisation or people outside.")
+        out = Section(
+            "Sharing by person",
+            ["Person", "Anyone links", "People outside", "Organisation-wide", "Shared items"],
+            intro="Files and folders each person shares from their OneDrive beyond specific colleagues.",
+            empty="Nobody shares OneDrive files with anyone, the whole organisation or people outside.",
+        )
         for who, p in sorted(per.items(), key=lambda kv: (-kv[1]["anyone"], -len(kv[1]["external"]), kv[0])):
-            out.add([who, p["anyone"], sorted(p["external"]) or "None", p["org"], p["items"]],
-                    "high" if p["anyone"] else ("medium" if p["external"] else None))
+            out.add(
+                [who, p["anyone"], sorted(p["external"]) or "None", p["org"], p["items"]],
+                "high" if p["anyone"] else ("medium" if p["external"] else None),
+            )
         sections.append(out)
 
-    every = Section("All OneDrives", ["Person", "Account", "Storage", "Of quota", "Files",
-                                      "Active files (30 days)", "Last activity"],
-                    intro="Largest first." + _as_of(status), empty="No OneDrives.")
+    every = Section(
+        "All OneDrives",
+        ["Person", "Account", "Storage", "Of quota", "Files", "Active files (30 days)", "Last activity"],
+        intro="Largest first." + _as_of(status),
+        empty="No OneDrives.",
+    )
     for r in sorted(rows, key=lambda r: -r["storageUsed"]):
         pct = 100 * r["storageUsed"] / r["storageAllocated"] if r["storageAllocated"] else None
         quota = "" if pct is None else ("Under 1%" if 0 < pct < 1 else f"{pct:.0f}%")
-        every.add([person(r), account(r), size(r["storageUsed"]), quota, r["files"], r["activeFiles"],
-                   _date(r.get("lastActivityDate")) or "None recorded"])
+        every.add(
+            [
+                person(r),
+                account(r),
+                size(r["storageUsed"]),
+                quota,
+                r["files"],
+                r["activeFiles"],
+                _date(r.get("lastActivityDate")) or "None recorded",
+            ]
+        )
     sections.append(every)
     report.sections = sections
 
@@ -380,15 +509,19 @@ def _item_cell(item: dict):
 
 
 def _link_words(link: dict) -> str:
-    return {"view": "View", "edit": "Edit", "review": "Review", "embed": "Embed",
-            "blocksDownload": "View, no download"}.get(link.get("type"), link.get("type") or "")
+    return {
+        "view": "View",
+        "edit": "Edit",
+        "review": "Review",
+        "embed": "Embed",
+        "blocksDownload": "View, no download",
+    }.get(link.get("type"), link.get("type") or "")
 
 
 @report(
     "shared-files",
     "Shared files",
-    "Every file and folder shared with anyone, people outside, or the whole "
-    "organisation.",
+    "Every file and folder shared with anyone, people outside, or the whole organisation.",
     ("shared_files", "sharepoint_usage"),
     group="files",
     order=40,
@@ -397,71 +530,123 @@ def _link_words(link: dict) -> str:
 def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("shared_files", "scan_status") or [None])[0]
     if status is None:
-        report.unavailable = "Shared files haven't been scanned yet. Refresh \"Shared files\" on the tenant page."
+        report.unavailable = 'Shared files haven\'t been scanned yet. Refresh "Shared files" on the tenant page.'
         return
     if not status.get("available"):
-        report.unavailable = ("This tenant has no SharePoint licence." if status.get("reason") == "no_sharepoint" else
-                              "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
-                              "permission: open the tenant page, send the consent link to the client's Global "
-                              "Admin again and ask them to accept. The other SharePoint reports work without it.")
+        report.unavailable = (
+            "This tenant has no SharePoint licence."
+            if status.get("reason") == "no_sharepoint"
+            else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
+            "permission: open the tenant page, send the consent link to the client's Global "
+            "Admin again and ask them to accept. The other SharePoint reports work without it."
+        )
         return
-    items = [{**i, "links": [x for x in i.get("links") or [] if isinstance(x, dict)],
-              "externalPeople": i.get("externalPeople") or []}
-             for i in snap.objects("shared_files", "shared_item") or []]
+    items = [
+        {
+            **i,
+            "links": [x for x in i.get("links") or [] if isinstance(x, dict)],
+            "externalPeople": i.get("externalPeople") or [],
+        }
+        for i in snap.objects("shared_files", "shared_item") or []
+    ]
     anyone = [i for i in items if i.get("exposure") == "anyone"]
     outside = [i for i in items if i.get("externalPeople")]
     org = [i for i in items if i.get("orgLinks")]
     forever = [i for i in anyone if i.get("neverExpires")]
     report.tiles = [
-        Tile("Shared with anyone", len(anyone), "Open without signing in", "bad" if anyone else "ok",
-             trend=metric_trend(snap, "sharing.anyone_items", now)),
-        Tile("Shared with people outside", len(outside), f"{len({p for i in outside for p in i['externalPeople']})} "
-                                                         "outside address(es)",
-             rows=Rows("Shared with people outside the organisation"),
-             trend=metric_trend(snap, "sharing.external_items", now)),
-        Tile("Shared organisation-wide", len(org), "Anyone in the organisation, and Copilot",
-             rows=Rows("Shared with the whole organisation"), trend=metric_trend(snap, "sharing.org_items", now)),
-        Tile("Anyone links with no expiry", len(forever), "These should expire", "warn" if forever else None,
-             Rows("Shared with anyone", {"Expires": "Never"})),
+        Tile(
+            "Shared with anyone",
+            len(anyone),
+            "Open without signing in",
+            "bad" if anyone else "ok",
+            trend=metric_trend(snap, "sharing.anyone_items", now),
+        ),
+        Tile(
+            "Shared with people outside",
+            len(outside),
+            f"{len({p for i in outside for p in i['externalPeople']})} outside address(es)",
+            rows=Rows("Shared with people outside the organisation"),
+            trend=metric_trend(snap, "sharing.external_items", now),
+        ),
+        Tile(
+            "Shared organisation-wide",
+            len(org),
+            "Anyone in the organisation, and Copilot",
+            rows=Rows("Shared with the whole organisation"),
+            trend=metric_trend(snap, "sharing.org_items", now),
+        ),
+        Tile(
+            "Anyone links with no expiry",
+            len(forever),
+            "These should expire",
+            "warn" if forever else None,
+            Rows("Shared with anyone", {"Expires": "Never"}),
+        ),
     ]
     links = sum(i.get("anyoneLinks") or 0 for i in snap.objects("sharepoint_usage", "site") or [])
     if links and not anyone:
-        report.notice = (f"Microsoft counts {plural(links, 'anyone link')} in this tenant, but the scan found none. "
-                         "Some libraries may not have been readable; check the last Shared files run on the tenant "
-                         "page.")
-    report.footnote = (f"Scanned {status.get('items') or 0:,} files and folders in {status.get('drives') or 0} "
-                       "libraries and OneDrives. A shared folder is listed once; the files inside it are shared "
-                       "the same way.")
+        report.notice = (
+            f"Microsoft counts {plural(links, 'anyone link')} in this tenant, but the scan found none. "
+            "Some libraries may not have been readable; check the last Shared files run on the tenant "
+            "page."
+        )
+    report.footnote = (
+        f"Scanned {status.get('items') or 0:,} files and folders in {status.get('drives') or 0} "
+        "libraries and OneDrives. A shared folder is listed once; the files inside it are shared "
+        "the same way."
+    )
 
     def flagged(i, base):
         return "high" if i.get("editable") else base
 
-    a = Section("Shared with anyone", ["File or folder", "Location", "Access", "Expires", "Password",
-                                       "Last modified"],
-                intro="Anyone who gets the link can open these without signing in, and links get forwarded. "
-                      "Remove the link, or set an expiry date and view-only.",
-                empty="Nothing is shared with an anyone link.")
+    a = Section(
+        "Shared with anyone",
+        ["File or folder", "Location", "Access", "Expires", "Password", "Last modified"],
+        intro="Anyone who gets the link can open these without signing in, and links get forwarded. "
+        "Remove the link, or set an expiry date and view-only.",
+        empty="Nothing is shared with an anyone link.",
+    )
     for i in sorted(anyone, key=lambda i: (not i.get("editable"), _location(i), i.get("path") or "")):
         lk = [x for x in i["links"] if x.get("scope") == "anonymous"]
         expires = [x["expires"] for x in lk if x.get("expires")]
-        a.add([_item_cell(i), _location(i), sorted({_link_words(x) for x in lk}),
-               _date(min(expires)) if expires and len(expires) == len(lk) else "Never",
-               bool(lk) and all(x.get("password") for x in lk), _date(i.get("lastModified"))],
-              flagged(i, "medium" if i.get("neverExpires") else "low"))
+        a.add(
+            [
+                _item_cell(i),
+                _location(i),
+                sorted({_link_words(x) for x in lk}),
+                _date(min(expires)) if expires and len(expires) == len(lk) else "Never",
+                bool(lk) and all(x.get("password") for x in lk),
+                _date(i.get("lastModified")),
+            ],
+            flagged(i, "medium" if i.get("neverExpires") else "low"),
+        )
 
-    b = Section("Shared with people outside the organisation", ["File or folder", "Location", "Shared with",
-                                                                 "Can edit", "Last modified"],
-                intro="Named people outside the organisation. Check each one still needs access.",
-                empty="Nothing is shared with people outside the organisation.")
+    b = Section(
+        "Shared with people outside the organisation",
+        ["File or folder", "Location", "Shared with", "Can edit", "Last modified"],
+        intro="Named people outside the organisation. Check each one still needs access.",
+        empty="Nothing is shared with people outside the organisation.",
+    )
     for i in sorted(outside, key=lambda i: (_location(i), i.get("path") or "")):
-        b.add([_item_cell(i), _location(i), i["externalPeople"], i.get("editable"),
-               _date(i.get("lastModified"))], flagged(i, "low"))
+        b.add(
+            [_item_cell(i), _location(i), i["externalPeople"], i.get("editable"), _date(i.get("lastModified"))],
+            flagged(i, "low"),
+        )
 
-    c = Section("Shared with the whole organisation", ["File or folder", "Location", "Access", "Last modified"],
-                intro="Everyone in the organisation can open these with the link, and Copilot can surface them to "
-                      "anyone who searches.", empty="Nothing is shared with the whole organisation.")
+    c = Section(
+        "Shared with the whole organisation",
+        ["File or folder", "Location", "Access", "Last modified"],
+        intro="Everyone in the organisation can open these with the link, and Copilot can surface them to "
+        "anyone who searches.",
+        empty="Nothing is shared with the whole organisation.",
+    )
     for i in sorted(org, key=lambda i: (_location(i), i.get("path") or "")):
-        c.add([_item_cell(i), _location(i),
-               sorted({_link_words(x) for x in i["links"] if x.get("scope") == "organization"}),
-               _date(i.get("lastModified"))])
+        c.add(
+            [
+                _item_cell(i),
+                _location(i),
+                sorted({_link_words(x) for x in i["links"] if x.get("scope") == "organization"}),
+                _date(i.get("lastModified")),
+            ]
+        )
     report.sections = [a, b, c]

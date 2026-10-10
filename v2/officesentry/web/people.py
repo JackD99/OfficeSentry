@@ -52,8 +52,9 @@ def person(tenant_id: int, user_id: str):
 def person_pdf(tenant_id: int, user_id: str):
     t, profile = _profile(tenant_id, user_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "user.pdf")
-    return pdf_response("reports/detail.html", f"account-{_slug(profile.upn or profile.name)}",
-                        report=profile.as_report())
+    return pdf_response(
+        "reports/detail.html", f"account-{_slug(profile.upn or profile.name)}", report=profile.as_report()
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/users/<user_id>.xlsx")

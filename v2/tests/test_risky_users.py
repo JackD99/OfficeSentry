@@ -18,8 +18,12 @@ from tests.test_collectors import SKUS, USERS
 
 V1 = f"{GRAPH_ROOT}/v1.0"
 RISKY = f"{V1}/identityProtection/riskyUsers"
-P2_SKUS = [dict(SKUS[0], servicePlans=SKUS[0]["servicePlans"] + [
-    {"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}])]
+P2_SKUS = [
+    dict(
+        SKUS[0],
+        servicePlans=SKUS[0]["servicePlans"] + [{"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}],
+    )
+]
 
 
 def _seed(db, tenant_id, **kwargs):
@@ -36,8 +40,9 @@ def _run(db, tenant_id, caps=None):
 
 
 def _metrics(db, tenant_id) -> dict:
-    return {r["key"]: r["value"] for r in db.execute("SELECT key, value FROM metrics WHERE tenant_id = ?",
-                                                      (tenant_id,))}
+    return {
+        r["key"]: r["value"] for r in db.execute("SELECT key, value FROM metrics WHERE tenant_id = ?", (tenant_id,))
+    }
 
 
 # -- Collector --------------------------------------------------------------------------------
@@ -46,8 +51,7 @@ def _metrics(db, tenant_id) -> dict:
 @responses.activate
 def test_collector_keeps_open_and_recently_resolved_risk(db, two_tenants):
     alpha, _ = two_tenants
-    responses.get(RISKY, json={"value": gd.RISKY_USERS[:3],
-                               "@odata.nextLink": f"{RISKY}?$skiptoken=page2"})
+    responses.get(RISKY, json={"value": gd.RISKY_USERS[:3], "@odata.nextLink": f"{RISKY}?$skiptoken=page2"})
     responses.get(RISKY, json={"value": gd.RISKY_USERS[3:]})
     run_id, status = _run(db, alpha, {"entra_p2": True, "entra_p1": True})
     assert status == "succeeded"
@@ -78,8 +82,9 @@ def test_without_entra_p2_nothing_is_asked(db, two_tenants):
     assert result.status == "unavailable" and "Entra ID P2" in result.summary
 
     # Licence not known: Microsoft refuses, the run is partial rather than failed.
-    responses.get(RISKY, status=403, json={"error": {"code": "Authorization_RequestDenied",
-                                                     "message": "Insufficient privileges"}})
+    responses.get(
+        RISKY, status=403, json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}}
+    )
     run_id, status = _run(db, bravo)
     assert status == "partial"
     assert store.run_objects(db, run_id, "risky_user_status")[0]["reason"] == "permission"
@@ -130,7 +135,9 @@ def test_report_and_check_with_entra_p2(client, db, two_tenants):
     assert result.status == "fail"
     assert result.summary == "2 accounts at risk in Entra ID Protection, 1 high or confirmed compromised"
     assert [(f.severity, f.subject, f.object_id) for f in result.findings] == [
-        ("high", "bob@x.com", "u2"), ("medium", "ann@x.com", "u1")]
+        ("high", "bob@x.com", "u2"),
+        ("medium", "ann@x.com", "u1"),
+    ]
 
     make_user(db, "admin")
     login(client, "admin")
@@ -158,8 +165,7 @@ def test_check_is_unavailable_when_the_list_was_cut_short(db, two_tenants):
     tenant = _seed(db, alpha, skus=P2_SKUS, risky_users=calm)
     # An account at risk could be past the page cap, so finding none proves nothing.
     unpack(db)
-    db.execute("UPDATE objects SET data = json_set(data, '$.truncated', json('true')) "
-               "WHERE kind = 'risky_user_status'")
+    db.execute("UPDATE objects SET data = json_set(data, '$.truncated', json('true')) WHERE kind = 'risky_user_status'")
     result = {r.key: r for r in evaluate(TenantSnapshot(db, tenant))}["risky_users"]
     assert result.status == "unavailable"
 

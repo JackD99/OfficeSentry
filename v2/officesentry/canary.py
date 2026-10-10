@@ -134,21 +134,30 @@ class Report:
     def markdown(self) -> str:
         lines = []
         if self.failed:
-            lines.append("**The live canary found something to look at.** Microsoft's answers no longer match "
-                         "the recording the tests replay (`v2/tests/fixtures/live_tenant.json`).")
+            lines.append(
+                "**The live canary found something to look at.** Microsoft's answers no longer match "
+                "the recording the tests replay (`v2/tests/fixtures/live_tenant.json`)."
+            )
         else:
             lines.append("**Nothing changed.** Microsoft's answers match the recording the tests replay.")
         lines += ["", f"Calls compared with the recording: {self.compared}.", ""]
         if self.failed_collectors:
-            lines += ["### Collectors that failed", "",
-                      *[f"- {name}" for name in self.failed_collectors],
-                      "", "If every collector failed, signing in failed: check the test app's federated "
-                      "credential (`v2/tests/nightly/README.md`, \"Live canary\"). Otherwise run "
-                      "`python -m officesentry live-test --collector <key>` with the test tenant's settings to "
-                      "see the error.", ""]
-        for title, section in (("What Microsoft changed", self.changes),
-                               ("Deprecation and sunset notices", self.notices),
-                               ("For information (not a failure)", self.info)):
+            lines += [
+                "### Collectors that failed",
+                "",
+                *[f"- {name}" for name in self.failed_collectors],
+                "",
+                "If every collector failed, signing in failed: check the test app's federated "
+                'credential (`v2/tests/nightly/README.md`, "Live canary"). Otherwise run '
+                "`python -m officesentry live-test --collector <key>` with the test tenant's settings to "
+                "see the error.",
+                "",
+            ]
+        for title, section in (
+            ("What Microsoft changed", self.changes),
+            ("Deprecation and sunset notices", self.notices),
+            ("For information (not a failure)", self.info),
+        ):
             if not section:
                 continue
             lines += [f"### {title}", ""]
@@ -157,12 +166,16 @@ class Report:
                 lines += [f"  - {line}" for line in section[key]]
             lines.append("")
         if self.failed:
-            lines += ["### What to do", "",
-                      "1. If a field moved or changed type, fix the collector that reads it, with a test.",
-                      "2. If a call is being retired, move to its replacement before the sunset date "
-                      "(the endpoint catalogue, `officesentry/endpoints.py`, says what each call falls back to).",
-                      "3. Re-record the fixture (`python -m officesentry live-test --record "
-                      "tests/fixtures/live_tenant.json`) so the tests replay what Microsoft sends now.", ""]
+            lines += [
+                "### What to do",
+                "",
+                "1. If a field moved or changed type, fix the collector that reads it, with a test.",
+                "2. If a call is being retired, move to its replacement before the sunset date "
+                "(the endpoint catalogue, `officesentry/endpoints.py`, says what each call falls back to).",
+                "3. Re-record the fixture (`python -m officesentry live-test --record "
+                "tests/fixtures/live_tenant.json`) so the tests replay what Microsoft sends now.",
+                "",
+            ]
         return "\n".join(lines)
 
 
@@ -193,8 +206,13 @@ def compare(baseline: dict, current: dict, failed_collectors: list[str] = ()) ->
         lines = _field_changes(before.fields, now.fields)
         if lines:
             report.changes.setdefault(key, []).extend(lines)
-        added = sorted(p for p in now.fields if p not in before.fields and "object" in before.fields.get(
-            _parent(p), set()) and not p.endswith(("[]", ">")))
+        added = sorted(
+            p
+            for p in now.fields
+            if p not in before.fields
+            and "object" in before.fields.get(_parent(p), set())
+            and not p.endswith(("[]", ">"))
+        )
         if added:
             report.info.setdefault(key, []).append("new fields: " + ", ".join(f"`{p}`" for p in added))
     return report

@@ -47,8 +47,9 @@ def pdfs(tmp_path_factory) -> dict[str, bytes]:
         cfg, ids, passwords, _ = screenshots.build_site(tmp_path_factory.mktemp("pdf") / "data")
         with screenshots.Server(cfg) as server:
             server.beat()
-            return screenshots.download(server, passwords, {n: screenshots.EXAMPLES[n][0].format(t=ids[0])
-                                                            for n in PDFS})
+            return screenshots.download(
+                server, passwords, {n: screenshots.EXAMPLES[n][0].format(t=ids[0]) for n in PDFS}
+            )
     finally:
         traveller.stop()
 
@@ -57,8 +58,18 @@ def _pages(pdf: bytes, tmp: Path) -> list:
     from PIL import Image
 
     (tmp / "report.pdf").write_bytes(pdf)
-    subprocess.run(["pdftoppm", "-gray", "-png", "-r", str(DPI),  # noqa: S603, S607
-                    str(tmp / "report.pdf"), str(tmp / "page")], check=True)
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "pdftoppm",
+            "-gray",
+            "-png",
+            "-r",
+            str(DPI),
+            str(tmp / "report.pdf"),
+            str(tmp / "page"),
+        ],
+        check=True,
+    )
     return [Image.open(p).convert("L") for p in sorted(tmp.glob("page-*.png"))]
 
 
@@ -114,7 +125,7 @@ def _save(name: str, page, expected=None, changed=None) -> None:
         expected.save(OUTPUT / f"{name}.baseline.png")
     if changed is not None:
         # The new page, faded, with what changed in red.
-        faded = Image.blend(page.convert("RGB"), Image.new("RGB", page.size, "white"), .7)
+        faded = Image.blend(page.convert("RGB"), Image.new("RGB", page.size, "white"), 0.7)
         faded.paste(Image.new("RGB", page.size, (220, 30, 30)), mask=changed)
         faded.save(OUTPUT / f"{name}.diff.png")
 

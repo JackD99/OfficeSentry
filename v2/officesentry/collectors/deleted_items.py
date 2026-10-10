@@ -15,8 +15,9 @@ from .base import Collector, RunContext, register
 
 RETENTION_DAYS = 30
 EXPIRING_DAYS = 7
-USER_FIELDS = ("id,displayName,userPrincipalName,mail,userType,deletedDateTime,assignedLicenses,accountEnabled,"
-               "jobTitle,department")
+USER_FIELDS = (
+    "id,displayName,userPrincipalName,mail,userType,deletedDateTime,assignedLicenses,accountEnabled,jobTitle,department"
+)
 GROUP_FIELDS = "id,displayName,mail,groupTypes,deletedDateTime,mailEnabled,securityEnabled,resourceProvisioningOptions"
 
 
@@ -36,8 +37,11 @@ def _user(u: dict) -> dict:
         "accountEnabled": u.get("accountEnabled"),
         "jobTitle": u.get("jobTitle"),
         "department": u.get("department"),
-        "licenceSkuIds": [lic.get("skuId") for lic in u.get("assignedLicenses") or []
-                          if isinstance(lic, dict) and isinstance(lic.get("skuId"), str)],
+        "licenceSkuIds": [
+            lic.get("skuId")
+            for lic in u.get("assignedLicenses") or []
+            if isinstance(lic, dict) and isinstance(lic.get("skuId"), str)
+        ],
     }
 
 
@@ -58,8 +62,10 @@ def _group(g: dict) -> dict:
 class DeletedItems(Collector):
     key = "deleted_items"
     title = "Deleted users and groups"
-    description = ("Users and Microsoft 365 groups in the Entra ID recycle bin, and how many days are left to "
-                   "restore each before Microsoft deletes it for good.")
+    description = (
+        "Users and Microsoft 365 groups in the Entra ID recycle bin, and how many days are left to "
+        "restore each before Microsoft deletes it for good."
+    )
     permissions = ("Directory.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
@@ -67,8 +73,9 @@ class DeletedItems(Collector):
         status = {"users": False, "groups": False}
         found: dict[str, list[dict]] = {}
         for kind, path, fields, summary in (
-                ("users", "/directory/deletedItems/microsoft.graph.user", USER_FIELDS, _user),
-                ("groups", "/directory/deletedItems/microsoft.graph.group", GROUP_FIELDS, _group)):
+            ("users", "/directory/deletedItems/microsoft.graph.user", USER_FIELDS, _user),
+            ("groups", "/directory/deletedItems/microsoft.graph.group", GROUP_FIELDS, _group),
+        ):
             try:
                 items = ctx.paged(ctx.graph.get_all(path, params={"$select": fields, "$top": "999"}))
             except GraphError as exc:
@@ -87,5 +94,6 @@ class DeletedItems(Collector):
             ctx.metric("deleted.groups", len(found["groups"]))
         if status["users"] or status["groups"]:
             every = found.get("users", []) + found.get("groups", [])
-            ctx.metric("deleted.expiring_7d", sum(1 for r in every
-                                                  if (p := purge_date(r["deletedDateTime"])) and p <= soon))
+            ctx.metric(
+                "deleted.expiring_7d", sum(1 for r in every if (p := purge_date(r["deletedDateTime"])) and p <= soon)
+            )

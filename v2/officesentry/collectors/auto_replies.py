@@ -29,7 +29,7 @@ def plain_text(message, limit: int = PREVIEW) -> str:
     if not isinstance(message, str):
         return ""
     text = _SPACE.sub(" ", html.unescape(_TAGS.sub(" ", message))).strip()
-    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
 def _when(value) -> dict:
@@ -49,8 +49,7 @@ class AutoReplies(Collector):
             ctx.log("Tenant has no Exchange Online licence; nothing to collect")
             ctx.objects("auto_reply", [])
             return
-        window = mailbox_window.plan(ctx, self.key, "auto_reply", _targets(ctx), lambda t: t["id"],
-                                     "automatic replies")
+        window = mailbox_window.plan(ctx, self.key, "auto_reply", _targets(ctx), lambda t: t["id"], "automatic replies")
         targets = window.mailboxes
         rows, failed, denied = [], 0, 0
         for t in targets:
@@ -65,17 +64,29 @@ class AutoReplies(Collector):
             status = s.get("status") if isinstance(s.get("status"), str) else None
             if status in (None, "disabled"):
                 continue
-            rows.append((t["id"], {
-                "mailboxId": t["id"], "mailbox": t["upn"], "mailboxType": t["type"], "status": status,
-                "externalAudience": s.get("externalAudience"),
-                "start": _when(s.get("scheduledStartDateTime")), "end": _when(s.get("scheduledEndDateTime")),
-                "internalText": plain_text(s.get("internalReplyMessage")),
-                "externalText": plain_text(s.get("externalReplyMessage")),
-            }))
+            rows.append(
+                (
+                    t["id"],
+                    {
+                        "mailboxId": t["id"],
+                        "mailbox": t["upn"],
+                        "mailboxType": t["type"],
+                        "status": status,
+                        "externalAudience": s.get("externalAudience"),
+                        "start": _when(s.get("scheduledStartDateTime")),
+                        "end": _when(s.get("scheduledEndDateTime")),
+                        "internalText": plain_text(s.get("internalReplyMessage")),
+                        "externalText": plain_text(s.get("externalReplyMessage")),
+                    },
+                )
+            )
         if targets and denied == len(targets):
-            raise PermissionMissing(403, "Authorization_RequestDenied",
-                                    "Reading automatic replies was refused for every mailbox; check "
-                                    "MailboxSettings.Read consent and any Exchange application access policy")
+            raise PermissionMissing(
+                403,
+                "Authorization_RequestDenied",
+                "Reading automatic replies was refused for every mailbox; check "
+                "MailboxSettings.Read consent and any Exchange application access policy",
+            )
         if denied or failed:
             ctx.warn(f"Could not read automatic replies for {denied + failed} of {plural(len(targets), 'mailbox')}")
         rows += window.carried

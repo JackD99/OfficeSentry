@@ -82,6 +82,7 @@ def rule(key: str, title: str, category: str, recommendation: str):
     def decorator(fn):
         RULES.append(Rule(key, title, category, recommendation, fn))
         return fn
+
     return decorator
 
 
@@ -95,7 +96,7 @@ def _subjects(findings: list[Finding]) -> int:
 
 
 def _all_are(n: int, noun: str) -> str:
-    """"All 4 admins are", or "The 1 admin is"."""
+    """ "All 4 admins are", or "The 1 admin is"."""
     return f"{every(n, noun, start=True)} {verb(n, 'is', 'are')}"
 
 
@@ -106,14 +107,19 @@ def _label(row: dict) -> str:
 def _names(snap: TenantSnapshot) -> dict[str, str]:
     """Best available label for any object ID seen in the tenant's snapshots."""
     names: dict[str, str] = {}
-    for rows in (snap.objects("conditional_access", "ca_group"), snap.objects("admin_roles", "role_assignment"),
-                 snap.objects("mfa_registration", "mfa_registration"), snap.objects("users", "user")):
+    for rows in (
+        snap.objects("conditional_access", "ca_group"),
+        snap.objects("admin_roles", "role_assignment"),
+        snap.objects("mfa_registration", "mfa_registration"),
+        snap.objects("users", "user"),
+    ):
         for r in rows or []:
             key = r.get("principalId") or r["_id"]
             label = r.get("userPrincipalName") or r.get("displayName")
             if label:
                 names[key] = label
     return names
+
 
 def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResult]:
     now = now or datetime.now(UTC)
@@ -126,6 +132,7 @@ def evaluate(snap: TenantSnapshot, now: datetime | None = None) -> list[RuleResu
         except Exception as exc:  # one broken check mustn't blank the whole report
             logging.getLogger(__name__).exception("Check %s failed", r.key)
             status, summary, findings, advice = "unavailable", f"This check couldn't run: {type(exc).__name__}", [], []
-        results.append(RuleResult(r.key, r.title, r.category, status, summary,
-                                  advice[0] if advice else r.recommendation, findings))
+        results.append(
+            RuleResult(r.key, r.title, r.category, status, summary, advice[0] if advice else r.recommendation, findings)
+        )
     return results

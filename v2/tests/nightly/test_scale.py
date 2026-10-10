@@ -45,22 +45,40 @@ def scale(tmp_path_factory, summary):
     data = tmp_path_factory.mktemp("scale") / "data"
     env = {k: v for k, v in os.environ.items() if not k.startswith("OFFICESENTRY_")}
     start = time.monotonic()
-    done = subprocess.run([sys.executable, "scripts/scale_data.py", "--data-dir", str(data), "--tenants",  # noqa: S603
-                           str(TENANTS), "--days", str(DAYS), "--no-backup"],
-                          cwd=V2, env=env, capture_output=True, text=True)
+    done = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            "scripts/scale_data.py",
+            "--data-dir",
+            str(data),
+            "--tenants",
+            str(TENANTS),
+            "--days",
+            str(DAYS),
+            "--no-backup",
+        ],
+        cwd=V2,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
     took = time.monotonic() - start
     assert done.returncode == 0, f"scale_data.py failed:\n{done.stdout[-2000:]}\n{done.stderr[-4000:]}"
     size = (data / "officesentry.db").stat().st_size / 1e9
-    summary.append(f"### Scale: {TENANTS} tenants, {DAYS} nights ({size:.2f} GB)\n\n"
-                   f"Building it took {took:.0f} s (budget {BUILD_BUDGET} s).\n\n"
-                   "| Page | First visit | Normal visit | Budget |\n|---|---|---|---|")
+    summary.append(
+        f"### Scale: {TENANTS} tenants, {DAYS} nights ({size:.2f} GB)\n\n"
+        f"Building it took {took:.0f} s (budget {BUILD_BUDGET} s).\n\n"
+        "| Page | First visit | Normal visit | Budget |\n|---|---|---|---|"
+    )
     from werkzeug.security import generate_password_hash
 
     from officesentry.db import connect, utcnow
+
     db = connect(data / "officesentry.db")
-    db.execute("INSERT INTO users (username, password_hash, role, all_tenants, created_at)"
-               " VALUES (?, ?, 'admin', 1, ?)",
-               (USERNAME, generate_password_hash(PASSWORD, method="pbkdf2:sha256:1"), utcnow()))
+    db.execute(
+        "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
+        (USERNAME, generate_password_hash(PASSWORD, method="pbkdf2:sha256:1"), utcnow()),
+    )
     tenant = db.execute("SELECT MIN(id) FROM tenants").fetchone()[0]
     db.close()
     _, client = portal(data, USERNAME, PASSWORD)
@@ -86,4 +104,5 @@ def test_page_stays_fast_at_200_tenants(page, scale, summary):
     cold, warm = times
     summary.append(f"| `{page}` | {cold:.2f} s | {warm:.2f} s | {cold_budget} s / {warm_budget} s |")
     assert cold <= cold_budget and warm <= warm_budget, (
-        f"{url} took {cold:.2f} s (first visit, budget {cold_budget} s) and {warm:.2f} s (budget {warm_budget} s)")
+        f"{url} took {cold:.2f} s (first visit, budget {cold_budget} s) and {warm:.2f} s (budget {warm_budget} s)"
+    )
