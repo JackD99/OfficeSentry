@@ -107,6 +107,14 @@ No.
   and worker stopped when the restore fails, rather than starting them over an empty database.
 - A nightly backup whose activity history copy failed says the database was copied and what failed, rather
   than "No backup made", and still removes old copies.
+- One huge client can't make the worker look down. The shared-files scan has a night's share of pages and
+  time (about a million items or two hours); the libraries left over keep their last results and are
+  scanned first the next night. The daily pass (retention, the dashboard rows) runs beside the worker's main
+  loop rather than in it, and a run that finds the database locked as it's recorded is tried again for a
+  few minutes rather than failed later as "worker stopped".
+- A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
+  minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
+  containers running while it is itself updated (`live-restore`, on new servers).
 
 ### Security
 
