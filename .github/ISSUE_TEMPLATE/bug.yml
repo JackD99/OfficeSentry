@@ -34,7 +34,10 @@ body:
     id: version
     attributes:
       label: Version
-      description: The commit you run (`git rev-parse --short HEAD` in your checkout), or the date you last updated.
+      description: >-
+        The version at the foot of the portal's menu, or in `/health` (`2.1.0`). If you run your own build of a
+        branch, add its commit (`git rev-parse --short HEAD`).
+      placeholder: 2.1.0
   - type: dropdown
     id: install
     attributes:
