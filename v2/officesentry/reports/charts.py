@@ -239,7 +239,7 @@ def bars(items: list[Bar], *, label: str, series: list[tuple[str, str]] | None =
     top = max((sum(b.values) for b in items), default=0) or 1
     out = [f'<figure class="barchart" aria-label="{escape(label)}">']
     if title or len(series) > 1:
-        out.append(f'<figcaption><span class="chart-title">{escape(title)}</span>')
+        out.append("<figcaption>" + (f'<span class="chart-title">{escape(title)}</span>' if title else ""))
     if len(series) > 1:
         out.append('<span class="legend">' + "".join(
             f'<span><i class="sw tone-{escape(tone)}"></i>{escape(name)}</span>' for name, tone in series) + "</span>")

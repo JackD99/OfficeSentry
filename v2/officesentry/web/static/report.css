@@ -199,7 +199,8 @@ svg .part.tone-bad, .barchart .sw.tone-bad { fill: var(--sev-critical-fill); bac
 svg .part.tone-muted, .barchart .sw.tone-muted { fill: var(--sev-low-fill); background: var(--sev-low-fill); }
 .bar-track .gap { fill: var(--surface); }
 .bar-track .zero { fill: var(--border-strong); }
-.value.has-spark { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.value.has-spark { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 var(--space-2); }
+.value.has-spark > span { white-space: nowrap; }
 svg.spark { flex: none; overflow: visible; }
 svg.spark .spark-line { stroke: var(--decor); }
 svg.spark .spark-end { fill: var(--chart-series); }

@@ -33,15 +33,15 @@
 </section>
 
 <section id="figures" class="keep">
-  <h2>Key figures <span class="count">ui.kpi, ui.figure, ui.breakdown</span></h2>
+  <h2>Key figures <span class="count">ui.kpi, ui.figure, ui.breakdown, sparkline</span></h2>
   <div class="kpis">
-    {{ ui.kpi('Secure Score', '33%', '<b>+2%</b> <span class="vs">vs last month</span>', 'better', meter_value=33) }}
+    {{ ui.kpi('Secure Score', '33%', '<b>+2%</b> <span class="vs">vs last month</span>', 'better', meter_value=33, spark=[29, 30, 30, 31, 31, 33], spark_label='Secure Score since 12 Jul 2026: from 29% to 33%') }}
     {{ ui.kpi('Licence waste a month', '£164', '<b>+£12</b> <span class="vs">vs last month</span>', 'worse') }}
     {{ ui.kpi('Users with MFA', none, note='Needs the Authentication methods report') }}
   </div>
   {{ ui.breakdown('Open findings by severity', [('Critical', 1, 'critical'), ('High', 10, 'high'), ('Medium', 12, 'medium'), ('Low', 3, 'low'), ('Passing', 28, 'ok')]) }}
   {% call ui.figures(4) %}
-    {{ ui.figure('Accounts', 54, '3 without a licence') }}
+    {{ ui.figure('Accounts', 54, '3 without a licence', trend=report.tiles[0].trend) }}
     {{ ui.figure('Without MFA', 2, 'of 54', tone='bad') }}
     {{ ui.figure('Shared files', 12, tone='warn') }}
     {{ ui.figure('Status', 'Mostly fine', tone='ok') }}
@@ -62,8 +62,9 @@
 
 {% for section in report.sections %}
 <section id="{{ section.title|lower|replace(' ', '-') }}">
-  <h2>{{ section.title }} <span class="count">ui.data_table</span></h2>
+  <h2>{{ section.title }} <span class="count">ui.data_table{{ ', charts.bars' if section.figure }}</span></h2>
   {% if section.intro %}<p class="section-intro">{{ section.intro }}</p>{% endif %}
+  {% if section.figure %}<div class="chart-wrap keep">{{ section.figure|safe }}</div>{% endif %}
   {{ ui.data_table(section) }}
 </section>
 {% endfor %}

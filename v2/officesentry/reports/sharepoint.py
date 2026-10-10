@@ -6,6 +6,7 @@ Builders read the snapshots written by ``collectors/sharepoint.py`` and fill a
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime, timedelta
 
 from .. import store
@@ -136,7 +137,7 @@ def forecast(points: list[tuple[date, float]], now: datetime, quota: float | Non
     per_day = growth / GROWTH_DAYS
     days = 365 if quota else 91
     if quota and last < quota:
-        days = min(days, max(int((quota - last) / per_day) + 1, 1))
+        days = min(days, max(math.ceil((quota - last) / per_day), 1))
     elif quota:
         return []
     return [(last_day + timedelta(days=days), last + per_day * days)]
