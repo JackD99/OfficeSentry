@@ -15,6 +15,7 @@
     {% if period != current %}<a class="btn sm" href="{{ url_for('reporting.queue', period=current) }}">This month</a>{% endif %}
     <a class="btn sm" href="{{ url_for('reporting.queue', period=next, show=show) }}" aria-label="Next month">&rarr;</a>
     {% if admin %}<a class="btn sm" href="{{ url_for('reporting.plans') }}">Report plans</a>{% endif %}
+    <a class="btn sm" href="{{ url_for('designs.index') }}">Report designs</a>
   </div>
 </div>
 

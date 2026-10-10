@@ -39,6 +39,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   for everything at once):
   - Send any mix of reports (the monthly review, the evidence pack, any detail
     report) weekly, monthly or quarterly, at a time in the schedule's own timezone.
+  - **Saved views** too: a report with your filters, columns and sort, as a PDF,
+    XLSX or CSV, for one client, or with every tenant's rows (or one group's)
+    for your team.
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
   - A cross-tenant **digest** for your team, worst tenants first.
@@ -54,7 +57,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
 - **Alerts** (Admin → Alerts): a Microsoft Teams (Workflows), Slack or generic
   JSON webhook message when a tenant gets new findings at or above a chosen
   severity (one message per tenant per collection), when a collection fails
-  after working last time, and optionally when it works again. The webhook URL
+  after working last time, optionally when it works again, and optionally when a
+  client's report is ready ("The October 2026 report for Contoso is ready", a
+  link to the report history, never the files). The webhook URL
   and optional HMAC signing secret are stored encrypted; only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
@@ -70,6 +75,8 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   filtered by the values in it (or by age, for dates), sorted, and have columns
   hidden; headers stay visible while scrolling, and the view can be saved by
   name and reused on any tenant. Downloads contain the rows and columns shown.
+  The busiest tables have a bar chart that follows the filters (click a bar for
+  its rows), and headline figures carry a line of their last 90 days.
   Every headline number opens the rows behind it, here and on All tenants:
   - *Mail forwarding*: every forward (admin-set or inbox rule), and the
     outbound spam policies and remote domains that allow or block it.
@@ -81,6 +88,20 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     be signed in to, their last sign-in, who has access, and their size.
   - *Mailbox size*: each mailbox's size against its send quota
     (`Get-MailboxStatistics`), with mailboxes over 90% flagged.
+  - *Mailbox size trend*: each mailbox's growth over one and three months
+    from Office Sentry's own kept snapshots, the date each will fill at that
+    rate, and the tenant's total month by month.
+  - *Automatic replies*: mailboxes sending an out-of-office reply (Graph,
+    `MailboxSettings.Read`), who outside hears it, and replies on for over 30
+    days on an active account, dated from the kept snapshots.
+  - *Mobile devices*: phones and tablets syncing mail (`Get-MobileDevice` and
+    `Get-MobileDeviceStatistics`), with which app and when each last synced;
+    leavers' devices still connected, ones waiting for approval and ones
+    unused for 90 days come first.
+  - *Distribution lists*: members, owners and who outside can mail each list,
+    with empty, ownerless and unused lists flagged. How much mail each gets is
+    counted from the message trace (`Get-MessageTraceV2`, read 10 days at a
+    time from where the last run stopped) and kept per day for 90 days.
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.
@@ -118,6 +139,14 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   - *Apps and consents*: third-party apps with what they were granted
     (application permissions, tenant-wide and per-user consent), and app
     registration secrets or certificates expiring.
+  - *Unused apps*: every app from outside Microsoft with when it last signed
+    in (signing people in, on its own, or called as an API), from Entra ID's
+    app sign-in activity (needs Entra ID P1). Apps unused for 90 days that
+    still hold application permissions or consent are flagged.
+  - *All users*: every account with its department, job title, manager,
+    licences, source (cloud or synced) and last sign-in; each manager with
+    their direct reports; member counts by department. Accounts reporting to
+    a manager whose sign-in is blocked are flagged.
   - *Conditional Access coverage*: every policy in plain words, and for each
     account which enforced policy requires MFA, whether legacy sign-in is
     blocked, and which policies exclude it (group membership expanded).
@@ -152,6 +181,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     enabled owner or a single one, every team and group with its owners,
     members and guests, every guest in a team or group, and counts of security
     groups and distribution lists.
+  - *Empty, nested and dynamic groups*: groups with no members, security
+    groups and distribution lists that contain other groups (and how many
+    levels deep), and dynamic groups with their rule, flagging paused ones.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS. SPF checks also catch multiple records,
     +all/?all, the ptr mechanism and includes that publish no SPF record;
@@ -209,11 +241,16 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     Licence waste so nothing is counted twice. When the tenant hides names in
     usage reports, people show as short codes, licences are read from
     Microsoft's product names, and the page explains how to show names.
-- **Insurance evidence** (`/tenants/<id>/evidence`, PDF, XLSX): the controls
-  cyber-insurance questionnaires ask about (MFA, admin accounts, legacy auth,
-  email authentication, forwarding, logging, leavers, apps, sharing, devices), each
-  answered In place / Partly / Not in place from the checks, with the gaps
-  listed. Backups and training are marked "Not assessed".
+- **Questionnaires and evidence** (`/tenants/<id>/evidence`, PDF, XLSX, CSV,
+  text): answers for cyber insurance proposal forms, supplier security
+  questionnaires and Cyber Essentials (IASME's Danzell set, by question
+  number), in each form's wording with text to copy and paste, and the
+  Microsoft 365 data and date behind each. Questions Microsoft 365 can't
+  answer (backups, firewalls, plans) get a text to complete, with the gaps in
+  `[brackets]`; an answer written once fills every form that asks it. The
+  Controls view keeps the controls insurers ask about (MFA, admin accounts,
+  legacy auth, email authentication, forwarding, logging, leavers, apps,
+  sharing, devices), each In place / Partly / Not in place with the gaps.
 - **Recommended projects** (`/projects` and `/tenants/<id>/projects`, admins
   and analysts): each client's failing checks and missing licences grouped
   into the projects that fix them (Identity and Conditional Access, Device
@@ -235,7 +272,7 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   Office Sentry" stays small in the footer), the support contact clients see,
   and an optional note printed at the end of every report. The name is also
   the email sender's name unless Email delivery sets one.
-- **Data retention** (`/admin/retention`): how long snapshots, sign-in detail
+- **Data retention** (`/admin/retention`): how long snapshots, the daily history, sign-in detail
   (IP addresses and locations), the activity history, resolved findings, run
   logs, the activity log and issued reports are kept, with a count of what the next daily pass would
   delete. Defaults keep today's behaviour; see DEPLOY.md.
@@ -260,6 +297,23 @@ subscriptions in their grace period, suspended ones still assigned). For
 tenants synced from on-premises AD: directory sync running, password hash sync
 on, and admin accounts that are cloud-only. The [check catalogue](docs/checks.md)
 lists every check with the data it reads and what it needs.
+
+### Report designs: your own client reports
+
+**Month-end → Report designs** builds a client report from blocks, the way a website builder builds a
+page. Drag a block in from the list (a status verdict, key figures, checks by severity, the Secure Score
+trend, recommended next steps, failing checks, what changed, licences, a table from any detail report,
+the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
+page break), set it up in its panel (which severities, how many rows, the heading), put two blocks side
+by side, and watch the preview on a real client update as you go. Start from an executive summary, a
+full security review, a licensing review or a blank page.
+
+A design belongs to the MSP and works for every tenant: a block with nothing to show for a client (no
+accepted risks, no commentary yet) is left out of that client's report. Each tenant's **Reports →
+Custom reports** lists every design as a page and a PDF, and a report plan or a tenant's email schedule
+can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
+`{month}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
+call, and it comes out of any plan or schedule that sent it.
 
 ### Exchange data
 
@@ -339,7 +393,10 @@ These areas have no real recording and are tested with simulated data only:
   and "all tenants" analysts excepted). Hidden tenants return 404.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
-  snapshots for the last 30 days plus one per month for 12 months.
+  snapshots for the last 30 days plus one per month for 12 months. The daily
+  history also keeps every run for 25 months, storing each object once per
+  version (`state_history.py`), written alongside the snapshots and checked
+  against them.
 - **One worker process, no Redis/Celery.** It collects on a cron schedule in
   your timezone, skips data that is already fresh, refreshes stale data before
   an emailed report, and prunes old snapshots. Month-end approvals and report

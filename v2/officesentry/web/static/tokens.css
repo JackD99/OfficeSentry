@@ -37,8 +37,9 @@
   --sev-low: #475467; --sev-low-soft: #f0f2f5; --sev-low-fill: #98a2b3;
   --none-fill: #c4cad4;
   --on-sev: #ffffff; /* text on a solid severity or status colour */
-  /* Charts (reports/charts.py writes the same light values into the SVG for PDFs) */
-  --chart-series: #2a78d6; --chart-grid: #e3e6eb; --chart-track: #e8ebf0;
+  /* Charts (reports/charts.py writes the same light values into the SVG for PDFs). Series take the
+     categorical order series, 2, 3 (validated for colour blindness against both surfaces); never more. */
+  --chart-series: #2a78d6; --chart-2: #eb6834; --chart-3: #1baf7a; --chart-grid: #e3e6eb; --chart-track: #e8ebf0;
   /* Sidebar (dark in both themes) */
   --sidebar: #0f172a; --sidebar-text: #cbd5e1; --sidebar-muted: #8a97ac; --sidebar-active: #1e293b;
   --sidebar-strong: #ffffff; --sidebar-line: #1e293b; --sidebar-marker: #60a5fa;
@@ -85,7 +86,7 @@
     --sev-medium: #fdb022; --sev-medium-soft: #36290f;
     --sev-low: #a6b0c0; --sev-low-soft: #242c38;
     --on-sev: #0b1017;
-    --chart-series: #3987e5; --chart-grid: #223042; --chart-track: #223042;
+    --chart-series: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-grid: #223042; --chart-track: #223042;
     --sidebar: #070b11; --sidebar-active: #152031;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4);
     color-scheme: dark;

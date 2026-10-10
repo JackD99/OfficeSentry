@@ -102,7 +102,7 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
 @login_required
 @group_aware
 def dashboard():
-    from ..reports.monthly_review import rollup_row, setting
+    from ..reports.monthly_review import dashboard_trends, rollup_row, setting
 
     if g.user["role"] == "client":
         from . import client_home
@@ -121,6 +121,7 @@ def dashboard():
         "avg_score": sum(scores) / len(scores) if scores else None,
         "scored": len(scores),
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
+        **dashboard_trends(g.db, rows),
     }
     return render_template("dashboard.html", rows=rows, summary=summary, currency=setting(g.db, "currency", "GBP"))
 
@@ -322,8 +323,23 @@ def test_connection(tenant_id: int):
 
 
 @bp.get("/consent/callback")
-@roles_required("admin")
 def consent_callback():
+    """Where Microsoft sends people back from the consent page: the app registration's one redirect URI.
+
+    A link an admin opened from Office Sentry comes back to their own signed-in browser (``_consent_return``,
+    admins only, which signs in anyone else first). A link sent to a client's administrator
+    (``onboarding.client_link``) lands on a public thank-you page that records nothing itself; it only queues
+    a sign-in check, which is what records consent."""
+    from . import onboarding
+
+    tenant = onboarding.client_link_tenant(request.args.get("state", ""))
+    if tenant is not None:
+        return onboarding.client_returned(tenant)
+    return _consent_return()
+
+
+@roles_required("admin")
+def _consent_return():
     try:
         data = _consent_serializer().loads(request.args.get("state", ""),
                                            max_age=int(CONSENT_LINK_LIFETIME.total_seconds()))

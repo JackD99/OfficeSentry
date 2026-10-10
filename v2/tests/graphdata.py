@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+from tests import exchangedata
+
 GA = "role-ga"
 EXCH = "role-exch"
 READER = "role-reader"
@@ -148,6 +150,32 @@ SERVICE_PRINCIPALS = [
      "publisherName": "Unknown Ltd", "servicePrincipalType": "Application"},
     {"id": "sp-zoom", "appId": "app-zoom", "displayName": "Zoom", "appOwnerOrganizationId": "zoom-tenant",
      "verifiedPublisher": {"displayName": "Zoom Video Communications"}, "servicePrincipalType": "Application"},
+    {"id": "sp-survey", "appId": "app-survey", "displayName": "Survey Tool", "appOwnerOrganizationId": "survey-tenant",
+     "publisherName": "Survey Co", "servicePrincipalType": "Application", "accountEnabled": True},
+]
+
+
+def _activity(app_id, **kinds):
+    """One entry of /beta/reports/servicePrincipalSignInActivities; ``kinds`` maps Graph's kind of sign-in
+    (delegatedClient, applicationAuthenticationClient, ...) to how many days ago the last one was."""
+    def at(days):
+        if days is None:
+            return {"lastSignInDateTime": None, "lastSignInRequestId": None}
+        when = datetime.now(UTC) - timedelta(days=days)
+        return {"lastSignInDateTime": when.strftime("%Y-%m-%dT%H:%M:%S.1234567Z"), "lastSignInRequestId": "req"}
+    out = {"id": "act-" + app_id, "appId": app_id, "lastSignInActivity": at(min(kinds.values(), default=None))}
+    for kind in ("delegatedClient", "delegatedResource", "applicationAuthenticationClient",
+                 "applicationAuthenticationResource"):
+        out[kind + "SignInActivity"] = at(kinds.get(kind))
+    return out
+
+
+# Zoom signs people in every few days; Mail Sync Pro last ran on its own months ago and still reads mail;
+# Survey Tool has never signed in; Microsoft Graph is only ever called as an API.
+APP_SIGN_INS = [
+    _activity("app-zoom", delegatedClient=3),
+    _activity("app-evil", applicationAuthenticationClient=200),
+    _activity("00000003-0000-0000-c000-000000000000", delegatedResource=0, applicationAuthenticationResource=0),
 ]
 GRAPH_APP_ROLES = {"appRoles": [{"id": "r-mailread", "value": "Mail.Read"},
                                 {"id": "r-userread", "value": "User.Read.All"}]}
@@ -258,6 +286,7 @@ EXCHANGE = {
     "Get-RemoteDomain": [{"Name": "Default", "DomainName": "*", "AutoForwardEnabled": True}],
     "Get-Recipient": [],
 }
+EXCHANGE.update(exchangedata.EXCHANGE)  # mobile devices and distribution lists
 # Sign-ins happen in the last few days, whenever the tests run: the activity history keeps the
 # sign-in log by date, and the summaries cover the last week of it.
 SIGNIN_BASE = (datetime.now(UTC) - timedelta(days=1)).date()

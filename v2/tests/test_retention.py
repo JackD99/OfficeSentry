@@ -74,7 +74,7 @@ def test_default_prune_changes_nothing_new(db, cfg, two_tenants):
 
 FORM = {"keep_daily": "14", "keep_monthly": "6", "signin_days": "60", "findings_days": "180",
         "run_log_days": "30", "audit_days": "400", "issued_days": "730", "history_signin_days": "180",
-        "history_daily_months": "25", "history_audit_years": "7"}
+        "history_daily_months": "25", "history_audit_years": "7", "state_months": "25"}
 
 
 @pytest.mark.parametrize("role", ["analyst", "client"])

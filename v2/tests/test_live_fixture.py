@@ -4,12 +4,13 @@
 against a Business Premium (no Teams) test tenant (Entra ID P1, no P2, synced from
 on-premises AD) with 11 Conditional Access policies, one excluding a group, a mail domain,
 a file shared with one person, a deleted file and an inbox rule that moves mail to a
-folder, last on 9 Oct 2026. Names, emails,
+folder, last on 10 Oct 2026. Names, emails,
 phone numbers, domains and IDs are replaced; the response shapes are Microsoft's.
 Re-record when a collector starts asking for something new (DNS too: run it with
 ``--dns-over-https`` where plain DNS is blocked).
 """
 
+import re
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -32,12 +33,22 @@ from tests.conftest import login, make_user
 
 FIXTURE = replay.load()
 # When the recording was made; checks that depend on dates (inactive accounts) use it.
-RECORDED = datetime(2026, 10, 9, 22, 26, tzinfo=UTC)
+RECORDED = datetime(2026, 10, 10, 2, 47, tzinfo=UTC)
 
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
-STAND_INS: dict[str, dict] = {}
+STAND_INS: dict[str, dict] = {
+    # Mobile devices, automatic replies and distribution lists (added 10 Oct 2026). The test tenant has no phone
+    # syncing mail and no distribution list; both mailboxes have automatic replies off.
+    "Get-MobileDevice": {"value": []},
+    "Get-DistributionGroup": {"value": []},
+    "/v1.0/users/{id}/mailboxSettings/automaticRepliesSetting": {
+        "status": "disabled", "externalAudience": "all",
+        "scheduledStartDateTime": {"dateTime": "2026-10-09T22:00:00.0000000", "timeZone": "UTC"},
+        "scheduledEndDateTime": {"dateTime": "2026-10-10T22:00:00.0000000", "timeZone": "UTC"},
+        "internalReplyMessage": "", "externalReplyMessage": ""},
+}
 NEW_FIELDS: frozenset[str] = frozenset()
 
 
@@ -83,7 +94,9 @@ def live(db):
 def test_stand_ins_are_only_for_requests_not_recorded():
     """Once the fixture is re-recorded with these requests, delete them from STAND_INS and NEW_FIELDS."""
     recorded = {replay.request_key(e["url"])[0] for e in FIXTURE["entries"] if e["api"] == "graph"}
+    recorded |= {e["cmdlet"]["CmdletName"] for e in FIXTURE["entries"] if e["api"] == "exchange"}
     assert not set(STAND_INS) & recorded
+    assert not any(re.fullmatch(path.replace("{id}", "[^/]+"), r) for path in STAND_INS for r in recorded)
 
 
 def _results(db, tenant):
@@ -93,12 +106,13 @@ def _results(db, tenant):
 def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
-    # Entra ID P2, so sign-in risk and risky users are hidden.
-    nothing_to_check = {"tls_rpt", "device_compliance", "device_encryption", "supported_windows", "intune_enrolled",
+    # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered.
+    nothing_to_check = {"tls_rpt", "device_compliance", "device_encryption", "intune_enrolled",
                         "device_checkin", "risky_sign_ins", "risky_users"}
     assert {k for k, r in results.items() if r.status == "unavailable"} == nothing_to_check
     assert results["legacy_auth_blocked"].status == "pass"
     assert results["admins_ca_mfa"].status == "pass"
+    assert results["supported_windows"].status == "fail"  # Windows 11 24H2, whose support ends on 13 Oct 2026
 
 
 def test_own_and_microsoft_apps_are_not_flagged(db, live):
@@ -267,3 +281,18 @@ def test_connection_health_on_real_data(db, live):
     assert health.onboarded
     # The replay signs in without an app connection; that is all there is to fix.
     assert [c.key for c in health.problems] == ["connection"], health.problems
+
+
+def test_directory_reports_on_real_data(db, live):
+    apps = data_reports.build(db, live, "unused-apps", RECORDED)
+    rows = {r[0]: (r, f) for r, f in zip(apps.sections[0].rows, apps.sections[0].flags, strict=True)}
+    # Office Sentry's own test app signs in every night and is left out; Entra Connect's app signed in the day
+    # before; an in-house app consented for everyone has never signed in.
+    assert len(rows) == 2 and all(r[1] == "This organisation" for r, _ in rows.values())
+    assert sorted((r[3], f) for r, f in rows.values()) == [("Last 30 days", None), ("No sign-in on record", "medium")]
+    groups = data_reports.build(db, live, "group-structure", RECORDED)
+    tables = {s.title: s for s in groups.sections}
+    assert [r[3] for r in tables["Dynamic groups"].rows] == ["Running"]
+    assert tables["Empty groups"].rows and not tables["Groups inside groups"].rows
+    users = data_reports.build(db, live, "all-users", RECORDED)
+    assert users.unavailable is None and len(users.sections[0].rows) == 7

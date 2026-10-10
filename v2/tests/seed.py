@@ -14,6 +14,7 @@ from officesentry.graph import GRAPH_ROOT, GraphClient
 from officesentry.worker import execute_run
 from tests import adminactivitydata as ad
 from tests import devicedata as dd
+from tests import exchangedata as xd
 from tests import graphdata as gd
 from tests import groupdata as grp
 from tests import hybriddata as hd
@@ -89,7 +90,8 @@ def mock_our_app(rsps, *, found=True, missing=(), roles=None):
                       callback=role_assignments, content_type="application/json")
 
 
-def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_policy=None, our_app=None):
+def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_policy=None, our_app=None,
+                auto_replies=None):
     rsps.get(f"{V1}/policies/authorizationPolicy", json=gd.AUTHORIZATION_POLICY if auth_policy is None else auth_policy)
     rsps.get(f"{V1}/admin/sharepoint/settings", json=gd.SHAREPOINT_SETTINGS if sharepoint is None else sharepoint)
     rsps.get(f"{V1}/oauth2PermissionGrants", json={"value": gd.DELEGATED_GRANTS})
@@ -104,6 +106,7 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
     rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/inbox/messageRules"),
                       callback=messages, content_type="application/json")
     rsps.get(f"{V1}/auditLogs/signIns", json={"value": gd.LEGACY_SIGNINS})
+    xd.mock_auto_replies(rsps, auto_replies)
     if exchange is not False:
         mock_exchange(rsps, exchange)
 
@@ -111,6 +114,7 @@ def mock_phase4(rsps, *, exchange=None, inbox_rules=None, sharepoint=None, auth_
 def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, registration=None, sharepoint_kw=None,
                 secure_scores=None, per_user=None, usage_kw=None, signins=None, auth_methods_policy=None,
                 subscriptions=None, groups=None, deleted_users=None, deleted_groups=None, risky_users=None,
+                app_sign_ins=None,
                 **phase4):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/subscribedSkus", json={"value": skus})
@@ -163,6 +167,8 @@ def mock_tenant(rsps, *, users=USERS, skus=SKUS, ca=None, defaults=False, regist
     # log once it covers 30 days (the /v1.0 query above is its fallback until then).
     rsps.get(f"{BETA}/auditLogs/signIns",
              json={"value": [*gd.SIGNINS, *gd.LEGACY_SIGNINS] if signins is None else signins})
+    rsps.get(f"{BETA}/reports/servicePrincipalSignInActivities",
+             json={"value": gd.APP_SIGN_INS if app_sign_ins is None else app_sign_ins})
     rsps.get(f"{V1}/identityProtection/riskyUsers",
              json={"value": gd.RISKY_USERS if risky_users is None else risky_users})
     mock_phase4(rsps, **phase4)

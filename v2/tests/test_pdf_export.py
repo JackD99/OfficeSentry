@@ -50,12 +50,13 @@ def test_detail_page_shows_its_group_and_downloads(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True)
-    assert 'aria-current="true">Email' in page  # the open group
-    assert "Mailbox size" in page and f'/tenants/{alpha}/data/inbox-rules.pdf"' in page
+    # The report picker lists every group, the open report marked; phones get it as a grouped select.
+    picker = page.split('<nav class="report-menu"')[1].split("</nav>")[0]
+    assert '>Email</p>' in picker and "Mailbox size" in picker and "MFA coverage" in picker
+    assert f'href="/tenants/{alpha}/data/inbox-rules" title="' in picker
+    assert 'aria-current="page">Inbox rules<' in picker
+    assert f'/tenants/{alpha}/data/inbox-rules.pdf"' in page
     assert f'/tenants/{alpha}/data/inbox-rules.xlsx"' in page
-    # Only the open group's reports are tabs; the rest are in the phone picker's grouped list.
-    tabs = page.split('class="subtabs m0"')[1].split("</div>")[0]
-    assert "Mailbox size" in tabs and "MFA coverage" not in tabs
     assert '<optgroup label="Identity and access">' in page
 
 

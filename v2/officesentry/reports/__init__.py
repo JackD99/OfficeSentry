@@ -1,17 +1,24 @@
 """Report builders. Importing a module here declares its detail reports (``registry.report``)."""
 
 from . import (  # noqa: F401
+    all_users,
     auth_methods,
+    auto_replies,
     data_reports,
     deleted_items,
+    distribution_lists,
     group_membership,
+    group_structure,
     identity_reports,
     mail_compliance,
     mail_reports,
+    mailbox_trend,
+    mobile_devices,
     risky_users,
     sharepoint,
     sharepoint_storage,
     sign_in_reports,
     subscriptions,
+    unused_apps,
     usage_reports,
 )

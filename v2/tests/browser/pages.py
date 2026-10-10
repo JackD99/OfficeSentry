@@ -22,6 +22,8 @@ class Page:
 PAGES = [
     Page("login", "/login", user=""),
     Page("dashboard", "/"),
+    Page("today", "/today"),
+    Page("clients", "/clients"),
     Page("tenant-overview", "/tenants/{t}"),
     Page("findings", "/tenants/{t}/findings"),
     Page("tenant-changes", "/tenants/{t}/changes"),
@@ -48,6 +50,7 @@ PAGES = [
     Page("month-end", "/reporting"),
     Page("search", "/search?q=adele"),
     Page("client-tenants", "/admin/tenants"),
+    Page("onboarding-tracker", "/admin/onboarding"),
     Page("users", "/admin/users"),
     Page("branding", "/admin/branding"),
     Page("system-status", "/admin/status"),

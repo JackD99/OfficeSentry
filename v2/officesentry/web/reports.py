@@ -17,6 +17,7 @@ from ..reports import (
     export,
     findings_report,
     library,
+    questionnaires,
     tables,
     views,
 )
@@ -126,22 +127,41 @@ def _evidence_name(tenant, ext: str) -> str:
     return _filename(tenant, ext).replace("security-review", "security-evidence")
 
 
+CONTROLS_VIEW = "controls"
+
+
+def _set_key(value: str | None, default: str | None = questionnaires.DEFAULT) -> str | None:
+    """The question set a request asks for (``set=``), or ``default``; the controls view is its own."""
+    return value if value in questionnaires.SETS or value == CONTROLS_VIEW else default
+
+
 @bp.get("/tenants/<int:tenant_id>/evidence")
 @login_required
 def evidence_pack(tenant_id: int):
+    """Questionnaire answers for one question set (insurance by default), or the controls view."""
     t = tenant_or_404(tenant_id)
-    return render_template("evidence_page.html", pack=evidence.build(g.db, t), answers=evidence_answers.ANSWERS,
+    view = _set_key(request.args.get("set"))
+    pack = evidence.build(g.db, t)
+    sheet = questionnaires.sheet(pack, view) if view != CONTROLS_VIEW else None
+    copy_all = questionnaires.to_text(sheet, branding.load(g.db).display_name) if sheet else ""
+    show = request.args.get("show") if request.args.get("show") in ("input", "attention") else ""
+    return render_template("evidence_page.html", pack=pack, sheet=sheet, view=view, sets=questionnaires.SETS,
+                           copy_all=copy_all, show=show, answers=evidence_answers.ANSWERS,
                            staff=g.user["role"] in STAFF, max_note=evidence_answers.MAX_NOTE)
 
 
 @bp.post("/tenants/<int:tenant_id>/evidence/answers/<key>")
 @roles_required(*STAFF)
 def evidence_answer(tenant_id: int, key: str):
-    """The technical lead's answer to one questionnaire question, in place of the suggested one (or back to it)."""
+    """The technical lead's answer to one questionnaire topic, in place of the suggested one (or back to it).
+
+    One answer per topic and tenant, so it fills every question set that asks it."""
     t = tenant_or_404(tenant_id)
     if key not in evidence_answers.KEYS:
         abort(404)
-    back = url_for("reports.evidence_pack", tenant_id=t["id"]) + f"#answer-{key}"
+    view = _set_key(request.form.get("set"), None)
+    show = request.form.get("show") if request.form.get("show") in ("input", "attention") else None
+    back = url_for("reports.evidence_pack", tenant_id=t["id"], set=view, show=show) + f"#answer-{key}"
     if request.form.get("action") == "clear":
         if evidence_answers.clear_override(g.db, t["id"], key, g.user["username"]):
             flash("Back to the suggested answer.", "success")
@@ -152,36 +172,67 @@ def evidence_answer(tenant_id: int, key: str):
     suggested = next(a.suggested for a in evidence.build(g.db, t).answers if a.key == key)
     evidence_answers.set_override(g.db, t["id"], key, answer, request.form.get("note", ""), suggested,
                                   g.user["username"])
-    flash("Answer saved. The pack, its PDF and downloads now show it.", "success")
+    flash("Answer saved for this client. Every question set that asks it, and the downloads, now use it.", "success")
     return redirect(back)
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.pdf")
 @login_required
 def evidence_pdf(tenant_id: int):
+    """With ``set=``, that question set's answer sheet; without, the controls evidence pack."""
     t = tenant_or_404(tenant_id)
+    key = _set_key(request.args.get("set"), None)
+    pack = evidence.build(g.db, t)
+    if key in questionnaires.SETS:
+        audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.pdf")
+        return pdf_response("reports/answer_sheet.html", _evidence_name(t, "pdf")[:-4] + f"-{key}",
+                            sheet=questionnaires.sheet(pack, key))
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.pdf")
-    return pdf_response("reports/evidence.html", _evidence_name(t, "pdf")[:-4], pack=evidence.build(g.db, t))
+    return pdf_response("reports/evidence.html", _evidence_name(t, "pdf")[:-4], pack=pack,
+                        sheet=questionnaires.sheet(pack, questionnaires.DEFAULT))
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.xlsx")
 @login_required
 def evidence_xlsx(tenant_id: int):
+    """Every question set and the controls; with ``set=``, that question set only."""
     t = tenant_or_404(tenant_id)
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.xlsx")
+    key = _set_key(request.args.get("set"), None)
+    key = key if key in questionnaires.SETS else None
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.xlsx" if key else "evidence.xlsx")
+    name = _evidence_name(t, "xlsx")
     return Response(
-        evidence.to_xlsx(evidence.build(g.db, t), brand=branding.load(g.db)),
+        evidence.to_xlsx(evidence.build(g.db, t), brand=branding.load(g.db), only=key),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={_evidence_name(t, 'xlsx')}"},
+        headers={"Content-Disposition": f"attachment; filename={name[:-5] + '-' + key if key else name[:-5]}.xlsx"},
     )
+
+
+@bp.get("/tenants/<int:tenant_id>/evidence.txt")
+@login_required
+def evidence_text(tenant_id: int):
+    """One question set as plain text, to paste from."""
+    t = tenant_or_404(tenant_id)
+    key = _set_key(request.args.get("set"))
+    key = key if key in questionnaires.SETS else questionnaires.DEFAULT
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.txt")
+    body = questionnaires.to_text(questionnaires.sheet(evidence.build(g.db, t), key), branding.load(g.db).display_name)
+    return Response(body, mimetype="text/plain; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="{_evidence_name(t, "txt")[:-4]}-{key}.txt"'})
 
 
 @bp.get("/tenants/<int:tenant_id>/data")
 @login_required
 def data_index(tenant_id: int):
-    """The Detail reports tab, and the report picker on phones: ``?key=`` or the first report."""
+    """The Reports tab, and the report picker on phones: ``?key=`` or the first report."""
     t = tenant_or_404(tenant_id)
     key = request.args.get("key", "")
+    if key == "review":
+        return redirect(url_for("reports.tenant_report", tenant_id=t["id"]))
+    if key == "evidence":
+        return redirect(url_for("reports.evidence_pack", tenant_id=t["id"]))
+    if key == "designs":
+        return redirect(url_for("designs.tenant_designs", tenant_id=t["id"]))
     if key not in data_reports.REPORTS:
         key = data_reports.grouped()[0].reports[0][0]
     return redirect(url_for("reports.data_report", tenant_id=t["id"], key=key))

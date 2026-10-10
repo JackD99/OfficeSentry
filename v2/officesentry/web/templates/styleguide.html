@@ -1,7 +1,7 @@
 {#- The style guide (web/styleguide.py): every token in tokens.css and every shared component, with made-up
     data. Light or dark follows the system setting. Links in the examples go nowhere useful. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ICONS, ts, status, change_tag, sev_counts, sev_legend, tenant_header, downloads, report_nav with context %}
+{% from "_macros.html" import icon, ICONS, ts, status, change_tag, sev_counts, sev_legend, tenant_header, downloads, report_picker with context %}
 {% from "_report_table.html" import report_table with context %}
 {% block title %}Style guide · Office Sentry{% endblock %}
 {% block content %}
@@ -113,7 +113,7 @@
     {% for t in report.tiles %}{% set href = links.tiles[loop.index0] %}
     <{{ 'a' if href else 'div' }} class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view{% endif %}>
       <div class="label">{{ t.label }}{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
-      <div class="value">{{ t.value }}</div>
+      <div class="value{{ ' has-spark' if t.trend }}"><span>{{ t.value }}</span>{% if t.trend %}{{ sparkline(t.trend.values, label=t.trend.label)|safe }}{% endif %}</div>
       <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
     </{{ 'a' if href else 'div' }}>
     {% endfor %}
@@ -176,9 +176,9 @@
 
 {# -- Navigation ------------------------------------------------------------------------------------ #}
 <section class="card" id="navigation">
-  <div class="card-head"><h2>Navigation</h2><span class="meta"><code>tenant_header()</code>, <code>report_nav()</code>, pill rows</span></div>
-  <div class="sg-frame">{{ tenant_header(tenant, 'data', counts={'findings': 137}) }}</div>
-  <div class="sg-frame">{{ report_nav(tenant, report_groups, report_groups[0], 'mfa') }}</div>
+  <div class="card-head"><h2>Navigation</h2><span class="meta"><code>tenant_header()</code> (its tab bar stays pinned on laptops), <code>report_picker()</code>, pill rows</span></div>
+  <div class="sg-frame">{{ tenant_header(tenant, 'data', counts={'findings': 137}, pin=false) }}</div>
+  <div class="sg-frame"><div class="report-layout">{{ report_picker(tenant, 'mfa') }}<div class="report-main"><p class="muted m0">The open report, beside a list of every report with a search box. Narrower screens get a select instead.</p></div></div></div>
   <div class="sg-frame"><nav class="subtabs m0" aria-label="Example pill row"><a class="active" aria-current="page" href="#navigation">Monthly review</a><a href="#navigation">Insurance evidence</a><a href="#navigation">Checks</a></nav></div>
 </section>
 

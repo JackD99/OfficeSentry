@@ -43,6 +43,7 @@ def save():
         "alerts.min_severity": severity,
         "alerts.on_failures": "1" if request.form.get("on_failures") == "1" else "0",
         "alerts.on_recovery": "1" if request.form.get("on_recovery") == "1" else "0",
+        "alerts.on_reports": "1" if request.form.get("on_reports") == "1" else "0",
         "alerts.system": "1" if request.form.get("system") == "1" else "0",
     }
     url = request.form.get("url", "").strip()
@@ -77,7 +78,7 @@ def save():
         audit(g.db, g.user["username"], "alert_settings_updated",
               detail=f"enabled={values['alerts.enabled']} format={fmt} severity={severity} "
                      f"failures={values['alerts.on_failures']} recovery={values['alerts.on_recovery']} "
-                     f"system={values['alerts.system']} "
+                     f"reports={values['alerts.on_reports']} system={values['alerts.system']} "
                      f"url={url_change} secret={signing_state}")
     flash("Alert settings saved.", "success")
     return redirect(url_for("alerts.settings"))
@@ -88,12 +89,15 @@ def save():
 def send_test():
     s = alerts.settings(g.db)
     base_url = current_app.extensions["officesentry.config"].base_url
+    sample = request.form.get("sample") == "report"
+    message = alerts.sample_report_message(base_url) if sample else alerts.test_message(base_url)
     try:
-        alerts.send(g.db, _vault(), alerts.test_message(base_url), s)
+        alerts.send(g.db, _vault(), message, s)
     except alerts.AlertError as exc:
         audit(g.db, g.user["username"], "alert_test_failed", detail=str(exc)[:500])
         flash(f"Test failed: {exc}", "error")
     else:
-        audit(g.db, g.user["username"], "alert_test_sent", detail=s["alerts.format"])
-        flash(f"Test alert sent to {alerts.masked_url(_vault(), s)}", "success")
+        audit(g.db, g.user["username"], "alert_test_sent", detail=s["alerts.format"] + (" report" if sample else ""))
+        flash(f"{'Sample report message' if sample else 'Test alert'} sent to {alerts.masked_url(_vault(), s)}",
+              "success")
     return redirect(url_for("alerts.settings"))

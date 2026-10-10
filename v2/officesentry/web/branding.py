@@ -1,7 +1,7 @@
 """MSP branding: the MSP's name, logo, colour and contact details on client reports and the portal.
 
 Also gives every template ``brand`` (loaded only when a template uses it) and
-the report helpers ``summary``, ``stacked_bar`` and ``meter``.
+the report helpers ``summary``, ``stacked_bar``, ``meter`` and ``sparkline``.
 
 ``/brand.css`` and ``/brand/logo`` (also ``/favicon.ico``) are deliberately
 public: the sign-in page shows the MSP's colour and logo before anyone signs
@@ -64,7 +64,8 @@ def page_title(title: str) -> str:
 
 @bp.record_once
 def _globals(state):
-    state.app.jinja_env.globals.update(summary=summary, stacked_bar=charts.stacked_bar, meter=charts.meter)
+    state.app.jinja_env.globals.update(summary=summary, stacked_bar=charts.stacked_bar, meter=charts.meter,
+                                       sparkline=charts.sparkline)
     state.app.jinja_env.filters["page_title"] = page_title
 
 

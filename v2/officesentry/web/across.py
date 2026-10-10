@@ -12,13 +12,24 @@ from datetime import UTC, datetime
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
 from ..checks import RULES
-from ..db import audit, transaction, utcnow
-from ..reports import branding, data_reports, evidence, month_changes, rollups, tables, views, workbook
+from ..db import audit
+from ..reports import (
+    branding,
+    data_reports,
+    evidence,
+    month_changes,
+    questionnaires,
+    rollups,
+    tables,
+    views,
+    workbook,
+)
 from ..reports.monthly_review import build as build_review
 from .access import login_required, roles_required, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
 from .saved_views import MAX_VIEWS
+from .saved_views import store as store_view
 
 bp = Blueprint("across", __name__)
 
@@ -172,11 +183,7 @@ def save_rows_view(key: str, table: str):
     if count >= MAX_VIEWS:
         flash(f"You can keep up to {MAX_VIEWS} views. Delete one you don't use first.", "error")
         return redirect(f"{page}?{query}")
-    with transaction(g.db):
-        g.db.execute(
-            "INSERT INTO saved_views (user_id, report_key, name, query, created_at) VALUES (?, ?, ?, ?, ?)"
-            " ON CONFLICT(user_id, report_key, name) DO UPDATE SET query = excluded.query",
-            (g.user["id"], key, name, query, utcnow()))
+    store_view(g.db, g.user["id"], key, name, query)
     flash(f"Saved “{name}”. It's under Views on this report, here and for every tenant.", "success")
     return redirect(f"{page}?{query}")
 
@@ -378,8 +385,15 @@ def review_csv(tenant_id: int):
 @bp.get("/tenants/<int:tenant_id>/evidence.csv")
 @login_required
 def evidence_csv(tenant_id: int):
+    """With ``set=``, that question set's answers; without, every topic's answer and the controls."""
     t = tenant_or_404(tenant_id)
     pack = evidence.build(g.db, t)
+    key = request.args.get("set")
+    if key in questionnaires.SETS:
+        table = tables.Table(questionnaires.SETS[key].title, questionnaires.COLUMNS,
+                             questionnaires.rows(questionnaires.sheet(pack, key)))
+        audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.csv")
+        return _download(tables.to_csv(table), f"security-evidence-{tables.slug(t['name'])}-{key}", "csv")
     table = tables.Table("Evidence", ["Section", "Question", "Answer", "Why", "Answered by", "Evidence", "Gaps"], [
         ["Questionnaire", question, answer, why, by, source, ""]
         for question, answer, why, by, source in evidence.answer_rows(pack)] + [

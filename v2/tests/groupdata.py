@@ -35,7 +35,8 @@ GROUPS = [
     _group("g4", "Board", team=True),
     _group("g5", "Provisioned", visibility="Private"),
     _group("s1", "All Staff", unified=False, mail=False, security=True, groupTypes=["DynamicMembership"],
-           membershipRule='(user.userType -eq "Member")', assignedLicenses=[{"skuId": "sku-bp", "disabledPlans": []}]),
+           membershipRule='(user.userType -eq "Member")', membershipRuleProcessingState="On",
+           assignedLicenses=[{"skuId": "sku-bp", "disabledPlans": []}]),
     _group("s2", "VPN Users", unified=False, mail=False, security=True, onPremisesSyncEnabled=True),
     _group("s3", "Group creators", unified=False, mail=False, security=True),
     _group("m1", "Finance alerts", unified=False, security=True),
@@ -57,6 +58,12 @@ MEMBERS = {
     "g3": [_member("u1")],
     "g4": [_member("u1"), _member("u5")],
     "g5": [_member("u1")],
+    # Security groups and distribution lists (read by Group nesting): VPN Users holds Group creators, which is
+    # empty; Info holds Finance alerts, which holds VPN Users: three levels.
+    "s1": [_member("u1"), _member("u5")],
+    "s2": [_member("u1"), {"@odata.type": "#microsoft.graph.group", "id": "s3"}],
+    "m1": [_member("u5"), {"@odata.type": "#microsoft.graph.group", "id": "s2"}],
+    "d1": [{"@odata.type": "#microsoft.graph.group", "id": "m1"}, _member("u1")],
 }
 
 GROUP_SETTINGS = [

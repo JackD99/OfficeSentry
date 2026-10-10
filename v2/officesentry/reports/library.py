@@ -71,6 +71,10 @@ USES: tuple[Use, ...] = (
         "Check the client's bill against the tenant: products, quantities, prices, trials and suspended "
         "subscriptions, and licence assignment errors.",
         ("subscriptions", "licences")),
+    Use("cleanup", "Directory clean-up",
+        "What nobody uses any more: stale accounts, apps unused for months that still hold permissions, empty and "
+        "nested groups, managers who have left, and what's in the recycle bin.",
+        ("inactive", "unused-apps", "group-structure", "all-users", "apps", "deleted-items", "devices")),
 )
 
 
@@ -100,8 +104,10 @@ class Area:
 SUMMARIES = (
     ("review", "Monthly review", "Security and licensing summary with recommendations, ready to send to the client.",
      "review", "summary pdf client report recommendations"),
-    ("evidence", "Insurance evidence", "Answers to the controls cyber insurers ask about, with the evidence.",
-     "evidence", "cyber insurance questionnaire controls"),
+    ("evidence", "Questionnaires and evidence", "Answers to paste into cyber insurance, supplier security and "
+     "Cyber Essentials questions, with the evidence behind each.",
+     "evidence", "cyber insurance questionnaire controls supplier vendor due diligence cyber essentials iasme "
+     "danzell proposal renewal form"),
     ("changes", "What changed", "Configuration changes, new and fixed findings, and figures that moved.",
      "changes", "month over month history drift differences"),
     ("findings", "Findings", "Every open finding from the checks, worst first, with accepted risks.",

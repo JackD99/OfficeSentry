@@ -52,6 +52,11 @@ def test_demo_reports_add_up(app, db, vault):
             assert f"{len(report.resolved)} fixed and {report.new_count} new or returning" in findings
             assert f"{report.new_count} new item" in " ".join(summary.monthly(report).paragraphs)
 
+        # Guests: the fixtures' guest keeps its account type when its name is changed.
+        guests = data_reports.build(db, tenant, "guests")
+        listed = next(s for s in guests.sections if s.title == "Guest accounts")
+        assert listed.rows, tenant["name"]
+
         # SharePoint storage: the parts make up what's used, and used plus free is the tenant's total.
         storage = data_reports.build(db, tenant, "sharepoint-storage")
         if storage.unavailable:

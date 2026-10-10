@@ -26,7 +26,20 @@ from datetime import UTC, datetime, timedelta
 
 import requests
 
-from . import alerts, app_setup, clouds, findings, lifecycle, ratelimit, retention, schedule, store, tasks, throttle
+from . import (
+    alerts,
+    app_setup,
+    clouds,
+    findings,
+    lifecycle,
+    ratelimit,
+    retention,
+    schedule,
+    state_history,
+    store,
+    tasks,
+    throttle,
+)
 from .collectors import REGISTRY, RunContext
 from .config import Config
 from .connection_check import explain
@@ -187,6 +200,10 @@ def _run_collector(conn, run, graph_factory, exchange_factory, client_id: str | 
     status = "partial" if ctx.warnings else "succeeded"
     store.log_event(conn, run_id, "info", f"Finished: {status}")
     store.finish_run(conn, run_id, status, "; ".join(ctx.warnings) or None)
+    try:
+        state_history.record_finished(conn, run_id)
+    except Exception:  # the history is a second copy, written in shadow: it must never fail a collection
+        log.exception("Recording run %s in the state history failed", run_id)
     # Data came back, so consent exists even if it was granted outside Office Sentry's consent link.
     conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
                  (utcnow(), run["tenant_id"]))
@@ -396,8 +413,9 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
 
 # Modules that register ``schedule.periodic`` jobs, and ``tasks.handler`` kinds. Add yours here.
 JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing",
-               "officesentry.system_alerts")
-TASK_MODULES = ("officesentry.delivery", "officesentry.month_end", "officesentry.reports.precomputed")
+               "officesentry.state_history", "officesentry.system_alerts", "officesentry.onboarding")
+TASK_MODULES = ("officesentry.delivery", "officesentry.month_end", "officesentry.reports.precomputed",
+                "officesentry.onboarding")
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
 

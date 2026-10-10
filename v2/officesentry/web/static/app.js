@@ -71,3 +71,93 @@
   else focusable();
   window.addEventListener('resize', function () { clearTimeout(timer); timer = setTimeout(focusable, 150); });
 })();
+
+/* Tenant pages on laptops: the header's tab bar stays pinned to the top of the window as the page
+ * scrolls, with the tenant's name in it (.tenant-head[data-pin], app.css). Pure CSS position: sticky with
+ * a negative top, so nothing changes height and the page never jumps; this only measures. The Reports tab's
+ * picker scrolls to the open report. window.officeSentryHead runs again after a view loads in place. */
+(function () {
+  var wide = window.matchMedia ? window.matchMedia('(min-width: 961px)') : { matches: true };
+  var GAP = 10;  // px of the header kept above the tabs while pinned
+  var head = null, top = 0;
+  function measure() {
+    var root = document.documentElement;
+    if (!head || !wide.matches) {
+      if (head) head.classList.remove('pinned', 'stuck');
+      root.style.removeProperty('--pin-h');
+      return;
+    }
+    head.classList.add('pinned');
+    var tabs = head.querySelector('.tabs');
+    var keep = tabs.offsetHeight + GAP;
+    top = keep - head.offsetHeight;
+    head.style.setProperty('--head-top', top + 'px');
+    root.style.setProperty('--pin-h', keep + 'px');
+    check();
+  }
+  function check() {
+    if (head && head.classList.contains('pinned')) head.classList.toggle('stuck', head.getBoundingClientRect().top <= top + 0.5);
+  }
+  function picker() {
+    var list = document.querySelector('.picker-list');
+    var open = list && list.querySelector('a[aria-current]');
+    if (open && list.scrollHeight > list.clientHeight) {
+      var below = Math.round(open.offsetTop - list.offsetTop - list.clientHeight / 3);
+      if (below > 0) list.scrollTop = below;
+    }
+  }
+  function start() {
+    head = document.querySelector('.tenant-head[data-pin]');
+    measure();
+    picker();
+    // Web fonts change line heights, so measure again once they're in: the open report's place in the
+    // picker (and the pinned bar's height) then come out the same on every load.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { measure(); picker(); });
+  }
+  window.officeSentryHead = start;
+  var ticking = false;
+  window.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () { ticking = false; check(); });
+  }, { passive: true });
+  var timer;
+  window.addEventListener('resize', function () { clearTimeout(timer); timer = setTimeout(measure, 100); });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+/* Copy buttons: data-copy="#id" copies that element's text (a textarea's value) to the clipboard and says so. */
+(function () {
+  function fallback(text) {
+    var box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.position = 'fixed';
+    box.style.opacity = '0';
+    document.body.appendChild(box);
+    box.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    box.remove();
+    return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
+  }
+  document.addEventListener('click', function (e) {
+    var button = e.target.closest && e.target.closest('[data-copy]');
+    if (!button) return;
+    var source = document.querySelector(button.getAttribute('data-copy'));
+    if (!source) return;
+    var text = source.value !== undefined ? source.value : source.textContent;
+    var done = navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(text) : fallback(text);
+    var label = button.getAttribute('data-label') || button.innerHTML;
+    button.setAttribute('data-label', label);
+    done.then(function () {
+      button.classList.add('copied');
+      button.textContent = button.getAttribute('data-copied') || 'Copied';
+    }, function () {
+      button.textContent = 'Select and copy';
+    }).then(function () {
+      setTimeout(function () { button.innerHTML = label; button.classList.remove('copied'); }, 2000);
+    });
+  });
+})();

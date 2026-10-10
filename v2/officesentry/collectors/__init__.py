@@ -13,6 +13,7 @@ from . import apps, policies  # noqa: F401
 from . import groups  # noqa: F401
 from . import deleted_items  # noqa: F401
 from . import exchange, mail_rules, mail_usage  # noqa: F401, I001  (these reuse the mailbox snapshot)
+from . import mobile_devices, auto_replies, distribution_lists  # noqa: F401, I001  (these too)
 from . import sign_ins, risky_users  # noqa: F401, I001
 from . import domains  # noqa: F401
 from . import devices  # noqa: F401
@@ -20,6 +21,7 @@ from . import directory_sync  # noqa: F401
 from . import sharepoint  # noqa: F401  (shared files reuse the users and tenant profile snapshots)
 from . import sharepoint_storage  # noqa: F401
 from . import usage  # noqa: F401
+from . import app_sign_ins, group_nesting, user_details  # noqa: F401  (their reports join Apps, Groups and Users)
 from .base import REGISTRY, Collector, RunContext
 
 __all__ = ["REGISTRY", "Collector", "RunContext"]

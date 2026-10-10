@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon, ts, tenant_header, downloads, report_nav, csrf with context %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, report_picker, csrf with context %}
 {% from "_report_table.html" import report_table, saved_views with context %}
 {% block title %}{{ report.title }} · {{ tenant.name }}{% endblock %}
 {% block content %}
 {{ tenant_header(tenant, 'data') }}
-{{ report_nav(tenant, groups, group, report.key) }}
+<div class="report-layout">
+{{ report_picker(tenant, report.key) }}
+<div class="report-main" id="report" tabindex="-1">
 <div class="toolbar report-title">
   <div>
     <h2 class="section-title">{{ report.title }}</h2>
@@ -30,14 +32,14 @@
   {% for t in report.tiles %}{% set href = links.tiles[loop.index0] %}
   <{{ 'a' if href else 'div' }} class="tile{% if t.tone %} tone-{{ t.tone }}{% endif %}{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view title="Show the rows behind this figure"{% endif %}>
     <div class="label">{{ t.label }}{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
-    <div class="value">{{ t.value }}</div>
+    <div class="value{{ ' has-spark' if t.trend }}"><span>{{ t.value }}</span>{% if t.trend %}{{ sparkline(t.trend.values, label=t.trend.label)|safe }}{% endif %}</div>
     <div class="foot">{% if t.foot %}{{ t.foot }}{% else %}&nbsp;{% endif %}</div>
   </{{ 'a' if href else 'div' }}>
   {% endfor %}
   {% for h in report.highlights %}{% set href = links.highlights[loop.index0] %}
   <{{ 'a' if href else 'div' }} class="tile{{ ' link' if href }}"{% if href %} href="{{ href }}" data-view title="Show the rows behind this figure"{% endif %}>
     <div class="label"><span>{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</span>{% if href %}{{ icon('arrow', 'go') }}{% endif %}</div>
-    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}{{ ' has-spark' if h.trend }}"><span>{{ h.value }}</span>{% if h.trend %}{{ sparkline(h.trend.values, label=h.trend.label)|safe }}{% endif %}</div>
     {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
   </{{ 'a' if href else 'div' }}>
   {% endfor %}
@@ -73,6 +75,8 @@
 {% if report.footnote and not report.unavailable %}<p class="footnote">{{ report.footnote }}</p>{% endif %}
 <p class="footnote">Data from
 {% for title, finished in report.sources %}{{ title }} ({% if finished %}{{ ts(finished) }}{% else %}not collected yet{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+</div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>

@@ -17,7 +17,7 @@ from ..devices import parse_ts
 from ..licences import Assignment, assignment_error, assignments, is_free, load_prices, sku_name
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import DataReport, Highlight, Rows, Section
+from .data_reports import Chart, DataReport, Highlight, Rows, Section
 from .identity_reports import Money
 from .monthly_review import setting
 from .registry import report
@@ -170,6 +170,7 @@ def _subscriptions(skus, subs, names, prices, currency, now):
                       intro="Every product the tenant has, with licences bought, assigned and still available, and "
                             "what they cost a month at your prices. Free products are listed last.",
                       empty="The tenant has no subscriptions.")
+    section.chart = Chart("Licence", ("Assigned", "Available"), total="Purchased", tones=("1", "muted"))
     next_dates = _next_dates(subs, now)
     trials = {s.get("skuId") for s in subs if s.get("isTrial") is True and _status(s.get("status")) != "Ended"}
     paid_subs = {s.get("skuId") for s in subs if s.get("isTrial") is not True and _status(s.get("status")) != "Ended"}

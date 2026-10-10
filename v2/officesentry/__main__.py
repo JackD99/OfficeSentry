@@ -317,6 +317,84 @@ def cmd_compact(args, cfg):
         conn.close()
 
 
+def _size(n: float) -> str:
+    return f"{n / 2**30:,.2f} GB" if n >= 2**30 else f"{n / 2**20:,.1f} MB"
+
+
+def _duration(seconds: float) -> str:
+    if seconds < 90:
+        return f"{max(seconds, 1):.0f} seconds"
+    if seconds < 90 * 60:
+        return f"{seconds / 60:.0f} minutes"
+    return f"{seconds / 3600:.1f} hours"
+
+
+def cmd_history(args, cfg):
+    """The daily history (state_history.py): progress, a dry run of the backfill, the backfill now, or a check."""
+    import shutil
+    import time
+
+    from . import state_history
+
+    conn = connect(cfg.db_path)
+    try:
+        migrate(conn)
+        if args.dry_run:
+            est = state_history.estimate(conn, seconds=args.seconds)
+            if not est.pending:
+                print("Nothing to record: every run with a snapshot is in the daily history.")
+                return
+            free = shutil.disk_usage(cfg.db_path.parent).free
+            print(f"Dry run, nothing written. {plural(est.pending, 'run')} ({est.pending_objects:,} objects) to "
+                  f"record; sampled {plural(est.sampled_sources, 'data source')} ({est.share:.0%} of the objects) "
+                  f"in {_duration(est.seconds)}.")
+            print(f"  Room needed: about {_size(est.total_bytes)}; {_size(free)} free next to the database.")
+            print(f"  Time: about {_duration(est.total_seconds)} with `history --backfill`, or about "
+                  f"{_duration(est.total_seconds * 60 / state_history.SECONDS_PER_TICK)} in the worker's background "
+                  f"({state_history.SECONDS_PER_TICK:.0f} seconds a minute).")
+            if est.total_bytes * 2 > free:
+                print("  There isn't twice that room free: free some disk space first. The worker pauses the "
+                      "backfill while the disk is over 85% full.")
+            return
+        if args.backfill:
+            if not state_history.room(conn):
+                sys.exit("The disk is over 85% full, so the daily history wasn't backfilled. Free some space first.")
+            started = time.monotonic()
+
+            def progress(n: int) -> None:
+                print(f"  {n:,} runs recorded ({_duration(time.monotonic() - started)})", flush=True)
+
+            done, finished = state_history.catch_up(conn, seconds=None, report=progress)
+            print(f"Recorded {plural(done, 'run')} in {_duration(time.monotonic() - started)}."
+                  + ("" if finished else " Some runs are still queued or running; the worker records them."))
+        if args.verify:
+            checked = bad = 0
+            for (run_id,) in conn.execute("SELECT run_id FROM state_runs ORDER BY run_id").fetchall():
+                differ = state_history.verify_run(conn, run_id)
+                if differ is None:
+                    continue
+                checked += 1
+                if differ:
+                    bad += 1
+                    print(f"  run {run_id}: {', '.join(differ)} differ from the snapshot")
+            print(f"Checked {plural(checked, 'run')} that still have their snapshot: "
+                  + (f"{plural(bad, 'run')} differ." if bad else "every one reads back exactly."))
+            if bad:
+                sys.exit(1)
+            return
+        st = state_history.status(conn)
+        print(f"Daily history: {plural(st['runs'], 'run')} recorded ({st['objects']:,} objects as {st['versions']:,} "
+              f"versions), {_size(st['bytes'])}; the snapshots take {_size(st['snapshot_bytes'])}.")
+        if st["oldest"]:
+            print(f"  Reaches back to {st['oldest'][:10]}.")
+        print(f"  {plural(st['pending'], 'run')} still to record" + (" (the worker records them a few seconds a "
+                                                                      "minute)." if st["pending"] else "."))
+        if st["mismatches"]:
+            print(f"  {plural(st['mismatches'], 'run')} didn't read back as stored; last: {st['last_mismatch']}.")
+    finally:
+        conn.close()
+
+
 def cmd_delete_tenant(args, cfg):
     """Delete a tenant and everything stored for it: the portal's Offboard → Delete permanently."""
     from . import lifecycle
@@ -436,6 +514,18 @@ def main(argv=None):
     compact = sub.add_parser("compact", help="compress old snapshot data now and shrink the database file "
                                              "(the worker compresses it gradually anyway)")
     compact.set_defaults(func=cmd_compact)
+
+    history = sub.add_parser("history", help="show how far the daily history has been recorded (the worker records "
+                                             "it in the background)")
+    what = history.add_mutually_exclusive_group()
+    what.add_argument("--dry-run", action="store_true",
+                      help="estimate the room and time recording the rest needs, writing nothing")
+    what.add_argument("--backfill", action="store_true",
+                      help="record everything left now rather than in the background")
+    what.add_argument("--verify", action="store_true",
+                      help="check every recorded run that still has its snapshot reads back exactly as stored")
+    history.add_argument("--seconds", type=float, default=20, help="with --dry-run: how long to sample for")
+    history.set_defaults(func=cmd_history)
 
     delete = sub.add_parser("delete-tenant", help="delete a client tenant and everything stored for it")
     delete.add_argument("tenant_id", type=int, help="the number in the tenant's address, /tenants/<id>")

@@ -19,6 +19,12 @@ stores objects the way Office Sentry did before compression (one row of JSON tex
 ``--compact`` then runs ``python -m officesentry compact`` on it, so one run measures before and after.
 It prints the file size, the largest tables and how long a compressed backup takes.
 
+``--history`` then measures the daily history (``state_history.py``): it backfills it from the kept snapshots,
+as the worker does after the upgrade, and records ``--history-nights`` more nights for every tenant in which
+``--churn`` of the objects change and the fast-changing fields (``state_history.VOLATILE``: last sign-ins,
+mailbox sizes, usage) move for ``--active`` of them. The snapshots here are identical copies, so the backfill is
+as small as it can be; the nights after it show what real change costs, per night and over 25 months.
+
 Development only: it imports the test fixtures, which aren't in the Docker image.
 """
 
@@ -150,6 +156,84 @@ def timed_backup(db_path: Path) -> None:
     print(f"  compressed backup: {dest.stat().st_size / 1e9:.2f} GB in {time.monotonic() - start:.0f} s")
 
 
+def state_bytes(db) -> int:
+    return sum(size for table, size in table_sizes(db) if table.startswith("state_"))
+
+
+def _churned(objects: dict, night: int, rng: random.Random, churn: float, active: float) -> dict:
+    """One more night of a run's objects: ``churn`` of them edited, a few added and removed, and the fast-changing
+    fields of ``active`` of them moved."""
+    from officesentry import state_history
+
+    out = {}
+    for kind, items in objects.items():
+        fields = state_history.VOLATILE.get(kind, ())
+        new = {}
+        for oid, data in items.items():
+            roll = rng.random()
+            if roll < churn / 10:
+                continue  # removed
+            if isinstance(data, dict):
+                if roll < churn:
+                    data = dict(data, edited=night)
+                if fields and rng.random() < active:
+                    data = dict(data, **{f: f"2026-{night:04}" for f in fields if f in data})
+            new[oid] = data
+            if roll > 1 - churn / 10:
+                new[f"{oid}-{night}"] = data  # added
+        out[kind] = new
+    return out
+
+
+def measure_history(db, nights: int, churn: float, active: float) -> None:
+    from officesentry import state_history
+
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    snapshots = sum(size for table, size in table_sizes(db) if table == "objects")
+    start = time.monotonic()
+    done, _ = state_history.catch_up(db, seconds=None)
+    took = time.monotonic() - start
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    backfilled = state_bytes(db)
+    st = state_history.status(db)
+    print(f"\nDaily history backfill: {done:,} runs in {took:.0f} s ({took / max(done, 1) * 1000:.1f} ms a run), "
+          f"{st['objects']:,} objects as {st['versions']:,} versions: {backfilled / 1e9:.3f} GB "
+          f"(the kept snapshots take {snapshots / 1e9:.3f} GB)")
+    if not nights:
+        return
+    rng = random.Random(7)  # noqa: S311 (test data)
+    series = db.execute("SELECT run_id, tenant_id, collector, finished_at FROM state_runs WHERE run_id IN"
+                        " (SELECT MAX(run_id) FROM state_runs GROUP BY tenant_id, collector)").fetchall()
+    latest = {(r["tenant_id"], r["collector"]): state_history._snapshot(db, r["run_id"]) for r in series}
+    start, recorded = time.monotonic(), 0
+    for night in range(1, nights + 1):
+        with transaction(db, immediate=True):
+            for (tenant_id, collector), objects in latest.items():
+                objects = latest[tenant_id, collector] = _churned(objects, night, rng, churn, active)
+                at = _iso(datetime.now(UTC) + timedelta(days=night))
+                run_id = db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at, started_at,"
+                                    " finished_at, object_count) VALUES (?, ?, 'succeeded', 'schedule', ?, ?, ?, ?)",
+                                    (tenant_id, collector, at, at, at, sum(map(len, objects.values())))).lastrowid
+                run = {"id": run_id, "tenant_id": tenant_id, "collector": collector, "finished_at": at}
+                state_history.record_run(db, run, objects)
+                recorded += 1
+        if night % 10 == 0 or night == nights:
+            print(f"  {night} nights recorded ({time.monotonic() - start:.0f} s)", flush=True)
+    took = time.monotonic() - start
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    grown = state_bytes(db)
+    per_night = (grown - backfilled) / nights
+    st = state_history.status(db)
+    print(f"Daily history after {nights} more nights ({churn:.1%} of objects changed and {active:.0%} of sign-ins "
+          f"and sizes moved each night): {grown / 1e9:.3f} GB, {st['versions']:,} versions; "
+          f"{per_night / 1e6:.1f} MB a night, {took / recorded * 1000:.1f} ms a run")
+    print(f"  At 25 months (760 nights): about {(backfilled + per_night * 760) / 1e9:.2f} GB for a day-by-day "
+          f"history, against {snapshots / 1e9:.2f} GB for the snapshots kept today")
+    for table, size in table_sizes(db):
+        if table.startswith("state_"):
+            print(f"  {table:24} {size / 1e9:6.3f} GB")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--data-dir", required=True, type=Path, help="a new, empty data directory")
@@ -158,6 +242,11 @@ def main() -> None:
     parser.add_argument("--plain", action="store_true", help="store objects as before compression")
     parser.add_argument("--compact", action="store_true", help="then run the compact command and measure again")
     parser.add_argument("--no-backup", action="store_true", help="don't time a compressed backup")
+    parser.add_argument("--history", action="store_true", help="then backfill and measure the daily history")
+    parser.add_argument("--history-nights", type=int, default=30, help="with --history: nights to record after it")
+    parser.add_argument("--churn", type=float, default=0.01, help="with --history: share of objects edited a night")
+    parser.add_argument("--active", type=float, default=0.7,
+                        help="with --history: share whose sign-in times and sizes move a night")
     args = parser.parse_args()
 
     from officesentry.config import load_config
@@ -203,6 +292,8 @@ def main() -> None:
         report(db, cfg.db_path, "After compact")
         if not args.no_backup:
             timed_backup(cfg.db_path)
+    if args.history:
+        measure_history(db, args.history_nights, args.churn, args.active)
     db.close()
     print(f"\nDone in {time.monotonic() - started:.0f} s. Portal: OFFICESENTRY_DATA_DIR={args.data_dir} "
           "python -m officesentry web (create an admin with create-admin first)")

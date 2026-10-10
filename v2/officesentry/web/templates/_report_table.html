@@ -56,6 +56,9 @@
     {% else %}
     <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here to use it on any tenant.</p>
     {% endfor %}
+    {% if current and current_user.role in ('admin', 'analyst') %}
+    <a class="menu-link small" href="{{ url_for('email.new_schedule', tenant_id=tenant.id, view=current.id) }}">{{ icon('send') }} Email this view on a schedule</a>
+    {% endif %}
     {% if view_query and not current %}
     <form method="post" action="{{ url_for('views.save', key=key) }}" class="save-view">{{ csrf() }}
       <input type="hidden" name="query" value="{{ view_query }}"><input type="hidden" name="tenant_id" value="{{ tenant.id }}">
@@ -95,6 +98,7 @@
     <a class="small" href="{{ tv.clear_href }}" data-view>Clear filters</a>
   </div>
   {% endif %}
+  {% if tv.chart %}<div class="chart-wrap">{{ tv.chart|safe }}</div>{% endif %}
   {% if not tv.rows %}
   <p class="no-rows">No rows match {{ 'this filter' if tv.chips|length == 1 else 'these filters' }}. <a href="{{ tv.clear_href }}" data-view>Show all {{ tv.total }}</a></p>
   {% else %}

@@ -42,6 +42,7 @@ import tempfile
 import textwrap
 import threading
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -75,7 +76,12 @@ def seed(db, vault) -> list[int]:
     add_project_statuses(db, ids)
     # A client part-way through onboarding (consent not given yet), for the Client tenants page and checklist.
     connection = db.execute("SELECT id FROM app_connections ORDER BY id LIMIT 1").fetchone()[0]
-    ids.append(store.create_tenant(db, ONBOARDING, "kingsleyoptometry.onmicrosoft.com", connection))
+    onboarding = store.create_tenant(db, ONBOARDING, "kingsleyoptometry.onmicrosoft.com", connection)
+    sent = (datetime.now(UTC) - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("INSERT INTO onboarding (tenant_id, contact_name, contact_email, sent_at, sent_by)"
+               " VALUES (?, ?, ?, ?, ?)", (onboarding, "Priya Kingsley", "priya@kingsleyoptometry.example", sent,
+                                           ADMIN))
+    ids.append(onboarding)
     return ids
 
 
