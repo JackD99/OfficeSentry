@@ -48,6 +48,7 @@ PAGES = [
     Page("month-end", "/reporting"),
     Page("search", "/search?q=adele"),
     Page("client-tenants", "/admin/tenants"),
+    Page("onboarding-tracker", "/admin/onboarding"),
     Page("users", "/admin/users"),
     Page("branding", "/admin/branding"),
     Page("system-status", "/admin/status"),

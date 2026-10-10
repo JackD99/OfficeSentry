@@ -34,12 +34,25 @@ None. The sign-in and directory audit logs were already read; they're now read i
 ### Database upgrade
 
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
-have been read up to, and migration 0031 adds `summary_cache` for the precomputed rows under Changed. The
+have been read up to, migration 0031 adds `summary_cache` for the precomputed rows under Changed, and
+migration 0032 adds `onboarding` (each new client's contact and how far their consent has got). The
 portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
 tenant; until then the pages build them as before.
 
 ### Added
 
+- Onboarding many clients (Settings → Client tenants → Onboarding): import tenants from a CSV (name, tenant ID
+  or domain, group, contact; a preview first, nothing added until you confirm), then a tracker of every
+  tenant's state (not sent, sent, approved, consented, Global Reader missing, connected) with a copyable
+  consent link per tenant, a ready-to-send email, a "send this to your client" PDF pack (how to approve,
+  what Office Sentry reads and never reads, how to remove it) and a mail-merge CSV of every link. Links
+  sent to clients now work: their Global Administrator lands on a thank-you page instead of your sign-in
+  page, and Office Sentry confirms the consent by signing in to the tenant (within minutes, then hourly for a
+  month after a link is marked sent) and starts the first collection itself. No change to the app
+  registration is needed: it uses the same redirect URI.
+- Onboarding a client documents GDAP: a Partner Center technician whose GDAP role includes Privileged Role
+  Administrator can approve the app and assign Global Reader for a client with their own partner account
+  ([v2/docs/onboarding-a-client.md, "Through Partner Center (GDAP)"](v2/docs/onboarding-a-client.md#through-partner-center-gdap)).
 - The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
   pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Deploy workflow: a `restore-drill` action, backup status in `status`, and a `PRODUCTION_FROM_TAGS`

@@ -28,8 +28,10 @@ errors and their fixes.
   links and change or delete tenants. Analysts can see connection health and
   press *Check connection now*.
 - **The client has someone who can sign in as a Global Administrator** of
-  their tenant. Only a Global Administrator can approve application
-  permissions for the whole organisation.
+  their tenant, or you reach the client through Partner Center with a GDAP
+  role that includes Privileged Role Administrator (see *Through Partner
+  Center (GDAP)* below). Approving Microsoft Graph application permissions
+  for the whole organisation needs one of those two roles.
 
 ## 1. Add the tenant
 
@@ -80,12 +82,84 @@ So the quickest way is to open the link **yourself**, in the browser where you
 are signed in to Office Sentry, and sign in to Microsoft with an account that
 is a Global Administrator of the client's tenant.
 
-If you send the link to the client's Global Administrator instead, their
-approval still takes effect at Microsoft, but Microsoft sends them to your
-Office Sentry sign-in page and the consent isn't recorded there. Once they've
-approved, press **Check connection now** on the checklist or the Manage page:
-when Office Sentry can sign in and read the tenant, it records the consent
-itself and queues the first full collection.
+### Sending the link to the client
+
+To have the client's Global Administrator approve it, send them the client
+link instead: *Settings → Client tenants → Onboarding*, then the tenant's
+**Send…** (or **Copy link** in the list). That page has the link, a message to
+paste into an email, a **Consent pack PDF** to attach (how to approve, what
+Office Sentry reads and never reads, and how to remove it) and **Mark as
+sent**. The client link is different from the one above:
+
+- It never expires and is the same every time, so the printed pack, the
+  email and the list all match.
+- When the client's administrator approves, Microsoft sends them to a
+  thank-you page from you (with the Global Reader step), not to your sign-in
+  page.
+- Coming back through it records nothing by itself. Office Sentry confirms
+  the consent by **signing in to the tenant** as the app: within a few
+  minutes of the client approving, then hourly for a month after you mark the
+  link as sent, or straight away with **Check now**. Once that works it records
+  the consent, swaps a domain for the tenant ID Microsoft publishes for it,
+  and queues the first full collection. Until then the Onboarding list says
+  *Approved, confirming*, with Microsoft's reason if signing in still fails.
+
+**Check connection now** on the Manage page still works too, whichever way
+the client approved.
+
+### Through Partner Center (GDAP)
+
+If you manage the client through Partner Center with granular delegated
+admin privileges (GDAP), a technician can approve Office Sentry for the
+client with their own partner account, without a Global Administrator
+account in the client's tenant:
+
+1. The technician's GDAP relationship with the client includes
+   **Privileged Role Administrator** (or Global Administrator), and they've
+   activated it if it's just-in-time.
+2. They open the client's consent link (from the Onboarding page, or **Grant
+   admin consent** on the tenant's checklist if they're also an Office
+   Sentry admin) and sign in with their partner account. The link names the
+   client's tenant, which is what makes Microsoft apply their GDAP roles
+   there; a link to `/common` or `/organizations` would consent in the
+   partner's own tenant instead.
+3. They accept the permissions. Office Sentry confirms it by signing in, as
+   above.
+4. In the client's Microsoft Entra admin centre (from Partner Center's
+   *Service management* links), they assign Global Reader to the app, as in
+   step 3 below.
+
+What Microsoft documents, and what it means here:
+
+| Microsoft says | Source |
+|---|---|
+| An app with application-only permissions "must be manually consented to, either by the partner or customer ... using tenant-wide admin consent URL." | [GDAP FAQ](https://learn.microsoft.com/en-us/partner-center/customers/gdap-faq), "What action must a partner perform moving from DAP to GDAP regarding consent?" |
+| "If you have the Global Administrator role in a customer's tenant, you can consent to the app yourself", with the URL `https://login.microsoftonline.com/{customertenant}.onmicrosoft.com/adminconsent?client_id={appid}`. | [Migrate your CPV/CSP applications to GDAP](https://learn.microsoft.com/en-us/partner-center/developer/gdap-and-secure-application-model), "Manually requesting app consent" |
+| Privileged Role Administrator can grant consent "for apps requesting any permission, for any API"; Cloud Application Administrator and Application Administrator can't for "Microsoft Graph app roles (application permissions)". | [Grant tenant-wide admin consent](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/grant-admin-consent), "Prerequisites" |
+| "All Microsoft Entra tasks are supported" through GDAP except a short list; the only application items on it are consenting "inline with sign-in" and enterprise app "User settings". | [Workloads supported by GDAP](https://learn.microsoft.com/en-us/partner-center/customers/gdap-supported-workloads), "Microsoft Entra ID tasks" |
+| Adding someone to a directory role needs Privileged Role Administrator. | [Least-privileged GDAP roles by task](https://learn.microsoft.com/en-us/partner-center/customers/gdap-least-privileged-roles-by-task) |
+
+So:
+
+- **Cloud Application Administrator or Application Administrator isn't
+  enough** for Office Sentry, although the GDAP FAQ names them: Office Sentry
+  asks for Microsoft Graph application permissions, and Entra only lets
+  Privileged Role Administrator or Global Administrator approve those.
+- **Partner Center's consent API doesn't help**: it grants delegated (app +
+  user) permissions, and Microsoft says explicit application-only consent
+  through it "isn't supported for third-party application developers who use
+  GDAP". Office Sentry never calls Partner Center.
+- A technician holding only Global Reader or Security Reader through GDAP
+  can get "No Access" on *Roles and admins* in a tenant with PIM turned on
+  (a known GDAP issue), so they can't assign Global Reader either.
+- The consent appears in the client's audit log under the technician's
+  partner account, which is the traceability GDAP is meant to give the
+  client. Tell the client before you approve on their behalf.
+
+Office Sentry hasn't been tried against a live GDAP relationship yet (its
+test tenant has none). It doesn't need to know how consent was given: the
+sign-in check above records it either way. If you try it, the Onboarding page
+shows *Consented* within minutes of pressing **Check now**.
 
 What you see when you come back from the consent page:
 
@@ -132,6 +206,42 @@ The worker runs one data source at a time, tenant profile first: it finds out
 which licences the tenant has, and the others use that to skip what the tenant
 can't provide. A large tenant can take a while. To collect again later, use
 **Refresh all data** on the **Data collection** page.
+
+## Onboarding many clients
+
+*Settings → Client tenants → Onboarding* (admins) is for adding clients in
+bulk and following each one through consent.
+
+1. **Import from CSV.** One row per client with column names on the first
+   row: `name` and `tenant` (the tenant ID or any domain the tenant uses), and
+   optionally `group` (several separated by `;`; missing groups are created),
+   `contact` (`jane@contoso.com` or `Jane Smith <jane@contoso.com>`, also added
+   to the client's email contacts) and `cloud` (empty for Commercial, or GCC
+   High, DoD, China). Excel's *Save as CSV* works, comma or semicolon. Up to
+   1,000 rows at a time; **Download a template** has the layout. You see every
+   row first, with what's wrong with any of them, which app connection each
+   cloud uses, any groups the import creates and which analysts will see the
+   new tenants through a group. Nothing is added until you press **Import**.
+   Tenants already in Office Sentry are skipped, never changed.
+2. **Send.** Each tenant's **Send…** page has its link, an email to paste and
+   the consent pack PDF (see *Sending the link to the client* above). For a
+   mail merge, **Consent links (CSV)** lists every tenant that hasn't
+   consented with its contact and link. Tick tenants and press **Mark as
+   sent**.
+3. **Follow.** The list shows each tenant's state:
+
+| State | Meaning |
+|---|---|
+| Not sent | No link marked as sent yet. |
+| Sent | Waiting for the client's Global Administrator. Checked hourly for a month. |
+| Approved, confirming | Someone came back from the consent page through the client's link; Office Sentry is signing in to confirm (with Microsoft's reason while that fails). |
+| Consented | Office Sentry signs in. Global Reader is read by the first collection. |
+| Global Reader missing | Consented, but the app doesn't hold Global Reader, so mailbox reports can't be collected (step 3 below). |
+| Connected | Consent and Global Reader in place. |
+
+Imported tenants are ordinary tenants: admins see them; analysts and client
+users only once they're given access, one by one or through a group (an
+analyst given a group sees the imported tenants in it).
 
 ## 5. Connection health: the Manage page
 

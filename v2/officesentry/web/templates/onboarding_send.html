@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf %}
+{% block title %}Send consent · {{ tenant.name }} · Office Sentry{% endblock %}
+{% block content %}
+{% set contact_set = row and (row.contact_name or row.contact_email) %}
+{% set consented = tenant.consented_at %}
+{% set reader = state.key == 'connected' %}
+<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client tenants</a><span>/</span><a href="{{ url_for('onboarding.index') }}">Onboarding</a><span>/</span><span>{{ tenant.name }}</span></div>
+<div class="page-head">
+  <div>
+    <h1>{{ tenant.name }} <span class="pill {{ state.tone }}">{{ state.label }}</span></h1>
+    <div class="sub">{{ state.detail }}</div>
+  </div>
+  <div class="actions"><a class="btn" href="{{ url_for('tenant_admin.manage', tenant_id=tenant.id) }}">Manage tenant</a></div>
+</div>
+
+<ol class="setup-steps card send-steps">
+  <li class="{{ 'done' if contact_set else 'current' }}">
+    <div class="step-title">Who it goes to</div>
+    <div class="step-body">
+      <form method="post" action="{{ url_for('onboarding.contact', tenant_id=tenant.id) }}" class="inline-fields">{{ csrf() }}
+        <label>Name <input name="contact_name" maxlength="200" value="{{ row.contact_name if row else '' }}" placeholder="Jane Smith" autocomplete="off"></label>
+        <label>Email <input type="email" name="contact_email" maxlength="200" value="{{ row.contact_email if row else '' }}" placeholder="jane@contoso.com" autocomplete="off"></label>
+        <button class="sm">Save</button>
+      </form>
+      <p class="small muted m0">Someone at {{ tenant.name }} who is, or can reach, a Global Administrator of their Microsoft 365.</p>
+    </div>
+  </li>
+  <li class="{{ 'done' if consented or (row and row.sent_at) else ('current' if contact_set else '') }}">
+    <div class="step-title">Send the consent link and pack</div>
+    <div class="step-body">
+      {% if link %}
+      <p class="m0">Email the client this message with the PDF attached. The link opens Microsoft's own approval page for {{ tenant.name }}'s tenant; it never expires, and it's the same link every time.</p>
+      <label class="copy-label">Subject <input class="copy-text" value="{{ subject }}" readonly id="email-subject"></label>
+      <label class="copy-label">Message <textarea class="copy-text" rows="14" readonly id="email-body">{{ body }}</textarea></label>
+      <div class="form-actions wrap">
+        <button type="button" class="primary" data-copy="#email-body">Copy message</button>
+        <button type="button" data-copy-text="{{ link }}">Copy link only</button>
+        <a class="btn" href="mailto:{{ row.contact_email if row else '' }}?subject={{ subject|urlencode }}&amp;body={{ body|urlencode }}">{{ icon('mail') }} Open in your email app</a>
+        <a class="btn" href="{{ url_for('onboarding.pack', tenant_id=tenant.id) }}">{{ icon('download') }} Consent pack PDF</a>
+      </div>
+      {% if not consented %}
+      <form method="post" action="{{ url_for('onboarding.mark_sent', tenant_id=tenant.id) }}" class="sent-row">{{ csrf() }}
+        {% if row and row.sent_at %}<span class="small">{{ icon('check') }} Sent {{ ts(row.sent_at) }}{% if row.sent_by %} by {{ row.sent_by }}{% endif %}.</span>
+          <input type="hidden" name="sent" value="0"><button class="sm ghost">Mark as not sent</button>
+        {% else %}<input type="hidden" name="sent" value="1"><button class="sm">{{ icon('send') }} Mark as sent</button>
+          <span class="small muted">Then Office Sentry checks every hour whether they've approved.</span>{% endif %}
+      </form>
+      {% endif %}
+      {% else %}
+      <div class="callout warn">{{ icon('alert') }}<div>No consent link yet: {{ tenant.name }} has no app connection that's ready for its Microsoft cloud ({{ cloud.label }}). Choose or finish one under <a href="{{ url_for('tenant_admin.manage', tenant_id=tenant.id) }}">Manage</a>.</div></div>
+      {% endif %}
+    </div>
+  </li>
+  <li class="{{ 'done' if consented else ('current' if row and (row.sent_at or row.approved_at) else '') }}">
+    <div class="step-title">The client approves</div>
+    <div class="step-body">
+      {% if consented %}Confirmed {{ ts(tenant.consented_at) }}: Office Sentry signs in and reads the tenant.
+      {% else %}
+      A Global Administrator of {{ tenant.name }} opens the link, checks the read-only permissions and presses <em>Accept</em>. Office Sentry then signs in to confirm, and starts the first collection by itself.
+      {% if row and row.checked_at %}<p class="small">Last checked {{ ts(row.checked_at) }}{% if row.check_error %}: {{ row.check_error }}{% else %}.{% endif %}</p>{% endif %}
+      <form method="post" action="{{ url_for('onboarding.check', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Check now</button></form>
+      <details class="by-hand"><summary>You reach this client through Partner Center (GDAP)?</summary>
+        <p class="small m0">A technician whose GDAP access to {{ tenant.name }} includes <strong>Privileged Role Administrator</strong> (or Global Administrator) can approve for the client: open the link above, sign in with your own partner account, and accept. Microsoft documents partners consenting this way; Cloud Application Administrator isn't enough, because the app asks for Microsoft Graph application permissions. Then press <em>Check now</em>.</p>
+      </details>
+      {% endif %}
+    </div>
+  </li>
+  <li class="{{ 'done' if reader else ('current' if consented else '') }}">
+    <div class="step-title">Global Reader, for mailbox reports</div>
+    <div class="step-body">
+      {% if reader %}Assigned. Everything is in place.
+      {% else %}
+      In {{ tenant.name }}'s Microsoft Entra admin centre: <em>Roles and admins</em> → <em>Global Reader</em> → <em>Add assignments</em>, then select <strong>{{ app }}</strong>. It can view settings but not change them. The client, or a GDAP technician with Privileged Role Administrator, does this.
+      {% if state.key == 'global_reader' %}<p class="small">Missing at the last check. Microsoft can take up to an hour to apply it; Office Sentry checks again with every collection.</p>{% endif %}
+      {% endif %}
+    </div>
+  </li>
+</ol>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  function copied(button) {
+    var label = button.textContent;
+    button.textContent = 'Copied';
+    setTimeout(function () { button.textContent = label; }, 2000);
+  }
+  document.querySelectorAll('[data-copy], [data-copy-text]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var text = button.dataset.copyText || document.querySelector(button.dataset.copy).value;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { copied(button); });
+    });
+  });
+})();
+</script>
+{% endblock %}

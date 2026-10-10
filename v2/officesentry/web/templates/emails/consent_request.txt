@@ -1,0 +1,18 @@
+{#- The message an admin copies to send a client their consent link (onboarding_send.html). First line is the subject. -#}
+Subject: Please approve read-only access for your Microsoft 365 reports
+Hi {{ (row.contact_name.split()[0] if row and row.contact_name else 'there') }},
+
+We use Office Sentry to produce {{ tenant.name }}'s Microsoft 365 security and licensing reports. To start, a Global Administrator of your Microsoft 365 needs to approve its read-only access. It takes about five minutes:
+
+1. Open this link and sign in with a Global Administrator account:
+{{ link }}
+
+2. Microsoft lists the permissions, all of them read-only. Press Accept.
+
+3. In the Microsoft Entra admin centre ({{ cloud.admin_centre }}), go to Roles and admins > Global Reader > Add assignments and select "{{ app }}". This lets the reports include mailbox settings. Global Reader can view settings but can't change anything.
+
+Office Sentry can't change anything in your tenant, and it never reads email, files or chats. The attached PDF explains exactly what it reads, and how to remove the access at any time.
+
+Thanks,
+{{ brand.display_name }}{% if brand.contact %}
+{{ brand.contact }}{% endif %}
