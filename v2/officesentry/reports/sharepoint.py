@@ -294,6 +294,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     idle = Section(
         "Inactive sites",
         ["Site", "Type", "Owner", "Last activity", "Storage", "Files"],
+        drifts=("Storage", "Files"),
         intro=f"Sites nobody has used in {INACTIVE_DAYS} days. Archive or delete them, or confirm "
         "someone still owns the content.",
         empty=f"Every site has been used in the last {INACTIVE_DAYS} days.",
@@ -323,6 +324,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "Last activity",
             "External sharing on",
         ],
+        drifts=("Storage", "Files"),
         intro="Largest first."
         + ("" if before is not None else f" Growth appears once Office Sentry has {GROWTH_DAYS} days of history."),
         empty="No sites.",
@@ -422,6 +424,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     gone = Section(
         "OneDrives of people who've left",
         ["Person", "Account", "Storage", "Files", "Last activity"],
+        drifts=("Storage", "Files"),
         intro="Files here may include client data nobody is looking after. Move what's still needed to a "
         "shared site, then remove the account.",
         empty="Every OneDrive belongs to an enabled account."
@@ -467,6 +470,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     every = Section(
         "All OneDrives",
         ["Person", "Account", "Storage", "Of quota", "Files", "Active files (30 days)", "Last activity"],
+        drifts=("Storage", "Of quota", "Files", "Active files (30 days)"),
         intro="Largest first." + _as_of(status),
         empty="No OneDrives.",
     )

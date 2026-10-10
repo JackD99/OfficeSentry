@@ -68,6 +68,9 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   waste, the unassigned licences check and the monthly review.
 - What changed tells two subscriptions of one licence apart, so a seat change on one is one changed row
   rather than one added and one removed.
+- What changed no longer lists every mailbox, OneDrive, site and library because its size or file count
+  moved. Those columns are compared like day counts; a mailbox or site that crosses into a table (nearly
+  full, say) still shows.
 
 ### Security
 

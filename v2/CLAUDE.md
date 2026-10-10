@@ -191,6 +191,8 @@ needing goes in those lists.
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
   `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
   time-driven; "No check-in for N days" in a cell is compared without its number.
+  A section names its columns that drift every night with use (sizes, file and
+  item counts) in `Section(drifts=(...))`, and those are ignored too.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and

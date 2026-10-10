@@ -192,6 +192,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     parts = Section(
         "Where the space goes",
         ["Part", "Size", "Share of storage", "How to free it"],
+        drifts=("Size", "Share of storage"),
         intro="Everything stored in SharePoint sites, by what it is."
         + (f" The tenant has about {size(quota.total)} ({quota.explained})." if quota else ""),
         empty="No SharePoint storage in use.",
@@ -223,6 +224,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "Site limit",
             "Last change",
         ],
+        drifts=("Storage used", "Current files", "Older versions", "Recycle bin", f"Untouched {years}+ years"),
         intro="Largest first. Storage used includes versions, the recycle bin and everything else on the site.",
         empty="No sites.",
     )
@@ -317,6 +319,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     libraries = Section(
         "Libraries",
         ["Library", "Size", "Current files", "Older versions", "Files", "Highest version", "Last change"],
+        drifts=("Size", "Current files", "Older versions", "Files", "Highest version"),
         intro="Every document library, largest first. Preservation Hold libraries hold copies kept "
         "by retention policies.",
         empty="No libraries.",
@@ -350,6 +353,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     full = Section(
         "OneDrives nearly full",
         ["Person", "Used", "Quota", "Share used", "Recycle bin", "Older versions"],
+        drifts=("Used", "Share used", "Recycle bin", "Older versions"),
         intro=f"OneDrives over {NEARLY_FULL:.0%} of their own quota. OneDrive storage doesn't count "
         "towards the tenant's SharePoint storage.",
         empty=f"No OneDrive is more than {NEARLY_FULL:.0%} full.",

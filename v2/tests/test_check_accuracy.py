@@ -304,3 +304,37 @@ def test_unused_trial_licences_are_not_waste_in_the_check_or_the_report(db, two_
     rows = {str(r[0]): r for r in section.rows}
     assert rows["Microsoft 365 Business Premium"][3] == 0  # Unassigned: the 5 spare are the trial's
     assert rows["Microsoft 365 Copilot"][3] == 0
+
+
+def _grown(section, **changes):
+    """The same table a month later, with some columns' values changed in every row."""
+    later = copy.copy(section)
+    later.rows = [list(row) for row in section.rows]
+    for row in later.rows:
+        for column, value in changes.items():
+            row[later.columns.index(column)] = value
+    return later
+
+
+def test_sizes_and_counts_that_only_grew_are_not_changes(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    tenant = store.get_tenant(db, alpha)
+    for key, title, grew, real in [
+        ("mailbox-size", "Mailboxes by size", {"Size": "9.9 GB", "Used": "99%", "Items": 123456}, "Archive"),
+        ("onedrive", "All OneDrives", {"Storage": "9.9 GB", "Files": 4321, "Of quota": "99%"}, "Account"),
+    ]:
+        report = data_reports.build(db, tenant, key)
+        section = next(s for s in report.sections if s.title == title)
+        assert section.rows, title
+        assert compare_sections(section, _grown(section, **grew)).changes == []
+        # Anything else still counts, and the row shows the new sizes alongside it.
+        diff = compare_sections(section, _grown(section, **grew, **{real: "changed"}))
+        assert {c.kind for c in diff.changes} == {"changed"}
+        assert len(diff.changes) == len(section.rows)
+
+    # "Used" is only a size where a table says so: in Unused apps it's how an app was used.
+    report = data_reports.build(db, tenant, "unused-apps")
+    [section] = report.sections
+    if section.rows:
+        assert compare_sections(section, _grown(section, Used=["Something new"])).changes

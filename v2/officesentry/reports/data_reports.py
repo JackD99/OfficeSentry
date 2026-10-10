@@ -60,6 +60,9 @@ class Section:
     empty: str = "Nothing to show."
     # False for event logs (e.g. admin activity), which the change report shouldn't diff like state.
     compare: bool = True
+    # Columns that drift every night with use (sizes, file and item counts), which What changed ignores like
+    # day counts: a row that only grew isn't a change. A row crossing into or out of the table still is.
+    drifts: tuple[str, ...] = ()
     # Page-only extras, used by the Findings page: what the flag column is called, a column whose
     # value groups rows under collapsible headings (with an anchor id per value), columns that always
     # get a value filter however many values they have, and an id per row for row actions.
