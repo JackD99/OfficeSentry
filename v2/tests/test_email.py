@@ -830,6 +830,7 @@ def test_migration_carries_over_monthly_schedules(cfg, monkeypatch):
 
 def _capture_pdfs(monkeypatch) -> list[str]:
     html = []
+    monkeypatch.setattr(delivery.export, "pdf_available", lambda: True)  # Windows CI has no Pango
     monkeypatch.setattr(delivery.export, "to_pdf", lambda page, base: html.append(page) or b"%PDF-1.7")
     return html
 
