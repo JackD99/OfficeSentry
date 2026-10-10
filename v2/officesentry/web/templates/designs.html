@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}Report designs · Office Sentry{% endblock %}
+{% block content %}
+{% set admin = current_user.role == 'admin' %}
+<div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><span>Report designs</span></div>
+<div class="page-head">
+  <div><h1>Report designs</h1>
+    <div class="sub">Client reports built from blocks: drag in the pieces, set each one up, see it on a real client. A design works for every tenant, and a report plan or schedule can send it.</div></div>
+</div>
+
+<div class="grid-main">
+<div>
+<section class="card flush">
+  <div class="card-head toolbar"><h2>Designs</h2></div>
+  {% if designs %}
+  <table class="stack-sm">
+    <thead><tr><th>Design</th><th class="num">Blocks</th><th>Sent by</th><th>Changed</th><th></th></tr></thead>
+    <tbody>
+    {% for d in designs %}
+    <tr>
+      <td><a class="strong" href="{{ url_for('designs.edit', design_id=d.id) }}">{{ d.name }}</a>
+        {% if d.description %}<span class="sub">{{ d.description }}</span>{% endif %}</td>
+      <td data-label="Blocks" class="num">{{ counts[d.id] }}</td>
+      <td data-label="Sent by">{% if used.get(d.id) %}{{ used[d.id]|plural('plan or schedule', 'plans and schedules') }}{% else %}<span class="faint">Nothing yet</span>{% endif %}</td>
+      <td data-label="Changed" class="nowrap small muted">{{ (d.updated_at or d.created_at)|ago }}</td>
+      <td class="num"><div class="row-actions">
+        {% if tenants %}<a class="btn sm ghost" href="{{ url_for('designs.tenant_design', tenant_id=tenants[0].id, design_id=d.id) }}">View</a>{% endif %}
+        <form method="post" action="{{ url_for('designs.duplicate', design_id=d.id) }}" class="inline">{{ csrf() }}<button class="sm ghost">Duplicate</button></form>
+        {% if admin %}<form method="post" action="{{ url_for('designs.delete', design_id=d.id) }}" class="inline" data-confirm="Remove this design? Plans and schedules that send it will stop.">{{ csrf() }}<button class="sm ghost danger">Remove</button></form>{% endif %}
+      </div></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><h3>No designs yet</h3>
+    <p>Start from one of the templates on the right, or from a blank page, then drag in the blocks you want.</p></div>
+  {% endif %}
+</section>
+</div>
+
+<div>
+<section class="card">
+  <h2>New design</h2>
+  <form method="post" action="{{ url_for('designs.create') }}">
+    {{ csrf() }}
+    <label>Name <input name="name" maxlength="100" placeholder="Quarterly review">
+      <span class="hint">Shown on the cover unless the design sets its own title.</span></label>
+    <fieldset class="choices">
+      <legend class="label-sm">Start from</legend>
+      {% for key, (label, description, _doc) in starters.items() %}
+      <label class="choice"><input type="radio" name="starter" value="{{ key }}"{% if key == 'executive' %} checked{% endif %}>
+        <span class="grow"><span class="choice-title">{{ label }}</span><span class="hint">{{ description }}</span></span></label>
+      {% endfor %}
+    </fieldset>
+    <div class="form-actions"><button class="primary">{{ icon('plus') }} Create and open</button></div>
+  </form>
+</section>
+<section class="card">
+  <h2>How it works</h2>
+  <ul class="small muted">
+    <li>Every block draws on data the portal already has: the monthly review, the checks, the detail reports, licences and this month's commentary.</li>
+    <li>A block with nothing to show for a client is left out of their report, so one design fits every client.</li>
+    <li>To send a design, tick it in a report plan (Month-end → Report plans) or a tenant's email schedule. It goes as a PDF.</li>
+  </ul>
+</section>
+</div>
+</div>
+{% endblock %}

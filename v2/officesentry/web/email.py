@@ -84,7 +84,7 @@ def _decorate(s) -> dict:
     d["tz"] = delivery.schedule_tz(s, _cfg().timezone)
     # A plan schedule that waits for approval never sends on its timer (month_end.approve sends it).
     d["next"] = None if s["on_approval"] else delivery.next_send(s, _cfg().timezone)
-    d["titles"] = delivery.schedule_titles(s)
+    d["titles"] = delivery.schedule_titles(s, g.db)
     d["upcoming"] = delivery.is_upcoming(s)
     if d["kind"] == "digest" and not d["upcoming"]:
         group = tenant_groups.get(g.db, s["group_id"])
@@ -170,7 +170,7 @@ def _blank(kind: str, reports=None) -> dict:
 
 def _form_values(kind: str) -> dict:
     f = request.form
-    valid = {o.key for o in delivery.catalog()}
+    valid = {o.key for o in delivery.catalog(g.db)}
     values = {
         "kind": kind,
         "reports": [k for k in dict.fromkeys(f.getlist("reports")) if k in valid] if kind == "report" else [],
@@ -220,7 +220,7 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
     zones = list(dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] +
                                ([values["timezone"]] if values["timezone"] else [])))
     return render_template(
-        "schedule_form.html", tenant=tenant, s=values, chosen=chosen, catalog=delivery.catalog(),
+        "schedule_form.html", tenant=tenant, s=values, chosen=chosen, catalog=delivery.catalog(g.db),
         report_groups=report_groups(),
         contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [], team=delivery.team_contacts(g.db),
         frequencies=delivery.FREQUENCIES, days=delivery.DAYS, zones=zones, default_tz=cfg.timezone,

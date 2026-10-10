@@ -1,0 +1,41 @@
+{#- A report design rendered for one tenant (reports/designs.py), as the page, the editor's preview and the
+    PDF. The blocks come in rows: two half-width blocks share a row. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% import "reports/_widgets.html" as widgets with context %}
+
+{% block doc_title %}{{ title }}{% endblock %}
+{% block client %}{{ tenant.name }}{% endblock %}
+{% block toolbar %}
+  {% if not preview %}
+  <a class="back" href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a>
+  <span class="spacer"></span>
+  {% if pdf_available %}<a class="button primary" href="{{ url_for('designs.tenant_design_pdf', tenant_id=tenant.id, design_id=design.id) }}"><span class="wide">Download </span>PDF</a>{% endif %}
+  {% endif %}
+{% endblock %}
+{% block cover_subtitle %}{% if subtitle %}<div class="client">{{ subtitle }}</div>{% endif %}{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', generated_at.day ~ ' ' ~ generated_at.strftime('%B %Y')) }}
+  {{ ui.meta('Compared with', period_since) }}
+  {{ ui.meta('Microsoft 365 tenant', tenant.tenant_ref) }}
+{% endblock %}
+{% block cover_status %}{% if cover_verdict %}{{ ui.verdict(cover_verdict) }}{% endif %}{% endblock %}
+{% block contents %}
+  {% if show_contents %}{% for anchor, heading in contents %}<li><a href="#{{ anchor }}">{{ heading }}</a></li>{% endfor %}{% endif %}
+{% endblock %}
+
+{% block body %}
+{% if preview and not rows %}
+<div class="block-note">This report has no blocks yet. Drag one in from the list on the left.</div>
+{% endif %}
+{% for row in rows %}
+{% if row|length == 2 %}
+<div class="block-row">{% for item in row %}{{ widgets.draw(item, preview) }}{% endfor %}</div>
+{% elif row[0].block.width == 'half' and row[0].data is not none %}
+<div class="block-row">{{ widgets.draw(row[0], preview) }}</div>
+{% else %}
+{{ widgets.draw(row[0], preview) }}
+{% endif %}
+{% endfor %}
+{% endblock %}

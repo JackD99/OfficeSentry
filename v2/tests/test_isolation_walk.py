@@ -23,6 +23,7 @@ import pytest
 from officesentry import delivery, issued, store, tenant_groups
 from officesentry.db import utcnow
 from officesentry.projects import CATALOG
+from officesentry.reports import designs
 from officesentry.reports.data_reports import REPORTS
 from officesentry.reports.evidence_answers import QUESTIONS
 from tests.conftest import login, make_user
@@ -37,7 +38,7 @@ TENANT_ARGS = {"tenant_id", "run_id", "finding_id", "schedule_id", "alert_id", "
 # itself (portal users, app connections, report plans, sign-in sessions, someone's own saved views, tenant
 # groups, which are admin-only), and flags a route sets itself (``resolved`` on the findings downloads).
 OTHER_ARGS = {"key", "table", "ext", "filename", "period", "user_id", "conn_id", "plan_id", "session_id", "view_id",
-              "resolved", "group_id"}
+              "resolved", "group_id", "design_id"}
 # Who is signed in for the walk. Each sees only tenant A.
 ROLES = ["analyst", "client", "analyst-by-group", "client-with-group"]
 REFUSED = (400, 403, 404)
@@ -73,6 +74,7 @@ def world(app, db, connection_id):
                                   " VALUES (?, 'Bravo action', ?, ?)", (bravo, now, now)).lastrowid
     ids["note_id"] = db.execute("INSERT INTO finding_notes (tenant_id, rule_key, body, visibility, created_at)"
                                 " VALUES (?, 'admin_mfa', 'Bravo note', 'staff', ?)", (bravo, now)).lastrowid
+    ids["design_id"] = designs.create(db, "Walk design", "test", designs.STARTERS["executive"][2])
     for name, tenant in (("Alpha group", alpha), ("Bravo group", bravo)):
         group = tenant_groups.create(db, {"name": name, "category": "", "description": ""}, "test")
         tenant_groups.set_members(db, group, [tenant])

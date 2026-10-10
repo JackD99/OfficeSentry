@@ -65,7 +65,7 @@ def _blank_plan() -> dict:
 
 def _plan_values() -> dict:
     f = request.form
-    valid = {o.key for o in delivery.catalog()}
+    valid = {o.key for o in delivery.catalog(g.db)}
     values = {
         "name": f.get("name", "").strip()[:100],
         "reports": [k for k in dict.fromkeys(f.getlist("reports")) if k in valid],
@@ -98,7 +98,7 @@ def _render_plan(values: dict, chosen: set[int]):
     contacts = {t["id"]: len(delivery.tenant_contacts(g.db, t["id"])) for t in tenants}
     return render_template(
         "report_plan_form.html", p=values, chosen=chosen, tenants=tenants, on_plan=on_plan, contacts=contacts,
-        catalog=delivery.catalog(), report_groups=report_groups(), zones=zones, default_tz=cfg.timezone,
+        catalog=delivery.catalog(g.db), report_groups=report_groups(), zones=zones, default_tz=cfg.timezone,
         ordinal=delivery.ordinal, modes=month_end.MODES, deliveries=month_end.DELIVERIES,
         pdf_available=delivery.export.pdf_available())
 
@@ -140,7 +140,7 @@ def plans():
                            deliveries=month_end.DELIVERIES, coverage=month_end.coverage(g.db, tenants),
                            describe=lambda p: f"Monthly on the {delivery.ordinal(p['day_of_month'])} at "
                                               f"{p['hour']:02d}:00 ({p['timezone'] or _cfg().timezone})",
-                           titles=lambda p: delivery.report_titles(p["reports"]))
+                           titles=lambda p: delivery.report_titles(p["reports"], g.db))
 
 
 @bp.route("/reporting/plans/new", methods=["GET", "POST"])

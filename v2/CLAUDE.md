@@ -510,6 +510,27 @@ change is audited; note text is never put in the audit log.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
 
+## Report designs
+
+`reports/designs.py` holds the widgets (`WIDGETS`: key, title, group, `Field`s for
+the editor's panel, a `build(ctx, settings)` returning plain data or `{"empty":
+why}`) and the document rules (`clean`: unknown kinds dropped, every setting
+coerced to its field, half width only where `halfable`). A design row
+(`report_designs`, migration 0032) is `settings` (cover) and `blocks` JSON;
+`document(row)` always returns a cleaned document. `Context` builds the monthly
+review, its summary, the evidence pack and detail reports once each for a
+tenant; `render` builds every block and catches a widget's exception, so a
+broken block says so and never takes the report down (`test_report_designs.py`
+checks). `templates/reports/_widgets.html` has one macro per kind and draws the
+page, the preview and the PDF from the same blocks. Routes are in
+`web/designs.py` (admin and analyst; delete is admin): the editor autosaves the
+JSON with fetch, `/reporting/designs/<id>/preview?tenant=` is the preview pane,
+and `/tenants/<id>/designs/<id>` (`.pdf`) is a tenant's copy. A design is a
+report key `design:<id>` in `delivery.catalog(conn)` (PDF only), so plans and
+schedules send it through `_attachments`; `designs.remove` strips the key from
+them. Adding a widget: a `Widget` in `WIDGETS` and a `w_<kind>` macro in
+`DRAW`; the editor reads the palette from `designs.palette()`.
+
 ## Tenant groups
 
 `tenant_groups.py` (schema in `migrations/0029`, admin page `/admin/groups` in

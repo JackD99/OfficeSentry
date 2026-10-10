@@ -56,6 +56,12 @@ tenant; until then the pages build them as before.
   changes worth a second look.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
+- Report designs (Month-end → Report designs): client reports built from blocks in the portal, without code.
+  Drag in a status verdict, key figures, failing checks, what changed, licences, a table from any detail
+  report, your own text and more; set each block up in its panel; see it on a real client as you go. Start
+  from an executive summary, a full review, a licensing review or a blank page. A design works for every
+  tenant (a block with nothing to show for a client is left out), opens from the tenant's Reports tab as a
+  page and a PDF, and a report plan or email schedule can send it like the monthly review.
 
 ### Changed
 
