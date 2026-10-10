@@ -17,9 +17,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from .. import store
-from ..graph import GraphError
+from ..graph import GraphError, PermissionMissing
 from ..text import plural
 from .base import RunContext
+from .connection import granted
 
 COLLECTORS = ("shared_files", "sharepoint_storage")
 REUSE_HOURS = 6
@@ -117,3 +118,29 @@ class Lookups:
         )
         if reused:
             self.ctx.log(f"Reused {' and '.join(reused)} from earlier SharePoint collections")
+
+
+def refused(ctx: RunContext, what: str, exc: PermissionMissing) -> tuple[str, str]:
+    """Why SharePoint answered 403, as a status reason and a warning: a missing Sites.Read.All consent,
+    or ("denied") SharePoint itself refusing an app that holds it, which a new consent link won't fix."""
+    if granted(ctx, "Sites.Read.All"):
+        return (
+            "denied",
+            f"SharePoint refused {what} although this tenant granted Sites.Read.All, so this isn't a consent "
+            "problem: the client's SharePoint may restrict app access, or may not be set up yet. "
+            f"({exc.message})",
+        )
+    return (
+        "permission",
+        f"{what[0].upper()}{what[1:]} needs the Sites.Read.All permission. Re-send the consent link from the "
+        f"tenant page to add it. ({exc.message})",
+    )
+
+
+# What reports say when a SharePoint scan couldn't run, by status reason.
+DENIED_TEXT = (
+    "SharePoint refused Office Sentry's app although this tenant granted the Sites.Read.All permission, so "
+    "sending the consent link again won't help. The client's SharePoint may restrict which apps can read it "
+    "(an app access policy or restricted site access), or SharePoint may not be set up yet. The run log on the "
+    "tenant page has Microsoft's message."
+)
