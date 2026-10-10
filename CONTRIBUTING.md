@@ -70,6 +70,7 @@ directly, since the locks are made for Linux.
 
 ```bash
 cd v2
+ruff format .       # CI fails on unformatted code (ruff format --check)
 ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
@@ -121,9 +122,9 @@ The same gates apply to every change, whoever wrote it:
 
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
-- CI runs `ruff`, the full test suite on Python 3.11, 3.12 and 3.13 (with
-  a 90% coverage floor), a Windows subset, a Docker build and `pip-audit`
-  on every pull request, and a pull request isn't merged until it's green.
+- CI runs `ruff check` and `ruff format --check`, the full test suite on
+  Python 3.11, 3.12 and 3.13 (with a 90% coverage floor), a Windows subset,
+  a Docker build and `pip-audit` on every pull request, and a pull request isn't merged until it's green.
   The pull request template's checklist covers migrations, new permissions,
   the access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and

@@ -739,7 +739,7 @@ take the next free number above `main`'s highest when you merge `main` in
 
 ## Commands
 
-`pytest -n auto` (every core; plain `pytest` for debugging), `ruff check .`,
+`pytest -n auto` (every core; plain `pytest` for debugging), `ruff format .` and `ruff check .` (CI checks both),
 and `python -m officesentry <command>`:
 
 | Command | What it does |

@@ -311,7 +311,7 @@ All code is in [`v2/`](v2/): Flask, SQLite and WeasyPrint, with one background w
 cd v2
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
-ruff check . && pytest
+ruff format . && ruff check . && pytest
 OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:8000
 ```
 
