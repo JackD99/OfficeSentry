@@ -35,6 +35,14 @@ No.
 - The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
 - The plain-text part of a report email leads with the verdict and says when the data is old.
 - Pausing and resuming an email schedule is saved as one change.
+- The collection check and its alert no longer clear on a night every client failed just because one
+  client's report refresh ran since.
+- A system alert or certificate warning that no email or webhook took is tried again after 15 minutes,
+  rather than being marked sent.
+- Turning off off-site backups no longer leaves the Backups check warning for good: the nightly job and the
+  restore drill record that they aren't set up.
+- The server's uptime ping asks `/health/ready`, so the monitor hears when the worker stops or the disk
+  fills, not only when the portal is down.
 - Deleting a client no longer rebuilds the whole database inside the web request, which failed for want of
   room in Docker and left the client's data readable on disk while saying it was erased. The delete is
   quick, and the worker erases the last copies in the background, rebuilding the file only when there's
