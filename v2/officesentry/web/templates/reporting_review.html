@@ -160,7 +160,7 @@
       {% if editable %}
       {% if nobody %}
       <div class="callout warn">{{ icon('alert') }}<div><strong>Nobody to email.</strong> <span class="small">{{ tenant.name }} has no contacts on this plan. Approving keeps the report in the client's report history; it's emailed when you add a contact and send it.</span>
-        <div><a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}#contacts">Add a contact</a></div></div></div>
+        <div class="callout-actions"><a class="btn sm" href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}#contacts">Add a contact</a></div></div></div>
       {% endif %}
       <p class="small muted">The report is frozen as it is now, with your commentary, recommendations and client-visible notes, and {{ 'emailed to the client' if emailed else 'kept in the client\'s report history' if nobody else 'published to the client\'s report history' }}.</p>
       <form method="post" action="{{ url_for('reporting.approve', period=period, tenant_id=tenant.id) }}" data-busy="Approving…" id="approve-form">{{ csrf() }}<button class="primary">{{ icon('send') }} {{ 'Approve and send' if emailed else 'Approve' if nobody else 'Approve and publish' }}</button></form>
