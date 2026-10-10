@@ -93,14 +93,18 @@ def test_report_picker_links_every_report(client, db, seeded):
         picker = _picker(page)
         hrefs = re.findall(r'href="(/tenants/[^"]+)"', picker)
         assert f"/tenants/{alpha}/report" in hrefs and f"/tenants/{alpha}/evidence" in hrefs
+        assert f"/tenants/{alpha}/designs" in hrefs  # Custom reports, for staff
         assert {f"/tenants/{alpha}/data/{key}" for key in data_reports.REPORTS} <= set(hrefs)
-        assert len(hrefs) == len(data_reports.REPORTS) + 2
+        assert len(hrefs) == len(data_reports.REPORTS) + 3
         assert _active(picker) == [] and re.findall(r'aria-current="page">([^<]+)<', picker) == [current]
         assert 'data-report-search="report-list"' in picker and '<label for="report-find"' in picker
         # Narrower screens get the same list as a select, which the Reports tab URL turns into the page.
         assert '<option value="evidence"' in page and '<optgroup label="Identity and access">' in page
     assert client.get(f"/tenants/{alpha}/data?key=evidence").headers["Location"].endswith(f"/tenants/{alpha}/evidence")
     assert client.get(f"/tenants/{alpha}/data?key=review").headers["Location"].endswith(f"/tenants/{alpha}/report")
+    assert client.get(f"/tenants/{alpha}/data?key=designs").headers["Location"].endswith(f"/tenants/{alpha}/designs")
+    page = client.get(f"/tenants/{alpha}/designs").get_data(as_text=True)
+    assert re.findall(r'aria-current="page">([^<]+)<', _picker(page)) == ["Custom reports"]
 
 
 def test_tenant_header_pins_its_tab_bar(client, db, seeded):
@@ -122,6 +126,8 @@ def test_tabs_follow_the_role(client, db, seeded, role):
     if role == "client":
         assert labels == ["Findings", "Changes", "Reports", "Users", "Emails"]
         assert f"/tenants/{alpha}/collection" not in page and f"/tenants/{alpha}/manage" not in page
+        reports = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+        assert f"/tenants/{alpha}/designs" not in reports and 'value="designs"' not in reports
     else:
         assert labels == TABS
 

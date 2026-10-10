@@ -136,7 +136,9 @@ needing goes in those lists.
   string (`f=`, `age=`, `hide=`, `sort=`, keyed by table and column slugs), and
   the page, PDF, XLSX and CSV apply the same view (`views.apply`). Pass lists
   for list cells (they become `Many`, so a filter offers each item). Saved
-  views are per person, per report key (`saved_views` table, `web/saved_views.py`).
+  views are per person, per report key (`saved_views` table, `web/saved_views.py`);
+  save them with `saved_views.store`, which also updates the copies scheduled
+  emails keep (see "Email delivery").
   A `Section` can also name its flag column (`flag_name`), group rows under
   collapsible headings by a column (`group`, anchors in `group_ids`), always
   offer a value filter on some columns (`filter_columns`), carry a key per row
@@ -312,8 +314,9 @@ is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link`
   the tab's second row (`.tab-pages`), rather than a new tab. On laptops its tab bar stays pinned to the
   top as the page scrolls (`data-pin`, `app.js`: CSS `position: sticky` with a negative top, so nothing
   changes height); pass `pin=false` for a sample header. The Reports tab has no second row: its pages
-  (Monthly review, Questionnaires and evidence, and every detail report, from `library.catalogue()`) are in
-  `report_picker()`, a searchable list beside the report on wide screens and a select on narrower ones;
+  (Monthly review, Questionnaires and evidence, every detail report from `library.catalogue()`, and
+  Custom reports for staff) are in `report_picker()`, a searchable list beside the report on wide screens
+  and a select on narrower ones;
   a page that uses it wraps itself in `.report-layout` with the report in `.report-main`.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
   ISO strings. Licence flags go through the `capability` filter. Python code
@@ -399,8 +402,8 @@ never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
-`send_schedule` (`delivery.py`) and `precompute` (`reports/precomputed.py`,
-below other work). Queue with `tasks.enqueue(conn, kind,
+`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`) and
+`precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
 Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
@@ -438,7 +441,20 @@ and retries failed alert emails. A report schedule's send time is a cron slot
 (the Teams/Slack/webhook alert event after each findings sync) calls
 `delivery.after_sync()`, so both go out on the same findings. Schedules store their own timezone and the last period they finished
 ("2026-10", "2026-W41", "2026-Q4"); new detail reports in `data_reports.REPORTS`
-show up in the schedule form automatically. Email templates live in
+show up in the schedule form automatically. A schedule can also send saved views
+(`email_schedule_views`, `delivery.ScheduledView`): a copy of the view's name and
+query with a format (PDF, XLSX, or CSV with one file per table the view shapes,
+`delivery.view_plan`), kept in step through `saved_views.store` and kept when the
+saved view is deleted. The form only offers the signed-in person's own views (or
+copies the schedule already has). Report schedules attach them after the reports
+and archive them as kind `view:<report key>`; a digest whose `reports` is
+`["views"]` (`delivery.is_views`, `build_views_email`, `/emails/views/new`, admin)
+stacks every active tenant's rows, or one group's, with `rollups.all_rows` and goes
+to the team only. `delivery.digest_builder` picks a digest's builder. When a
+tenant's report email goes out (`send_schedule`, after its commit) or a month-end
+month is sent or published (`month_end.deliver`), `delivery.report_ready` posts
+`alerts.report_ready` if the admin ticked `alerts.on_reports`: a link to the
+report history and the file names, never the files. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
 
@@ -553,6 +569,43 @@ change is audited; note text is never put in the audit log.
   connection still waiting for its client ID in that cloud.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
+- Onboarding many clients (`onboarding.py`, admin pages `/admin/onboarding*`
+  in `web/onboarding.py`, table `onboarding` from `migrations/0034`): CSV
+  import (`parse` previews, `create` adds in one transaction, groups created
+  as needed), each tenant's state (`onboarding.state`, from stored data only),
+  the client link, email text and consent pack PDF. A **client link**
+  (`web/onboarding.client_link`, state signed with salt `client-consent`,
+  naming the tenant's id and `created_at`) differs from an admin's own consent
+  link: it never expires and comes back to `/consent/callback` without a
+  sign-in. That route is the one exception to "every route needs a
+  decorator": it hands a client state to the public `client_returned` page and
+  everything else to `_consent_return` (`@roles_required("admin")`). The
+  public page never records consent and never shows Microsoft's text; it
+  notes `approved_at` and queues a `consent_check` task. Only
+  `onboarding.confirm` (signing in as the app, `connection_check.check`)
+  sets `consented_at` for a client link; the `consent_checks` periodic job
+  re-checks tenants still waiting (`onboarding.due`). No Partner Center calls.
+
+## Report designs
+
+`reports/designs.py` holds the widgets (`WIDGETS`: key, title, group, `Field`s for
+the editor's panel, a `build(ctx, settings)` returning plain data or `{"empty":
+why}`) and the document rules (`clean`: unknown kinds dropped, every setting
+coerced to its field, half width only where `halfable`). A design row
+(`report_designs`, migration 0032) is `settings` (cover) and `blocks` JSON;
+`document(row)` always returns a cleaned document. `Context` builds the monthly
+review, its summary, the evidence pack and detail reports once each for a
+tenant; `render` builds every block and catches a widget's exception, so a
+broken block says so and never takes the report down (`test_report_designs.py`
+checks). `templates/reports/_widgets.html` has one macro per kind and draws the
+page, the preview and the PDF from the same blocks. Routes are in
+`web/designs.py` (admin and analyst; delete is admin): the editor autosaves the
+JSON with fetch, `/reporting/designs/<id>/preview?tenant=` is the preview pane,
+and `/tenants/<id>/designs/<id>` (`.pdf`) is a tenant's copy. A design is a
+report key `design:<id>` in `delivery.catalog(conn)` (PDF only), so plans and
+schedules send it through `_attachments`; `designs.remove` strips the key from
+them. Adding a widget: a `Widget` in `WIDGETS` and a `w_<kind>` macro in
+`DRAW`; the editor reads the palette from `designs.palette()`.
 
 ## Tenant groups
 

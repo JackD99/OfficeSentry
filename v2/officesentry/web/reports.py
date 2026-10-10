@@ -231,6 +231,8 @@ def data_index(tenant_id: int):
         return redirect(url_for("reports.tenant_report", tenant_id=t["id"]))
     if key == "evidence":
         return redirect(url_for("reports.evidence_pack", tenant_id=t["id"]))
+    if key == "designs":
+        return redirect(url_for("designs.tenant_designs", tenant_id=t["id"]))
     if key not in data_reports.REPORTS:
         key = data_reports.grouped()[0].reports[0][0]
     return redirect(url_for("reports.data_report", tenant_id=t["id"], key=key))

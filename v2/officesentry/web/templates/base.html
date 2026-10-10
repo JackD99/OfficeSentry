@@ -13,7 +13,7 @@
 <body{% if not brand.is_default %} class="branded"{% endif %}>
 {#- Admin settings: one sidebar entry, and this row of links on top of each settings page.
     (endpoint, label, other endpoints that belong to the page) -#}
-{% set SETTINGS = [('tenant_admin.clients', 'Client tenants', []), ('groups.index', 'Tenant groups', ['groups.edit']),
+{% set SETTINGS = [('tenant_admin.clients', 'Client tenants', ['onboarding.index', 'onboarding.import_tenants', 'onboarding.send']), ('groups.index', 'Tenant groups', ['groups.edit']),
                    ('admin.connections', 'App connection', []),
                    ('reports.prices', 'Licence prices', []), ('email.settings', 'Email delivery', []),
                    ('alerts.settings', 'Alerts', []), ('branding.settings', 'Branding', []),

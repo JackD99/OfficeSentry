@@ -14,6 +14,7 @@
   'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M21.5 20a6.5 6.5 0 00-4-6"/>',
   'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
   'download': '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  'grip': '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01"/>',
   'refresh': '<path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/>',
   'copy': '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/>',
   'doc': '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
@@ -69,7 +70,7 @@
 
 {# Tab that each tenant page key highlights. Keys not listed are tabs themselves. #}
 {% set TAB_OF = {
-  'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports',
+  'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'collection': 'settings', 'manage': 'settings',
   'activity': 'changes',
 } %}
@@ -137,6 +138,7 @@
    <div class="report-main" id="report" tabindex="-1">. current: a detail report's key, 'review' or 'evidence'. #}
 {% macro _picker_href(tenant, e) %}{% if e.kind == 'review' %}{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}{% elif e.kind == 'evidence' %}{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}{% else %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}{% endif %}{% endmacro %}
 {% macro report_picker(tenant, current) -%}
+{% set staff = current_user.role in ('admin', 'analyst') %}
 {% set areas = report_catalogue() %}
 {% set shown = ('data', 'review', 'evidence') %}
 <nav class="report-menu" aria-label="Reports">
@@ -152,6 +154,7 @@
       <ul aria-labelledby="picker-{{ area.key }}">
         {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
         {% endfor %}
+        {% if loop.first and staff %}<li data-name="custom reports report designs blocks"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Your report designs, on this client's data"{% if current == 'designs' %} aria-current="page"{% endif %}>Custom reports</a></li>{% endif %}
       </ul>
     </div>
     {% endif %}{% endfor %}
@@ -161,7 +164,7 @@
 <form method="get" action="{{ url_for('reports.data_index', tenant_id=tenant.id) }}" class="picker-form report-menu-sm" data-autosubmit>
   <label for="report-key">Report</label>
   <select id="report-key" name="key">
-    {% for area in areas %}{% set entries = area.entries|selectattr('kind', 'in', shown)|list %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}</optgroup>{% endif %}{% endfor %}
+    {% for area in areas %}{% set entries = area.entries|selectattr('kind', 'in', shown)|list %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}{% if loop.first and staff %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>Custom reports</option>{% endif %}</optgroup>{% endif %}{% endfor %}
   </select>
   <noscript><button class="btn sm">Show</button></noscript>
 </form>

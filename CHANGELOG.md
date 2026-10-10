@@ -35,9 +35,11 @@ None. The sign-in and directory audit logs were already read; they're now read i
 
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
 have been read up to, migration 0031 adds `summary_cache` for the precomputed rows under Changed, and
-migration 0035 adds each person's home page to `users`. The portal saves a `pre-upgrade-*` copy first, as
-always. The precomputed rows fill in as the worker gets to each tenant; until then the pages build them as
-before.
+migration 0032 adds `report_designs` (the client reports built from blocks under Month-end → Report designs),
+migration 0033 adds `email_schedule_views`, the saved views a scheduled email sends, migration 0034 adds
+`onboarding` (each new client's contact and how far their consent has got) and migration 0035 adds each
+person's home page to `users`. The portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows
+fill in as the worker gets to each tenant; until then the pages build them as before.
 
 ### Added
 
@@ -46,6 +48,19 @@ before.
   collections, access not granted, anything due this week). **Clients**, for account managers: licence
   waste, renewals in the next 30 days, reports to approve and projects to propose, per client. Pick yours in
   Account settings; Home in the menu and the logo open it, and staff land on it when they sign in.
+
+- Onboarding many clients (Settings → Client tenants → Onboarding): import tenants from a CSV (name, tenant ID
+  or domain, group, contact; a preview first, nothing added until you confirm), then a tracker of every
+  tenant's state (not sent, sent, approved, consented, Global Reader missing, connected) with a copyable
+  consent link per tenant, a ready-to-send email, a "send this to your client" PDF pack (how to approve,
+  what Office Sentry reads and never reads, how to remove it) and a mail-merge CSV of every link. Links
+  sent to clients now work: their Global Administrator lands on a thank-you page instead of your sign-in
+  page, and Office Sentry confirms the consent by signing in to the tenant (within minutes, then hourly for a
+  month after a link is marked sent) and starts the first collection itself. No change to the app
+  registration is needed: it uses the same redirect URI.
+- Onboarding a client documents GDAP: a Partner Center technician whose GDAP role includes Privileged Role
+  Administrator can approve the app and assign Global Reader for a client with their own partner account
+  ([v2/docs/onboarding-a-client.md, "Through Partner Center (GDAP)"](v2/docs/onboarding-a-client.md#through-partner-center-gdap)).
 - The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
   pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Deploy workflow: a `restore-drill` action, backup status in `status`, and a `PRODUCTION_FROM_TAGS`
@@ -68,6 +83,20 @@ before.
   sheet, XLSX, CSV and plain text per form.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
+- Scheduled emails can send saved views: a report with your filters, columns and sort, as a PDF, XLSX or
+  CSV. Tick them on a client's scheduled email, or choose **Email this view on a schedule** from a report's
+  Views menu. Email reports → Saved views sends a view with every tenant's rows (or one group's) to your
+  team, like the All tenants "every row" page. A scheduled view keeps working if its saved view is deleted.
+- Alerts can post "The October 2026 report for Contoso is ready" to Teams, Slack or your webhook when a
+  client's report email goes out or a month-end report is published (Settings → Alerts, "A client's report
+  is ready"; off until you tick it). The post links to the client's report history and never carries the
+  files, so only people signed in with access to that client can open them.
+- Report designs (Month-end → Report designs): client reports built from blocks in the portal, without code.
+  Drag in a status verdict, key figures, failing checks, what changed, licences, a table from any detail
+  report, your own text and more; set each block up in its panel; see it on a real client as you go. Start
+  from an executive summary, a full review, a licensing review or a blank page. A design works for every
+  tenant (a block with nothing to show for a client is left out), opens from the tenant's Reports tab as a
+  page and a PDF, and a report plan or email schedule can send it like the monthly review.
 
 ### Changed
 

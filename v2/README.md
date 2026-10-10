@@ -39,6 +39,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   for everything at once):
   - Send any mix of reports (the monthly review, the evidence pack, any detail
     report) weekly, monthly or quarterly, at a time in the schedule's own timezone.
+  - **Saved views** too: a report with your filters, columns and sort, as a PDF,
+    XLSX or CSV, for one client, or with every tenant's rows (or one group's)
+    for your team.
   - Recipients are contacts: the client's people get the email, your team gets a
     hidden copy. Optional note at the top of the email.
   - A cross-tenant **digest** for your team, worst tenants first.
@@ -54,7 +57,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
 - **Alerts** (Admin → Alerts): a Microsoft Teams (Workflows), Slack or generic
   JSON webhook message when a tenant gets new findings at or above a chosen
   severity (one message per tenant per collection), when a collection fails
-  after working last time, and optionally when it works again. The webhook URL
+  after working last time, optionally when it works again, and optionally when a
+  client's report is ready ("The October 2026 report for Contoso is ready", a
+  link to the report history, never the files). The webhook URL
   and optional HMAC signing secret are stored encrypted; only https URLs that
   resolve to public addresses are called (`OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS=1`
   allows internal ones).
@@ -265,6 +270,23 @@ subscriptions in their grace period, suspended ones still assigned). For
 tenants synced from on-premises AD: directory sync running, password hash sync
 on, and admin accounts that are cloud-only. The [check catalogue](docs/checks.md)
 lists every check with the data it reads and what it needs.
+
+### Report designs: your own client reports
+
+**Month-end → Report designs** builds a client report from blocks, the way a website builder builds a
+page. Drag a block in from the list (a status verdict, key figures, checks by severity, the Secure Score
+trend, recommended next steps, failing checks, what changed, licences, a table from any detail report,
+the insurance questionnaire answers, this month's commentary, headings, your own text, a contact card, a
+page break), set it up in its panel (which severities, how many rows, the heading), put two blocks side
+by side, and watch the preview on a real client update as you go. Start from an executive summary, a
+full security review, a licensing review or a blank page.
+
+A design belongs to the MSP and works for every tenant: a block with nothing to show for a client (no
+accepted risks, no commentary yet) is left out of that client's report. Each tenant's **Reports →
+Custom reports** lists every design as a page and a PDF, and a report plan or a tenant's email schedule
+can send a design (as a PDF) alongside or instead of the monthly review. Text blocks take `{client}`,
+`{month}`, `{msp}` and `{date}`. Admins and analysts make and edit designs; removing one is an admin's
+call, and it comes out of any plan or schedule that sent it.
 
 ### Exchange data
 

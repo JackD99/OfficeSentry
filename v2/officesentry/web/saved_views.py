@@ -1,7 +1,9 @@
 """Saved table views: a person's filters, columns and sort for a detail report, by name.
 
 A view is the report page's query string (see ``reports.views``), so it isn't
-tied to a tenant: the same view opens on every tenant the person can see.
+tied to a tenant: the same view opens on every tenant the person can see. A
+scheduled email can send one (``delivery.ScheduledView``); it keeps a copy, which
+saving the view again updates.
 """
 
 from __future__ import annotations
@@ -26,6 +28,17 @@ def page_url(key: str, tenant_id: int) -> str:
     return url_for("reports.data_report", tenant_id=tenant_id, key=key)
 
 
+def store(conn, user_id: int, key: str, name: str, query: str) -> None:
+    """Save (or replace) a person's view, and the copies scheduled emails keep of it."""
+    with transaction(conn):
+        conn.execute(
+            "INSERT INTO saved_views (user_id, report_key, name, query, created_at) VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(user_id, report_key, name) DO UPDATE SET query = excluded.query",
+            (user_id, key, name, query, utcnow()))
+        conn.execute("UPDATE email_schedule_views SET query = ? WHERE saved_view_id = (SELECT id FROM saved_views"
+                     " WHERE user_id = ? AND report_key = ? AND name = ?)", (query, user_id, key, name))
+
+
 def _back(default: str) -> str:
     """Only ever redirect within the portal (the same check as after sign-in)."""
     return safe_next(request.form.get("next"), default)
@@ -47,11 +60,7 @@ def save(key: str):
     if count >= MAX_VIEWS:
         flash(f"You can keep up to {MAX_VIEWS} views. Delete one you don't use first.", "error")
         return redirect(f"{page}?{query}")
-    with transaction(g.db):
-        g.db.execute(
-            "INSERT INTO saved_views (user_id, report_key, name, query, created_at) VALUES (?, ?, ?, ?, ?)"
-            " ON CONFLICT(user_id, report_key, name) DO UPDATE SET query = excluded.query",
-            (g.user["id"], key, name, query, utcnow()))
+    store(g.db, g.user["id"], key, name, query)
     flash(f"Saved “{name}”. It's under Views on this {'page' if key in findings_report.TITLES else 'report'}"
           " for every tenant.", "success")
     return redirect(f"{page}?{query}")

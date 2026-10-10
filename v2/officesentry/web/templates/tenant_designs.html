@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header, report_picker with context %}
+{% block title %}Custom reports · {{ tenant.name }}{% endblock %}
+{% block content %}
+{% call tenant_header(tenant, 'designs') %}{% endcall %}
+<div class="report-layout">
+{{ report_picker(tenant, 'designs') }}
+<div class="report-main" id="report" tabindex="-1">
+<section class="card flush">
+  <div class="card-head toolbar"><div><h2>Custom reports</h2>
+    <span class="meta">Every report design, on {{ tenant.name }}'s data. Designs are made under <a href="{{ url_for('designs.index') }}">Month-end → Report designs</a>.</span></div></div>
+  {% if designs %}
+  <table class="stack-sm">
+    <thead><tr><th>Report</th><th class="num">Blocks</th><th></th></tr></thead>
+    <tbody>
+    {% for d in designs %}
+    <tr>
+      <td><a class="strong" href="{{ url_for('designs.tenant_design', tenant_id=tenant.id, design_id=d.id) }}">{{ d.name }}</a>
+        {% if d.description %}<span class="sub">{{ d.description }}</span>{% endif %}</td>
+      <td data-label="Blocks" class="num">{{ counts[d.id] }}</td>
+      <td class="num"><div class="row-actions">
+        {% if pdf_available %}<a class="btn sm" href="{{ url_for('designs.tenant_design_pdf', tenant_id=tenant.id, design_id=d.id) }}">{{ icon('download') }} PDF</a>{% endif %}
+        <a class="btn sm ghost" href="{{ url_for('designs.edit', design_id=d.id, tenant=tenant.id) }}">Edit design</a></div></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><h3>No report designs yet</h3>
+    <p>A design is a client report built from blocks, which then works for every tenant.</p>
+    <a class="btn primary" href="{{ url_for('designs.index') }}">{{ icon('plus') }} Make one</a></div>
+  {% endif %}
+</section>
+</div>
+</div>
+{% endblock %}

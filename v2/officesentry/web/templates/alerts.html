@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon %}
 {% block title %}Alerts · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Alerts</h1><div class="sub">Post to Microsoft Teams, Slack or any webhook when a tenant gets new findings or a collection starts failing.</div></div>
+<div class="page-head"><div><h1>Alerts</h1><div class="sub">Post to Microsoft Teams, Slack or any webhook when a tenant gets new findings, a collection starts failing or a client's report is ready.</div></div>
   {% if s['alerts.enabled'] == '1' %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
 <div class="grid-main">
 <form method="post" action="{{ url_for('alerts.save') }}" class="card">
@@ -27,6 +27,8 @@
   <label class="check"><input type="checkbox" name="on_failures" value="1" {% if s['alerts.on_failures'] == '1' %}checked{% endif %}> A collection fails after working last time</label>
   <label class="check"><input type="checkbox" name="on_recovery" value="1" {% if s['alerts.on_recovery'] == '1' %}checked{% endif %}> A failing collection works again</label>
   <p class="footnote">Failures alert once when they start, not every night they continue.</p>
+  <label class="check"><input type="checkbox" name="on_reports" value="1" {% if s['alerts.on_reports'] == '1' %}checked{% endif %}> A client's report is ready</label>
+  <p class="footnote">“The October 2026 report for Contoso is ready”, when a report email goes out or a month-end report is published. It links to the client's report history and never carries the files, so only people signed in with access to that client can open them.</p>
   <h2>Problems with Office Sentry</h2>
   <label class="check"><input type="checkbox" name="system" value="1" {% if s['alerts.system'] == '1' %}checked{% endif %}> The worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect</label>
   <p class="footnote">These go to your team contacts by email and to the webhook above, once when a problem starts, daily while it lasts and once when it's fixed. See <a href="{{ url_for('system.status') }}">System status</a>.</p>
@@ -37,7 +39,8 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>Send a test</h2>
   <p class="muted small">Save first, then check the webhook works.</p>
-  <div class="form-actions"><button {% if not url_hint %}disabled{% endif %}>Send test alert</button></div>
+  <div class="form-actions"><button {% if not url_hint %}disabled{% endif %}>Send test alert</button>
+    <button name="sample" value="report" {% if not url_hint %}disabled{% endif %}>Send a sample report</button></div>
 </form>
 <section class="card">
   <h2>{{ icon('mail') }} By email</h2>
