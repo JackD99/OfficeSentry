@@ -71,7 +71,9 @@ class Endpoint:
     or the cmdlet name (Exchange). ``limits`` are names in ``LIMITS``; every Graph call also
     counts against ``graph``. ``cost`` is the resource units it uses where its limits count
     units (SharePoint, directory), else 1. ``select`` makes the entry match only when the
-    request's ``$select`` includes that field."""
+    request's ``$select`` includes that field. ``beta`` says why a Graph call uses beta, what v1.0 lacks;
+    ``tests/test_endpoints.py`` fails on a beta entry without one, and the run telemetry tests on a beta call
+    that isn't listed as beta."""
 
     path: str
     versions: tuple[str, ...]
@@ -81,6 +83,7 @@ class Endpoint:
     fallback: str = ""
     select: str = ""
     api: str = "graph"
+    beta: str = ""
     pattern: re.Pattern = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -106,7 +109,8 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/users/{id}/authentication/methods", V1, "UserAuthenticationMethod.Read.All", ("directory",),
              fallback="Only used when the registration report is empty"),
     Endpoint("/users/{id}/authentication/requirements", BETA, "Policy.Read.All", ("directory",),
-             fallback="Beta only; per-user MFA shows as unknown if it fails"),
+             fallback="Per-user MFA shows as unknown if it fails",
+             beta="Per-user MFA state is only in beta"),
     Endpoint("/groups", V1, "Directory.Read.All", ("directory",)),
     Endpoint("/groups/{id}", V1, "Directory.Read.All", ("directory",)),
     Endpoint("/groups/{id}/members", V1, "Directory.Read.All", ("directory",), cost=3),
@@ -117,7 +121,7 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/devices", V1, "Directory.Read.All", ("directory",)),
     Endpoint("/domains", V1, "Directory.Read.All", ("directory",)),
     Endpoint("/organization", BOTH, "Organization.Read.All", ("directory",),
-             fallback="Beta is used only for onPremisesLastPasswordSyncDateTime"),
+             beta="Only for onPremisesLastPasswordSyncDateTime, which v1.0 doesn't have"),
     Endpoint("/subscribedSkus", V1, "Organization.Read.All", ("directory",)),
     Endpoint("/directory/subscriptions", V1, "Organization.Read.All", ("directory",)),
     Endpoint("/directory/deletedItems/microsoft.graph.user", V1, "Directory.Read.All", ("directory",)),
@@ -141,26 +145,30 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/admin/sharepoint/settings", V1, "SharePointTenantSettings.Read.All"),
     # Sign-in and audit logs, and the MFA registration report: the identity and access reports limits.
     Endpoint("/auditLogs/signIns", BOTH, "AuditLog.Read.All", ("identity_reports_tenant", "identity_reports"),
-             fallback="Beta for authenticationRequirement; timeouts split into one-day windows"),
+             fallback="Timeouts split into one-day windows",
+             beta="authenticationRequirement (MFA or password only) is only in beta; asks for events.SIGNIN_FIELDS "
+                  "only, since returning every field brings Microsoft's Deprecation and Sunset headers"),
     Endpoint("/auditLogs/directoryAudits", V1, "AuditLog.Read.All", ("identity_reports_tenant", "identity_reports")),
     Endpoint("/reports/authenticationMethods/userRegistrationDetails", V1, "AuditLog.Read.All",
              ("identity_reports_tenant", "identity_reports"),
              fallback="Needs Entra ID P1; per-user methods are read instead"),
     Endpoint("/reports/servicePrincipalSignInActivities", BETA, "AuditLog.Read.All",
              ("identity_reports_tenant", "identity_reports"),
-             fallback="Beta only; Unused apps shows why when the tenant's licence or consent doesn't allow it"),
+             fallback="Unused apps shows why when the tenant's licence or consent doesn't allow it",
+             beta="App sign-in activity is only in beta"),
     Endpoint("/identityProtection/riskyUsers", V1, "IdentityRiskyUser.Read.All", ("identity_protection",),
              fallback="Needs Entra ID P2; shown as unavailable without it"),
     # Microsoft 365 usage reports. v1.0 returns CSV only, so these use beta's JSON.
     *(Endpoint(f"/reports/{name}", BETA, "Reports.Read.All", ("usage_reports",),
-               fallback="Beta only for JSON; v1.0 would need CSV parsing")
+               beta="v1.0 returns CSV only; beta returns JSON")
       for name in ("getOffice365ActiveUserDetail(period={period})", "getM365AppUserDetail(period={period})",
                    "getOffice365ActivationsUserDetail", "getEmailActivityUserDetail(period={period})",
                    "getTeamsUserActivityUserDetail(period={period})",
                    "getSharePointSiteUsageDetail(period={period})", "getOneDriveUsageAccountDetail(period={period})",
                    "getSharePointSiteUsageStorage(period={period})", "getOneDriveUsageStorage(period={period})")),
     Endpoint("/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period={period})", BETA, "Reports.Read.All",
-             ("usage_reports",), fallback="Skipped when the tenant has no Copilot licences"),
+             ("usage_reports",), fallback="Skipped when the tenant has no Copilot licences",
+             beta="Copilot usage is only in beta"),
     # Security and devices.
     Endpoint("/security/secureScores", V1, "SecurityEvents.Read.All", ("secure_score",)),
     Endpoint("/security/secureScoreControlProfiles", V1, "SecurityEvents.Read.All", ("secure_score",)),
@@ -177,7 +185,8 @@ GRAPH: tuple[Endpoint, ...] = (
     Endpoint("/sites/{site}/lists", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
     Endpoint("/sites/{site}/lists/{list}/items", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
     Endpoint("/sites/{site}/recycleBin/items", BETA, "Sites.Read.All", ("sharepoint",), cost=SP_MANY,
-             fallback="Beta only; the recycle bin's size still comes from the site's quota"),
+             fallback="The recycle bin's size still comes from the site's quota",
+             beta="Listing a site's recycle bin is only in beta"),
     Endpoint("/users/{id}/drive", V1, "Sites.Read.All", ("sharepoint",), cost=SP_ONE,
              fallback="Asked once a night for both SharePoint collectors; 'no OneDrive' is kept for 7 days"),
     Endpoint("/drives/{drive}/list", V1, "Sites.Read.All", ("sharepoint",), cost=SP_ONE),

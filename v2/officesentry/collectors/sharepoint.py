@@ -153,6 +153,10 @@ class SharePointUsage(Collector):
 # -- Shared files ------------------------------------------------------------------
 
 ITEM_FIELDS = "id,name,webUrl,parentReference,shared,file,folder,size,lastModifiedDateTime,deleted,root"
+# What describe_permissions reads. Asking for everything returns grantedTo and grantedToIdentities too,
+# which Microsoft retired in 2023 (it sends Deprecation and Sunset headers); the V2 fields replace them.
+PERMISSION_FIELDS = ("id,roles,link,grantedToV2,grantedToIdentitiesV2,inheritedFrom,expirationDateTime,"
+                     "hasPassword,invitation")
 MAX_DRIVES = 3000
 MAX_PAGES_PER_DRIVE = 250          # 250 pages of up to 200 items: 50,000 items per library
 MAX_PERMISSION_LOOKUPS = 5000      # shared items whose permissions are read per run
@@ -272,7 +276,8 @@ class SharedFiles(Collector):
                     break
                 lookups += 1
                 try:
-                    perms = ctx.graph.get_all(f"/drives/{drive['id']}/items/{item['id']}/permissions").items
+                    perms = ctx.graph.get_all(f"/drives/{drive['id']}/items/{item['id']}/permissions",
+                                              {"$select": PERMISSION_FIELDS}).items
                 except GraphError as exc:
                     ctx.log(f"Couldn't read sharing for {item.get('webUrl')}: {exc.message}", "warning")
                     continue
