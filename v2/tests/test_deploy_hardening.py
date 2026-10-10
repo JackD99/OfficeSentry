@@ -104,6 +104,19 @@ def test_compose_keeps_the_keys_out_of_the_data_volume():
     assert "chown sentry /data /keys" in dockerfile  # a new keys volume is the app user's
 
 
+def test_compose_keeps_the_containers_fenced_in():
+    compose = yaml.safe_load((V2 / "docker-compose.yml").read_text(encoding="utf-8"))
+    services = compose["services"]
+    for name in ("web", "worker"):
+        svc = services[name]
+        assert svc["read_only"] is True and svc["cap_drop"] == ["ALL"] and svc["pids_limit"] == 256
+        assert "no-new-privileges:true" in svc["security_opt"]
+    caddy = services["caddy"]
+    assert caddy["cap_drop"] == ["ALL"] and caddy["cap_add"] == ["NET_BIND_SERVICE"] and caddy["pids_limit"] == 256
+    assert "no-new-privileges:true" in caddy["security_opt"]
+    assert "header -Server" in (V2 / "Caddyfile").read_text(encoding="utf-8")
+
+
 def test_offsite_and_drill_record_their_status(env_cfg):
     main(["backup-status", "--record", "offsite", "--ok", "--detail", "copy 1a2b3c4d"])
     main(["backup-status", "--record", "offsite", "--failed", "--error", "wrong password or no key found"])

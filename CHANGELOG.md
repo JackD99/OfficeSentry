@@ -50,6 +50,15 @@ No.
 - A nightly backup whose activity history copy failed says the database was copied and what failed, rather
   than "No backup made", and still removes old copies.
 
+### Security
+
+- Every response now carries `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`
+  and `X-Permitted-Cross-Domain-Policies: none`, and the bundled Caddy drops the `Server` header.
+- The portal's access log (Docker and `serve`) records the path only, not the query string or the referer,
+  which carried search terms, filter values and the one-time setup link.
+- The containers get a process limit, and the bundled Caddy runs with every capability but binding its
+  ports dropped, like the portal and worker.
+
 ## 2.1.0 (2026-10-10)
 
 The first release from the public repository. The headlines: home pages for technicians and account
