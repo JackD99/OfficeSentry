@@ -15,11 +15,20 @@ from tests.seed import V1, exchange_callback, exchange_factory
 
 IDS = ["u3", "u0", "u4", "u1", "u2"]  # Exchange's order isn't the ID order
 EXCHANGE = {
-    "Get-Mailbox": [{"ExternalDirectoryObjectId": i, "Guid": f"g-{i}", "PrimarySmtpAddress": f"{i}@x.com",
-                     "UserPrincipalName": f"{i}@x.com", "RecipientTypeDetails": "UserMailbox",
-                     "GrantSendOnBehalfTo": []} for i in IDS],
-    "Get-MailboxPermission": {f"g-{i}": [{"User": f"delegate-{i}@x.com", "AccessRights": ["FullAccess"],
-                                          "IsInherited": False}] for i in IDS},
+    "Get-Mailbox": [
+        {
+            "ExternalDirectoryObjectId": i,
+            "Guid": f"g-{i}",
+            "PrimarySmtpAddress": f"{i}@x.com",
+            "UserPrincipalName": f"{i}@x.com",
+            "RecipientTypeDetails": "UserMailbox",
+            "GrantSendOnBehalfTo": [],
+        }
+        for i in IDS
+    ],
+    "Get-MailboxPermission": {
+        f"g-{i}": [{"User": f"delegate-{i}@x.com", "AccessRights": ["FullAccess"], "IsInherited": False}] for i in IDS
+    },
     "Get-MailboxStatistics": {f"g-{i}": [{"TotalItemSize": "1 KB (1,024 bytes)", "ItemCount": 1}] for i in IDS},
 }
 COLLECTORS = ("mailboxes", "inbox_rules", "mailbox_usage")
@@ -49,10 +58,18 @@ def _round(db, tenant_id) -> tuple[dict, dict]:
 
     runs = {}
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
-        rsps.add_callback(responses.POST, re.compile(re.escape(EXCHANGE_ROOT) + r"/adminapi/beta/[^/]+/InvokeCommand"),
-                          callback=exchange, content_type="application/json")
-        rsps.add_callback(responses.GET, re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/inbox/messageRules"),
-                          callback=rules, content_type="application/json")
+        rsps.add_callback(
+            responses.POST,
+            re.compile(re.escape(EXCHANGE_ROOT) + r"/adminapi/beta/[^/]+/InvokeCommand"),
+            callback=exchange,
+            content_type="application/json",
+        )
+        rsps.add_callback(
+            responses.GET,
+            re.compile(re.escape(V1) + r"/users/[^/]+/mailFolders/inbox/messageRules"),
+            callback=rules,
+            content_type="application/json",
+        )
         for collector in COLLECTORS:
             store.enqueue_run(db, tenant_id, collector)
             run = store.claim_next_run(db)
@@ -89,8 +106,9 @@ def test_over_the_limit_rotates_through_mailboxes_and_keeps_earlier_results(db, 
     assert _covered(db, runs) == {c: ["u0", "u1", "u2", "u3"] for c in COLLECTORS}
     rules = {r["mailboxId"]: r for r in store.run_objects(db, runs["inbox_rules"]["id"], "inbox_rule")}
     assert rules["u0"]["displayName"] == "rule of u0"  # copied as it was, not just counted
-    metric = db.execute("SELECT value FROM metrics WHERE run_id = ? AND key = 'mail.mailboxes_checked'",
-                        (runs["inbox_rules"]["id"],)).fetchone()
+    metric = db.execute(
+        "SELECT value FROM metrics WHERE run_id = ? AND key = 'mail.mailboxes_checked'", (runs["inbox_rules"]["id"],)
+    ).fetchone()
     assert metric["value"] == 4
 
     runs, asked = _round(db, alpha)
@@ -106,13 +124,15 @@ def test_over_the_limit_warning_says_what_was_covered(db, two_tenants, monkeypat
     assert runs["inbox_rules"]["status"] == "partial"
     assert runs["inbox_rules"]["error"] == (
         "Checked inbox rules for 2 of 5 mailboxes this run (2 per run, so each mailbox is checked about every "
-        "3 runs); 3 mailboxes not checked yet")
+        "3 runs); 3 mailboxes not checked yet"
+    )
 
     runs, _ = _round(db, alpha)
     day = store.run_objects(db, runs["mailboxes"]["id"], "mailbox_permission_coverage")[0]["checkedAt"]["u0"][:10]
     assert runs["mailboxes"]["error"] == (
         "Checked mailbox permissions for 2 of 5 mailboxes this run (2 per run, so each mailbox is checked about "
-        f"every 3 runs); showing earlier results for 2 mailboxes, last checked on {day}; 1 mailbox not checked yet")
+        f"every 3 runs); showing earlier results for 2 mailboxes, last checked on {day}; 1 mailbox not checked yet"
+    )
     assert runs["mailbox_usage"]["error"].startswith("Checked mailbox sizes for 2 of 5 mailboxes this run")
 
 

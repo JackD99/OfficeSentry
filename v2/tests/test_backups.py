@@ -187,7 +187,7 @@ def test_backups_are_compressed_private_and_rotate_with_older_plain_ones(env, db
     folder.mkdir(parents=True)
     (folder / "officesentry-20260101-000000.db").write_bytes(b"")  # from before backups were compressed
     main(["backup", "--keep", "1"])
-    saved, = folder.iterdir()  # the older plain one rotated out
+    (saved,) = folder.iterdir()  # the older plain one rotated out
     assert saved.name.endswith(".db.gz")
     assert saved.read_bytes()[:2] == b"\x1f\x8b"
     assert saved.stat().st_size < backups.database_bytes(db) / 3

@@ -9,14 +9,17 @@ from tests.seed import seed_tenant
 from tests.test_email import fake_smtp, sends  # noqa: F401  (autouse: replaces smtplib)
 
 PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
 
 
 def _brand(db, **values):
     for key, value in values.items():
-        db.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                   " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (f"brand_{key}", value))
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (f"brand_{key}", value),
+        )
 
 
 def test_sign_in_page_says_office_sentry_until_branding_is_set_up(client, db):
@@ -79,14 +82,24 @@ def test_logo_route_serves_nothing_else(client, db):
 def test_branding_page_saves_support_contact_and_report_footer(client, db):
     make_user(db, "admin")
     login(client, "admin")
-    resp = client.post("/admin/branding", data={"name": "Harbour IT", "accent": "#0d7a5f",
-                                                "support_name": "Service desk", "support_email": "help@harbour.it",
-                                                "support_phone": "01234 567890",
-                                                "report_footer": "For information only.\n  Not an audit."})
+    resp = client.post(
+        "/admin/branding",
+        data={
+            "name": "Harbour IT",
+            "accent": "#0d7a5f",
+            "support_name": "Service desk",
+            "support_email": "help@harbour.it",
+            "support_phone": "01234 567890",
+            "report_footer": "For information only.\n  Not an audit.",
+        },
+    )
     assert resp.status_code == 302
     brand = branding.load(db)
     assert (brand.support_name, brand.support_email, brand.support_phone) == (
-        "Service desk", "help@harbour.it", "01234 567890")
+        "Service desk",
+        "help@harbour.it",
+        "01234 567890",
+    )
     assert brand.report_footer == "For information only. Not an audit."
     client.post("/admin/branding", data={"support_email": "not an email"})
     assert branding.load(db).support_email == "help@harbour.it"
@@ -106,13 +119,21 @@ def test_client_home_leads_with_the_report_then_recommendations_then_contact(cli
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     seed_tenant(db, bravo)
-    _brand(db, name="Harbour IT", support_name="Harbour service desk", support_email="help@harbour.it",
-           support_phone="01234 567890")
+    _brand(
+        db,
+        name="Harbour IT",
+        support_name="Harbour service desk",
+        support_email="help@harbour.it",
+        support_phone="01234 567890",
+    )
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     page = client.get("/").get_data(as_text=True)
-    report, recs, contact = (page.index(f'/tenants/{alpha}/report"'), page.index("<h2>Recommendations</h2>"),
-                             page.index("Questions about your reports?"))
+    report, recs, contact = (
+        page.index(f'/tenants/{alpha}/report"'),
+        page.index("<h2>Recommendations</h2>"),
+        page.index("Questions about your reports?"),
+    )
     assert report < recs < contact
     assert f'/tenants/{alpha}/report.pdf"' in page and "Based on data collected" in page
     assert "Harbour service desk" in page and 'href="mailto:help@harbour.it"' in page

@@ -90,10 +90,15 @@ def default_graph_factory(vault: Vault):
     def factory(tenant: dict, connection: dict | None) -> GraphClient:
         cloud = connection_cloud(tenant, connection)
         return GraphClient.from_certificate(
-            tenant["tenant_ref"], connection["client_id"],
-            vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
+            tenant["tenant_ref"],
+            connection["client_id"],
+            vault.decrypt(connection["key_enc"]),
+            connection["thumbprint"],
+            cloud=cloud,
+            session=_session(),
             limiter=ratelimit.LIMITER,
         )
+
     return factory
 
 
@@ -101,15 +106,26 @@ def default_exchange_factory(vault: Vault):
     def factory(tenant: dict, connection: dict | None) -> ExchangeClient:
         cloud = connection_cloud(tenant, connection)
         return ExchangeClient.from_certificate(
-            tenant["tenant_ref"], connection["client_id"],
-            vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud=cloud, session=_session(),
+            tenant["tenant_ref"],
+            connection["client_id"],
+            vault.decrypt(connection["key_enc"]),
+            connection["thumbprint"],
+            cloud=cloud,
+            session=_session(),
             limiter=ratelimit.LIMITER,
         )
+
     return factory
 
 
-def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alerts.Alerting | None = None,
-                client_id: str | None = None) -> str:
+def execute_run(
+    conn,
+    run,
+    graph_factory,
+    exchange_factory=None,
+    alerting: alerts.Alerting | None = None,
+    client_id: str | None = None,
+) -> str:
     """Execute one claimed run. Returns the final status.
 
     ``client_id`` is the app the graph client signs in as, when that isn't the
@@ -121,8 +137,12 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
     """
     status = _collect(conn, run, graph_factory, exchange_factory, client_id)
     tenant = store.get_tenant(conn, run["tenant_id"])
-    if tenant is not None and not conn.execute(
-            "SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('queued', 'running')", (tenant["id"],)).fetchone():
+    if (
+        tenant is not None
+        and not conn.execute(
+            "SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('queued', 'running')", (tenant["id"],)
+        ).fetchone()
+    ):
         _sync(conn, tenant, run["id"], alerting)
         # Rebuild the tenant's dashboard row now rather than on the next page load, and its rows on
         # What changed and the check matrix in a background task.
@@ -132,14 +152,16 @@ def execute_run(conn, run, graph_factory, exchange_factory=None, alerting: alert
 
 
 def _sync(conn, tenant, run_id: int, alerting: alerts.Alerting | None) -> None:
-    if not conn.execute("SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial') LIMIT 1",
-                        (tenant["id"],)).fetchone():
+    if not conn.execute(
+        "SELECT 1 FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial') LIMIT 1", (tenant["id"],)
+    ).fetchone():
         return  # nothing collected yet
     try:
         stats = findings.sync(conn, tenant)
         if any(stats.values()):
-            store.log_event(conn, run_id, "info", "Findings: {new} new, {reopened} reopened, {resolved} resolved"
-                            .format(**stats))
+            store.log_event(
+                conn, run_id, "info", "Findings: {new} new, {reopened} reopened, {resolved} resolved".format(**stats)
+            )
         alerts.after_sync(conn, alerting, tenant, stats, run_id)
     except Exception:  # a rule bug must not mark a good collection as failed
         store.log_event(conn, run_id, "error", "Updating findings failed:\n" + traceback.format_exc())
@@ -157,8 +179,9 @@ def _collect(conn, run, graph_factory, exchange_factory, client_id: str | None) 
             log.exception("Storing request telemetry for run %s failed", run["id"])
 
 
-def _run_collector(conn, run, graph_factory, exchange_factory, client_id: str | None,
-                   telemetry: ratelimit.Telemetry) -> str:
+def _run_collector(
+    conn, run, graph_factory, exchange_factory, client_id: str | None, telemetry: ratelimit.Telemetry
+) -> str:
     run_id = run["id"]
     tenant = store.get_tenant(conn, run["tenant_id"])
     collector_cls = REGISTRY.get(run["collector"])
@@ -171,14 +194,21 @@ def _run_collector(conn, run, graph_factory, exchange_factory, client_id: str | 
     try:
         graph = graph_factory(dict(tenant), dict(connection) if connection else None)
         graph.telemetry = telemetry
-        ctx = RunContext(conn=conn, run_id=run_id, tenant=dict(tenant), graph=graph,
-                         capabilities=store.tenant_capabilities(tenant),
-                         client_id=client_id or (connection["client_id"] if connection else None))
+        ctx = RunContext(
+            conn=conn,
+            run_id=run_id,
+            tenant=dict(tenant),
+            graph=graph,
+            capabilities=store.tenant_capabilities(tenant),
+            client_id=client_id or (connection["client_id"] if connection else None),
+        )
         if exchange_factory is not None:
+
             def exchange() -> ExchangeClient:
                 client = exchange_factory(dict(tenant), dict(connection) if connection else None)
                 client.telemetry = telemetry
                 return client
+
             ctx.exchange_factory = exchange
         if why := clouds.missing(clouds.of(tenant), collector_cls.key):
             ctx.warn(why)  # Microsoft doesn't offer it in this national cloud: partial, not failed
@@ -205,8 +235,9 @@ def _run_collector(conn, run, graph_factory, exchange_factory, client_id: str | 
     except Exception:  # the history is a second copy, written in shadow: it must never fail a collection
         log.exception("Recording run %s in the state history failed", run_id)
     # Data came back, so consent exists even if it was granted outside Office Sentry's consent link.
-    conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
-                 (utcnow(), run["tenant_id"]))
+    conn.execute(
+        "UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), run["tenant_id"])
+    )
     if tenant["consented_at"] is None:
         # Consent was given outside the link (say the client's admin opened it): collect the rest now
         # rather than at the next nightly slot.
@@ -278,8 +309,10 @@ HEARTBEAT_STALE = timedelta(minutes=5)
 
 
 def beat(conn) -> None:
-    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (HEARTBEAT_KEY, utcnow()))
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (HEARTBEAT_KEY, utcnow()),
+    )
 
 
 def clear_heartbeat(conn) -> None:
@@ -392,6 +425,7 @@ def heartbeat_step(conn, liveness: Liveness | None) -> bool:
 
 def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None = None) -> threading.Thread:
     """Report liveness from a side thread, so a long collection doesn't look like a dead worker."""
+
     def loop():
         conn = connect(db_path)
         try:
@@ -403,6 +437,7 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
                 stop.wait(HEARTBEAT_EVERY)
         finally:
             conn.close()
+
     thread = threading.Thread(target=loop, name="heartbeat", daemon=True)
     thread.start()
     return thread
@@ -412,10 +447,20 @@ def _heartbeat_thread(db_path, stop: threading.Event, liveness: Liveness | None 
 
 
 # Modules that register ``schedule.periodic`` jobs, and ``tasks.handler`` kinds. Add yours here.
-JOB_MODULES = ("officesentry.delivery", "officesentry.cert_lifecycle", "officesentry.packing",
-               "officesentry.state_history", "officesentry.system_alerts", "officesentry.onboarding")
-TASK_MODULES = ("officesentry.delivery", "officesentry.month_end", "officesentry.reports.precomputed",
-                "officesentry.onboarding")
+JOB_MODULES = (
+    "officesentry.delivery",
+    "officesentry.cert_lifecycle",
+    "officesentry.packing",
+    "officesentry.state_history",
+    "officesentry.system_alerts",
+    "officesentry.onboarding",
+)
+TASK_MODULES = (
+    "officesentry.delivery",
+    "officesentry.month_end",
+    "officesentry.reports.precomputed",
+    "officesentry.onboarding",
+)
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
 
@@ -479,8 +524,15 @@ def _claim(conn):
         return None
 
 
-def _collector_thread(cfg: Config, number: int, stop: threading.Event, graph_factory, exchange_factory,
-                      alerting, liveness: Liveness | None = None) -> threading.Thread:
+def _collector_thread(
+    cfg: Config,
+    number: int,
+    stop: threading.Event,
+    graph_factory,
+    exchange_factory,
+    alerting,
+    liveness: Liveness | None = None,
+) -> threading.Thread:
     """Claim and execute queued runs until ``stop`` is set, then finish the current run."""
     liveness = liveness or Liveness()
 
@@ -499,14 +551,15 @@ def _collector_thread(cfg: Config, number: int, stop: threading.Event, graph_fac
                     _rollback(conn)
         finally:
             conn.close()
+
     thread = threading.Thread(target=loop, name=f"collector-{number}", daemon=True)
     thread.start()
     return thread
 
 
-def _task_thread(app, vault, cfg: Config, number: int, stop: threading.Event,
-                 liveness: Liveness) -> threading.Thread:
+def _task_thread(app, vault, cfg: Config, number: int, stop: threading.Event, liveness: Liveness) -> threading.Thread:
     """Claim and run background tasks until ``stop`` is set, then finish the current one."""
+
     def loop():
         conn = connect(cfg.db_path)
         try:
@@ -531,6 +584,7 @@ def _task_thread(app, vault, cfg: Config, number: int, stop: threading.Event,
                     liveness.end_task()
         finally:
             conn.close()
+
     thread = threading.Thread(target=loop, name=f"task-{number}", daemon=True)
     thread.start()
     return thread
@@ -558,8 +612,9 @@ def _daily(conn, cfg: Config) -> None:
     _queue_precompute(conn, rebuild=bool(removed))
 
 
-def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None,
-               stop: threading.Event | None = None) -> None:
+def run_worker(
+    cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None, stop: threading.Event | None = None
+) -> None:
     conn = connect(cfg.db_path)
     migrate(conn)
     vault = Vault(cfg.encryption_keys)
@@ -588,11 +643,17 @@ def run_worker(cfg: Config, *, once: bool = False, graph_factory=None, exchange_
         for sig in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sig, lambda *_: stop.set())
     heartbeat = _heartbeat_thread(cfg.db_path, stop, liveness)
-    log.info("Worker started with %s. Collecting on '%s' (%s); next slot %s",
-             plural(cfg.worker_concurrency, "collector thread"), cfg.collect_cron, cfg.timezone,
-             schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat())
-    collectors = [_collector_thread(cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness)
-                  for n in range(cfg.worker_concurrency)]
+    log.info(
+        "Worker started with %s. Collecting on '%s' (%s); next slot %s",
+        plural(cfg.worker_concurrency, "collector thread"),
+        cfg.collect_cron,
+        cfg.timezone,
+        schedule.next_fire(cfg.collect_cron, cfg.timezone, datetime.now(UTC)).isoformat(),
+    )
+    collectors = [
+        _collector_thread(cfg, n + 1, stop, graph_factory, exchange_factory, alerting, liveness)
+        for n in range(cfg.worker_concurrency)
+    ]
     collectors += [_task_thread(app, vault, cfg, n + 1, stop, liveness) for n in range(TASK_THREADS)]
 
     last_day = None

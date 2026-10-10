@@ -153,7 +153,7 @@ def test_production_from_releases_is_off_unless_set():
     # Production only ever runs a release tag's published image, pinned by digest.
     assert 'echo "OFFICESENTRY_VERSION=${REF#v}@$RELEASE_DIGEST"' in workflow
     # The off-site password reaches the server's .env.backup only, never the portal's .env.
-    env_block = workflow[workflow.index("} > v2/.env\n") - 2000:workflow.index("} > v2/.env\n")]
+    env_block = workflow[workflow.index("} > v2/.env\n") - 2000 : workflow.index("} > v2/.env\n")]
     assert "BACKUP_PASSWORD" not in env_block.split("{\n", 1)[-1]
 
 

@@ -10,10 +10,20 @@ from .base import Collector, RunContext, register
 SIGN_IN_ACTIVITY_PAGE = "500"
 
 BASE_FIELDS = [
-    "id", "displayName", "userPrincipalName", "mail", "userType", "accountEnabled",
-    "createdDateTime", "assignedLicenses", "lastPasswordChangeDateTime",
-    "onPremisesSyncEnabled", "passwordPolicies", "externalUserState",
-    "licenseAssignmentStates", "usageLocation",  # how each licence is assigned (directly or by a group)
+    "id",
+    "displayName",
+    "userPrincipalName",
+    "mail",
+    "userType",
+    "accountEnabled",
+    "createdDateTime",
+    "assignedLicenses",
+    "lastPasswordChangeDateTime",
+    "onPremisesSyncEnabled",
+    "passwordPolicies",
+    "externalUserState",
+    "licenseAssignmentStates",
+    "usageLocation",  # how each licence is assigned (directly or by a group)
 ]
 
 
@@ -23,10 +33,17 @@ def licence_states(user: dict) -> list[dict] | None:
     states = user.get("licenseAssignmentStates")
     if not isinstance(states, list):
         return None
-    return [{"skuId": s.get("skuId"), "group": s.get("assignedByGroup") or None, "state": s.get("state"),
-             "error": s.get("error") if s.get("error") not in (None, "", "None") else None,
-             "updated": s.get("lastUpdatedDateTime")}
-            for s in states if isinstance(s, dict) and s.get("skuId")]
+    return [
+        {
+            "skuId": s.get("skuId"),
+            "group": s.get("assignedByGroup") or None,
+            "state": s.get("state"),
+            "error": s.get("error") if s.get("error") not in (None, "", "None") else None,
+            "updated": s.get("lastUpdatedDateTime"),
+        }
+        for s in states
+        if isinstance(s, dict) and s.get("skuId")
+    ]
 
 
 def summarise(user: dict, activity_available: bool) -> dict:
@@ -60,8 +77,10 @@ def summarise(user: dict, activity_available: bool) -> dict:
 class Users(Collector):
     key = "users"
     title = "Users"
-    description = ("Members and guests with licences (and whether each comes directly or from a group), password age "
-                   "and last sign-in (sign-in needs Entra ID P1).")
+    description = (
+        "Members and guests with licences (and whether each comes directly or from a group), password age "
+        "and last sign-in (sign-in needs Entra ID P1)."
+    )
     permissions = ("User.Read.All", "AuditLog.Read.All")
 
     def collect(self, ctx: RunContext) -> None:
@@ -70,16 +89,28 @@ class Users(Collector):
         activity = False
         if want_activity:
             try:
-                users = ctx.paged(ctx.graph.get_all("/users", params={
-                    "$select": ",".join(BASE_FIELDS + ["signInActivity"]), "$top": SIGN_IN_ACTIVITY_PAGE,
-                }))
+                users = ctx.paged(
+                    ctx.graph.get_all(
+                        "/users",
+                        params={
+                            "$select": ",".join(BASE_FIELDS + ["signInActivity"]),
+                            "$top": SIGN_IN_ACTIVITY_PAGE,
+                        },
+                    )
+                )
                 activity = True
             except LicenseRequired:
                 ctx.warn("Sign-in activity needs Entra ID P1; collected users without it")
         if users is None:
-            users = ctx.paged(ctx.graph.get_all("/users", params={
-                "$select": ",".join(BASE_FIELDS), "$top": "999",
-            }))
+            users = ctx.paged(
+                ctx.graph.get_all(
+                    "/users",
+                    params={
+                        "$select": ",".join(BASE_FIELDS),
+                        "$top": "999",
+                    },
+                )
+            )
 
         rows = [(u["id"], summarise(u, activity)) for u in users]
         ctx.objects("user", rows)
@@ -93,5 +124,7 @@ class Users(Collector):
         ctx.metric("users.enabled", sum(u["accountEnabled"] for u in data))
         ctx.metric("users.licensed", sum(u["licensed"] for u in data))
         ctx.metric("users.licensed_disabled", sum(u["licensed"] and not u["accountEnabled"] for u in data))
-        ctx.metric("licences.assignment_errors", sum(
-            1 for u in data for s in u["licenceStates"] or [] if s["state"] in ("Error", "ActiveWithError")))
+        ctx.metric(
+            "licences.assignment_errors",
+            sum(1 for u in data for s in u["licenceStates"] or [] if s["state"] in ("Error", "ActiveWithError")),
+        )

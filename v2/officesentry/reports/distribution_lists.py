@@ -30,12 +30,24 @@ MEMBERS = "Members"
 SEVERITY = ("high", "medium", "low")
 NO_OWNER = "No owner"
 LEAVER_OWNERS = "Only leavers own it"
-TYPES = {"MailUniversalDistributionGroup": "Distribution list", "MailUniversalSecurityGroup": "Mail-enabled security",
-         "MailNonUniversalGroup": "Distribution list"}
-MEMBER_TYPES = {"UserMailbox": "Mailbox", "SharedMailbox": "Shared mailbox", "MailContact": "External contact",
-                "MailUser": "Mail user", "GuestMailUser": "Guest", "MailUniversalDistributionGroup": "List",
-                "MailUniversalSecurityGroup": "Security group", "DynamicDistributionGroup": "Dynamic list",
-                "GroupMailbox": "Microsoft 365 group", "RoomMailbox": "Room", "EquipmentMailbox": "Equipment"}
+TYPES = {
+    "MailUniversalDistributionGroup": "Distribution list",
+    "MailUniversalSecurityGroup": "Mail-enabled security",
+    "MailNonUniversalGroup": "Distribution list",
+}
+MEMBER_TYPES = {
+    "UserMailbox": "Mailbox",
+    "SharedMailbox": "Shared mailbox",
+    "MailContact": "External contact",
+    "MailUser": "Mail user",
+    "GuestMailUser": "Guest",
+    "MailUniversalDistributionGroup": "List",
+    "MailUniversalSecurityGroup": "Security group",
+    "DynamicDistributionGroup": "Dynamic list",
+    "GroupMailbox": "Microsoft 365 group",
+    "RoomMailbox": "Room",
+    "EquipmentMailbox": "Equipment",
+}
 
 
 def _text(value) -> str:
@@ -57,8 +69,7 @@ class _Owners:
         box = self.boxes.get(name.lower())
         user = self.users.get(_text((box or {}).get("ExternalDirectoryObjectId")).lower()) if box else None
         user = user or self.users.get(name.lower())
-        label = (_text((user or {}).get("userPrincipalName")) or _text((box or {}).get("PrimarySmtpAddress"))
-                 or name)
+        label = _text((user or {}).get("userPrincipalName")) or _text((box or {}).get("PrimarySmtpAddress")) or name
         return label, user
 
 
@@ -77,8 +88,7 @@ def _recent(entry: dict, now: datetime, days: int) -> int:
 @report(
     "distribution-lists",
     "Distribution lists",
-    "Every distribution list with its members and owners, who can mail it, and empty, "
-    "ownerless or unused lists.",
+    "Every distribution list with its members and owners, who can mail it, and empty, ownerless or unused lists.",
     ("distribution_lists", "mailboxes", "users"),
     group="email",
     order=64,
@@ -97,14 +107,29 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
     activity, status = _activity(snap)
     traced = bool(status and status.get("available"))
 
-    every = Section(EVERY, ["List", "Address", "Type", "Members", "Owners", "External members",
-                            "Accepts mail from outside", f"Mail in the last {RECENT_DAYS} days", "Last mail received",
-                            "Synced from AD", "Created"],
-                    empty="This tenant has no distribution lists.")
-    attention = Section(ATTENTION, ["List", "Why", "Members", "Owners", "Last mail received"],
-                        empty="Every list has members and an owner who can still sign in, and none looks unused.")
-    members = Section(MEMBERS, ["List", "Member", "Address", "Member type"],
-                      empty="No members were read.")
+    every = Section(
+        EVERY,
+        [
+            "List",
+            "Address",
+            "Type",
+            "Members",
+            "Owners",
+            "External members",
+            "Accepts mail from outside",
+            f"Mail in the last {RECENT_DAYS} days",
+            "Last mail received",
+            "Synced from AD",
+            "Created",
+        ],
+        empty="This tenant has no distribution lists.",
+    )
+    attention = Section(
+        ATTENTION,
+        ["List", "Why", "Members", "Owners", "Last mail received"],
+        empty="Every list has members and an owner who can still sign in, and none looks unused.",
+    )
+    members = Section(MEMBERS, ["List", "Member", "Address", "Member type"], empty="No members were read.")
     empty = ownerless = unused = open_outside = 0
     needs: list[tuple[int, list, str]] = []
     watched_short: list[str] = []
@@ -146,15 +171,30 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
                 reasons.append(("low", f"Anyone outside can mail all {count} members"))
         flag = next((sev for sev in SEVERITY if any(s == sev for s, _ in reasons)), None)
         last_day = last.date().isoformat() if last else ""
-        every.add([name, address, TYPES.get(_text(g.get("RecipientTypeDetails")), "Distribution list"),
-                   "" if count is None else count, labels or "None",
-                   g.get("externalCount") if read and isinstance(g.get("externalCount"), int) else "",
-                   outside, "Not read" if recent is None else recent,
-                   last_day,
-                   bool(g.get("IsDirSynced")), (_text(g.get("WhenCreatedUTC")) or "")[:10]], flag)
+        every.add(
+            [
+                name,
+                address,
+                TYPES.get(_text(g.get("RecipientTypeDetails")), "Distribution list"),
+                "" if count is None else count,
+                labels or "None",
+                g.get("externalCount") if read and isinstance(g.get("externalCount"), int) else "",
+                outside,
+                "Not read" if recent is None else recent,
+                last_day,
+                bool(g.get("IsDirSynced")),
+                (_text(g.get("WhenCreatedUTC")) or "")[:10],
+            ],
+            flag,
+        )
         if reasons:
-            needs.append((SEVERITY.index(flag), [name, [why for _, why in reasons], "" if count is None else count,
-                                                  labels or "None", last_day], flag))
+            needs.append(
+                (
+                    SEVERITY.index(flag),
+                    [name, [why for _, why in reasons], "" if count is None else count, labels or "None", last_day],
+                    flag,
+                )
+            )
         for m in g.get("members") or [] if read else []:
             if isinstance(m, dict):
                 kind = _text(m.get("type"))
@@ -163,34 +203,57 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         attention.add(row, flag)
 
     n = len(lists)
-    every.intro = (f"{plural(n, 'distribution list')}. Lists that accept mail from outside can be mailed by anyone "
-                   "on the internet; most lists only need mail from colleagues.")
-    attention.intro = (f"{plural(len(attention.rows), 'list')} {verb(len(attention.rows), 'needs', 'need')} a look. "
-                       "Mail to an empty list reaches nobody, a list without an owner (or owned only by people whose "
-                       "sign-in is blocked) has nobody keeping its members right, and a big list anyone outside can "
-                       "mail is a phishing target. "
-                       "Give each list an owner who still works here, and delete lists nobody uses (Exchange admin "
-                       "centre, Recipients > Groups > Distribution list). To stop outside mail, open the list's "
-                       "Settings and untick \"Allow people outside of my organisation to send to this group\".")
-    members.intro = ("Each list's direct members (the first 200 of a big list). A member that is itself a list "
-                     "passes mail on to its own members.")
+    every.intro = (
+        f"{plural(n, 'distribution list')}. Lists that accept mail from outside can be mailed by anyone "
+        "on the internet; most lists only need mail from colleagues."
+    )
+    attention.intro = (
+        f"{plural(len(attention.rows), 'list')} {verb(len(attention.rows), 'needs', 'need')} a look. "
+        "Mail to an empty list reaches nobody, a list without an owner (or owned only by people whose "
+        "sign-in is blocked) has nobody keeping its members right, and a big list anyone outside can "
+        "mail is a phishing target. "
+        "Give each list an owner who still works here, and delete lists nobody uses (Exchange admin "
+        "centre, Recipients > Groups > Distribution list). To stop outside mail, open the list's "
+        'Settings and untick "Allow people outside of my organisation to send to this group".'
+    )
+    members.intro = (
+        "Each list's direct members (the first 200 of a big list). A member that is itself a list "
+        "passes mail on to its own members."
+    )
     if not traced:
-        out.notes.append("How much mail each list gets comes from the message trace, which isn't available here"
-                         + (f": {status.get('reason')}" if status and status.get("reason") else " yet") + ".")
+        out.notes.append(
+            "How much mail each list gets comes from the message trace, which isn't available here"
+            + (f": {status.get('reason')}" if status and status.get("reason") else " yet")
+            + "."
+        )
     elif watched_short:
-        out.notes.append(f"{plural(len(watched_short), 'list')} {verb(len(watched_short), 'has', 'have')} been "
-                         f"watched for less than {MIN_WATCHED} days, so unused lists aren't flagged for "
-                         f"{verb(len(watched_short), 'it', 'them')} yet.")
+        out.notes.append(
+            f"{plural(len(watched_short), 'list')} {verb(len(watched_short), 'has', 'have')} been "
+            f"watched for less than {MIN_WATCHED} days, so unused lists aren't flagged for "
+            f"{verb(len(watched_short), 'it', 'them')} yet."
+        )
     out.tiles = [
         Tile("Distribution lists", n, "Lists that pass mail on to their members", rows=Rows(EVERY)),
         Tile("Empty lists", empty, "No members", "warn" if empty else "ok", Rows(EVERY, {"Members": 0})),
-        Tile("Without an owner", ownerless, "No owner, or only leavers", "warn" if ownerless else "ok",
-             Rows(ATTENTION, {"Why": [NO_OWNER, LEAVER_OWNERS]})),
-        Tile(f"No mail in {UNUSED_DAYS} days", unused if traced else "Not read",
-             "Lists that look unused" if traced else "Needs the message trace", ("warn" if unused else "ok")
-             if traced else None, Rows(EVERY, {f"Mail in the last {RECENT_DAYS} days": 0}) if traced else None),
-        Tile("Open to outside senders", open_outside, "Anyone can mail these lists",
-             rows=Rows(EVERY, {"Accepts mail from outside": "Yes"})),
+        Tile(
+            "Without an owner",
+            ownerless,
+            "No owner, or only leavers",
+            "warn" if ownerless else "ok",
+            Rows(ATTENTION, {"Why": [NO_OWNER, LEAVER_OWNERS]}),
+        ),
+        Tile(
+            f"No mail in {UNUSED_DAYS} days",
+            unused if traced else "Not read",
+            "Lists that look unused" if traced else "Needs the message trace",
+            ("warn" if unused else "ok") if traced else None,
+            Rows(EVERY, {f"Mail in the last {RECENT_DAYS} days": 0}) if traced else None,
+        ),
+        Tile(
+            "Open to outside senders",
+            open_outside,
+            "Anyone can mail these lists",
+            rows=Rows(EVERY, {"Accepts mail from outside": "Yes"}),
+        ),
     ]
     out.sections = [attention, every, members]
-

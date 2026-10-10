@@ -22,10 +22,16 @@ def no_weasyprint(monkeypatch):
 
 
 def _pdf_urls(alpha: int) -> list[str]:
-    return ([f"/tenants/{alpha}/data/{key}.pdf" for key in data_reports.REPORTS]
-            + [f"/across/{key}.pdf" for key, _ in rollups.available()]
-            + ["/changes.pdf?days=7", f"/tenants/{alpha}/changes.pdf?days=30",
-               f"/tenants/{alpha}/report.pdf", f"/tenants/{alpha}/evidence.pdf"])
+    return (
+        [f"/tenants/{alpha}/data/{key}.pdf" for key in data_reports.REPORTS]
+        + [f"/across/{key}.pdf" for key, _ in rollups.available()]
+        + [
+            "/changes.pdf?days=7",
+            f"/tenants/{alpha}/changes.pdf?days=30",
+            f"/tenants/{alpha}/report.pdf",
+            f"/tenants/{alpha}/evidence.pdf",
+        ]
+    )
 
 
 # -- Report menu -------------------------------------------------------------------
@@ -34,8 +40,9 @@ def _pdf_urls(alpha: int) -> list[str]:
 def test_every_detail_report_is_in_one_menu_group():
     keys = [k for group in data_reports.grouped() for k, _, _ in group.reports]
     assert sorted(keys) == sorted(data_reports.REPORTS)
-    assert all(k in data_reports.REPORTS for _, _, group in data_reports.GROUPS for k in group), \
+    assert all(k in data_reports.REPORTS for _, _, group in data_reports.GROUPS for k in group), (
         "a key in GROUPS has no report: rename it there"
+    )
 
 
 def test_new_report_without_a_group_still_shows(monkeypatch):
@@ -52,7 +59,7 @@ def test_detail_page_shows_its_group_and_downloads(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}/data/inbox-rules").get_data(as_text=True)
     # The report picker lists every group, the open report marked; phones get it as a grouped select.
     picker = page.split('<nav class="report-menu"')[1].split("</nav>")[0]
-    assert '>Email</p>' in picker and "Mailbox size" in picker and "MFA coverage" in picker
+    assert ">Email</p>" in picker and "Mailbox size" in picker and "MFA coverage" in picker
     assert f'href="/tenants/{alpha}/data/inbox-rules" title="' in picker
     assert 'aria-current="page">Inbox rules<' in picker
     assert f'/tenants/{alpha}/data/inbox-rules.pdf"' in page
@@ -97,13 +104,21 @@ def test_pdf_downloads_render(client, db, two_tenants):
     seed_tenant(db, alpha)
     make_user(db, "admin")
     login(client, "admin")
-    for url in (f"/tenants/{alpha}/data/admins.pdf", f"/tenants/{alpha}/data/secure-score.pdf",
-                "/across/review.pdf", "/across/inbox-rules.pdf", "/changes.pdf", f"/tenants/{alpha}/changes.pdf"):
+    for url in (
+        f"/tenants/{alpha}/data/admins.pdf",
+        f"/tenants/{alpha}/data/secure-score.pdf",
+        "/across/review.pdf",
+        "/across/inbox-rules.pdf",
+        "/changes.pdf",
+        f"/tenants/{alpha}/changes.pdf",
+    ):
         resp = client.get(url)
         assert resp.status_code == 200 and resp.data[:4] == b"%PDF", url
         assert resp.headers["Content-Disposition"].startswith("attachment; filename="), url
-    assert 'filename="admins-alpha-ltd.pdf"' in client.get(f"/tenants/{alpha}/data/admins.pdf").headers[
-        "Content-Disposition"]
+    assert (
+        'filename="admins-alpha-ltd.pdf"'
+        in client.get(f"/tenants/{alpha}/data/admins.pdf").headers["Content-Disposition"]
+    )
 
 
 @needs_pdf

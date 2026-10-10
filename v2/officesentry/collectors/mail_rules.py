@@ -27,13 +27,22 @@ def _targets(ctx: RunContext) -> list[dict]:
     if run:
         boxes = store.run_objects(ctx.conn, run["id"], "mailbox")
         if boxes:
-            return [{"id": m["ExternalDirectoryObjectId"], "upn": m.get("UserPrincipalName") or m.get(
-                "PrimarySmtpAddress"), "type": m.get("RecipientTypeDetails")}
-                for m in boxes if m.get("ExternalDirectoryObjectId") and m.get("RecipientTypeDetails") in MAILBOX_TYPES]
+            return [
+                {
+                    "id": m["ExternalDirectoryObjectId"],
+                    "upn": m.get("UserPrincipalName") or m.get("PrimarySmtpAddress"),
+                    "type": m.get("RecipientTypeDetails"),
+                }
+                for m in boxes
+                if m.get("ExternalDirectoryObjectId") and m.get("RecipientTypeDetails") in MAILBOX_TYPES
+            ]
     run = store.latest_run(ctx.conn, ctx.tenant["id"], "users")
     users = store.run_objects(ctx.conn, run["id"], "user") if run else []
-    return [{"id": u["_id"], "upn": u.get("userPrincipalName"), "type": "UserMailbox"}
-            for u in users if u.get("licensed") and u.get("accountEnabled")]
+    return [
+        {"id": u["_id"], "upn": u.get("userPrincipalName"), "type": "UserMailbox"}
+        for u in users
+        if u.get("licensed") and u.get("accountEnabled")
+    ]
 
 
 @register
@@ -67,17 +76,30 @@ class InboxRules(Collector):
                 folders, exchange_ok = _folder_names(ctx, t)
             for r in rules:
                 folder_id = (r.get("actions") or {}).get("moveToFolder")
-                rows.append((f"{t['id']}:{r['id']}", {
-                    "mailboxId": t["id"], "mailbox": t["upn"], "mailboxType": t["type"],
-                    "displayName": r.get("displayName"), "isEnabled": r.get("isEnabled", True),
-                    "hasError": r.get("hasError"), "sequence": r.get("sequence"),
-                    "conditions": r.get("conditions") or {}, "actions": r.get("actions") or {},
-                    "moveToFolderName": _folder_of(r, folders) if folder_id else None,
-                }))
+                rows.append(
+                    (
+                        f"{t['id']}:{r['id']}",
+                        {
+                            "mailboxId": t["id"],
+                            "mailbox": t["upn"],
+                            "mailboxType": t["type"],
+                            "displayName": r.get("displayName"),
+                            "isEnabled": r.get("isEnabled", True),
+                            "hasError": r.get("hasError"),
+                            "sequence": r.get("sequence"),
+                            "conditions": r.get("conditions") or {},
+                            "actions": r.get("actions") or {},
+                            "moveToFolderName": _folder_of(r, folders) if folder_id else None,
+                        },
+                    )
+                )
         if targets and denied == len(targets):
-            raise PermissionMissing(403, "Authorization_RequestDenied",
-                                    "Reading inbox rules was refused for every mailbox; check MailboxSettings.Read "
-                                    "consent and any Exchange application access policy")
+            raise PermissionMissing(
+                403,
+                "Authorization_RequestDenied",
+                "Reading inbox rules was refused for every mailbox; check MailboxSettings.Read "
+                "consent and any Exchange application access policy",
+            )
         if denied or failed:
             ctx.warn(f"Could not read inbox rules for {denied + failed} of {plural(len(targets), 'mailbox')}")
         rows += window.carried
@@ -86,7 +108,6 @@ class InboxRules(Collector):
         ctx.metric("mail.inbox_rules", len(rows))
         # Mailboxes the stored rules cover: read this run, or kept from an earlier run.
         ctx.metric("mail.mailboxes_checked", len(targets) - denied - failed + window.carried_mailboxes)
-
 
 
 def _folder_names(ctx: RunContext, target: dict) -> tuple[dict[str, str], bool]:

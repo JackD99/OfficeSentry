@@ -22,14 +22,24 @@ def atomic(conn):
 # -- App connections ---------------------------------------------------------
 
 
-def create_connection(conn, vault, name: str, cert, client_id: str | None = None,
-                      multi_tenant: bool = True, cloud: str = "commercial") -> int:
+def create_connection(
+    conn, vault, name: str, cert, client_id: str | None = None, multi_tenant: bool = True, cloud: str = "commercial"
+) -> int:
     """An app registration Office Sentry signs in as, in one Microsoft cloud (``clouds.py``)."""
     cur = conn.execute(
         "INSERT INTO app_connections (name, client_id, multi_tenant, cert_pem, key_enc, thumbprint,"
         " not_after, created_at, cloud) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (name, client_id, int(multi_tenant), cert.cert_pem, vault.encrypt(cert.key_pem),
-         cert.thumbprint, cert.not_after.strftime("%Y-%m-%dT%H:%M:%SZ"), utcnow(), cloud),
+        (
+            name,
+            client_id,
+            int(multi_tenant),
+            cert.cert_pem,
+            vault.encrypt(cert.key_pem),
+            cert.thumbprint,
+            cert.not_after.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            utcnow(),
+            cloud,
+        ),
     )
     return cur.lastrowid
 
@@ -45,8 +55,7 @@ def list_connections(conn):
 # -- Tenants -----------------------------------------------------------------
 
 
-def create_tenant(conn, name: str, tenant_ref: str, connection_id: int | None,
-                  cloud: str = "commercial") -> int:
+def create_tenant(conn, name: str, tenant_ref: str, connection_id: int | None, cloud: str = "commercial") -> int:
     cur = conn.execute(
         "INSERT INTO tenants (name, tenant_ref, connection_id, created_at, cloud) VALUES (?, ?, ?, ?, ?)",
         (name, tenant_ref, connection_id, utcnow(), cloud),
@@ -63,8 +72,7 @@ def tenant_capabilities(tenant) -> dict:
 
 
 def set_capabilities(conn, tenant_id: int, caps: dict) -> None:
-    conn.execute("UPDATE tenants SET capabilities = ? WHERE id = ?",
-                 (json.dumps(caps, sort_keys=True), tenant_id))
+    conn.execute("UPDATE tenants SET capabilities = ? WHERE id = ?", (json.dumps(caps, sort_keys=True), tenant_id))
 
 
 # -- Runs --------------------------------------------------------------------
@@ -84,9 +92,15 @@ def lease_until(now: datetime | None = None) -> str:
     return ((now or datetime.now(UTC)) + LEASE).strftime(ISO)
 
 
-def enqueue_run(conn, tenant_id: int, collector: str, trigger: str = "manual",
-                requested_by: str | None = None, scheduled_for: str | None = None,
-                priority: int | None = None) -> int:
+def enqueue_run(
+    conn,
+    tenant_id: int,
+    collector: str,
+    trigger: str = "manual",
+    requested_by: str | None = None,
+    scheduled_for: str | None = None,
+    priority: int | None = None,
+) -> int:
     """Queue a run unless one for the same tenant+collector is already pending.
 
     Manual runs default to ``PRIORITY_WAITING``, so "Run now" goes ahead of the
@@ -133,8 +147,10 @@ def claim_next_run(conn):
         ).fetchone()
         if not row:
             return None
-        conn.execute("UPDATE runs SET status = 'running', started_at = ?, lease_until = ? WHERE id = ?",
-                     (utcnow(), lease_until(), row["id"]))
+        conn.execute(
+            "UPDATE runs SET status = 'running', started_at = ?, lease_until = ? WHERE id = ?",
+            (utcnow(), lease_until(), row["id"]),
+        )
         return conn.execute("SELECT * FROM runs WHERE id = ?", (row["id"],)).fetchone()
 
 
@@ -150,8 +166,10 @@ def renew_run_leases(conn, run_ids, now: datetime | None = None) -> None:
     """Keep the runs this worker is executing claimed (``worker._heartbeat_thread``)."""
     ids = list(run_ids)
     if ids:
-        conn.execute(f"UPDATE runs SET lease_until = ? WHERE status = 'running' AND id IN ({','.join('?' * len(ids))})",
-                     (lease_until(now), *ids))
+        conn.execute(
+            f"UPDATE runs SET lease_until = ? WHERE status = 'running' AND id IN ({','.join('?' * len(ids))})",
+            (lease_until(now), *ids),
+        )
 
 
 def expire_run_leases(conn, now: datetime | None = None, held=()) -> int:
@@ -169,8 +187,10 @@ def expire_run_leases(conn, now: datetime | None = None, held=()) -> int:
 
 
 def log_event(conn, run_id: int, level: str, message: str) -> None:
-    conn.execute("INSERT INTO run_events (run_id, ts, level, message) VALUES (?, ?, ?, ?)",
-                 (run_id, utcnow(), level, message[:2000]))
+    conn.execute(
+        "INSERT INTO run_events (run_id, ts, level, message) VALUES (?, ?, ?, ?)",
+        (run_id, utcnow(), level, message[:2000]),
+    )
 
 
 def latest_run(conn, tenant_id: int, collector: str, successful: bool = True):
@@ -217,8 +237,7 @@ def _pack_rows(lines: dict[str, bytes]) -> list[tuple[str, int, bytes]]:
             chunk, size = [], 0
     if chunk:
         packs.append(chunk)
-    return [(c[0][0], len(c), PACK_ZLIB + zlib.compress(b"\n".join(line for _, line in c), PACK_LEVEL))
-            for c in packs]
+    return [(c[0][0], len(c), PACK_ZLIB + zlib.compress(b"\n".join(line for _, line in c), PACK_LEVEL)) for c in packs]
 
 
 def pack_lines(blob: bytes) -> list[bytes]:
@@ -240,8 +259,9 @@ def write_packs(conn, run_id: int, kind: str, lines: dict[str, bytes]) -> None:
 def stored_lines(conn, run_id: int, kind: str) -> dict[str, bytes]:
     """{object id: line} of everything stored for the run and kind, packed or not."""
     lines: dict[str, bytes] = {}
-    for row in conn.execute("SELECT object_id, data FROM objects WHERE run_id = ? AND kind = ? ORDER BY object_id",
-                            (run_id, kind)):
+    for row in conn.execute(
+        "SELECT object_id, data FROM objects WHERE run_id = ? AND kind = ? ORDER BY object_id", (run_id, kind)
+    ):
         if isinstance(row["data"], bytes):
             lines.update((json.loads(line)[0], line) for line in pack_lines(row["data"]))
         else:  # the stored JSON as it is, so it reads back exactly as before
@@ -293,12 +313,14 @@ def find_object(conn, run_id: int, kind: str, object_id: str):
     """One object of a run by its id, or None. Reads only the pack that would hold it."""
     row = conn.execute(
         "SELECT kind, object_id, data FROM objects WHERE run_id = ? AND kind = ? AND object_id <= ?"
-        " ORDER BY object_id DESC LIMIT 1", (run_id, kind, object_id)).fetchone()
+        " ORDER BY object_id DESC LIMIT 1",
+        (run_id, kind, object_id),
+    ).fetchone()
     if row is None:
         return None
     if not isinstance(row["data"], bytes):
         return json.loads(row["data"]) if row["object_id"] == object_id else None
-    start = _line(object_id, None)[:-len(b"null]")]  # '["<id>", '
+    start = _line(object_id, None)[: -len(b"null]")]  # '["<id>", '
     for line in pack_lines(row["data"]):
         if line.startswith(start):
             return json.loads(line)[1]
@@ -308,7 +330,9 @@ def find_object(conn, run_id: int, kind: str, object_id: str):
 def _snapshot_runs(conn, tenant_id: int, collector: str):
     return conn.execute(
         "SELECT id, finished_at FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
-        " ORDER BY finished_at, id", (tenant_id, collector)).fetchall()
+        " ORDER BY finished_at, id",
+        (tenant_id, collector),
+    ).fetchall()
 
 
 def object_copies(conn, tenant_id: int, collector: str, kind: str, object_id: str) -> list[tuple[str, dict]]:
@@ -322,15 +346,18 @@ def object_copies(conn, tenant_id: int, collector: str, kind: str, object_id: st
     return out
 
 
-def matching_objects(conn, tenant_id: int, collector: str, kind: str, field: str,
-                     value: str) -> list[tuple[str, str, int, dict]]:
+def matching_objects(
+    conn, tenant_id: int, collector: str, kind: str, field: str, value: str
+) -> list[tuple[str, str, int, dict]]:
     """(object id, finished at, run ID, data) of every object of the kind whose ``field`` is ``value``, across
     the collector's successful runs that still hold objects, oldest run first, then by object id."""
     needle = json.dumps(value).encode() if isinstance(value, str) else None
     out = []
     for run in _snapshot_runs(conn, tenant_id, collector):
-        rows = conn.execute("SELECT kind, object_id, data FROM objects WHERE run_id = ? AND kind = ?"
-                            " ORDER BY object_id", (run["id"], kind))
+        rows = conn.execute(
+            "SELECT kind, object_id, data FROM objects WHERE run_id = ? AND kind = ? ORDER BY object_id",
+            (run["id"], kind),
+        )
         for _, object_id, data in _objects_in(rows, needle):
             if isinstance(data, dict) and data.get(field) == value:
                 out.append((object_id, run["finished_at"], run["id"], data))
@@ -377,8 +404,10 @@ def snapshots_to_keep(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: st
         group = (r["tenant_id"], r["collector"])
         local = datetime.fromisoformat(r["finished_at"].replace("Z", "+00:00")).astimezone(zone)
         # Rows arrive newest first, so the first run seen in a day/month is its last.
-        for buckets, label, limit in ((days, local.date(), keep_daily),
-                                      (months, (local.year, local.month), keep_monthly)):
+        for buckets, label, limit in (
+            (days, local.date(), keep_daily),
+            (months, (local.year, local.month), keep_monthly),
+        ):
             seen = buckets.setdefault(group, [])
             if len(seen) < limit and (not seen or seen[-1] != label):
                 seen.append(label)
@@ -386,20 +415,26 @@ def snapshots_to_keep(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: st
     return keep
 
 
-def snapshots_to_prune(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC",
-                       grace_hours: int = 24) -> list[int]:
+def snapshots_to_prune(
+    conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC", grace_hours: int = 24
+) -> list[int]:
     """Run IDs whose objects ``prune_snapshots`` would delete now (also the settings page's dry run)."""
     keep = snapshots_to_keep(conn, keep_daily, keep_monthly, tz)
     cutoff = (datetime.now(UTC) - timedelta(hours=grace_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return [r["id"] for r in conn.execute(
-        "SELECT id FROM runs WHERE status IN ('succeeded', 'partial', 'failed') AND finished_at < ?"
-        " AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id) ORDER BY id",
-        (cutoff,),
-    ) if r["id"] not in keep]
+    return [
+        r["id"]
+        for r in conn.execute(
+            "SELECT id FROM runs WHERE status IN ('succeeded', 'partial', 'failed') AND finished_at < ?"
+            " AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id) ORDER BY id",
+            (cutoff,),
+        )
+        if r["id"] not in keep
+    ]
 
 
-def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC",
-                    grace_hours: int = 24, batch: int = 200) -> int:
+def prune_snapshots(
+    conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str = "UTC", grace_hours: int = 24, batch: int = 200
+) -> int:
     """Delete the objects of runs the retention policy doesn't keep. Returns runs pruned.
 
     Metrics and the run rows are never pruned (run logs are, see
@@ -410,11 +445,10 @@ def prune_snapshots(conn, keep_daily: int = 30, keep_monthly: int = 12, tz: str 
     """
     candidates = snapshots_to_prune(conn, keep_daily, keep_monthly, tz, grace_hours)
     for i in range(0, len(candidates), batch):
-        chunk = candidates[i:i + batch]
+        chunk = candidates[i : i + batch]
         with transaction(conn, immediate=True):
             conn.execute(f"DELETE FROM objects WHERE run_id IN ({','.join('?' * len(chunk))})", chunk)
     return len(candidates)
-
 
 
 # Run log lines older than this are deleted, except warnings and errors.
@@ -429,8 +463,9 @@ def run_logs_to_prune(conn, days: int = RUN_LOG_DAYS, now: datetime | None = Non
     start = int(mark["value"]) if mark else 0
     row = conn.execute("SELECT MAX(id) AS id FROM runs WHERE id > ? AND created_at < ?", (start, cutoff)).fetchone()
     last = row["id"] if row and row["id"] else start
-    return conn.execute("SELECT COUNT(*) FROM run_events WHERE run_id > ? AND run_id <= ? AND level = 'info'",
-                        (start, last)).fetchone()[0]
+    return conn.execute(
+        "SELECT COUNT(*) FROM run_events WHERE run_id > ? AND run_id <= ? AND level = 'info'", (start, last)
+    ).fetchone()[0]
 
 
 def prune_run_logs(conn, days: int = RUN_LOG_DAYS, batch: int = 500, now: datetime | None = None) -> int:
@@ -451,10 +486,13 @@ def prune_run_logs(conn, days: int = RUN_LOG_DAYS, batch: int = 500, now: dateti
     while start < last:
         end = min(start + batch, last)
         with transaction(conn, immediate=True):
-            deleted += conn.execute("DELETE FROM run_events WHERE run_id > ? AND run_id <= ? AND level = 'info'",
-                                    (start, end)).rowcount
+            deleted += conn.execute(
+                "DELETE FROM run_events WHERE run_id > ? AND run_id <= ? AND level = 'info'", (start, end)
+            ).rowcount
             conn.execute("DELETE FROM run_requests WHERE run_id > ? AND run_id <= ?", (start, end))
-            conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                         " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (RUN_LOG_WATERMARK, str(end)))
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (RUN_LOG_WATERMARK, str(end)),
+            )
         start = end
     return deleted

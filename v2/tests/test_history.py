@@ -10,8 +10,10 @@ from tests.test_collectors import USERS
 
 
 def _open(db, tenant_id):
-    return {(r["rule_key"], r["object_id"]): r for r in db.execute(
-        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (tenant_id,))}
+    return {
+        (r["rule_key"], r["object_id"]): r
+        for r in db.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (tenant_id,))
+    }
 
 
 def test_worker_syncs_findings(db, two_tenants):
@@ -72,11 +74,20 @@ def test_changes_since_baseline(db, two_tenants):
     seed_tenant(db, alpha, ca=[gd.CA_MFA_ALL])
     old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute("UPDATE runs SET finished_at = ?", (old,))
-    users = USERS + [{"id": "u7", "displayName": "Newbie", "userPrincipalName": "new@x.com", "userType": "Member",
-                      "accountEnabled": True, "assignedLicenses": []}]
+    users = USERS + [
+        {
+            "id": "u7",
+            "displayName": "Newbie",
+            "userPrincipalName": "new@x.com",
+            "userType": "Member",
+            "accountEnabled": True,
+            "assignedLicenses": [],
+        }
+    ]
     users = [dict(u, accountEnabled=False) if u["id"] == "u1" else u for u in users]
-    seed_tenant(db, alpha, users=users, ca=[dict(gd.CA_MFA_ALL, state="enabledForReportingButNotEnforced"),
-                                            gd.CA_BLOCK_LEGACY])
+    seed_tenant(
+        db, alpha, users=users, ca=[dict(gd.CA_MFA_ALL, state="enabledForReportingButNotEnforced"), gd.CA_BLOCK_LEGACY]
+    )
     since = (datetime.now(UTC) - timedelta(days=28)).strftime("%Y-%m-%dT%H:%M:%SZ")
     changes = {(c.area, c.kind, c.subject) for c in all_changes(db, alpha, since)}
     assert ("Accounts", "added", "new@x.com") in changes
@@ -101,10 +112,12 @@ def test_findings_page_and_accept_flow(client, db, two_tenants):
     login(client, "analyst")
     assert "Guest holding" in client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
     assert client.get(f"/tenants/{bravo}/findings").status_code == 404
-    mine = db.execute("SELECT id FROM findings WHERE tenant_id = ? AND rule_key = 'guest_admins'",
-                      (alpha,)).fetchone()[0]
-    other = db.execute("SELECT id FROM findings WHERE tenant_id = ? AND rule_key = 'guest_admins'",
-                       (bravo,)).fetchone()[0]
+    mine = db.execute("SELECT id FROM findings WHERE tenant_id = ? AND rule_key = 'guest_admins'", (alpha,)).fetchone()[
+        0
+    ]
+    other = db.execute(
+        "SELECT id FROM findings WHERE tenant_id = ? AND rule_key = 'guest_admins'", (bravo,)
+    ).fetchone()[0]
     assert client.post(f"/findings/{other}/accept", data={"note": "x"}).status_code == 404
     client.post(f"/findings/{mine}/accept", data={"note": "Known partner", "until": "2027-01-01"})
     row = db.execute("SELECT * FROM findings WHERE id = ?", (mine,)).fetchone()
@@ -135,6 +148,7 @@ def test_report_marks_new_findings(db, two_tenants):
     later = build(db, store.get_tenant(db, alpha))
     assert not later.first_report and later.new_count == 0
     one = db.execute("SELECT id FROM findings WHERE resolved_at IS NULL LIMIT 1").fetchone()["id"]
-    db.execute("UPDATE findings SET first_seen = ? WHERE id = ?",
-               (datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), one))
+    db.execute(
+        "UPDATE findings SET first_seen = ? WHERE id = ?", (datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), one)
+    )
     assert build(db, store.get_tenant(db, alpha)).new_count == 1

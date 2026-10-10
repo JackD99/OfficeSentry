@@ -15,8 +15,9 @@ from tests.seed import seed_tenant
 
 
 def _finding(db, tenant_id, rule_key):
-    return db.execute("SELECT * FROM findings WHERE tenant_id = ? AND rule_key = ? ORDER BY id",
-                      (tenant_id, rule_key)).fetchone()
+    return db.execute(
+        "SELECT * FROM findings WHERE tenant_id = ? AND rule_key = ? ORDER BY id", (tenant_id, rule_key)
+    ).fetchone()
 
 
 def _sections(report):
@@ -40,8 +41,9 @@ def test_builder_splits_open_and_accepted_risks(db, two_tenants):
     assert guest["id"] in accepted.keys and guest["id"] not in open_.keys
     assert lapsed["id"] in open_.keys  # a lapsed acceptance is open again
     assert accepted.rows[accepted.keys.index(guest["id"])][3:5] == ["analyst", "Known partner"]
-    unresolved = db.execute("SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND resolved_at IS NULL",
-                            (alpha,)).fetchone()[0]
+    unresolved = db.execute(
+        "SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (alpha,)
+    ).fetchone()[0]
     assert len(open_.rows) + len(accepted.rows) == unresolved == len(open_.keys) + len(accepted.keys)
     assert set(open_.flags) <= {"critical", "high", "medium", "low", "info"}
     # One check's findings sit together, worst check first.
@@ -93,8 +95,7 @@ def test_page_filters_and_actions(client, db, two_tenants):
     body = high.split('id="tbl-open-findings"')[1].split("</table>")[0]
     assert 'class="flag-high"' in body and 'class="flag-medium"' not in body and 'class="flag-low"' not in body
     guest = _finding(db, alpha, "guest_admins")
-    check = client.get(f"/tenants/{alpha}/findings?f=open-findings/check:{quote(_title(guest))}").get_data(
-        as_text=True)
+    check = client.get(f"/tenants/{alpha}/findings?f=open-findings/check:{quote(_title(guest))}").get_data(as_text=True)
     assert check.split('id="tbl-open-findings"')[1].count('class="group"') == 1
     resp = client.post(f"/findings/{guest['id']}/accept", data={"note": "Known partner"})
     assert resp.headers["Location"].endswith(f"/tenants/{alpha}/findings#t-accepted-risks")
@@ -137,8 +138,13 @@ def test_downloads_apply_the_view(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     view = "f=open-findings/flag:high&hide=open-findings/category"
-    rows = list(csv.reader(io.StringIO(client.get(f"/tenants/{alpha}/findings.csv?section=1&{view}")
-                                       .get_data(as_text=True).lstrip("\ufeff"))))
+    rows = list(
+        csv.reader(
+            io.StringIO(
+                client.get(f"/tenants/{alpha}/findings.csv?section=1&{view}").get_data(as_text=True).lstrip("\ufeff")
+            )
+        )
+    )
     assert rows[0] == ["Account or item", "Check", "Detail", "First seen", "Severity"]
     assert len(rows) > 1 and {r[-1] for r in rows[1:]} == {"high"}
     book = load_workbook(io.BytesIO(client.get(f"/tenants/{alpha}/findings.xlsx?{view}").data))
@@ -157,8 +163,10 @@ def test_resolved_page_and_old_link(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     row = _finding(db, alpha, "guest_admins")
-    db.execute("UPDATE findings SET resolved_at = ? WHERE id = ?",
-               ((datetime.now(UTC) - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ"), row["id"]))
+    db.execute(
+        "UPDATE findings SET resolved_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ"), row["id"]),
+    )
     make_user(db, "admin")
     login(client, "admin")
     resp = client.get(f"/tenants/{alpha}/findings?view=resolved&f=resolved-findings/flag:high")
@@ -185,7 +193,9 @@ def test_saved_views_on_findings(client, db, two_tenants):
     assert "High only" in page and f"/tenants/{bravo}/findings?f=open-findings%2Fflag%3Ahigh" in page
     library = client.get(f"/reports?tenant={alpha}").get_data(as_text=True)
     assert f"/tenants/{alpha}/findings?f=open-findings%2Fflag%3Ahigh" in library
-    resp = client.post("/reports/findings-resolved/views", data={"name": "Old", "query": "sort=resolved-findings/"
-                       "resolved:desc", "tenant_id": alpha})
+    resp = client.post(
+        "/reports/findings-resolved/views",
+        data={"name": "Old", "query": "sort=resolved-findings/resolved:desc", "tenant_id": alpha},
+    )
     assert "/findings/resolved?" in resp.headers["Location"]
     assert client.post("/reports/nope/views", data={"name": "x", "query": query, "tenant_id": alpha}).status_code == 404

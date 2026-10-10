@@ -54,12 +54,18 @@
     return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
   }
 
+  // One pass over the plain text, longest words first, so a word never matches inside an earlier <mark> or an
+  // escaped character.
   function mark(text, words) {
-    var out = esc(text);
-    words.forEach(function (w) {
-      out = out.replace(new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'), '<mark>$1</mark>');
-    });
-    return out;
+    var re = new RegExp(words.slice().sort(function (a, b) { return b.length - a.length; }).map(function (w) {
+      return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|'), 'gi');
+    var out = '', last = 0, m;
+    while ((m = re.exec(text))) {
+      out += esc(text.slice(last, m.index)) + '<mark>' + esc(m[0]) + '</mark>';
+      last = m.index + m[0].length;
+    }
+    return out + esc(text.slice(last));
   }
 
   function snippet(text, words) {

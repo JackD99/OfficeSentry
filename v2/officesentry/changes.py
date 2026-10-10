@@ -50,14 +50,17 @@ def admin_changes(conn, tenant_id: int, before: str) -> list[Change]:
         return []
 
     def keyed(rows):
-        return {(o.get("principalId"), o.get("roleName")): o for o in rows.values()
-                if o.get("privileged") and o.get("assignment") == "active" and o.get("principalId")
-                and o.get("roleName")}
+        return {
+            (o.get("principalId"), o.get("roleName")): o
+            for o in rows.values()
+            if o.get("privileged") and o.get("assignment") == "active" and o.get("principalId") and o.get("roleName")
+        }
 
     old, new = keyed(pair[0]), keyed(pair[1])
     out = [Change("Admins", "added", _who(o), f"Now holds {o['roleName']}") for k, o in new.items() if k not in old]
-    out += [Change("Admins", "removed", _who(o), f"No longer holds {o['roleName']}")
-            for k, o in old.items() if k not in new]
+    out += [
+        Change("Admins", "removed", _who(o), f"No longer holds {o['roleName']}") for k, o in old.items() if k not in new
+    ]
     return out
 
 
@@ -94,13 +97,21 @@ def ca_changes(conn, tenant_id: int, before: str) -> list[Change]:
             state = STATE_NAMES.get(p.get("state"), p.get("state"))
             out.append(Change("Conditional Access", "added", name, f"New policy ({state})"))
         elif old[pid].get("state") != p.get("state"):
-            out.append(Change("Conditional Access", "changed", name,
-                              f"Switched {STATE_NAMES.get(old[pid].get('state'), '?')} → "
-                              f"{STATE_NAMES.get(p.get('state'), '?')}"))
+            out.append(
+                Change(
+                    "Conditional Access",
+                    "changed",
+                    name,
+                    f"Switched {STATE_NAMES.get(old[pid].get('state'), '?')} → {STATE_NAMES.get(p.get('state'), '?')}",
+                )
+            )
         elif old[pid].get("modifiedDateTime") != p.get("modifiedDateTime"):
             out.append(Change("Conditional Access", "changed", name, "Policy edited"))
-    out += [Change("Conditional Access", "removed", p.get("displayName") or pid, "Policy deleted")
-            for pid, p in old.items() if pid not in new]
+    out += [
+        Change("Conditional Access", "removed", p.get("displayName") or pid, "Policy deleted")
+        for pid, p in old.items()
+        if pid not in new
+    ]
     return out
 
 
@@ -130,8 +141,9 @@ def app_changes(conn, tenant_id: int, before: str) -> list[Change]:
     names = {o["_id"]: o.get("displayName") for o in store.run_objects(conn, latest["id"], "service_principal")}
 
     def keyed(rows):
-        return {(o.get("clientId"), o.get("permission")) for o in rows.values()
-                if o.get("clientId") and o.get("permission")}
+        return {
+            (o.get("clientId"), o.get("permission")) for o in rows.values() if o.get("clientId") and o.get("permission")
+        }
 
     added: dict[str, list[str]] = {}
     for client, perm in sorted(keyed(pair[1]) - keyed(pair[0])):
@@ -167,17 +179,28 @@ def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
                 out.append(Change("Devices", "changed", name + user, "Compliant again"))
             if old[did].get("isEncrypted") and d.get("isEncrypted") is False:
                 out.append(Change("Devices", "changed", name + user, "Disk no longer encrypted"))
-        out += [Change("Devices", "removed", d.get("deviceName") or did, "Removed from Intune")
-                for did, d in old.items() if did not in new]
+        out += [
+            Change("Devices", "removed", d.get("deviceName") or did, "Removed from Intune")
+            for did, d in old.items()
+            if did not in new
+        ]
         return out
     pair = _device_pair(conn, tenant_id, "entra_device", before)
     if pair is None:
         return []
     old, new = pair
-    out = [Change("Devices", "added", d.get("displayName") or did, f"New {d.get('operatingSystem') or 'device'} "
-                  "registered") for did, d in new.items() if did not in old]
-    return out + [Change("Devices", "removed", d.get("displayName") or did, "Removed from Entra ID")
-                  for did, d in old.items() if did not in new]
+    out = [
+        Change(
+            "Devices", "added", d.get("displayName") or did, f"New {d.get('operatingSystem') or 'device'} registered"
+        )
+        for did, d in new.items()
+        if did not in old
+    ]
+    return out + [
+        Change("Devices", "removed", d.get("displayName") or did, "Removed from Entra ID")
+        for did, d in old.items()
+        if did not in new
+    ]
 
 
 def group_changes(conn, tenant_id: int, before: str) -> list[Change]:
@@ -193,10 +216,24 @@ def group_changes(conn, tenant_id: int, before: str) -> list[Change]:
             visibility = {"Public": "public ", "Private": "private "}.get(g.get("visibility"), "")
             out.append(Change("Teams and groups", "added", name, f"New {visibility}{label}"))
         elif old[gid].get("enabledOwnerCount") and g.get("examined") and not g.get("enabledOwnerCount"):
-            out.append(Change("Teams and groups", "changed", name,
-                              "Last owner removed" if not g.get("ownerCount") else "Last enabled owner disabled"))
-    out += [Change("Teams and groups", "removed", g.get("displayName") or gid,
-                   "Team deleted" if g.get("isTeam") else "Group deleted") for gid, g in old.items() if gid not in new]
+            out.append(
+                Change(
+                    "Teams and groups",
+                    "changed",
+                    name,
+                    "Last owner removed" if not g.get("ownerCount") else "Last enabled owner disabled",
+                )
+            )
+    out += [
+        Change(
+            "Teams and groups",
+            "removed",
+            g.get("displayName") or gid,
+            "Team deleted" if g.get("isTeam") else "Group deleted",
+        )
+        for gid, g in old.items()
+        if gid not in new
+    ]
     return out
 
 
@@ -216,15 +253,24 @@ def audit_changes(conn, tenant_id: int, before: str) -> list[Change]:
             continue
         targets = ", ".join(e.get("targets") or []) or "the tenant"
         detail = f"{e.get('activity')} by {e.get('actor') or 'someone'} on {(e.get('time') or '')[:10]}"
-        out.append(Change("Admin activity", "changed", targets, detail + (f": {e['detail']}" if e.get("detail")
-                                                                          else "")))
+        out.append(
+            Change("Admin activity", "changed", targets, detail + (f": {e['detail']}" if e.get("detail") else ""))
+        )
     return out
 
 
 def all_changes(conn, tenant_id: int, before: str) -> list[Change]:
     out: list[Change] = []
-    for feed in (admin_changes, ca_changes, user_changes, forwarding_changes, app_changes, device_changes,
-                 group_changes, audit_changes):
+    for feed in (
+        admin_changes,
+        ca_changes,
+        user_changes,
+        forwarding_changes,
+        app_changes,
+        device_changes,
+        group_changes,
+        audit_changes,
+    ):
         try:
             out += feed(conn, tenant_id, before)
         except Exception:  # one unreadable feed mustn't take the monthly review down

@@ -6,10 +6,35 @@ import re
 from dataclasses import dataclass, field
 
 # Folders attackers move mail into so the victim doesn't see replies.
-HIDING_FOLDERS = {"rss feeds", "rss subscriptions", "conversation history", "archive", "deleted items",
-                  "junk email", "notes", "sync issues"}
-BEC_KEYWORDS = {"invoice", "payment", "wire", "bank", "transfer", "remittance", "payroll", "iban",
-                "swift", "password", "account", "urgent", "fraud", "hacked", "phish", "suspicious", "ceo"}
+HIDING_FOLDERS = {
+    "rss feeds",
+    "rss subscriptions",
+    "conversation history",
+    "archive",
+    "deleted items",
+    "junk email",
+    "notes",
+    "sync issues",
+}
+BEC_KEYWORDS = {
+    "invoice",
+    "payment",
+    "wire",
+    "bank",
+    "transfer",
+    "remittance",
+    "payroll",
+    "iban",
+    "swift",
+    "password",
+    "account",
+    "urgent",
+    "fraud",
+    "hacked",
+    "phish",
+    "suspicious",
+    "ceo",
+}
 
 
 def smtp_address(value: str | None) -> str | None:
@@ -45,9 +70,11 @@ def mailbox_forwarding(mailbox: dict) -> str | None:
     if mailbox.get("ForwardingSmtpAddress"):
         return smtp_address(mailbox["ForwardingSmtpAddress"])
     recipient = mailbox.get("ForwardingRecipient") or {}
-    return (smtp_address(recipient.get("ExternalEmailAddress"))
-            or smtp_address(recipient.get("PrimarySmtpAddress"))
-            or (mailbox.get("ForwardingAddress") or None))
+    return (
+        smtp_address(recipient.get("ExternalEmailAddress"))
+        or smtp_address(recipient.get("PrimarySmtpAddress"))
+        or (mailbox.get("ForwardingAddress") or None)
+    )
 
 
 @dataclass
@@ -77,8 +104,9 @@ def inbox_rule_risk(rule: dict, domains: set[str]) -> RuleRisk:
 
     folder = (rule.get("moveToFolderName") or "").lower()
     hides = bool(actions.get("delete") or actions.get("permanentDelete") or folder in HIDING_FOLDERS)
-    words = " ".join(str(w) for k in ("bodyContains", "subjectContains", "bodyOrSubjectContains")
-                     for w in conditions.get(k) or []).lower()
+    words = " ".join(
+        str(w) for k in ("bodyContains", "subjectContains", "bodyOrSubjectContains") for w in conditions.get(k) or []
+    ).lower()
     keywords = sorted(k for k in BEC_KEYWORDS if re.search(rf"\b{k}", words))
     odd_name = not re.search(r"[A-Za-z0-9]{3}", rule.get("displayName") or "")
 
@@ -87,8 +115,11 @@ def inbox_rule_risk(rule: dict, domains: set[str]) -> RuleRisk:
         risk.reasons.append("Forwards to " + ", ".join(risk.external))
         severity = "high"
     if hides:
-        where = "deletes" if actions.get("delete") or actions.get("permanentDelete") else \
-            f"moves to {rule.get('moveToFolderName')}"
+        where = (
+            "deletes"
+            if actions.get("delete") or actions.get("permanentDelete")
+            else f"moves to {rule.get('moveToFolderName')}"
+        )
         if keywords:
             risk.reasons.append(f"{where[0].upper()}{where[1:]} mail mentioning {', '.join(keywords)}")
             severity = "high"

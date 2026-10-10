@@ -35,16 +35,24 @@ def _block(kind: str, width: str = "full", **settings) -> dict:
 
 
 def test_clean_keeps_known_blocks_and_coerces_every_setting():
-    doc = designs.clean({"settings": {"title": " Quarterly review ", "cover_verdict": 0, "junk": 1}, "blocks": [
-        {"kind": "kpis", "width": "half", "settings": {"keys": ["waste", "nope"], "columns": 99, "heading": 7}},
-        {"kind": "findings", "width": "sideways", "settings": {"severities": "critical", "max_rows": "x",
-                                                                "style": "weird"}},
-        {"kind": "not_a_widget", "settings": {}},
-        "garbage",
-        {"kind": "text", "width": "half", "settings": {"text": "a" * 5000}, "id": "Same ID!"},
-        {"kind": "text", "width": "half", "id": "sameid"},
-        {"kind": "page_break"},
-    ]})
+    doc = designs.clean(
+        {
+            "settings": {"title": " Quarterly review ", "cover_verdict": 0, "junk": 1},
+            "blocks": [
+                {"kind": "kpis", "width": "half", "settings": {"keys": ["waste", "nope"], "columns": 99, "heading": 7}},
+                {
+                    "kind": "findings",
+                    "width": "sideways",
+                    "settings": {"severities": "critical", "max_rows": "x", "style": "weird"},
+                },
+                {"kind": "not_a_widget", "settings": {}},
+                "garbage",
+                {"kind": "text", "width": "half", "settings": {"text": "a" * 5000}, "id": "Same ID!"},
+                {"kind": "text", "width": "half", "id": "sameid"},
+                {"kind": "page_break"},
+            ],
+        }
+    )
     assert doc["settings"] == {"title": "Quarterly review", "subtitle": "", "cover_verdict": False, "contents": True}
     kinds = [b["kind"] for b in doc["blocks"]]
     assert kinds == ["kpis", "findings", "text", "text", "page_break"]
@@ -54,8 +62,10 @@ def test_clean_keeps_known_blocks_and_coerces_every_setting():
     assert findings["settings"]["style"] == "detailed" and findings["width"] == "full"
     assert len(text["settings"]["text"]) == designs.LONG_TEXT_MAX and text["width"] == "half"
     assert text["id"] == "sameid" and text2["id"] == "sameidx"  # ids are unique, whatever the editor sent
-    assert designs.clean("nonsense") == {"settings": {"title": "", "subtitle": "", "cover_verdict": True,
-                                                      "contents": True}, "blocks": []}
+    assert designs.clean("nonsense") == {
+        "settings": {"title": "", "subtitle": "", "cover_verdict": True, "contents": True},
+        "blocks": [],
+    }
     assert len(designs.clean({"blocks": [{"kind": "text"}] * 200})["blocks"]) == designs.MAX_BLOCKS
 
 
@@ -115,8 +125,12 @@ def test_every_widget_renders_on_a_seeded_and_an_empty_tenant(client, db, two_te
 def test_half_width_blocks_share_a_row(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
-    did = designs.create(db, "Rows", "test", _doc(_block("breakdown", "half"), _block("contact", "half"),
-                                                 _block("verdict", "half"), _block("summary_text")))
+    did = designs.create(
+        db,
+        "Rows",
+        "test",
+        _doc(_block("breakdown", "half"), _block("contact", "half"), _block("verdict", "half"), _block("summary_text")),
+    )
     _staff(client, db)
     page = _text(client.get(f"/tenants/{alpha}/designs/{did}"))
     assert page.count('class="block-row"') == 2  # breakdown + contact, then the lone verdict
@@ -147,8 +161,10 @@ def test_pdf_and_print_fallback(client, db, two_tenants, design, monkeypatch):
     _staff(client, db)
     resp = client.get(f"/tenants/{alpha}/designs/{design}.pdf")
     assert resp.status_code == 200 and resp.data[:4] == b"%PDF"
-    assert db.execute("SELECT detail FROM audit_log WHERE action = 'report_downloaded'").fetchone()[0] == \
-        f"design:{design} pdf"
+    assert (
+        db.execute("SELECT detail FROM audit_log WHERE action = 'report_downloaded'").fetchone()[0]
+        == f"design:{design} pdf"
+    )
     monkeypatch.setattr(export, "pdf_available", lambda: False)
     resp = client.get(f"/tenants/{alpha}/designs/{design}.pdf")
     assert resp.status_code == 200 and b"print-view" in resp.data
@@ -159,9 +175,11 @@ def test_commentary_and_curated_actions_come_from_month_end(client, db, two_tena
     seed_tenant(db, alpha)
     period = month_end.current_period("UTC")
     month_end.update_review(db, alpha, period, "lead", commentary="A good month.\n\nKeep going.")
-    db.execute("INSERT INTO report_actions (tenant_id, title, detail, status, created_at, updated_at)"
-               " VALUES (?, 'Roll out passkeys', 'For the finance team first', 'planned', ?, ?)",
-               (alpha, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"))
+    db.execute(
+        "INSERT INTO report_actions (tenant_id, title, detail, status, created_at, updated_at)"
+        " VALUES (?, 'Roll out passkeys', 'For the finance team first', 'planned', ?, ?)",
+        (alpha, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"),
+    )
     did = designs.create(db, "Month", "test", _doc(_block("commentary"), _block("actions")))
     _staff(client, db)
     page = _text(client.get(f"/tenants/{alpha}/designs/{did}"))
@@ -185,8 +203,12 @@ def test_designs_are_made_edited_duplicated_and_removed(client, db, two_tenants)
     assert 'id="designer-data"' in page and "Status verdict" in page and "Alpha Ltd" in page
     assert f"/reporting/designs/{did}/preview" in page
 
-    body = {"name": "QBR pack v2", "description": "For quarterly reviews", "settings": {"title": "QBR {month}"},
-            "blocks": [_block("verdict"), _block("bogus"), _block("text", "half", text="Hello {client}")]}
+    body = {
+        "name": "QBR pack v2",
+        "description": "For quarterly reviews",
+        "settings": {"title": "QBR {month}"},
+        "blocks": [_block("verdict"), _block("bogus"), _block("text", "half", text="Hello {client}")],
+    }
     resp = client.post(f"/reporting/designs/{did}", data=json.dumps(body), content_type="application/json")
     assert resp.status_code == 200
     stored = resp.get_json()
@@ -194,13 +216,18 @@ def test_designs_are_made_edited_duplicated_and_removed(client, db, two_tenants)
     row = designs.get(db, did)
     assert row["description"] == "For quarterly reviews" and json.loads(row["settings"])["title"] == "QBR {month}"
     assert client.post(f"/reporting/designs/{did}", data="[]", content_type="application/json").status_code == 400
-    assert client.post(f"/reporting/designs/{did}", data="x" * (designs.TEXT_MAX * 2000),
-                       content_type="application/json").status_code == 413
+    assert (
+        client.post(
+            f"/reporting/designs/{did}", data="x" * (designs.TEXT_MAX * 2000), content_type="application/json"
+        ).status_code
+        == 413
+    )
 
     resp = client.post(f"/reporting/designs/{did}/duplicate")
     copy = int(resp.headers["Location"].rsplit("/", 1)[1])
-    assert designs.get(db, copy)["name"] == "QBR pack v2 (copy)" and designs.document(designs.get(db, copy)) == \
-        designs.document(designs.get(db, did))
+    assert designs.get(db, copy)["name"] == "QBR pack v2 (copy)" and designs.document(
+        designs.get(db, copy)
+    ) == designs.document(designs.get(db, did))
     page = _text(client.get("/reporting/designs"))
     assert "QBR pack v2" in page and "(copy)" in page
 
@@ -220,8 +247,14 @@ def test_who_may_do_what(client, db, two_tenants):
     did = designs.create(db, "D", "test", designs.STARTERS["executive"][2])
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
-    for url in ("/reporting/designs", f"/reporting/designs/{did}", f"/reporting/designs/{did}/preview",
-                f"/tenants/{alpha}/designs", f"/tenants/{alpha}/designs/{did}", f"/tenants/{alpha}/designs/{did}.pdf"):
+    for url in (
+        "/reporting/designs",
+        f"/reporting/designs/{did}",
+        f"/reporting/designs/{did}/preview",
+        f"/tenants/{alpha}/designs",
+        f"/tenants/{alpha}/designs/{did}",
+        f"/tenants/{alpha}/designs/{did}.pdf",
+    ):
         assert client.get(url).status_code == 403, url
     assert client.post(f"/reporting/designs/{did}", data="{}", content_type="application/json").status_code == 403
     client.post("/logout")
@@ -263,8 +296,10 @@ def test_a_plan_sends_a_design_as_a_pdf(client, db, two_tenants, app):
     key = designs.key_of(did)
     assert key in {o.key for o in delivery.catalog(db)} and key not in {o.key for o in delivery.catalog()}
     tenant = store.get_tenant(db, alpha)
-    assert delivery.attachment_plan(tenant, ["review", key], False, db) == \
-        [("review", "security-review-alpha-ltd.pdf"), (key, "board-pack-alpha-ltd.pdf")]
+    assert delivery.attachment_plan(tenant, ["review", key], False, db) == [
+        ("review", "security-review-alpha-ltd.pdf"),
+        (key, "board-pack-alpha-ltd.pdf"),
+    ]
     assert delivery.report_titles(json.dumps([key, "review"]), db)[0] == "Board pack"
     files = delivery._attachments(app, db, tenant, [key], False, datetime.now(UTC))
     assert [(f[0], f[1], f[2][:4]) for f in files] == [("board-pack-alpha-ltd.pdf", "application/pdf", b"%PDF")]
@@ -272,8 +307,18 @@ def test_a_plan_sends_a_design_as_a_pdf(client, db, two_tenants, app):
     _staff(client, db, "admin")
     page = _text(client.get("/reporting/plans/new"))
     assert "Board pack" in page and "For the board" in page
-    client.post("/reporting/plans/new", data={"name": "Gold", "reports": ["review", key], "day_of_month": 1,
-                                             "hour": 8, "mode": "auto", "delivery": "email", "tenants": [alpha]})
+    client.post(
+        "/reporting/plans/new",
+        data={
+            "name": "Gold",
+            "reports": ["review", key],
+            "day_of_month": 1,
+            "hour": 8,
+            "mode": "auto",
+            "delivery": "email",
+            "tenants": [alpha],
+        },
+    )
     plan = db.execute("SELECT * FROM report_plans").fetchone()
     assert json.loads(plan["reports"]) == ["review", key]
     assert "Board pack" in _text(client.get("/reporting/plans"))

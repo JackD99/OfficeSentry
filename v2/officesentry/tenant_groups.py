@@ -23,6 +23,7 @@ SUGGESTED_CATEGORIES = ("Tier", "Region", "Service level")
 @dataclass
 class Option:
     """A group as a picker shows it to one person: only the tenants they see are counted."""
+
     id: int
     name: str
     category: str
@@ -45,8 +46,7 @@ def all_groups(conn) -> list:
 
 
 def members(conn, group_id: int) -> set[int]:
-    return {r[0] for r in conn.execute("SELECT tenant_id FROM tenant_group_members WHERE group_id = ?",
-                                       (group_id,))}
+    return {r[0] for r in conn.execute("SELECT tenant_id FROM tenant_group_members WHERE group_id = ?", (group_id,))}
 
 
 def only(conn, tenants, group_id: int | None) -> list:
@@ -79,8 +79,10 @@ def of_tenants(conn, tenant_ids) -> dict[int, list]:
     """Each tenant's groups (id, name, category), by name."""
     wanted = set(tenant_ids)
     out: dict[int, list] = {t: [] for t in wanted}
-    for r in conn.execute("SELECT m.tenant_id, g.id, g.name, g.category FROM tenant_group_members m"
-                          " JOIN tenant_groups g ON g.id = m.group_id ORDER BY g.name COLLATE NOCASE"):
+    for r in conn.execute(
+        "SELECT m.tenant_id, g.id, g.name, g.category FROM tenant_group_members m"
+        " JOIN tenant_groups g ON g.id = m.group_id ORDER BY g.name COLLATE NOCASE"
+    ):
         if r["tenant_id"] in wanted:
             out[r["tenant_id"]].append(r)
     return out
@@ -88,50 +90,64 @@ def of_tenants(conn, tenant_ids) -> dict[int, list]:
 
 def clean(name: str, category: str, description: str) -> tuple[dict, str | None]:
     """Form values tidied, and what's wrong with them in plain words (or None)."""
-    values = {"name": " ".join(name.split())[:NAME_MAX], "category": " ".join(category.split())[:CATEGORY_MAX],
-              "description": description.strip()[:DESCRIPTION_MAX]}
+    values = {
+        "name": " ".join(name.split())[:NAME_MAX],
+        "category": " ".join(category.split())[:CATEGORY_MAX],
+        "description": description.strip()[:DESCRIPTION_MAX],
+    }
     if not values["name"]:
         return values, "Give the group a name."
     return values, None
 
 
 def name_taken(conn, name: str, except_id: int | None = None) -> bool:
-    return conn.execute("SELECT 1 FROM tenant_groups WHERE name = ? AND id IS NOT ?", (name, except_id)).fetchone() \
+    return (
+        conn.execute("SELECT 1 FROM tenant_groups WHERE name = ? AND id IS NOT ?", (name, except_id)).fetchone()
         is not None
+    )
 
 
 def create(conn, values: dict, user: str) -> int:
     return conn.execute(
         "INSERT INTO tenant_groups (name, category, description, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
-        (values["name"], values["category"], values["description"], user, utcnow())).lastrowid
+        (values["name"], values["category"], values["description"], user, utcnow()),
+    ).lastrowid
 
 
 def update(conn, group_id: int, values: dict) -> None:
-    conn.execute("UPDATE tenant_groups SET name = ?, category = ?, description = ? WHERE id = ?",
-                 (values["name"], values["category"], values["description"], group_id))
+    conn.execute(
+        "UPDATE tenant_groups SET name = ?, category = ?, description = ? WHERE id = ?",
+        (values["name"], values["category"], values["description"], group_id),
+    )
 
 
 def set_members(conn, group_id: int, tenant_ids) -> tuple[int, int]:
     """Make the group hold exactly ``tenant_ids``. Returns (added, removed)."""
     before = members(conn, group_id)
     after = set(tenant_ids)
-    conn.executemany("DELETE FROM tenant_group_members WHERE group_id = ? AND tenant_id = ?",
-                     [(group_id, t) for t in before - after])
-    conn.executemany("INSERT INTO tenant_group_members (group_id, tenant_id) VALUES (?, ?)",
-                     [(group_id, t) for t in sorted(after - before)])
+    conn.executemany(
+        "DELETE FROM tenant_group_members WHERE group_id = ? AND tenant_id = ?", [(group_id, t) for t in before - after]
+    )
+    conn.executemany(
+        "INSERT INTO tenant_group_members (group_id, tenant_id) VALUES (?, ?)",
+        [(group_id, t) for t in sorted(after - before)],
+    )
     return len(after - before), len(before - after)
 
 
 def set_tenant_groups(conn, tenant_id: int, group_ids) -> tuple[int, int]:
     """Put one tenant in exactly ``group_ids``. Returns (added, removed)."""
-    before = {r[0] for r in conn.execute("SELECT group_id FROM tenant_group_members WHERE tenant_id = ?",
-                                         (tenant_id,))}
+    before = {r[0] for r in conn.execute("SELECT group_id FROM tenant_group_members WHERE tenant_id = ?", (tenant_id,))}
     valid = {r[0] for r in conn.execute("SELECT id FROM tenant_groups")}
     after = set(group_ids) & valid
-    conn.executemany("DELETE FROM tenant_group_members WHERE group_id = ? AND tenant_id = ?",
-                     [(g, tenant_id) for g in before - after])
-    conn.executemany("INSERT INTO tenant_group_members (group_id, tenant_id) VALUES (?, ?)",
-                     [(g, tenant_id) for g in sorted(after - before)])
+    conn.executemany(
+        "DELETE FROM tenant_group_members WHERE group_id = ? AND tenant_id = ?",
+        [(g, tenant_id) for g in before - after],
+    )
+    conn.executemany(
+        "INSERT INTO tenant_group_members (group_id, tenant_id) VALUES (?, ?)",
+        [(g, tenant_id) for g in sorted(after - before)],
+    )
     return len(after - before), len(before - after)
 
 
@@ -140,8 +156,10 @@ def usage(conn, group_id: int) -> dict:
     one = lambda sql: conn.execute(sql, (group_id,)).fetchone()[0]  # noqa: E731
     return {
         "digests": one("SELECT COUNT(*) FROM email_schedules WHERE group_id = ?"),
-        "analysts": one("SELECT COUNT(*) FROM user_tenant_groups ug JOIN users u ON u.id = ug.user_id"
-                        " WHERE ug.group_id = ? AND u.role = 'analyst'"),
+        "analysts": one(
+            "SELECT COUNT(*) FROM user_tenant_groups ug JOIN users u ON u.id = ug.user_id"
+            " WHERE ug.group_id = ? AND u.role = 'analyst'"
+        ),
     }
 
 
@@ -156,5 +174,7 @@ def user_groups(conn, user_id: int) -> set[int]:
 
 def set_user_groups(conn, user_id: int, group_ids) -> None:
     conn.execute("DELETE FROM user_tenant_groups WHERE user_id = ?", (user_id,))
-    conn.executemany("INSERT INTO user_tenant_groups (user_id, group_id) VALUES (?, ?)",
-                     [(user_id, g) for g in sorted(set(group_ids))])
+    conn.executemany(
+        "INSERT INTO user_tenant_groups (user_id, group_id) VALUES (?, ?)",
+        [(user_id, g) for g in sorted(set(group_ids))],
+    )

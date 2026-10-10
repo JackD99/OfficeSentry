@@ -68,8 +68,15 @@ class Profile:
 
     def as_report(self) -> DataReport:
         """The same content as a detail report, for the PDF and XLSX downloads."""
-        report = DataReport("user", self.name, f"Everything collected about {self.upn or self.name}.",
-                            self.tenant, self.generated_at, sources=self.sources, highlights=self.tiles)
+        report = DataReport(
+            "user",
+            self.name,
+            f"Everything collected about {self.upn or self.name}.",
+            self.tenant,
+            self.generated_at,
+            sources=self.sources,
+            highlights=self.tiles,
+        )
         todo = Section("Needs attention", ["What", "Area"], empty="Nothing needs attention.")
         titles = {p.key: p.title for p in self.parts}
         for a in self.attention:
@@ -88,8 +95,9 @@ class Profile:
                     facts.add([label, value])
                 sections.append(facts)
             for t in p.tables:
-                sections.append(Section(t.title, t.columns, list(t.rows), list(t.flags), t.intro, t.empty,
-                                        compare=False))
+                sections.append(
+                    Section(t.title, t.columns, list(t.rows), list(t.flags), t.intro, t.empty, compare=False)
+                )
             if not p.facts and not p.tables:
                 sections.append(Section(p.title, ["Note"], rows=[[p.empty or p.summary]], flags=[None]))
         if self.findings:
@@ -97,8 +105,7 @@ class Profile:
             for f in self.findings:
                 found.add([f["title"], f["detail"], (f["first_seen"] or "")[:10]], f["severity"])
             sections.append(found)
-        history = Section("History", ["Seen", "Area", "Change"], compare=False,
-                          empty="No changes recorded yet.")
+        history = Section("History", ["Seen", "Area", "Change"], compare=False, empty="No changes recorded yet.")
         for e in self.history:
             history.add([e.day, e.area, e.text])
         sections.append(history)
@@ -148,16 +155,22 @@ class Person:
         """Admin changes by or to this account from the activity history (newest first) and the period they
         cover in words; None when the tenant's audit log has never been read into it."""
         if not hasattr(self, "_admin_history"):
-            found = adminactivity.from_history(self.snap.conn, self.snap.tenant["id"],
-                                               self.end - timedelta(days=adminactivity.HISTORY_DAYS), self.end)
+            found = adminactivity.from_history(
+                self.snap.conn, self.snap.tenant["id"], self.end - timedelta(days=adminactivity.HISTORY_DAYS), self.end
+            )
             if found is None:
                 self._admin_history = None
             else:
-                mine = [e for e in found[0]
-                        if self.named(e.get("actor")) or any(self.named(t) for t in e.get("targets") or [])]
+                mine = [
+                    e
+                    for e in found[0]
+                    if self.named(e.get("actor")) or any(self.named(t) for t in e.get("targets") or [])
+                ]
                 span = (self.end - datetime.fromtimestamp(found[1].detailed_from, UTC)).days
-                self._admin_history = (mine, "the last 12 months" if span >= adminactivity.HISTORY_DAYS
-                                       else f"the last {max(span, 1)} days")
+                self._admin_history = (
+                    mine,
+                    "the last 12 months" if span >= adminactivity.HISTORY_DAYS else f"the last {max(span, 1)} days",
+                )
         return self._admin_history
 
 
@@ -170,6 +183,7 @@ def part(order: int) -> Callable[[Builder], Builder]:
         PARTS.append((order, fn))
         PARTS.sort(key=lambda p: p[0])
         return fn
+
     return register
 
 

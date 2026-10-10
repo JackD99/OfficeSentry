@@ -104,10 +104,14 @@ def _months(start: int, end: int) -> list[str]:
 
 # -- Files ----------------------------------------------------------------------------------------
 
-_LABEL = ("CREATE TABLE IF NOT EXISTS label (id INTEGER PRIMARY KEY, tenant INTEGER NOT NULL, value TEXT NOT NULL,"
-          " UNIQUE (tenant, value))")
+_LABEL = (
+    "CREATE TABLE IF NOT EXISTS label (id INTEGER PRIMARY KEY, tenant INTEGER NOT NULL, value TEXT NOT NULL,"
+    " UNIQUE (tenant, value))"
+)
 SCHEMA = {
-    "signins": (_LABEL, """CREATE TABLE IF NOT EXISTS signin (
+    "signins": (
+        _LABEL,
+        """CREATE TABLE IF NOT EXISTS signin (
         tenant INTEGER NOT NULL, ts INTEGER NOT NULL, id NOT NULL,
         user INTEGER NOT NULL, user_id INTEGER NOT NULL, name INTEGER NOT NULL,
         app INTEGER NOT NULL, app_id INTEGER NOT NULL, client INTEGER NOT NULL, ip TEXT,
@@ -115,19 +119,26 @@ SCHEMA = {
         code INTEGER NOT NULL, reason INTEGER NOT NULL, mfa INTEGER, ca INTEGER NOT NULL,
         risk INTEGER NOT NULL, risk_state INTEGER NOT NULL, risk_detail INTEGER NOT NULL, risk_types TEXT,
         interactive INTEGER NOT NULL,
-        PRIMARY KEY (tenant, ts, id)) WITHOUT ROWID"""),
-    "daily": (_LABEL, """CREATE TABLE IF NOT EXISTS daily (
+        PRIMARY KEY (tenant, ts, id)) WITHOUT ROWID""",
+    ),
+    "daily": (
+        _LABEL,
+        """CREATE TABLE IF NOT EXISTS daily (
         tenant INTEGER NOT NULL, day TEXT NOT NULL, user INTEGER NOT NULL, app INTEGER NOT NULL,
         country INTEGER NOT NULL, user_id INTEGER NOT NULL,
         succeeded INTEGER NOT NULL, failed INTEGER NOT NULL, interrupted INTEGER NOT NULL,
         mfa INTEGER NOT NULL, single_factor INTEGER NOT NULL, first_ts INTEGER NOT NULL, last_ts INTEGER NOT NULL,
         ips TEXT NOT NULL,
-        PRIMARY KEY (tenant, day, user, app, country)) WITHOUT ROWID"""),
-    "audits": (_LABEL, """CREATE TABLE IF NOT EXISTS audit (
+        PRIMARY KEY (tenant, day, user, app, country)) WITHOUT ROWID""",
+    ),
+    "audits": (
+        _LABEL,
+        """CREATE TABLE IF NOT EXISTS audit (
         tenant INTEGER NOT NULL, ts INTEGER NOT NULL, id NOT NULL,
         category INTEGER NOT NULL, activity INTEGER NOT NULL, result INTEGER NOT NULL,
         initiator INTEGER NOT NULL, target INTEGER NOT NULL, detail BLOB NOT NULL,
-        PRIMARY KEY (tenant, ts, id)) WITHOUT ROWID"""),
+        PRIMARY KEY (tenant, ts, id)) WITHOUT ROWID""",
+    ),
 }
 
 
@@ -191,7 +202,8 @@ class _Labels:
         if found is None:
             self.db.execute("INSERT OR IGNORE INTO label (tenant, value) VALUES (?, ?)", (self.tenant, text))
             found = self.cache[text] = self.db.execute(
-                "SELECT id FROM label WHERE tenant = ? AND value = ?", (self.tenant, text)).fetchone()[0]
+                "SELECT id FROM label WHERE tenant = ? AND value = ?", (self.tenant, text)
+            ).fetchone()[0]
         return found
 
 
@@ -228,8 +240,10 @@ def tenant_key(conn, tenant_id: int, create: bool = False) -> int | None:
     if row or not create:
         return row[0] if row else None
     with transaction(conn, immediate=True):
-        conn.execute("INSERT OR IGNORE INTO event_tenants (tenant_id, created_at) VALUES (?, ?)",
-                     (tenant_id, _iso(int(clock().timestamp()))))
+        conn.execute(
+            "INSERT OR IGNORE INTO event_tenants (tenant_id, created_at) VALUES (?, ?)",
+            (tenant_id, _iso(int(clock().timestamp()))),
+        )
     return conn.execute("SELECT id FROM event_tenants WHERE tenant_id = ?", (tenant_id,)).fetchone()[0]
 
 
@@ -290,17 +304,24 @@ def _times(raw: str) -> list[list[int]]:
 
 
 def coverage(conn, tenant_id: int, source: str) -> Coverage:
-    row = conn.execute("SELECT * FROM event_cursors WHERE tenant_id = ? AND source = ?",
-                       (tenant_id, source)).fetchone()
+    row = conn.execute("SELECT * FROM event_cursors WHERE tenant_id = ? AND source = ?", (tenant_id, source)).fetchone()
     if row is None:
         return Coverage(source)
-    return Coverage(source, _epoch(row["since_at"]), _epoch(row["read_to"]), _times(row["gaps"]),
-                    _times(row["lost"]), json.loads(row["pending"] or "[]"), row["updated_at"])
+    return Coverage(
+        source,
+        _epoch(row["since_at"]),
+        _epoch(row["read_to"]),
+        _times(row["gaps"]),
+        _times(row["lost"]),
+        json.loads(row["pending"] or "[]"),
+        row["updated_at"],
+    )
 
 
 def save_coverage(conn, tenant_id: int, cov: Coverage) -> None:
     def times(ranges):
         return json.dumps([[_iso(lo), _iso(hi)] for lo, hi in ranges])
+
     cov.updated_at = _iso(int(clock().timestamp()))
     with transaction(conn, immediate=True):
         conn.execute(
@@ -308,9 +329,17 @@ def save_coverage(conn, tenant_id: int, cov: Coverage) -> None:
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (tenant_id, source) DO UPDATE SET"
             " since_at = excluded.since_at, read_to = excluded.read_to, gaps = excluded.gaps,"
             " lost = excluded.lost, pending = excluded.pending, updated_at = excluded.updated_at",
-            (tenant_id, cov.source, None if cov.since is None else _iso(cov.since),
-             None if cov.read_to is None else _iso(cov.read_to), times(cov.gaps), times(cov.lost),
-             json.dumps(sorted(set(cov.pending))), cov.updated_at))
+            (
+                tenant_id,
+                cov.source,
+                None if cov.since is None else _iso(cov.since),
+                None if cov.read_to is None else _iso(cov.read_to),
+                times(cov.gaps),
+                times(cov.lost),
+                json.dumps(sorted(set(cov.pending))),
+                cov.updated_at,
+            ),
+        )
 
 
 def _merge(gaps: list[list[int]]) -> list[list[int]]:
@@ -381,8 +410,29 @@ def _write(base: Path, store: str, key: int, items, time_key: str, row: Callable
 
 MFA = "multiFactorAuthentication"
 SINGLE = "singleFactorAuthentication"
-SIGNIN_COLUMNS = ("ts", "id", "user", "user_id", "name", "app", "app_id", "client", "ip", "country", "city", "os",
-                  "code", "reason", "mfa", "ca", "risk", "risk_state", "risk_detail", "risk_types", "interactive")
+SIGNIN_COLUMNS = (
+    "ts",
+    "id",
+    "user",
+    "user_id",
+    "name",
+    "app",
+    "app_id",
+    "client",
+    "ip",
+    "country",
+    "city",
+    "os",
+    "code",
+    "reason",
+    "mfa",
+    "ca",
+    "risk",
+    "risk_state",
+    "risk_detail",
+    "risk_types",
+    "interactive",
+)
 
 
 def _signin_row(label: _Labels, s: dict) -> tuple:
@@ -390,14 +440,27 @@ def _signin_row(label: _Labels, s: dict) -> tuple:
     mfa = signins.mfa_used(s)
     types = s.get("riskEventTypes_v2") or s.get("riskEventTypes") or []
     types = [t for t in types if isinstance(t, str)] if isinstance(types, list) else []
-    return (label(s.get("userPrincipalName")), label(s.get("userId")), label(s.get("userDisplayName")),
-            label(s.get("appDisplayName")), label(s.get("appId")), label(s.get("clientAppUsed")),
-            _text(s.get("ipAddress")) or None, label(where.get("countryOrRegion")), label(where.get("city")),
-            label(device.get("operatingSystem")), signins.code(status.get("errorCode")),
-            label(status.get("failureReason")), None if mfa is None else int(mfa),
-            label(s.get("conditionalAccessStatus")), label(s.get("riskLevelDuringSignIn")), label(s.get("riskState")),
-            label(s.get("riskDetail")), json.dumps(types) if types else None,
-            0 if s.get("isInteractive") is False else 1)
+    return (
+        label(s.get("userPrincipalName")),
+        label(s.get("userId")),
+        label(s.get("userDisplayName")),
+        label(s.get("appDisplayName")),
+        label(s.get("appId")),
+        label(s.get("clientAppUsed")),
+        _text(s.get("ipAddress")) or None,
+        label(where.get("countryOrRegion")),
+        label(where.get("city")),
+        label(device.get("operatingSystem")),
+        signins.code(status.get("errorCode")),
+        label(status.get("failureReason")),
+        None if mfa is None else int(mfa),
+        label(s.get("conditionalAccessStatus")),
+        label(s.get("riskLevelDuringSignIn")),
+        label(s.get("riskState")),
+        label(s.get("riskDetail")),
+        json.dumps(types) if types else None,
+        0 if s.get("isInteractive") is False else 1,
+    )
 
 
 def add_signins(base: Path, key: int, items) -> Added:
@@ -407,8 +470,13 @@ def add_signins(base: Path, key: int, items) -> Added:
 def _initiator(e: dict) -> str:
     by = _dict(e.get("initiatedBy"))
     user, app = _dict(by.get("user")), _dict(by.get("app"))
-    return (_text(user.get("userPrincipalName")) or _text(user.get("displayName")) or _text(app.get("displayName"))
-            or _text(app.get("servicePrincipalName")) or _text(app.get("appId")))
+    return (
+        _text(user.get("userPrincipalName"))
+        or _text(user.get("displayName"))
+        or _text(app.get("displayName"))
+        or _text(app.get("servicePrincipalName"))
+        or _text(app.get("appId"))
+    )
 
 
 def _target(e: dict) -> str:
@@ -422,8 +490,14 @@ def _target(e: dict) -> str:
 
 def _audit_row(label: _Labels, e: dict) -> tuple:
     detail = zlib.compress(json.dumps(e, separators=(",", ":"), sort_keys=True).encode(), 6)
-    return (label(e.get("category")), label(e.get("activityDisplayName")), label(e.get("result")),
-            label(_initiator(e)), label(_target(e)), detail)
+    return (
+        label(e.get("category")),
+        label(e.get("activityDisplayName")),
+        label(e.get("result")),
+        label(_initiator(e)),
+        label(_target(e)),
+        detail,
+    )
 
 
 def add_audits(base: Path, key: int, items) -> Added:
@@ -440,22 +514,57 @@ def _where(conn, tenant_id: int) -> tuple[Path, int] | None:
 
 
 def _signin_dict(row, names: dict[int, str]) -> dict:
-    (ts, sid, user, user_id, name, app, app_id, client, ip, country, city, os_, code, reason, mfa, ca, risk,
-     risk_state, risk_detail, risk_types, interactive) = row
+    (
+        ts,
+        sid,
+        user,
+        user_id,
+        name,
+        app,
+        app_id,
+        client,
+        ip,
+        country,
+        city,
+        os_,
+        code,
+        reason,
+        mfa,
+        ca,
+        risk,
+        risk_state,
+        risk_detail,
+        risk_types,
+        interactive,
+    ) = row
 
     def n(i):
         return names.get(i) or None
-    return {"id": _unpack_id(sid), "createdDateTime": _iso(ts), "userPrincipalName": n(user), "userId": n(user_id),
-            "userDisplayName": n(name), "appDisplayName": n(app), "appId": n(app_id), "clientAppUsed": n(client),
-            "ipAddress": ip, "location": {"countryOrRegion": n(country), "city": n(city)},
-            "deviceDetail": {"operatingSystem": n(os_)}, "status": {"errorCode": code, "failureReason": n(reason)},
-            "authenticationRequirement": {1: MFA, 0: SINGLE}.get(mfa), "conditionalAccessStatus": n(ca),
-            "riskLevelDuringSignIn": n(risk), "riskState": n(risk_state), "riskDetail": n(risk_detail),
-            "riskEventTypes_v2": json.loads(risk_types) if risk_types else [], "isInteractive": bool(interactive)}
+
+    return {
+        "id": _unpack_id(sid),
+        "createdDateTime": _iso(ts),
+        "userPrincipalName": n(user),
+        "userId": n(user_id),
+        "userDisplayName": n(name),
+        "appDisplayName": n(app),
+        "appId": n(app_id),
+        "clientAppUsed": n(client),
+        "ipAddress": ip,
+        "location": {"countryOrRegion": n(country), "city": n(city)},
+        "deviceDetail": {"operatingSystem": n(os_)},
+        "status": {"errorCode": code, "failureReason": n(reason)},
+        "authenticationRequirement": {1: MFA, 0: SINGLE}.get(mfa),
+        "conditionalAccessStatus": n(ca),
+        "riskLevelDuringSignIn": n(risk),
+        "riskState": n(risk_state),
+        "riskDetail": n(risk_detail),
+        "riskEventTypes_v2": json.loads(risk_types) if risk_types else [],
+        "isInteractive": bool(interactive),
+    }
 
 
-def signins_between(conn, tenant_id: int, start: datetime, end: datetime,
-                    oldest_first: bool = False) -> Iterator[dict]:
+def signins_between(conn, tenant_id: int, start: datetime, end: datetime, oldest_first: bool = False) -> Iterator[dict]:
     """Stored sign-ins from ``start`` to ``end`` (inclusive), newest first (or oldest first), in the sign-in
     log's own shape. Rows are read as they're used, so a month's download never holds the month in memory."""
     where = _where(conn, tenant_id)
@@ -469,13 +578,19 @@ def signins_between(conn, tenant_id: int, start: datetime, end: datetime,
             if db is None:
                 continue
             names = _names(db, key)
-            yield from (_signin_dict(r, names) for r in db.execute(
-                f"SELECT {', '.join(SIGNIN_COLUMNS)} FROM signin WHERE tenant = ? AND ts BETWEEN ? AND ?"
-                f" ORDER BY {order}", (key, lo, hi)))
+            yield from (
+                _signin_dict(r, names)
+                for r in db.execute(
+                    f"SELECT {', '.join(SIGNIN_COLUMNS)} FROM signin WHERE tenant = ? AND ts BETWEEN ? AND ?"
+                    f" ORDER BY {order}",
+                    (key, lo, hi),
+                )
+            )
 
 
-def audits_between(conn, tenant_id: int, start: datetime, end: datetime,
-                   keep: Callable[[str, str], bool] | None = None) -> Iterator[dict]:
+def audits_between(
+    conn, tenant_id: int, start: datetime, end: datetime, keep: Callable[[str, str], bool] | None = None
+) -> Iterator[dict]:
     """Stored directory audit events from ``start`` to ``end``, newest first, as Graph returned them.
     ``keep(category, activity)`` picks events before their text is unpacked."""
     where = _where(conn, tenant_id)
@@ -490,8 +605,10 @@ def audits_between(conn, tenant_id: int, start: datetime, end: datetime,
             names = _names(db, key)
             chosen: dict[tuple[int, int], bool] = {}
             for category, activity, detail in db.execute(
-                    "SELECT category, activity, detail FROM audit WHERE tenant = ? AND ts BETWEEN ? AND ?"
-                    " ORDER BY ts DESC, id", (key, lo, hi)):
+                "SELECT category, activity, detail FROM audit WHERE tenant = ? AND ts BETWEEN ? AND ?"
+                " ORDER BY ts DESC, id",
+                (key, lo, hi),
+            ):
                 if keep is not None:
                     pair = (category, activity)
                     if pair not in chosen:
@@ -541,14 +658,28 @@ def daily_between(conn, tenant_id: int, first_day: str, last_day: str) -> list[D
             if db is None:
                 continue
             names = _names(db, key)
-            for (day, user, user_id, app, country, ok, failed, interrupted, mfa, single, first, last,
-                 ips) in db.execute(
-                    "SELECT day, user, user_id, app, country, succeeded, failed, interrupted, mfa, single_factor,"
-                    " first_ts, last_ts, ips FROM daily WHERE tenant = ? AND day BETWEEN ? AND ? ORDER BY day",
-                    (key, first_day, last_day)):
-                out.append(DayRow(day, names.get(user) or "Unknown", names.get(user_id) or None,
-                                  names.get(app) or "Unknown app", names.get(country) or None, ok, failed,
-                                  interrupted, mfa, single, _iso(first), _iso(last), json.loads(ips)))
+            for day, user, user_id, app, country, ok, failed, interrupted, mfa, single, first, last, ips in db.execute(
+                "SELECT day, user, user_id, app, country, succeeded, failed, interrupted, mfa, single_factor,"
+                " first_ts, last_ts, ips FROM daily WHERE tenant = ? AND day BETWEEN ? AND ? ORDER BY day",
+                (key, first_day, last_day),
+            ):
+                out.append(
+                    DayRow(
+                        day,
+                        names.get(user) or "Unknown",
+                        names.get(user_id) or None,
+                        names.get(app) or "Unknown app",
+                        names.get(country) or None,
+                        ok,
+                        failed,
+                        interrupted,
+                        mfa,
+                        single,
+                        _iso(first),
+                        _iso(last),
+                        json.loads(ips),
+                    )
+                )
     return out
 
 
@@ -571,15 +702,29 @@ def daily_for(conn, tenant_id: int, names: Iterable[str], first_day: str, last_d
             if not ids:
                 continue
             marks = ",".join("?" * len(ids))
-            for (day, user, user_id, app, country, ok, failed, interrupted, mfa, single, first, last,
-                 ips) in db.execute(
-                    "SELECT day, user, user_id, app, country, succeeded, failed, interrupted, mfa, single_factor,"
-                    f" first_ts, last_ts, ips FROM daily WHERE tenant = ? AND day BETWEEN ? AND ?"
-                    f" AND (user IN ({marks}) OR user_id IN ({marks})) ORDER BY day",
-                    (key, first_day, last_day, *ids, *ids)):
-                out.append(DayRow(day, names_of.get(user) or "Unknown", names_of.get(user_id) or None,
-                                  names_of.get(app) or "Unknown app", names_of.get(country) or None, ok, failed,
-                                  interrupted, mfa, single, _iso(first), _iso(last), json.loads(ips)))
+            for day, user, user_id, app, country, ok, failed, interrupted, mfa, single, first, last, ips in db.execute(
+                "SELECT day, user, user_id, app, country, succeeded, failed, interrupted, mfa, single_factor,"
+                f" first_ts, last_ts, ips FROM daily WHERE tenant = ? AND day BETWEEN ? AND ?"
+                f" AND (user IN ({marks}) OR user_id IN ({marks})) ORDER BY day",
+                (key, first_day, last_day, *ids, *ids),
+            ):
+                out.append(
+                    DayRow(
+                        day,
+                        names_of.get(user) or "Unknown",
+                        names_of.get(user_id) or None,
+                        names_of.get(app) or "Unknown app",
+                        names_of.get(country) or None,
+                        ok,
+                        failed,
+                        interrupted,
+                        mfa,
+                        single,
+                        _iso(first),
+                        _iso(last),
+                        json.loads(ips),
+                    )
+                )
     return out
 
 
@@ -601,7 +746,7 @@ class Totals:
         return self.succeeded + self.failed + self.interrupted
 
 
-_TOTALS = ("SUM(succeeded), SUM(failed), SUM(interrupted), SUM(mfa), SUM(single_factor), COUNT(DISTINCT user)")
+_TOTALS = "SUM(succeeded), SUM(failed), SUM(interrupted), SUM(mfa), SUM(single_factor), COUNT(DISTINCT user)"
 
 
 def totals(conn, tenant_id: int, first_day: str, last_day: str) -> tuple[list[Totals], list[Totals]]:
@@ -619,15 +764,21 @@ def totals(conn, tenant_id: int, first_day: str, last_day: str) -> tuple[list[To
             if db is None:
                 continue
             args = (key, first_day, last_day)
-            for day, *numbers in db.execute(f"SELECT day, {_TOTALS} FROM daily WHERE tenant = ?"
-                                            " AND day BETWEEN ? AND ? GROUP BY day ORDER BY day", args):
+            for day, *numbers in db.execute(
+                f"SELECT day, {_TOTALS} FROM daily WHERE tenant = ? AND day BETWEEN ? AND ? GROUP BY day ORDER BY day",
+                args,
+            ):
                 days.append(Totals(day, *numbers))
             row = db.execute(f"SELECT {_TOTALS} FROM daily WHERE tenant = ? AND day BETWEEN ? AND ?", args).fetchone()
             if row[0] is None:
                 continue
             names = _names(db, key)
-            countries = sorted(names.get(c) or "" for (c,) in db.execute(
-                "SELECT DISTINCT country FROM daily WHERE tenant = ? AND day BETWEEN ? AND ?", args))
+            countries = sorted(
+                names.get(c) or ""
+                for (c,) in db.execute(
+                    "SELECT DISTINCT country FROM daily WHERE tenant = ? AND day BETWEEN ? AND ?", args
+                )
+            )
             by_month.append(Totals(month, *row, countries=[c for c in countries if c]))
     return days, by_month
 
@@ -654,17 +805,32 @@ def rebuild_daily(base: Path, key: int, days: Iterable[str]) -> int:
         groups: dict[tuple[str, str, str], dict] = {}
         with _open(_path(base, "signins", _month(start)), "signins") as db:
             names = _names(db, key) if db else {}
-            rows = db.execute(
-                "SELECT ts, user, user_id, app, country, code, mfa, ip FROM signin"
-                " WHERE tenant = ? AND ts BETWEEN ? AND ? AND interactive = 1 ORDER BY ts",
-                (key, start, start + DAY - 1)).fetchall() if db else []
+            rows = (
+                db.execute(
+                    "SELECT ts, user, user_id, app, country, code, mfa, ip FROM signin"
+                    " WHERE tenant = ? AND ts BETWEEN ? AND ? AND interactive = 1 ORDER BY ts",
+                    (key, start, start + DAY - 1),
+                ).fetchall()
+                if db
+                else []
+            )
         for ts, user, user_id, app, country, code, mfa, ip in rows:
             upn = names.get(user) or names.get(user_id) or "Unknown"
             k = (upn.lower(), names.get(app) or "Unknown app", names.get(country) or "")
             g = groups.get(k)
             if g is None:
-                g = groups[k] = {"user": upn, "user_id": names.get(user_id) or "", "succeeded": 0, "failed": 0,
-                                 "interrupted": 0, "mfa": 0, "single": 0, "first": ts, "last": ts, "ips": Counter()}
+                g = groups[k] = {
+                    "user": upn,
+                    "user_id": names.get(user_id) or "",
+                    "succeeded": 0,
+                    "failed": 0,
+                    "interrupted": 0,
+                    "mfa": 0,
+                    "single": 0,
+                    "first": ts,
+                    "last": ts,
+                    "ips": Counter(),
+                }
             result = signins.outcome(code)
             g[{"success": "succeeded", "failure": "failed"}.get(result, "interrupted")] += 1
             if result == "success":
@@ -680,10 +846,25 @@ def rebuild_daily(base: Path, key: int, days: Iterable[str]) -> int:
             label = _Labels(db, key)
             db.execute("DELETE FROM daily WHERE tenant = ? AND day = ?", (key, day))
             for (_, app, country), g in groups.items():
-                db.execute("INSERT INTO daily VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
-                    key, day, label(g["user"]), label(app), label(country), label(g["user_id"]), g["succeeded"],
-                    g["failed"], g["interrupted"], g["mfa"], g["single"], g["first"], g["last"],
-                    json.dumps([ip for ip, _ in g["ips"].most_common(5)])))
+                db.execute(
+                    "INSERT INTO daily VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        key,
+                        day,
+                        label(g["user"]),
+                        label(app),
+                        label(country),
+                        label(g["user_id"]),
+                        g["succeeded"],
+                        g["failed"],
+                        g["interrupted"],
+                        g["mfa"],
+                        g["single"],
+                        g["first"],
+                        g["last"],
+                        json.dumps([ip for ip, _ in g["ips"].most_common(5)]),
+                    ),
+                )
                 written += 1
     return written
 
@@ -725,8 +906,18 @@ class Ingest:
 
 
 class _Reader:
-    def __init__(self, ctx, source: Log, base: Path, key: int, cov: Coverage, now: int, budget: int,
-                 retries: int | None, deadline: Callable[[], Callable[[], bool]]):
+    def __init__(
+        self,
+        ctx,
+        source: Log,
+        base: Path,
+        key: int,
+        cov: Coverage,
+        now: int,
+        budget: int,
+        retries: int | None,
+        deadline: Callable[[], Callable[[], bool]],
+    ):
         self.ctx, self.src, self.base, self.key, self.cov, self.now = ctx, source, base, key, cov, now
         self.budget, self.retries, self.deadline = budget, retries, deadline
         self.result = Ingest(cov)
@@ -819,8 +1010,15 @@ def _no_deadline() -> Callable[[], bool]:
     return lambda: False
 
 
-def ingest(ctx, source: Log, keep_days: int, budget: int, *, retries: int | None = None,
-           deadline: Callable[[], Callable[[], bool]] = _no_deadline) -> Ingest:
+def ingest(
+    ctx,
+    source: Log,
+    keep_days: int,
+    budget: int,
+    *,
+    retries: int | None = None,
+    deadline: Callable[[], Callable[[], bool]] = _no_deadline,
+) -> Ingest:
     """Read the log from where the last run got to, into the event files. See the module docstring.
 
     ``keep_days`` is how far back Microsoft keeps the log, ``budget`` the most pages this run reads.
@@ -867,8 +1065,10 @@ def _older(db: sqlite3.Connection, store: str, cutoff: int, count_only: bool, ba
     while True:
         with transaction(db, immediate=True):
             cols = ", ".join(_key(store))
-            n = db.execute(f"DELETE FROM {table} WHERE ({cols}) IN (SELECT {cols} FROM {table} WHERE {where} LIMIT ?)",
-                           (arg, batch)).rowcount
+            n = db.execute(
+                f"DELETE FROM {table} WHERE ({cols}) IN (SELECT {cols} FROM {table} WHERE {where} LIMIT ?)",
+                (arg, batch),
+            ).rowcount
         done += n
         if n < batch:
             return done
@@ -947,8 +1147,9 @@ def counts(conn, tenant_id: int) -> dict[str, int]:
         for month in months(base, store):
             with _open(_path(base, store, month), store) as db:
                 if db is not None:
-                    out[store] += db.execute(f"SELECT COUNT(*) FROM {TABLE[store]} WHERE tenant = ?",
-                                             (key,)).fetchone()[0]
+                    out[store] += db.execute(
+                        f"SELECT COUNT(*) FROM {TABLE[store]} WHERE tenant = ?", (key,)
+                    ).fetchone()[0]
     return out
 
 
@@ -962,8 +1163,11 @@ def first_day(conn, tenant_id: int) -> date | None:
     for store in ("signins", "audits"):
         for month in months(base, store):
             with _open(_path(base, store, month), store) as db:
-                row = db.execute(f"SELECT MIN(ts) FROM {TABLE[store]} WHERE tenant = ?", (key,)).fetchone() \
-                    if db else None
+                row = (
+                    db.execute(f"SELECT MIN(ts) FROM {TABLE[store]} WHERE tenant = ?", (key,)).fetchone()
+                    if db
+                    else None
+                )
             if row and row[0] is not None:
                 days.append(datetime.fromtimestamp(row[0], UTC).date())
                 break

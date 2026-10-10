@@ -38,15 +38,40 @@ OUTLOOK_ID = re.compile(r"(?<![A-Za-z0-9_-])(A[AQ]Mk[A-Za-z0-9_-]{40,})((?:=|%3D
 EMAIL = re.compile(r"[A-Za-z0-9._%+'{}#-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}")
 PHONE = re.compile(r"\+\d[\d ()-]{6,}\d")
 # National formats: UK and similar (07700 900123, 020 7946 0000) and North American ((555) 010-0199).
-NATIONAL_PHONE = re.compile(r"(?<![\w.:/+-])(?:0\d(?: ?\d){8,10}|\(\d{3}\) ?\d{3}[-. ]\d{4}|\d{3}-\d{3}-\d{4})"
-                            r"(?![\w.:/-])")
+NATIONAL_PHONE = re.compile(
+    r"(?<![\w.:/+-])(?:0\d(?: ?\d){8,10}|\(\d{3}\) ?\d{3}[-. ]\d{4}|\d{3}-\d{3}-\d{4})"
+    r"(?![\w.:/-])"
+)
 # Keys (lower case) that hold phone numbers in Graph and Exchange, replaced whatever their format.
-PHONE_KEYS = {"businessphones", "mobilephone", "homephones", "otherphones", "faxnumber", "phonenumber",
-              "telephonenumber", "phone", "phones", "mobile", "homephone", "othertelephone", "fax",
-              "otherfax", "otherhomephone", "pager", "devicetelephonenumber", "devicephonenumber"}
+PHONE_KEYS = {
+    "businessphones",
+    "mobilephone",
+    "homephones",
+    "otherphones",
+    "faxnumber",
+    "phonenumber",
+    "telephonenumber",
+    "phone",
+    "phones",
+    "mobile",
+    "homephone",
+    "othertelephone",
+    "fax",
+    "otherfax",
+    "otherhomephone",
+    "pager",
+    "devicetelephonenumber",
+    "devicephonenumber",
+}
 # Free text and device secrets that may say anything about anyone: replaced whatever they hold.
-REDACTED_KEYS = {"subject", "internalreplymessage", "externalreplymessage", "recoverypassword", "deviceimei",
-                 "deviceimeinumber"}
+REDACTED_KEYS = {
+    "subject",
+    "internalreplymessage",
+    "externalreplymessage",
+    "recoverypassword",
+    "deviceimei",
+    "deviceimeinumber",
+}
 # Fictional numbers (555-0100 to 555-0199 are reserved for fiction); the leak check accepts only these.
 FAKE_PHONE = "+1 555 01{:02d}"
 # OneDrive addresses carry the owner's sign-in name: /personal/jane_contoso_com/Documents.
@@ -60,8 +85,9 @@ DEVICE_KEYS = {"displayName", "model", "deviceTag", "phoneAppVersion", "phoneNum
 
 # IDs that Office Sentry's own code looks for (role templates, guest access levels, Microsoft
 # apps) are Microsoft's constants, not the tenant's data, so they're kept as they are.
-KNOWN_IDS = {g.lower() for f in Path(__file__).parent.rglob("*.py")
-             for g in GUID.findall(f.read_text(encoding="utf-8"))}
+KNOWN_IDS = {
+    g.lower() for f in Path(__file__).parent.rglob("*.py") for g in GUID.findall(f.read_text(encoding="utf-8"))
+}
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z")
 # Fields that hold someone's IP address (audit logs, sign-ins). Version numbers look like IPs,
 # so only values under these keys are replaced, with documentation addresses.
@@ -115,6 +141,7 @@ def recording_lookup(log: list, real=None):
         answer = real(name, rdtype)
         log.append({"api": "dns", "name": name, "rdtype": rdtype, "answer": answer})
         return answer
+
     return lookup
 
 
@@ -188,8 +215,9 @@ class Scrubber:
         if len(raw) != 48:
             return match.group(0)
         self.drive_ids.add(match.group(1))
-        fake = b"".join(uuid.UUID(self.guid(str(uuid.UUID(bytes_le=raw[i:i + 16])))).bytes_le
-                        for i in range(0, 48, 16))
+        fake = b"".join(
+            uuid.UUID(self.guid(str(uuid.UUID(bytes_le=raw[i : i + 16])))).bytes_le for i in range(0, 48, 16)
+        )
         return match.group(0)[:-64] + base64.urlsafe_b64encode(fake).decode().rstrip("=")
 
     def outlook_id(self, match: re.Match) -> str:
@@ -202,7 +230,7 @@ class Scrubber:
                 raw = b""
             text = raw.decode("latin-1")
             found = GUID.search(text)
-            head = (text[:found.start()] + self.guid(found.group(0))).encode("latin-1") if found else b""
+            head = (text[: found.start()] + self.guid(found.group(0))).encode("latin-1") if found else b""
             size = len(raw) - len(head)
             seed = hashlib.sha256(f"outlook-{len(self.outlook_ids)}".encode()).digest()
             fake = head + (seed * (size // len(seed) + 1))[:size]
@@ -261,7 +289,6 @@ class Scrubber:
         if isinstance(value, str):
             return self.text(value)
         return value
-
 
     def _field(self, key: str, value, device: bool):
         if key == "location" and isinstance(value, dict) and "geoCoordinates" in value:
@@ -345,11 +372,13 @@ def _collect_names(log: list) -> tuple[list[str], dict[str, str], set[str]]:
             if "/groups/" in path and path.count("/") == 3 and item["displayName"] not in names:
                 groups += 1
                 names[item["displayName"]] = f"Test Group {groups}"
-            elif path.endswith(("/servicePrincipals", "/applications")) and \
-                    (item.get("appOwnerOrganizationId") or "").lower() in tenant_ids | {""} and \
-                    item.get("servicePrincipalType", "Application") == "Application" and \
-                    item["displayName"] not in names and \
-                    (item.get("appOwnerOrganizationId") or path.endswith("/applications")):
+            elif (
+                path.endswith(("/servicePrincipals", "/applications"))
+                and (item.get("appOwnerOrganizationId") or "").lower() in tenant_ids | {""}
+                and item.get("servicePrincipalType", "Application") == "Application"
+                and item["displayName"] not in names
+                and (item.get("appOwnerOrganizationId") or path.endswith("/applications"))
+            ):
                 apps += 1
                 names[item["displayName"]] = f"Tenant App {apps}"
     for e in log:  # Exchange display names and aliases for the same mailboxes
@@ -386,17 +415,22 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
             answer = e["answer"]
             if e["rdtype"] == "TXT":  # drop verification tokens; keep what the checks read
                 answer = [a for a in answer if a.lower().startswith(("v=spf1", "v=dmarc1", "v=stsv1"))]
-            entries.append({"api": "dns", "name": s.text(e["name"]), "rdtype": e["rdtype"],
-                            "answer": [s.text(a) for a in answer]})
+            entries.append(
+                {"api": "dns", "name": s.text(e["name"]), "rdtype": e["rdtype"], "answer": [s.text(a) for a in answer]}
+            )
             continue
         body = e["body"]
         path = urlsplit(e["url"]).path
         if isinstance(body, dict) and isinstance(body.get("value"), list) and path in LIST_LIMIT:
-            body = dict(body, value=body["value"][:LIST_LIMIT[path]])
+            body = dict(body, value=body["value"][: LIST_LIMIT[path]])
         if path.endswith("/applications") and isinstance(body, dict):
             body = _rename_credentials(body)
-        out = {"api": e["api"], "url": s.text(e["url"]), "status": e["status"],
-               "body": s.walk(body, device="/authentication/methods" in path)}
+        out = {
+            "api": e["api"],
+            "url": s.text(e["url"]),
+            "status": e["status"],
+            "body": s.walk(body, device="/authentication/methods" in path),
+        }
         if e["api"] == "exchange":
             out["cmdlet"] = s.walk(e["cmdlet"])
         entries.append(out)
@@ -404,8 +438,10 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
     # URLs are checked for IDs and domains only: a person named "admin" isn't leaked by /admin/sharepoint.
     text = "\n".join(v for v in _strings(fixture) if not v.startswith("https://"))
     leaks = find_leaks(text, [*names, *personal, *s.places])
-    leaks += find_leaks(json.dumps(fixture), [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites,
-                                              *s.drive_ids, *s.outlook_ids])
+    leaks += find_leaks(
+        json.dumps(fixture),
+        [tenant_id, client_id, *domains, *s.emails, *ips, *s.personal_sites, *s.drive_ids, *s.outlook_ids],
+    )
     leaks += phone_leaks(fixture)
     if leaks:
         hints = ", ".join(f"{v[0]}… ({len(v)} chars)" for v in leaks)  # never print the values themselves
@@ -419,8 +455,10 @@ def _rename_credentials(body: dict) -> dict:
     for app in body.get("value") or []:
         app = dict(app)
         for key in ("passwordCredentials", "keyCredentials"):
-            app[key] = [dict(c, displayName=f"Credential {i + 1}" if c.get("displayName") else None)
-                        for i, c in enumerate(app.get(key) or [])]
+            app[key] = [
+                dict(c, displayName=f"Credential {i + 1}" if c.get("displayName") else None)
+                for i, c in enumerate(app.get(key) or [])
+            ]
         apps.append(app)
     return dict(body, value=apps)
 
@@ -455,8 +493,11 @@ def phone_leaks(fixture) -> list[str]:
     for text in _strings(fixture):
         if text.startswith("https://"):
             continue
-        found += [m.group(0) for m in (*PHONE.finditer(text), *NATIONAL_PHONE.finditer(text))
-                  if not _is_fake_phone(m.group(0))]
+        found += [
+            m.group(0)
+            for m in (*PHONE.finditer(text), *NATIONAL_PHONE.finditer(text))
+            if not _is_fake_phone(m.group(0))
+        ]
     return sorted(set(found))
 
 

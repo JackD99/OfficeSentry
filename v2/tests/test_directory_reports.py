@@ -62,17 +62,33 @@ def test_app_sign_ins_keeps_each_apps_latest_sign_in_by_kind(db, two_tenants):
 @responses.activate
 def test_app_sign_ins_without_the_licence_or_permission_say_why(db, two_tenants):
     alpha, bravo = two_tenants
-    responses.get(ACTIVITY, status=403, json={"error": {
-        "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant",
-        "message": "Neither tenant is B2C or tenant doesn't have premium license"}})
+    responses.get(
+        ACTIVITY,
+        status=403,
+        json={
+            "error": {
+                "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant",
+                "message": "Neither tenant is B2C or tenant doesn't have premium license",
+            }
+        },
+    )
     run_id, status = _run(db, alpha, "app_sign_ins")
     assert status == "partial"
     assert store.run_objects(db, run_id, "sign_in_status")[0]["reason"] == "licence"
     report = build(db, store.get_tenant(db, alpha), "unused-apps")
     assert "Entra ID P1" in report.unavailable
 
-    responses.replace(responses.GET, ACTIVITY, status=403, json={"error": {
-        "code": "Authorization_RequestDenied", "message": "Insufficient privileges to complete the operation."}})
+    responses.replace(
+        responses.GET,
+        ACTIVITY,
+        status=403,
+        json={
+            "error": {
+                "code": "Authorization_RequestDenied",
+                "message": "Insufficient privileges to complete the operation.",
+            }
+        },
+    )
     run_id, status = _run(db, bravo, "app_sign_ins")
     assert store.run_objects(db, run_id, "sign_in_status")[0]["reason"] == "permission"
     assert "AuditLog.Read.All" in build(db, store.get_tenant(db, bravo), "unused-apps").unavailable
@@ -88,8 +104,7 @@ def test_user_details_reads_department_and_manager(db, two_tenants):
     assert "department" in query["$select"] and query["$expand"].startswith("manager(")
     people = {p["_id"]: p for p in store.run_objects(db, run_id, "person")}
     assert people["u1"]["department"] == "Sales" and people["u1"]["jobTitle"] == "Sales lead"
-    assert people["u1"]["manager"] == {"id": "u2", "name": "Bob", "upn": "bob@x.com", "type": "user",
-                                       "enabled": False}
+    assert people["u1"]["manager"] == {"id": "u2", "name": "Bob", "upn": "bob@x.com", "type": "user", "enabled": False}
     assert people["u2"]["manager"] is None and people["u2"]["department"] is None
 
 
@@ -101,8 +116,10 @@ def test_group_nesting_reads_members_of_security_groups_and_lists_only(db, two_t
     def members(request):
         gid = request.path_url.split("?")[0].split("/")[3]
         return 200, {}, json.dumps({"value": grp.MEMBERS.get(gid, [])})
-    responses.add_callback(responses.GET, re.compile(rf"{V1}/groups/[^/]+/members"), callback=members,
-                           content_type="application/json")
+
+    responses.add_callback(
+        responses.GET, re.compile(rf"{V1}/groups/[^/]+/members"), callback=members, content_type="application/json"
+    )
     run_id, status = _run(db, alpha, "group_nesting")
     assert status == "succeeded"
     read = {c.request.path_url.split("?")[0].split("/")[3] for c in responses.calls if "/members" in c.request.url}
@@ -215,8 +232,11 @@ def test_reports_are_listed_and_render_with_downloads(client, db, two_tenants):
     seed_tenant(db, alpha)
     make_user(db, "admin")
     login(client, "admin")
-    for key, text in (("unused-apps", b"Mail Sync Pro"), ("all-users", b"Sales lead"),
-                      ("group-structure", b"Group creators")):
+    for key, text in (
+        ("unused-apps", b"Mail Sync Pro"),
+        ("all-users", b"Sales lead"),
+        ("group-structure", b"Group creators"),
+    ):
         page = client.get(f"/tenants/{alpha}/data/{key}")
         assert page.status_code == 200 and text in page.data, key
         assert text in client.get(f"/tenants/{alpha}/data/{key}.csv").data

@@ -37,8 +37,10 @@ def _write(folder, files):
 
 def test_two_migrations_with_one_number_stop_the_upgrade(cfg, tmp_path, monkeypatch):
     folder = tmp_path / "migrations"
-    _write(folder, {"0001_a.sql": "CREATE TABLE a (x);", "0002_b.sql": "CREATE TABLE b (x);",
-                    "0002_c.sql": "CREATE TABLE c (x);"})
+    _write(
+        folder,
+        {"0001_a.sql": "CREATE TABLE a (x);", "0002_b.sql": "CREATE TABLE b (x);", "0002_c.sql": "CREATE TABLE c (x);"},
+    )
     monkeypatch.setattr(db_module, "MIGRATIONS_DIR", folder)
     conn = connect(cfg.db_path)
     with pytest.raises(RuntimeError, match=r"share the number 0002 \(0002_b\.sql, 0002_c\.sql\)"):

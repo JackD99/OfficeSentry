@@ -22,8 +22,12 @@ from tests.seed import seed_tenant
 from tests.test_collectors import SKUS, USERS
 
 BETA = f"{GRAPH_ROOT}/beta"
-P2_SKUS = [dict(SKUS[0], servicePlans=SKUS[0]["servicePlans"] + [
-    {"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}])]
+P2_SKUS = [
+    dict(
+        SKUS[0],
+        servicePlans=SKUS[0]["servicePlans"] + [{"servicePlanName": "AAD_PREMIUM_P2", "provisioningStatus": "Success"}],
+    )
+]
 
 
 def _seed(db, tenant_id, **kwargs):
@@ -59,8 +63,14 @@ def test_error_codes_in_plain_english():
     assert signins.meaning(99999, template) == "Error 99999"
     assert "isn't set up with" in signins.meaning(50011, template)
     assert signins.meaning(None) == "Signed in"
-    assert [signins.outcome(c) for c in (0, 50074, 50076, 50140, 50126, 53003)] == \
-        ["success", "interrupted", "interrupted", "interrupted", "failure", "failure"]
+    assert [signins.outcome(c) for c in (0, 50074, 50076, 50140, 50126, 53003)] == [
+        "success",
+        "interrupted",
+        "interrupted",
+        "interrupted",
+        "failure",
+        "failure",
+    ]
     assert signins.risk_severity("high", "atRisk") == "high"
     assert signins.risk_severity("low", "confirmedCompromised") == "high"
     assert signins.risk_severity("medium", "atRisk") == "medium"
@@ -156,15 +166,27 @@ def test_without_entra_p1_the_log_is_unavailable(db, two_tenants):
     run_id, status = _run(db, alpha, {"entra_p1": False})
     assert status == "succeeded" and not responses.calls
     assert store.run_objects(db, run_id, "sign_in_status")[0] == {
-        "_id": "status", "_kind": "sign_in_status", "available": False, "reason": "licence"}
+        "_id": "status",
+        "_kind": "sign_in_status",
+        "available": False,
+        "reason": "licence",
+    }
     report = data_reports.build(db, store.get_tenant(db, alpha), "sign-ins")
     assert "Entra ID P1" in report.unavailable and not report.sections
     results = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)))}
     assert results["risky_sign_ins"].status == "unavailable"
 
     # Not known: Microsoft says so.
-    responses.get(f"{BETA}/auditLogs/signIns", status=403, json={"error": {
-        "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant", "message": "Needs a premium licence"}})
+    responses.get(
+        f"{BETA}/auditLogs/signIns",
+        status=403,
+        json={
+            "error": {
+                "code": "Authentication_RequestFromNonPremiumTenantOrB2CTenant",
+                "message": "Needs a premium licence",
+            }
+        },
+    )
     run_id, status = _run(db, bravo)
     assert status == "partial"
     assert store.run_objects(db, run_id, "sign_in_status")[0]["reason"] == "licence"
@@ -175,8 +197,12 @@ def test_not_collected_yet(db, two_tenants):
     alpha, _ = two_tenants
     report = data_reports.build(db, store.get_tenant(db, alpha), "sign-ins")
     assert "hasn't been collected" in report.unavailable
-    assert user_profile.sign_ins_part(user_profile.Person(
-        TenantSnapshot(db, store.get_tenant(db, alpha)), {"_id": "u1"}, report.generated_at)) is None
+    assert (
+        user_profile.sign_ins_part(
+            user_profile.Person(TenantSnapshot(db, store.get_tenant(db, alpha)), {"_id": "u1"}, report.generated_at)
+        )
+        is None
+    )
 
 
 # -- Report -----------------------------------------------------------------------------------
@@ -188,21 +214,34 @@ def test_report_leads_with_what_to_act_on(db, two_tenants):
     report = data_reports.build(db, tenant, "sign-ins")
     assert report.unavailable is None
     s = _sections(report)
-    assert list(s) == ["Accounts with repeated failures", "Addresses with many failures",
-                       "Successful sign-ins from unusual countries", "Successful sign-ins without MFA",
-                       "Failure reasons", "Sign-ins by country", "Sign-ins by app", "Every account"]
+    assert list(s) == [
+        "Accounts with repeated failures",
+        "Addresses with many failures",
+        "Successful sign-ins from unusual countries",
+        "Successful sign-ins without MFA",
+        "Failure reasons",
+        "Sign-ins by country",
+        "Sign-ins by app",
+        "Every account",
+    ]
     assert not any(sec.compare for sec in report.sections)
     repeated = s["Accounts with repeated failures"]
     assert [r[0] for r in repeated.rows] == ["bob@x.com"] and repeated.flags == ["high"]
     assert repeated.rows[0][1:5] == [9, 8, 1, 0] and repeated.rows[0][-1] == "Account is disabled"
-    addresses = {r[0]: (r, f) for r, f in zip(s["Addresses with many failures"].rows,
-                                              s["Addresses with many failures"].flags, strict=True)}
+    addresses = {
+        r[0]: (r, f)
+        for r, f in zip(s["Addresses with many failures"].rows, s["Addresses with many failures"].flags, strict=True)
+    }
     assert addresses["203.0.113.66"][0][3] == 5 and addresses["203.0.113.66"][1] == "high"
     assert addresses["198.51.100.7"][1] == "medium"
     unusual = s["Successful sign-ins from unusual countries"]
     assert [(r[0], r[1], r[2]) for r in unusual.rows] == [("ann@x.com", "FR", 1)]
-    single = {r[0]: f for r, f in zip(s["Successful sign-ins without MFA"].rows,
-                                      s["Successful sign-ins without MFA"].flags, strict=True)}
+    single = {
+        r[0]: f
+        for r, f in zip(
+            s["Successful sign-ins without MFA"].rows, s["Successful sign-ins without MFA"].flags, strict=True
+        )
+    }
     assert single == {"info@x.com": "medium", "ann@x.com": "low"}
     reasons = {r[0]: r for r in s["Failure reasons"].rows}
     assert reasons["50126"][1:4] == ["Wrong user name or password", "Failure", 10]
@@ -265,8 +304,12 @@ def test_risky_sign_ins_with_entra_p2(db, two_tenants):
     snap = TenantSnapshot(db, tenant)
     assert signins.status(snap)["riskVisible"] is True
     [risky] = snap.objects("sign_ins", "risky_sign_in")
-    assert (risky["user"], risky["level"], risky["state"], risky["succeeded"]) == ("ann@x.com", "medium", "atRisk",
-                                                                                   True)
+    assert (risky["user"], risky["level"], risky["state"], risky["succeeded"]) == (
+        "ann@x.com",
+        "medium",
+        "atRisk",
+        True,
+    )
     result = {r.key: r for r in evaluate(snap)}["risky_sign_ins"]
     assert result.status == "fail" and result.summary.startswith("1 account signed in despite")
     [finding] = result.findings
@@ -312,8 +355,10 @@ def test_account_page_shows_recent_sign_ins(client, db, two_tenants):
     part = {p.key: p for p in ann.parts}["signins"]
     assert "FR (unusual for this tenant)" in dict(part.facts)["Countries"]
     places = part.tables[0]
-    assert places.title == "Where this account signed in" and places.flags[places.rows.index(
-        next(r for r in places.rows if r[0] == "FR"))] == "medium"
+    assert (
+        places.title == "Where this account signed in"
+        and places.flags[places.rows.index(next(r for r in places.rows if r[0] == "FR"))] == "medium"
+    )
     texts = [a.text for a in ann.attention]
     assert any("Signed in from FR" in t for t in texts)
     info = user_profile.build(db, tenant, "u7")
@@ -347,8 +392,15 @@ def test_account_page_without_entra_p1(db, two_tenants):
 
 # -- When Microsoft times out -----------------------------------------------------------------
 
-SIGNIN_KINDS = ("sign_in_account", "sign_in_location", "sign_in_country", "sign_in_app", "sign_in_failure",
-                "sign_in_failure_ip", "risky_sign_in")
+SIGNIN_KINDS = (
+    "sign_in_account",
+    "sign_in_location",
+    "sign_in_country",
+    "sign_in_app",
+    "sign_in_failure",
+    "sign_in_failure_ip",
+    "risky_sign_in",
+)
 
 
 def _recent_signins():
@@ -359,15 +411,25 @@ def _recent_signins():
         when = (now - timedelta(hours=1 + 3.5 * i)).strftime("%Y-%m-%dT%H:%M:%SZ")
         for _ in range(1 + (i % 3 == 0)):  # every third time has two sign-ins
             n = len(out)
-            out.append(gd._signin(n, when, ["ann@x.com", "bob@x.com", "cat@x.com"][n % 3], f"u{n % 3}",
-                                  [0, 0, 50126, 50074][n % 4], ip=f"198.51.100.{n % 5}",
-                                  country=["GB", "FR", "RU"][n % 3], app=["Teams", "Outlook"][n % 2],
-                                  mfa=bool(n % 2)))
+            out.append(
+                gd._signin(
+                    n,
+                    when,
+                    ["ann@x.com", "bob@x.com", "cat@x.com"][n % 3],
+                    f"u{n % 3}",
+                    [0, 0, 50126, 50074][n % 4],
+                    ip=f"198.51.100.{n % 5}",
+                    country=["GB", "FR", "RU"][n % 3],
+                    app=["Teams", "Outlook"][n % 2],
+                    mfa=bool(n % 2),
+                )
+            )
     return out
 
 
 def _signin_log(rows, fail=lambda flt, skip: False, page=7):
     """A fake /beta/auditLogs/signIns honouring the createdDateTime filter, newest first, in pages."""
+
     def handler(request):
         query = parse_qs(urlsplit(request.url).query)
         flt, skip = query["$filter"][0], int(query.get("$skiptoken", ["0"])[0])
@@ -377,12 +439,14 @@ def _signin_log(rows, fail=lambda flt, skip: False, page=7):
         ops = {"ge": str.__ge__, "le": str.__le__, "lt": str.__lt__}
         match = [s for s in rows if all(ops[op](s["createdDateTime"], value) for _, op, value in clauses)]
         match.sort(key=lambda s: s["createdDateTime"], reverse=True)
-        body = {"value": match[skip:skip + page]}
+        body = {"value": match[skip : skip + page]}
         if skip + page < len(match):
-            body["@odata.nextLink"] = (f"{BETA}/auditLogs/signIns?$filter={flt}&$skiptoken={skip + page}")
+            body["@odata.nextLink"] = f"{BETA}/auditLogs/signIns?$filter={flt}&$skiptoken={skip + page}"
         return 200, {}, json.dumps(body)
-    responses.add_callback(responses.GET, f"{BETA}/auditLogs/signIns", callback=handler,
-                           content_type="application/json")
+
+    responses.add_callback(
+        responses.GET, f"{BETA}/auditLogs/signIns", callback=handler, content_type="application/json"
+    )
 
 
 def _stored(db, run_id):
@@ -442,6 +506,7 @@ def test_a_day_that_still_times_out_is_left_out_with_a_warning(db, two_tenants):
 
     def fail(flt, skip):
         return _is_week_query(flt) or (" and " in flt and flt.split(" ")[2].startswith(day))
+
     _signin_log(rows, fail=fail)
     run_id, status = _run(db, alpha)
     assert status == "partial"
@@ -475,6 +540,7 @@ def test_a_sign_in_log_that_is_down_gives_up_instead_of_holding_the_worker(db, t
     def clock():
         now[0] += sign_ins.FALLBACK_SECONDS / 3
         return now[0]
+
     monkeypatch.setattr(sign_ins, "clock", clock)
     responses.reset()
     _signin_log(_recent_signins(), fail=lambda flt, skip: _is_week_query(flt))

@@ -45,8 +45,13 @@ def test_xlsx_flags_are_coloured(db, two_tenants):
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
     report = data_reports.build(db, tenant, "admins")
     wb = load_workbook(BytesIO(data_reports.to_xlsx(report)))
-    flagged = [c for ws in wb.worksheets for row in ws.iter_rows(min_row=2) for c in row[-1:]
-               if c.value in data_reports.FLAG_FILLS]
+    flagged = [
+        c
+        for ws in wb.worksheets
+        for row in ws.iter_rows(min_row=2)
+        for c in row[-1:]
+        if c.value in data_reports.FLAG_FILLS
+    ]
     assert flagged
     for cell in flagged:
         assert cell.fill.fgColor.rgb.endswith(data_reports.FLAG_FILLS[cell.value][0])

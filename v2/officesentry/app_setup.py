@@ -37,9 +37,11 @@ ANY_TENANT = "organizations"  # Microsoft works out the tenant from the account 
 TENANT_RE = re.compile(r"^([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}|([a-z0-9-]+\.)+[a-z]{2,})$")
 # A check that started creating the app and never finished (its process died) is given up after this.
 STUCK_AFTER = timedelta(minutes=5)
-INTERRUPTED = ("Setup was interrupted while the app was being created. Before starting again, look in the "
-               "Entra admin centre under App registrations: if an app named \"{name}\" is there with no "
-               "matching connection on this page, delete it.")
+INTERRUPTED = (
+    "Setup was interrupted while the app was being created. Before starting again, look in the "
+    'Entra admin centre under App registrations: if an app named "{name}" is there with no '
+    "matching connection on this page, delete it."
+)
 NO_ANSWER = "Microsoft didn't answer just now. Office Sentry will keep checking."
 
 # Statuses: waiting (for the admin to sign in), working (one check is talking to Microsoft), done, failed.
@@ -64,18 +66,27 @@ def tenant_ref(value: str) -> str | None:
 
 def pending_connection(conn, cloud: str):
     """A connection in ``cloud`` whose certificate was generated but whose app was never saved."""
-    return conn.execute("SELECT * FROM app_connections WHERE client_id IS NULL AND cloud = ? ORDER BY id LIMIT 1",
-                        (cloud,)).fetchone()
+    return conn.execute(
+        "SELECT * FROM app_connections WHERE client_id IS NULL AND cloud = ? ORDER BY id LIMIT 1", (cloud,)
+    ).fetchone()
 
 
 def ready_connection(conn, cloud: str):
     """A connection in ``cloud`` that already has its app."""
-    return conn.execute("SELECT * FROM app_connections WHERE client_id IS NOT NULL AND cloud = ? ORDER BY id LIMIT 1",
-                        (cloud,)).fetchone()
+    return conn.execute(
+        "SELECT * FROM app_connections WHERE client_id IS NOT NULL AND cloud = ? ORDER BY id LIMIT 1", (cloud,)
+    ).fetchone()
 
 
-def register_app(conn, vault, token: str, redirect_uri: str, name: str = DEFAULT_NAME, cloud: str = clouds.DEFAULT,
-                 session: requests.Session | None = None) -> tuple[int, dict]:
+def register_app(
+    conn,
+    vault,
+    token: str,
+    redirect_uri: str,
+    name: str = DEFAULT_NAME,
+    cloud: str = clouds.DEFAULT,
+    session: requests.Session | None = None,
+) -> tuple[int, dict]:
     """Create the multi-tenant read-only app with ``token`` and save it as an app connection.
 
     Reuses the certificate of a connection in the same cloud that's still waiting for its client ID, so
@@ -85,8 +96,14 @@ def register_app(conn, vault, token: str, redirect_uri: str, name: str = DEFAULT
     pending = pending_connection(conn, cloud)
     cert = None if pending else generate_certificate(f"Office Sentry - {name}"[:64])
     try:
-        app = entra.create_app_registration(token, pending["cert_pem"] if pending else cert.cert_pem, redirect_uri,
-                                            display_name=name, session=session, cloud=cloud)
+        app = entra.create_app_registration(
+            token,
+            pending["cert_pem"] if pending else cert.cert_pem,
+            redirect_uri,
+            display_name=name,
+            session=session,
+            cloud=cloud,
+        )
     except requests.RequestException as exc:
         raise entra.SignInError(entra.create_problem(exc)) from exc
     client_id = str(app["appId"]).lower()
@@ -100,12 +117,22 @@ def register_app(conn, vault, token: str, redirect_uri: str, name: str = DEFAULT
 
 
 def current(conn, user_id: int):
-    return conn.execute("SELECT * FROM setup_sign_ins WHERE user_id = ? ORDER BY id DESC LIMIT 1",
-                        (user_id,)).fetchone()
+    return conn.execute(
+        "SELECT * FROM setup_sign_ins WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,)
+    ).fetchone()
 
 
-def start(conn, vault, user_id: int, actor: str, tenant: str = ANY_TENANT, cloud: str = clouds.DEFAULT,
-          name: str = DEFAULT_NAME, session: requests.Session | None = None, now: datetime | None = None):
+def start(
+    conn,
+    vault,
+    user_id: int,
+    actor: str,
+    tenant: str = ANY_TENANT,
+    cloud: str = clouds.DEFAULT,
+    name: str = DEFAULT_NAME,
+    session: requests.Session | None = None,
+    now: datetime | None = None,
+):
     """Get a device code from Microsoft and remember it (encrypted) for this admin. Replaces any earlier one.
     Raises ``entra.SignInError`` if Microsoft won't give one."""
     now = now or datetime.now(UTC)
@@ -115,8 +142,20 @@ def start(conn, vault, user_id: int, actor: str, tenant: str = ANY_TENANT, cloud
         "INSERT INTO setup_sign_ins (user_id, cloud, tenant, name, device_code_enc, user_code, verification_uri,"
         " poll_seconds, expires_at, next_poll_at, status, created_at, updated_at)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?)",
-        (user_id, cloud, tenant, name, vault.encrypt(code.device_code), code.user_code, code.verification_uri,
-         max(code.interval, 1), _iso(now + timedelta(seconds=code.expires_in)), _iso(now), _iso(now), _iso(now)),
+        (
+            user_id,
+            cloud,
+            tenant,
+            name,
+            vault.encrypt(code.device_code),
+            code.user_code,
+            code.verification_uri,
+            max(code.interval, 1),
+            _iso(now + timedelta(seconds=code.expires_in)),
+            _iso(now),
+            _iso(now),
+            _iso(now),
+        ),
     )
     audit(conn, actor, "app_setup_started", detail=cloud if tenant == ANY_TENANT else f"{cloud} {tenant}")
     return current(conn, user_id)
@@ -128,13 +167,22 @@ def cancel(conn, user_id: int) -> None:
 
 
 def _fail(conn, row, message: str, actor: str) -> None:
-    conn.execute("UPDATE setup_sign_ins SET status = 'failed', error = ?, device_code_enc = NULL, updated_at = ?"
-                 " WHERE id = ?", (message, _iso(datetime.now(UTC)), row["id"]))
+    conn.execute(
+        "UPDATE setup_sign_ins SET status = 'failed', error = ?, device_code_enc = NULL, updated_at = ? WHERE id = ?",
+        (message, _iso(datetime.now(UTC)), row["id"]),
+    )
     audit(conn, actor, "app_setup_failed", detail=row["cloud"])
 
 
-def check(conn, vault, user_id: int, actor: str, redirect_uri: str, session: requests.Session | None = None,
-          now: datetime | None = None):
+def check(
+    conn,
+    vault,
+    user_id: int,
+    actor: str,
+    redirect_uri: str,
+    session: requests.Session | None = None,
+    now: datetime | None = None,
+):
     """Take the wizard one step: ask Microsoft once whether the admin has signed in and, when they have,
     create the app. Safe to call as often as the page likes: Microsoft is asked at most once per its
     interval, and only one call at a time (across portal processes) gets to ask. Returns the row."""
@@ -151,19 +199,24 @@ def check(conn, vault, user_id: int, actor: str, redirect_uri: str, session: req
         return current(conn, user_id)
     if row["next_poll_at"] and _parse(row["next_poll_at"]) > now:
         return row
-    claimed = conn.execute("UPDATE setup_sign_ins SET status = 'working', updated_at = ? WHERE id = ?"
-                           " AND status = 'waiting'", (_iso(now), row["id"])).rowcount
+    claimed = conn.execute(
+        "UPDATE setup_sign_ins SET status = 'working', updated_at = ? WHERE id = ? AND status = 'waiting'",
+        (_iso(now), row["id"]),
+    ).rowcount
     if not claimed:
         return current(conn, user_id)  # another check got there first
 
     def wait(seconds: int, note: str | None = None) -> None:
-        conn.execute("UPDATE setup_sign_ins SET status = 'waiting', poll_seconds = ?, next_poll_at = ?, error = ?,"
-                     " updated_at = ? WHERE id = ?",
-                     (seconds, _iso(now + timedelta(seconds=max(seconds - 1, 1))), note, _iso(now), row["id"]))
+        conn.execute(
+            "UPDATE setup_sign_ins SET status = 'waiting', poll_seconds = ?, next_poll_at = ?, error = ?,"
+            " updated_at = ? WHERE id = ?",
+            (seconds, _iso(now + timedelta(seconds=max(seconds - 1, 1))), note, _iso(now), row["id"]),
+        )
 
     try:
-        poll = entra.poll_device_sign_in(vault.decrypt(row["device_code_enc"]), row["tenant"], row["cloud"],
-                                         session=session)
+        poll = entra.poll_device_sign_in(
+            vault.decrypt(row["device_code_enc"]), row["tenant"], row["cloud"], session=session
+        )
     except entra.SignInError as exc:
         _fail(conn, row, str(exc), actor)
         return current(conn, user_id)
@@ -183,7 +236,8 @@ def check(conn, vault, user_id: int, actor: str, redirect_uri: str, session: req
     conn.execute(
         "UPDATE setup_sign_ins SET status = 'done', device_code_enc = NULL, error = NULL, connection_id = ?,"
         " client_id = ?, home_tenant = ?, updated_at = ? WHERE id = ?",
-        (conn_id, str(app["appId"]).lower(), home, _iso(now), row["id"]))
+        (conn_id, str(app["appId"]).lower(), home, _iso(now), row["id"]),
+    )
     audit(conn, actor, "connection_created", detail=f"{row['name']} {app['appId']} {row['cloud']} (setup wizard)")
     return current(conn, user_id)
 
@@ -195,8 +249,9 @@ def seconds_left(row, now: datetime | None = None) -> int:
 def prune(conn, now: datetime | None = None) -> int:
     """Daily (``worker.prune``): erase device codes nobody came back for, and forget sign-ins over a day old."""
     now = now or datetime.now(UTC)
-    conn.execute("UPDATE setup_sign_ins SET device_code_enc = NULL, status = 'failed', error = ?"
-                 " WHERE status IN ('waiting', 'working') AND expires_at <= ?",
-                 (entra.SIGN_IN_PROBLEMS["expired_token"], _iso(now)))
-    return conn.execute("DELETE FROM setup_sign_ins WHERE updated_at < ?",
-                        (_iso(now - timedelta(days=1)),)).rowcount
+    conn.execute(
+        "UPDATE setup_sign_ins SET device_code_enc = NULL, status = 'failed', error = ?"
+        " WHERE status IN ('waiting', 'working') AND expires_at <= ?",
+        (entra.SIGN_IN_PROBLEMS["expired_token"], _iso(now)),
+    )
+    return conn.execute("DELETE FROM setup_sign_ins WHERE updated_at < ?", (_iso(now - timedelta(days=1)),)).rowcount

@@ -31,14 +31,37 @@ from tests.seed import seed_tenant
 from tests.test_collectors import USERS
 
 # URL arguments that identify a tenant or something it owns. Each must be refused for an ungranted tenant.
-TENANT_ARGS = {"tenant_id", "run_id", "finding_id", "schedule_id", "alert_id", "contact_id", "delivery_id",
-               "report_id", "action_id", "note_id"}
+TENANT_ARGS = {
+    "tenant_id",
+    "run_id",
+    "finding_id",
+    "schedule_id",
+    "alert_id",
+    "contact_id",
+    "delivery_id",
+    "report_id",
+    "action_id",
+    "note_id",
+}
 # URL arguments that don't: names (report keys, table slugs, a month, a file extension, a static file),
 # a person's account inside a tenant (only ever with tenant_id), and objects that belong to Office Sentry
 # itself (portal users, app connections, report plans, sign-in sessions, someone's own saved views, tenant
 # groups, which are admin-only), and flags a route sets itself (``resolved`` on the findings downloads).
-OTHER_ARGS = {"key", "table", "ext", "filename", "period", "user_id", "conn_id", "plan_id", "session_id", "view_id",
-              "resolved", "group_id", "design_id"}
+OTHER_ARGS = {
+    "key",
+    "table",
+    "ext",
+    "filename",
+    "period",
+    "user_id",
+    "conn_id",
+    "plan_id",
+    "session_id",
+    "view_id",
+    "resolved",
+    "group_id",
+    "design_id",
+}
 # Who is signed in for the walk. Each sees only tenant A.
 ROLES = ["analyst", "client", "analyst-by-group", "client-with-group"]
 REFUSED = (400, 403, 404)
@@ -59,21 +82,35 @@ def world(app, db, connection_id):
     ids["finding_id"] = db.execute("SELECT MAX(id) FROM findings WHERE tenant_id = ?", (bravo,)).fetchone()[0]
     ids["schedule_id"] = db.execute(
         "INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, timezone, created_at)"
-        " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, 'UTC', ?)", (bravo, now)).lastrowid
-    ids["alert_id"] = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at) VALUES (?, 'high', ?)",
-                                 (bravo, now)).lastrowid
+        " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, 'UTC', ?)",
+        (bravo, now),
+    ).lastrowid
+    ids["alert_id"] = db.execute(
+        "INSERT INTO email_alerts (tenant_id, min_severity, created_at) VALUES (?, 'high', ?)", (bravo, now)
+    ).lastrowid
     ids["contact_id"] = delivery.add_contact(db, bravo, "Bravo IT", "it@bravo.example")
     ids["delivery_id"] = db.execute(
         "INSERT INTO email_deliveries (kind, schedule_id, tenant_id, subject, recipients, status, error, created_at)"
         " VALUES ('report', ?, ?, 'Monthly', 'it@bravo.example', 'failed', 'x', ?)",
-        (ids["schedule_id"], bravo, now)).lastrowid
-    ids["report_id"] = issued.archive(db, bravo, [issued.IssuedFile("review", "Monthly review", "bravo.pdf",
-                                                                     "application/pdf", b"%PDF-1 bravo")],
-                                      period="2026-09", trigger="manual", user="x")[0]
-    ids["action_id"] = db.execute("INSERT INTO report_actions (tenant_id, title, created_at, updated_at)"
-                                  " VALUES (?, 'Bravo action', ?, ?)", (bravo, now, now)).lastrowid
-    ids["note_id"] = db.execute("INSERT INTO finding_notes (tenant_id, rule_key, body, visibility, created_at)"
-                                " VALUES (?, 'admin_mfa', 'Bravo note', 'staff', ?)", (bravo, now)).lastrowid
+        (ids["schedule_id"], bravo, now),
+    ).lastrowid
+    ids["report_id"] = issued.archive(
+        db,
+        bravo,
+        [issued.IssuedFile("review", "Monthly review", "bravo.pdf", "application/pdf", b"%PDF-1 bravo")],
+        period="2026-09",
+        trigger="manual",
+        user="x",
+    )[0]
+    ids["action_id"] = db.execute(
+        "INSERT INTO report_actions (tenant_id, title, created_at, updated_at) VALUES (?, 'Bravo action', ?, ?)",
+        (bravo, now, now),
+    ).lastrowid
+    ids["note_id"] = db.execute(
+        "INSERT INTO finding_notes (tenant_id, rule_key, body, visibility, created_at)"
+        " VALUES (?, 'admin_mfa', 'Bravo note', 'staff', ?)",
+        (bravo, now),
+    ).lastrowid
     ids["design_id"] = designs.create(db, "Walk design", "test", designs.STARTERS["executive"][2])
     for name, tenant in (("Alpha group", alpha), ("Bravo group", bravo)):
         group = tenant_groups.create(db, {"name": name, "category": "", "description": ""}, "test")
@@ -105,12 +142,18 @@ def _url(rule, ids: dict) -> str:
         key = CATALOG[0].key
     else:
         key = next(iter(REPORTS))
-    names = {"key": key, "period": datetime.now(UTC).strftime("%Y-%m"), "ext": "csv", "table": "x",
-             "user_id": USERS[0]["id"]}
+    names = {
+        "key": key,
+        "period": datetime.now(UTC).strftime("%Y-%m"),
+        "ext": "csv",
+        "table": "x",
+        "user_id": USERS[0]["id"],
+    }
 
     def value(m):
         name = m.group(1)
         return str(ids.get(name, names.get(name, "1")))
+
     return re.sub(r"<(?:\w+:)?(\w+)>", value, rule.rule)
 
 
@@ -120,8 +163,10 @@ def _tenant_rules(app):
 
 def test_every_route_argument_is_classified(app):
     unknown = {arg for rule in app.url_map.iter_rules() for arg in rule.arguments} - TENANT_ARGS - OTHER_ARGS
-    assert not unknown, (f"New URL argument(s) {sorted(unknown)}: add each to TENANT_ARGS if it identifies a tenant "
-                         "or something a tenant owns (then the walk below checks it), else to OTHER_ARGS")
+    assert not unknown, (
+        f"New URL argument(s) {sorted(unknown)}: add each to TENANT_ARGS if it identifies a tenant "
+        "or something a tenant owns (then the walk below checks it), else to OTHER_ARGS"
+    )
 
 
 def test_the_walk_opens_real_pages(app, client, db, world):
@@ -167,8 +212,11 @@ def test_lists_and_rollups_never_mention_an_ungranted_tenant(app, client, db, wo
     if pick:  # the group picker remembers a choice; asking for B's group must not bring B in
         client.get(f"/?group={ids[pick]}")
     period = datetime.now(UTC).strftime("%Y-%m")
-    urls = [r.rule for r in app.url_map.iter_rules()
-            if not r.arguments and "GET" in r.methods and r.endpoint not in SKIP_LISTS]
+    urls = [
+        r.rule
+        for r in app.url_map.iter_rules()
+        if not r.arguments and "GET" in r.methods and r.endpoint not in SKIP_LISTS
+    ]
     urls += ["/search?q=a", "/search?q=Bravo", f"/reporting/{period}"]
     urls += [f"/across/{key}" for key in REPORTS] + [f"/across/{key}.csv" for key in list(REPORTS)[:5]]
     seen = 0

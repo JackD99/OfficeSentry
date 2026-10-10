@@ -38,9 +38,11 @@ def test_overview_without_data_says_so_once(client, db, two_tenants):
 
 
 def test_rollup_figures_line_up_with_numbers():
-    rows = [RollupRow({"id": 1}, values={"a": "1 of 3", "b": "Yes", "c": "3.0 GB", "d": "42%"}),
-            RollupRow({"id": 2}, values={"a": "0 of 0", "b": "No", "c": "", "d": "7%"}),
-            RollupRow({"id": 3}, note="No data")]
+    rows = [
+        RollupRow({"id": 1}, values={"a": "1 of 3", "b": "Yes", "c": "3.0 GB", "d": "42%"}),
+        RollupRow({"id": 2}, values={"a": "0 of 0", "b": "No", "c": "", "d": "7%"}),
+        RollupRow({"id": 3}, note="No data"),
+    ]
     rollup = SimpleNamespace(columns=[Column(k, k, "text") for k in "abcd"] + [Column("n", "n")], rows=rows)
     assert figure_columns(rollup) == {"a", "c", "d"}
 
@@ -57,8 +59,10 @@ def test_schedule_form_folds_detail_reports_by_group(client, db, two_tenants):
         assert f'value="data:{key}"' in page
     assert "Add a contact at Alpha Ltd" in page
     # A group with a chosen report opens and says so.
-    page = client.post(f"/tenants/{alpha}/schedules/new", data={
-        "reports": ["data:mailboxes"], "frequency": "monthly", "day_of_month": "1", "hour": "8"}).get_data(as_text=True)
+    page = client.post(
+        f"/tenants/{alpha}/schedules/new",
+        data={"reports": ["data:mailboxes"], "frequency": "monthly", "day_of_month": "1", "hour": "8"},
+    ).get_data(as_text=True)
     assert '<details class="report-choices" open>' in page and "1 chosen" in page
 
 

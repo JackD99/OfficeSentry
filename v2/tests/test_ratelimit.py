@@ -93,15 +93,17 @@ def test_claims_follow_the_catalogue():
     assert keys == ["signin_activity|app1", "directory|app1|t1", "graph|app1"]
     assert ratelimit.claims(users, "app1", "t1")[1].cost == 2  # GET users is 2 directory resource units
     report = endpoints.graph(f"{GRAPH_ROOT}/beta/reports/getM365AppUserDetail(period='D30')")
-    assert [c.key for c in ratelimit.claims(report, "a", "t")][0] == \
-        "usage_reports|a|t|/reports/getM365AppUserDetail(period={period})"  # each report API has its own
+    assert [c.key for c in ratelimit.claims(report, "a", "t")][
+        0
+    ] == "usage_reports|a|t|/reports/getM365AppUserDetail(period={period})"  # each report API has its own
     # A 429 pauses the endpoint's own buckets; x-ms-throttle-scope picks app-wide or per-tenant ones.
     logs = ratelimit.claims(endpoints.graph(SIGN_INS), "a", "t")
     assert ratelimit.to_pause(logs) == ["identity_reports_tenant|a|t", "identity_reports|a"]
     assert ratelimit.to_pause(logs, "Tenant_Application/ReadWrite/a/t") == ["identity_reports_tenant|a|t"]
     assert ratelimit.to_pause(logs, "Application/ReadWrite/a") == ["identity_reports|a"]
-    assert ratelimit.to_pause(ratelimit.claims(endpoints.graph(f"{GRAPH_ROOT}/v1.0/groups"), "a", "t")) == \
-        ["directory|a|t"]  # never Graph's general bucket, which every tenant shares
+    assert ratelimit.to_pause(ratelimit.claims(endpoints.graph(f"{GRAPH_ROOT}/v1.0/groups"), "a", "t")) == [
+        "directory|a|t"
+    ]  # never Graph's general bucket, which every tenant shares
 
 
 # -- Several worker threads against simulated Graph -----------------------------------------
@@ -130,8 +132,9 @@ def test_threads_share_the_app_wide_limit(monkeypatch):
     limiter = Limiter()
     times = []
     with responses.RequestsMock() as rsps:
-        rsps.add_callback(responses.GET, USERS,
-                          callback=lambda req: (times.append(time.monotonic()), (200, {}, '{"value": []}'))[1])
+        rsps.add_callback(
+            responses.GET, USERS, callback=lambda req: (times.append(time.monotonic()), (200, {}, '{"value": []}'))[1]
+        )
 
         def collect(i):
             graph = GraphClient(lambda: "t", limiter=limiter, app="app", tenant=f"tenant{i}")
@@ -279,9 +282,14 @@ def test_every_run_records_its_requests(db, two_tenants):
     assert (users["requests"], users["throttled"], users["wait_seconds"]) == (1, 0, 0)
     rows = db.execute("SELECT * FROM run_requests WHERE run_id = ?", (users["id"],)).fetchall()
     assert [(r["endpoint"], r["throttle_limit"], r["calls"], r["units"]) for r in rows] == [
-        ("v1.0 /users (signInActivity)", "signin_activity", 1, 2)]
-    assert db.execute("SELECT requests FROM runs WHERE collector = 'domain_health' AND tenant_id = ?",
-                      (alpha,)).fetchone()[0] == 0  # DNS only: nothing asked of Microsoft
+        ("v1.0 /users (signInActivity)", "signin_activity", 1, 2)
+    ]
+    assert (
+        db.execute(
+            "SELECT requests FROM runs WHERE collector = 'domain_health' AND tenant_id = ?", (alpha,)
+        ).fetchone()[0]
+        == 0
+    )  # DNS only: nothing asked of Microsoft
     # Every Microsoft call any collector made is in the endpoint catalogue.
     catalogued = {e.key(v) for e in endpoints.GRAPH for v in e.versions} | {e.key() for e in endpoints.EXCHANGE}
     made = {r[0] for r in db.execute("SELECT DISTINCT endpoint FROM run_requests")}
@@ -316,8 +324,9 @@ def test_run_page_shows_requests(client, db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     run = db.execute("SELECT id FROM runs WHERE tenant_id = ? AND collector = 'sign_ins'", (alpha,)).fetchone()
-    db.execute("UPDATE run_requests SET throttled = 2, retry_wait = 95, throttle_pct = 0.85 WHERE run_id = ?",
-               (run["id"],))
+    db.execute(
+        "UPDATE run_requests SET throttled = 2, retry_wait = 95, throttle_pct = 0.85 WHERE run_id = ?", (run["id"],)
+    )
     db.execute("UPDATE runs SET throttled = 2, wait_seconds = 95 WHERE id = ?", (run["id"],))
     make_user(db, "ann", "admin", all_tenants=True)
     login(client, "ann")
@@ -340,8 +349,9 @@ def test_request_rows_are_pruned_with_the_run_log(db, two_tenants):
     assert db.execute("SELECT COUNT(*) FROM run_requests").fetchone()[0] > 0
     store.prune_run_logs(db, now=later)
     assert db.execute("SELECT COUNT(*) FROM run_requests").fetchone()[0] == 0
-    assert db.execute("SELECT COUNT(*) FROM runs WHERE requests IS NULL AND tenant_id = ?",
-                      (alpha,)).fetchone()[0] == 0  # the totals stay on the run
+    assert (
+        db.execute("SELECT COUNT(*) FROM runs WHERE requests IS NULL AND tenant_id = ?", (alpha,)).fetchone()[0] == 0
+    )  # the totals stay on the run
 
 
 def test_telemetry_totals_round_waits():

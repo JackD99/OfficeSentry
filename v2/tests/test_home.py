@@ -15,21 +15,34 @@ ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 def _finding(db, tenant_id, rule_key="mfa_registration", severity="high", age=timedelta(hours=2), **extra):
     seen = (datetime.now(UTC) - age).strftime(ISO)
-    db.execute("INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen, last_seen,"
-               " accepted_at, accepted_until) VALUES (?, ?, ?, ?, 'someone', '', ?, ?, ?, ?)",
-               (tenant_id, rule_key, f"obj-{rule_key}-{severity}-{age}", severity, seen, seen,
-                extra.get("accepted_at"), extra.get("accepted_until")))
+    db.execute(
+        "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen, last_seen,"
+        " accepted_at, accepted_until) VALUES (?, ?, ?, ?, 'someone', '', ?, ?, ?, ?)",
+        (
+            tenant_id,
+            rule_key,
+            f"obj-{rule_key}-{severity}-{age}",
+            severity,
+            seen,
+            seen,
+            extra.get("accepted_at"),
+            extra.get("accepted_until"),
+        ),
+    )
 
 
 def test_today_sentence_leads_with_the_answer():
     since = datetime.now(UTC)
     quiet = home.Today([], 12, 0, 0, 0, 0, 0, 0, since)
-    assert quiet.sentence() == ("Nothing needs you today. All 12 clients are collecting, with no new critical or high"
-                                " findings and nothing due this week.")
+    assert quiet.sentence() == (
+        "Nothing needs you today. All 12 clients are collecting, with no new critical or high"
+        " findings and nothing due this week."
+    )
     rows = [home.TodayRow({"name": "A"}), home.TodayRow({"name": "B"}), home.TodayRow({"name": "C"})]
     busy = home.Today(rows, 12, 2, 1, 1, 0, 0, 4, since)
-    assert busy.sentence() == ("3 clients need you today: 2 new critical or high findings, 1 failed collection"
-                               " and 4 things due this week.")
+    assert busy.sentence() == (
+        "3 clients need you today: 2 new critical or high findings, 1 failed collection and 4 things due this week."
+    )
     one = home.Today(rows[:1], 1, 1, 0, 0, 0, 0, 0, since)
     assert one.sentence() == "1 client needs you today: 1 new high finding."
     assert home.Today([], 0, 0, 0, 0, 0, 0, 0, since).sentence() == "No active clients to look after yet."
@@ -84,15 +97,21 @@ def test_clients_page_with_data(client, db, two_tenants):
 
 
 def test_clients_sentence():
-    rows = [home.ClientRow({"name": "A"}, 1240.0, None, 2, "draft", False, 3, 1, 50.0),
-            home.ClientRow({"name": "B"}, 0.0, None, 0, "sent", False, 0, 0, None)]
+    rows = [
+        home.ClientRow({"name": "A"}, 1240.0, None, 2, "draft", False, 3, 1, 50.0),
+        home.ClientRow({"name": "B"}, 0.0, None, 0, "sent", False, 0, 0, None),
+    ]
     data = home.Clients(rows, "GBP", "2026-10", "October 2026", 2)
-    assert data.sentence(lambda v: f"£{v:,.0f}") == ("£1,240 a month of licence waste across 1 client; 2 renewals in"
-                                                    " the next 30 days; 1 report to approve for October 2026.")
-    unpriced = home.Clients([home.ClientRow({"name": "A"}, None, None, 0, None, False, 0, 0, None)], "GBP",
-                            "2026-10", "October 2026", 0)
-    assert unpriced.sentence(str) == ("Licence waste isn't counted until licence prices are set; no renewals in the"
-                                      " next 30 days.")
+    assert data.sentence(lambda v: f"£{v:,.0f}") == (
+        "£1,240 a month of licence waste across 1 client; 2 renewals in"
+        " the next 30 days; 1 report to approve for October 2026."
+    )
+    unpriced = home.Clients(
+        [home.ClientRow({"name": "A"}, None, None, 0, None, False, 0, 0, None)], "GBP", "2026-10", "October 2026", 0
+    )
+    assert unpriced.sentence(str) == (
+        "Licence waste isn't counted until licence prices are set; no renewals in the next 30 days."
+    )
 
 
 @pytest.mark.parametrize("path", ["/today", "/clients"])

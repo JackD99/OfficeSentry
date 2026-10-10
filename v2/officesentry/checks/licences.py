@@ -13,10 +13,14 @@ from .base import Finding, _label, _unavailable, rule
 TRIAL_DAYS = 30
 
 
-@rule("licence_assignment_errors", "Every licence assignment works", "Licences",
-      "Fix each failed licence from the group's Licenses page in the Entra admin center: buy more licences when "
-      "there aren't enough, remove licences that conflict, and correct usage locations. The Licences and "
-      "subscriptions report explains each error.")
+@rule(
+    "licence_assignment_errors",
+    "Every licence assignment works",
+    "Licences",
+    "Fix each failed licence from the group's Licenses page in the Entra admin center: buy more licences when "
+    "there aren't enough, remove licences that conflict, and correct usage locations. The Licences and "
+    "subscriptions report explains each error.",
+)
 def licence_assignment_errors(snap: TenantSnapshot, now: datetime):
     users = snap.objects("users", "user")
     if users is None:
@@ -33,20 +37,28 @@ def licence_assignment_errors(snap: TenantSnapshot, now: datetime):
                 meaning, _ = assignment_error(e.code)
                 source = f" from {groups.get(e.group) or 'a group'}" if e.group else ""
                 outcome = "only partly works" if e.active else "wasn't assigned"
-                findings.append(Finding("low" if e.active else "medium", _label(u),
-                                        f"{sku_name(skus.get(sid)) if skus.get(sid) else 'A licence'}{source} "
-                                        f"{outcome}. {meaning}.", u["_id"]))
+                findings.append(
+                    Finding(
+                        "low" if e.active else "medium",
+                        _label(u),
+                        f"{sku_name(skus.get(sid)) if skus.get(sid) else 'A licence'}{source} {outcome}. {meaning}.",
+                        u["_id"],
+                    )
+                )
     if not findings:
         return ("pass", "Every licence assignment worked", [])
     people = len({f.object_id for f in findings})
-    return ("fail", f"{plural(len(findings), 'licence assignment')} failed for {plural(people, 'account')}",
-            findings)
+    return ("fail", f"{plural(len(findings), 'licence assignment')} failed for {plural(people, 'account')}", findings)
 
 
-@rule("subscriptions_lapsing", "No subscriptions are about to lapse", "Licences",
-      "Renew subscriptions in their grace period, buy or cancel trials people use before they end, and move people "
-      "off suspended subscriptions. Billing > Your products in the Microsoft 365 admin center (or Partner Center for "
-      "subscriptions you sell) shows each one.")
+@rule(
+    "subscriptions_lapsing",
+    "No subscriptions are about to lapse",
+    "Licences",
+    "Renew subscriptions in their grace period, buy or cancel trials people use before they end, and move people "
+    "off suspended subscriptions. Billing > Your products in the Microsoft 365 admin center (or Partner Center for "
+    "subscriptions you sell) shows each one.",
+)
 def subscriptions_lapsing(snap: TenantSnapshot, now: datetime):
     skus = snap.objects("tenant_profile", "subscribed_sku")
     if skus is None:
@@ -70,17 +82,33 @@ def subscriptions_lapsing(snap: TenantSnapshot, now: datetime):
         total = s.get("totalLicenses") if isinstance(s.get("totalLicenses"), int) else 0
         state = s.get("status")
         if state == "Warning":
-            findings.append(Finding("high", name, f"Expired and in its grace period: {plural(total, 'licence')} "
-                                                  f"stop working{on} unless it's renewed", s["_id"]))
+            findings.append(
+                Finding(
+                    "high",
+                    name,
+                    f"Expired and in its grace period: {plural(total, 'licence')} stop working{on} unless it's renewed",
+                    s["_id"],
+                )
+            )
         elif state in ("Suspended", "LockedOut") and used > working:
-            findings.append(Finding("high", name, f"{'Suspended' if state == 'Suspended' else 'Locked out'}, yet "
-                                                  f"assigned to {plural(used - working, 'account')} that can't use it",
-                                    s["_id"]))
-        elif state == "Enabled" and s.get("isTrial") is True and used and when \
-                and (when - now).days <= TRIAL_DAYS:
-            findings.append(Finding("medium", name, f"Trial ends{on} and {plural(used, 'account')} "
-                                                    f"{'uses' if used == 1 else 'use'} it", s["_id"]))
+            findings.append(
+                Finding(
+                    "high",
+                    name,
+                    f"{'Suspended' if state == 'Suspended' else 'Locked out'}, yet "
+                    f"assigned to {plural(used - working, 'account')} that can't use it",
+                    s["_id"],
+                )
+            )
+        elif state == "Enabled" and s.get("isTrial") is True and used and when and (when - now).days <= TRIAL_DAYS:
+            findings.append(
+                Finding(
+                    "medium",
+                    name,
+                    f"Trial ends{on} and {plural(used, 'account')} {'uses' if used == 1 else 'use'} it",
+                    s["_id"],
+                )
+            )
     if findings:
         return ("fail", f"{plural(len(findings), 'subscription')} about to lapse or already lapsed", findings)
-    return ("pass", f"{plural(len(subs), 'subscription')} checked; none is lapsing" if subs else "No subscriptions",
-            [])
+    return ("pass", f"{plural(len(subs), 'subscription')} checked; none is lapsing" if subs else "No subscriptions", [])

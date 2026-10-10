@@ -16,28 +16,58 @@ from tests.test_collectors import SKUS, USERS
 
 KEY = "mailbox-holds"
 # A shared mailbox converted from a person who has left: their account has signed in before.
-OLD_USER = {"id": "u8", "displayName": "Old", "userPrincipalName": "old@x.com", "userType": "Member",
-            "accountEnabled": True, "assignedLicenses": [], "licenseAssignmentStates": [],
-            "signInActivity": {"lastSignInDateTime": "2026-03-01T09:00:00Z"}}
+OLD_USER = {
+    "id": "u8",
+    "displayName": "Old",
+    "userPrincipalName": "old@x.com",
+    "userType": "Member",
+    "accountEnabled": True,
+    "assignedLicenses": [],
+    "licenseAssignmentStates": [],
+    "signInActivity": {"lastSignInDateTime": "2026-03-01T09:00:00Z"},
+}
 
 
 def _exchange():
     data = copy.deepcopy(gd.EXCHANGE)
     ann, info = data["Get-Mailbox"]
     # Ann: 48 GB of a 49.5 GB quota and no archive.
-    ann.update({"ProhibitSendQuota": "49.5 GB (53,150,220,288 bytes)", "ArchiveStatus": "None",
-                "LitigationHoldEnabled": False})
+    ann.update(
+        {"ProhibitSendQuota": "49.5 GB (53,150,220,288 bytes)", "ArchiveStatus": "None", "LitigationHoldEnabled": False}
+    )
     info.update({"ProhibitSendQuota": "Unlimited", "ArchiveStatus": "None", "LitigationHoldEnabled": True})
     data["Get-Mailbox"] += [
         # Bob has left (sign-in blocked); his mailbox has an archive but no hold.
-        {"ExternalDirectoryObjectId": "u2", "Guid": "g-u2", "UserPrincipalName": "bob@x.com",
-         "PrimarySmtpAddress": "bob@x.com", "DisplayName": "Bob", "RecipientTypeDetails": "UserMailbox",
-         "GrantSendOnBehalfTo": [], "ArchiveStatus": "Active", "LitigationHoldEnabled": False},
-        {"ExternalDirectoryObjectId": "u8", "Guid": "g-u8", "UserPrincipalName": "old@x.com",
-         "PrimarySmtpAddress": "old@x.com", "DisplayName": "Old", "RecipientTypeDetails": "SharedMailbox",
-         "GrantSendOnBehalfTo": [], "ArchiveStatus": "None", "LitigationHoldEnabled": False},
-        {"ExternalDirectoryObjectId": "", "Guid": "g-disc", "PrimarySmtpAddress": "DiscoverySearchMailbox@x.com",
-         "Name": "DiscoverySearchMailbox", "RecipientTypeDetails": "DiscoveryMailbox", "GrantSendOnBehalfTo": []},
+        {
+            "ExternalDirectoryObjectId": "u2",
+            "Guid": "g-u2",
+            "UserPrincipalName": "bob@x.com",
+            "PrimarySmtpAddress": "bob@x.com",
+            "DisplayName": "Bob",
+            "RecipientTypeDetails": "UserMailbox",
+            "GrantSendOnBehalfTo": [],
+            "ArchiveStatus": "Active",
+            "LitigationHoldEnabled": False,
+        },
+        {
+            "ExternalDirectoryObjectId": "u8",
+            "Guid": "g-u8",
+            "UserPrincipalName": "old@x.com",
+            "PrimarySmtpAddress": "old@x.com",
+            "DisplayName": "Old",
+            "RecipientTypeDetails": "SharedMailbox",
+            "GrantSendOnBehalfTo": [],
+            "ArchiveStatus": "None",
+            "LitigationHoldEnabled": False,
+        },
+        {
+            "ExternalDirectoryObjectId": "",
+            "Guid": "g-disc",
+            "PrimarySmtpAddress": "DiscoverySearchMailbox@x.com",
+            "Name": "DiscoverySearchMailbox",
+            "RecipientTypeDetails": "DiscoveryMailbox",
+            "GrantSendOnBehalfTo": [],
+        },
     ]
     data["Get-MailboxStatistics"] = {
         "g-u1": [{"TotalItemSize": "48 GB (51,539,607,552 bytes)", "ItemCount": 90000}],

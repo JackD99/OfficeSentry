@@ -137,8 +137,9 @@ class GraphClient:
         self._jitter = jitter
 
     @classmethod
-    def from_certificate(cls, tenant_ref: str, client_id: str, key_pem: str,
-                         thumbprint: str, cloud: str | None = None, **kwargs) -> GraphClient:
+    def from_certificate(
+        cls, tenant_ref: str, client_id: str, key_pem: str, thumbprint: str, cloud: str | None = None, **kwargs
+    ) -> GraphClient:
         from .msauth import TokenError, shared_certificate_token_provider
 
         root = clouds.get(cloud).graph
@@ -166,15 +167,12 @@ class GraphClient:
         if not path.startswith("/"):
             raise ValueError(f"Graph path must start with '/': {path!r}")
         if path.split("/")[1] in VERSIONS:
-            raise ValueError(
-                f"Graph path {path!r} includes the API version; pass version= instead"
-            )
+            raise ValueError(f"Graph path {path!r} includes the API version; pass version= instead")
         return f"{root}/{version}{path}"
 
     # -- Requests ----------------------------------------------------------
 
-    def _get(self, url: str, params: dict | None, headers: dict | None,
-             transient_retries: int | None = None) -> dict:
+    def _get(self, url: str, params: dict | None, headers: dict | None, transient_retries: int | None = None) -> dict:
         # Timeouts and server errors get ``transient_retries`` (when a caller has a cheaper fallback, such as
         # asking for less); throttling (429) always gets the full count, since asking again sooner won't help.
         limit = self._max_retries if transient_retries is None else min(transient_retries, self._max_retries)
@@ -184,8 +182,11 @@ class GraphClient:
         attempt = failures = 0
         while True:
             waited = self.limiter.acquire(taken) if self.limiter else 0.0
-            hdrs = {"Authorization": f"Bearer {self._token_provider()}", "Accept": "application/json",
-                    "User-Agent": USER_AGENT}
+            hdrs = {
+                "Authorization": f"Bearer {self._token_provider()}",
+                "Accept": "application/json",
+                "User-Agent": USER_AGENT,
+            }
             if headers:
                 hdrs.update(headers)
             try:
@@ -202,11 +203,13 @@ class GraphClient:
                 continue
 
             throttled = resp.status_code == 429
-            retry = resp.status_code in RETRY_STATUSES and attempt < self._max_retries and \
-                (throttled or failures < limit)
+            retry = (
+                resp.status_code in RETRY_STATUSES and attempt < self._max_retries and (throttled or failures < limit)
+            )
             delay = self._retry_after(resp, attempt) if retry else 0.0
-            self.telemetry.request(key, endpoint, status=resp.status_code, limiter_wait=waited, retry_wait=delay,
-                                   headers=resp.headers)
+            self.telemetry.request(
+                key, endpoint, status=resp.status_code, limiter_wait=waited, retry_wait=delay, headers=resp.headers
+            )
             if retry:
                 failures += not throttled
                 log.info("Graph %s on %s; retrying in %ss", resp.status_code, url, delay)
@@ -222,7 +225,7 @@ class GraphClient:
 
     def _backoff(self, attempt: int) -> float:
         """Exponential backoff with "equal jitter": between half and all of 2**attempt (max 60s)."""
-        base = float(min(2 ** attempt, 60))
+        base = float(min(2**attempt, 60))
         return base / 2 + self._jitter() * base / 2
 
     def _retry_after(self, resp: requests.Response, attempt: int) -> float:
@@ -240,13 +243,27 @@ class GraphClient:
             return self._backoff(attempt)
         return min(max(seconds, 0.0), MAX_RETRY_AFTER) + self._jitter()
 
-    def get(self, path: str, params: dict | None = None, *, version: str = "v1.0",
-            headers: dict | None = None, transient_retries: int | None = None) -> dict:
+    def get(
+        self,
+        path: str,
+        params: dict | None = None,
+        *,
+        version: str = "v1.0",
+        headers: dict | None = None,
+        transient_retries: int | None = None,
+    ) -> dict:
         return self._get(self.build_url(path, version, self.root), params, headers, transient_retries)
 
-    def get_all(self, path: str, params: dict | None = None, *, version: str = "v1.0",
-                headers: dict | None = None, max_pages: int = 1000,
-                transient_retries: int | None = None) -> PagedResult:
+    def get_all(
+        self,
+        path: str,
+        params: dict | None = None,
+        *,
+        version: str = "v1.0",
+        headers: dict | None = None,
+        max_pages: int = 1000,
+        transient_retries: int | None = None,
+    ) -> PagedResult:
         """Follow ``@odata.nextLink`` and return every item of ``value``."""
         result = PagedResult()
         url: str | None = self.build_url(path, version, self.root)
@@ -256,8 +273,9 @@ class GraphClient:
                 result.truncated = True
                 log.warning("Stopped paging %s after %s pages", path, max_pages)
                 break
-            data = self._get(self.build_url(url, version, self.root), params if first else None, headers,
-                             transient_retries)
+            data = self._get(
+                self.build_url(url, version, self.root), params if first else None, headers, transient_retries
+            )
             first = False
             result.items.extend(data.get("value", []))
             result.pages += 1

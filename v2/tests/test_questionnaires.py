@@ -15,9 +15,41 @@ from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
 # Every Cyber Essentials question number used, as printed in IASME's Danzell booklet (version 16, April 2026).
-DANZELL = {"A2.4.2", "A2.6", "A2.8", "A2.9", "A4.1", "A4.1.1", "A4.2", "A4.6", "A4.7", "A4.9", "A5.1", "A5.2",
-           "A5.3", "A5.8", "A5.9", "A6.1", "A6.4", "A6.5", "A7.1", "A7.2", "A7.3", "A7.4", "A7.5", "A7.6", "A7.7",
-           "A7.8", "A7.9", "A7.10", "A7.13", "A7.14", "A7.16", "A7.17", "A8.1"}
+DANZELL = {
+    "A2.4.2",
+    "A2.6",
+    "A2.8",
+    "A2.9",
+    "A4.1",
+    "A4.1.1",
+    "A4.2",
+    "A4.6",
+    "A4.7",
+    "A4.9",
+    "A5.1",
+    "A5.2",
+    "A5.3",
+    "A5.8",
+    "A5.9",
+    "A6.1",
+    "A6.4",
+    "A6.5",
+    "A7.1",
+    "A7.2",
+    "A7.3",
+    "A7.4",
+    "A7.5",
+    "A7.6",
+    "A7.7",
+    "A7.8",
+    "A7.9",
+    "A7.10",
+    "A7.13",
+    "A7.14",
+    "A7.16",
+    "A7.17",
+    "A8.1",
+}
 
 
 def _sheet(db, tenant_id, key):
@@ -46,11 +78,17 @@ def test_every_question_names_a_topic_and_every_gap_has_a_template():
 
 def test_a_set_is_checked_when_registered():
     part = questionnaires.Part("Access", (questionnaires.Item("mfa_remote", "MFA?", ref="1"),))
-    for bad, why in ((questionnaires.QuestionSet("insurance", "T", "T", "I", (part,)), "already exists"),
-                     (questionnaires.QuestionSet("controls", "T", "T", "I", (part,)), "already exists"),
-                     (questionnaires.QuestionSet("x", "T", "T", "I", (questionnaires.Part(
-                         "P", (questionnaires.Item("nope", "Q?"),)),)), "unknown topics: nope"),
-                     (questionnaires.QuestionSet("x", "T", "T", "I", (part, part)), "repeats")):
+    for bad, why in (
+        (questionnaires.QuestionSet("insurance", "T", "T", "I", (part,)), "already exists"),
+        (questionnaires.QuestionSet("controls", "T", "T", "I", (part,)), "already exists"),
+        (
+            questionnaires.QuestionSet(
+                "x", "T", "T", "I", (questionnaires.Part("P", (questionnaires.Item("nope", "Q?"),)),)
+            ),
+            "unknown topics: nope",
+        ),
+        (questionnaires.QuestionSet("x", "T", "T", "I", (part, part)), "repeats"),
+    ):
         try:
             questionnaires.register(bad)
         except ValueError as e:
@@ -79,8 +117,9 @@ def test_answers_from_seeded_data(db, two_tenants):
     backups = ins["backups"]
     assert backups.state == INPUT and backups.tone == "input" and "[backup product or provider]" in backups.answer.text
     assert backups.answer.blanks and backups.based_on.startswith("Backups aren't visible")
-    assert any(blank for _, blank in backups.segments) and "".join(t for t, _ in backups.segments) == \
-        backups.answer.text
+    assert (
+        any(blank for _, blank in backups.segments) and "".join(t for t, _ in backups.segments) == backups.answer.text
+    )
     assert "Exchange Online Protection" in ins["email_filtering"].answer.text
 
     ce = _rows(db, alpha, "cyber-essentials")
@@ -155,10 +194,13 @@ def test_pages_for_staff_and_clients(client, db, two_tenants):
     assert "Write this answer for Alpha Ltd" in only_input and "Change this answer" not in only_input
     # An unknown set shows the insurance one.
     assert "Is endpoint detection and response" in client.get(f"/tenants/{alpha}/evidence?set=nope").get_data(
-        as_text=True)
+        as_text=True
+    )
 
-    resp = client.post(f"/tenants/{alpha}/evidence/answers/backups",
-                       data={"answer": "Yes", "note": "Backed up nightly by Acme Backup.", "set": "supplier"})
+    resp = client.post(
+        f"/tenants/{alpha}/evidence/answers/backups",
+        data={"answer": "Yes", "note": "Backed up nightly by Acme Backup.", "set": "supplier"},
+    )
     assert resp.headers["Location"].endswith(f"/tenants/{alpha}/evidence?set=supplier#answer-backups")
     page = client.get(f"/tenants/{alpha}/evidence?set=cyber-essentials").get_data(as_text=True)
     assert "Backed up nightly by Acme Backup." not in page  # Cyber Essentials doesn't ask about backups
@@ -184,8 +226,9 @@ def test_downloads_for_each_set(client, db, two_tenants, monkeypatch):
         body = text.get_data(as_text=True)
         assert body.startswith(f"{s.title}: Alpha Ltd") and "Answer: Your input" in body
 
-        rows = list(csv.reader(io.StringIO(client.get(f"/tenants/{alpha}/evidence.csv?set={key}").get_data(
-            as_text=True))))
+        rows = list(
+            csv.reader(io.StringIO(client.get(f"/tenants/{alpha}/evidence.csv?set={key}").get_data(as_text=True)))
+        )
         assert [rows[0][0].lstrip("\ufeff")] + rows[0][1:] == questionnaires.COLUMNS and len(rows) == len(s.items) + 1
 
         wb = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx?set={key}").data))
