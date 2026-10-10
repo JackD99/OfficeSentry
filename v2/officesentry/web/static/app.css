@@ -1124,3 +1124,19 @@ dd.sg-row { margin-bottom: 0; }
   .sg-type li { flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 }
 .sg-frame .report-menu { position: static; max-height: 360px; }
+/* -- Home pages by role (home_today.html, home_clients.html) --------------------------------------------- */
+.home-switch { margin: 0; }
+.make-home { align-self: center; }
+.make-home button.link { font-size: var(--fs-sm); }
+.today-list { list-style: none; margin: 0; padding: 0; }
+.today-client { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: var(--space-2) var(--space-5); padding: var(--space-3-5) var(--space-5); border-top: 1px solid var(--border); }
+.today-client:first-child { border-top: 0; }
+.today-name { display: flex; align-items: baseline; gap: var(--space-2); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.today-name .dot { flex: none; }
+.today-reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.today-reasons a { font-weight: 500; }
+.today-reasons .pill { margin-left: var(--space-1); vertical-align: 1px; }
+@media (max-width: 640px) {
+  .today-client { grid-template-columns: 1fr; padding: var(--space-3) var(--space-4); }
+  .page-head .actions .home-switch { order: -1; }
+}

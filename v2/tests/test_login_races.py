@@ -85,7 +85,7 @@ def test_a_two_step_code_works_once_even_in_parallel(live, client, db, vault, cf
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(submit, browsers))
-    assert sum(loc == "/" for loc in results) == 1, results
+    assert sum(loc == "/today" for loc in results) == 1, results  # staff land on their home page
     assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
 
 

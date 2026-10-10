@@ -26,6 +26,7 @@ from . import (
     filters,
     groups,
     history,
+    home,
     people,
     projects,
     public_demo,
@@ -173,6 +174,7 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(tenants.bp)
+    app.register_blueprint(home.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(projects.bp)

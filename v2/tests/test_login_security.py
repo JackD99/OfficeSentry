@@ -90,7 +90,7 @@ def test_recovery_code_works_once(client, db, vault, staff_mfa):
     _secret, codes = enrol(client, db, vault, "admin")
     client.post("/logout")
     login(client, "admin")
-    assert client.post("/login/code", data={"code": codes[0].upper()}).headers["Location"] == "/"
+    assert client.post("/login/code", data={"code": codes[0].upper()}).headers["Location"] == "/today"
     client.post("/logout")
     login(client, "admin")
     client.post("/login/code", data={"code": codes[0]})
@@ -180,7 +180,7 @@ def test_a_reset_password_is_replaced_after_the_two_step_code(client, db, vault,
     resp = client.post("/login/code", data={"code": next_code(secret)})
     assert resp.headers["Location"].endswith("/login/new-password")
     resp = client.post("/login/new-password", data={"password": NEW_PASSWORD, "confirm": NEW_PASSWORD})
-    assert resp.headers["Location"] == "/" and client.get("/").status_code == 200
+    assert resp.headers["Location"] == "/today" and client.get("/today").status_code == 200
 
 
 def test_admin_can_reset_lost_phone(client, db, vault, staff_mfa):

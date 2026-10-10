@@ -241,6 +241,18 @@ Staff search every visible tenant's latest snapshot from the sidebar box
 searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 `show` linking the person's page or the detail report filtered to the row.
 
+## Home pages by role
+
+`home.py` (pages in `web/home.py`, staff only, `@group_aware` over `scoped_tenants()`): **Today**
+(`/today`, for technicians: critical and high findings new in the last day, failed or out-of-date
+collections, access not granted yet, and Coming up items due within a week) and **Clients** (`/clients`, for
+account managers: licence waste from the cached rollup rows, renewals in 30 days, this month's month-end
+reports to approve and projects to propose). Each opens with one sentence (`Today.sentence()`,
+`Clients.sentence()`), then the detail, from stored state only. A person's choice is `users.home` (Account
+settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
+and signing in without a page to go back to lands there. Clients keep the dashboard. A new reason on Today
+is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
+
 ## Web UI conventions
 
 - Colours, type sizes (`--fs-*`), spacing (`--space-*`, a 4px grid), radii and

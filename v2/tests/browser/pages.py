@@ -22,6 +22,8 @@ class Page:
 PAGES = [
     Page("login", "/login", user=""),
     Page("dashboard", "/"),
+    Page("today", "/today"),
+    Page("clients", "/clients"),
     Page("tenant-overview", "/tenants/{t}"),
     Page("findings", "/tenants/{t}/findings"),
     Page("tenant-changes", "/tenants/{t}/changes"),

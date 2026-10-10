@@ -34,12 +34,18 @@ None. The sign-in and directory audit logs were already read; they're now read i
 ### Database upgrade
 
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
-have been read up to, and migration 0031 adds `summary_cache` for the precomputed rows under Changed. The
-portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
-tenant; until then the pages build them as before.
+have been read up to, migration 0031 adds `summary_cache` for the precomputed rows under Changed, and
+migration 0032 adds each person's home page to `users`. The portal saves a `pre-upgrade-*` copy first, as
+always. The precomputed rows fill in as the worker gets to each tenant; until then the pages build them as
+before.
 
 ### Added
 
+- Home pages by role, each opening with one sentence that says what needs attention. **Today**, for
+  technicians: the clients that need someone today and why (new critical and high findings, failed
+  collections, access not granted, anything due this week). **Clients**, for account managers: licence
+  waste, renewals in the next 30 days, reports to approve and projects to propose, per client. Pick yours in
+  Account settings; Home in the menu and the logo open it, and staff land on it when they sign in.
 - The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
   pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Deploy workflow: a `restore-drill` action, backup status in `status`, and a `PRODUCTION_FROM_TAGS`
