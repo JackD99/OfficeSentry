@@ -188,7 +188,7 @@ def test_fresh_install_reaches_first_tenant_consent_link_without_the_command_lin
     assert actions[-2:] == ["app_setup_started", "connection_created"]
 
     page = admin.get("/admin/connections").get_data(as_text=True)
-    assert "App created" in page and APP_ID.lower() in page and "Add your first tenant" in page
+    assert "App created" in page and APP_ID.lower() in page and "Add your first client" in page
     assert f'data-value="{HOME}"' in page  # offers the MSP's own tenant
 
     resp = admin.post(
@@ -206,7 +206,7 @@ def test_fresh_install_reaches_first_tenant_consent_link_without_the_command_lin
 
     # With a tenant added, the wizard is finished and the page is back to the connection itself.
     page = admin.get("/admin/connections").get_data(as_text=True)
-    assert "Connect Office Sentry to Microsoft 365" not in page and "Add a tenant" in page
+    assert "Connect Office Sentry to Microsoft 365" not in page and "Add a client" in page
     assert db.execute("SELECT COUNT(*) FROM setup_sign_ins").fetchone()[0] == 0
 
 

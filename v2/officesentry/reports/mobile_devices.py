@@ -16,7 +16,7 @@ from .data_reports import DataReport, Rows, Section, Tile
 from .mail_reports import _no_exchange
 from .registry import report
 
-NOT_COLLECTED = "Mobile devices haven't been collected yet. Refresh Mobile devices on the tenant page."
+NOT_COLLECTED = "Mobile devices haven't been collected yet. Refresh Mobile devices on the client page."
 ACTIVE_DAYS = 30
 STALE_DAYS = 90
 

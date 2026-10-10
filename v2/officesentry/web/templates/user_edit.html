@@ -15,18 +15,18 @@
     {% endfor %}
   </fieldset>
   <fieldset>
-    <legend>Tenant access</legend>
-    <label class="check"><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> All tenants, including ones added later <span class="faint small">(analysts only)</span></label>
+    <legend>Client access</legend>
+    <label class="check"><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> All clients, including ones added later <span class="faint small">(analysts only)</span></label>
     <div class="check-grid">
-    {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}{% if t.archived_at %} <span class="faint small">(archived)</span>{% endif %}</label>{% else %}<p class="muted">No tenants yet.</p>{% endfor %}
+    {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}{% if t.archived_at %} <span class="faint small">(archived)</span>{% endif %}</label>{% else %}<p class="muted">No clients yet.</p>{% endfor %}
     </div>
   </fieldset>
   {% if groups %}
   <fieldset>
-    <legend>Tenant groups <span class="faint small">(analysts only)</span></legend>
-    <p class="muted small m0">Every tenant in a ticked group, including tenants added to it later. Client accounts are never given tenants through a group.</p>
+    <legend>Client groups <span class="faint small">(analysts only)</span></legend>
+    <p class="muted small m0">Every client in a ticked group, including clients added to it later. Client accounts are never given clients through a group.</p>
     <div class="check-grid">
-    {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}" {% if gr.id in granted_groups %}checked{% endif %}> {{ gr.name }} <span class="faint small">{{ gr.tenants|plural('tenant') }}</span></label>{% endfor %}
+    {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}" {% if gr.id in granted_groups %}checked{% endif %}> {{ gr.name }} <span class="faint small">{{ gr.tenants|plural('client') }}</span></label>{% endfor %}
     </div>
   </fieldset>
   {% endif %}

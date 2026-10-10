@@ -230,8 +230,8 @@ def tenants_due(conn) -> int:
 
 
 COLLECTION_FIX = (
-    "When every tenant fails at once it's usually the app certificate (App connection), the app "
-    "registration in Entra, or the server's internet access. Open a failed run from a tenant's "
+    "When every client fails at once it's usually the app certificate (App connection), the app "
+    "registration in Entra, or the server's internet access. Open a failed run from a client's "
     "Overview to see Microsoft's answer."
 )
 
@@ -253,13 +253,13 @@ def check_collection(conn, cfg, now) -> Check:
         ),
     }
     if not due:
-        return Check("collection", "Collection", OK, "No client tenants to collect yet", data=data)
+        return Check("collection", "Collection", OK, "No clients to collect yet", data=data)
     if slot and slot.mass_failure:
         return Check(
             "collection",
             "Collection",
             WARN,
-            f"The last scheduled collection failed for {slot.failed} of {plural(slot.tenants, 'tenant')}",
+            f"The last scheduled collection failed for {slot.failed} of {plural(slot.tenants, 'client')}",
             COLLECTION_FIX + (f" Most common error: {slot.top_error}" if slot.top_error else ""),
             data,
         )
@@ -269,7 +269,7 @@ def check_collection(conn, cfg, now) -> Check:
             "Collection",
             WARN,
             "Nothing has been collected yet",
-            "Collection starts when a tenant has consented and the worker is running.",
+            "Collection starts when a client has consented and the worker is running.",
             data,
         )
     if now - last > interval:
@@ -283,7 +283,7 @@ def check_collection(conn, cfg, now) -> Check:
         )
     summary = f"Last data collected {duration((now - last).total_seconds())} ago"
     if slot and slot.complete and slot.failed:
-        summary += f"; {slot.failed} of {plural(slot.tenants, 'tenant')} failed in the last scheduled run"
+        summary += f"; {slot.failed} of {plural(slot.tenants, 'client')} failed in the last scheduled run"
     return Check("collection", "Collection", OK, summary, data=data)
 
 

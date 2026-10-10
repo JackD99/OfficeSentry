@@ -211,7 +211,7 @@ class Enforcement:
         elif self.p1 is False and not self.security_defaults and not self.per_user_checked:
             self.note = (
                 f"This tenant has no {P1} and Security Defaults are off, so MFA can only be required "
-                "per user. Per-user MFA hasn't been read yet; refresh Per-user MFA on the tenant page."
+                "per user. Per-user MFA hasn't been read yet; refresh Per-user MFA on the client page."
             )
             self.known = False
         else:
@@ -309,7 +309,7 @@ GAP_TEXT = {
 def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     if users is None:
-        report.unavailable = "User data hasn't been collected yet. Refresh Users on the tenant page."
+        report.unavailable = "User data hasn't been collected yet. Refresh Users on the client page."
         return
     reg = Registration(snap)
     enf = Enforcement(snap)
@@ -459,7 +459,7 @@ BREAK_GLASS_NAME = re.compile(r"break.?glass|emergency|\bbg[-_.]?admin|\beaa\b",
 def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     roles = _roles(snap)
     if roles is None:
-        report.unavailable = "Admin role data hasn't been collected yet. Refresh Admin roles on the tenant page."
+        report.unavailable = "Admin role data hasn't been collected yet. Refresh Admin roles on the client page."
         return
     users = _users(snap) or {}
     reg = Registration(snap)
@@ -880,7 +880,7 @@ def _inactive_for(user: dict, now: datetime) -> tuple[str, int | None]:
 def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     if users is None:
-        report.unavailable = "User data hasn't been collected yet. Refresh Users on the tenant page."
+        report.unavailable = "User data hasn't been collected yet. Refresh Users on the client page."
         return
     activity = any(u.get("signInActivityAvailable") for u in users)
     roles = _admin_role_names(_roles(snap))
@@ -1059,7 +1059,7 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
         return
     daily = snap.objects("secure_score", "secure_score_daily")
     if daily is None:
-        report.unavailable = "Secure Score hasn't been collected yet. Refresh Secure Score on the tenant page."
+        report.unavailable = "Secure Score hasn't been collected yet. Refresh Secure Score on the client page."
         return
     daily = [d for d in daily if d.get("maxScore") and parse_day(d.get("date"))]
     if not daily:

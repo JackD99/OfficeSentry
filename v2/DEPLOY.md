@@ -1,7 +1,7 @@
 # Running Office Sentry on your own server
 
 Office Sentry runs as two containers from one image: the **portal** (the
-website) and the **worker** (collects from tenants, sends scheduled emails,
+website) and the **worker** (collects from clients, sends scheduled emails,
 tidies old data). Everything it stores lives in one Docker volume, and the
 keys that decrypt its stored certificates and passwords in a second one
 ([Where the keys are](#where-the-keys-are)).
@@ -10,28 +10,28 @@ keys that decrypt its stored certificates and passwords in a second one
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
   installed, with at least 2 CPUs and 4 GB of RAM. Disk use grows with the
-  number of tenants and users (see [How much disk](#how-much-disk)).
+  number of clients and users (see [How much disk](#how-much-disk)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
 
 ### How much disk
 
-Measured with `scripts/scale_data.py`: 200 client tenants of about 110
+Measured with `scripts/scale_data.py`: 200 clients of about 110
 accounts each, after two years of nightly collection with the default *Data
 retention* settings.
 
-| Tenants | Database | One nightly backup | Disk to plan for |
+| Clients | Database | One nightly backup | Disk to plan for |
 |---|---|---|---|
 | 50 | about 1 GB | about 0.3 GB | 20 GB |
 | 200 | 4.0 GB | 1.2 GB (under 2 minutes) | 40 GB |
 | 500 | about 10 GB | about 3 GB | 80 GB |
 
-The 50 and 500 rows are scaled from the 200-tenant measurement. A tenant with
+The 50 and 500 rows are scaled from the 200-client measurement. A client with
 twice the accounts takes about twice the room. "Disk to plan for" covers the
 operating system and Docker, the database, 7 nightly backups and the room a
 backup needs while it's being made (about the database's size again). Of the
 4.0 GB, collected data is 0.8 GB (stored compressed); the rest is run history
-and trend figures, which grow by about 0.7 MB per tenant a month.
+and trend figures, which grow by about 0.7 MB per client a month.
 
 Before collected data was compressed the same database was 13.8 GB and 7
 backups took about 97 GB. An existing install compresses its older data a few
@@ -81,7 +81,7 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
    password, scan the QR code with an authenticator app and save the recovery codes.
 6. Open **Settings → App connection** and press **Sign in to Microsoft**. Enter the code it shows on
    Microsoft's page and sign in as an admin of your own tenant who can create app registrations. Office
-   Sentry creates its read-only app and then offers to add your first tenant. No command needed.
+   Sentry creates its read-only app and then offers to add your first client. No command needed.
 
 ## Is it working?
 
@@ -97,7 +97,7 @@ app certificates, each with what to do about it.
 ### Hear about problems without signing in
 
 Office Sentry tells your team itself when the worker stops, a backup fails,
-the disk is over 85% full or most tenants fail to collect: an email to the
+the disk is over 85% full or most clients fail to collect: an email to the
 people under *Email reports → Your team* (once *Email delivery* is set up) and
 a post to the Teams, Slack or webhook alert (once *Alerts* is set up). Each
 problem is sent once when it starts, again every day it lasts, and once when
@@ -113,7 +113,7 @@ https://<your domain>/health/ready
 
 It answers **200** while Office Sentry works and **503** when the database,
 the worker or the disk has a problem. Anyone can read that much, so it's safe
-to give to an outside service; it never names a tenant.
+to give to an outside service; it never names a client.
 
 **Uptime Kuma** (self-hosted, on a different machine) or **UptimeRobot** /
 **Better Stack** (free accounts):
@@ -193,7 +193,7 @@ their own address.
 
 ## Clients in GCC High, DoD or China
 
-Nothing on the server changes: the portal and worker reach each tenant's
+Nothing on the server changes: the portal and worker reach each client's
 cloud from the same install. The server needs outbound HTTPS to that cloud's
 hosts (login.microsoftonline.us, graph.microsoft.us, outlook.office365.us for
 GCC High; login.microsoftonline.us, dod-graph.microsoft.us, webmail.apps.mil
@@ -205,20 +205,20 @@ its own app connection in Office Sentry with the matching cloud: on **App connec
 *Create an app for another Microsoft cloud*, choose the cloud and sign in, or run
 `docker compose run --rm worker python -m officesentry create-app --cloud gcc_high --tenant <your GCC High tenant>`
 (or `dod`, `china`). The [README](README.md#national-clouds-gcc-high-dod-china)
-explains choosing the cloud for a tenant and what Microsoft doesn't offer in
+explains choosing the cloud for a client and what Microsoft doesn't offer in
 each cloud.
 
 ## When things run
 
 | Setting in `.env` | Default | What it does |
 |---|---|---|
-| `OFFICESENTRY_COLLECT_CRON` | `0 2 * * *` | When every tenant is collected, as cron (minute hour day month weekday). The default is 02:00 every night. |
+| `OFFICESENTRY_COLLECT_CRON` | `0 2 * * *` | When every client is collected, as cron (minute hour day month weekday). The default is 02:00 every night. |
 | `OFFICESENTRY_TIMEZONE` | `UTC` | The timezone for the collection time and for emailed reports. |
 | `OFFICESENTRY_MAX_AGE_HOURS` | `12` | A collection is skipped if it already ran this recently (say, by hand that evening). Before a scheduled email goes out, anything older than this is collected again first, so the report is fresh. |
-| `OFFICESENTRY_WORKER_CONCURRENCY` | `4` | How many tenants are collected at once. Each tenant still runs one data source at a time. With many tenants, raise it (8 suits about 200) so the night's collection finishes before morning. |
+| `OFFICESENTRY_WORKER_CONCURRENCY` | `4` | How many clients are collected at once. Each client still runs one data source at a time. With many clients, raise it (8 suits about 200) so the night's collection finishes before morning. |
 
-"Run now", a tenant's first collection and the refresh before an emailed
-report go ahead of the nightly queue, so they don't wait for every tenant to
+"Run now", a client's first collection and the refresh before an emailed
+report go ahead of the nightly queue, so they don't wait for every client to
 be collected.
 
 Some cron examples: `0 2 * * *` nightly at 02:00, `0 2 * * 1-5` weeknights
@@ -250,30 +250,30 @@ The settings page overrides the environment variables once saved. Trend
 numbers are counts only, with no names or addresses, and are kept forever, so
 run pages for cleared snapshots still show their numbers. The latest snapshot,
 anything collected in the last day, open findings and accepted risks, each
-tenant's first-scan findings (alert emails compare against them) and each
-tenant's latest file of each issued report (month-end reporting compares
+client's first-scan findings (alert emails compare against them) and each
+client's latest file of each issued report (month-end reporting compares
 against it) are never deleted by retention. The activity log can't be set
 under a year because it's the record of who changed what and signed in from
 where, which security reviews and investigations look back over.
 
 The **daily history** keeps every collection, not one a day or a month, at a
 fraction of the size of snapshots: an object is stored again only when it
-changes. Measured with `scripts/scale_data.py --history` at 200 tenants
+changes. Measured with `scripts/scale_data.py --history` at 200 clients
 (about 22,000 accounts): backfilling 40 days of snapshots took 12 minutes and
 0.07 GB (the snapshots take 0.80 GB), and each night adds about 2.5 MB, so 25
 months comes to about 2 GB. The command `python -m officesentry history
 --dry-run` estimates it for your own data before you upgrade, and `history`
 shows how far the backfill has got.
 
-The **activity history** is each tenant's sign-in and directory audit logs,
+The **activity history** is each client's sign-in and directory audit logs,
 kept beyond the 30 days Microsoft keeps them (7 days for audit events without
 Entra ID P1). It lives in monthly files in `/data/events`, outside the
 database, and a month older than its period is deleted as a whole file.
-Deleting a tenant deletes its rows from every file.
+Deleting a client deletes its rows from every file.
 
 The **activity log** (*Settings → Activity log*, admins only) records sign-ins
 and every change, with the address it came from; filter it by user, action,
-tenant and date, and download it as CSV. Failed and slowed-down sign-ins are
+client and date, and download it as CSV. Failed and slowed-down sign-ins are
 removed after 90 days; everything else is kept unless *Data retention* sets
 a period. Failed sign-ins with
 usernames that don't exist are counted per address and hour, without storing
@@ -384,7 +384,7 @@ one a month for a year. Only the backups folder goes: never the live
 database, and never `secrets.json`, which lives in its own volume.
 
 Costs are small: each night sends only what's new, the night's compressed
-copy (see [How much disk](#how-much-disk)). With 200 tenants the copies kept
+copy (see [How much disk](#how-much-disk)). With 200 clients the copies kept
 come to about 40 GB, well under a dollar a month at B2's published price.
 
 **On the Hetzner deploy**, from your phone:
@@ -452,7 +452,7 @@ own container reads; the portal never sees them.
 A backup is only proven once it has been restored. Every Sunday at 04:30
 (server time) `deploy/jobs.sh drill` checks the off-site storage, restores the
 newest database copy from it into a scratch volume, and has Office Sentry open
-it read-only, run SQLite's integrity check and count the tenants. It never
+it read-only, run SQLite's integrity check and count the clients. It never
 touches the live database, and deletes the scratch volume afterwards. The
 result is the **Restore check** line in `status` and on *System status*.
 
@@ -461,10 +461,10 @@ To run it now: *Actions → Deploy → Run workflow*, action **restore-drill**
 with a line like:
 
 ```
-OK: officesentry-20261009-034500.db.gz opens and passes SQLite's integrity check; database version 26, 12 tenants, newest collection 2026-10-09 02:14
+OK: officesentry-20261009-034500.db.gz opens and passes SQLite's integrity check; database version 26, 12 clients, newest collection 2026-10-09 02:14
 ```
 
-Read the tenant count and the newest collection date: they should match what
+Read the client count and the newest collection date: they should match what
 the portal shows.
 
 Once a year, rehearse the whole recovery below on a scratch server, so the
@@ -478,8 +478,8 @@ kept). It's made before the upgrade starts, while the portal is down (see
 go back to can always restore it. If it can't (a full disk, say), it doesn't
 upgrade and says why.
 
-**Deleted tenants stay in backups.** Backups keep everything that was in the
-database when they were made. After you delete a client tenant, its data stays
+**Deleted clients stay in backups.** Backups keep everything that was in the
+database when they were made. After you delete a client, its data stays
 in older backups until they rotate out (nightly ones after `--keep` runs;
 `pre-upgrade-*` and `pre-restore-*` copies only when 3 newer ones replace
 them) and in any copies you took off the server; delete those too if the

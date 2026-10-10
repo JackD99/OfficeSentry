@@ -71,7 +71,7 @@ LABELS = {
     "worker": "Worker stopped",
     "backup": "Backup failed",
     "disk": f"Disk over {system_health.DISK_WARN}% full",
-    "collection": "Most tenants failed to collect",
+    "collection": "Most clients failed to collect",
 }
 
 
@@ -89,7 +89,7 @@ def detect(key: str, health: system_health.Health, state: dict | None, now: date
         text = (
             f"It last checked in {duration((now - seen).total_seconds())} ago." if seen else "It isn't checking in."
         ) + (
-            " Until it runs again, no tenant is collected and no scheduled "
+            " Until it runs again, no client is collected and no scheduled "
             "report, email alert or certificate warning goes out."
         )
         return Problem(

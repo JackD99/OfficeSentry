@@ -300,7 +300,7 @@ def start_setup():
     elif app_setup.ready_connection(g.db, cloud):
         flash(
             f"You already have an app for {clouds.get(cloud).label}, so there's nothing to create. "
-            "Add tenants with it, or replace its certificate below if that's what you need.",
+            "Add clients with it, or replace its certificate below if that's what you need.",
             "error",
         )
     else:

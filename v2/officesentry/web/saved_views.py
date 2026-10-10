@@ -67,7 +67,7 @@ def save(key: str):
     store(g.db, g.user["id"], key, name, query)
     flash(
         f"Saved “{name}”. It's under Views on this {'page' if key in findings_report.TITLES else 'report'}"
-        " for every tenant.",
+        " for every client.",
         "success",
     )
     return redirect(f"{page}?{query}")

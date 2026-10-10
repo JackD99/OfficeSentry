@@ -309,7 +309,7 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
         checks.append(Check("sources", "Data sources", "ok", "None failing."))
 
     steps = [
-        Step("added", "Tenant added", True),
+        Step("added", "Client added", True),
         Step("consent", "Admin consent granted", bool(tenant["consented_at"]), "grant admin consent"),
         Step(
             "global_reader",
@@ -380,11 +380,11 @@ def _app_checks(result: dict | None, name: str) -> list[Check]:
             ),
         ]
     if not result.get("client_id"):
-        return [Check("permissions", "Permissions", "unknown", "Not checked: the tenant has no app connection.")]
+        return [Check("permissions", "Permissions", "unknown", "Not checked: the client has no app connection.")]
     if result.get("app_found") is False:
         fix = (
             f"A Global Administrator of {name} grants admin consent with the consent link. If they deleted the "
-            "app on purpose, offboard this tenant."
+            "app on purpose, offboard this client."
         )
         return [Check("permissions", "Permissions", "bad", "Office Sentry's app isn't in this tenant.", fix, "consent")]
     checks = []

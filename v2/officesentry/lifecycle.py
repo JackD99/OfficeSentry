@@ -61,7 +61,7 @@ def pause(conn, tenant, user: str) -> int:
 
 def resume(conn, tenant, user: str) -> None:
     if tenant["archived_at"]:
-        raise ValueError("restore the tenant before resuming it")
+        raise ValueError("restore the client before resuming it")
     with transaction(conn, immediate=True):
         conn.execute("UPDATE tenants SET enabled = 1, paused_at = NULL WHERE id = ?", (tenant["id"],))
         audit(conn, user, "tenant_resumed", tenant["id"], tenant["name"])
@@ -165,7 +165,7 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
     allowed = {u["id"]: u["username"] for u in client_only_users(conn, tenant["id"])}
     unknown = set(delete_users) - set(allowed)
     if unknown:
-        raise DeleteError("only client accounts with no other tenant can be deleted with it")
+        raise DeleteError("only client accounts with no other client can be deleted with it")
     # The activity history is in its own files: its key goes with the tenant (ON DELETE CASCADE), and its rows
     # are deleted right after. If that stops part-way, the daily retention pass sweeps up rows with no key.
     key, base = events.tenant_key(conn, tenant["id"]), events.root(conn)
@@ -192,7 +192,7 @@ PERSONAL_DETAIL = (
     "alert_sent",
     "alert_failed",
 )
-REDACTED = "(removed when the tenant was deleted)"
+REDACTED = "(removed when the client was deleted)"
 
 
 def _scrub_audit(conn, tenant_id: int, deleted_users: dict[int, str]) -> None:

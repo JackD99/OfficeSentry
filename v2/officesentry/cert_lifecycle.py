@@ -96,7 +96,7 @@ class Expiry:
     @property
     def stops(self) -> str:
         """What stops when it expires."""
-        return "Email from Office Sentry" if self.kind == "mail" else "Collection from every client tenant"
+        return "Email from Office Sentry" if self.kind == "mail" else "Collection from every client"
 
     @property
     def consequence(self) -> str:

@@ -111,7 +111,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     elif not status.get("available"):
         report.notes.append(
             "Microsoft didn't return the tenant's subscriptions on the last collection, so renewal "
-            "dates aren't shown. The collection log on the tenant page has the reason."
+            "dates aren't shown. The collection log on the client page has the reason."
         )
     known = status is not None and bool(status.get("available"))
 

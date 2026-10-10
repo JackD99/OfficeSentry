@@ -137,12 +137,12 @@ def test_banner_and_connections_page_warn_admins(client, db, connection_id, two_
     _expires_in(db, connection_id, 25)
     page = client.get("/").get_data(as_text=True)
     assert "The Test app certificate expires in 24 days" in page
-    assert "Collection from every client tenant stops when it expires." in page
+    assert "Collection from every client stops when it expires." in page
     page = client.get("/admin/connections").get_data(as_text=True)
     assert "Certificate expires soon" in page and "Replace certificate" in page
     _expires_in(db, connection_id, -2)
     page = client.get("/admin/tenants").get_data(as_text=True)
-    assert "expired 2 days ago" in page and "Collection from every client tenant has stopped." in page
+    assert "expired 2 days ago" in page and "Collection from every client has stopped." in page
     analyst = client.application.test_client()
     login(analyst, "analyst")  # only admins can replace it, so only they're told
     assert "certificate" not in analyst.get("/").get_data(as_text=True).lower()

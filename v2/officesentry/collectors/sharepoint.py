@@ -280,7 +280,7 @@ class SharedFiles(Collector):
             drives = self._drives(ctx, catalog)
         except PermissionMissing as exc:
             ctx.warn(
-                "Reading files needs the Sites.Read.All permission. Re-send the consent link from the tenant "
+                "Reading files needs the Sites.Read.All permission. Re-send the consent link from the client "
                 f"page to add it. ({exc.message})"
             )
             ctx.objects("scan_status", [("status", {"available": False, "reason": "permission"})])

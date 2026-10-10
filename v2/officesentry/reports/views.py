@@ -47,6 +47,8 @@ _PERCENT = re.compile(r"^-?[\d.,]+%$")
 _SIZES = {"bytes": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 
 Key = tuple[str, str]  # (table slug, column slug)
+# Column titles that were renamed: views saved (and links bookmarked) under the old slug keep working.
+RENAMED = {"tenant": "client"}
 
 
 def slug(text: str) -> str:
@@ -95,6 +97,7 @@ class View:
             table, _, column = target.partition("/")
             if not (_SLUG.match(table) and _SLUG.match(column)):
                 continue
+            column = RENAMED.get(column, column)
             key = (table, column)
             if name == "f":
                 values = view.filters.setdefault(key, [])

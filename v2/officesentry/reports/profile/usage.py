@@ -19,7 +19,7 @@ def usage_part(p: Person) -> Part | None:
         return None  # usage isn't collected for this tenant yet; leave the area out
     result = Part("usage", "Microsoft 365 use")
     if not status.get("available"):
-        result.unavailable = "Usage reports weren't readable. Check Reports.Read.All consent on the tenant page."
+        result.unavailable = "Usage reports weren't readable. Check Reports.Read.All consent on the client page."
         return result
     if status.get("concealed"):
         result.unavailable = usage.CONCEALED_NOTICE

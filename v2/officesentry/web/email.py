@@ -90,8 +90,8 @@ def _decorate(s) -> dict:
     d["views"] = delivery.is_views(s)
     if d["kind"] == "digest" and not d["upcoming"]:
         group = tenant_groups.get(g.db, s["group_id"])
-        what = " + ".join(d["titles"]) if d["views"] else "Tenant digest"
-        d["titles"] = [f"{what} · {group['name']}" if group else f"{what} · every tenant"]
+        what = " + ".join(d["titles"]) if d["views"] else "Client digest"
+        d["titles"] = [f"{what} · {group['name']}" if group else f"{what} · every client"]
     d["due_now"] = d["next"] is not None and d["next"] <= datetime.now(UTC)
     return d
 

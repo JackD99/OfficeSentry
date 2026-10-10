@@ -224,7 +224,7 @@ class SharePointStorage(Collector):
             sites = catalog.sites()
         except PermissionMissing as exc:
             ctx.warn(
-                "Reading storage needs the Sites.Read.All permission. Re-send the consent link from the tenant "
+                "Reading storage needs the Sites.Read.All permission. Re-send the consent link from the client "
                 f"page to add it. ({exc.message})"
             )
             ctx.objects("storage_status", [("status", {"available": False, "reason": "permission"})])
