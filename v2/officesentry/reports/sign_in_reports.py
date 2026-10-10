@@ -15,7 +15,7 @@ from .. import signins
 from ..signins import REPEATED_FAILURES, SPRAY_ACCOUNTS
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import DataReport, Rows, Section, Tile
+from .data_reports import Chart, DataReport, Rows, Section, Tile
 
 NOT_COLLECTED = "Sign-in activity hasn't been collected yet. Refresh \"Sign-in activity\" on the tenant page."
 NO_P1 = ("Sign-in activity comes from the Entra ID sign-in log, which needs Entra ID P1 (included in Microsoft 365 "
@@ -214,6 +214,8 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
                                      "Unusual"], compare=False,
                          intro="Where sign-ins came from, by Microsoft's location for the address. Flagged: "
                                "countries the tenant rarely signs in from.", empty="No sign-ins.")
+    by_country.chart = Chart("Country", ("Succeeded", "Failed"), total="Sign-ins", tones=("1", "bad"),
+                             rest="Prompts")
     for c in sorted(countries, key=lambda c: -_n(c.get("signIns"))):
         odd = _text(c.get("country")) in unusual
         by_country.add([signins.country(c.get("country")), _n(c.get("signIns")), _n(c.get("succeeded")),
@@ -224,6 +226,7 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     by_app = Section(APPS, ["App", "Sign-ins", "Succeeded", "Failed", "Without MFA", "Accounts"], compare=False,
                      intro="What people signed in to. \"Without MFA\" counts successful sign-ins that needed only a "
                            "password.", empty="No sign-ins.")
+    by_app.chart = Chart("App", ("Succeeded", "Failed"), total="Sign-ins", tones=("1", "bad"), rest="Prompts")
     for a in sorted(_rows(snap, "sign_in_app"), key=lambda a: -_n(a.get("signIns"))):
         by_app.add([a.get("app") or "Unknown app", _n(a.get("signIns")), _n(a.get("succeeded")), _n(a.get("failed")),
                     _n(a.get("singleFactor")), _n(a.get("accounts"))])

@@ -23,10 +23,10 @@
 {% if report.notice %}<div class="callout warn">{{ report.notice }}</div>{% endif %}
 {% if report.filtered %}<div class="callout"><strong>Filtered view.</strong> {{ report.filtered|join(' ') }} The headline figures cover every row.</div>{% endif %}
 {% if report.tiles %}
-{% call ui.figures(report.tiles|length) %}{% for t in report.tiles %}{{ ui.figure(t.label, t.value, t.foot, t.tone) }}{% endfor %}{% endcall %}
+{% call ui.figures(report.tiles|length) %}{% for t in report.tiles %}{{ ui.figure(t.label, t.value, t.foot, t.tone, t.trend) }}{% endfor %}{% endcall %}
 {% endif %}
 {% if report.highlights %}
-{% call ui.figures(report.highlights|length) %}{% for h in report.highlights %}{{ ui.figure(h.label, h.value, h.foot, h.tone) }}{% endfor %}{% endcall %}
+{% call ui.figures(report.highlights|length) %}{% for h in report.highlights %}{{ ui.figure(h.label, h.value, h.foot, h.tone, h.trend) }}{% endfor %}{% endcall %}
 {% endif %}
 {% if report.notes %}
 <div class="callout"><strong>Not checked.</strong> {{ report.notes|join(' ') }}</div>
@@ -41,6 +41,7 @@
 <section class="doc-section" id="s{{ loop.index }}">
   <h2>{{ section.title }} <span class="count">{{ section.rows|length }}</span>{% if section.flagged and section.review %} <span class="pill warn">{{ section.flagged }} to review</span>{% endif %}</h2>
   {% if section.intro %}<p class="section-intro">{{ section.intro }}</p>{% endif %}
+  {% if section.figure %}<div class="chart-wrap keep">{{ section.figure|safe }}</div>{% endif %}
   {% if section.rows %}{{ ui.data_table(section) }}{% else %}<p class="empty-note">{{ section.empty }}</p>{% endif %}
 </section>
 {% endfor %}

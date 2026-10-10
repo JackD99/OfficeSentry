@@ -95,6 +95,7 @@
     <a class="small" href="{{ tv.clear_href }}" data-view>Clear filters</a>
   </div>
   {% endif %}
+  {% if tv.chart %}<div class="chart-wrap">{{ tv.chart|safe }}</div>{% endif %}
   {% if not tv.rows %}
   <p class="no-rows">No rows match {{ 'this filter' if tv.chips|length == 1 else 'these filters' }}. <a href="{{ tv.clear_href }}" data-view>Show all {{ tv.total }}</a></p>
   {% else %}

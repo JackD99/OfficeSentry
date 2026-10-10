@@ -57,11 +57,12 @@
 
 {% macro meta(label, value) -%}<div><dt>{{ label }}</dt><dd>{{ value|string|breakable }}</dd></div>{%- endmacro %}
 
-{# A headline figure for document-style reports (detail, rollup, changes). tone: ok | warn | bad #}
-{% macro figure(label, value, foot='', tone=none) -%}
+{# A headline figure for document-style reports (detail, rollup, changes). tone: ok | warn | bad;
+   trend: a data_reports.Trend for a sparkline beside the value. #}
+{% macro figure(label, value, foot='', tone=none, trend=none) -%}
 <div class="kpi{% if tone %} tone-{{ tone }}{% endif %}">
   <div class="label">{{ label }}</div>
-  <div class="value{% if value is string and value|length > 9 %} wordy{% endif %}">{{ value }}</div>
+  <div class="value{% if value is string and value|length > 9 %} wordy{% endif %}{{ ' has-spark' if trend }}"><span>{{ value }}</span>{% if trend %}{{ sparkline(trend.values, label=trend.label)|safe }}{% endif %}</div>
   {% if foot %}<div class="note">{{ foot }}</div>{% endif %}
 </div>
 {%- endmacro %}

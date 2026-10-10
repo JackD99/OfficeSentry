@@ -13,7 +13,7 @@ from ..devices import parse_day
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart
-from .data_reports import DataReport, Link, Rows, Section, Tile, _date
+from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date
 
 INACTIVE_DAYS = 90
 GROWTH_DAYS = 30
@@ -212,6 +212,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                                               f" Growth appears once Office Sentry has {GROWTH_DAYS} days of "
                                               "history."),
                     empty="No sites.")
+    every.chart = Chart("Site", ("Storage",), title="Largest sites")
     for r in sorted(rows, key=lambda r: -r["storageUsed"]):
         prev = (before or {}).get(r["_id"]) if not r.get("concealed") else None
         every.add([site_cell(r), site_type(r), r.get("ownerPrincipalName") or r.get("owner"), size(r["storageUsed"]),

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, tenant_domains
 from ..snapshot import TenantSnapshot
-from .data_reports import DataReport, Highlight, Rows, Section, _describe_actions, _describe_conditions, _type
+from .data_reports import Chart, DataReport, Highlight, Rows, Section, _describe_actions, _describe_conditions, _type
 
 NOT_COLLECTED = "Mailbox data hasn't been collected yet. Refresh Mailboxes on the tenant page."
 RESOURCE_TYPES = {"SharedMailbox": "Shared", "RoomMailbox": "Room", "EquipmentMailbox": "Equipment"}
@@ -298,6 +298,7 @@ def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                              + (f"{near} {'is' if near == 1 else 'are'} over 90% of quota: turn on the archive or "
                                 "clear old mail before sending stops." if near else "None is close to its quota.")),
                       empty="No mailboxes.")
+    section.chart = Chart("Mailbox", ("Size",), title="Largest mailboxes", other=False)
     for s in ordered:
         pct = used(s)
         flag = "high" if pct is not None and pct >= 0.98 else ("medium" if pct is not None and pct >= 0.9 else None)

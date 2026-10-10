@@ -178,6 +178,34 @@ ul.unavailable li:last-child { border-bottom: 0; }
 .callout { border-radius: var(--radius); background: var(--brand-soft); padding: 14px 18px; margin: var(--space-3-5) 0; }
 .callout .big { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
 
+/* -- Bars that open their rows (charts.bars) and sparklines ------------------------ */
+.chart-wrap { margin: var(--space-1) 0 var(--space-3); }
+.barchart { margin: 0; }
+.barchart figcaption { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-1); }
+.chart-title { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.barchart .legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3-5); font-size: var(--fs-xs); color: var(--muted); }
+.barchart .legend span { display: inline-flex; align-items: center; gap: var(--space-1-5); }
+.barchart .legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.bars { list-style: none; margin: 0; padding: 0; }
+.bars .bar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-0-5) 0; color: var(--text-2); font-size: var(--fs-xs); text-decoration: none; }
+.bar-label { flex: 0 0 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { flex: 1 1 auto; display: block; }
+.bar-value { flex: 0 0 5.5rem; text-align: right; color: var(--text); font-weight: 600; white-space: nowrap; }
+a.bar.on .bar-label { font-weight: 600; color: var(--text); }
+svg .part.tone-1, .barchart .sw.tone-1 { fill: var(--chart-series); background: var(--chart-series); }
+svg .part.tone-2, .barchart .sw.tone-2 { fill: var(--chart-2); background: var(--chart-2); }
+svg .part.tone-3, .barchart .sw.tone-3 { fill: var(--chart-3); background: var(--chart-3); }
+svg .part.tone-bad, .barchart .sw.tone-bad { fill: var(--sev-critical-fill); background: var(--sev-critical-fill); }
+svg .part.tone-muted, .barchart .sw.tone-muted { fill: var(--sev-low-fill); background: var(--sev-low-fill); }
+.bar-track .gap { fill: var(--surface); }
+.bar-track .zero { fill: var(--border-strong); }
+.value.has-spark { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+svg.spark { flex: none; overflow: visible; }
+svg.spark .spark-line { stroke: var(--decor); }
+svg.spark .spark-end { fill: var(--chart-series); }
+svg.chart .forecast { stroke: var(--chart-series); }
+svg.chart .limit { stroke: var(--muted); }
+
 /* -- Line chart --------------------------------------------------------------- */
 .chart-card { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3-5) var(--space-4) var(--space-2); }
 svg.chart { width: 100%; height: auto; display: block; }

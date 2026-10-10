@@ -27,7 +27,7 @@ from ..licences import (
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart
-from .data_reports import DataReport, Highlight, Rows, Section
+from .data_reports import Chart, DataReport, Highlight, Rows, Section
 from .monthly_review import _secure_score_points, setting
 
 NEVER_SIGNED_IN_GRACE = 30  # days after creation before "never signed in" counts as inactive (see licences.is_stale)
@@ -264,8 +264,10 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                                            "Excluded from", "What it means"],
                    intro="Enabled members who either haven't set up MFA or aren't required to use it. Admins first.",
                    empty="Every enabled member has MFA set up and is required to use it.")
+    gaps.chart = Chart("Gap")
     protected = Section("Protected accounts", ["Account", "Admin roles", "Methods", "Required by"],
                         empty="No account is both set up and required to use MFA.")
+    protected.chart = Chart("Methods", title="By method")
     guests = Section("Guests", ["Guest", "Required by", "Excluded from"],
                      intro="Guests set up MFA in their own organisation, so only whether this tenant requires it "
                            "is shown.", empty="No enabled guest accounts.")
@@ -360,6 +362,7 @@ def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                                                      "What to check"],
                          intro="Everyone who holds a role that can change security settings, users or data. "
                                "Problems first.", empty="Nobody holds a privileged role.")
+    privileged.chart = Chart("Roles", title="By role")
     others = Section("Other roles", ["Account", "Kind", "Roles", "How assigned"],
                      intro="Roles with narrower or read-only permissions.", empty="No other roles are assigned.")
     rows = []
@@ -515,6 +518,7 @@ def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                                              "Waste / month", "Waste / year"],
                    intro="Paid licences nobody is using: unassigned, or assigned to disabled or inactive accounts. "
                          "Free and trial licences are left out.", empty="No paid subscriptions.")
+    subs.chart = Chart("Licence", ("Unassigned", "On disabled accounts", "On inactive accounts"))
     for line in paid.values():
         waste = line.monthly_waste
         subs.add([line.name, line.purchased, line.assigned, line.unassigned, line.on_disabled_users,
@@ -621,6 +625,7 @@ def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     members = Section("Inactive members", ["Account", "Inactive for", "Last sign-in", "Days", "Licences",
                                            "Admin roles", "Created", "Synced from on-premises"],
                       intro=rule + " Admins and licensed accounts first.", empty="No inactive members.")
+    members.chart = Chart("Inactive for", title="By time since last sign-in")
     guests = Section("Inactive guests", ["Guest", "Inactive for", "Last sign-in", "Days", "Invitation", "Invited"],
                      intro=rule, empty="No inactive guests.")
     pending = Section("Invitations never accepted", ["Guest", "Invited", "Days waiting"],

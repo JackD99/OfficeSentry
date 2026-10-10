@@ -13,7 +13,7 @@ from ..collectors.sharepoint_storage import NEARLY_FULL, STALE_DAYS
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import nouns
-from .data_reports import DataReport, Link, Rows, Section, Tile, _date
+from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date
 from .sharepoint import GROWTH_DAYS, _growth, size, storage_points
 
 SHOW_FOLDERS = 50
@@ -139,6 +139,7 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                     intro="Everything stored in SharePoint sites, by what it is." +
                           (f" The tenant has about {size(quota.total)} ({quota.explained})." if quota else ""),
                     empty="No SharePoint storage in use.")
+    parts.chart = Chart("Part", ("Size",), ranked=False, title="By part")
     other = max(used - current - versions - recycle - hold, 0)
     for label, value, key in sorted([("Current files", current, "current"), ("Older versions of files", versions,
                                                                              "versions"),
@@ -152,6 +153,8 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                                            f"Untouched {years}+ years", "Site limit", "Last change"],
                       intro="Largest first. Storage used includes versions, the recycle bin and everything else on "
                             "the site.", empty="No sites.")
+    by_site.chart = Chart("Site", ("Current files", "Older versions", "Recycle bin"), total="Storage used",
+                          title="Largest sites")
     for s in sorted(sites, key=lambda s: -(s.get("used") or 0)):
         limit = s.get("limit")
         state = s.get("state")

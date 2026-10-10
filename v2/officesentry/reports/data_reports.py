@@ -32,6 +32,28 @@ from . import workbook
 from .tables import Table
 
 
+@dataclass(frozen=True)
+class Chart:
+    """A bar chart of a table's rows, declared on its ``Section`` and drawn after the table's filters apply.
+
+    One bar per value of the ``by`` column (or "flag" for the flag column; each item of a list cell counts
+    once), so the chart always matches the filtered table, and each bar opens the table filtered to it.
+    ``series`` are number columns (counts, sizes or money) summed and stacked in each bar, with ``tones``
+    from ``charts.TONE_FILL`` ("1", "2", "3", "bad"); with none, each bar counts rows. Bars are largest
+    first unless ``ranked`` is False (the table's own order), and past ``top`` the rest are folded into
+    "Other" (``other=False`` leaves them out). ``views.chart`` does the drawing.
+    """
+    by: str
+    series: tuple[str, ...] = ()
+    total: str = ""  # a number column to show as each bar's value, when the series don't add up to it
+    rest: str = "Other"  # what the grey part for the rest of ``total`` is called
+    title: str = ""  # defaults to "By <column>"
+    tones: tuple[str, ...] = ("1", "2", "3")
+    ranked: bool = True
+    top: int = 8
+    other: bool = True
+
+
 @dataclass
 class Section:
     title: str
@@ -51,6 +73,8 @@ class Section:
     filter_columns: tuple[str, ...] = ()
     keys: list = field(default_factory=list)
     review: bool = True  # False: rows already dealt with (accepted, resolved), so no "<n> to review"
+    chart: Chart | None = None  # drawn from the rows the view leaves (views.chart)
+    figure: str = ""  # the chart as drawn for a download, set by views.apply()
 
     def add(self, row: list, flag: str | None = None, key=None) -> None:
         self.rows.append([_cell(v) for v in row])
@@ -148,6 +172,41 @@ class Rows:
 
 
 @dataclass
+class Trend:
+    """A headline figure's history for its sparkline: one value per day with a collection, oldest first."""
+    values: list[float]
+    first: str  # the oldest value as people read it, for the sparkline's title
+    last: str
+    since: str  # "12 Jul 2026"
+
+    @property
+    def label(self) -> str:
+        return f"Since {self.since}: from {self.first} to {self.last}"
+
+
+TREND_DAYS = 90
+
+
+def trend(snap: TenantSnapshot, key: str, now: datetime, fmt: Callable[[float], str] | None = None,
+          days: int = TREND_DAYS) -> Trend | None:
+    """The last ``days`` of a metric (``ctx.metric`` keys), the day's last value each day, for a sparkline.
+
+    None with fewer than three days of history: a line through two points says nothing a delta doesn't.
+    """
+    since = (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    daily: dict[str, float] = {}
+    for captured, value in snap.history(key, since):
+        daily[captured[:10]] = value
+    if len(daily) < 3:
+        return None
+    fmt = fmt or (lambda v: f"{v:,.0f}" if float(v).is_integer() else f"{v:,.1f}")
+    first = min(daily)
+    values = [daily[d] for d in sorted(daily)]
+    day = datetime.fromisoformat(first)
+    return Trend(values, fmt(values[0]), fmt(values[-1]), f"{day.day} {day:%b %Y}")
+
+
+@dataclass
 class Tile:
     """A headline figure above a report's tables. ``tone``: ok, warn or bad."""
     label: str
@@ -155,6 +214,7 @@ class Tile:
     foot: str = ""
     tone: str | None = None
     rows: Rows | None = None  # what clicking it shows; a figure named like a table links to that table
+    trend: Trend | None = None  # a sparkline of its history (``trend()``)
 
 
 @dataclass
@@ -165,6 +225,7 @@ class Highlight:
     foot: str = ""
     tone: str | None = None  # bad | warn | ok, for the dot next to the label
     rows: Rows | None = None  # what clicking it shows, as for Tile
+    trend: Trend | None = None  # a sparkline of its history, as for Tile
 
 
 @dataclass
@@ -803,6 +864,7 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
         every = Section("Managed devices", ["Device", "User", "Owner", "Operating system", "Compliance",
                                             "Encrypted", "Last check-in", "Enrolled", "Model"],
                         empty="No devices are enrolled in Intune.")
+        every.chart = Chart("Compliance")
         for d in sorted(managed, key=lambda d: (d.get("deviceName") or "").lower()):
             issues, flag = _device_issues(d, now)
             if issues:

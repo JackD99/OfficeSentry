@@ -566,6 +566,42 @@ svg.chart.bars .hit:hover { fill: var(--text); fill-opacity: .07; }
 .legend .sw-good { background: var(--accent); }
 .legend .sw-bad { background: var(--bad); }
 .legend .sw-none { background: var(--border-strong); height: 3px; }
+/* Bars that open their rows (charts.bars, drawn from a table's filtered rows by views.chart): text in HTML,
+   each bar a small SVG. On phones the bar drops under its label and value. */
+.chart-wrap { padding: var(--space-3) var(--space-4) var(--space-2); border-bottom: 1px solid var(--border); }
+.barchart { margin: 0; }
+.barchart figcaption { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-1-5); }
+.chart-title { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.barchart .legend { margin: 0; }
+.bars { list-style: none; margin: 0; padding: 0; }
+.bars .bar { display: grid; grid-template-columns: minmax(7rem, 16rem) minmax(0, 1fr) minmax(4rem, max-content); align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); margin: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm); color: var(--text-2); font-size: var(--fs-sm); text-decoration: none; }
+a.bar:hover { background: var(--surface-2); }
+a.bar:hover .bar-label { color: var(--accent); text-decoration: underline; }
+a.bar.on { background: var(--accent-soft); }
+a.bar.on .bar-label { color: var(--text); font-weight: 600; }
+.bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { display: block; overflow: visible; }
+.bar-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; white-space: nowrap; }
+svg .part.tone-1, .legend .sw.tone-1 { fill: var(--chart-series); background: var(--chart-series); }
+svg .part.tone-2, .legend .sw.tone-2 { fill: var(--chart-2); background: var(--chart-2); }
+svg .part.tone-3, .legend .sw.tone-3 { fill: var(--chart-3); background: var(--chart-3); }
+svg .part.tone-bad, .legend .sw.tone-bad { fill: var(--sev-critical-fill); background: var(--sev-critical-fill); }
+svg .part.tone-muted, .legend .sw.tone-muted { fill: var(--sev-low-fill); background: var(--sev-low-fill); }
+.bar-track .gap { fill: var(--surface); }
+a.bar:hover .bar-track .gap { fill: var(--surface-2); }
+a.bar.on .bar-track .gap { fill: var(--accent-soft); }
+.bar-track .zero { fill: var(--border-strong); }
+@media (max-width: 640px) {
+  .bars .bar { grid-template-columns: minmax(0, 1fr) max-content; row-gap: var(--space-1); }
+  .bar-track { grid-column: 1 / -1; grid-row: 2; }
+}
+/* Sparklines beside headline figures (charts.sparkline): a muted line, the latest point in the accent. */
+.value.has-spark { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+svg.spark { flex: none; overflow: visible; }
+svg.spark .spark-line { stroke: var(--decor); }
+svg.spark .spark-end { fill: var(--chart-series); }
+svg.chart .forecast { stroke: var(--accent); }
+svg.chart .limit { stroke: var(--muted); }
 /* 90 columns stay readable on a phone: the chart keeps a minimum width and scrolls sideways. */
 .chart-scroll { overflow-x: auto; direction: rtl; } /* opens on the newest days */
 .chart-scroll > svg { direction: ltr; }
