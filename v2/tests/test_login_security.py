@@ -189,9 +189,60 @@ def test_admin_can_reset_lost_phone(client, db, vault, staff_mfa):
     admin = client.application.test_client()
     make_user(db, "boss")
     enrol(admin, db, vault, "boss")
-    admin.post(f"/admin/users/{uid}/reset-two-step")
+    admin.post(f"/admin/users/{uid}/reset-two-step", data={"admin_password": PASSWORD})
     assert client.get("/").status_code == 302  # signed out
     assert login(client, "analyst").headers["Location"].endswith("/two-step/setup")
+
+
+def test_admin_resets_need_the_admins_own_password(app, db, vault, staff_mfa):
+    """A stolen admin session can't reset another account's password, two-step sign-in or sessions, just as
+    the account page asks for the password before the same changes."""
+    uid = make_user(db, "ana", role="analyst")
+    ana = app.test_client()
+    enrol(ana, db, vault, "ana")
+    make_user(db, "boss")
+    boss = app.test_client()
+    enrol(boss, db, vault, "boss")
+    before = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    page = boss.get(f"/admin/users/{uid}").get_data(as_text=True)
+    assert page.count('name="admin_password"') == 2
+
+    wrong = {"admin_password": "not my password"}
+    for path in ("reset-two-step", "sign-out"):
+        resp = boss.post(f"/admin/users/{uid}/{path}", data=wrong, follow_redirects=True)
+        assert "Your password isn&#39;t right, so nothing was changed." in resp.get_data(as_text=True)
+    resp = boss.post(f"/admin/users/{uid}", data={"role": "admin", "password": NEW_PASSWORD, **wrong})
+    assert resp.headers["Location"] == f"/admin/users/{uid}"
+    boss.post(f"/admin/users/{uid}", data={"role": "admin", "password": NEW_PASSWORD})  # none given at all
+    after = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    assert dict(after) == dict(before)  # not the password, the role, two-step or the version that signs out
+    assert ana.get("/").status_code == 200
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'password_confirm_failed'").fetchone()[0] == 4
+
+    # With the admin's own password each one works.
+    boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": PASSWORD})
+    assert ana.get("/").status_code == 302
+    boss.post(f"/admin/users/{uid}/reset-two-step", data={"admin_password": PASSWORD})
+    assert db.execute("SELECT totp_enabled_at FROM users WHERE id = ?", (uid,)).fetchone()[0] is None
+    boss.post(f"/admin/users/{uid}", data={"role": "analyst", "password": NEW_PASSWORD, "admin_password": PASSWORD})
+    row = db.execute("SELECT password_hash, must_change_password FROM users WHERE id = ?", (uid,)).fetchone()
+    assert row["password_hash"] != before["password_hash"] and row["must_change_password"] == 1
+    assert boss.get("/").status_code == 200  # the admin's own right password undid nothing
+
+
+def test_wrong_admin_passwords_lock_the_admin(app, db):
+    from officesentry.web.auth import MAX_FAILURES
+
+    uid = make_user(db, "ana", role="analyst")
+    make_user(db, "boss")
+    boss = app.test_client()
+    login(boss, "boss")
+    for _ in range(MAX_FAILURES):
+        boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": "guess"})
+    resp = boss.post(f"/admin/users/{uid}/sign-out", data={"admin_password": PASSWORD}, follow_redirects=True)
+    assert "Too many wrong passwords" in resp.get_data(as_text=True)
+    assert db.execute("SELECT locked_until FROM users WHERE username = 'boss'").fetchone()[0]
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'user_signed_out'").fetchone()[0] == 0
 
 
 # -- Sessions ------------------------------------------------------------------------

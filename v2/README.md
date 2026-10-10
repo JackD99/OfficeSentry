@@ -416,7 +416,8 @@ These areas have no real recording and are tested with simulated data only:
   an admin set (new user or reset) has to be replaced at the next sign-in,
   before two-step setup (or right after the code, for accounts that have it). Each user gets ten
   one-time recovery codes. An admin can reset someone's two-step sign-in from
-  their user page if they lose their phone.
+  their user page if they lose their phone, giving their own password, as
+  for resetting a password or signing someone out.
 - **Sign-in limits by address, not account lockout:** wrong passwords slow
   down the address they come from (5 per username or 20 in all per 15
   minutes), and a spread-out attack on one account slows new addresses only,

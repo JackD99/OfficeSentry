@@ -190,6 +190,9 @@ copied collection reads back exactly as its snapshot.
   interrupted rotation can no longer leave stored secrets under a key that was never saved.
 - The public demo no longer stores an authenticator secret on its shared visitor when the two-step setup
   page is opened.
+- Resetting someone else's password, two-step sign-in or sessions from their user page asks for the admin's
+  own password, as the account page does before the same changes, so a stolen admin session isn't enough.
+  Wrong answers count towards the admin's own sign-in lock.
 
 ## 2.0.0 (2026-10-09)
 

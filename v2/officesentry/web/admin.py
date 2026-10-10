@@ -27,7 +27,7 @@ from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
 from ..text import plural
 from . import sessions
 from .access import ROLES, roles_required
-from .auth import password_problem
+from .auth import confirm_password, password_problem
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -39,6 +39,13 @@ def _user_or_404(user_id: int):
     if user is None:
         abort(404)
     return user
+
+
+def _admin_password_ok() -> bool:
+    """The admin's own password, asked again before resetting someone's password, two-step sign-in or
+    sessions, as the account page asks before the same changes: a stolen admin session isn't enough.
+    Wrong answers count towards the admin's own lock (``auth.confirm_password``)."""
+    return confirm_password("admin_password", "Your password isn't right, so nothing was changed.")
 
 
 # -- Users -------------------------------------------------------------------
@@ -92,6 +99,8 @@ def edit_user(user_id: int):
     # Archived tenants are listed too, so saving the form keeps grants for when they're restored.
     tenants = g.db.execute("SELECT id, name, archived_at FROM tenants ORDER BY name COLLATE NOCASE").fetchall()
     if request.method == "POST":
+        if request.form.get("password") and not _admin_password_ok():
+            return redirect(url_for("admin.edit_user", user_id=user_id))
         role = request.form.get("role", user["role"])
         if role not in ROLES:
             abort(400)
@@ -165,6 +174,8 @@ def _is_locked(user) -> bool:
 def reset_two_step(user_id: int):
     """For a lost phone: remove their authenticator and sign them out. They set it up again at next sign-in."""
     user = _user_or_404(user_id)
+    if not _admin_password_ok():
+        return redirect(url_for("admin.edit_user", user_id=user_id))
     with transaction(g.db):
         g.db.execute(
             "UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
@@ -184,6 +195,8 @@ def reset_two_step(user_id: int):
 @roles_required("admin")
 def sign_out_user(user_id: int):
     user = _user_or_404(user_id)
+    if not _admin_password_ok():
+        return redirect(url_for("admin.edit_user", user_id=user_id))
     ended = sessions.revoke_user(user_id, except_current=user_id == g.user["id"])
     audit(g.db, g.user["username"], "user_signed_out", detail=f"{user['username']}: {plural(ended, 'session')}")
     flash(f"Signed {user['username']} out of {ended} browser{'s' if ended != 1 else ''}.", "success")

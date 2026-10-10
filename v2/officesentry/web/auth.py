@@ -373,7 +373,7 @@ def two_step_setup():
         return redirect(url_for("auth.account"))
     vault = _vault()
 
-    if request.method == "POST" and user["totp_pending_enc"] and signed_in and not _confirm_password():
+    if request.method == "POST" and user["totp_pending_enc"] and signed_in and not confirm_password():
         # From the account page, adding an authenticator needs the password: a stolen session isn't enough.
         return _setup_page(user, signed_in)
     if request.method == "POST" and user["totp_pending_enc"]:
@@ -524,7 +524,7 @@ def change_password():
     if request.method == "GET":
         return redirect(url_for("auth.account"))
     # Wrong guesses count towards the lock, like any other password check on a signed-in session.
-    if not _confirm_password("current", "Current password is wrong."):
+    if not confirm_password("current", "Current password is wrong."):
         return redirect(url_for("auth.account"))
     if problem := password_problem(request.form.get("password", ""), request.form.get("confirm", "")):
         flash(problem, "error")
@@ -539,7 +539,7 @@ def change_password():
     return redirect(url_for("auth.account"))
 
 
-def _confirm_password(field: str = "password", wrong: str = "That password isn't right.") -> bool:
+def confirm_password(field: str = "password", wrong: str = "That password isn't right.") -> bool:
     """The signed-in person's password, asked again before a security change.
 
     Wrong answers count towards the two-step lock (MAX_FAILURES), so a stolen
@@ -563,7 +563,7 @@ def _confirm_password(field: str = "password", wrong: str = "That password isn't
 def two_step_off():
     if _cfg().mfa_required(g.user["role"], g.db):
         flash("Two-step sign-in is required for your account, so it can't be turned off.", "error")
-    elif _confirm_password():
+    elif confirm_password():
         with transaction(g.db):
             g.db.execute(
                 "UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
@@ -582,7 +582,7 @@ def two_step_off():
 def new_recovery_codes():
     if not g.user["totp_enabled_at"]:
         return redirect(url_for("auth.account"))
-    if not _confirm_password():
+    if not confirm_password():
         return redirect(url_for("auth.account"))
     codes = totp.new_recovery_codes()
     with transaction(g.db):
