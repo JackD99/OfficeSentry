@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}Support · Office Sentry{% endblock %}
+{% set TONE = {'ok': 'ok', 'warn': 'warn', 'fail': 'bad'} %}
+{% set errors = figures.errors.web + figures.errors.worker %}
+{% set log_kb = (figures.log_bytes.web + figures.log_bytes.worker) // 1024 %}
+{% block content %}
+<div class="page-head"><div><h1>Support</h1>
+  <div class="sub">When something isn't working: where to look, and a package of diagnostics to attach to a bug report. Nothing in it names a client or a person unless you choose to.</div></div></div>
+
+{% if health.attention %}
+{% set c = health.attention[0] %}
+<div class="callout {{ TONE[c.status] }}" role="status">{{ icon('alert') }}<span class="grow"><strong>{{ c.label }}: {{ c.summary }}{{ '' if c.summary.endswith('.') else '.' }}</strong>
+  {% if c.fix %}<span class="fix">{{ c.fix }}</span>{% endif %} <a href="{{ url_for('system.status') }}">See every check</a>.</span></div>
+{% else %}
+<div class="callout ok" role="status">{{ icon('check') }}<span><strong>Office Sentry's own checks pass.</strong> If a page or a report is still wrong, the steps on the right get it looked at fastest.</span></div>
+{% endif %}
+
+<div class="tiles">
+  <div class="tile"><div class="label">Version</div><div class="value small-value">{{ version }}</div><div class="foot">Say this in a bug report</div></div>
+  <div class="tile tone-{{ 'warn' if errors else 'ok' }}"><div class="label"><span class="dot {{ 'warn' if errors else 'ok' }}"></span>Errors logged</div>
+    <div class="value">{{ '{:,}'.format(errors) }}</div><div class="foot">last 24 hours, portal and worker</div></div>
+  <div class="tile tone-{{ 'warn' if figures.failed_runs else 'ok' }}"><div class="label"><span class="dot {{ 'warn' if figures.failed_runs else 'ok' }}"></span>Failed collections</div>
+    <div class="value">{{ '{:,}'.format(figures.failed_runs) }}</div><div class="foot">last {{ failure_days }} days{% if figures.failed_tasks %}, and {{ figures.failed_tasks|plural('failed task') }}{% endif %}</div></div>
+  <div class="tile"><div class="label">Log kept</div><div class="value">{{ '{:,}'.format(log_kb) }} <span class="unit">KB</span></div><div class="foot">{{ log_dir }}</div></div>
+</div>
+
+<div class="grid-main">
+<section class="card" id="package">
+  <div class="card-head"><h2>{{ icon('download') }} Support package</h2><span class="meta">one zip, made fresh each time</span></div>
+  <p class="muted small">Everything a maintainer needs to see what went wrong, gathered from stored state and the logs in a few seconds. It never asks Microsoft for anything and is never saved on the server.</p>
+  <ul class="list compact package-parts">
+    {% for title, holds in parts %}
+    <li><span class="grow"><div class="title">{{ title }}</div><div class="desc">{{ holds }}</div></span></li>
+    {% endfor %}
+  </ul>
+  <div class="callout" role="note">{{ icon('shield') }}<span><strong>Never inside:</strong> encryption keys, certificates and private keys, passwords, session tokens, webhook URLs, e-mail and IP addresses, or anything a report shows. Clients appear as numbers, people as <span class="mono">[user]</span>.</span></div>
+  <form method="post" action="{{ url_for('support.package') }}" class="package-form">
+    {{ csrf() }}
+    <label class="check identifiers"><input type="checkbox" name="identifiers" value="1"><span><strong>Include client identifiers</strong>
+      <span class="hint">Keeps client names, Microsoft tenant IDs, domains and user names, so a problem with one client can be followed by name. Only for a private channel, never a public issue.</span></span></label>
+    <div class="form-actions wrap"><button class="primary">{{ icon('download') }} Download support package</button>
+      <span class="muted small">Recorded in the activity log.</span></div>
+  </form>
+  <p class="footnote">If the portal won't open, make the same package from the server's shell:
+    {% if docker %}<span class="mono">docker compose run --rm -T web python -m officesentry support-package --out - &gt; support.zip</span>{% else %}<span class="mono">python -m officesentry support-package</span>{% endif %}</p>
+</section>
+
+<div class="stack">
+<section class="card">
+  <div class="card-head"><h2>{{ icon('doc') }} Get help in three steps</h2></div>
+  <ol class="steps">
+    <li><strong>Check the usual causes.</strong> <a href="{{ url_for('system.status') }}">System status</a> says whether the worker, collection, backups and disk are fine; <a href="{{ troubleshooting_url }}">Troubleshooting</a> covers the setup and sign-in errors people meet most.</li>
+    <li><strong>Download the support package</strong> (left). It carries the version, settings, health, recent failures and logs, so nobody has to ask for them one by one.</li>
+    <li><strong><a href="{{ issue_url }}">Open a bug report</a></strong> on GitHub: what you did, what you saw and what you expected, the reference from the error page if there was one, and the zip attached. Issues are public; the package is written for that.</li>
+  </ol>
+  <p class="footnote">Found a security problem? Don't post it: use <a href="{{ security_url }}">private vulnerability reporting</a>. More in <a href="{{ help_url }}">Getting help</a>.</p>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>{{ icon('search') }} Looking yourself</h2></div>
+  <dl class="kv">
+    <dt>Error page reference</dt><dd>Every "something went wrong" page shows a reference such as <span class="mono">3f9a1c2b4d5e</span>. The same reference is on the error's line in the portal log (<span class="mono">req=3f9a1c2b4d5e</span>), with who was signed in and which tenant the page was about.</dd>
+    <dt>Logs</dt><dd>The portal and worker each keep a short rolling log in <span class="mono">{{ log_dir }}</span>{% if docker %} (inside the data volume; <span class="mono">docker compose logs web</span> has the same lines){% endif %}. Lines name the tenant, run or task they happened in.</dd>
+    <dt>A failed collection</dt><dd>The run's own page explains Microsoft's answer in plain words; a tenant's <strong>Manage</strong> page says what's wrong with its connection.</dd>
+    <dt>Who did what</dt><dd>The <a href="{{ url_for('activity.index') }}">Activity log</a> records every change and sign-in.</dd>
+  </dl>
+</section>
+</div>
+</div>
+{% endblock %}

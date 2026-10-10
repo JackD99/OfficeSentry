@@ -20,6 +20,18 @@ None.
 
 No.
 
+### Added
+
+- **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
+  failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
+  addresses and client names taken out (clients appear as numbers unless you tick *Include client
+  identifiers*). `python -m officesentry support-package` makes the same zip from the shell when the portal
+  won't start, over a broken database or a configuration that won't load.
+  [Getting help](v2/docs/getting-help.md) says what's in it.
+- The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
+  every line says which request, user, tenant, run or task it belongs to. A page that fails shows a
+  reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
+
 ### Fixed
 
 - A report email retried after midnight, sent again with Retry the next week, or approved late now names

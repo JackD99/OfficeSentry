@@ -809,7 +809,11 @@ The runs never print the portal's own log, because it names clients, users
 and addresses and the run logs will be public once the repository is. When
 `status` counts errors, or a deploy says the portal didn't become healthy,
 read the log in a shell (below) with `docker compose logs --tail 200 web`
-(or `worker`).
+(or `worker`), or make a support package with the log's tail and the health
+checks, secrets and client names taken out: **Settings → Support** in the
+portal, or `docker compose run --rm -T web python -m officesentry
+support-package --out - > support.zip` in a shell
+([Getting help](docs/getting-help.md)).
 
 ### Automatic deploys: off and on
 

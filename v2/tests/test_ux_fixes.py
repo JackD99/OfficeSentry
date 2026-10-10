@@ -29,6 +29,7 @@ SETTINGS = (
     "/admin/users",
     "/admin/activity",
     "/admin/status",
+    "/admin/support",
 )
 
 

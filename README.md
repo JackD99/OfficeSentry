@@ -289,7 +289,9 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
    tenant grants consent, you assign Global Reader, and the first collection runs.
 
 Stuck? [Troubleshooting](v2/docs/troubleshooting.md) covers the common errors, such as `AADSTS50011` on the
-consent page, mailboxes failing without Global Reader and the worker not running.
+consent page, mailboxes failing without Global Reader and the worker not running. For anything else,
+**Settings → Support** makes a support package to attach to a bug report, with secrets and client names taken
+out ([Getting help](v2/docs/getting-help.md)).
 
 [v2/DEPLOY.md](v2/DEPLOY.md) covers HTTPS, the collection schedule, retention, backups and updating.
 
@@ -302,6 +304,7 @@ consent page, mailboxes failing without Global Reader and the worker not running
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
+- [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be
 

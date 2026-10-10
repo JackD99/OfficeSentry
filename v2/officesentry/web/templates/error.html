@@ -6,6 +6,8 @@
   <div class="error-code">{{ code }}</div>
   <h3>{{ message }}</h3>
   {% if detail %}<p>{{ detail }}</p>{% endif %}
+  {% if reference %}<p class="error-reference">Reference <span class="mono">{{ reference }}</span></p>
+  {% if current_user and current_user.role == 'admin' %}<p class="small">The portal log has the full error under this reference. <a href="{{ url_for('support.index') }}">Support</a> makes a package to attach to a bug report.</p>{% endif %}{% endif %}
   <div class="form-actions center-actions">
     {% if current_user %}
     <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">{{ icon('tenants') }} {{ 'Your reports' if current_user.role == 'client' else 'Tenants' }}</a>

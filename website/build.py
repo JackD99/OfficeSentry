@@ -74,6 +74,8 @@ SECTIONS = [
             blurb="Consent, Global Reader, the first collection, connection health and offboarding."),
         Doc("v2/docs/troubleshooting.md", "troubleshooting",
             blurb="The common setup and collection errors, and how to fix them."),
+        Doc("v2/docs/getting-help.md", "getting-help",
+            blurb="Where to look first, the support package to attach to a bug report, and what it leaves out."),
     ]),
     ("Reference", [
         Doc("v2/README.md", "reference", "Reports and features",

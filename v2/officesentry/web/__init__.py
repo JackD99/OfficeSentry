@@ -9,7 +9,7 @@ from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import __version__, system_alerts, system_health, worker
+from .. import __version__, logs, system_alerts, system_health, worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
@@ -37,6 +37,7 @@ from . import (
     saved_views,
     search,
     styleguide,
+    support,
     system,
     tenant_admin,
     tenants,
@@ -48,6 +49,7 @@ csrf = CSRFProtect()
 
 def create_app(cfg: Config | None = None) -> Flask:
     cfg = cfg or load_config()
+    logs.setup(cfg.data_dir, "web")
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=cfg.secret_key,
@@ -90,6 +92,15 @@ def create_app(cfg: Config | None = None) -> Flask:
         g.db = connect(cfg.db_path)
         g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
+        # Every line logged while handling this request names it (logs.py); the id goes back in the
+        # X-Request-ID header and on the error page, so a report can quote it.
+        g.request_id = logs.new_request_id()
+        user = g.get("user")
+        g.log_token = logs.push(
+            req=g.request_id,
+            user=user["username"] if user else None,
+            tenant=(request.view_args or {}).get("tenant_id"),
+        )
 
     # On the public demo site, nothing but reading (after load_user, which sets g.public_demo).
     app.before_request(public_demo.refuse_changes)
@@ -100,6 +111,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         db = g.pop("db", None)
         if db is not None:
             db.close()
+        logs.pop(g.pop("log_token", None))
 
     @app.after_request
     def _security_headers(resp):
@@ -114,6 +126,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "SAMEORIGIN" if override else "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
+        if request_id := g.get("request_id"):
+            resp.headers["X-Request-ID"] = request_id
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if cfg.secure_cookies:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -172,6 +186,18 @@ def create_app(cfg: Config | None = None) -> Flask:
             detail="The link may be out of date, or the page belongs to a tenant you haven't been given access to.",
         ), 404
 
+    @app.errorhandler(500)
+    def _failed(_e):
+        # Flask has already logged the traceback with this request's id in its context.
+        return render_template(
+            "error.html",
+            code=500,
+            message="Something went wrong on our side.",
+            detail="It has been logged. Try again; if it keeps happening, quote the reference below when you ask "
+            "for help.",
+            reference=g.get("request_id"),
+        ), 500
+
     @app.get("/health")
     def health():
         # The version lets an uptime monitor (or a person after an update) confirm what is running.
@@ -210,6 +236,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(groups.bp)
     app.register_blueprint(upcoming.bp)
     app.register_blueprint(system.bp)
+    app.register_blueprint(support.bp)
     app.register_blueprint(styleguide.bp)
     app.register_blueprint(designs.bp)
     return app
