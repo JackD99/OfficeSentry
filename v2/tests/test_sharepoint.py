@@ -91,14 +91,26 @@ def test_shared_files_collector(db, two_tenants):
 
 def test_shared_files_without_permission(db, two_tenants):
     alpha, _ = two_tenants
-    seed_tenant(db, alpha, sharepoint_kw={"files": False})
+    seed_tenant(db, alpha, sharepoint_kw={"files": False}, our_app={"missing": ("Sites.Read.All",)})
     run = store.latest_run(db, alpha, "shared_files")
-    assert run["status"] == "partial" and "Sites.Read.All" in run["error"]
+    assert run["status"] == "partial" and "needs the Sites.Read.All permission" in run["error"]
     report = _report(db, alpha, "shared-files")
-    assert "consent link" in report.unavailable
+    assert "send the consent link to the client's Global Admin again" in report.unavailable
     # The check falls back to Microsoft's per-site counts instead of passing.
     result = _results(db, alpha)["anyone_links"]
     assert result.status == "fail" and result.findings[0].subject == sd.FINANCE
+
+
+def test_sharepoint_refusing_a_granted_app_is_not_called_missing_consent(db, two_tenants):
+    """A 403 from SharePoint while Sites.Read.All is granted is SharePoint's own restriction: a consent
+    link won't fix it, so neither the run nor the reports send the admin to re-consent."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, sharepoint_kw={"files": False})
+    run = store.latest_run(db, alpha, "shared_files")
+    assert run["status"] == "partial" and "isn't a consent problem" in run["error"]
+    assert _snap(db, alpha).objects("shared_files", "scan_status")[0]["reason"] == "denied"
+    report = _report(db, alpha, "shared-files")
+    assert "won't help" in report.unavailable and "Admin again" not in report.unavailable
 
 
 def test_describe_permissions_treats_guest_logins_as_external():
@@ -268,7 +280,7 @@ def test_shared_files_report(db, two_tenants):
     first = anyone.rows[0]
     assert str(first[0]) == "Clients (folder)" and first[0].safe_href == "https://x/Clients"
     assert first[2] == "Edit" and first[3] == "Never" and first[5] == "2026-09-01"
-    assert anyone.flags == ["high", "low"]
+    assert anyone.flags == ["high", "medium"]  # view-only with an expiry: medium, as the check rates it
     assert anyone.rows[1][1] == "OneDrive of ann@x.com" and anyone.rows[1][3] == "2099-01-01"
     assert _section(report, "Shared with people outside the organisation").rows[0][2] == "partner@other.com"
     assert _section(report, "Shared with the whole organisation").rows[0][1] == "Finance / Documents"

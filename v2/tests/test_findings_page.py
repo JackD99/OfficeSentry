@@ -199,3 +199,20 @@ def test_saved_views_on_findings(client, db, two_tenants):
     )
     assert "/findings/resolved?" in resp.headers["Location"]
     assert client.post("/reports/nope/views", data={"name": "x", "query": query, "tenant_id": alpha}).status_code == 404
+
+
+def test_an_impossible_review_date_is_refused(client, db, two_tenants):
+    """A review date like 31 February never comes round, so accepting with it would hide the finding for good."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "analyst1", role="analyst", tenants=[alpha])
+    login(client, "analyst1")
+    guest = _finding(db, alpha, "guest_admins")
+    for until in ("2026-02-31", "2026-13-01"):
+        resp = client.post(f"/findings/{guest['id']}/accept", data={"note": "Partner", "until": until})
+        assert resp.status_code == 302 and "#t-accepted-risks" not in resp.headers["Location"]
+        assert _finding(db, alpha, "guest_admins")["accepted_by"] is None
+    page = client.get(f"/tenants/{alpha}/findings").get_data(as_text=True)
+    assert "isn&#39;t a real date" in page
+    client.post(f"/findings/{guest['id']}/accept", data={"note": "Partner", "until": "2027-02-28"})
+    assert _finding(db, alpha, "guest_admins")["accepted_by"] == "analyst1"
