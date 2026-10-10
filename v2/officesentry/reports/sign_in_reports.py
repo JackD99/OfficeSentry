@@ -16,6 +16,7 @@ from ..signins import REPEATED_FAILURES, SPRAY_ACCOUNTS
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile
+from .registry import report
 
 NOT_COLLECTED = "Sign-in activity hasn't been collected yet. Refresh \"Sign-in activity\" on the tenant page."
 NO_P1 = ("Sign-in activity comes from the Entra ID sign-in log, which needs Entra ID P1 (included in Microsoft 365 "
@@ -73,6 +74,17 @@ def _rows(snap: TenantSnapshot, kind: str) -> list[dict]:
     return [r for r in snap.objects("sign_ins", kind) or [] if isinstance(r, dict)]
 
 
+@report(
+    "sign-ins",
+    "Sign-in activity",
+    "Failed and successful sign-ins over the last week by account, country and app: password "
+    "guessing, unusual countries, sign-ins without MFA and risky sign-ins.",
+    ("sign_ins", "tenant_profile"),
+    group="identity",
+    order=60,
+    keywords="sign-in logs login logins failed failures password spray brute force lockout locked "
+    "countries locations risky risk compromised breach hacked single-factor audit",
+)
 def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = signins.status(snap)
     if status is None:
@@ -274,11 +286,3 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
     if status.get("truncated"):
         report.notes.append(f"The tenant had more than {total:,} sign-ins in {days} days; the most recent "
                             f"{total:,} are summarised.")
-
-
-REPORTS = {
-    "sign-ins": ("Sign-in activity",
-                 "Failed and successful sign-ins over the last week by account, country and app: password "
-                 "guessing, unusual countries, sign-ins without MFA and risky sign-ins.",
-                 ("sign_ins", "tenant_profile"), sign_in_report),
-}

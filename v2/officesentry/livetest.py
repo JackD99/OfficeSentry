@@ -22,13 +22,13 @@ from pathlib import Path
 import requests
 
 from . import clouds, dnscheck, recording, store
+from .checks import evaluate
 from .collectors import REGISTRY
 from .config import Config
 from .db import connect, migrate, utcnow
 from .exchange import ExchangeClient, ExchangeError
 from .graph import GraphClient, GraphError
 from .msauth import TokenError, secret_token_provider
-from .rules import evaluate
 from .snapshot import TenantSnapshot
 from .text import plural
 from .worker import execute_run
