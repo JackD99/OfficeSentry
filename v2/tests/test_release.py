@@ -76,8 +76,12 @@ def test_a_database_from_before_releases_gets_a_plain_pre_upgrade_name(cfg, monk
 
 
 def test_rotation_keeps_the_newest_copies_whatever_their_database_version(tmp_path):
-    names = ["pre-upgrade-v8-to-v9-20260101-000000.db", "pre-upgrade-v9-to-v10-20260201-000000.db",
-             "pre-upgrade-v10-to-v11-20260301-000000.db", "pre-upgrade-v11-to-v12-20260401-000000-from-2.0.0.db"]
+    names = [
+        "pre-upgrade-v8-to-v9-20260101-000000.db",
+        "pre-upgrade-v9-to-v10-20260201-000000.db",
+        "pre-upgrade-v10-to-v11-20260301-000000.db",
+        "pre-upgrade-v11-to-v12-20260401-000000-from-2.0.0.db",
+    ]
     for name in names:
         (tmp_path / name).write_bytes(b"")
     deleted = backups.rotate(tmp_path, backups.PRE_UPGRADE_PREFIX, 2)
@@ -97,8 +101,11 @@ def test_the_lock_files_pin_every_dependency_with_hashes():
     assert {k: v for k, v in dev.items() if k in image} == image
     for name in ("requirements.txt", "requirements-dev.txt"):
         text = (V2 / name).read_text(encoding="utf-8")
-        assert all("--hash=sha256:" in block for block in re.split(r"\n(?=[A-Za-z])", text.split("\n\n", 1)[-1])
-                   if "==" in block), f"every pin in {name} needs its hashes"
+        assert all(
+            "--hash=sha256:" in block
+            for block in re.split(r"\n(?=[A-Za-z])", text.split("\n\n", 1)[-1])
+            if "==" in block
+        ), f"every pin in {name} needs its hashes"
 
 
 def test_images_are_pinned():
@@ -111,15 +118,19 @@ def test_images_are_pinned():
     assert "build: ." in (V2 / "docker-compose.build.yml").read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize(("tag", "code", "release", "prerelease"), [
-    ("v2.1.0", "2.1.0", "2.1.0", False),
-    ("v2.1.0-rc.1", "2.1.0rc1", "2.1.0", True),
-    ("v2.1.0-beta.2", "2.1.0b2", "2.1.0", True),
-])
+@pytest.mark.parametrize(
+    ("tag", "code", "release", "prerelease"),
+    [
+        ("v2.1.0", "2.1.0", "2.1.0", False),
+        ("v2.1.0-rc.1", "2.1.0rc1", "2.1.0", True),
+        ("v2.1.0-beta.2", "2.1.0b2", "2.1.0", True),
+    ],
+)
 def test_release_notes_come_from_the_changelog(tag, code, release, prerelease):
     notes = _release_notes()
-    changelog = (f"# Changelog\n\n## {release} (2026-11-02)\n\n### Added\n\n- Things.\n\n"
-                 "## 2.0.0 (2026-10-10)\n\n- Old.\n")
+    changelog = (
+        f"# Changelog\n\n## {release} (2026-11-02)\n\n### Added\n\n- Things.\n\n## 2.0.0 (2026-10-10)\n\n- Old.\n"
+    )
     assert notes.notes(tag, changelog, code) == ("### Added\n\n- Things.\n", prerelease)
 
 
@@ -157,16 +168,24 @@ def test_old_images_are_pruned_with_their_parts():
     spec.loader.exec_module(prune)
 
     def version(vid, when, *tags):
-        return {"id": vid, "name": f"sha256:{vid}", "created_at": f"2026-{when}Z",
-                "metadata": {"container": {"tags": list(tags)}}}
+        return {
+            "id": vid,
+            "name": f"sha256:{vid}",
+            "created_at": f"2026-{when}Z",
+            "metadata": {"container": {"tags": list(tags)}},
+        }
 
     versions = [
-        version(1, "10-01T10:00:00", "2.0.0-rc.1"), version(2, "10-01T09:58:00"),  # its platform image
+        version(1, "10-01T10:00:00", "2.0.0-rc.1"),
+        version(2, "10-01T09:58:00"),  # its platform image
         version(3, "10-01T10:05:00", "sha256-1"),  # its signed attestation
-        version(4, "10-15T10:00:00", "2.0.0", "2.0", "2", "latest"), version(5, "10-15T09:59:00"),
+        version(4, "10-15T10:00:00", "2.0.0", "2.0", "2", "latest"),
+        version(5, "10-15T09:59:00"),
         version(6, "10-20T10:00:00"),  # a push whose scan failed: never tagged
-        version(7, "11-02T10:00:00", "2.1.0"), version(8, "11-02T09:59:00"),
-        version(9, "12-01T10:00:00", "2.2.0"), version(10, "12-01T09:59:00"),
+        version(7, "11-02T10:00:00", "2.1.0"),
+        version(8, "11-02T09:59:00"),
+        version(9, "12-01T10:00:00", "2.2.0"),
+        version(10, "12-01T09:59:00"),
     ]
     assert prune.to_delete(versions, keep=4) == []
     assert [v["id"] for v in prune.to_delete(versions, keep=3)] == [1, 2, 3]

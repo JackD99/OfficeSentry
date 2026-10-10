@@ -77,8 +77,13 @@ def test_table_view_offers_values_and_presets():
     assert by["roles"].options[0].active and by["roles"].filtered
     assert by["name"].options == []  # every value is different: nothing to filter by
     assert [o.label for o in by["last-sign-in"].options] == [
-        "In the last 30 days", "Older than 30 days", "Older than 90 days", "Older than 180 days",
-        "Older than a year", "Never or blank"]
+        "In the last 30 days",
+        "Older than 30 days",
+        "Older than 90 days",
+        "Older than 180 days",
+        "Older than a year",
+        "Never or blank",
+    ]
     assert [o.label for o in tv.flag.options] == ["To review", "High", "Medium", "Low", "No flag"]
     assert [c.label for c in tv.chips] == ["Roles: Exchange Administrator"]
     assert tv.chips[0].href == "/p#t-people"  # removing the only filter
@@ -94,10 +99,13 @@ def test_many_cells_still_read_as_text():
 def test_headline_links_point_at_rows():
     report = sample()
     admins = Rows("People", {"Roles": "Global Administrator"})
-    report.highlights = [data_reports.Highlight("Global admins", 2, rows=admins),
-                         data_reports.Highlight("To review", 2, rows=Rows("People", flagged=True)),
-                         data_reports.Highlight("People", 4), data_reports.Highlight("Missing", 1, rows=Rows("Nope")),
-                         data_reports.Highlight("Plain", 1)]
+    report.highlights = [
+        data_reports.Highlight("Global admins", 2, rows=admins),
+        data_reports.Highlight("To review", 2, rows=Rows("People", flagged=True)),
+        data_reports.Highlight("People", 4),
+        data_reports.Highlight("Missing", 1, rows=Rows("Nope")),
+        data_reports.Highlight("Plain", 1),
+    ]
     links = views.headline_links(report, "/r")["highlights"]
     assert links[0] == "/r?f=people%2Froles%3AGlobal+Administrator#t-people"
     assert links[1] == "/r?f=people%2Fflag%3Ahigh&f=people%2Fflag%3Amedium#t-people"
@@ -139,8 +147,8 @@ def test_report_page_filters_hides_and_downloads_the_same_rows(client, db, two_t
     q = "f=forwarding/outside-the-organisation:Yes&hide=forwarding/keeps-a-copy"
     page = unescape(client.get(f"{base}?{q}").get_data(as_text=True))
     assert "2 of 3" in page and "Outside the organisation: Yes" in page and "Clear filters" in page
-    table = page[page.index('id="tbl-forwarding"'):]
-    table = table[:table.index("</table>")]
+    table = page[page.index('id="tbl-forwarding"') :]
+    table = table[: table.index("</table>")]
     assert "Keeps a copy" not in table and table.count("<tr") == 3  # header + two rows
     assert f"/tenants/{alpha}/data/mailboxes.pdf?{q}" in page.replace("%2F", "/").replace("%3A", ":")
     body = client.get(f"{base}.csv?section=1&{q}").get_data(as_text=True).lstrip("\ufeff")
@@ -164,12 +172,15 @@ def test_saved_views(client, db, two_tenants):
     q = "f=forwarding/outside-the-organisation:Yes"
     resp = client.post("/reports/mailboxes/views", data={"name": "  Leaving us  ", "query": q, "tenant_id": alpha})
     assert resp.status_code == 302 and resp.headers["Location"].endswith(
-        f"/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes")
+        f"/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes"
+    )
     row = db.execute("SELECT * FROM saved_views").fetchone()
     assert row["name"] == "Leaving us" and row["report_key"] == "mailboxes"
     # Saving the same name again replaces it; an empty view or unknown report isn't saved.
-    client.post("/reports/mailboxes/views", data={"name": "Leaving us", "query": q + "&sort=forwarding/mailbox:desc",
-                                                  "tenant_id": alpha})
+    client.post(
+        "/reports/mailboxes/views",
+        data={"name": "Leaving us", "query": q + "&sort=forwarding/mailbox:desc", "tenant_id": alpha},
+    )
     assert db.execute("SELECT COUNT(*) FROM saved_views").fetchone()[0] == 1
     client.post("/reports/mailboxes/views", data={"name": "Empty", "query": "bogus=1", "tenant_id": alpha})
     assert client.post("/reports/nope/views", data={"name": "x", "query": q, "tenant_id": alpha}).status_code == 404
@@ -191,8 +202,11 @@ def test_saved_views(client, db, two_tenants):
     # The same check as after sign-in: backslashes and control characters (which browsers drop) are refused too.
     uid = db.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()[0]
     for target in ("/\\evil.example/path", "/\t/evil.example"):
-        vid = db.execute("INSERT INTO saved_views (user_id, report_key, name, query, created_at)"
-                         " VALUES (?, 'mailboxes', ?, 'a', 'now')", (uid, target)).lastrowid
+        vid = db.execute(
+            "INSERT INTO saved_views (user_id, report_key, name, query, created_at)"
+            " VALUES (?, 'mailboxes', ?, 'a', 'now')",
+            (uid, target),
+        ).lastrowid
         resp = client.post(f"/views/{vid}/delete", data={"next": target})
         assert resp.headers["Location"] == "/reports", target
 
@@ -241,7 +255,9 @@ def test_rollup_figures_open_the_tenant_rows(client, db, two_tenants):
     data = rollups.build(db, tenants, "mailboxes")
     row = next(r for r in data.rows if r.tenant["id"] == alpha)
     assert row.links["c:Forwarding outside"] == (
-        "mailboxes", "?f=forwarding%2Foutside-the-organisation%3AYes#t-forwarding")
+        "mailboxes",
+        "?f=forwarding%2Foutside-the-organisation%3AYes#t-forwarding",
+    )
     page = unescape(client.get("/across/mailboxes").get_data(as_text=True))
     assert f'href="/tenants/{alpha}/data/mailboxes?f=forwarding%2Foutside-the-organisation%3AYes#t-forwarding"' in page
     page = client.get("/across/review").get_data(as_text=True)

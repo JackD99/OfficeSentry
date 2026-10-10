@@ -15,8 +15,13 @@ SOURCE = Path(officesentry.__file__).parent
 
 
 def test_rotation_covers_the_webhook(db, cfg, vault):
-    alerts.save_settings(db, {"alerts.url_enc": vault.encrypt("https://hooks.example.com/x?sig=s3cret"),
-                              "alerts.secret_enc": vault.encrypt("signing")})
+    alerts.save_settings(
+        db,
+        {
+            "alerts.url_enc": vault.encrypt("https://hooks.example.com/x?sig=s3cret"),
+            "alerts.secret_enc": vault.encrypt("signing"),
+        },
+    )
     new = Fernet.generate_key().decode()
     assert reencrypt_all(db, Vault([new, *cfg.encryption_keys])) == 2  # what rotate-keys --new does...
     only_new = Vault([new])  # ...before it drops the old key
@@ -27,8 +32,7 @@ def test_rotation_covers_the_webhook(db, cfg, vault):
 
 def _schema_enc_columns(db) -> set[tuple[str, str]]:
     tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
-    return {(t, c["name"]) for t in tables for c in db.execute(f"PRAGMA table_info({t})")
-            if c["name"].endswith("_enc")}
+    return {(t, c["name"]) for t in tables for c in db.execute(f"PRAGMA table_info({t})") if c["name"].endswith("_enc")}
 
 
 def test_every_encrypted_value_is_registered_for_rotation(db):
@@ -65,8 +69,9 @@ def test_new_keys_are_saved_before_anything_is_reencrypted(db, cfg, vault, monke
     smtp = vault.encrypt("pw")
     db.execute("INSERT INTO settings (key, value) VALUES ('smtp_password_enc', ?)", (smtp,))
     db.commit()
-    write_private(cfg.secrets_path, json.dumps({"secret_key": cfg.secret_key,
-                                                "encryption_keys": list(cfg.encryption_keys)}))
+    write_private(
+        cfg.secrets_path, json.dumps({"secret_key": cfg.secret_key, "encryption_keys": list(cfg.encryption_keys)})
+    )
 
     def crash(conn, new_vault):
         reencrypt_all(conn, new_vault)

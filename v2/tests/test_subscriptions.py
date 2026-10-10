@@ -17,8 +17,17 @@ from tests.stored import unpack
 
 
 def _licensing(db, tenant_id, **kwargs):
-    seed_tenant(db, tenant_id, **{"users": ld.USERS, "skus": ld.SKUS, "subscriptions": ld.TENANT_SUBSCRIPTIONS,
-                                  "groups": grp.GROUPS + ld.LICENSING_GROUPS, **kwargs})
+    seed_tenant(
+        db,
+        tenant_id,
+        **{
+            "users": ld.USERS,
+            "skus": ld.SKUS,
+            "subscriptions": ld.TENANT_SUBSCRIPTIONS,
+            "groups": grp.GROUPS + ld.LICENSING_GROUPS,
+            **kwargs,
+        },
+    )
     return store.get_tenant(db, tenant_id)
 
 
@@ -36,8 +45,10 @@ def _results(db, tenant, now=None):
 
 
 def _price(db, part, price):
-    db.execute("INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)",
-               (part, price, "2026-10-01T00:00:00Z"))
+    db.execute(
+        "INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)",
+        (part, price, "2026-10-01T00:00:00Z"),
+    )
 
 
 def test_products_with_cost_and_what_needs_action_first(db, two_tenants):
@@ -101,8 +112,12 @@ def test_who_has_which_licence_and_how(db, two_tenants):
 
     problems, flags = _table(report, "Assignment problems")
     kinds = [(r[0], r[2]) for r in problems]
-    assert kinds == [("dan@x.com", "Licence error"), ("fay@x.com", "Licence error"),
-                     ("eve@x.com", "No usage location"), ("ann@x.com", "Directly and by group")]
+    assert kinds == [
+        ("dan@x.com", "Licence error"),
+        ("fay@x.com", "Licence error"),
+        ("eve@x.com", "No usage location"),
+        ("ann@x.com", "Directly and by group"),
+    ]
     assert "Not enough licences" in problems[0][4] and problems[0][3] == "Licence - Business Premium"
     assert "base licence" in problems[1][4]
     assert flags == ["medium", "medium", "low", "low"]
@@ -162,8 +177,10 @@ def test_checks_find_errors_and_lapsing_subscriptions(db, two_tenants):
     assert errors.status == "fail" and errors.summary == "2 licence assignments failed for 2 accounts"
     dan = next(f for f in errors.findings if f.subject == "dan@x.com")
     assert dan.severity == "medium" and dan.object_id == "u8"
-    assert dan.detail == ("Microsoft 365 Business Premium from Licence - Business Premium wasn't assigned. Not enough "
-                          "licences: every one bought is already assigned.")
+    assert dan.detail == (
+        "Microsoft 365 Business Premium from Licence - Business Premium wasn't assigned. Not enough "
+        "licences: every one bought is already assigned."
+    )
     lapsing = results["subscriptions_lapsing"]
     assert lapsing.status == "fail" and lapsing.summary == "3 subscriptions about to lapse or already lapsed"
     found = {f.subject: f for f in lapsing.findings}
@@ -175,8 +192,10 @@ def test_checks_find_errors_and_lapsing_subscriptions(db, two_tenants):
 
 def test_paid_subscriptions_and_unused_trials_are_not_flagged(db, two_tenants):
     alpha, _ = two_tenants
-    subs = [ld.subscription("s-bp", "sku-bp", "SPB", total=10, ends_in=5),  # renews in 5 days: normal
-            ld.subscription("s-copilot", "sku-copilot", "Microsoft_365_Copilot", trial=True, ends_in=10)]
+    subs = [
+        ld.subscription("s-bp", "sku-bp", "SPB", total=10, ends_in=5),  # renews in 5 days: normal
+        ld.subscription("s-copilot", "sku-copilot", "Microsoft_365_Copilot", trial=True, ends_in=10),
+    ]
     skus = [ld.SKUS[0], dict(ld.SKUS[1], consumedUnits=0)]
     users = [ld.user("u1", "Ann", [ld.state("sku-bp")])]
     tenant = _licensing(db, alpha, skus=skus, subscriptions=subs, users=users)
@@ -211,7 +230,8 @@ def test_unreadable_or_old_data_is_unavailable_not_passed(db, two_tenants):
     assert figures["Licence errors"] == "Not checked" and figures["Lapsing within 30 days"] == "Not checked"
 
     assert data_reports.build(db, store.get_tenant(db, bravo), "subscriptions").unavailable.startswith(
-        "Licence data hasn't been collected")
+        "Licence data hasn't been collected"
+    )
 
 
 def test_account_page_shows_how_each_licence_is_assigned(db, two_tenants):
@@ -232,11 +252,16 @@ def test_account_page_shows_how_each_licence_is_assigned(db, two_tenants):
     assert (bp[1], bp[2], flag) == ("By group: Licence - Business Premium", "Not assigned", "medium")
     assert bp[3].startswith("Not enough licences")
     attention = [(a.severity, a.text) for a in dan.attention if a.part == "licences"]
-    assert ("medium", "Microsoft 365 Business Premium from Licence - Business Premium was not assigned. Not enough "
-                      "licences: every one bought is already assigned. Buy more, or remove the licence from someone "
-                      "who doesn't need it.") in attention
-    assert any(s == "medium" and t.startswith("Exchange Online (Plan 1) comes from a suspended subscription")
-               for s, t in attention)
+    assert (
+        "medium",
+        "Microsoft 365 Business Premium from Licence - Business Premium was not assigned. Not enough "
+        "licences: every one bought is already assigned. Buy more, or remove the licence from someone "
+        "who doesn't need it.",
+    ) in attention
+    assert any(
+        s == "medium" and t.startswith("Exchange Online (Plan 1) comes from a suspended subscription")
+        for s, t in attention
+    )
 
     eve = user_profile.build(db, tenant, "u5")
     assert ("Usage location", "Not set") in next(p for p in eve.parts if p.key == "licences").facts

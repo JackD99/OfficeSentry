@@ -20,17 +20,30 @@ NOW = datetime(2026, 10, 2, tzinfo=UTC)
 
 
 def _user(uid, name, upn, password, signed_in=None, created="2024-01-01T00:00:00Z", never_expires=False):
-    return {"id": uid, "displayName": name, "userPrincipalName": upn, "userType": "Member", "accountEnabled": True,
-            "createdDateTime": created, "assignedLicenses": [{"skuId": "sku-bp"}],
-            "lastPasswordChangeDateTime": password,
-            "passwordPolicies": "DisablePasswordExpiration" if never_expires else "None",
-            "signInActivity": {"lastSignInDateTime": signed_in} if signed_in else {}}
+    return {
+        "id": uid,
+        "displayName": name,
+        "userPrincipalName": upn,
+        "userType": "Member",
+        "accountEnabled": True,
+        "createdDateTime": created,
+        "assignedLicenses": [{"skuId": "sku-bp"}],
+        "lastPasswordChangeDateTime": password,
+        "passwordPolicies": "DisablePasswordExpiration" if never_expires else "None",
+        "signInActivity": {"lastSignInDateTime": signed_in} if signed_in else {},
+    }
 
 
 USERS = [
     _user("u1", "Ann", "ann@x.com", "2026-01-01T00:00:00Z", "2026-09-30T10:00:00Z"),
-    {"id": "u3", "displayName": "Guest", "userPrincipalName": "g#EXT#@x.com", "userType": "Guest",
-     "accountEnabled": True, "assignedLicenses": []},
+    {
+        "id": "u3",
+        "displayName": "Guest",
+        "userPrincipalName": "g#EXT#@x.com",
+        "userType": "Guest",
+        "accountEnabled": True,
+        "assignedLicenses": [],
+    },
     _user("u4", "Breakglass", "bg@x.com", "2025-01-01T00:00:00Z", "2026-09-01T00:00:00Z"),
     _user("u5", "Eve", "eve@x.com", "2026-05-01T00:00:00Z", "2026-09-20T00:00:00Z"),
     _user("u6", "Carl", "carl@x.com", "2024-06-01T00:00:00Z", "2026-09-01T00:00:00Z", never_expires=True),
@@ -40,9 +53,19 @@ USERS = [
 
 
 def _reg(uid, upn, methods, admin=False, **extra):
-    return {"id": uid, "userPrincipalName": upn, "userDisplayName": upn, "userType": "member", "isAdmin": admin,
-            "isMfaRegistered": bool(methods), "isMfaCapable": bool(methods), "methodsRegistered": methods,
-            "isSsprRegistered": False, "isPasswordlessCapable": False, **extra}
+    return {
+        "id": uid,
+        "userPrincipalName": upn,
+        "userDisplayName": upn,
+        "userType": "member",
+        "isAdmin": admin,
+        "isMfaRegistered": bool(methods),
+        "isMfaCapable": bool(methods),
+        "methodsRegistered": methods,
+        "isSsprRegistered": False,
+        "isPasswordlessCapable": False,
+        **extra,
+    }
 
 
 REGISTRATION = [
@@ -50,18 +73,36 @@ REGISTRATION = [
     _reg("u4", "bg@x.com", ["fido2SecurityKey"], admin=True, isPasswordlessCapable=True),
     _reg("u5", "eve@x.com", ["mobilePhone", "email"], admin=True),
     _reg("u6", "carl@x.com", []),
-    _reg("u8", "dana@x.com", ["microsoftAuthenticatorPush", "mobilePhone"], isSsprRegistered=True,
-         isPasswordlessCapable=True, isSystemPreferredAuthenticationMethodEnabled=False,
-         userPreferredMethodForSecondaryAuthentication="sms"),
+    _reg(
+        "u8",
+        "dana@x.com",
+        ["microsoftAuthenticatorPush", "mobilePhone"],
+        isSsprRegistered=True,
+        isPasswordlessCapable=True,
+        isSystemPreferredAuthenticationMethodEnabled=False,
+        userPreferredMethodForSecondaryAuthentication="sms",
+    ),
 ]  # Nick isn't in the report yet, so his methods are read one by one (none)
 
 PR_ADMINS = {
-    "id": "ca4", "displayName": "Admins need phishing-resistant MFA", "state": "enabledForReportingButNotEnforced",
-    "conditions": {"users": {"includeRoles": [gd.GA], "excludeUsers": ["u4"]},
-                   "applications": {"includeApplications": ["All"]}, "clientAppTypes": ["all"]},
-    "grantControls": {"operator": "OR", "builtInControls": [], "authenticationStrength": {
-        "id": "00000000-0000-0000-0000-000000000004", "displayName": "Phishing-resistant MFA", "policyType": "builtIn",
-        "allowedCombinations": ["windowsHelloForBusiness", "fido2", "x509CertificateMultiFactor"]}},
+    "id": "ca4",
+    "displayName": "Admins need phishing-resistant MFA",
+    "state": "enabledForReportingButNotEnforced",
+    "conditions": {
+        "users": {"includeRoles": [gd.GA], "excludeUsers": ["u4"]},
+        "applications": {"includeApplications": ["All"]},
+        "clientAppTypes": ["all"],
+    },
+    "grantControls": {
+        "operator": "OR",
+        "builtInControls": [],
+        "authenticationStrength": {
+            "id": "00000000-0000-0000-0000-000000000004",
+            "displayName": "Phishing-resistant MFA",
+            "policyType": "builtIn",
+            "allowedCombinations": ["windowsHelloForBusiness", "fido2", "x509CertificateMultiFactor"],
+        },
+    },
 }
 
 
@@ -98,9 +139,16 @@ def test_strength_tiers():
     tap = authmethods.strength({"methodsRegistered": ["temporaryAccessPass"]})
     assert tap.strongest == authmethods.NO_SECOND_FACTOR
     assert authmethods.strength(None) is None
-    assert authmethods.preferred({"isSystemPreferredAuthenticationMethodEnabled": True,
-                                  "systemPreferredAuthenticationMethods": ["Fido2"],
-                                  "userPreferredMethodForSecondaryAuthentication": "sms"}) == "Passkey or security key"
+    assert (
+        authmethods.preferred(
+            {
+                "isSystemPreferredAuthenticationMethodEnabled": True,
+                "systemPreferredAuthenticationMethods": ["Fido2"],
+                "userPreferredMethodForSecondaryAuthentication": "sms",
+            }
+        )
+        == "Passkey or security key"
+    )
     assert authmethods.asks_for_phone({"userPreferredMethodForSecondaryAuthentication": "voiceMobile"})
 
 
@@ -125,15 +173,19 @@ def test_policy_collector_names_groups(db, two_tenants, factory):  # noqa: F811
     assert methods["MicrosoftAuthenticator"]["features"]["displayLocationInformationRequiredState"] == "disabled"
     assert methods["Fido2"]["settings"] == {"isSelfServiceRegistrationAllowed": True, "isAttestationEnforced": False}
     assert [(g["_id"], g["displayName"]) for g in snap.objects("auth_methods_policy", "auth_policy_group")] == [
-        ("grp-admins", "IT admins")]
+        ("grp-admins", "IT admins")
+    ]
     assert snap.metric("auth_methods.sms_or_voice_enabled") == 1
 
 
 @responses.activate
 def test_policy_collector_without_permission_is_partial(db, two_tenants, factory):  # noqa: F811
     alpha, _ = two_tenants
-    responses.get(f"{V1}/policies/authenticationMethodsPolicy", status=403,
-                  json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{V1}/policies/authenticationMethodsPolicy",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     _, status = _run(db, alpha, "auth_methods_policy", factory)
     assert status == "partial"
 
@@ -162,8 +214,14 @@ def test_report_ranks_methods_by_strength(db, tenant):
     assert figures["Passwordless ready"] == "2 of 6"
     assert figures["No self-service reset"] == 3
     people = _sections(report)["Sign-in methods by person"]
-    assert [r[0] for r in people.rows] == ["eve@x.com", "ann@x.com", "bg@x.com", "carl@x.com", "nick@x.com",
-                                           "dana@x.com"]
+    assert [r[0] for r in people.rows] == [
+        "eve@x.com",
+        "ann@x.com",
+        "bg@x.com",
+        "carl@x.com",
+        "nick@x.com",
+        "dana@x.com",
+    ]
     rows = _rows(people)
     assert rows["eve@x.com"][1] == "high" and rows["eve@x.com"][0][3] == authmethods.PHONE
     assert rows["eve@x.com"][0][2] == "Global Administrator (eligible)"
@@ -190,8 +248,16 @@ def test_report_compares_the_methods_policy_with_advice(db, tenant):
     assert system[0][1] == "Off" and system[1] == "low"
     assert policy["Authenticator shows where the sign-in is from"][1] == "low"
     strengths = _sections(report)["Authentication strengths in Conditional Access"]
-    assert strengths.rows == [["Admins need phishing-resistant MFA", "Report-only", "Phishing-resistant MFA", "Yes",
-                               "Global Administrator", "bg@x.com"]]
+    assert strengths.rows == [
+        [
+            "Admins need phishing-resistant MFA",
+            "Report-only",
+            "Phishing-resistant MFA",
+            "Yes",
+            "Global Administrator",
+            "bg@x.com",
+        ]
+    ]
 
 
 def test_report_password_hygiene(db, tenant):
@@ -263,17 +329,20 @@ def test_checks(db, tenant):
     assert admins.status == "fail" and admins.summary == "2 admins without a phishing-resistant method"
     assert {f.subject: f.detail for f in admins.findings} == {
         "ann@x.com": "Global Administrator; signs in with Authenticator app",
-        "eve@x.com": "Global Administrator; signs in with Mobile phone (SMS or call), Email"}
+        "eve@x.com": "Global Administrator; signs in with Mobile phone (SMS or call), Email",
+    }
     phone = results["phone_only_mfa"]
     assert phone.status == "fail" and phone.summary == "1 person can only use a text or call as a second factor"
     assert [(f.severity, f.subject, f.detail) for f in phone.findings] == [
-        ("medium", "eve@x.com", "Second factor is only Mobile phone (SMS or call) (holds an admin role)")]
+        ("medium", "eve@x.com", "Second factor is only Mobile phone (SMS or call) (holds an admin role)")
+    ]
 
 
 def test_checks_pass_and_are_unavailable_without_data(db, two_tenants):
     alpha, bravo = two_tenants
-    strong = [_reg(r["id"], r["userPrincipalName"], ["fido2SecurityKey", "microsoftAuthenticatorPush"])
-              for r in REGISTRATION]
+    strong = [
+        _reg(r["id"], r["userPrincipalName"], ["fido2SecurityKey", "microsoftAuthenticatorPush"]) for r in REGISTRATION
+    ]
     seed_tenant(db, alpha, users=USERS, registration=strong)
     results = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)), NOW)}
     assert results["admin_phishing_resistant"].status == "pass"

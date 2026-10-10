@@ -38,9 +38,11 @@ def _results(db, tenant_id):
 
 
 def _org(last_sync=0.3, password_sync=0.3):
-    return {**hd.ORGANIZATION,
-            "onPremisesLastSyncDateTime": None if last_sync is None else hd.hours_ago(last_sync),
-            "onPremisesLastPasswordSyncDateTime": None if password_sync is None else hd.hours_ago(password_sync)}
+    return {
+        **hd.ORGANIZATION,
+        "onPremisesLastSyncDateTime": None if last_sync is None else hd.hours_ago(last_sync),
+        "onPremisesLastPasswordSyncDateTime": None if password_sync is None else hd.hours_ago(password_sync),
+    }
 
 
 def _collect(db, tenant_id, factory, org, beta=None, domains=None):
@@ -98,13 +100,16 @@ def test_unreadable_password_sync_is_partial(db, two_tenants, factory):
 # -- Checks ------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("hours, status, severity, summary", [
-    (0.3, "pass", None, "Last sync less than an hour ago"),
-    (5, "fail", "high", "Last sync 5 hours ago"),
-    (30, "fail", "critical", "Last sync 30 hours ago"),
-    (24 * 9, "fail", "critical", "Last sync 9 days ago"),
-    (None, "fail", "high", "Turned on but has never synced"),
-])
+@pytest.mark.parametrize(
+    "hours, status, severity, summary",
+    [
+        (0.3, "pass", None, "Last sync less than an hour ago"),
+        (5, "fail", "high", "Last sync 5 hours ago"),
+        (30, "fail", "critical", "Last sync 30 hours ago"),
+        (24 * 9, "fail", "critical", "Last sync 9 days ago"),
+        (None, "fail", "high", "Turned on but has never synced"),
+    ],
+)
 def test_directory_sync_running(db, two_tenants, factory, hours, status, severity, summary):
     alpha, _ = two_tenants
     _collect(db, alpha, factory, _org(last_sync=hours, password_sync=hours))
@@ -120,8 +125,9 @@ def test_sync_checks_unavailable_for_cloud_only_and_uncollected(db, two_tenants,
     for key in ("directory_sync_running", "password_hash_sync"):
         assert r[key].status == "unavailable" and r[key].summary.startswith("Cloud-only tenant")
     r = _results(db, bravo)
-    assert all(r[k].status == "unavailable" for k in ("directory_sync_running", "password_hash_sync",
-                                                       "cloud_only_admins"))
+    assert all(
+        r[k].status == "unavailable" for k in ("directory_sync_running", "password_hash_sync", "cloud_only_admins")
+    )
 
 
 def test_password_hash_sync_on(db, two_tenants, factory):
@@ -145,8 +151,10 @@ def test_password_hash_sync_stopped(db, two_tenants, factory):
     _collect(db, alpha, factory, _org(password_sync=72), domains=hd.DOMAINS)
     result = _results(db, alpha)["password_hash_sync"]
     assert (result.status, result.summary) == ("fail", "Password hash sync has stopped")
-    assert result.findings[0].detail == ("Last password sync 3 days ago, though directory sync ran less than an "
-                                         "hour ago: password hash sync has stopped or been turned off")
+    assert result.findings[0].detail == (
+        "Last password sync 3 days ago, though directory sync ran less than an "
+        "hour ago: password hash sync has stopped or been turned off"
+    )
 
 
 def test_whole_sync_stopped_is_flagged_once(db, two_tenants, factory):
@@ -189,7 +197,9 @@ def test_cloud_only_tenant_passes_admin_check(db, two_tenants):
     seed_tenant(db, alpha)
     r = _results(db, alpha)
     assert (r["cloud_only_admins"].status, r["cloud_only_admins"].summary) == (
-        "pass", "Cloud-only tenant: no accounts are synced from on-premises AD")
+        "pass",
+        "Cloud-only tenant: no accounts are synced from on-premises AD",
+    )
     assert r["directory_sync_running"].status == "unavailable"
 
 
@@ -230,11 +240,12 @@ def test_hybrid_report(db, two_tenants, hybrid):
     assert [r[0] for r in domains.rows] == ["x.com", "x.co.uk", "x.onmicrosoft.com"]  # default first
     assert dict(zip(domains.columns, domains.rows[1], strict=True))["Sign-in"] == "Federated"
     admins = sections["Synced admin accounts"]
-    assert [r[:2] for r in admins.rows] == [["ann@x.com", "Global Administrator"],
-                                            ["eve@x.com", "Global Administrator (eligible)"]]
+    assert [r[:2] for r in admins.rows] == [
+        ["ann@x.com", "Global Administrator"],
+        ["eve@x.com", "Global Administrator (eligible)"],
+    ]
     assert admins.flags == ["high", "high"]
-    assert sections["Accounts by source"].rows == [["Members", 4, 1, 5], ["Guests", 0, 1, 1],
-                                                   ["All accounts", 4, 2, 6]]
+    assert sections["Accounts by source"].rows == [["Members", 4, 1, 5], ["Guests", 0, 1, 1], ["All accounts", 4, 2, 6]]
 
 
 def test_hybrid_report_flags_stale_sync(db, two_tenants, factory):

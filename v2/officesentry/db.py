@@ -57,9 +57,7 @@ def _split_statements(sql: str) -> list[str]:
             if buf.strip():
                 statements.append(buf.strip())
             buf = ""
-    if buf.strip() and not all(
-        ln.strip().startswith("--") or not ln.strip() for ln in buf.splitlines()
-    ):
+    if buf.strip() and not all(ln.strip().startswith("--") or not ln.strip() for ln in buf.splitlines()):
         raise ValueError(f"incomplete SQL statement in migration: {buf[:80]!r}")
     return statements
 
@@ -72,8 +70,10 @@ def migration_files() -> list[tuple[int, Path]]:
     # one number would never run on a database the first reached. Refuse instead (test_migrations.py).
     if clashes := sorted(v for v, n in Counter(v for v, _ in files).items() if n > 1):
         names = ", ".join(path.name for v, path in files if v == clashes[0])
-        raise RuntimeError(f"Two database upgrades share the number {clashes[0]:04d} ({names}). Renumber the "
-                           f"newer one to the next free number above {files[-1][0]:04d}.")
+        raise RuntimeError(
+            f"Two database upgrades share the number {clashes[0]:04d} ({names}). Renumber the "
+            f"newer one to the next free number above {files[-1][0]:04d}."
+        )
     return files
 
 
@@ -121,8 +121,10 @@ def _record_app_version(conn: sqlite3.Connection) -> None:
     if stored_app_version(conn) == __version__:
         return
     try:
-        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
-                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (APP_VERSION_KEY, __version__))
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (APP_VERSION_KEY, __version__),
+        )
     except sqlite3.OperationalError:  # no settings table yet, or busy: never stop a start over a label
         pass
 
@@ -141,8 +143,10 @@ def _backup_before_upgrade(conn: sqlite3.Connection, current: int) -> None:
     try:
         backups.before_upgrade(db_file, current, latest_version(), stored_app_version(conn))
     except (OSError, sqlite3.Error) as exc:
-        raise RuntimeError(f"Couldn't back up the database before upgrading it, so it wasn't upgraded: {exc}. "
-                           "Free some disk space (or fix the backups folder's permissions) and start again.") from exc
+        raise RuntimeError(
+            f"Couldn't back up the database before upgrading it, so it wasn't upgraded: {exc}. "
+            "Free some disk space (or fix the backups folder's permissions) and start again."
+        ) from exc
 
 
 class DatabaseTooNew(RuntimeError):
@@ -157,22 +161,29 @@ def _too_new_message(conn: sqlite3.Connection, current: int, latest: int) -> str
     folder = db_file.parent / "backups" if db_file else None
     fits = []
     for path in folder.glob(f"{backups.PRE_UPGRADE_PREFIX}v*-to-v*.db") if folder and folder.is_dir() else ():
-        if (m := re.fullmatch(rf"{backups.PRE_UPGRADE_PREFIX}v(\d+)-to-v\d+-(.+)\.db", path.name)) \
-                and int(m[1]) <= latest:
+        if (m := re.fullmatch(rf"{backups.PRE_UPGRADE_PREFIX}v(\d+)-to-v\d+-(.+)\.db", path.name)) and int(
+            m[1]
+        ) <= latest:
             fits.append((m[2], path))
     if fits:
         how = f"run `python -m officesentry restore {max(fits)[1]}`"
     elif folder:
-        how = (f"restore the {backups.PRE_UPGRADE_PREFIX}*.db copy from {folder} (or another backup from before "
-               "the upgrade) with `python -m officesentry restore <file>`")
+        how = (
+            f"restore the {backups.PRE_UPGRADE_PREFIX}*.db copy from {folder} (or another backup from before "
+            "the upgrade) with `python -m officesentry restore <file>`"
+        )
     else:
-        how = (f"restore the {backups.PRE_UPGRADE_PREFIX}*.db copy taken before the upgrade with "
-               "`python -m officesentry restore <file>`")
+        how = (
+            f"restore the {backups.PRE_UPGRADE_PREFIX}*.db copy taken before the upgrade with "
+            "`python -m officesentry restore <file>`"
+        )
     newer = f"Office Sentry {stored}" if (stored := stored_app_version(conn)) else "a newer version of Office Sentry"
-    return (f"This database was upgraded by {newer} (database version {current}; this "
-            f"version knows up to {latest}), so this version won't start on it. Either go back to the newer "
-            f"version, or to stay on this one: stop the portal and the worker, {how}, then start them again. "
-            "Anything collected since the upgrade is lost. DEPLOY.md, \"Rolling back an update\", has the steps.")
+    return (
+        f"This database was upgraded by {newer} (database version {current}; this "
+        f"version knows up to {latest}), so this version won't start on it. Either go back to the newer "
+        f"version, or to stay on this one: stop the portal and the worker, {how}, then start them again. "
+        'Anything collected since the upgrade is lost. DEPLOY.md, "Rolling back an update", has the steps.'
+    )
 
 
 def migrate(conn: sqlite3.Connection) -> int:
@@ -219,8 +230,9 @@ def _request_ip() -> str | None:
     return (request.remote_addr or "")[:64] or None
 
 
-def audit(conn: sqlite3.Connection, username: str | None, action: str,
-          tenant_id: int | None = None, detail: str = "") -> None:
+def audit(
+    conn: sqlite3.Connection, username: str | None, action: str, tenant_id: int | None = None, detail: str = ""
+) -> None:
     conn.execute(
         "INSERT INTO audit_log (ts, username, action, tenant_id, detail, ip) VALUES (?, ?, ?, ?, ?, ?)",
         (utcnow(), username, action, tenant_id, detail, _request_ip()),
@@ -228,8 +240,14 @@ def audit(conn: sqlite3.Connection, username: str | None, action: str,
 
 
 # Sign-in noise: kept for AUDIT_NOISE_DAYS, then pruned by the worker. Everything else is kept.
-AUDIT_NOISE = ("login_failed", "login_failed_unknown", "login_throttled", "login_code_failed",
-               "two_step_setup_failed", "consent_link_refused")
+AUDIT_NOISE = (
+    "login_failed",
+    "login_failed_unknown",
+    "login_throttled",
+    "login_code_failed",
+    "two_step_setup_failed",
+    "consent_link_refused",
+)
 AUDIT_NOISE_DAYS = 90
 COUNTED_WINDOW_MINUTES = 60
 
@@ -240,10 +258,14 @@ def audit_counted(conn: sqlite3.Connection, action: str, ip: str, username: str 
     since = (datetime.now(UTC) - timedelta(minutes=COUNTED_WINDOW_MINUTES)).strftime("%Y-%m-%dT%H:%M:%SZ")
     row = conn.execute(
         "SELECT id, detail FROM audit_log WHERE action = ? AND ip = ? AND username IS ? AND ts >= ?"
-        " ORDER BY id DESC LIMIT 1", (action, ip, username, since)).fetchone()
+        " ORDER BY id DESC LIMIT 1",
+        (action, ip, username, since),
+    ).fetchone()
     if row is None:
-        conn.execute("INSERT INTO audit_log (ts, username, action, detail, ip) VALUES (?, ?, ?, '1 attempt', ?)",
-                      (utcnow(), username, action, ip))
+        conn.execute(
+            "INSERT INTO audit_log (ts, username, action, detail, ip) VALUES (?, ?, ?, '1 attempt', ?)",
+            (utcnow(), username, action, ip),
+        )
         return
     count = int((row["detail"] or "1").split(" ", 1)[0] or 1) + 1
     conn.execute("UPDATE audit_log SET detail = ? WHERE id = ?", (f"{count} attempts", row["id"]))
@@ -252,5 +274,6 @@ def audit_counted(conn: sqlite3.Connection, action: str, ip: str, username: str 
 def prune_audit(conn: sqlite3.Connection, now: datetime | None = None) -> int:
     """Drop sign-in noise older than AUDIT_NOISE_DAYS. Who changed what is kept for good."""
     cutoff = ((now or datetime.now(UTC)) - timedelta(days=AUDIT_NOISE_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return conn.execute(f"DELETE FROM audit_log WHERE ts < ? AND action IN ({','.join('?' * len(AUDIT_NOISE))})",
-                        (cutoff, *AUDIT_NOISE)).rowcount
+    return conn.execute(
+        f"DELETE FROM audit_log WHERE ts < ? AND action IN ({','.join('?' * len(AUDIT_NOISE))})", (cutoff, *AUDIT_NOISE)
+    ).rowcount

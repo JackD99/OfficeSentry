@@ -17,12 +17,15 @@ def resolver(records):
 
 
 def test_good_domain_has_no_issues():
-    r = resolver({
-        ("a.com", "MX"): ["a-com.mail.protection.outlook.com"],
-        ("a.com", "TXT"): ["v=spf1 include:spf.protection.outlook.com -all"],
-        ("_dmarc.a.com", "TXT"): ["v=DMARC1; p=reject; rua=mailto:x@a.com"],
-        ("selector1._domainkey.a.com", "CNAME"): ["s1"], ("selector2._domainkey.a.com", "CNAME"): ["s2"],
-    })
+    r = resolver(
+        {
+            ("a.com", "MX"): ["a-com.mail.protection.outlook.com"],
+            ("a.com", "TXT"): ["v=spf1 include:spf.protection.outlook.com -all"],
+            ("_dmarc.a.com", "TXT"): ["v=DMARC1; p=reject; rua=mailto:x@a.com"],
+            ("selector1._domainkey.a.com", "CNAME"): ["s1"],
+            ("selector2._domainkey.a.com", "CNAME"): ["s2"],
+        }
+    )
     h = dnscheck.check_domain("A.com", r)
     assert (h.spf_all, h.dmarc_policy, h.microsoft_365) == ("-all", "reject", True)
     assert dnscheck.issues(h) == []
@@ -30,20 +33,31 @@ def test_good_domain_has_no_issues():
 
 
 def test_missing_and_weak_records():
-    h = dnscheck.check_domain("b.com", resolver({("b.com", "MX"): ["mx.b.com"],
-                                                 ("b.com", "TXT"): ["v=spf1 a mx ?all"]}))
+    h = dnscheck.check_domain(
+        "b.com", resolver({("b.com", "MX"): ["mx.b.com"], ("b.com", "TXT"): ["v=spf1 a mx ?all"]})
+    )
     found = {(i.area, i.severity) for i in dnscheck.issues(h)}
     assert ("SPF", "medium") in found and ("DMARC", "high") in found
     assert not any(i.area == "DKIM" for i in dnscheck.issues(h))  # not a Microsoft 365 mail domain
-    two = dnscheck.check_domain("c.com", resolver({("c.com", "MX"): ["m"], ("c.com", "TXT"): [
-        "v=spf1 -all", "v=spf1 ~all"], ("_dmarc.c.com", "TXT"): ["v=DMARC1; p=none"]}))
+    two = dnscheck.check_domain(
+        "c.com",
+        resolver(
+            {
+                ("c.com", "MX"): ["m"],
+                ("c.com", "TXT"): ["v=spf1 -all", "v=spf1 ~all"],
+                ("_dmarc.c.com", "TXT"): ["v=DMARC1; p=none"],
+            }
+        ),
+    )
     assert [i.detail for i in dnscheck.issues(two)][0].startswith("2 SPF records")
     assert {i.area for i in dnscheck.issues(two) if i.severity == "low"} == {"DMARC"}  # no rua
 
 
 def test_spf_lookup_count_follows_includes():
-    records = {("d.com", "MX"): ["m"], ("d.com", "TXT"): ["v=spf1 " + " ".join(
-        f"include:i{n}.com" for n in range(6)) + " -all"]}
+    records = {
+        ("d.com", "MX"): ["m"],
+        ("d.com", "TXT"): ["v=spf1 " + " ".join(f"include:i{n}.com" for n in range(6)) + " -all"],
+    }
     for n in range(6):
         records[(f"i{n}.com", "TXT")] = ["v=spf1 include:deep.com a -all"]
     records[("deep.com", "TXT")] = ["v=spf1 ip4:1.2.3.4 -all"]
@@ -61,6 +75,7 @@ def test_parked_domain_should_block_spoofing():
 def test_dns_errors_are_recorded_not_raised():
     def broken(name, rdtype):
         raise dnscheck.DnsError("timeout")
+
     h = dnscheck.check_domain("e.com", broken)
     assert h.errors and h.mx == []
 
@@ -80,6 +95,7 @@ def test_tenant_without_custom_domains(db, two_tenants):
     alpha, _ = two_tenants
     gd_org = dict(gd.ORGANIZATION, verifiedDomains=[{"name": "x.onmicrosoft.com"}])
     import tests.graphdata as g
+
     old, g.ORGANIZATION = g.ORGANIZATION, gd_org
     try:
         seed_tenant(db, alpha)
@@ -115,6 +131,7 @@ def failing(records, *broken):
         if (name, rdtype) in broken:
             raise dnscheck.DnsError(f"{name} {rdtype}: All nameservers failed to answer the query.")
         return list(records.get((name, rdtype), []))
+
     return resolve
 
 
@@ -136,8 +153,10 @@ def test_findings_keep_the_worst_problem_and_survive_a_failed_lookup(db, two_ten
     seed_tenant(db, alpha, dns=failing(records))
 
     def stored():
-        return {r["object_id"]: (r["severity"], r["detail"], r["resolved_at"]) for r in db.execute(
-            "SELECT * FROM findings WHERE tenant_id = ? AND object_id LIKE 'x.com:%'", (alpha,))}
+        return {
+            r["object_id"]: (r["severity"], r["detail"], r["resolved_at"])
+            for r in db.execute("SELECT * FROM findings WHERE tenant_id = ? AND object_id LIKE 'x.com:%'", (alpha,))
+        }
 
     before = stored()
     assert before["x.com:SPF"][0] == "high" and before["x.com:DMARC"][0] == "medium"
@@ -151,5 +170,7 @@ def test_findings_keep_the_worst_problem_and_survive_a_failed_lookup(db, two_ten
     snap = TenantSnapshot(db, store.get_tenant(db, alpha))
     r = {x.key: x for x in evaluate(snap)}
     assert "couldn't check x.com" in r["spf_record"].summary and r["spf_record"].keep == ["x.com:SPF"]
-    assert db.execute("SELECT value FROM metrics WHERE tenant_id = ? AND key = 'domains.mail'",
-                      (alpha,)).fetchall() == mail  # no drop to zero mail domains
+    assert (
+        db.execute("SELECT value FROM metrics WHERE tenant_id = ? AND key = 'domains.mail'", (alpha,)).fetchall()
+        == mail
+    )  # no drop to zero mail domains

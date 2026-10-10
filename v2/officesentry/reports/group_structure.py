@@ -24,8 +24,11 @@ DYNAMIC = "Dynamic groups"
 EVERY = "Every group"
 DEEP = 3  # levels of groups below a group that make it hard to see who is in it
 NEW_DAYS = 30  # an empty group this new may still be being set up
-KINDS = {"security": "Security group", "mail_security": "Mail-enabled security group",
-         "distribution": "Distribution list"}
+KINDS = {
+    "security": "Security group",
+    "mail_security": "Mail-enabled security group",
+    "distribution": "Distribution list",
+}
 PROCESSING = {"On": "Running", "Paused": "Paused"}
 
 NOT_COLLECTED = "Group nesting hasn't been collected yet. Refresh Group nesting on the tenant page."
@@ -50,7 +53,7 @@ def _membership(g: dict) -> str:
     group="files",
     order=70,
     keywords="empty groups nested groups dynamic membership rule paused distribution lists security groups "
-             "clean up cleanup",
+    "clean up cleanup",
 )
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     groups = snap.objects("group_nesting", "group")
@@ -59,8 +62,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         return
     teams = snap.objects("groups", "group")
     if teams is None:
-        report.notes.append("Member counts of teams and Microsoft 365 groups show after Groups and Teams is "
-                            "collected.")
+        report.notes.append("Member counts of teams and Microsoft 365 groups show after Groups and Teams is collected.")
     m365 = {g["_id"]: g for g in teams or [] if isinstance(g.get("_id"), str)}
     by_id = {g["_id"]: g for g in groups if isinstance(g.get("_id"), str)}
 
@@ -104,27 +106,42 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     others = [g for g in by_id.values() if g.get("kind") != "microsoft365"]
     unread = sum(1 for g in others if not g.get("examined"))
     if unread and len(others) > GROUP_LIMIT:
-        report.notes.append(f"Members were read for the first {GROUP_LIMIT:,} security groups and distribution "
-                            f"lists, not the other {unread:,}.")
+        report.notes.append(
+            f"Members were read for the first {GROUP_LIMIT:,} security groups and distribution "
+            f"lists, not the other {unread:,}."
+        )
     elif unread:
-        report.notes.append(f"Members of {plural(unread, 'group')} couldn't be read. The collection log on the "
-                            "tenant page says why.")
+        report.notes.append(
+            f"Members of {plural(unread, 'group')} couldn't be read. The collection log on the tenant page says why."
+        )
 
-    empty = Section(EMPTY, ["Group", "Kind", "Membership", "Email", "Created"],
-                    intro="Groups with no members at all. Delete the ones nobody needs; a dynamic group here has a "
-                          f"rule that matches nobody. Empty groups older than {NEW_DAYS} days are flagged.",
-                    empty="Every group has members.")
-    nested = Section(NESTED, ["Group", "Kind", "Groups inside", "Inside of", "Levels below", "Members"],
-                     intro="Groups with other groups as members. Everyone in the inner groups gets what the outer "
-                           f"group gives, which is easy to miss; {DEEP} or more levels are flagged.",
-                     empty="No group has another group as a member.")
-    dynamic = Section(DYNAMIC, ["Group", "Kind", "Rule", "Processing", "Members"],
-                      intro="Groups whose members Entra ID works out from a rule (needs Entra ID P1). A paused rule "
-                            "stops adding joiners and removing leavers, so it's flagged.",
-                      empty="No dynamic groups.")
-    every = Section(EVERY, ["Group", "Kind", "Membership", "Members", "Groups inside", "Inside of", "Created"],
-                    intro="Every group in the tenant, with its direct members (people, devices, apps and groups).",
-                    empty="The tenant has no groups.")
+    empty = Section(
+        EMPTY,
+        ["Group", "Kind", "Membership", "Email", "Created"],
+        intro="Groups with no members at all. Delete the ones nobody needs; a dynamic group here has a "
+        f"rule that matches nobody. Empty groups older than {NEW_DAYS} days are flagged.",
+        empty="Every group has members.",
+    )
+    nested = Section(
+        NESTED,
+        ["Group", "Kind", "Groups inside", "Inside of", "Levels below", "Members"],
+        intro="Groups with other groups as members. Everyone in the inner groups gets what the outer "
+        f"group gives, which is easy to miss; {DEEP} or more levels are flagged.",
+        empty="No group has another group as a member.",
+    )
+    dynamic = Section(
+        DYNAMIC,
+        ["Group", "Kind", "Rule", "Processing", "Members"],
+        intro="Groups whose members Entra ID works out from a rule (needs Entra ID P1). A paused rule "
+        "stops adding joiners and removing leavers, so it's flagged.",
+        empty="No dynamic groups.",
+    )
+    every = Section(
+        EVERY,
+        ["Group", "Kind", "Membership", "Members", "Groups inside", "Inside of", "Created"],
+        intro="Every group in the tenant, with its direct members (people, devices, apps and groups).",
+        empty="The tenant has no groups.",
+    )
     for gid in order:
         g = by_id[gid]
         kind, count = _kind(g), members(gid)
@@ -134,34 +151,65 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         created = parse_ts(g.get("createdDateTime"))
         if count == 0:
             old = created is None or created < now - timedelta(days=NEW_DAYS)
-            empty.add([name(gid), kind, _membership(g), g.get("mail"), _date(g.get("createdDateTime"))],
-                      "low" if old else None)
+            empty.add(
+                [name(gid), kind, _membership(g), g.get("mail"), _date(g.get("createdDateTime"))],
+                "low" if old else None,
+            )
         if inner:
             levels = depth(gid)[0]
-            nested.add([name(gid), kind, sorted(inner) + ([f"and {inner_count - len(inner)} more"]
-                                                          if inner_count > len(inner) else []),
-                        outer, levels, shown], "low" if levels >= DEEP else None)
+            nested.add(
+                [
+                    name(gid),
+                    kind,
+                    sorted(inner) + ([f"and {inner_count - len(inner)} more"] if inner_count > len(inner) else []),
+                    outer,
+                    levels,
+                    shown,
+                ],
+                "low" if levels >= DEEP else None,
+            )
         if g.get("dynamic"):
             state = g.get("ruleState")
             processing = PROCESSING.get(state, state) if isinstance(state, str) and state else ""
-            dynamic.add([name(gid), kind, g.get("rule"), processing, shown],
-                        "medium" if processing == "Paused" else None)
-        every.add([name(gid), kind, _membership(g), shown, inner_count or "", outer,
-                   _date(g.get("createdDateTime"))])
+            dynamic.add(
+                [name(gid), kind, g.get("rule"), processing, shown], "medium" if processing == "Paused" else None
+            )
+        every.add([name(gid), kind, _membership(g), shown, inner_count or "", outer, _date(g.get("createdDateTime"))])
     report.sections = [empty, nested, dynamic, every]
 
     paused = sum(1 for r in dynamic.rows if r[3] == "Paused")
     deepest = max((r[4] for r in nested.rows if isinstance(r[4], int)), default=0)
     report.tiles = [
-        Tile(EMPTY, len(empty.rows), f"{sum(1 for f in empty.flags if f)} older than {NEW_DAYS} days",
-             "warn" if any(empty.flags) else "ok", Rows(EMPTY)),
-        Tile(NESTED, len(nested.rows), f"Deepest: {plural(deepest, 'level')}" if nested.rows else "None nested",
-             "warn" if deepest >= DEEP else None, Rows(NESTED)),
-        Tile(DYNAMIC, len(dynamic.rows), f"{paused} paused" if dynamic.rows else "Members set by a rule",
-             rows=Rows(DYNAMIC)),
-        Tile("Paused dynamic rules", paused, "Not adding joiners or removing leavers", "bad" if paused else "ok",
-             Rows(DYNAMIC, {"Processing": "Paused"})),
+        Tile(
+            EMPTY,
+            len(empty.rows),
+            f"{sum(1 for f in empty.flags if f)} older than {NEW_DAYS} days",
+            "warn" if any(empty.flags) else "ok",
+            Rows(EMPTY),
+        ),
+        Tile(
+            NESTED,
+            len(nested.rows),
+            f"Deepest: {plural(deepest, 'level')}" if nested.rows else "None nested",
+            "warn" if deepest >= DEEP else None,
+            Rows(NESTED),
+        ),
+        Tile(
+            DYNAMIC,
+            len(dynamic.rows),
+            f"{paused} paused" if dynamic.rows else "Members set by a rule",
+            rows=Rows(DYNAMIC),
+        ),
+        Tile(
+            "Paused dynamic rules",
+            paused,
+            "Not adding joiners or removing leavers",
+            "bad" if paused else "ok",
+            Rows(DYNAMIC, {"Processing": "Paused"}),
+        ),
     ]
-    report.footnote = ("Members are direct members. Teams and Microsoft 365 groups can't contain other groups. "
-                       "Delete or change groups in the Microsoft Entra admin center (Groups), or in on-premises AD "
-                       "for synced groups; Office Sentry only reads them.")
+    report.footnote = (
+        "Members are direct members. Teams and Microsoft 365 groups can't contain other groups. "
+        "Delete or change groups in the Microsoft Entra admin center (Groups), or in on-premises AD "
+        "for synced groups; Office Sentry only reads them."
+    )

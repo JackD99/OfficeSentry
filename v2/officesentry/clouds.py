@@ -63,7 +63,8 @@ _DOD = "Microsoft 365 US Government DoD"
 
 CLOUDS: dict[str, Cloud] = {
     "commercial": Cloud(
-        "commercial", "Commercial (includes GCC)",
+        "commercial",
+        "Commercial (includes GCC)",
         login="https://login.microsoftonline.com",
         graph="https://graph.microsoft.com",
         exchange="https://outlook.office365.com",
@@ -71,7 +72,8 @@ CLOUDS: dict[str, Cloud] = {
         admin_centre="https://entra.microsoft.com",
     ),
     "gcc_high": Cloud(
-        "gcc_high", "US Government GCC High",
+        "gcc_high",
+        "US Government GCC High",
         login="https://login.microsoftonline.us",
         graph="https://graph.microsoft.us",
         exchange="https://outlook.office365.us",
@@ -83,7 +85,8 @@ CLOUDS: dict[str, Cloud] = {
         },
     ),
     "dod": Cloud(
-        "dod", "US Government DoD",
+        "dod",
+        "US Government DoD",
         login="https://login.microsoftonline.us",
         graph="https://dod-graph.microsoft.us",
         exchange="https://webmail.apps.mil",
@@ -95,7 +98,8 @@ CLOUDS: dict[str, Cloud] = {
         },
     ),
     "china": Cloud(
-        "china", "China (operated by 21Vianet)",
+        "china",
+        "China (operated by 21Vianet)",
         login="https://login.chinacloudapi.cn",
         graph="https://microsoftgraph.chinacloudapi.cn",
         exchange="https://partner.outlook.cn",
@@ -139,7 +143,9 @@ def missing(cloud: Cloud | str | None, feature: str) -> str | None:
 
 def app_needed(cloud: Cloud) -> str:
     """The plain-English "set up an app for this cloud" message."""
-    return (f"This tenant is in {cloud.label}, and no app connection is set up for that cloud yet. "
-            f"An app registered in another cloud can't sign in to it: register Office Sentry's app in "
-            f"{cloud.label} ({cloud.admin_centre}), then add it under App connection with the cloud set to "
-            f"{cloud.label} and choose it for this tenant under Manage.")
+    return (
+        f"This tenant is in {cloud.label}, and no app connection is set up for that cloud yet. "
+        f"An app registered in another cloud can't sign in to it: register Office Sentry's app in "
+        f"{cloud.label} ({cloud.admin_centre}), then add it under App connection with the cloud set to "
+        f"{cloud.label} and choose it for this tenant under Manage."
+    )

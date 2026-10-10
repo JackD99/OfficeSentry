@@ -59,8 +59,14 @@ def contexts(browser, site):
     def get(user: str, viewport: str, theme: str):
         key = (user, viewport, theme)
         if key not in made:
-            options = {"viewport": VIEWPORTS[viewport], "color_scheme": theme, "device_scale_factor": 1,
-                       "reduced_motion": "reduce", "locale": "en-GB", "timezone_id": "Europe/London"}
+            options = {
+                "viewport": VIEWPORTS[viewport],
+                "color_scheme": theme,
+                "device_scale_factor": 1,
+                "reduced_motion": "reduce",
+                "locale": "en-GB",
+                "timezone_id": "Europe/London",
+            }
             if viewport == "phone":
                 options.update(is_mobile=True, has_touch=True)
             made[key] = browser.new_context(**options)

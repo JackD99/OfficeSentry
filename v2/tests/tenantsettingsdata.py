@@ -43,16 +43,28 @@ LOCKED_POLICY = {
 # What a tenant returns before anyone has turned the workflow on (recorded from a test tenant).
 ADMIN_CONSENT_POLICY = {
     "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#policies/adminConsentRequestPolicy/$entity",
-    "isEnabled": False, "notifyReviewers": False, "remindersEnabled": False, "requestDurationInDays": 0,
-    "version": 0, "reviewers": [],
+    "isEnabled": False,
+    "notifyReviewers": False,
+    "remindersEnabled": False,
+    "requestDurationInDays": 0,
+    "version": 0,
+    "reviewers": [],
 }
 
 ADMIN_CONSENT_ON = {
     **ADMIN_CONSENT_POLICY,
-    "isEnabled": True, "notifyReviewers": True, "remindersEnabled": True, "requestDurationInDays": 30, "version": 2,
+    "isEnabled": True,
+    "notifyReviewers": True,
+    "remindersEnabled": True,
+    "requestDurationInDays": 30,
+    "version": 2,
     "reviewers": [
         {"query": "/users/u1", "queryType": "MicrosoftGraph", "queryRoot": None},
-        {"query": "/v1.0/roleManagement/directory/roleAssignments?$filter=roleDefinitionId eq "
-                  "'62e90394-69f5-4237-9190-012177145e10'", "queryType": "MicrosoftGraph", "queryRoot": None},
+        {
+            "query": "/v1.0/roleManagement/directory/roleAssignments?$filter=roleDefinitionId eq "
+            "'62e90394-69f5-4237-9190-012177145e10'",
+            "queryType": "MicrosoftGraph",
+            "queryRoot": None,
+        },
     ],
 }

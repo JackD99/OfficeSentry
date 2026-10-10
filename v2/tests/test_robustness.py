@@ -60,8 +60,11 @@ TYPE_MUTATIONS = {"as_string", "as_list"}
 BAD_TIMESTAMPS = {"ts_empty": "", "ts_zero": "0001-01-01T00:00:00Z", "ts_garbage": "not-a-date"}
 FLAGS = {None, *SEVERITY_RANK}
 
-CHANGE_FEEDS = {name: fn for name, fn in vars(changes).items()
-                if name.endswith("_changes") and name != "all_changes" and callable(fn)}
+CHANGE_FEEDS = {
+    name: fn
+    for name, fn in vars(changes).items()
+    if name.endswith("_changes") and name != "all_changes" and callable(fn)
+}
 
 
 # -- Degraded snapshots ---------------------------------------------------------------------
@@ -156,9 +159,14 @@ class Degrader:
     """Stands in for ``store.run_objects``: replays stored objects, degrading one kind of the latest runs."""
 
     def __init__(self, conn, tenant_id: int):
-        self.latest = {r["id"]: r["collector"] for r in conn.execute(
-            "SELECT MAX(id) AS id, collector FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')"
-            " GROUP BY collector", (tenant_id,))}
+        self.latest = {
+            r["id"]: r["collector"]
+            for r in conn.execute(
+                "SELECT MAX(id) AS id, collector FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')"
+                " GROUP BY collector",
+                (tenant_id,),
+            )
+        }
         self.rows: dict[tuple[int, str], list[dict]] = {}
         for run in conn.execute("SELECT id FROM runs WHERE tenant_id = ?", (tenant_id,)).fetchall():
             for obj in _real_run_objects(conn, run["id"]):
@@ -167,8 +175,9 @@ class Degrader:
         self.reads: set[tuple[str, str]] = set()
 
     def latest_rows(self) -> dict[tuple[str, str], list[dict]]:
-        return {(self.latest[run_id], kind): rows for (run_id, kind), rows in self.rows.items()
-                if run_id in self.latest}
+        return {
+            (self.latest[run_id], kind): rows for (run_id, kind), rows in self.rows.items() if run_id in self.latest
+        }
 
     def __call__(self, conn, run_id, kind=None, limit=None):
         if kind is None or limit:
@@ -199,8 +208,13 @@ def seeded(tmp_path_factory):
         cfg = load_config(data_dir=tmp_path_factory.mktemp("robustness"), testing=True, secure_cookies=False)
     conn = connect(cfg.db_path)
     migrate(conn)
-    cid = store.create_connection(conn, Vault(cfg.encryption_keys), "Test app", generate_certificate("test"),
-                                  client_id="11111111-2222-3333-4444-555555555555")
+    cid = store.create_connection(
+        conn,
+        Vault(cfg.encryption_keys),
+        "Test app",
+        generate_certificate("test"),
+        client_id="11111111-2222-3333-4444-555555555555",
+    )
     tid = store.create_tenant(conn, "Alpha Ltd", "alpha.onmicrosoft.com", cid)
     seed_tenant(conn, tid)
     # Push the first collection back so the second one has a baseline for "what changed".
@@ -208,8 +222,7 @@ def seeded(tmp_path_factory):
     conn.execute("UPDATE runs SET finished_at = ?, started_at = ?, created_at = ?", (old, old, old))
     seed_tenant(conn, tid)
     degrader = Degrader(conn, tid)
-    yield Seeded(conn, store.get_tenant(conn, tid), degrader, build_cases(degrader.latest_rows()),
-                 datetime.now(UTC))
+    yield Seeded(conn, store.get_tenant(conn, tid), degrader, build_cases(degrader.latest_rows()), datetime.now(UTC))
     conn.close()
 
 
@@ -232,8 +245,13 @@ def check_rule(result) -> list[str]:
     if status == "fail" and not found:
         problems.append(f"fail with no findings ({summary})")
     for f in found:
-        if not isinstance(f, Finding) or f.severity not in SEVERITY_RANK or not isinstance(f.subject, str) \
-                or not isinstance(f.detail, str) or not isinstance(f.object_id, (str, type(None))):
+        if (
+            not isinstance(f, Finding)
+            or f.severity not in SEVERITY_RANK
+            or not isinstance(f.subject, str)
+            or not isinstance(f.detail, str)
+            or not isinstance(f.object_id, (str, type(None)))
+        ):
             problems.append(f"malformed finding {f!r}")
     return problems
 
@@ -259,8 +277,11 @@ def check_report(report: data_reports.DataReport) -> list[str]:
 def check_changes(result) -> list[str]:
     if not isinstance(result, list):
         return [f"returned {result!r}"]
-    return [f"malformed change {c!r}" for c in result
-            if not isinstance(c, changes.Change) or not all(isinstance(v, str) for v in (c.subject, c.detail))]
+    return [
+        f"malformed change {c!r}"
+        for c in result
+        if not isinstance(c, changes.Change) or not all(isinstance(v, str) for v in (c.subject, c.detail))
+    ]
 
 
 def run_rule(s: Seeded, r: Rule):
@@ -279,8 +300,11 @@ def run_changes(s: Seeded, name: str):
     return check_changes(CHANGE_FEEDS[name](s.conn, s.tenant["id"], since))
 
 
-RUNNERS = {"rule": lambda s, key: run_rule(s, next(r for r in RULES if r.key == key)),
-           "report": run_report, "changes": run_changes}
+RUNNERS = {
+    "rule": lambda s, key: run_rule(s, next(r for r in RULES if r.key == key)),
+    "report": run_report,
+    "changes": run_changes,
+}
 
 
 def _where(exc: Exception) -> str:
@@ -291,8 +315,6 @@ def _where(exc: Exception) -> str:
     path = frames[-1].filename
     named = [f.name for f in frames if f.filename == path and not f.name.startswith("<")] or [frames[-1].name]
     return f"{path.replace(chr(92), '/').rsplit('/officesentry/', 1)[-1]}:{named[-1]}"
-
-
 
 
 # -- Known crashes ------------------------------------------------------------------------------
@@ -306,7 +328,7 @@ class Known:
 
     target: str
     key: str
-    kind: str   # "collector/kind"
+    kind: str  # "collector/kind"
     cases: str  # space-separated "field|field:mutation|mutation" groups
     cause: str
 
@@ -352,8 +374,7 @@ def fuzz(s: Seeded, target: str, key: str, only: Known | None = None) -> list[st
                     found = run(s, key)
                 except Exception as exc:  # noqa: BLE001 - every crash is a finding
                     # A wrong JSON type may crash a target; evaluate(), build() and all_changes() contain it.
-                    found = [] if case.mutation in TYPE_MUTATIONS else \
-                        [f"{type(exc).__name__} in {_where(exc)}: {exc}"]
+                    found = [] if case.mutation in TYPE_MUTATIONS else [f"{type(exc).__name__} in {_where(exc)}: {exc}"]
                 finally:
                     d.case = None
                 problems += [f"{case.name}: {p}" for p in found]
@@ -381,8 +402,9 @@ def test_changes_survive_degraded_data(seeded, name):
     assert not problems, f"{name}:\n  " + "\n  ".join(problems)
 
 
-@pytest.mark.parametrize("known", [
-    pytest.param(k, id=k.id, marks=pytest.mark.xfail(strict=True, reason=f"known: {k.cause}")) for k in KNOWN])
+@pytest.mark.parametrize(
+    "known", [pytest.param(k, id=k.id, marks=pytest.mark.xfail(strict=True, reason=f"known: {k.cause}")) for k in KNOWN]
+)
 def test_known_crashes(seeded, known):
     problems = fuzz(seeded, known.target, known.key, only=known)
     assert not problems, "\n".join(problems)
@@ -390,9 +412,13 @@ def test_known_crashes(seeded, known):
 
 def test_fuzz_finds_a_crash(seeded):
     """The harness itself: a check that trips over a missing field is reported."""
+
     def fragile(snap, now):
-        return ("pass", "ok", []) if all(d["deviceName"] for d in snap.objects("devices", "managed_device")) \
+        return (
+            ("pass", "ok", [])
+            if all(d["deviceName"] for d in snap.objects("devices", "managed_device"))
             else ("pass", "", [])
+        )
 
     with patch.dict(RUNNERS, {"rule": lambda s, key: run_rule(s, Rule("fragile", "Fragile", "Test", "", fragile))}):
         problems = fuzz(seeded, "rule", "fragile")
@@ -447,20 +473,27 @@ def test_guarded_crash_leaves_findings_untouched(db, connection_id):
     seed_tenant(db, tid)
     tenant = store.get_tenant(db, tid)
     findings.sync(db, tenant)
-    before = db.execute("SELECT COUNT(*) FROM findings WHERE rule_key = 'device_compliance'"
-                        " AND resolved_at IS NULL").fetchone()[0]
+    before = db.execute(
+        "SELECT COUNT(*) FROM findings WHERE rule_key = 'device_compliance' AND resolved_at IS NULL"
+    ).fetchone()[0]
     assert before
 
     def broken(snap, now):
         raise RuntimeError("bug")
 
-    rules = [Rule(r.key, r.title, r.category, r.recommendation, broken if r.key == "device_compliance" else r.check)
-             for r in RULES]
+    rules = [
+        Rule(r.key, r.title, r.category, r.recommendation, broken if r.key == "device_compliance" else r.check)
+        for r in RULES
+    ]
     with patch("officesentry.checks.base.RULES", rules):
         stats = findings.sync(db, tenant)
     assert stats["resolved"] == 0  # a crash is "couldn't run", never "fixed"
-    assert db.execute("SELECT COUNT(*) FROM findings WHERE rule_key = 'device_compliance'"
-                      " AND resolved_at IS NULL").fetchone()[0] == before
+    assert (
+        db.execute(
+            "SELECT COUNT(*) FROM findings WHERE rule_key = 'device_compliance' AND resolved_at IS NULL"
+        ).fetchone()[0]
+        == before
+    )
 
 
 # -- Devices regressions (fixed root causes) ---------------------------------------------------
@@ -469,11 +502,24 @@ def test_guarded_crash_leaves_findings_untouched(db, connection_id):
 def test_device_records_with_wrong_types_are_cleaned():
     from officesentry import devices
 
-    record = {"_id": "d1", "deviceName": ["laptop"], "operatingSystem": "Windows", "osVersion": 10,
-              "lastSyncDateTime": ["2026-01-01T00:00:00Z"], "isEncrypted": "yes", "accountEnabled": True}
-    assert devices.clean(record) == {"_id": "d1", "deviceName": None, "operatingSystem": "Windows",
-                                     "osVersion": None, "lastSyncDateTime": None, "isEncrypted": None,
-                                     "accountEnabled": True}
+    record = {
+        "_id": "d1",
+        "deviceName": ["laptop"],
+        "operatingSystem": "Windows",
+        "osVersion": 10,
+        "lastSyncDateTime": ["2026-01-01T00:00:00Z"],
+        "isEncrypted": "yes",
+        "accountEnabled": True,
+    }
+    assert devices.clean(record) == {
+        "_id": "d1",
+        "deviceName": None,
+        "operatingSystem": "Windows",
+        "osVersion": None,
+        "lastSyncDateTime": None,
+        "isEncrypted": None,
+        "accountEnabled": True,
+    }
 
 
 def test_device_checks_and_report_survive_lists_where_text_belongs(db, connection_id):
@@ -484,19 +530,28 @@ def test_device_checks_and_report_survive_lists_where_text_belongs(db, connectio
     for kind in ("entra_device", "managed_device"):
         for row in db.execute("SELECT run_id, object_id, data FROM objects WHERE kind = ?", (kind,)).fetchall():
             data = {k: [v] if isinstance(v, str) else v for k, v in json.loads(row["data"]).items()}
-            db.execute("UPDATE objects SET data = ? WHERE run_id = ? AND kind = ? AND object_id = ?",
-                       (json.dumps(data), row["run_id"], kind, row["object_id"]))
+            db.execute(
+                "UPDATE objects SET data = ? WHERE run_id = ? AND kind = ? AND object_id = ?",
+                (json.dumps(data), row["run_id"], kind, row["object_id"]),
+            )
     with patch("officesentry.checks.base.logging") as log:
         results = {r.key: r for r in evaluate(TenantSnapshot(db, tenant))}
     log.getLogger.assert_not_called()  # nothing crashed
-    for key in ("device_compliance", "device_encryption", "supported_windows", "intune_enrolled",
-                "device_checkin", "stale_devices"):
+    for key in (
+        "device_compliance",
+        "device_encryption",
+        "supported_windows",
+        "intune_enrolled",
+        "device_checkin",
+        "stale_devices",
+    ):
         assert results[key].status in ("pass", "unavailable"), key  # every value unreadable: nothing to flag
     report = data_reports.build(db, tenant, "devices")
     assert report.unavailable is None and not check_report(report)
 
 
 # -- End to end: one heavily degraded tenant -----------------------------------------------------
+
 
 def _wreck(row: dict, i: int) -> dict:
     """Degrade a stored object a different way for each field, varying by object."""
@@ -530,13 +585,17 @@ def wreck_tenant(db, connection_id):
     latest = [r["id"] for r in db.execute("SELECT MAX(id) AS id FROM runs GROUP BY collector")]
     marks = ",".join("?" * len(latest))
     unpack(db)
-    rows = db.execute(f"SELECT run_id, kind, object_id, data FROM objects WHERE run_id IN ({marks})"
-                      " ORDER BY run_id, kind, object_id", latest).fetchall()
+    rows = db.execute(
+        f"SELECT run_id, kind, object_id, data FROM objects WHERE run_id IN ({marks}) ORDER BY run_id, kind, object_id",
+        latest,
+    ).fetchall()
     position: dict[str, int] = {}
     for row in rows:
         i = position[row["kind"]] = position.get(row["kind"], -1) + 1  # per kind, so new kinds don't shift others
-        db.execute("UPDATE objects SET data = ? WHERE run_id = ? AND kind = ? AND object_id = ?",
-                   (json.dumps(_wreck(json.loads(row["data"]), i)), row["run_id"], row["kind"], row["object_id"]))
+        db.execute(
+            "UPDATE objects SET data = ? WHERE run_id = ? AND kind = ? AND object_id = ?",
+            (json.dumps(_wreck(json.loads(row["data"]), i)), row["run_id"], row["kind"], row["object_id"]),
+        )
     return store.get_tenant(db, tid)
 
 
@@ -554,8 +613,13 @@ def wrecked_once(tmp_path_factory):
         cfg = load_config(data_dir=tmp_path_factory.mktemp("wrecked"), testing=True, secure_cookies=False)
     conn = connect(cfg.db_path)
     migrate(conn)
-    cid = store.create_connection(conn, Vault(cfg.encryption_keys), "Test app", generate_certificate("test"),
-                                  client_id="11111111-2222-3333-4444-555555555555")
+    cid = store.create_connection(
+        conn,
+        Vault(cfg.encryption_keys),
+        "Test app",
+        generate_certificate("test"),
+        client_id="11111111-2222-3333-4444-555555555555",
+    )
     yield conn, wreck_tenant(conn, cid)
     conn.close()
 
@@ -594,7 +658,6 @@ def test_monthly_review_and_evidence_survive_a_wrecked_tenant(db, connection_id,
 
     make_user(db, "admin", all_tenants=True)
     login(client, "admin")
-    pages = [f"/tenants/{tenant['id']}/{p}" for p in ("report", "report.xlsx", "evidence", "evidence.xlsx",
-                                                      "findings")]
+    pages = [f"/tenants/{tenant['id']}/{p}" for p in ("report", "report.xlsx", "evidence", "evidence.xlsx", "findings")]
     pages += [f"/tenants/{tenant['id']}/data/{key}{ext}" for key in data_reports.REPORTS for ext in ("", ".xlsx")]
     assert {p: client.get(p).status_code for p in pages} == {p: 200 for p in pages}

@@ -22,8 +22,9 @@ TIMELINE_DAYS = 90
 TIMELINE_LIMIT = 50
 
 
-def _sightings(conn, tid: int, collector: str, kind: str, key: str,
-               value: str) -> tuple[dict[str, list[tuple[str, dict, int]]], str | None, int | None]:
+def _sightings(
+    conn, tid: int, collector: str, kind: str, key: str, value: str
+) -> tuple[dict[str, list[tuple[str, dict, int]]], str | None, int | None]:
     """Each object whose ``key`` is ``value``: its copies across retained snapshots ({object id:
     [(finished_at, data, run ID)]}, oldest first), when the oldest retained snapshot finished and the latest
     run's ID."""
@@ -40,7 +41,8 @@ def _retained(conn, tid: int, collector: str) -> tuple[str | None, int | None]:
         "SELECT MIN(finished_at) AS oldest, MAX(id) AS latest FROM runs r WHERE tenant_id = ? AND collector = ?"
         " AND status IN ('succeeded', 'partial')"
         " AND (object_count = 0 OR EXISTS (SELECT 1 FROM objects o WHERE o.run_id = r.id))",
-        (tid, collector)).fetchone()
+        (tid, collector),
+    ).fetchone()
     return row["oldest"], row["latest"]
 
 
@@ -76,32 +78,57 @@ def timeline(p: Person) -> list[_Happened]:
         if not by and not any(p.named(t) for t in e.get("targets") or []):
             continue
         detail = f": {e['detail']}" if e.get("detail") else ""
-        text = (f"{e.get('activity')}{detail}" + (f" (by {e.get('actor')})" if not by and e.get("actor") else "")
-                + (f" (to {', '.join(e.get('targets') or [])})" if by and e.get("targets") else ""))
-        timed(e.get("time"), "Admin change" if not by else "Done by this account", text,
-              "warn" if e.get("kind") in ("role_grant", "consent") or e.get("credential_added") else None)
+        text = (
+            f"{e.get('activity')}{detail}"
+            + (f" (by {e.get('actor')})" if not by and e.get("actor") else "")
+            + (f" (to {', '.join(e.get('targets') or [])})" if by and e.get("targets") else "")
+        )
+        timed(
+            e.get("time"),
+            "Admin change" if not by else "Done by this account",
+            text,
+            "warn" if e.get("kind") in ("role_grant", "consent") or e.get("credential_added") else None,
+        )
 
     mine = lambda r: r.get("userId") == p.id or p.named(r.get("user"))  # noqa: E731
     row = signins.for_account(p.snap, p.id, p.keys) or {}
     if row.get("lastFailure"):
-        timed(row["lastFailure"], "Sign-in", f"Last of {_plural(_int(row.get('failed')), 'failed sign-in')}: "
-              f"{signins.meaning(row.get('lastFailureCode'), row.get('lastFailureReason'))}",
-              "warn" if _int(row.get("failed")) >= signins.REPEATED_FAILURES else None)
+        timed(
+            row["lastFailure"],
+            "Sign-in",
+            f"Last of {_plural(_int(row.get('failed')), 'failed sign-in')}: "
+            f"{signins.meaning(row.get('lastFailureCode'), row.get('lastFailureReason'))}",
+            "warn" if _int(row.get("failed")) >= signins.REPEATED_FAILURES else None,
+        )
     for r in p.snap.objects("sign_ins", "risky_sign_in") or []:
         if mine(r):
-            timed(r.get("time"), "Sign-in", f"{(r.get('level') or 'Risky').capitalize()} risk sign-in from "
-                  f"{signins.country(r.get('country'))} ({r.get('ip') or 'unknown address'})"
-                  + ("" if r.get("succeeded") else ", blocked"), "bad" if r.get("succeeded") else "warn")
+            timed(
+                r.get("time"),
+                "Sign-in",
+                f"{(r.get('level') or 'Risky').capitalize()} risk sign-in from "
+                f"{signins.country(r.get('country'))} ({r.get('ip') or 'unknown address'})"
+                + ("" if r.get("succeeded") else ", blocked"),
+                "bad" if r.get("succeeded") else "warn",
+            )
     unusual = signins.unusual_countries(p.snap)
     for loc in p.snap.objects("sign_ins", "sign_in_location") or []:
         if mine(loc) and loc.get("country") in unusual and loc.get("lastSuccess"):
-            timed(loc["lastSuccess"], "Sign-in", f"Signed in from {loc['country']}, unusual for this tenant"
-                  + (f" ({', '.join(loc.get('ips') or [])})" if loc.get("ips") else ""), "warn")
+            timed(
+                loc["lastSuccess"],
+                "Sign-in",
+                f"Signed in from {loc['country']}, unusual for this tenant"
+                + (f" ({', '.join(loc.get('ips') or [])})" if loc.get("ips") else ""),
+                "warn",
+            )
     for s in p.snap.objects("legacy_signins", "legacy_signin") or []:
         if mine(s):
-            timed(s.get("lastAttempt"), "Sign-in", f"Legacy sign-in with {s.get('client') or 'an old protocol'}: "
-                  f"{s.get('succeeded') or 0} succeeded, {s.get('failed') or 0} failed",
-                  "warn" if s.get("succeeded") else None)
+            timed(
+                s.get("lastAttempt"),
+                "Sign-in",
+                f"Legacy sign-in with {s.get('client') or 'an old protocol'}: "
+                f"{s.get('succeeded') or 0} succeeded, {s.get('failed') or 0} failed",
+                "warn" if s.get("succeeded") else None,
+            )
     kept = events_store.coverage(conn, tid, "signins").detailed_from
     if kept is not None:
         # The activity history has every day: the first day each country shows up, exactly.
@@ -118,18 +145,28 @@ def timeline(p: Person) -> list[_Happened]:
         for copies in places.values():
             at = copies[0][0]
             if oldest and at > oldest:  # a country this account hadn't signed in from before
-                first(at, oldest, "Sign-in", f"First sign-in from {signins.country(copies[-1][1].get('country'))} "
-                      "seen", "warn")
+                first(
+                    at,
+                    oldest,
+                    "Sign-in",
+                    f"First sign-in from {signins.country(copies[-1][1].get('country'))} seen",
+                    "warn",
+                )
 
     domains = tenant_domains(p.snap) or set()
     rules, oldest, latest = _sightings(conn, tid, "inbox_rules", "inbox_rule", "mailboxId", p.id)
     for copies in rules.values():
         data = copies[-1][1]
         risk = inbox_rule_risk(data, domains)
-        first(copies[0][0], oldest, "Mailbox", f"Inbox rule \"{data.get('displayName')}\" first seen"
-              + ("" if copies[-1][2] == latest else " (since removed)")
-              + (f": {'; '.join(risk.reasons)}" if risk.reasons else ""),
-              {"high": "bad", "medium": "warn"}.get(risk.severity))
+        first(
+            copies[0][0],
+            oldest,
+            "Mailbox",
+            f'Inbox rule "{data.get("displayName")}" first seen'
+            + ("" if copies[-1][2] == latest else " (since removed)")
+            + (f": {'; '.join(risk.reasons)}" if risk.reasons else ""),
+            {"high": "bad", "medium": "warn"}.get(risk.severity),
+        )
 
     boxes = _object_history(conn, tid, "mailboxes", "mailbox", p.id)
     box_oldest, _ = _retained(conn, tid, "mailboxes")
@@ -139,9 +176,14 @@ def timeline(p: Person) -> list[_Happened]:
         if target:
             targets.setdefault(target, at)
     for target, at in targets.items():
-        first(at, box_oldest, "Mailbox", f"Forwarding to {target} first seen"
-              + (" (outside the organisation)" if is_external(target, domains) else ""),
-              "bad" if is_external(target, domains) else "warn")
+        first(
+            at,
+            box_oldest,
+            "Mailbox",
+            f"Forwarding to {target} first seen"
+            + (" (outside the organisation)" if is_external(target, domains) else ""),
+            "bad" if is_external(target, domains) else "warn",
+        )
 
     grants, oldest, latest = _sightings(conn, tid, "app_consents", "delegated_grant", "principalId", p.id)
     sps = {s["_id"]: s for s in p.snap.objects("app_consents", "service_principal") or []}
@@ -151,9 +193,15 @@ def timeline(p: Person) -> list[_Happened]:
             continue
         app = (sps.get(data.get("clientId")) or {}).get("displayName") or "An app"
         scopes = sorted(s for s in data.get("scopes") or [] if s)
-        first(copies[0][0], oldest, "Apps", f"Allowed {app}" + (f" ({', '.join(scopes)})" if scopes else "")
-              + ("" if copies[-1][2] == latest else " (since removed)"),
-              "warn" if set(scopes) & SENSITIVE_DELEGATED else None)
+        first(
+            copies[0][0],
+            oldest,
+            "Apps",
+            f"Allowed {app}"
+            + (f" ({', '.join(scopes)})" if scopes else "")
+            + ("" if copies[-1][2] == latest else " (since removed)"),
+            "warn" if set(scopes) & SENSITIVE_DELEGATED else None,
+        )
 
     mfa = _object_history(conn, tid, "mfa_registration", "mfa_registration", p.id)
     methods: dict[str, str] = {}
@@ -191,7 +239,9 @@ def timeline_part(p: Person) -> Part:
         result.tables = [table]
         result.summary = _plural(len(events), "event")
         result.tone = "bad" if any(e.tone == "bad" for e in events) else None
-    result.note = (f"Newest first, the last {TIMELINE_DAYS} days (up to {TIMELINE_LIMIT} events). Admin changes "
-                   "and sign-ins keep their own time; rules, forwarding, app consents, MFA methods and roles are dated "
-                   "when Office Sentry first collected them, so they were set up on or before that day.")
+    result.note = (
+        f"Newest first, the last {TIMELINE_DAYS} days (up to {TIMELINE_LIMIT} events). Admin changes "
+        "and sign-ins keep their own time; rules, forwarding, app consents, MFA methods and roles are dated "
+        "when Office Sentry first collected them, so they were set up on or before that day."
+    )
     return result

@@ -30,6 +30,7 @@ def public_dns(monkeypatch):
     def fake(host, port, *args, **kwargs):
         calls.append(host)
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, port))]
+
     monkeypatch.setattr(socket, "getaddrinfo", fake)
     return calls
 
@@ -39,28 +40,56 @@ def alerting(cfg, vault):
     return alerts.Alerting(cfg.base_url, vault)
 
 
-def configure(db, vault, url=HOOK, fmt="teams", enabled=True, severity="high", failures=True, recovery=False,
-              secret=None):
-    alerts.save_settings(db, {
-        "alerts.enabled": "1" if enabled else "0", "alerts.format": fmt, "alerts.min_severity": severity,
-        "alerts.on_failures": "1" if failures else "0", "alerts.on_recovery": "1" if recovery else "0",
-        "alerts.url_enc": vault.encrypt(url) if url else "",
-        "alerts.secret_enc": vault.encrypt(secret) if secret else "",
-    })
+def configure(
+    db, vault, url=HOOK, fmt="teams", enabled=True, severity="high", failures=True, recovery=False, secret=None
+):
+    alerts.save_settings(
+        db,
+        {
+            "alerts.enabled": "1" if enabled else "0",
+            "alerts.format": fmt,
+            "alerts.min_severity": severity,
+            "alerts.on_failures": "1" if failures else "0",
+            "alerts.on_recovery": "1" if recovery else "0",
+            "alerts.url_enc": vault.encrypt(url) if url else "",
+            "alerts.secret_enc": vault.encrypt(secret) if secret else "",
+        },
+    )
 
 
-def add_finding(db, tenant_id, severity="high", rule_key="admin_mfa", object_id="u1", subject="ann@x.com",
-                detail="No MFA method registered", **extra):
-    cols = {"tenant_id": tenant_id, "rule_key": rule_key, "object_id": object_id, "severity": severity,
-            "subject": subject, "detail": detail, "first_seen": utcnow(), "last_seen": utcnow(), **extra}
-    cur = db.execute(f"INSERT INTO findings ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
-                     tuple(cols.values()))
+def add_finding(
+    db,
+    tenant_id,
+    severity="high",
+    rule_key="admin_mfa",
+    object_id="u1",
+    subject="ann@x.com",
+    detail="No MFA method registered",
+    **extra,
+):
+    cols = {
+        "tenant_id": tenant_id,
+        "rule_key": rule_key,
+        "object_id": object_id,
+        "severity": severity,
+        "subject": subject,
+        "detail": detail,
+        "first_seen": utcnow(),
+        "last_seen": utcnow(),
+        **extra,
+    }
+    cur = db.execute(
+        f"INSERT INTO findings ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", tuple(cols.values())
+    )
     return cur.lastrowid
 
 
 def add_run(db, tenant_id, status, collector="users", error=None):
-    cur = db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at, finished_at, error)"
-                     " VALUES (?, ?, ?, 'manual', ?, ?, ?)", (tenant_id, collector, status, utcnow(), utcnow(), error))
+    cur = db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at, finished_at, error)"
+        " VALUES (?, ?, ?, 'manual', ?, ?, ?)",
+        (tenant_id, collector, status, utcnow(), utcnow(), error),
+    )
     return cur.lastrowid
 
 
@@ -69,8 +98,9 @@ def posted(rsps, i=-1):
 
 
 def audit_rows(db, *actions):
-    return db.execute(f"SELECT * FROM audit_log WHERE action IN ({','.join('?' * len(actions))}) ORDER BY id",
-                      actions).fetchall()
+    return db.execute(
+        f"SELECT * FROM audit_log WHERE action IN ({','.join('?' * len(actions))}) ORDER BY id", actions
+    ).fetchall()
 
 
 # -- Findings alerts ---------------------------------------------------------
@@ -94,8 +124,10 @@ def test_teams_payload_groups_findings_into_one_card(db, vault, alerting, two_te
     assert card["body"][0]["text"] == "Alpha Ltd: 13 new findings"
     facts = card["body"][2]["facts"]
     assert len(facts) == alerts.MAX_ITEMS
-    assert facts[0] == {"title": "High",
-                        "value": "user00@x.com: No MFA method registered (check: Every admin has MFA registered)"}
+    assert facts[0] == {
+        "title": "High",
+        "value": "user00@x.com: No MFA method registered (check: Every admin has MFA registered)",
+    }
     assert card["body"][3]["text"] == "And 3 more."
     assert card["actions"][0]["url"] == f"http://localhost:8000/tenants/{alpha}"
     assert responses.calls[0].request.headers["Content-Type"] == "application/json"
@@ -142,8 +174,12 @@ def test_generic_payload_and_signature(db, vault, alerting, two_tenants):
     request = responses.calls[0].request
     body = json.loads(request.body)
     assert body["event"] == "findings.new"
-    assert body["tenant"] == {"id": alpha, "name": "Alpha Ltd", "tenant_ref": "alpha.onmicrosoft.com",
-                              "url": f"http://localhost:8000/tenants/{alpha}"}
+    assert body["tenant"] == {
+        "id": alpha,
+        "name": "Alpha Ltd",
+        "tenant_ref": "alpha.onmicrosoft.com",
+        "url": f"http://localhost:8000/tenants/{alpha}",
+    }
     assert body["findings_total"] == 1 and body["findings_more"] == 0
     f = body["findings"][0]
     assert (f["severity"], f["check"], f["subject"], f["id"]) == ("critical", "guest_admins", "g#EXT#@x.com", fid)
@@ -169,8 +205,9 @@ def test_severity_threshold_and_accepted_risks(db, vault, alerting, two_tenants)
     tenant = store.get_tenant(db, alpha)
     medium = add_finding(db, alpha, severity="medium", object_id="m")
     low = add_finding(db, alpha, severity="low", object_id="l")
-    accepted = add_finding(db, alpha, severity="critical", object_id="a", accepted_at=utcnow(),
-                           accepted_by="jack", reopened_at=utcnow())
+    accepted = add_finding(
+        db, alpha, severity="critical", object_id="a", accepted_at=utcnow(), accepted_by="jack", reopened_at=utcnow()
+    )
     configure(db, vault, severity="high")
     assert alerts.after_sync(db, alerting, tenant, {"opened": [medium, low, accepted]}) is None
     assert not responses.calls
@@ -197,8 +234,10 @@ def test_disabled_or_unconfigured_sends_nothing(db, vault, alerting, two_tenants
 
 def _seed_with_alerts(db, tenant_id, alerting, hook_status=202, hook_body=None):
     factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
         mock_tenant(rsps)
         rsps.post(HOOK, status=hook_status, body=hook_body)
         for key in REGISTRY:
@@ -217,8 +256,12 @@ def test_worker_alerts_on_new_findings_only_once(db, vault, alerting, two_tenant
     assert set(statuses) <= {"succeeded", "partial"}
     assert calls, "new high findings should alert"
     alerted = {f["id"] for c in calls for f in json.loads(c.request.body)["findings"]}
-    expected = {r["id"] for r in db.execute(
-        "SELECT id FROM findings WHERE tenant_id = ? AND severity IN ('critical', 'high')", (alpha,))}
+    expected = {
+        r["id"]
+        for r in db.execute(
+            "SELECT id FROM findings WHERE tenant_id = ? AND severity IN ('critical', 'high')", (alpha,)
+        )
+    }
     assert alerted == expected
     assert all(json.loads(c.request.body)["tenant"]["id"] == alpha for c in calls)
     # The same data again: nothing new, so nothing sent.
@@ -226,8 +269,14 @@ def test_worker_alerts_on_new_findings_only_once(db, vault, alerting, two_tenant
     assert calls == []
 
 
-@pytest.mark.parametrize("hook", [{"hook_status": 500}, {"hook_body": requests.Timeout("slow")},
-                                  {"hook_body": requests.ConnectionError(f"Max retries exceeded with url: {HOOK}")}])
+@pytest.mark.parametrize(
+    "hook",
+    [
+        {"hook_status": 500},
+        {"hook_body": requests.Timeout("slow")},
+        {"hook_body": requests.ConnectionError(f"Max retries exceeded with url: {HOOK}")},
+    ],
+)
 def test_worker_survives_webhook_failure(db, vault, alerting, two_tenants, hook):
     alpha, _ = two_tenants
     configure(db, vault)
@@ -282,11 +331,13 @@ def test_run_worker_alerts_when_a_collection_starts_failing(cfg, db, vault, two_
     configure(db, vault, fmt="generic")
     ok = add_run(db, alpha, "succeeded", collector="users")
     # Old enough that the worker collects again (newer data counts as fresh and is skipped).
-    db.execute("UPDATE runs SET created_at = '2026-01-01T00:00:00Z', finished_at = '2026-01-01T00:00:00Z'"
-               " WHERE id = ?", (ok,))
+    db.execute(
+        "UPDATE runs SET created_at = '2026-01-01T00:00:00Z', finished_at = '2026-01-01T00:00:00Z' WHERE id = ?", (ok,)
+    )
 
     def broken(tenant, connection):
         raise NotConnected("tenant has no app connection with a client ID")
+
     with responses.RequestsMock() as rsps:
         rsps.post(HOOK)
         run_worker(cfg, once=True, graph_factory=broken, exchange_factory=broken)
@@ -337,13 +388,27 @@ def test_failure_alert_survives_webhook_error(db, vault, alerting, two_tenants):
 # -- Delivery safety ---------------------------------------------------------
 
 
-@pytest.mark.parametrize("ip", ["10.0.0.5", "127.0.0.1", "169.254.169.254", "192.168.1.1", "100.64.0.1", "::1",
-                                "fe80::1", "::ffff:10.0.0.1", "0.0.0.0", "240.0.0.1"])  # noqa: S104
+@pytest.mark.parametrize(
+    "ip",
+    [
+        "10.0.0.5",
+        "127.0.0.1",
+        "169.254.169.254",
+        "192.168.1.1",
+        "100.64.0.1",
+        "::1",
+        "fe80::1",
+        "::ffff:10.0.0.1",
+        "0.0.0.0",  # noqa: S104
+        "240.0.0.1",
+    ],
+)
 @responses.activate
 def test_ssrf_guard_refuses_internal_addresses(monkeypatch, ip):
     family = socket.AF_INET6 if ":" in ip else socket.AF_INET
-    monkeypatch.setattr(socket, "getaddrinfo",
-                        lambda host, port, *a, **k: [(family, socket.SOCK_STREAM, 6, "", (ip, port))])
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda host, port, *a, **k: [(family, socket.SOCK_STREAM, 6, "", (ip, port))]
+    )
     with pytest.raises(alerts.AlertError, match="internal address"):
         alerts.post(HOOK, {"x": 1})
     assert not responses.calls
@@ -351,17 +416,25 @@ def test_ssrf_guard_refuses_internal_addresses(monkeypatch, ip):
 
 @responses.activate
 def test_ssrf_guard_checks_every_address(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, *a, **k: [
-        (socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, port)),
-        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.1.1.1", port))])
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", (PUBLIC_IP, port)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.1.1.1", port)),
+        ],
+    )
     with pytest.raises(alerts.AlertError):
         alerts.post(HOOK, {"x": 1})
 
 
 @responses.activate
 def test_private_webhooks_can_be_allowed(monkeypatch):
-    monkeypatch.setattr(socket, "getaddrinfo",
-                        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", port))])
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", port))],
+    )
     monkeypatch.setenv(alerts.ALLOW_PRIVATE_ENV, "1")
     url = "https://teams-relay.internal/hook"
     responses.post(url)
@@ -380,6 +453,7 @@ def _record_connections(monkeypatch) -> list:
     def connect(address, *args, **kwargs):
         targets.append(address)
         raise OSError("not in tests")
+
     monkeypatch.setattr(urllib3.util.connection, "create_connection", connect)
     return targets
 
@@ -387,8 +461,11 @@ def _record_connections(monkeypatch) -> list:
 def test_webhook_connects_to_the_address_it_checked(monkeypatch):
     # DNS rebinding: public when checked, internal a moment later when the request connects.
     answers = iter([PUBLIC_IP] + ["127.0.0.1"] * 10)
-    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, *a, **k: [
-        (socket.AF_INET, socket.SOCK_STREAM, 6, "", (next(answers), port))])
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (next(answers), port))],
+    )
     targets = _record_connections(monkeypatch)
     with pytest.raises(alerts.AlertError, match="Couldn't connect"):
         alerts.post(HOOK, {"x": 1})
@@ -407,13 +484,22 @@ def test_pinned_connection_keeps_the_name_for_tls():
 def test_unresolvable_host(monkeypatch):
     def fail(*a, **k):
         raise socket.gaierror("nope")
+
     monkeypatch.setattr(socket, "getaddrinfo", fail)
     with pytest.raises(alerts.AlertError, match="Couldn't look up hooks.example.com"):
         alerts.post(HOOK, {"x": 1})
 
 
-@pytest.mark.parametrize("url", ["http://hooks.example.com/x", "ftp://hooks.example.com/x", "https:///x",
-                                 "https://user:pw@hooks.example.com/x", "hooks.example.com/x"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://hooks.example.com/x",
+        "ftp://hooks.example.com/x",
+        "https:///x",
+        "https://user:pw@hooks.example.com/x",
+        "hooks.example.com/x",
+    ],
+)
 @responses.activate
 def test_https_only(url):
     with pytest.raises(alerts.AlertError):
@@ -433,8 +519,7 @@ def test_redirects_are_not_followed():
 
 
 def _form(**overrides):
-    data = {"enabled": "1", "format": "teams", "url": HOOK, "min_severity": "high", "on_failures": "1",
-            "secret": ""}
+    data = {"enabled": "1", "format": "teams", "url": HOOK, "min_severity": "high", "on_failures": "1", "secret": ""}
     data.update(overrides)
     return {k: v for k, v in data.items() if v is not None}
 
@@ -501,8 +586,10 @@ def test_send_test_button(client, db):
     responses.replace(responses.POST, HOOK, status=404)
     html = client.post("/admin/alerts/test", follow_redirects=True).get_data(as_text=True)
     assert "Test failed: The webhook answered HTTP 404." in html
-    assert [r["action"] for r in audit_rows(db, "alert_test_sent", "alert_test_failed")] == \
-        ["alert_test_sent", "alert_test_failed"]
+    assert [r["action"] for r in audit_rows(db, "alert_test_sent", "alert_test_failed")] == [
+        "alert_test_sent",
+        "alert_test_failed",
+    ]
 
 
 def test_send_test_without_url(client, db):

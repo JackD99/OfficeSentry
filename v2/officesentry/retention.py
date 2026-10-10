@@ -58,8 +58,18 @@ AUDIT_FLOOR_DAYS = 365
 ISSUED_FLOOR_DAYS = 365
 
 # Objects that hold sign-in detail: who signed in, from which address, country and city.
-SIGNIN_KINDS = ("sign_in_status", "sign_in_account", "sign_in_location", "sign_in_country", "sign_in_app",
-                "sign_in_failure", "sign_in_failure_ip", "risky_sign_in", "legacy_signin", "legacy_signin_status")
+SIGNIN_KINDS = (
+    "sign_in_status",
+    "sign_in_account",
+    "sign_in_location",
+    "sign_in_country",
+    "sign_in_app",
+    "sign_in_failure",
+    "sign_in_failure_ip",
+    "risky_sign_in",
+    "legacy_signin",
+    "legacy_signin_status",
+)
 
 # key: (label, minimum, maximum, what "keep" means). None as a value means forever (or follow snapshots).
 LIMITS = {
@@ -76,25 +86,34 @@ LIMITS = {
     "state_months": (1, 1200),
 }
 # Which settings may be "keep forever" (or, for sign-in detail, "as long as the snapshot").
-OPEN_ENDED = {"keep_monthly", "signin_days", "findings_days", "run_log_days", "audit_days", "issued_days",
-              "history_daily_months", "history_audit_years", "state_months"}
+OPEN_ENDED = {
+    "keep_monthly",
+    "signin_days",
+    "findings_days",
+    "run_log_days",
+    "audit_days",
+    "issued_days",
+    "history_daily_months",
+    "history_audit_years",
+    "state_months",
+}
 FOREVER_MONTHS = 10**6  # snapshots_to_keep's limit for "every month"
 
 
 @dataclass(frozen=True)
 class Policy:
     keep_daily: int = 30
-    keep_monthly: int | None = 12      # None: the last run of every month, forever
-    signin_days: int | None = None     # None: as long as the snapshot it's in
-    findings_days: int | None = None   # None: resolved findings kept forever
+    keep_monthly: int | None = 12  # None: the last run of every month, forever
+    signin_days: int | None = None  # None: as long as the snapshot it's in
+    findings_days: int | None = None  # None: resolved findings kept forever
     run_log_days: int | None = store.RUN_LOG_DAYS  # None: info lines kept forever
-    audit_days: int | None = None      # None: activity log kept forever
-    issued_days: int | None = None     # None: issued reports kept forever
+    audit_days: int | None = None  # None: activity log kept forever
+    issued_days: int | None = None  # None: issued reports kept forever
     # Activity history: the plan's recommended defaults (D18). Raw sign-ins can't be kept forever.
     history_signin_days: int = 180
     history_daily_months: int | None = 25  # None: daily sign-in summaries kept forever
-    history_audit_years: int | None = 7    # None: directory audit events kept forever
-    state_months: int | None = 25          # daily history (state_history.py); None: kept forever
+    history_audit_years: int | None = 7  # None: directory audit events kept forever
+    state_months: int | None = 25  # daily history (state_history.py); None: kept forever
 
 
 def defaults(cfg) -> Policy:
@@ -117,8 +136,10 @@ def _parse(key: str, raw: str | None, default):
 
 def load(conn, cfg) -> Policy:
     base = defaults(cfg)
-    stored = {r["key"][len(PREFIX):]: r["value"] for r in conn.execute(
-        "SELECT key, value FROM settings WHERE key LIKE 'retention.%'")}
+    stored = {
+        r["key"][len(PREFIX) :]: r["value"]
+        for r in conn.execute("SELECT key, value FROM settings WHERE key LIKE 'retention.%'")
+    }
     return Policy(**{f.name: _parse(f.name, stored.get(f.name), getattr(base, f.name)) for f in fields(Policy)})
 
 
@@ -147,8 +168,10 @@ def save(conn, policy: Policy) -> None:
     """Store every setting (in the caller's transaction)."""
     for key, value in asdict(policy).items():
         stored = str(value) if value is not None else (SNAPSHOTS if key == "signin_days" else FOREVER)
-        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                     " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (PREFIX + key, stored))
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (PREFIX + key, stored),
+        )
 
 
 LABELS = {
@@ -164,8 +187,13 @@ LABELS = {
     "history_audit_years": "Directory audit history",
     "state_months": "Daily history",
 }
-UNITS = {"keep_daily": "day", "keep_monthly": "month", "history_daily_months": "month",
-         "history_audit_years": "year", "state_months": "month"}
+UNITS = {
+    "keep_daily": "day",
+    "keep_monthly": "month",
+    "history_daily_months": "month",
+    "history_audit_years": "year",
+    "state_months": "month",
+}
 
 
 def describe(key: str, value) -> str:
@@ -194,17 +222,17 @@ def _months(policy: Policy) -> int:
 def _delete_ids(conn, table: str, ids: list[int], batch: int) -> int:
     deleted = 0
     for i in range(0, len(ids), batch):
-        chunk = ids[i:i + batch]
+        chunk = ids[i : i + batch]
         with transaction(conn, immediate=True):
-            deleted += conn.execute(f"DELETE FROM {table} WHERE id IN ({','.join('?' * len(chunk))})",
-                                    chunk).rowcount
+            deleted += conn.execute(f"DELETE FROM {table} WHERE id IN ({','.join('?' * len(chunk))})", chunk).rowcount
     return deleted
 
 
 _SIGNIN_MARKS = ",".join("?" * len(SIGNIN_KINDS))
 _SIGNIN_RUNS = (
     "SELECT id FROM runs WHERE collector IN ('sign_ins', 'mail_usage') AND finished_at < ?"
-    f" AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id AND o.kind IN ({_SIGNIN_MARKS})) ORDER BY id")
+    f" AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id AND o.kind IN ({_SIGNIN_MARKS})) ORDER BY id"
+)
 
 
 def prune_signin_detail(conn, days: int | None, batch: int = 100, now: datetime | None = None) -> int:
@@ -214,11 +242,12 @@ def prune_signin_detail(conn, days: int | None, batch: int = 100, now: datetime 
     runs = [r["id"] for r in conn.execute(_SIGNIN_RUNS, (_cutoff(days, now), *SIGNIN_KINDS))]
     deleted = 0
     for i in range(0, len(runs), batch):
-        chunk = runs[i:i + batch]
+        chunk = runs[i : i + batch]
         where = f"run_id IN ({','.join('?' * len(chunk))}) AND kind IN ({_SIGNIN_MARKS})"
         with transaction(conn, immediate=True):
-            deleted += conn.execute(f"SELECT COALESCE(SUM(items), 0) FROM objects WHERE {where}",
-                                    (*chunk, *SIGNIN_KINDS)).fetchone()[0]
+            deleted += conn.execute(
+                f"SELECT COALESCE(SUM(items), 0) FROM objects WHERE {where}", (*chunk, *SIGNIN_KINDS)
+            ).fetchone()[0]
             conn.execute(f"DELETE FROM objects WHERE {where}", (*chunk, *SIGNIN_KINDS))
     return deleted
 
@@ -228,7 +257,8 @@ def _signin_count(conn, days: int | None, now: datetime | None) -> int:
         return 0
     return conn.execute(
         f"SELECT COALESCE(SUM(items), 0) FROM objects WHERE kind IN ({_SIGNIN_MARKS}) AND run_id IN ({_SIGNIN_RUNS})",
-        (*SIGNIN_KINDS, _cutoff(days, now), *SIGNIN_KINDS)).fetchone()[0]
+        (*SIGNIN_KINDS, _cutoff(days, now), *SIGNIN_KINDS),
+    ).fetchone()[0]
 
 
 # Each tenant's earliest findings are kept: alert emails leave out a tenant's first scan by
@@ -238,7 +268,8 @@ def _signin_count(conn, days: int | None, now: datetime | None) -> int:
 _FINDINGS = (
     "SELECT id FROM findings WHERE resolved_at IS NOT NULL AND resolved_at < ? AND accepted_at IS NULL"
     " AND first_seen > (SELECT MIN(f.first_seen) FROM findings f WHERE f.tenant_id = findings.tenant_id)"
-    " ORDER BY id")
+    " ORDER BY id"
+)
 
 
 def prune_findings(conn, days: int | None, batch: int = 500, now: datetime | None = None) -> int:
@@ -256,8 +287,9 @@ def prune_audit_log(conn, days: int | None, batch: int = 1000, now: datetime | N
     deleted = 0
     while True:
         with transaction(conn, immediate=True):
-            n = conn.execute("DELETE FROM audit_log WHERE id IN (SELECT id FROM audit_log WHERE ts < ? LIMIT ?)",
-                             (cutoff, batch)).rowcount
+            n = conn.execute(
+                "DELETE FROM audit_log WHERE id IN (SELECT id FROM audit_log WHERE ts < ? LIMIT ?)", (cutoff, batch)
+            ).rowcount
         deleted += n
         if n < batch:
             return deleted
@@ -269,7 +301,8 @@ def prune_audit_log(conn, days: int | None, batch: int = 1000, now: datetime | N
 _ISSUED = (
     "SELECT id FROM issued_reports r WHERE issued_at < ?"
     " AND issued_at < (SELECT MAX(l.issued_at) FROM issued_reports l"
-    " WHERE l.tenant_id = r.tenant_id AND l.kind = r.kind) ORDER BY id")
+    " WHERE l.tenant_id = r.tenant_id AND l.kind = r.kind) ORDER BY id"
+)
 
 
 def prune_issued(conn, days: int | None, batch: int = 50, now: datetime | None = None) -> int:
@@ -291,15 +324,16 @@ def history_cutoffs(policy: Policy, now: datetime | None = None) -> dict[str, da
     now = now or datetime.now(UTC)
     return {
         "history_signin_days": now - timedelta(days=policy.history_signin_days),
-        "history_daily_months": None if policy.history_daily_months is None
+        "history_daily_months": None
+        if policy.history_daily_months is None
         else _months_ago(now, policy.history_daily_months),
-        "history_audit_years": None if policy.history_audit_years is None
+        "history_audit_years": None
+        if policy.history_audit_years is None
         else _months_ago(now, 12 * policy.history_audit_years),
     }
 
 
-HISTORY_STORES = {"history_signin_days": "signins", "history_daily_months": "daily",
-                  "history_audit_years": "audits"}
+HISTORY_STORES = {"history_signin_days": "signins", "history_daily_months": "daily", "history_audit_years": "audits"}
 
 
 def prune_state(conn, months: int | None, now: datetime | None = None, dry_run: bool = False) -> int:
@@ -326,20 +360,25 @@ def dry_run(conn, policy: Policy, tz: str = "UTC", now: datetime | None = None) 
     count = {
         "snapshots": snapshots,
         "signin_days": _signin_count(conn, policy.signin_days, now),
-        "findings_days": 0, "audit_days": 0, "issued_days": 0,
+        "findings_days": 0,
+        "audit_days": 0,
+        "issued_days": 0,
         "state_months": prune_state(conn, policy.state_months, now, dry_run=True),
         "run_log_days": 0 if policy.run_log_days is None else store.run_logs_to_prune(conn, policy.run_log_days, now),
         **prune_history(conn, policy, now, dry_run=True),
     }
     if policy.findings_days is not None:
-        count["findings_days"] = conn.execute(f"SELECT COUNT(*) FROM ({_FINDINGS})",
-                                              (_cutoff(policy.findings_days, now),)).fetchone()[0]
+        count["findings_days"] = conn.execute(
+            f"SELECT COUNT(*) FROM ({_FINDINGS})", (_cutoff(policy.findings_days, now),)
+        ).fetchone()[0]
     if policy.audit_days is not None:
-        count["audit_days"] = conn.execute("SELECT COUNT(*) FROM audit_log WHERE ts < ?", (
-            _cutoff(max(policy.audit_days, AUDIT_FLOOR_DAYS), now),)).fetchone()[0]
+        count["audit_days"] = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE ts < ?", (_cutoff(max(policy.audit_days, AUDIT_FLOOR_DAYS), now),)
+        ).fetchone()[0]
     if policy.issued_days is not None:
-        count["issued_days"] = conn.execute(f"SELECT COUNT(*) FROM ({_ISSUED})", (
-            _cutoff(max(policy.issued_days, ISSUED_FLOOR_DAYS), now),)).fetchone()[0]
+        count["issued_days"] = conn.execute(
+            f"SELECT COUNT(*) FROM ({_ISSUED})", (_cutoff(max(policy.issued_days, ISSUED_FLOOR_DAYS), now),)
+        ).fetchone()[0]
     return count
 
 
@@ -353,8 +392,11 @@ def apply(conn, cfg, now: datetime | None = None) -> dict[str, int]:
         ("state_months", lambda: prune_state(conn, policy.state_months, now), "collection from the daily history"),
         ("signin_days", lambda: prune_signin_detail(conn, policy.signin_days, now=now), "sign-in detail row"),
         ("findings_days", lambda: prune_findings(conn, policy.findings_days, now=now), "resolved finding"),
-        ("run_log_days", lambda: 0 if policy.run_log_days is None
-         else store.prune_run_logs(conn, policy.run_log_days, now=now), "old run log line"),
+        (
+            "run_log_days",
+            lambda: 0 if policy.run_log_days is None else store.prune_run_logs(conn, policy.run_log_days, now=now),
+            "old run log line",
+        ),
         ("audit_days", lambda: prune_audit_log(conn, policy.audit_days, now=now), "old activity log entry"),
         ("issued_days", lambda: prune_issued(conn, policy.issued_days, now=now), "old issued report"),
     )
@@ -368,6 +410,7 @@ def apply(conn, cfg, now: datetime | None = None) -> dict[str, int]:
             log.info("Retention: removed %s from the activity history (%s)", plural(n, "row"), LABELS[key].lower())
     done["history_orphans"] = events.sweep(conn)
     if done["history_orphans"]:
-        log.info("Retention: removed %s of deleted tenants from the activity history",
-                 plural(done["history_orphans"], "row"))
+        log.info(
+            "Retention: removed %s of deleted tenants from the activity history", plural(done["history_orphans"], "row")
+        )
     return done

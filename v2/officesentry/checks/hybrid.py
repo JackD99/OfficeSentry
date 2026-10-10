@@ -20,10 +20,14 @@ def _sync_on(snap: TenantSnapshot):
     return status, ""
 
 
-@rule("directory_sync_running", "Directory sync is running", "Hybrid identity",
-      "Check the Entra Connect server: that it is up, the Microsoft Azure AD Sync service is running and "
-      "Synchronization Service Manager shows no errors. Until sync runs, accounts disabled or removed in Active "
-      "Directory keep working in Microsoft 365. If the client has moved to cloud-only, turn directory sync off.")
+@rule(
+    "directory_sync_running",
+    "Directory sync is running",
+    "Hybrid identity",
+    "Check the Entra Connect server: that it is up, the Microsoft Azure AD Sync service is running and "
+    "Synchronization Service Manager shows no errors. Until sync runs, accounts disabled or removed in Active "
+    "Directory keep working in Microsoft 365. If the client has moved to cloud-only, turn directory sync off.",
+)
 def directory_sync_running(snap: TenantSnapshot, now: datetime):
     status, reason = _sync_on(snap)
     if status is None:
@@ -37,10 +41,14 @@ def directory_sync_running(snap: TenantSnapshot, now: datetime):
     return ("pass", summary, [])
 
 
-@rule("password_hash_sync", "Password hash sync is on", "Hybrid identity",
-      "Turn on password hash synchronization in Entra Connect (Optional features), even when users sign in "
-      "through federation or pass-through authentication. Entra ID can then detect leaked passwords, and "
-      "sign-in can be switched to the cloud if the on-premises servers are down.")
+@rule(
+    "password_hash_sync",
+    "Password hash sync is on",
+    "Hybrid identity",
+    "Turn on password hash synchronization in Entra Connect (Optional features), even when users sign in "
+    "through federation or pass-through authentication. Entra ID can then detect leaked passwords, and "
+    "sign-in can be switched to the cloud if the on-premises servers are down.",
+)
 def password_hash_sync(snap: TenantSnapshot, now: datetime):
     status, reason = _sync_on(snap)
     if status is None:
@@ -53,17 +61,24 @@ def password_hash_sync(snap: TenantSnapshot, now: datetime):
         federated = hybrid.federated_domains(snap)
         if federated:
             detail += f". Sign-in for {', '.join(federated)} is federated and has no cloud fallback"
-        summary = "No password hash sync recorded" if status.get("lastPasswordSyncDateTime") is None \
+        summary = (
+            "No password hash sync recorded"
+            if status.get("lastPasswordSyncDateTime") is None
             else "Password hash sync has stopped"
+        )
         return ("fail", summary, [Finding(severity, "Password hash sync", detail)])
     hours = hybrid.hours_since(status["lastPasswordSyncDateTime"], now)
     return ("pass", f"Last password sync {hybrid.age(hours)}", [])
 
 
-@rule("cloud_only_admins", "Admin accounts are cloud-only", "Hybrid identity",
-      "Give each admin a separate cloud-only account (for example on the .onmicrosoft.com domain) for their admin "
-      "roles, and remove the roles from accounts synced from Active Directory. Otherwise anyone who takes over "
-      "on-premises AD can reset those passwords and become an admin in Microsoft 365.")
+@rule(
+    "cloud_only_admins",
+    "Admin accounts are cloud-only",
+    "Hybrid identity",
+    "Give each admin a separate cloud-only account (for example on the .onmicrosoft.com domain) for their admin "
+    "roles, and remove the roles from accounts synced from Active Directory. Otherwise anyone who takes over "
+    "on-premises AD can reset those passwords and become an admin in Microsoft 365.",
+)
 def cloud_only_admins(snap: TenantSnapshot, now: datetime):
     admins = hybrid.synced_admins(snap)
     if admins is None:

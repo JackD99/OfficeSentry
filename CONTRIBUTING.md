@@ -2,7 +2,10 @@
 
 All code lives in `v2/`. Its [README](v2/README.md) covers what the product
 does and [CLAUDE.md](v2/CLAUDE.md) covers the conventions (adding
-collectors, checks, reports and migrations).
+collectors, checks, reports and migrations). New here? Start with the
+[developer guide](DEVELOPING.md): running it locally, how it fits together,
+tests and simulated Microsoft responses. What's planned is in
+[ROADMAP.md](ROADMAP.md).
 
 ## Development setup
 
@@ -47,8 +50,11 @@ a release.
 is pinned, with hashes, in two lock files made from it with
 [pip-tools](https://pip-tools.readthedocs.io/):
 
-- `v2/requirements.txt`: the Docker image (and the dependency audit);
+- `v2/requirements.txt`: the Docker image;
 - `v2/requirements-dev.txt`: CI, the same versions plus the test tools.
+
+CI's dependency audit (`pip-audit`) checks both, and the browser tests' and
+the website's own locks.
 
 Dependabot refreshes both every Monday. To change a dependency yourself, edit
 `pyproject.toml`, then from `v2/` with Python 3.12 (the image's):
@@ -70,6 +76,7 @@ directly, since the locks are made for Linux.
 
 ```bash
 cd v2
+ruff format .       # CI fails on unformatted code (ruff format --check)
 ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
@@ -121,11 +128,12 @@ The same gates apply to every change, whoever wrote it:
 
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
-- CI runs `ruff`, the full test suite on Python 3.11, 3.12 and 3.13 (with
-  a 90% coverage floor), a Windows subset, a Docker build and `pip-audit`
-  on every pull request, and a pull request isn't merged until it's green.
-  The pull request template's checklist covers migrations, new permissions,
-  the access gate and read-only access.
+- CI runs `ruff check` and `ruff format --check`, the full test suite on
+  Python 3.11, 3.12 and 3.13 (with a 90% coverage floor), a Windows subset,
+  a Docker build and `pip-audit` over every lock file on every pull
+  request, and a pull request isn't merged until it's green. The pull
+  request template's checklist covers migrations, new permissions, the
+  access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
   `tests/test_live_fixture.py` replays responses recorded from a real
   Microsoft 365 Business Premium test tenant (names, emails, domains and IDs

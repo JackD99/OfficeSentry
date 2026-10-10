@@ -303,6 +303,7 @@ consent page, mailboxes failing without Global Reader and the worker not running
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
 - [Example reports](examples/)
+- [Roadmap](ROADMAP.md): what's planned next, and what never will be
 
 ## Development
 
@@ -312,13 +313,14 @@ All code is in [`v2/`](v2/): Flask, SQLite and WeasyPrint, with one background w
 cd v2
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
-ruff check . && pytest
+ruff format . && ruff check . && pytest
 OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:8000
 ```
 
 `python scripts/demo_data.py --data-dir /tmp/officesentry-demo` builds demo tenants to click around in.
 The screenshots and example reports here are made by `python scripts/screenshots.py` from the same demo data;
-re-run it when the UI or reports change. See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
+re-run it when the UI or reports change. [DEVELOPING.md](DEVELOPING.md) is a short tour of the code and tests, and
+[CONTRIBUTING.md](CONTRIBUTING.md) has the conventions.
 
 ## Security issues
 

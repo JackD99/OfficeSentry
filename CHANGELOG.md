@@ -174,7 +174,6 @@ copied collection reads back exactly as its snapshot.
 
 - Client users no longer see the MSP team's email addresses on the tenant's Emails page: alert emails are
   left out, and report emails show only the client's own contacts.
-
 - Encrypted off-site backups with restic to any S3-compatible storage, a weekly restore drill that proves
   the newest one opens, and the keys kept in a volume of their own, apart from the data and its backups.
 - Wrong guesses at the current password on the change-password form now count towards the account's

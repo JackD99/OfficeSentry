@@ -34,11 +34,11 @@ def _results(db, tenant_id):
 
 def test_windows_support_by_build():
     today = date(2026, 10, 2)
-    assert windows_support("10.0.19045.5011", today).status == "ended"          # Windows 10
-    assert windows_support("10.0.22621.4317", today).status == "ended"          # 22H2, all editions
-    assert windows_support("10.0.22631.4317", today).status == "pro_ended"      # 23H2: Enterprise until Nov 2026
-    assert windows_support("10.0.26100.1", today).status == "ending"            # 24H2 Home/Pro: 13 Oct 2026
-    assert windows_support("10.0.26200.1", today).status == "supported"         # 25H2
+    assert windows_support("10.0.19045.5011", today).status == "ended"  # Windows 10
+    assert windows_support("10.0.22621.4317", today).status == "ended"  # 22H2, all editions
+    assert windows_support("10.0.22631.4317", today).status == "pro_ended"  # 23H2: Enterprise until Nov 2026
+    assert windows_support("10.0.26100.1", today).status == "ending"  # 24H2 Home/Pro: 13 Oct 2026
+    assert windows_support("10.0.26200.1", today).status == "supported"  # 25H2
     assert windows_support("10.0.26100.1", date(2026, 6, 1)).status == "supported"
     assert windows_support("6.3.9600", today).status == "unknown"
     assert windows_support(None, today).status == "unknown"
@@ -65,8 +65,9 @@ def test_collects_entra_and_intune_devices(db, two_tenants, factory):
 @responses.activate
 def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
     alpha, _ = two_tenants
-    no_intune = [{**s, "servicePlans": [p for p in s["servicePlans"] if p["servicePlanName"] != "INTUNE_A"]}
-                 for s in SKUS]
+    no_intune = [
+        {**s, "servicePlans": [p for p in s["servicePlans"] if p["servicePlanName"] != "INTUNE_A"]} for s in SKUS
+    ]
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": no_intune})
     responses.get(f"{V1}/directory/subscriptions", json={"value": []})
@@ -86,8 +87,11 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
 def test_intune_forbidden_is_partial_not_failed(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
-    responses.get(f"{V1}/deviceManagement/managedDevices", status=403,
-                  json={"error": {"code": "Forbidden", "message": "Application is not authorized"}})
+    responses.get(
+        f"{V1}/deviceManagement/managedDevices",
+        status=403,
+        json={"error": {"code": "Forbidden", "message": "Application is not authorized"}},
+    )
     assert _run(db, alpha, "devices", factory)[1] == "partial"
     r = _results(db, alpha)
     assert r["device_compliance"].status == "unavailable"
@@ -128,8 +132,14 @@ def test_clean_estate_passes(db, two_tenants, monkeypatch):
     monkeypatch.setattr(dd, "ENTRA_DEVICES", [dd.ENTRA_DEVICES[0], dd.ENTRA_DEVICES[4]])
     seed_tenant(db, alpha)
     r = _results(db, alpha)
-    for key in ("device_compliance", "device_encryption", "supported_windows", "intune_enrolled",
-                "device_checkin", "stale_devices"):
+    for key in (
+        "device_compliance",
+        "device_encryption",
+        "supported_windows",
+        "intune_enrolled",
+        "device_checkin",
+        "stale_devices",
+    ):
         assert r[key].status == "pass", (key, r[key].summary)
 
 
@@ -206,5 +216,10 @@ def test_devices_page_and_xlsx(client, db, two_tenants):
     resp = client.get(f"/tenants/{alpha}/data/devices.xlsx")
     assert resp.status_code == 200
     wb = load_workbook(BytesIO(resp.data))
-    assert wb.sheetnames == ["Summary", "Operating systems", "Needs attention", "Managed devices",
-                             "Entra ID device records"]
+    assert wb.sheetnames == [
+        "Summary",
+        "Operating systems",
+        "Needs attention",
+        "Managed devices",
+        "Entra ID device records",
+    ]

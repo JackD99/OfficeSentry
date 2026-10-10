@@ -101,8 +101,10 @@ class Report:
 
     @property
     def failing(self) -> list[RuleResult]:
-        return sorted((r for r in self.results if r.status == "fail"),
-                      key=lambda r: (SEVERITY_RANK.get(r.severity or "info", 9), r.category, r.title))
+        return sorted(
+            (r for r in self.results if r.status == "fail"),
+            key=lambda r: (SEVERITY_RANK.get(r.severity or "info", 9), r.category, r.title),
+        )
 
     @property
     def new_findings(self) -> list[tuple[RuleResult, Finding]]:
@@ -153,8 +155,10 @@ def setting(conn, key: str, default: str) -> str:
 
 def _baseline_end(conn, tenant_id: int, now: datetime) -> str:
     """End of the tenant's first collection window; findings seen before it aren't new."""
-    row = conn.execute("SELECT MIN(finished_at) AS first FROM runs WHERE tenant_id = ?"
-                       " AND status IN ('succeeded', 'partial')", (tenant_id,)).fetchone()
+    row = conn.execute(
+        "SELECT MIN(finished_at) AS first FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')",
+        (tenant_id,),
+    ).fetchone()
     first = datetime.fromisoformat(row["first"].replace("Z", "+00:00")) if row and row["first"] else now
     return (first + BASELINE).strftime(ISO)
 
@@ -183,7 +187,8 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
                 f.new = now.strftime(ISO) > baseline_end
             else:
                 f.new = life.is_new_since(since) and (
-                    life.first_seen > baseline_end or (life.reopened_at or "") >= since)
+                    life.first_seen > baseline_end or (life.reopened_at or "") >= since
+                )
             active.append(f)
         if r.status == "fail" and not active:
             r.status = "accepted"
@@ -199,13 +204,23 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
         _kpi(snap, "mfa.registered_pct", "Users with MFA", now, unit="%"),
         _kpi(snap, "admins.privileged_principals", "Privileged accounts", now, better="down"),
         _kpi(snap, "users.licensed", "Licensed users", now, better="none"),
-        Kpi("stale", "Inactive accounts",
-            None if stale.status == "unavailable" else len(stale.findings), better="down",
-            note="Needs Entra ID P1" if stale.status == "unavailable" else ""),
-        Kpi("waste", "Licence waste / month", licences.monthly_waste if licences.lines else None,
-            unit="currency", better="down",
+        Kpi(
+            "stale",
+            "Inactive accounts",
+            None if stale.status == "unavailable" else len(stale.findings),
+            better="down",
+            note="Needs Entra ID P1" if stale.status == "unavailable" else "",
+        ),
+        Kpi(
+            "waste",
+            "Licence waste / month",
+            licences.monthly_waste if licences.lines else None,
+            unit="currency",
+            better="down",
             note=f"{plural(licences.unpriced_waste_units, 'unpriced licence')} not counted"
-            if licences.unpriced_waste_units else ""),
+            if licences.unpriced_waste_units
+            else "",
+        ),
     ]
 
     freshness = []
@@ -224,11 +239,21 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
             new_count += f.new
 
     return Report(
-        title=TITLE, tenant=dict(tenant), generated_at=now, currency=setting(conn, "currency", "GBP"),
-        kpis=kpis, results=results, licences=licences,
-        secure_score_chart=line_chart(points, label="Secure Score over time"), freshness=freshness, counts=counts,
-        period_start=period_start, changes=all_changes(conn, tenant["id"], since),
-        resolved=list(resolved_since(conn, tenant["id"], since)), accepted=accepted, new_count=new_count,
+        title=TITLE,
+        tenant=dict(tenant),
+        generated_at=now,
+        currency=setting(conn, "currency", "GBP"),
+        kpis=kpis,
+        results=results,
+        licences=licences,
+        secure_score_chart=line_chart(points, label="Secure Score over time"),
+        freshness=freshness,
+        counts=counts,
+        period_start=period_start,
+        changes=all_changes(conn, tenant["id"], since),
+        resolved=list(resolved_since(conn, tenant["id"], since)),
+        accepted=accepted,
+        new_count=new_count,
         first_report=first_report,
     )
 
@@ -251,14 +276,20 @@ def rollup_row(conn, tenant, now: datetime | None = None, cached: bool = False) 
         row = _rollup_row(conn, tenant)
         data = {k: v for k, v in row.items() if k not in ("tenant", "stale_data")}
         data["kpis"] = [asdict(k) for k in row["kpis"].values()]
-        conn.execute("INSERT INTO rollup_cache (tenant_id, fingerprint, data, built_at) VALUES (?, ?, ?, ?)"
-                     " ON CONFLICT(tenant_id) DO UPDATE SET fingerprint = excluded.fingerprint,"
-                     " data = excluded.data, built_at = excluded.built_at",
-                     (tenant["id"], fingerprint, json.dumps(data), utcnow()))
+        conn.execute(
+            "INSERT INTO rollup_cache (tenant_id, fingerprint, data, built_at) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(tenant_id) DO UPDATE SET fingerprint = excluded.fingerprint,"
+            " data = excluded.data, built_at = excluded.built_at",
+            (tenant["id"], fingerprint, json.dumps(data), utcnow()),
+        )
         return row
     kpis = [Kpi(**k) for k in data.pop("kpis")]
-    return {**data, "tenant": dict(tenant), "kpis": {k.key: k for k in kpis},
-            "stale_data": _stale(conn, tenant["id"], datetime.now(UTC))}
+    return {
+        **data,
+        "tenant": dict(tenant),
+        "kpis": {k.key: k for k in kpis},
+        "stale_data": _stale(conn, tenant["id"], datetime.now(UTC)),
+    }
 
 
 def _rollup_row(conn, tenant, now: datetime | None = None) -> dict:
@@ -293,15 +324,30 @@ def _fingerprint(conn, tenant, now: datetime) -> str:
     connections, the code, and the day (what counts as "new" and the 4-week
     comparison move daily).
     """
-    run = conn.execute("SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL"
-                       " ORDER BY finished_at DESC, id DESC LIMIT 1", (tenant["id"],)).fetchone()
+    run = conn.execute(
+        "SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL"
+        " ORDER BY finished_at DESC, id DESC LIMIT 1",
+        (tenant["id"],),
+    ).fetchone()
     findings = conn.execute(
         "SELECT COUNT(*), MAX(last_seen), MAX(resolved_at), MAX(reopened_at), COUNT(accepted_at),"
-        " MAX(accepted_at), MAX(accepted_until) FROM findings WHERE tenant_id = ?", (tenant["id"],)).fetchone()
+        " MAX(accepted_at), MAX(accepted_until) FROM findings WHERE tenant_id = ?",
+        (tenant["id"],),
+    ).fetchone()
     prices = conn.execute("SELECT COUNT(*), MAX(updated_at), TOTAL(monthly_price) FROM sku_prices").fetchone()
     apps = conn.execute("SELECT GROUP_CONCAT(client_id) FROM app_connections").fetchone()[0]
-    return json.dumps([_code_version(), now.date().isoformat(), list(run or ()), tenant["capabilities"], list(findings),
-                       list(prices), setting(conn, "currency", "GBP"), apps])
+    return json.dumps(
+        [
+            _code_version(),
+            now.date().isoformat(),
+            list(run or ()),
+            tenant["capabilities"],
+            list(findings),
+            list(prices),
+            setting(conn, "currency", "GBP"),
+            apps,
+        ]
+    )
 
 
 def _stale(conn, tenant_id: int, now: datetime) -> bool:
@@ -314,7 +360,8 @@ def _stale(conn, tenant_id: int, now: datetime) -> bool:
         "                    AND status = 'succeeded'), ''),"
         "            IFNULL((SELECT MAX(finished_at) FROM runs WHERE tenant_id = :t AND collector = c.key"
         "                    AND status = 'partial'), '')) AS at FROM c",
-        {**{f"k{i}": k for i, k in enumerate(keys)}, "t": tenant_id}).fetchall()
+        {**{f"k{i}": k for i, k in enumerate(keys)}, "t": tenant_id},
+    ).fetchall()
     cutoff = (now - STALE_AFTER).strftime(ISO)
     return any(not r["at"] or r["at"] < cutoff for r in rows)
 
@@ -336,14 +383,14 @@ def dashboard_trends(conn, rows: list[dict], now: datetime | None = None) -> dic
     scores: list[tuple[datetime, float]] = []
     for when in weeks:
         day = when.date().isoformat()
-        known = [next((v for d, v in reversed(r["kpis"]["secure_score.pct"].history) if d <= day), None)
-                 for r in rows]
+        known = [next((v for d, v in reversed(r["kpis"]["secure_score.pct"].history) if d <= day), None) for r in rows]
         known = [v for v in known if v is not None]
         if known:
             scores.append((when, round(sum(known) / len(known), 1)))
     if len(scores) >= 3:
-        out["score_trend"] = Trend([v for _, v in scores], f"{scores[0][1]:.0f}%", f"{scores[-1][1]:.0f}%",
-                                   since(scores[0][0]))
+        out["score_trend"] = Trend(
+            [v for _, v in scores], f"{scores[0][1]:.0f}%", f"{scores[-1][1]:.0f}%", since(scores[0][0])
+        )
 
     ids = [r["tenant"]["id"] for r in rows]
     if not ids:
@@ -353,12 +400,21 @@ def dashboard_trends(conn, rows: list[dict], now: datetime | None = None) -> dic
     found = conn.execute(
         f"SELECT first_seen, resolved_at, accepted_at, accepted_until FROM findings WHERE tenant_id IN ({marks})"
         " AND severity IN ('critical', 'high') AND (resolved_at IS NULL OR resolved_at >= ?)",
-        (*ids, weeks[0].strftime(ISO))).fetchall()
+        (*ids, weeks[0].strftime(ISO)),
+    ).fetchall()
 
     def open_at(at: str) -> int:
-        return sum(1 for f in found if f["first_seen"] <= at and (f["resolved_at"] is None or f["resolved_at"] > at)
-                   and not (f["accepted_at"] and f["accepted_at"] <= at
-                            and (f["accepted_until"] is None or f["accepted_until"] > at)))
+        return sum(
+            1
+            for f in found
+            if f["first_seen"] <= at
+            and (f["resolved_at"] is None or f["resolved_at"] > at)
+            and not (
+                f["accepted_at"]
+                and f["accepted_at"] <= at
+                and (f["accepted_until"] is None or f["accepted_until"] > at)
+            )
+        )
 
     shown = [w for w in weeks[:-1] if first and w.strftime(ISO) >= first]
     counts = [float(open_at(w.strftime(ISO))) for w in shown]

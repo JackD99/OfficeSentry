@@ -36,43 +36,78 @@ class SecureScore(Collector):
             ctx.warn("Microsoft returned no Secure Score for this tenant yet")
             return
         latest = scores[0]
-        daily = [(s["createdDateTime"][:10], {
-            "date": s["createdDateTime"][:10],
-            "currentScore": s.get("currentScore"),
-            "maxScore": s.get("maxScore"),
-        }) for s in scores]
+        daily = [
+            (
+                s["createdDateTime"][:10],
+                {
+                    "date": s["createdDateTime"][:10],
+                    "currentScore": s.get("currentScore"),
+                    "maxScore": s.get("maxScore"),
+                },
+            )
+            for s in scores
+        ]
         ctx.objects("secure_score_daily", daily)
-        controls = [(c.get("controlName"), {
-            "controlName": c.get("controlName"),
-            "controlCategory": c.get("controlCategory"),
-            "score": c.get("score"),
-            "scoreInPercentage": c.get("scoreInPercentage"),
-            "implementationStatus": c.get("implementationStatus"),
-            "description": c.get("description"),
-        }) for c in latest.get("controlScores", []) if c.get("controlName")]
+        controls = [
+            (
+                c.get("controlName"),
+                {
+                    "controlName": c.get("controlName"),
+                    "controlCategory": c.get("controlCategory"),
+                    "score": c.get("score"),
+                    "scoreInPercentage": c.get("scoreInPercentage"),
+                    "implementationStatus": c.get("implementationStatus"),
+                    "description": c.get("description"),
+                },
+            )
+            for c in latest.get("controlScores", [])
+            if c.get("controlName")
+        ]
         ctx.objects("secure_score_control", controls)
 
         past = baseline(scores)
         if past:
             day = past["createdDateTime"][:10]
-            ctx.objects("secure_score_control_past", [(f"{day}:{c['controlName']}", {
-                "date": day, "controlName": c["controlName"], "score": c.get("score"),
-            }) for c in past.get("controlScores", []) if c.get("controlName")])
+            ctx.objects(
+                "secure_score_control_past",
+                [
+                    (
+                        f"{day}:{c['controlName']}",
+                        {
+                            "date": day,
+                            "controlName": c["controlName"],
+                            "score": c.get("score"),
+                        },
+                    )
+                    for c in past.get("controlScores", [])
+                    if c.get("controlName")
+                ],
+            )
         try:
             profiles = ctx.paged(ctx.graph.get_all("/security/secureScoreControlProfiles"))
         except GraphError as exc:
             ctx.log(f"Control names not available: {exc.message}", "warning")
             profiles = []
-        ctx.objects("secure_score_control_profile", [(p["id"], {
-            "title": p.get("title"),
-            "maxScore": p.get("maxScore"),
-            "controlCategory": p.get("controlCategory"),
-            "service": p.get("service"),
-            "userImpact": p.get("userImpact"),
-            "implementationCost": p.get("implementationCost"),
-            "rank": p.get("rank"),
-            "deprecated": p.get("deprecated"),
-        }) for p in profiles if p.get("id")])
+        ctx.objects(
+            "secure_score_control_profile",
+            [
+                (
+                    p["id"],
+                    {
+                        "title": p.get("title"),
+                        "maxScore": p.get("maxScore"),
+                        "controlCategory": p.get("controlCategory"),
+                        "service": p.get("service"),
+                        "userImpact": p.get("userImpact"),
+                        "implementationCost": p.get("implementationCost"),
+                        "rank": p.get("rank"),
+                        "deprecated": p.get("deprecated"),
+                    },
+                )
+                for p in profiles
+                if p.get("id")
+            ],
+        )
 
         current, maximum = latest.get("currentScore") or 0, latest.get("maxScore") or 0
         ctx.metric("secure_score.current", current)

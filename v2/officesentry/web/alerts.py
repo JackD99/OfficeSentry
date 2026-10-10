@@ -21,11 +21,18 @@ def settings():
     s = alerts.settings(g.db)
     recent = g.db.execute(
         "SELECT a.*, t.name AS tenant_name FROM audit_log a LEFT JOIN tenants t ON t.id = a.tenant_id"
-        " WHERE a.action IN ('alert_sent', 'alert_failed') ORDER BY a.id DESC LIMIT 10").fetchall()
+        " WHERE a.action IN ('alert_sent', 'alert_failed') ORDER BY a.id DESC LIMIT 10"
+    ).fetchall()
     email_alerts = g.db.execute("SELECT COUNT(*) FROM email_alerts WHERE enabled = 1").fetchone()[0]
-    return render_template("alerts.html", s=s, url_hint=alerts.masked_url(_vault(), s),
-                           formats=alerts.FORMATS, severities=alerts.ALERT_SEVERITIES, recent=recent,
-                           email_alerts=email_alerts)
+    return render_template(
+        "alerts.html",
+        s=s,
+        url_hint=alerts.masked_url(_vault(), s),
+        formats=alerts.FORMATS,
+        severities=alerts.ALERT_SEVERITIES,
+        recent=recent,
+        email_alerts=email_alerts,
+    )
 
 
 @bp.post("/alerts")
@@ -75,11 +82,15 @@ def save():
     with transaction(g.db):
         alerts.save_settings(g.db, values)
         # Never the URL or the secret: the URL usually carries its own access key.
-        audit(g.db, g.user["username"], "alert_settings_updated",
-              detail=f"enabled={values['alerts.enabled']} format={fmt} severity={severity} "
-                     f"failures={values['alerts.on_failures']} recovery={values['alerts.on_recovery']} "
-                     f"reports={values['alerts.on_reports']} system={values['alerts.system']} "
-                     f"url={url_change} secret={signing_state}")
+        audit(
+            g.db,
+            g.user["username"],
+            "alert_settings_updated",
+            detail=f"enabled={values['alerts.enabled']} format={fmt} severity={severity} "
+            f"failures={values['alerts.on_failures']} recovery={values['alerts.on_recovery']} "
+            f"reports={values['alerts.on_reports']} system={values['alerts.system']} "
+            f"url={url_change} secret={signing_state}",
+        )
     flash("Alert settings saved.", "success")
     return redirect(url_for("alerts.settings"))
 
@@ -98,6 +109,7 @@ def send_test():
         flash(f"Test failed: {exc}", "error")
     else:
         audit(g.db, g.user["username"], "alert_test_sent", detail=s["alerts.format"] + (" report" if sample else ""))
-        flash(f"{'Sample report message' if sample else 'Test alert'} sent to {alerts.masked_url(_vault(), s)}",
-              "success")
+        flash(
+            f"{'Sample report message' if sample else 'Test alert'} sent to {alerts.masked_url(_vault(), s)}", "success"
+        )
     return redirect(url_for("alerts.settings"))

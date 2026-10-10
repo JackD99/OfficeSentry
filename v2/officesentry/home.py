@@ -23,10 +23,14 @@ from .text import plural
 
 TODAY, CLIENTS = "today", "clients"
 HOMES = {
-    TODAY: ("Today", "What needs you today: new critical and high findings, collections that failed and "
-                     "anything due this week."),
-    CLIENTS: ("Clients", "Licence waste, renewals in the next 30 days, reports waiting for approval and "
-                         "projects to propose."),
+    TODAY: (
+        "Today",
+        "What needs you today: new critical and high findings, collections that failed and anything due this week.",
+    ),
+    CLIENTS: (
+        "Clients",
+        "Licence waste, renewals in the next 30 days, reports waiting for approval and projects to propose.",
+    ),
 }
 DEFAULT = TODAY
 NEW_SINCE = timedelta(days=1)  # what counts as a new finding on Today
@@ -37,9 +41,15 @@ STALE_AFTER = timedelta(hours=36)  # matches monthly_review.STALE_AFTER and the 
 _ISO = "%Y-%m-%dT%H:%M:%SZ"
 _RULE_TITLES = {r.key: r.title for r in RULES}
 _RANK = {"bad": 0, "warn": 1}
-_NOUNS = {upcoming.SUBSCRIPTION: "subscription", upcoming.TRIAL: "trial", upcoming.APP_KEY_TYPE: "app secret",
-          upcoming.APP_CERTIFICATE: "app certificate", upcoming.QUOTA: "mailbox", upcoming.DMARC: "domain",
-          upcoming.RISK: "accepted risk"}
+_NOUNS = {
+    upcoming.SUBSCRIPTION: "subscription",
+    upcoming.TRIAL: "trial",
+    upcoming.APP_KEY_TYPE: "app secret",
+    upcoming.APP_CERTIFICATE: "app certificate",
+    upcoming.QUOTA: "mailbox",
+    upcoming.DMARC: "domain",
+    upcoming.RISK: "accepted risk",
+}
 KINDS = ("findings", "collection", "access", "due")  # the order a client's reasons show in
 
 
@@ -106,8 +116,11 @@ class Today:
             return "No active clients to look after yet."
         parts = []
         if self.new_severe:
-            word = "critical" if self.new_critical == self.new_severe else (
-                "critical or high" if self.new_critical else "high")
+            word = (
+                "critical"
+                if self.new_critical == self.new_severe
+                else ("critical or high" if self.new_critical else "high")
+            )
             parts.append(plural(self.new_severe, f"new {word} finding"))
         if self.failing:
             parts.append(plural(self.failing, "failed collection"))
@@ -119,8 +132,10 @@ class Today:
             parts.append(f"{plural(self.due, 'thing')} due this week")
         if not self.rows:
             who = "Your client is" if self.tenants == 1 else f"All {self.tenants} clients are"
-            return (f"Nothing needs you today. {who} collecting, with no new critical or high findings and nothing"
-                    " due this week.")
+            return (
+                f"Nothing needs you today. {who} collecting, with no new critical or high findings and nothing"
+                " due this week."
+            )
         lead = f"{plural(len(self.rows), 'client')} {'needs' if len(self.rows) == 1 else 'need'} you today"
         return f"{lead}: {join(parts)}."
 
@@ -141,7 +156,8 @@ def _new_findings(conn, ids: list[int], since: str, now: str) -> dict[int, list]
         " AND (accepted_at IS NULL OR (accepted_until IS NOT NULL AND accepted_until <= ?))"
         " GROUP BY tenant_id, rule_key, severity"
         " ORDER BY CASE severity WHEN 'critical' THEN 0 ELSE 1 END, n DESC, rule_key",
-        (*ids, since, since, now)).fetchall()
+        (*ids, since, since, now),
+    ).fetchall()
     out: dict[int, list] = {}
     for r in rows:
         out.setdefault(r["tenant_id"], []).append(r)
@@ -151,27 +167,43 @@ def _new_findings(conn, ids: list[int], since: str, now: str) -> dict[int, list]
 def _collection(conn, tenant: dict, now: datetime) -> Reason | None:
     """Why this client's data can't be trusted today, or None. The same reading as the tenants list."""
     if not tenant["consented_at"]:
-        return Reason("access", "warn", "Waiting for a tenant admin to grant access",
-                      "Nothing can be collected until they do.", target="tenant")
+        return Reason(
+            "access",
+            "warn",
+            "Waiting for a tenant admin to grant access",
+            "Nothing can be collected until they do.",
+            target="tenant",
+        )
     latest = tenant_health.latest_runs(conn, tenant["id"])
     if not latest:
         return None  # added and consented, first collection still to come
     failed = [k for k, r in latest.items() if r["status"] == "failed"]
     sign_in = [latest[k]["error"] for k in failed if (latest[k]["error"] or "").startswith("Sign-in failed: ")]
     if sign_in and len(sign_in) == len(failed):
-        return Reason("collection", "bad", "Office Sentry can't sign in to this tenant",
-                      sign_in[0].removeprefix("Sign-in failed: "), target="collection")
+        return Reason(
+            "collection",
+            "bad",
+            "Office Sentry can't sign in to this tenant",
+            sign_in[0].removeprefix("Sign-in failed: "),
+            target="collection",
+        )
     if failed:
         names = [REGISTRY[k].title for k in failed if k in REGISTRY]
-        return Reason("collection", "bad", f"{plural(len(failed), 'collection')} failed", ", ".join(names),
-                      target="collection")
+        return Reason(
+            "collection", "bad", f"{plural(len(failed), 'collection')} failed", ", ".join(names), target="collection"
+        )
     if any(r["status"] in ("queued", "running") for r in latest.values()):
         return None
     finished = [r["finished_at"] for r in latest.values() if r["finished_at"]]
     cutoff = (now - STALE_AFTER).strftime(_ISO)
     if finished and min(finished) < cutoff:
-        return Reason("collection", "warn", "Some data is more than 36 hours old",
-                      "Reports and checks may be out of date.", target="collection")
+        return Reason(
+            "collection",
+            "warn",
+            "Some data is more than 36 hours old",
+            "Reports and checks may be out of date.",
+            target="collection",
+        )
     return None
 
 
@@ -190,9 +222,15 @@ def _due(items: list) -> list[Reason]:
         else:
             # Each part's items share a link (the report that lists them), so one line links to all of them.
             href = group[0].href if len({i.href for i in group}) == 1 else ""
-            out.append(Reason("due", tone, f"{kind}: {plural(len(group), _NOUNS.get(kind, 'item'))}",
-                              " · ".join(i.title for i in group),
-                              target=href or "upcoming"))
+            out.append(
+                Reason(
+                    "due",
+                    tone,
+                    f"{kind}: {plural(len(group), _NOUNS.get(kind, 'item'))}",
+                    " · ".join(i.title for i in group),
+                    target=href or "upcoming",
+                )
+            )
     return out
 
 
@@ -216,8 +254,15 @@ def today(conn, tenants, now: datetime | None = None) -> Today:
             critical = sum(r["n"] for r in news if r["severity"] == "critical")
             word = "critical" if critical == n else ("critical or high" if critical else "high")
             titles = [_RULE_TITLES.get(r["rule_key"], r["rule_key"]) for r in news]
-            row.reasons.append(Reason("findings", "bad" if critical else "warn", plural(n, f"new {word} finding"),
-                                      "Failing: " + " · ".join(dict.fromkeys(titles)), target="findings"))
+            row.reasons.append(
+                Reason(
+                    "findings",
+                    "bad" if critical else "warn",
+                    plural(n, f"new {word} finding"),
+                    "Failing: " + " · ".join(dict.fromkeys(titles)),
+                    target="findings",
+                )
+            )
             totals["new"] += n
             totals["critical"] += critical
         if (state := _collection(conn, t, now)) is not None:
@@ -232,8 +277,18 @@ def today(conn, tenants, now: datetime | None = None) -> Today:
             row.reasons.sort(key=lambda r: (KINDS.index(r.kind), _RANK.get(r.tone, 2)))
             rows.append(row)
     rows.sort(key=lambda r: (_RANK.get(r.tone, 2), -len(r.reasons), r.tenant["name"].lower()))
-    return Today(rows, len(active), totals["new"], totals["critical"], totals["failing"], totals["stale"],
-                 totals["waiting"], totals["due"], since, up.without)
+    return Today(
+        rows,
+        len(active),
+        totals["new"],
+        totals["critical"],
+        totals["failing"],
+        totals["stale"],
+        totals["waiting"],
+        totals["due"],
+        since,
+        up.without,
+    )
 
 
 # -- Clients --------------------------------------------------------------------------------------
@@ -290,21 +345,36 @@ class Clients:
         if self.waste is None:
             parts.append("licence waste isn't counted until licence prices are set")
         elif self.waste:
-            parts.append(f"{money(self.waste)} a month of licence waste across "
-                         f"{plural(self.wasting, 'client')}")
+            parts.append(f"{money(self.waste)} a month of licence waste across {plural(self.wasting, 'client')}")
         else:
             parts.append("no licence waste")
-        parts.append(f"{plural(self.renewals, 'renewal')} in the next {RENEWAL_WITHIN} days" if self.renewals
-                     else f"no renewals in the next {RENEWAL_WITHIN} days")
+        parts.append(
+            f"{plural(self.renewals, 'renewal')} in the next {RENEWAL_WITHIN} days"
+            if self.renewals
+            else f"no renewals in the next {RENEWAL_WITHIN} days"
+        )
         if self.on_plan:
-            parts.append(f"{plural(self.to_approve, 'report')} to approve for {self.period_label}"
-                         if self.to_approve else f"every {self.period_label} report approved or sent")
+            parts.append(
+                f"{plural(self.to_approve, 'report')} to approve for {self.period_label}"
+                if self.to_approve
+                else f"every {self.period_label} report approved or sent"
+            )
         text = "; ".join(parts) + "."
         return text[0].upper() + text[1:]
 
 
-def clients(conn, tenants, period: str, period_label: str, currency: str, now: datetime | None = None,
-            *, rollup=None, queue=None, pipeline=None) -> Clients:
+def clients(
+    conn,
+    tenants,
+    period: str,
+    period_label: str,
+    currency: str,
+    now: datetime | None = None,
+    *,
+    rollup=None,
+    queue=None,
+    pipeline=None,
+) -> Clients:
     """Per client: waste, renewals, this month's report and projects.
 
     ``rollup(tenant)`` gives the cached rollup row (``monthly_review.rollup_row``), ``queue(tenants)`` this
@@ -322,8 +392,11 @@ def clients(conn, tenants, period: str, period_label: str, currency: str, now: d
     up = upcoming.collect(conn, active, now)
     renewals: dict[int, list] = {}
     for item in up.items:
-        if item.tenant and item.type in RENEWAL_TYPES and (
-                item.window == upcoming.NOW or (item.days is not None and item.days <= RENEWAL_WITHIN)):
+        if (
+            item.tenant
+            and item.type in RENEWAL_TYPES
+            and (item.window == upcoming.NOW or (item.days is not None and item.days <= RENEWAL_WITHIN))
+        ):
             renewals.setdefault(item.tenant["id"], []).append(item)
     rows = []
     for t in active:
@@ -334,8 +407,19 @@ def clients(conn, tenants, period: str, period_label: str, currency: str, now: d
         p = piped.get(t["id"])
         recs = [r for r in (p.recommendations if p else []) if r.status != "declined"]
         mine = renewals.get(t["id"], [])
-        rows.append(ClientRow(t, waste, mine[0] if mine else None, len(mine), q.state if q else None,
-                              bool(q and q.ready), len(recs), sum(r.status in ("proposed", "agreed") for r in recs),
-                              score, p.note if p else ""))
+        rows.append(
+            ClientRow(
+                t,
+                waste,
+                mine[0] if mine else None,
+                len(mine),
+                q.state if q else None,
+                bool(q and q.ready),
+                len(recs),
+                sum(r.status in ("proposed", "agreed") for r in recs),
+                score,
+                p.note if p else "",
+            )
+        )
     rows.sort(key=lambda r: (-(r.waste or 0), -r.renewals, r.tenant["name"].lower()))
     return Clients(rows, currency, period, period_label, len(queued))

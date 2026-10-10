@@ -326,8 +326,8 @@ Run statuses:
 | `Read application permissions for the first 1000 of N apps` | Very many third-party apps; only the first 1,000 were read. |
 | `SharePoint sharing settings unavailable: …` | Microsoft's reason follows. The sharing check shows as not checked. |
 | `Checked the first 100 of N domains` / `DNS lookups failed for <domain>: …` | Domain checks are limited to 100 domains; a DNS lookup failed from the Office Sentry server. |
-| `Checked mailbox permissions on the first 2000 of N mailboxes` / `Could not read permissions on N mailbox(es)` | Mailbox permissions are read one mailbox at a time, up to 2,000. |
-| `Read inbox rules for the first 2000 of N mailboxes` / `Could not read inbox rules for N of M mailbox(es)` | Some mailboxes didn't answer, usually because they aren't set up yet or are on-premises. |
+| `Checked mailbox permissions for 2000 of N mailboxes this run (2000 per run, so each mailbox is checked about every 2 runs)` / `Checked inbox rules for 2000 of N mailboxes this run …` | Mailbox permissions and inbox rules are read one mailbox at a time, up to 2,000 a run, taking the mailboxes checked longest ago first. The rest show their results from an earlier run, and the warning says when they were checked and how many haven't been checked yet. |
+| `Could not read permissions on N mailboxes` / `Could not read inbox rules for N of M mailboxes` | Some mailboxes didn't answer, usually because they aren't set up yet or are on-premises. |
 | `Intune managed devices need an Intune licence` | Entra ID device records were collected; Intune devices weren't. |
 | `Intune managed devices weren't readable (…)` | `DeviceManagementManagedDevices.Read.All` isn't consented, or Intune isn't set up in the tenant. |
 | `Result was truncated by the page limit` | Very large list; see *Truncated* above. |

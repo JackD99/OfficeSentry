@@ -62,21 +62,18 @@ EXCHANGE_PERMISSIONS: dict[str, str] = {
 }
 
 
-def admin_consent_url(client_id: str, tenant_ref: str, redirect_uri: str, state: str,
-                      cloud: str | None = None) -> str:
+def admin_consent_url(client_id: str, tenant_ref: str, redirect_uri: str, state: str, cloud: str | None = None) -> str:
     """The admin-consent link, on the sign-in host of the tenant's cloud."""
     query = urlencode({"client_id": client_id, "redirect_uri": redirect_uri, "state": state})
     return f"{clouds.get(cloud).login}/{tenant_ref}/adminconsent?{query}"
 
 
 def _resource(sp: dict, app_id: str, wanted: dict[str, str]) -> dict:
-    roles = {r["value"]: r["id"] for r in sp.get("appRoles", [])
-             if "Application" in r.get("allowedMemberTypes", [])}
+    roles = {r["value"]: r["id"] for r in sp.get("appRoles", []) if "Application" in r.get("allowedMemberTypes", [])}
     missing = sorted(set(wanted) - set(roles))
     if missing:
         raise ValueError(f"{app_id} does not offer these permissions: {', '.join(missing)}")
-    return {"resourceAppId": app_id,
-            "resourceAccess": [{"id": roles[name], "type": "Role"} for name in sorted(wanted)]}
+    return {"resourceAppId": app_id, "resourceAccess": [{"id": roles[name], "type": "Role"} for name in sorted(wanted)]}
 
 
 def required_resource_access(graph_sp: dict, exchange_sp: dict | None = None) -> list[dict]:
@@ -107,17 +104,26 @@ def device_code_token(tenant: str, say: Callable[[str], None], cloud: str | None
     return result["access_token"]
 
 
-def create_app_registration(token: str, cert_pem: str, redirect_uri: str,
-                            display_name: str = "Office Sentry (read-only)",
-                            session: requests.Session | None = None, cloud: str | None = None) -> dict:
+def create_app_registration(
+    token: str,
+    cert_pem: str,
+    redirect_uri: str,
+    display_name: str = "Office Sentry (read-only)",
+    session: requests.Session | None = None,
+    cloud: str | None = None,
+) -> dict:
     """Create the multi-tenant app in the MSP's own tenant (in ``cloud``). Returns the application."""
     http = session or requests.Session()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     base = f"{clouds.get(cloud).graph}/v1.0"
 
     def resource_sp(app_id: str) -> dict:
-        resp = http.get(f"{base}/servicePrincipals", headers=headers,
-                        params={"$filter": f"appId eq '{app_id}'", "$select": "id,appRoles"}, timeout=60)
+        resp = http.get(
+            f"{base}/servicePrincipals",
+            headers=headers,
+            params={"$filter": f"appId eq '{app_id}'", "$select": "id,appRoles"},
+            timeout=60,
+        )
         resp.raise_for_status()
         return resp.json()["value"][0]
 
@@ -147,15 +153,15 @@ SIGN_IN_PROBLEMS = {
     "expired_token": "The code expired before sign-in finished. Start again to get a new code.",
     "bad_verification_code": "Microsoft no longer recognises this code. Start again to get a new one.",
     "53003": "Your Conditional Access policies block this kind of sign-in (device code). Ask whoever manages "
-             "Conditional Access to let this account use it for a few minutes, or create the app by hand.",
+    "Conditional Access to let this account use it for a few minutes, or create the app by hand.",
     "50020": "That account isn't in the tenant you named. Sign in with an account of your own (the MSP's) "
-             "tenant, or leave the tenant on \"Any tenant\" under More options.",
+    'tenant, or leave the tenant on "Any tenant" under More options.',
     "90002": "Microsoft doesn't know that tenant. Check the domain or Directory (tenant) ID under More options.",
     "50059": "Microsoft couldn't tell which tenant to use. Enter your tenant's domain under More options.",
     "65001": "The sign-in needs consent to create app registrations. Sign in as a Global Administrator, "
-             "Application Administrator or Cloud Application Administrator and accept the prompt.",
+    "Application Administrator or Cloud Application Administrator and accept the prompt.",
     "50076": "Your tenant wants a second sign-in step that this sign-in couldn't do. Start again and complete "
-             "it on Microsoft's page.",
+    "it on Microsoft's page.",
     "700016": "Microsoft's sign-in app isn't available in this tenant. Create the app by hand instead.",
 }
 
@@ -198,31 +204,45 @@ def _json(resp: requests.Response) -> dict:
     return body if isinstance(body, dict) else {}
 
 
-def start_device_sign_in(tenant: str = "organizations", cloud: str | None = None,
-                         session: requests.Session | None = None) -> DeviceCode:
+def start_device_sign_in(
+    tenant: str = "organizations", cloud: str | None = None, session: requests.Session | None = None
+) -> DeviceCode:
     """Ask Microsoft for a device code. Only ``setup_scope`` is requested: no refresh token, no profile."""
     http = session or requests.Session()
     try:
-        resp = http.post(f"{clouds.get(cloud).login}/{tenant}/oauth2/v2.0/devicecode",
-                         data={"client_id": GRAPH_CLI_CLIENT_ID, "scope": setup_scope(cloud)}, timeout=30)
+        resp = http.post(
+            f"{clouds.get(cloud).login}/{tenant}/oauth2/v2.0/devicecode",
+            data={"client_id": GRAPH_CLI_CLIENT_ID, "scope": setup_scope(cloud)},
+            timeout=30,
+        )
     except requests.RequestException as exc:
-        raise SignInError("Office Sentry couldn't reach Microsoft's sign-in service. Check the server can reach "
-                          "the internet, then try again.") from exc
+        raise SignInError(
+            "Office Sentry couldn't reach Microsoft's sign-in service. Check the server can reach "
+            "the internet, then try again."
+        ) from exc
     body = _json(resp)
     if not resp.ok or "device_code" not in body or "user_code" not in body:
         raise SignInError(_sign_in_problem(body))
-    return DeviceCode(body["device_code"], body["user_code"], body.get("verification_uri") or "",
-                      int(body.get("expires_in") or 900), int(body.get("interval") or 5))
+    return DeviceCode(
+        body["device_code"],
+        body["user_code"],
+        body.get("verification_uri") or "",
+        int(body.get("expires_in") or 900),
+        int(body.get("interval") or 5),
+    )
 
 
-def poll_device_sign_in(device_code: str, tenant: str = "organizations", cloud: str | None = None,
-                        session: requests.Session | None = None) -> Poll:
+def poll_device_sign_in(
+    device_code: str, tenant: str = "organizations", cloud: str | None = None, session: requests.Session | None = None
+) -> Poll:
     """Ask Microsoft once whether the admin has signed in. Raises ``SignInError`` when it can't go on, and
     ``requests.RequestException`` when Microsoft didn't answer (worth asking again)."""
     http = session or requests.Session()
-    resp = http.post(f"{clouds.get(cloud).login}/{tenant}/oauth2/v2.0/token",
-                     data={"grant_type": DEVICE_GRANT, "client_id": GRAPH_CLI_CLIENT_ID, "device_code": device_code},
-                     timeout=30)
+    resp = http.post(
+        f"{clouds.get(cloud).login}/{tenant}/oauth2/v2.0/token",
+        data={"grant_type": DEVICE_GRANT, "client_id": GRAPH_CLI_CLIENT_ID, "device_code": device_code},
+        timeout=30,
+    )
     body = _json(resp)
     if resp.ok and body.get("access_token"):
         return Poll(token=body["access_token"])
@@ -251,6 +271,8 @@ def create_problem(exc: requests.RequestException) -> str:
     error = _json(resp).get("error")
     message = str(error.get("message") or "") if isinstance(error, dict) else ""
     if resp.status_code in (401, 403):
-        return ("That account can't create app registrations. Sign in as a Global Administrator, Application "
-                "Administrator or Cloud Application Administrator of your own tenant and start again.")
+        return (
+            "That account can't create app registrations. Sign in as a Global Administrator, Application "
+            "Administrator or Cloud Application Administrator of your own tenant and start again."
+        )
     return f"Microsoft wouldn't create the app ({resp.status_code}): {message or 'no reason given'}."

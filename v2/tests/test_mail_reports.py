@@ -25,34 +25,62 @@ from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import SKUS, USERS
 
-GB = 1024 ** 3
+GB = 1024**3
 MAIL_REPORTS = ("inbox-rules", "mailbox-permissions", "shared-mailboxes", "mailbox-size", "legacy-auth")
 
 
 def _exchange():
     data = copy.deepcopy(gd.EXCHANGE)
     ann, info = data["Get-Mailbox"]
-    ann.update({"Name": "u1", "Alias": "ann", "ProhibitSendQuota": "49.5 GB (53,150,220,288 bytes)",
-                "ArchiveStatus": "Active"})
+    ann.update(
+        {"Name": "u1", "Alias": "ann", "ProhibitSendQuota": "49.5 GB (53,150,220,288 bytes)", "ArchiveStatus": "Active"}
+    )
     info.update({"Name": "Info", "Alias": "info", "ProhibitSendQuota": "Unlimited", "LitigationHoldEnabled": True})
-    data["Get-Mailbox"].append({
-        "ExternalDirectoryObjectId": "", "Guid": "g-disc", "PrimarySmtpAddress": "DiscoverySearchMailbox@x.com",
-        "Name": "DiscoverySearchMailbox", "RecipientTypeDetails": "DiscoveryMailbox", "GrantSendOnBehalfTo": []})
+    data["Get-Mailbox"].append(
+        {
+            "ExternalDirectoryObjectId": "",
+            "Guid": "g-disc",
+            "PrimarySmtpAddress": "DiscoverySearchMailbox@x.com",
+            "Name": "DiscoverySearchMailbox",
+            "RecipientTypeDetails": "DiscoveryMailbox",
+            "GrantSendOnBehalfTo": [],
+        }
+    )
     data["Get-MailboxPermission"]["g-u7"].append(
-        {"User": "bob@x.com", "AccessRights": ["FullAccess"], "IsInherited": False})
-    data["Get-RecipientPermission"].append({"Identity": "ExchangeOnline-123", "Trustee": "NULL SID",
-                                            "AccessRights": ["SendAs"]})
+        {"User": "bob@x.com", "AccessRights": ["FullAccess"], "IsInherited": False}
+    )
+    data["Get-RecipientPermission"].append(
+        {"Identity": "ExchangeOnline-123", "Trustee": "NULL SID", "AccessRights": ["SendAs"]}
+    )
     data["Get-MailboxStatistics"] = {
-        "g-u1": [{"TotalItemSize": "48 GB (51,539,607,552 bytes)", "TotalDeletedItemSize": "1 GB (1,073,741,824 bytes)",
-                  "ItemCount": 90000}],
-        "g-u7": [{"TotalItemSize": "586.6 KB (600,640 bytes)", "TotalDeletedItemSize": "0 B (0 bytes)",
-                  "ItemCount": 13}],
+        "g-u1": [
+            {
+                "TotalItemSize": "48 GB (51,539,607,552 bytes)",
+                "TotalDeletedItemSize": "1 GB (1,073,741,824 bytes)",
+                "ItemCount": 90000,
+            }
+        ],
+        "g-u7": [
+            {"TotalItemSize": "586.6 KB (600,640 bytes)", "TotalDeletedItemSize": "0 B (0 bytes)", "ItemCount": 13}
+        ],
     }
     data["Get-CASMailbox"] = [
-        {"ExternalDirectoryObjectId": "u1", "Guid": "g-u1", "PrimarySmtpAddress": "ann@x.com",
-         "SmtpClientAuthenticationDisabled": True, "PopEnabled": False, "ImapEnabled": True},
-        {"ExternalDirectoryObjectId": "u7", "Guid": "g-u7", "PrimarySmtpAddress": "info@x.com",
-         "SmtpClientAuthenticationDisabled": None, "PopEnabled": True, "ImapEnabled": True},
+        {
+            "ExternalDirectoryObjectId": "u1",
+            "Guid": "g-u1",
+            "PrimarySmtpAddress": "ann@x.com",
+            "SmtpClientAuthenticationDisabled": True,
+            "PopEnabled": False,
+            "ImapEnabled": True,
+        },
+        {
+            "ExternalDirectoryObjectId": "u7",
+            "Guid": "g-u7",
+            "PrimarySmtpAddress": "info@x.com",
+            "SmtpClientAuthenticationDisabled": None,
+            "PopEnabled": True,
+            "ImapEnabled": True,
+        },
         {"ExternalDirectoryObjectId": "", "Guid": "g-disc", "PrimarySmtpAddress": "DiscoverySearchMailbox@x.com"},
     ]
     return data
@@ -103,14 +131,29 @@ def test_collectors_store_sizes_protocols_and_signins(db, tenant):
 
 
 def test_summarise_signins_groups_by_account_and_client():
-    rows = dict(summarise_signins([
-        {"createdDateTime": "2026-09-01T00:00:00Z", "userPrincipalName": "A@x.com", "clientAppUsed": "POP3",
-         "ipAddress": "1.1.1.1", "status": {"errorCode": 0}, "location": {"countryOrRegion": "GB"}},
-        {"createdDateTime": "2026-09-03T00:00:00Z", "userPrincipalName": "a@x.com", "clientAppUsed": "POP3",
-         "ipAddress": "2.2.2.2", "status": {"errorCode": 50126, "failureReason": "Bad password"},
-         "location": {"countryOrRegion": "US"}},
-        {"createdDateTime": "2026-09-02T00:00:00Z", "clientAppUsed": None, "status": None, "location": None},
-    ]))
+    rows = dict(
+        summarise_signins(
+            [
+                {
+                    "createdDateTime": "2026-09-01T00:00:00Z",
+                    "userPrincipalName": "A@x.com",
+                    "clientAppUsed": "POP3",
+                    "ipAddress": "1.1.1.1",
+                    "status": {"errorCode": 0},
+                    "location": {"countryOrRegion": "GB"},
+                },
+                {
+                    "createdDateTime": "2026-09-03T00:00:00Z",
+                    "userPrincipalName": "a@x.com",
+                    "clientAppUsed": "POP3",
+                    "ipAddress": "2.2.2.2",
+                    "status": {"errorCode": 50126, "failureReason": "Bad password"},
+                    "location": {"countryOrRegion": "US"},
+                },
+                {"createdDateTime": "2026-09-02T00:00:00Z", "clientAppUsed": None, "status": None, "location": None},
+            ]
+        )
+    )
     pop = rows["a@x.com|POP3"]
     assert (pop["succeeded"], pop["failed"]) == (1, 1)
     assert pop["lastSuccess"] == "2026-09-01T00:00:00Z" and pop["lastAttempt"] == "2026-09-03T00:00:00Z"
@@ -144,8 +187,9 @@ def test_mailbox_permissions_report(db, tenant):
 def test_shared_mailboxes_report(db, tenant):
     report, s = _sections(db, tenant, "shared-mailboxes")
     section = s["Shared and resource mailboxes"]
-    assert section.rows == [["info@x.com", "Shared", "Yes", "Never", "No", "ann@x.com, bob@x.com", "ann@x.com",
-                             "586.6 KB"]]
+    assert section.rows == [
+        ["info@x.com", "Shared", "Yes", "Never", "No", "ann@x.com, bob@x.com", "ann@x.com", "586.6 KB"]
+    ]
     assert section.flags == ["medium"]
     assert section.intro.startswith("1 of 1 can be signed in to")
     assert report.highlights[0].value == "1 of 1"
@@ -167,16 +211,19 @@ def test_legacy_auth_report(db, tenant):
     assert log.flags == ["medium", "low"]
     allows = s["What each mailbox allows"]
     # The test tenant leaves SMTP AUTH on for the organisation; Ann's mailbox turns it off.
-    assert allows.rows == [["ann@x.com", "Off", "No", "No", "Yes"],
-                           ["info@x.com", "On (organisation default)", "Yes", "Yes", "Yes"]]
+    assert allows.rows == [
+        ["ann@x.com", "Off", "No", "No", "Yes"],
+        ["info@x.com", "On (organisation default)", "Yes", "Yes", "Yes"],
+    ]
     assert allows.flags == [None, None]
     assert [h.value for h in report.highlights] == [1, 1, "1 of 2"]
 
 
 def test_legacy_auth_without_entra_p1(db, two_tenants):
     alpha, _ = two_tenants
-    exchange_only = [{**SKUS[0], "servicePlans": [{"servicePlanName": "EXCHANGE_S_STANDARD",
-                                                   "provisioningStatus": "Success"}]}]
+    exchange_only = [
+        {**SKUS[0], "servicePlans": [{"servicePlanName": "EXCHANGE_S_STANDARD", "provisioningStatus": "Success"}]}
+    ]
     seed_tenant(db, alpha, skus=exchange_only, exchange=_exchange())
     report = build(db, store.get_tenant(db, alpha), "legacy-auth")
     assert not report.unavailable
@@ -194,7 +241,7 @@ def test_mail_report_pages_tabs_and_xlsx(client, db, tenant):
     make_user(db, "admin")
     login(client, "admin")
     keys = list(REPORTS)
-    assert keys[keys.index("mailboxes"):keys.index("mailboxes") + 6] == ["mailboxes", *MAIL_REPORTS]
+    assert keys[keys.index("mailboxes") : keys.index("mailboxes") + 6] == ["mailboxes", *MAIL_REPORTS]
     for key in MAIL_REPORTS:
         page = client.get(f"/tenants/{tenant['id']}/data/{key}")
         assert page.status_code == 200, key
@@ -207,23 +254,32 @@ def test_mail_report_pages_tabs_and_xlsx(client, db, tenant):
 
 # -- Legacy sign-ins when Microsoft times out -------------------------------------------------
 
+
 def _legacy_rows():
     rows = []
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     for i, client in enumerate(LEGACY_CLIENTS):
         for j in range(3):
             when = now - timedelta(days=2 + j * 9, hours=i)
-            rows.append({"id": f"l{i}-{j}", "createdDateTime": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                         "userPrincipalName": ["ann@x.com", "info@x.com"][(i + j) % 2], "clientAppUsed": client,
-                         "ipAddress": f"203.0.113.{i}", "appDisplayName": f"App {j}",
-                         "location": {"countryOrRegion": ["GB", "RU", "FR"][j]},
-                         "status": {"errorCode": 0 if j else 50126}})
+            rows.append(
+                {
+                    "id": f"l{i}-{j}",
+                    "createdDateTime": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "userPrincipalName": ["ann@x.com", "info@x.com"][(i + j) % 2],
+                    "clientAppUsed": client,
+                    "ipAddress": f"203.0.113.{i}",
+                    "appDisplayName": f"App {j}",
+                    "location": {"countryOrRegion": ["GB", "RU", "FR"][j]},
+                    "status": {"errorCode": 0 if j else 50126},
+                }
+            )
     return rows
 
 
 def _legacy_log(rows, fail):
     """A fake /v1.0/auditLogs/signIns that filters on time and clientAppUsed and fails when
     ``fail(clients, days)``, ``days`` being how long the query's time range is."""
+
     def handler(request):
         flt = parse_qs(urlsplit(request.url).query)["$filter"][0]
         times, _, ors = flt.partition(" and (")
@@ -233,12 +289,22 @@ def _legacy_log(rows, fail):
         end = datetime.fromisoformat(bounds["lt"].replace("Z", "+00:00")) if "lt" in bounds else datetime.now(UTC)
         if fail(clients, (end - start).total_seconds() / 86400):
             return 504, {}, json.dumps({"error": {"code": "GatewayTimeout", "message": "Request timed out"}})
-        match = sorted((r for r in rows if r["clientAppUsed"] in clients and bounds["ge"] <= r["createdDateTime"]
-                        and ("lt" not in bounds or r["createdDateTime"] < bounds["lt"])),
-                       key=lambda r: r["createdDateTime"], reverse=True)
+        match = sorted(
+            (
+                r
+                for r in rows
+                if r["clientAppUsed"] in clients
+                and bounds["ge"] <= r["createdDateTime"]
+                and ("lt" not in bounds or r["createdDateTime"] < bounds["lt"])
+            ),
+            key=lambda r: r["createdDateTime"],
+            reverse=True,
+        )
         return 200, {}, json.dumps({"value": match})
-    responses.add_callback(responses.GET, f"{GRAPH_ROOT}/v1.0/auditLogs/signIns", callback=handler,
-                           content_type="application/json")
+
+    responses.add_callback(
+        responses.GET, f"{GRAPH_ROOT}/v1.0/auditLogs/signIns", callback=handler, content_type="application/json"
+    )
 
 
 def _legacy_run(db, tenant_id):
@@ -314,6 +380,7 @@ def test_legacy_signins_stop_splitting_when_the_log_is_too_slow(db, two_tenants,
     def clock():
         now[0] += sign_ins.FALLBACK_SECONDS / 4
         return now[0]
+
     monkeypatch.setattr(sign_ins, "clock", clock)
     responses.reset()
     _legacy_log(rows, fail=lambda clients, days: days > 8)

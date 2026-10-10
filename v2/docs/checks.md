@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-54 checks, 30 data sources (collectors) and 37 detail reports.
+54 checks, 33 data sources (collectors) and 40 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -94,7 +94,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
 | **No unexpected changes to how domains sign in**<br>`domain_federation_changed` | `admin_activity` |  | Confirm with the client that each change was planned (for example, setting up AD FS or another identity provider). If it wasn't, an attacker with admin rights may have federated the domain to their own identity provider so they can sign in as any user without a password or MFA: switch the domain back to managed sign-in, remove unknown federation settings, reset admin credentials and review the audit log. |
-| **Legacy authentication is blocked**<br>`legacy_auth_blocked` | `conditional_access` |  | Block legacy authentication (Exchange ActiveSync and other clients) with a Conditional Access policy for all users. Legacy protocols can't do MFA and are the most common password-spray target. |
+| **Legacy authentication is blocked**<br>`legacy_auth_blocked` | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |  | Block legacy authentication (Exchange ActiveSync and other clients) with a Conditional Access policy for all users. Legacy protocols can't do MFA and are the most common password-spray target. |
 | **MFA is enforced for all users**<br>`mfa_enforced` | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |  | Create a Conditional Access policy requiring MFA for all users and all cloud apps, or turn on Security Defaults if the tenant has no Entra ID P1. Keep exclusions to break-glass accounts. |
 | **Nobody relies on a text or call as their only second factor**<br>`phone_only_mfa` | `admin_roles`, `mfa_registration`, `users` |  | Ask these people to set up the Microsoft Authenticator app (the registration campaign in the authentication methods policy prompts them at sign-in), then turn off text message and voice call sign-in, or keep them only as a backup. Texts and calls can be intercepted or moved to an attacker's SIM. |
 | **No risky sign-ins succeeded**<br>`risky_sign_ins` | `sign_ins` | Sign-in risk needs Entra ID P2; The sign-in log needs Entra ID P1 | Check each sign-in with the person. If they don't recognise it, reset their password, sign them out everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm the account compromised in Entra ID Protection. Add a Conditional Access policy that asks for MFA on medium and high sign-in risk. The Sign-in activity report lists every risky sign-in. |
@@ -142,6 +142,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `admin_activity` | Admin activity | Admin role, Conditional Access, app credential, consent, domain and account changes from the directory audit log, kept in the activity history (Microsoft keeps 30 days with Entra ID P1, otherwise 7). | `AuditLog.Read.All` |
 | `admin_roles` | Admin roles | Who holds each directory role, active and PIM-eligible. | `RoleManagement.Read.Directory` |
 | `app_consents` | Apps and consents | Third-party apps, the permissions granted to them, and app secrets or certificates expiring. | `Application.Read.All`, `Directory.Read.All` |
+| `app_sign_ins` | App sign-ins | When each enterprise app last signed in, for a person or on its own (needs Entra ID P1). | `AuditLog.Read.All` |
 | `auth_methods_policy` | Sign-in methods policy | Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA. | `Policy.Read.All`, `Directory.Read.All` |
 | `auto_replies` | Automatic replies | Which mailboxes have an out-of-office reply on or scheduled, and who it goes to. | `MailboxSettings.Read` |
 | `conditional_access` | Conditional Access | Conditional Access policies and the Security Defaults setting. | `Policy.Read.All` |
@@ -151,6 +152,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `directory_sync` | Directory sync | Whether accounts are synced from on-premises Active Directory, when directory and password hash sync last ran, and how each domain signs in and how often its passwords expire. | `Organization.Read.All`, `Directory.Read.All` |
 | `distribution_lists` | Distribution lists | Every distribution list, its owners and members, and how much mail it gets (needs Global Reader). | `Exchange.ManageAsApp` |
 | `domain_health` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each verified domain, checked in public DNS. | none |
+| `group_nesting` | Group nesting | How many members each security group and distribution list has, the groups inside each, and dynamic membership rules. | `Directory.Read.All` |
 | `groups` | Groups and Teams | Every group, the owners, members and guests of each team and Microsoft 365 group, who can create them and whether unused ones expire. | `Directory.Read.All` |
 | `inbox_rules` | Inbox rules | Every mailbox's inbox rules, to spot forwarding and rules that hide mail. | `MailboxSettings.Read` |
 | `legacy_signins` | Legacy sign-ins | Sign-ins over SMTP AUTH, IMAP, POP and other basic-auth clients in the last 30 days (needs Entra ID P1). | `AuditLog.Read.All` |
@@ -168,6 +170,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `sign_ins` | Sign-in activity | Interactive sign-ins in the last 7 days, summarised by account, country, app and failure reason (needs Entra ID P1; sign-in risk needs P2). | `AuditLog.Read.All` |
 | `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions with renewal dates and licence capabilities. | `Organization.Read.All`, `Directory.Read.All` |
+| `user_details` | Departments and managers | Each account's department, job title, office, company and manager. | `User.Read.All` |
 | `users` | Users | Members and guests with licences (and whether each comes directly or from a group), password age and last sign-in (sign-in needs Entra ID P1). | `User.Read.All`, `AuditLog.Read.All` |
 
 ## Detail reports
@@ -178,6 +181,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 |---|---|---|---|
 | `admin-activity` | Admin activity | Admin roles, Conditional Access, app credentials, consents, domains and account changes from the directory audit log, and who made them. | `admin_activity` |
 | `admins` | Admins and roles | Every admin role holder with MFA, PIM and sign-in status, and a break-glass check. | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |
+| `all-users` | All users | Every account with its department, job title, manager, licences and last sign-in, its managers and departments, and accounts reporting to a blocked manager. | `tenant_profile`, `user_details`, `users` |
 | `apps` | Apps and consents | Third-party apps with access to the tenant, and app credential expiry. | `app_consents` |
 | `auth-methods` | Passwords and sign-in methods | How people sign in and how strong that is: methods by strength, admins without phishing-resistant MFA, the methods policy, and password age and expiry. | `admin_roles`, `auth_methods_policy`, `conditional_access`, `directory_sync`, `mfa_registration`, `users` |
 | `auto-replies` | Automatic replies | Mailboxes answering mail with an out-of-office reply, who outside hears it, and replies that have been on so long they look forgotten. | `auto_replies`, `users` |
@@ -187,6 +191,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `distribution-lists` | Distribution lists | Every distribution list with its members and owners, who can mail it, and empty, ownerless or unused lists. | `distribution_lists`, `mailboxes`, `users` |
 | `domains` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from public DNS. | `domain_health` |
 | `group-membership` | Group membership | Who is in which team and Microsoft 365 group: each person's teams and groups, each group's members, and every membership in one table. | `groups`, `users` |
+| `group-structure` | Empty, nested and dynamic groups | Groups with no members, groups inside other groups, and dynamic groups with their rules and whether they're paused. | `group_nesting`, `groups` |
 | `groups` | Groups and Teams | Who can create teams and groups, which have no owner, and the guests in each. | `groups` |
 | `guests` | Guests and sharing | Who can invite and share externally, and every guest account. | `tenant_policies`, `users` |
 | `hybrid` | Hybrid identity | Directory sync from on-premises AD, password hash sync, how each domain signs in, and admin accounts synced from AD. | `admin_roles`, `directory_sync`, `users` |
@@ -212,6 +217,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `sign-ins` | Sign-in activity | Failed and successful sign-ins over the last week by account, country and app: password guessing, unusual countries, sign-ins without MFA and risky sign-ins. | `sign_ins`, `tenant_profile` |
 | `subscriptions` | Licences and subscriptions | Every subscription with licences bought, assigned and available, its cost and renewal date, trials and lapsing subscriptions, and who has which licence, directly or by group. | `groups`, `tenant_profile`, `users` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
+| `unused-apps` | Unused apps | Every app from outside Microsoft with when it last signed in, and those unused for 90 days that still hold permissions. | `app_consents`, `app_sign_ins` |
 | `usage` | Microsoft 365 usage | Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active. | `m365_usage` |
 
 ## Permissions
@@ -221,9 +227,9 @@ Every application permission the app requests (all read-only) and the collectors
 | Permission | API | Purpose | Used by |
 |---|---|---|---|
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
-| `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
+| `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `app_sign_ins`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
-| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `groups`, `tenant_profile` |
+| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
@@ -234,5 +240,5 @@ Every application permission the app requests (all read-only) and the collectors
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
 | `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage` |
-| `User.Read.All` | Microsoft Graph | Users, licences, password age | `users` |
+| `User.Read.All` | Microsoft Graph | Users, licences, password age | `user_details`, `users` |
 | `UserAuthenticationMethod.Read.All` | Microsoft Graph | Registered MFA methods | `mfa_registration` |

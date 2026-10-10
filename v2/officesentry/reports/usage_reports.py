@@ -20,14 +20,15 @@ from .identity_reports import Money, _day, _parse
 from .monthly_review import setting
 from .registry import report
 
-NOT_COLLECTED = ("Microsoft 365 usage hasn't been collected yet. Refresh \"Microsoft 365 usage\" on the tenant "
-                 "page.")
-NO_PERMISSION = ("Office Sentry can't read this tenant's usage reports yet. It needs the Reports.Read.All "
-                 "permission: open the tenant page, send the consent link to the client's Global Admin again "
-                 "and ask them to accept.")
+NOT_COLLECTED = 'Microsoft 365 usage hasn\'t been collected yet. Refresh "Microsoft 365 usage" on the tenant page.'
+NO_PERMISSION = (
+    "Office Sentry can't read this tenant's usage reports yet. It needs the Reports.Read.All "
+    "permission: open the tenant page, send the consent link to the client's Global Admin again "
+    "and ask them to accept."
+)
 MISSING = {
     "apps": "Microsoft's Office apps report couldn't be read, so desktop app use isn't known and isn't used for "
-            "suggestions.",
+    "suggestions.",
     "activations": "Microsoft's Office activations report couldn't be read, so installs aren't listed.",
     "email": "Microsoft's email activity report couldn't be read, so email counts are missing.",
     "teams": "Microsoft's Teams activity report couldn't be read, so Teams counts are missing.",
@@ -49,8 +50,10 @@ def _load(snap: TenantSnapshot, report: DataReport) -> tuple[dict, dict[str, dic
         if not ok and key in MISSING:
             report.notes.append(MISSING[key])
     if status.get("reportDate"):
-        report.footnote = (f"Usage covers the {ACTIVE_DAYS} days to {_day(status['reportDate'])}, the latest date "
-                           "Microsoft had processed. Microsoft's usage reports run two or three days behind.")
+        report.footnote = (
+            f"Usage covers the {ACTIVE_DAYS} days to {_day(status['reportDate'])}, the latest date "
+            "Microsoft had processed. Microsoft's usage reports run two or three days behind."
+        )
     return status, usage.people(snap)
 
 
@@ -103,8 +106,7 @@ def active_points(snap: TenantSnapshot) -> list[tuple[date, float]]:
 @report(
     "usage",
     "Microsoft 365 usage",
-    "Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was "
-    "last active.",
+    "Who actually uses email, Teams, OneDrive, SharePoint and the Office apps, and when each person was last active.",
     ("m365_usage",),
     group="tenant",
     order=50,
@@ -118,13 +120,21 @@ def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     read = status.get("read") or {}
     licensed = [r for r in rows.values() if usage.licensed(r)]
     active = [r for r in licensed if usage.any_activity(r)]
-    report.tiles.append(Tile("Active people", _share(len(active), len(licensed)),
-                             f"{len(active)} of {len(licensed)} licensed used Microsoft 365",
-                             "ok" if len(active) == len(licensed) else "warn"))
+    report.tiles.append(
+        Tile(
+            "Active people",
+            _share(len(active), len(licensed)),
+            f"{len(active)} of {len(licensed)} licensed used Microsoft 365",
+            "ok" if len(active) == len(licensed) else "warn",
+        )
+    )
 
-    by_service = Section("Usage by service", ["Service", "Licensed", "Active", "Not active", "Active share"],
-                         intro=f"How many licensed people used each service in the last {ACTIVE_DAYS} days.",
-                         empty="Nobody is licensed for these services.")
+    by_service = Section(
+        "Usage by service",
+        ["Service", "Licensed", "Active", "Not active", "Active share"],
+        intro=f"How many licensed people used each service in the last {ACTIVE_DAYS} days.",
+        empty="Nobody is licensed for these services.",
+    )
     for key, name in SERVICES:
         holders = [r for r in rows.values() if _licensed(r, key)]
         used = sum(1 for r in holders if (r.get("active") or {}).get(key))
@@ -134,50 +144,97 @@ def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     if (status.get("read") or {}).get("apps"):
         desktop = [r for r in licensed if r.get("platforms") is not None and _office_licensed(r)]
         on_desktop = sum(1 for r in desktop if usage.desktop_use(r))
-        report.tiles.append(Tile("Desktop Office apps", _share(on_desktop, len(desktop)),
-                                 f"{on_desktop} of {len(desktop)} with Office used Windows or Mac apps"))
+        report.tiles.append(
+            Tile(
+                "Desktop Office apps",
+                _share(on_desktop, len(desktop)),
+                f"{on_desktop} of {len(desktop)} with Office used Windows or Mac apps",
+            )
+        )
 
-    last = Section("Last active in each service",
-                   ["Person", "Last email", "Last Teams", "Last OneDrive", "Last SharePoint", "Last Office apps",
-                    "Office apps on", "Licences"],
-                   intro=f"When each licensed person last used each service. Flagged: nothing used in the last "
-                         f"{ACTIVE_DAYS} days.", empty="Nobody holds a licence.")
+    last = Section(
+        "Last active in each service",
+        [
+            "Person",
+            "Last email",
+            "Last Teams",
+            "Last OneDrive",
+            "Last SharePoint",
+            "Last Office apps",
+            "Office apps on",
+            "Licences",
+        ],
+        intro=f"When each licensed person last used each service. Flagged: nothing used in the last "
+        f"{ACTIVE_DAYS} days.",
+        empty="Nobody holds a licence.",
+    )
     for r in sorted(licensed, key=lambda r: usage.label(r).lower()):
         lasts = r.get("lastActive") or {}
-        last.add([usage.label(r)] + [_when(lasts.get(k), _licensed(r, k)) for k, _ in SERVICES] +
-                 [_platforms(r, bool(read.get("apps"))),
-                  [_product(p) for p in r.get("products") or [] if "FREE" not in p.upper()]],
-                 None if usage.any_activity(r) else "low")
+        last.add(
+            [usage.label(r)]
+            + [_when(lasts.get(k), _licensed(r, k)) for k, _ in SERVICES]
+            + [
+                _platforms(r, bool(read.get("apps"))),
+                [_product(p) for p in r.get("products") or [] if "FREE" not in p.upper()],
+            ],
+            None if usage.any_activity(r) else "low",
+        )
 
-    apps = Section("Office apps by platform", ["App", "People"] + [name for _, name in PLATFORMS],
-                   intro=f"How many people used each Office app in the last {ACTIVE_DAYS} days, and where.",
-                   empty="Nobody used the Office apps." if (status.get("read") or {}).get("apps") else
-                   "Microsoft's Office apps report couldn't be read.")
+    apps = Section(
+        "Office apps by platform",
+        ["App", "People"] + [name for _, name in PLATFORMS],
+        intro=f"How many people used each Office app in the last {ACTIVE_DAYS} days, and where.",
+        empty="Nobody used the Office apps."
+        if (status.get("read") or {}).get("apps")
+        else "Microsoft's Office apps report couldn't be read.",
+    )
     for key, name in APPS:
         where = [r["apps"][key] for r in rows.values() if (r.get("apps") or {}).get(key) is not None]
         counts = Counter(p for platforms in where for p in platforms)
         if where:
             apps.add([name, len(where)] + [counts.get(p, 0) for p, _ in PLATFORMS])
 
-    installs = Section("Office installs", ["Person", "Product", "PCs", "Macs", "Phones and tablets",
-                                           "Shared computer", "Last activated"],
-                       intro="Where each person has installed the Office apps. Microsoft allows five of each.",
-                       empty="No Office installs reported.")
+    installs = Section(
+        "Office installs",
+        ["Person", "Product", "PCs", "Macs", "Phones and tablets", "Shared computer", "Last activated"],
+        intro="Where each person has installed the Office apps. Microsoft allows five of each.",
+        empty="No Office installs reported.",
+    )
     for r in sorted(rows.values(), key=lambda r: usage.label(r).lower()):
         for a in r.get("activations") or []:
-            installs.add([usage.label(r), _product(a.get("product") or ""), a.get("windows"), a.get("mac"),
-                          a.get("mobile"), a.get("shared"), _when(a.get("lastActivated"), False)])
+            installs.add(
+                [
+                    usage.label(r),
+                    _product(a.get("product") or ""),
+                    a.get("windows"),
+                    a.get("mac"),
+                    a.get("mobile"),
+                    a.get("shared"),
+                    _when(a.get("lastActivated"), False),
+                ]
+            )
 
-    counts = Section("Activity counts", ["Person", "Emails sent", "Emails received", "Teams messages", "Calls",
-                                         "Meetings"],
-                     intro=f"What each person did in the last {ACTIVE_DAYS} days.", empty="No activity reported.",
-                     compare=False)
+    counts = Section(
+        "Activity counts",
+        ["Person", "Emails sent", "Emails received", "Teams messages", "Calls", "Meetings"],
+        intro=f"What each person did in the last {ACTIVE_DAYS} days.",
+        empty="No activity reported.",
+        compare=False,
+    )
     for r in sorted(licensed, key=lambda r: usage.label(r).lower()):
         # Someone missing from a report that was read did nothing there; a report that wasn't read leaves blanks.
         email = r.get("email") or ({"sent": 0, "received": 0} if read.get("email") else {})
         teams = r.get("teamsCounts") or ({"messages": 0, "calls": 0, "meetings": 0} if read.get("teams") else {})
-        counts.add([usage.label(r), email.get("sent", ""), email.get("received", ""), teams.get("messages", ""),
-                    teams.get("calls", ""), teams.get("meetings", "")])
+        counts.add(
+            [
+                usage.label(r),
+                email.get("sent", ""),
+                email.get("received", ""),
+                teams.get("messages", ""),
+                teams.get("calls", ""),
+                teams.get("meetings", ""),
+            ]
+        )
     report.sections = [by_service, last, apps, installs, counts]
 
     points = active_points(snap)
@@ -192,8 +249,7 @@ def usage_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
 @report(
     "licence-rightsizing",
     "Licence right-sizing",
-    "People who could move to a cheaper licence, and services people are licensed for but "
-    "don't use.",
+    "People who could move to a cheaper licence, and services people are licensed for but don't use.",
     ("m365_usage", "users", "tenant_profile", "mailbox_usage"),
     group="tenant",
     order=40,
@@ -214,28 +270,36 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     currency = setting(snap.conn, "currency", "GBP")
 
     if users is None or skus is None:
-        report.notes.append("Users and licences haven't been collected yet, so licences are read from Microsoft's "
-                            "usage report and accounts that have left aren't skipped.")
+        report.notes.append(
+            "Users and licences haven't been collected yet, so licences are read from Microsoft's "
+            "usage report and accounts that have left aren't skipped."
+        )
     if boxes is None:
-        report.notes.append("Mailbox sizes haven't been collected, so Exchange Online Plan 2 isn't checked and "
-                            "mail-only suggestions assume Plan 1's 50 GB is enough.")
+        report.notes.append(
+            "Mailbox sizes haven't been collected, so Exchange Online Plan 2 isn't checked and "
+            "mail-only suggestions assume Plan 1's 50 GB is enough."
+        )
 
-    moves = Section("Could move to a cheaper licence",
-                    ["Person", "Has", f"Used in the last {ACTIVE_DAYS} days", "Could move to", "Saving / month",
-                     "Why"],
-                    intro="People whose use of Microsoft 365 fits a cheaper licence. Accounts that are disabled or "
-                          "haven't signed in for 90 days are in Licence waste instead, so they aren't counted twice.",
-                    empty="Everyone uses what their licence is for.")
-    unused = Section("Licensed but not used",
-                     ["Person", "Licences", f"Not used in the last {ACTIVE_DAYS} days", "Uses"],
-                     intro="People who use Microsoft 365 but not every service their licence includes. Useful for "
-                           "adoption and training, and to spot licences bought for one service.",
-                     empty="Everyone uses every service they're licensed for.")
+    moves = Section(
+        "Could move to a cheaper licence",
+        ["Person", "Has", f"Used in the last {ACTIVE_DAYS} days", "Could move to", "Saving / month", "Why"],
+        intro="People whose use of Microsoft 365 fits a cheaper licence. Accounts that are disabled or "
+        "haven't signed in for 90 days are in Licence waste instead, so they aren't counted twice.",
+        empty="Everyone uses what their licence is for.",
+    )
+    unused = Section(
+        "Licensed but not used",
+        ["Person", "Licences", f"Not used in the last {ACTIVE_DAYS} days", "Uses"],
+        intro="People who use Microsoft 365 but not every service their licence includes. Useful for "
+        "adoption and training, and to spot licences bought for one service.",
+        empty="Everyone uses every service they're licensed for.",
+    )
     found, unpriced, people_moving = [], set(), set()
     for upn, r in sorted(rows.items(), key=lambda x: usage.label(x[1]).lower()):
         user = by_upn.get(upn) if users is not None else None
-        if user is not None and (not user.get("accountEnabled") or user.get("userType") == "Guest"
-                                 or is_stale(user, now)):
+        if user is not None and (
+            not user.get("accountEnabled") or user.get("userType") == "Guest" or is_stale(user, now)
+        ):
             continue
         created = _parse((user or {}).get("createdDateTime"))
         if created and (now - created).days < ACTIVE_DAYS:
@@ -251,10 +315,23 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
                 unpriced.update(p for p in (s.current, s.target) if p and p not in prices)
             people_moving.add(upn)
             why = s.why + (f". {s.caution}" if s.caution else "")
-            found.append((-(saving or 0), who, [who, sku_name(s.current), uses, s.action,
-                                                Money(saving, currency) if saving is not None else
-                                                ("Not priced" if s.target is not None else ""), why],
-                          "medium" if saving or s.target == "" else "low"))
+            found.append(
+                (
+                    -(saving or 0),
+                    who,
+                    [
+                        who,
+                        sku_name(s.current),
+                        uses,
+                        s.action,
+                        Money(saving, currency)
+                        if saving is not None
+                        else ("Not priced" if s.target is not None else ""),
+                        why,
+                    ],
+                    "medium" if saving or s.target == "" else "low",
+                )
+            )
         if usage.any_activity(r):
             missing = [name for key, name in SERVICES if _licensed(r, key) and not (r.get("active") or {}).get(key)]
             if missing:
@@ -264,16 +341,29 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     report.sections = [moves, unused]
 
     if unpriced:
-        report.notes.append("Some suggestions have no price, so their saving isn't counted. An admin can add prices "
-                            f"for {', '.join(sorted(sku_name(p) for p in unpriced))} on the Licence prices page.")
+        report.notes.append(
+            "Some suggestions have no price, so their saving isn't counted. An admin can add prices "
+            f"for {', '.join(sorted(sku_name(p) for p in unpriced))} on the Licence prices page."
+        )
     total = round(sum(-x[0] for x in found), 2)
     priced = any(isinstance(row[4], Money) for _, _, row, _ in found)
     report.highlights = [
-        Highlight("Saving / month", Money(total, currency) if priced or not found else "Not priced",
-                  "From the suggestions below, at your prices", "warn" if total else None),
-        Highlight("Saving / year", Money(total * 12, currency) if priced or not found else "Not priced",
-                  "If every suggestion is taken"),
-        Highlight("People who could move", len(people_moving), "To a cheaper licence, or none",
-                  "warn" if people_moving else "ok"),
+        Highlight(
+            "Saving / month",
+            Money(total, currency) if priced or not found else "Not priced",
+            "From the suggestions below, at your prices",
+            "warn" if total else None,
+        ),
+        Highlight(
+            "Saving / year",
+            Money(total * 12, currency) if priced or not found else "Not priced",
+            "If every suggestion is taken",
+        ),
+        Highlight(
+            "People who could move",
+            len(people_moving),
+            "To a cheaper licence, or none",
+            "warn" if people_moving else "ok",
+        ),
         Highlight("Not using a service", len(unused.rows), f"In the last {ACTIVE_DAYS} days"),
     ]

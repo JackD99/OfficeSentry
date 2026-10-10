@@ -59,14 +59,30 @@ def test_collects_settings_and_admin_consent_policy(db, two_tenants, factory):
     assert _run(db, alpha, "tenant_policies", factory)[1] == "succeeded"
     snap = TenantSnapshot(db, store.get_tenant(db, alpha))
     policy = snap.objects("tenant_policies", "authorization_policy")[0]
-    assert {k: policy[k] for k in (
-        "allowedToCreateTenants", "allowedToCreateApps", "allowedToCreateSecurityGroups", "allowedToReadOtherUsers",
-        "guestUserRoleId", "allowEmailVerifiedUsersToJoinOrganization", "allowedToSignUpEmailBasedSubscriptions",
-        "allowedToUseSSPR", "blockMsolPowerShell")} == {
-        "allowedToCreateTenants": True, "allowedToCreateApps": True, "allowedToCreateSecurityGroups": True,
-        "allowedToReadOtherUsers": True, "guestUserRoleId": tsd.MEMBER_GUESTS,
-        "allowEmailVerifiedUsersToJoinOrganization": True, "allowedToSignUpEmailBasedSubscriptions": True,
-        "allowedToUseSSPR": True, "blockMsolPowerShell": False}
+    assert {
+        k: policy[k]
+        for k in (
+            "allowedToCreateTenants",
+            "allowedToCreateApps",
+            "allowedToCreateSecurityGroups",
+            "allowedToReadOtherUsers",
+            "guestUserRoleId",
+            "allowEmailVerifiedUsersToJoinOrganization",
+            "allowedToSignUpEmailBasedSubscriptions",
+            "allowedToUseSSPR",
+            "blockMsolPowerShell",
+        )
+    } == {
+        "allowedToCreateTenants": True,
+        "allowedToCreateApps": True,
+        "allowedToCreateSecurityGroups": True,
+        "allowedToReadOtherUsers": True,
+        "guestUserRoleId": tsd.MEMBER_GUESTS,
+        "allowEmailVerifiedUsersToJoinOrganization": True,
+        "allowedToSignUpEmailBasedSubscriptions": True,
+        "allowedToUseSSPR": True,
+        "blockMsolPowerShell": False,
+    }
     # Fields the existing checks read are still stored as before.
     assert policy["allowInvitesFrom"] == "everyone"
     assert policy["permissionGrantPolicies"] == ["ManagePermissionGrantsForSelf.microsoft-user-default-low"]
@@ -80,8 +96,11 @@ def test_collects_settings_and_admin_consent_policy(db, two_tenants, factory):
 def test_admin_consent_policy_forbidden_is_partial(db, two_tenants, factory):
     alpha, _ = two_tenants
     responses.get(f"{V1}/policies/authorizationPolicy", json=tsd.OPEN_POLICY)
-    responses.get(f"{V1}/policies/adminConsentRequestPolicy", status=403,
-                  json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{V1}/policies/adminConsentRequestPolicy",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     responses.get(f"{V1}/admin/sharepoint/settings", json=gd.SHAREPOINT_SETTINGS)
     assert _run(db, alpha, "tenant_policies", factory)[1] == "partial"
     r = _results(db, alpha)
@@ -125,8 +144,12 @@ def test_locked_down_tenant_passes(db, two_tenants, monkeypatch):
 
 
 def test_guest_access_levels():
-    for role, status in ((tsd.MEMBER_GUESTS, "fail"), (tsd.LIMITED_GUESTS, "pass"), (tsd.RESTRICTED_GUESTS, "pass"),
-                         ("not-a-role", "unavailable")):
+    for role, status in (
+        (tsd.MEMBER_GUESTS, "fail"),
+        (tsd.LIMITED_GUESTS, "pass"),
+        (tsd.RESTRICTED_GUESTS, "pass"),
+        ("not-a-role", "unavailable"),
+    ):
         assert _check("guest_access_level", {"guestUserRoleId": role})[0] == status, role
     assert "the default" in _check("guest_access_level", {"guestUserRoleId": tsd.LIMITED_GUESTS})[1]
 
@@ -141,8 +164,9 @@ def test_admin_consent_workflow_depends_on_user_consent():
     assert (status, found) == ("pass", []) and "can't ask for anything else" in summary
     status, _, found = _check("admin_consent_workflow", {"permissionGrantPolicies": []}, off)
     assert status == "fail" and found[0].severity == "low"  # users blocked from every app
-    status, _, found = _check("admin_consent_workflow", {"permissionGrantPolicies": []},
-                              [{"isEnabled": True, "reviewers": []}])
+    status, _, found = _check(
+        "admin_consent_workflow", {"permissionGrantPolicies": []}, [{"isEnabled": True, "reviewers": []}]
+    )
     assert status == "fail" and "nobody can approve" in found[0].detail
 
 
@@ -158,8 +182,9 @@ def test_missing_settings_are_unavailable_not_passed(db, two_tenants):
     status, summary, _ = _check("admin_consent_workflow", {"permissionGrantPolicies": []}, [])
     assert status == "unavailable" and "refresh Sharing and consent settings" in summary
     # Collected by this version, but Microsoft didn't return it: refreshing won't help.
-    status, summary, _ = _check("admin_consent_workflow", {"permissionGrantPolicies": [],
-                                                           "allowedToCreateSecurityGroups": True}, [])
+    status, summary, _ = _check(
+        "admin_consent_workflow", {"permissionGrantPolicies": [], "allowedToCreateSecurityGroups": True}, []
+    )
     assert status == "unavailable" and "didn't return" in summary and "refresh" not in summary
 
 
@@ -194,9 +219,13 @@ def test_tenant_settings_report(db, two_tenants, monkeypatch):
     assert rows["Legacy MSOnline PowerShell blocked"] == (["No", "Yes"], None)
     assert settings.flagged == 1
     consent = {row[0]: row[1] for row in sections["Admin consent requests"].rows}
-    assert consent == {"Admin consent requests": "On", "Reviewers": 2,
-                       "Reviewers are emailed about new requests": "Yes", "Reviewers get reminders": "Yes",
-                       "Requests expire after": "30 days"}
+    assert consent == {
+        "Admin consent requests": "On",
+        "Reviewers": 2,
+        "Reviewers are emailed about new requests": "Yes",
+        "Reviewers get reminders": "Yes",
+        "Requests expire after": "30 days",
+    }
 
 
 def test_tenant_settings_report_workflow_off(db, two_tenants):
@@ -206,8 +235,10 @@ def test_tenant_settings_report_workflow_off(db, two_tenants):
     sections = {s.title: s for s in report.sections}
     assert all(f is None for f in sections["Settings"].flags)
     assert dict(zip(sections["Settings"].columns, sections["Settings"].rows[2], strict=True)) == {
-        "Setting": "Guest access to the directory", "Value": "Only their own objects (most restrictive)",
-        "Recommended": "Limited or most restrictive"}
+        "Setting": "Guest access to the directory",
+        "Value": "Only their own objects (most restrictive)",
+        "Recommended": "Limited or most restrictive",
+    }
     consent = sections["Admin consent requests"]
     assert consent.rows == [["Admin consent requests", "Off", "On"]]
     assert consent.flags == ["low"]  # user consent is off, so users have nowhere to ask
@@ -230,11 +261,17 @@ def test_stale_run_says_refresh(db, two_tenants):
     seed_tenant(db, alpha)
     unpack(db)
     db.execute("DELETE FROM objects WHERE kind = 'admin_consent_policy'")
-    new_fields = ("allowedToCreateSecurityGroups", "allowedToReadOtherUsers",
-                  "allowEmailVerifiedUsersToJoinOrganization", "allowedToUseSSPR", "blockMsolPowerShell")
+    new_fields = (
+        "allowedToCreateSecurityGroups",
+        "allowedToReadOtherUsers",
+        "allowEmailVerifiedUsersToJoinOrganization",
+        "allowedToUseSSPR",
+        "blockMsolPowerShell",
+    )
     for field in new_fields:
-        db.execute("UPDATE objects SET data = json_remove(data, ?) WHERE kind = 'authorization_policy'",
-                   (f"$.{field}",))
+        db.execute(
+            "UPDATE objects SET data = json_remove(data, ?) WHERE kind = 'authorization_policy'", (f"$.{field}",)
+        )
     r = _results(db, alpha)["admin_consent_workflow"]
     assert r.status == "unavailable" and "refresh Sharing and consent settings" in r.summary
     report = data_reports.build(db, store.get_tenant(db, alpha), "tenant-settings")
@@ -245,10 +282,15 @@ def test_stale_run_says_refresh(db, two_tenants):
 def test_guests_report_uses_the_same_consent_reading(db, two_tenants):
     """Only ManagePermissionGrantsForSelf policies are user consent; a Teams owner policy alone means it's off."""
     alpha, _ = two_tenants
-    policy = {**tsd.LOCKED_POLICY, "defaultUserRolePermissions": {
-        **tsd.LOCKED_POLICY["defaultUserRolePermissions"],
-        "permissionGrantPoliciesAssigned": [
-            "ManagePermissionGrantsForOwnedResource.microsoft-dynamically-managed-permissions-for-team"]}}
+    policy = {
+        **tsd.LOCKED_POLICY,
+        "defaultUserRolePermissions": {
+            **tsd.LOCKED_POLICY["defaultUserRolePermissions"],
+            "permissionGrantPoliciesAssigned": [
+                "ManagePermissionGrantsForOwnedResource.microsoft-dynamically-managed-permissions-for-team"
+            ],
+        },
+    }
     seed_tenant(db, alpha, auth_policy=policy)
     report = data_reports.build(db, store.get_tenant(db, alpha), "guests")
     rows = {row[0]: row[1] for row in report.sections[0].rows}

@@ -11,7 +11,7 @@ from officesentry.worker import execute_run
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
-CERT_MISSING = ("AADSTS700027: Client assertion failed signature validation. Trace ID: x Correlation ID: y")
+CERT_MISSING = "AADSTS700027: Client assertion failed signature validation. Trace ID: x Correlation ID: y"
 
 
 def test_explain_known_codes():
@@ -28,6 +28,7 @@ def test_explain_known_codes():
 def _token_error(*args):
     def provider():
         raise TokenError("invalid_client", CERT_MISSING)
+
     return provider
 
 
@@ -41,7 +42,7 @@ def test_test_connection_explains_and_records_consent(client, db, two_tenants, m
     assert "doesn&#39;t have Office Sentry&#39;s certificate" in page
     assert store.get_tenant(db, alpha)["consented_at"] is None
 
-    monkeypatch.setattr(connection_check, "certificate_token_provider", lambda *a: (lambda: "tok"))
+    monkeypatch.setattr(connection_check, "certificate_token_provider", lambda *a: lambda: "tok")
     with responses.RequestsMock() as rsps:
         rsps.get(f"{GRAPH_ROOT}/v1.0/organization", json={"value": [{"displayName": "Alpha Ltd"}]})
         page = client.post(f"/tenants/{alpha}/test-connection", follow_redirects=True).get_data(as_text=True)
@@ -50,10 +51,13 @@ def test_test_connection_explains_and_records_consent(client, db, two_tenants, m
 
 
 def test_signed_in_but_no_consent_for_permissions(monkeypatch):
-    monkeypatch.setattr(connection_check, "certificate_token_provider", lambda *a: (lambda: "tok"))
+    monkeypatch.setattr(connection_check, "certificate_token_provider", lambda *a: lambda: "tok")
     with responses.RequestsMock() as rsps:
-        rsps.get(f"{GRAPH_ROOT}/v1.0/organization", status=403,
-                 json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+        rsps.get(
+            f"{GRAPH_ROOT}/v1.0/organization",
+            status=403,
+            json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+        )
         result = connection_check.check("t", "c", "key", "thumb")
     assert not result.ok and "consent" in result.fix
 
@@ -79,7 +83,9 @@ def test_failed_sign_in_shows_the_fix_not_awaiting_consent(db, two_tenants):
 
         def token():
             raise GraphError(401, "invalid_client", CERT_MISSING)
+
         return GraphClient(token)
+
     for key in ("users", "admin_roles"):
         store.enqueue_run(db, alpha, key)
         assert execute_run(db, store.claim_next_run(db), graph) == "failed"
@@ -104,10 +110,15 @@ def test_consent_callback_error_is_explained(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     state = _consent_state(client, alpha)["state"][0]
-    page = client.get("/consent/callback", query_string={
-        "state": state, "error": "invalid_request",
-        "error_description": "AADSTS50011: The redirect URI 'x' specified in the request does not match"},
-        follow_redirects=True).get_data(as_text=True)
+    page = client.get(
+        "/consent/callback",
+        query_string={
+            "state": state,
+            "error": "invalid_request",
+            "error_description": "AADSTS50011: The redirect URI 'x' specified in the request does not match",
+        },
+        follow_redirects=True,
+    ).get_data(as_text=True)
     assert "missing Office Sentry&#39;s redirect URI" in page
 
 
@@ -115,12 +126,20 @@ def test_saving_client_id_checks_the_certificate(client, db, connection_id, monk
     make_user(db, "admin")
     login(client, "admin")
     monkeypatch.setattr(connection_check, "certificate_token_provider", _token_error)
-    page = client.post(f"/admin/connections/{connection_id}/client-id", follow_redirects=True, data={
-        "client_id": "11111111-2222-3333-4444-555555555555",
-        "home_tenant": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}).get_data(as_text=True)
+    page = client.post(
+        f"/admin/connections/{connection_id}/client-id",
+        follow_redirects=True,
+        data={
+            "client_id": "11111111-2222-3333-4444-555555555555",
+            "home_tenant": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        },
+    ).get_data(as_text=True)
     assert "Client ID saved, but the check failed." in page and "Certificates &amp; secrets" in page
-    page = client.post(f"/admin/connections/{connection_id}/client-id", follow_redirects=True, data={
-        "client_id": "11111111-2222-3333-4444-555555555555"}).get_data(as_text=True)
+    page = client.post(
+        f"/admin/connections/{connection_id}/client-id",
+        follow_redirects=True,
+        data={"client_id": "11111111-2222-3333-4444-555555555555"},
+    ).get_data(as_text=True)
     assert "Client ID saved." in page
 
 
@@ -133,9 +152,11 @@ def test_live_test_links_the_only_connection(cfg, db, connection_id, monkeypatch
 
     for k in livetest.ENV:
         monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")
-    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: (lambda: "tok"))
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: lambda: "tok")
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
         mock_tenant(rsps)
         assert livetest.run(cfg, ["tenant_profile"]) == 0
     tenant = db.execute("SELECT * FROM tenants WHERE tenant_ref = 'tid'").fetchone()

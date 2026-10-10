@@ -17,8 +17,7 @@ DOMAIN_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+
 TENANT_GUID = re.compile(r"/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/")
 
 
-def tenant_id_for_domain(domain: str, session: requests.Session | None = None,
-                         cloud: str | None = None) -> str | None:
+def tenant_id_for_domain(domain: str, session: requests.Session | None = None, cloud: str | None = None) -> str | None:
     """The tenant GUID Microsoft publishes for ``domain``, or None when it can't be found out.
 
     Asks the sign-in host of ``cloud`` and only believes an answer issued by that host.
@@ -28,8 +27,7 @@ def tenant_id_for_domain(domain: str, session: requests.Session | None = None,
     login = clouds.get(cloud).login
     http = session or requests.Session()
     try:
-        resp = http.get(f"{login}/{domain}/v2.0/.well-known/openid-configuration", timeout=15,
-                        allow_redirects=False)
+        resp = http.get(f"{login}/{domain}/v2.0/.well-known/openid-configuration", timeout=15, allow_redirects=False)
         if resp.status_code != 200:
             return None
         data = resp.json()

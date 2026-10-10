@@ -64,8 +64,7 @@ def _user(user_id: int):
 
 def _locked(user, now: datetime | None = None) -> bool:
     now = now or datetime.now(UTC)
-    return bool(user["locked_until"]
-                and datetime.fromisoformat(user["locked_until"].replace("Z", "+00:00")) > now)
+    return bool(user["locked_until"] and datetime.fromisoformat(user["locked_until"].replace("Z", "+00:00")) > now)
 
 
 def _iso(dt: datetime) -> str:
@@ -81,8 +80,10 @@ class Attempt:
     def succeeded(self) -> None:
         """The password or code was right: lift the lock this attempt set in advance, if it set one."""
         if self.locks_until:
-            g.db.execute("UPDATE users SET locked_until = NULL WHERE id = ? AND locked_until = ?",
-                         (self.user["id"], self.locks_until))
+            g.db.execute(
+                "UPDATE users SET locked_until = NULL WHERE id = ? AND locked_until = ?",
+                (self.user["id"], self.locks_until),
+            )
 
     def failed(self, action: str) -> bool:
         """Audit the wrong password or code. Returns True when this attempt locked the account."""
@@ -124,10 +125,14 @@ def _use_totp(user, secret: str, value: str) -> bool:
     only the first to write gets the step.
     """
     step = totp.verify(secret, value, user["totp_last_step"])
-    return step is not None and g.db.execute(
-        "UPDATE users SET totp_last_step = ? WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)",
-        (step, user["id"], step),
-    ).rowcount == 1
+    return (
+        step is not None
+        and g.db.execute(
+            "UPDATE users SET totp_last_step = ? WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)",
+            (step, user["id"], step),
+        ).rowcount
+        == 1
+    )
 
 
 # -- Pending sign-in (password accepted, two-step still to do) ----------------
@@ -135,14 +140,25 @@ def _use_totp(user, secret: str, value: str) -> bool:
 
 def _set_pending(user, enroll: bool, next_url: str | None, change: bool = False) -> None:
     session.clear()
-    session["pending"] = {"uid": user["id"], "sv": user["session_version"], "at": int(time.time()),
-                          "enroll": enroll, "change": change, "next": safe_next(next_url)}
+    session["pending"] = {
+        "uid": user["id"],
+        "sv": user["session_version"],
+        "at": int(time.time()),
+        "enroll": enroll,
+        "change": change,
+        "next": safe_next(next_url),
+    }
 
 
 def _pending_user(enroll: bool, change: bool = False):
     p = session.get("pending")
-    if (not p or "uid" not in p or bool(p.get("enroll")) != enroll or bool(p.get("change")) != change
-            or time.time() - p.get("at", 0) > PENDING_SECONDS):
+    if (
+        not p
+        or "uid" not in p
+        or bool(p.get("enroll")) != enroll
+        or bool(p.get("change")) != change
+        or time.time() - p.get("at", 0) > PENDING_SECONDS
+    ):
         return None
     user = _user(p["uid"])
     if user is None or user["disabled"] or user["session_version"] != p["sv"] or _locked(user):
@@ -156,8 +172,10 @@ def _finish_login(user, next_url: str | None = None) -> str:
     # Signing in at the front door ("/" or no page asked for) opens the person's home page (web/home.py).
     target = next_url or (session.get("pending") or {}).get("next")
     next_url = safe_next(target) if target and target != "/" else home_url(user)
-    g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = ? WHERE id = ?",
-                 (utcnow(), user["id"]))
+    g.db.execute(
+        "UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = ? WHERE id = ?",
+        (utcnow(), user["id"]),
+    )
     sessions.start(user)
     audit(g.db, user["username"], "login")
     return next_url
@@ -197,9 +215,11 @@ def new_password():
             flash(problem, "error")
         else:
             next_url = session["pending"].get("next")
-            g.db.execute("UPDATE users SET password_hash = ?, must_change_password = 0,"
-                         " session_version = session_version + 1 WHERE id = ?",
-                         (generate_password_hash(password), user["id"]))
+            g.db.execute(
+                "UPDATE users SET password_hash = ?, must_change_password = 0,"
+                " session_version = session_version + 1 WHERE id = ?",
+                (generate_password_hash(password), user["id"]),
+            )
             audit(g.db, user["username"], "password_changed", detail="replaced the password an admin set")
             user = _user(user["id"])
             return redirect(_continue_sign_in(user, next_url, code_done=bool(user["totp_enabled_at"])))
@@ -261,18 +281,25 @@ def client_ip() -> str:
     if "X-Forwarded-For" in request.headers and not _cfg().trusted_proxies and not _proxy_warning["given"]:
         _proxy_warning["given"] = True
         current_app.logger.warning(
-        "Requests carry X-Forwarded-For but OFFICESENTRY_TRUSTED_PROXIES is 0, so every visitor appears to come "
-        "from the proxy's address and shares its sign-in limits. Set OFFICESENTRY_TRUSTED_PROXIES to the number "
-        "of proxies in front of Office Sentry (1 for the bundled Caddy).")
+            "Requests carry X-Forwarded-For but OFFICESENTRY_TRUSTED_PROXIES is 0, so every visitor appears to come "
+            "from the proxy's address and shares its sign-in limits. Set OFFICESENTRY_TRUSTED_PROXIES to the number "
+            "of proxies in front of Office Sentry (1 for the bundled Caddy)."
+        )
     return (request.remote_addr or "unknown")[:64]
 
 
 def _throttled(username: str, refused: throttle.Refused):
-    wait = (plural(-(-refused.retry_after // 60), "minute") if refused.retry_after > 90
-            else plural(refused.retry_after, "second"))
+    wait = (
+        plural(-(-refused.retry_after // 60), "minute")
+        if refused.retry_after > 90
+        else plural(refused.retry_after, "second")
+    )
     if refused.reason == "name":
-        flash(f"This account has had a lot of failed sign-ins from other places, so new devices are slowed down. "
-              f"Try again in {wait}.", "error")
+        flash(
+            f"This account has had a lot of failed sign-ins from other places, so new devices are slowed down. "
+            f"Try again in {wait}.",
+            "error",
+        )
     else:
         flash(f"Too many failed sign-ins from your network. Try again in {wait}.", "error")
     resp = make_response(render_template("login.html", username=username), 429)
@@ -300,10 +327,14 @@ def login_code():
         ok = False
         if totp.looks_like_recovery_code(value):
             # Claimed in one statement, so two requests can't both use the same code.
-            ok = used_recovery = g.db.execute(
-                "UPDATE user_recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
-                (utcnow(), user["id"], totp.hash_recovery_code(value)),
-            ).rowcount > 0
+            ok = used_recovery = (
+                g.db.execute(
+                    "UPDATE user_recovery_codes SET used_at = ?"
+                    " WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
+                    (utcnow(), user["id"], totp.hash_recovery_code(value)),
+                ).rowcount
+                > 0
+            )
         else:
             ok = _use_totp(user, _vault().decrypt(user["totp_secret_enc"]), value)
 
@@ -312,10 +343,14 @@ def login_code():
             next_url = _continue_sign_in(user, (session.get("pending") or {}).get("next"), code_done=True)
             if used_recovery:
                 audit(g.db, user["username"], "recovery_code_used")
-                left = g.db.execute("SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = ? AND used_at IS NULL",
-                                    (user["id"],)).fetchone()[0]
-                flash(f"You used a recovery code; {left} left. If you've lost your phone, set up two-step "
-                      "sign-in again from your account page.", "warning")
+                left = g.db.execute(
+                    "SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = ? AND used_at IS NULL", (user["id"],)
+                ).fetchone()[0]
+                flash(
+                    f"You used a recovery code; {left} left. If you've lost your phone, set up two-step "
+                    "sign-in again from your account page.",
+                    "warning",
+                )
             return redirect(next_url)
 
         if attempt.failed("login_code_failed"):
@@ -352,11 +387,15 @@ def two_step_setup():
             codes = totp.new_recovery_codes()
             with transaction(g.db):
                 # Only one request turns it on, even if the same code arrives twice at once.
-                enabled = g.db.execute(
-                    "UPDATE users SET totp_secret_enc = totp_pending_enc, totp_pending_enc = NULL,"
-                    " totp_enabled_at = ?, totp_last_step = ?, session_version = session_version + 1"
-                    " WHERE id = ? AND totp_enabled_at IS NULL AND totp_pending_enc = ?",
-                    (utcnow(), step, user["id"], user["totp_pending_enc"])).rowcount == 1
+                enabled = (
+                    g.db.execute(
+                        "UPDATE users SET totp_secret_enc = totp_pending_enc, totp_pending_enc = NULL,"
+                        " totp_enabled_at = ?, totp_last_step = ?, session_version = session_version + 1"
+                        " WHERE id = ? AND totp_enabled_at IS NULL AND totp_pending_enc = ?",
+                        (utcnow(), step, user["id"], user["totp_pending_enc"]),
+                    ).rowcount
+                    == 1
+                )
                 if enabled:
                     _store_recovery_codes(user["id"], codes)
                     audit(g.db, user["username"], "two_step_enabled")
@@ -375,8 +414,9 @@ def two_step_setup():
             session.pop("pending", None)
             flash(_SIGN_IN_FAILED, "error")
             return redirect(url_for("auth.login"))
-        flash("That code didn't match. Check your phone's clock is set automatically, then try the newest code.",
-              "error")
+        flash(
+            "That code didn't match. Check your phone's clock is set automatically, then try the newest code.", "error"
+        )
     return _setup_page(user, signed_in)
 
 
@@ -388,15 +428,20 @@ def _setup_page(user, signed_in: bool):
         secret = totp.new_secret()
         g.db.execute("UPDATE users SET totp_pending_enc = ? WHERE id = ?", (vault.encrypt(secret), user["id"]))
     return render_template(
-        "two_step_setup.html", signed_in=signed_in, username=user["username"],
-        qr=totp.qr_svg(totp.provisioning_uri(secret, user["username"])), secret=totp.grouped(secret),
+        "two_step_setup.html",
+        signed_in=signed_in,
+        username=user["username"],
+        qr=totp.qr_svg(totp.provisioning_uri(secret, user["username"])),
+        secret=totp.grouped(secret),
     )
 
 
 def _store_recovery_codes(user_id: int, codes: list[str]) -> None:
     g.db.execute("DELETE FROM user_recovery_codes WHERE user_id = ?", (user_id,))
-    g.db.executemany("INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)",
-                     [(user_id, totp.hash_recovery_code(c)) for c in codes])
+    g.db.executemany(
+        "INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)",
+        [(user_id, totp.hash_recovery_code(c)) for c in codes],
+    )
 
 
 @bp.post("/logout")
@@ -448,8 +493,9 @@ def setup():
                 _set_pending(user, enroll=True, next_url=None)
                 return redirect(url_for("auth.two_step_setup"))
             return redirect(_finish_login(user))
-    return render_template("setup.html", need_token=False, min_password=MIN_PASSWORD,
-                           two_step=cfg.mfa_required("admin", g.db))
+    return render_template(
+        "setup.html", need_token=False, min_password=MIN_PASSWORD, two_step=cfg.mfa_required("admin", g.db)
+    )
 
 
 # -- Account ------------------------------------------------------------------------
@@ -458,12 +504,17 @@ def setup():
 @bp.get("/account")
 @login_required
 def account():
-    codes_left = g.db.execute("SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = ? AND used_at IS NULL",
-                              (g.user["id"],)).fetchone()[0]
+    codes_left = g.db.execute(
+        "SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = ? AND used_at IS NULL", (g.user["id"],)
+    ).fetchone()[0]
     return render_template(
-        "account.html", min_password=MIN_PASSWORD, sessions=sessions.list_for(g.user["id"]),
-        codes_left=codes_left, two_step_required=_cfg().mfa_required(g.user["role"], g.db),
-        homes=home.HOMES, home_choice=home.home_of(g.user),
+        "account.html",
+        min_password=MIN_PASSWORD,
+        sessions=sessions.list_for(g.user["id"]),
+        codes_left=codes_left,
+        two_step_required=_cfg().mfa_required(g.user["role"], g.db),
+        homes=home.HOMES,
+        home_choice=home.home_of(g.user),
     )
 
 
@@ -514,9 +565,11 @@ def two_step_off():
         flash("Two-step sign-in is required for your account, so it can't be turned off.", "error")
     elif _confirm_password():
         with transaction(g.db):
-            g.db.execute("UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
-                         " totp_last_step = NULL, session_version = session_version + 1 WHERE id = ?",
-                         (g.user["id"],))
+            g.db.execute(
+                "UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
+                " totp_last_step = NULL, session_version = session_version + 1 WHERE id = ?",
+                (g.user["id"],),
+            )
             g.db.execute("DELETE FROM user_recovery_codes WHERE user_id = ?", (g.user["id"],))
             audit(g.db, g.user["username"], "two_step_disabled")
         sessions.keep_current(g.user["id"], g.user["session_version"] + 1)
@@ -535,8 +588,7 @@ def new_recovery_codes():
     with transaction(g.db):
         _store_recovery_codes(g.user["id"], codes)
         audit(g.db, g.user["username"], "recovery_codes_replaced")
-    return render_template("recovery_codes.html", codes=codes, continue_url=url_for("auth.account"),
-                           first_time=False)
+    return render_template("recovery_codes.html", codes=codes, continue_url=url_for("auth.account"), first_time=False)
 
 
 @bp.post("/account/sessions/<int:session_id>/end")
@@ -556,6 +608,10 @@ def end_session(session_id: int):
 def end_other_sessions():
     ended = sessions.revoke_user(g.user["id"], except_current=True)
     audit(g.db, g.user["username"], "sessions_ended", detail=plural(ended, "other session"))
-    flash(f"Signed out of {ended} other browser{'s' if ended != 1 else ''}." if ended
-          else "You weren't signed in anywhere else.", "success")
+    flash(
+        f"Signed out of {ended} other browser{'s' if ended != 1 else ''}."
+        if ended
+        else "You weren't signed in anywhere else.",
+        "success",
+    )
     return redirect(url_for("auth.account"))

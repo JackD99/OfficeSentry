@@ -48,9 +48,19 @@ SKU_NAMES = {
 
 # Free or trial SKUs that are never "waste", however many units are unassigned.
 FREE_SKUS = {
-    "FLOW_FREE", "POWER_BI_STANDARD", "TEAMS_EXPLORATORY", "WINDOWS_STORE", "MICROSOFT_BUSINESS_CENTER",
-    "STREAM", "CCIBOTS_PRIVPREV_VIRAL", "POWERAPPS_VIRAL", "POWERAPPS_DEV", "RIGHTSMANAGEMENT_ADHOC",
-    "MCOMEETADV", "PHONESYSTEM_VIRTUALUSER", "Teams_Premium_(for_Departments)_Trial",
+    "FLOW_FREE",
+    "POWER_BI_STANDARD",
+    "TEAMS_EXPLORATORY",
+    "WINDOWS_STORE",
+    "MICROSOFT_BUSINESS_CENTER",
+    "STREAM",
+    "CCIBOTS_PRIVPREV_VIRAL",
+    "POWERAPPS_VIRAL",
+    "POWERAPPS_DEV",
+    "RIGHTSMANAGEMENT_ADHOC",
+    "MCOMEETADV",
+    "PHONESYSTEM_VIRTUALUSER",
+    "Teams_Premium_(for_Departments)_Trial",
 }
 # Units at or above this are viral/free allocations, not purchases.
 FREE_UNIT_THRESHOLD = 10000
@@ -63,13 +73,18 @@ def sku_name(part_number: str | None) -> str:
 
 
 def load_prices(conn) -> dict[str, float]:
-    return {r["sku_part_number"]: r["monthly_price"] for r in conn.execute(
-        "SELECT sku_part_number, monthly_price FROM sku_prices")}
+    return {
+        r["sku_part_number"]: r["monthly_price"]
+        for r in conn.execute("SELECT sku_part_number, monthly_price FROM sku_prices")
+    }
 
 
 def last_sign_in(user: dict) -> datetime | None:
-    values = [user.get("lastSignInDateTime"), user.get("lastNonInteractiveSignInDateTime"),
-              user.get("lastSuccessfulSignInDateTime")]
+    values = [
+        user.get("lastSignInDateTime"),
+        user.get("lastNonInteractiveSignInDateTime"),
+        user.get("lastSuccessfulSignInDateTime"),
+    ]
     parsed = [dt for dt in map(parse_ts, values) if dt]
     return max(parsed) if parsed else None
 
@@ -131,8 +146,9 @@ class LicenceSummary:
         return sum(line.wasted_units for line in self.lines if line.monthly_price is None)
 
 
-def licence_summary(skus: list[dict], users: list[dict] | None, prices: dict[str, float],
-                    now: datetime | None = None) -> LicenceSummary:
+def licence_summary(
+    skus: list[dict], users: list[dict] | None, prices: dict[str, float], now: datetime | None = None
+) -> LicenceSummary:
     now = now or datetime.now(UTC)
     summary = LicenceSummary()
     by_id: dict[str, SkuLine] = {}
@@ -145,8 +161,12 @@ def licence_summary(skus: list[dict], users: list[dict] | None, prices: dict[str
             continue  # expired or suspended subscription with nothing assigned
         part = s.get("skuPartNumber") or ""
         line = SkuLine(
-            sku_id=s["skuId"], part_number=part, name=sku_name(part), purchased=purchased,
-            assigned=assigned, unassigned=max(purchased - assigned, 0),
+            sku_id=s["skuId"],
+            part_number=part,
+            name=sku_name(part),
+            purchased=purchased,
+            assigned=assigned,
+            unassigned=max(purchased - assigned, 0),
             monthly_price=prices.get(part),
             free=part in FREE_SKUS or purchased >= FREE_UNIT_THRESHOLD,
         )
@@ -169,26 +189,40 @@ def licence_summary(skus: list[dict], users: list[dict] | None, prices: dict[str
 
 def is_free(sku: dict) -> bool:
     """A free, viral or trial allocation (Power Automate Free, say) rather than something paid for."""
-    return sku.get("skuPartNumber") in FREE_SKUS or ((sku.get("prepaidUnits") or {}).get("enabled") or 0) \
-        >= FREE_UNIT_THRESHOLD
+    return (
+        sku.get("skuPartNumber") in FREE_SKUS
+        or ((sku.get("prepaidUnits") or {}).get("enabled") or 0) >= FREE_UNIT_THRESHOLD
+    )
 
 
 # -- How licences are assigned ----------------------------------------------------------------
 
 # Group-based licensing errors (licenseAssignmentState.error): what each means and what to do.
 ASSIGNMENT_ERRORS = {
-    "CountViolation": ("Not enough licences: every one bought is already assigned",
-                       "Buy more, or remove the licence from someone who doesn't need it"),
-    "MutuallyExclusiveViolation": ("Conflicts with another licence the person has, and the two can't be combined",
-                                   "Remove one of the two licences, or take the person out of one of the groups"),
-    "DependencyViolation": ("Needs another licence the person doesn't have (an add-on without its base licence)",
-                            "Assign the licence it depends on first, or remove the add-on"),
-    "ProhibitedInUsageLocationViolation": ("Isn't sold for use in the person's usage location (country)",
-                                           "Correct the person's usage location, or use a licence sold there"),
-    "UniquenessViolation": ("Clashes with another account, usually an email address used twice",
-                            "Remove the duplicate email address, then reprocess the group's licences"),
-    "Other": ("Microsoft couldn't assign it",
-              "Reprocess the group's licences in the Entra admin center; if it fails again, check the account"),
+    "CountViolation": (
+        "Not enough licences: every one bought is already assigned",
+        "Buy more, or remove the licence from someone who doesn't need it",
+    ),
+    "MutuallyExclusiveViolation": (
+        "Conflicts with another licence the person has, and the two can't be combined",
+        "Remove one of the two licences, or take the person out of one of the groups",
+    ),
+    "DependencyViolation": (
+        "Needs another licence the person doesn't have (an add-on without its base licence)",
+        "Assign the licence it depends on first, or remove the add-on",
+    ),
+    "ProhibitedInUsageLocationViolation": (
+        "Isn't sold for use in the person's usage location (country)",
+        "Correct the person's usage location, or use a licence sold there",
+    ),
+    "UniquenessViolation": (
+        "Clashes with another account, usually an email address used twice",
+        "Remove the duplicate email address, then reprocess the group's licences",
+    ),
+    "Other": (
+        "Microsoft couldn't assign it",
+        "Reprocess the group's licences in the Entra admin center; if it fails again, check the account",
+    ),
 }
 ERROR_STATES = ("Error", "ActiveWithError")
 
@@ -209,6 +243,7 @@ class AssignmentError:
 @dataclass
 class Assignment:
     """One licence (SKU) for one account: where it comes from and whether it worked."""
+
     sku_id: str
     direct: bool = False
     groups: list[str] = field(default_factory=list)  # group object IDs
@@ -243,17 +278,25 @@ def assignments(user: dict) -> dict[str, Assignment] | None:
             a.groups.append(group)
         state = s.get("state")
         if state in ERROR_STATES:
-            a.errors.append(AssignmentError(group, s.get("error") if isinstance(s.get("error"), str) else "Other",
-                                            state == "ActiveWithError",
-                                            s.get("updated") if isinstance(s.get("updated"), str) else None))
+            a.errors.append(
+                AssignmentError(
+                    group,
+                    s.get("error") if isinstance(s.get("error"), str) else "Other",
+                    state == "ActiveWithError",
+                    s.get("updated") if isinstance(s.get("updated"), str) else None,
+                )
+            )
         if state in ("Active", "ActiveWithError"):
             a.active = True
     assigned = user.get("skuIds")
     if isinstance(assigned, list):
         # Microsoft keeps an "Active" state for a licence that is no longer assigned (seen on the test tenant, for a
         # SKU the tenant no longer has): it isn't held, and without its subscription it can't even be named.
-        for sid in [sid for sid, a in out.items() if sid not in assigned and a.active and a.direct
-                    and not a.groups and not a.errors]:
+        for sid in [
+            sid
+            for sid, a in out.items()
+            if sid not in assigned and a.active and a.direct and not a.groups and not a.errors
+        ]:
             del out[sid]
     for sid in user.get("skuIds") or []:  # assigned, so it works whatever the states say
         if isinstance(sid, str):

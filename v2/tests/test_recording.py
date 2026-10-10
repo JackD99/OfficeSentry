@@ -23,51 +23,146 @@ def _graph(path, body):
 
 def raw_log():
     jane = {
-        "id": JANE, "displayName": "Jane Smithson", "givenName": "Jane", "surname": "Smithson",
-        "userPrincipalName": "jane.smithson@contoso.com", "mail": "jane.smithson@contoso.com",
-        "mailNickname": "jsmithson", "businessPhones": ["07700 900123"], "mobilePhone": "+44 7700 900456",
-        "faxNumber": "(212) 555-7788", "otherPhones": [], "jobTitle": None,
+        "id": JANE,
+        "displayName": "Jane Smithson",
+        "givenName": "Jane",
+        "surname": "Smithson",
+        "userPrincipalName": "jane.smithson@contoso.com",
+        "mail": "jane.smithson@contoso.com",
+        "mailNickname": "jsmithson",
+        "businessPhones": ["07700 900123"],
+        "mobilePhone": "+44 7700 900456",
+        "faxNumber": "(212) 555-7788",
+        "otherPhones": [],
+        "jobTitle": None,
     }
     return [
-        _graph("/v1.0/organization", {"value": [{
-            "id": TENANT, "displayName": "Contoso Widgets",
-            "verifiedDomains": [{"name": "contoso.com"}, {"name": "contosowidgets.onmicrosoft.com"}],
-        }]}),
+        _graph(
+            "/v1.0/organization",
+            {
+                "value": [
+                    {
+                        "id": TENANT,
+                        "displayName": "Contoso Widgets",
+                        "verifiedDomains": [{"name": "contoso.com"}, {"name": "contosowidgets.onmicrosoft.com"}],
+                    }
+                ]
+            },
+        ),
         _graph("/v1.0/users?$select=id,displayName", {"value": [jane]}),
         _graph(f"/v1.0/groups/{GROUP}", {"id": GROUP, "displayName": "Finance Team"}),
-        _graph("/v1.0/auditLogs/signIns", {"value": [{
-            "userId": JANE, "userDisplayName": "Jane Smithson", "userPrincipalName": "jane.smithson@contoso.com",
-            "ipAddress": "81.2.69.160", "clientAppUsed": "Browser",
-            "location": {"city": "Kilmarnock", "state": "East Ayrshire", "countryOrRegion": "GB",
-                         "geoCoordinates": {"altitude": None, "latitude": 55.611, "longitude": -4.495}},
-        }, {
-            "userId": JANE, "userDisplayName": "Jane Smithson", "userPrincipalName": "jane.smithson@contoso.com",
-            "ipAddress": "2a00:23c5:1234::1",
-        }]}),
+        _graph(
+            "/v1.0/auditLogs/signIns",
+            {
+                "value": [
+                    {
+                        "userId": JANE,
+                        "userDisplayName": "Jane Smithson",
+                        "userPrincipalName": "jane.smithson@contoso.com",
+                        "ipAddress": "81.2.69.160",
+                        "clientAppUsed": "Browser",
+                        "location": {
+                            "city": "Kilmarnock",
+                            "state": "East Ayrshire",
+                            "countryOrRegion": "GB",
+                            "geoCoordinates": {"altitude": None, "latitude": 55.611, "longitude": -4.495},
+                        },
+                    },
+                    {
+                        "userId": JANE,
+                        "userDisplayName": "Jane Smithson",
+                        "userPrincipalName": "jane.smithson@contoso.com",
+                        "ipAddress": "2a00:23c5:1234::1",
+                    },
+                ]
+            },
+        ),
         _graph("/v1.0/directoryRoles", {"value": [{"roleTemplateId": GLOBAL_ADMIN, "members": [{"id": JANE}]}]}),
-        _graph("/v1.0/roleManagement/directory/roleAssignments?$expand=principal", {"value": [{
-            "principal": {**jane, "businessPhones": ["07700900123"]},  # the same number, written differently
-        }]}),
-        _graph("/v1.0/sites", {"value": [{
-            "webUrl": "https://contoso-my.sharepoint.com/personal/jane_smithson_contoso_com/Documents",
-            "description": "Call Jane on 020 7946 0123 or +44 20 7946 0999",
-        }]}),
-        _graph(f"/v1.0/users/{JANE}/authentication/methods", {"value": [{
-            "phoneNumber": "+44 7700 900456", "displayName": "Jane's iPhone", "phoneType": "mobile",
-        }]}),
+        _graph(
+            "/v1.0/roleManagement/directory/roleAssignments?$expand=principal",
+            {
+                "value": [
+                    {
+                        "principal": {
+                            **jane,
+                            "businessPhones": ["07700900123"],
+                        },  # the same number, written differently
+                    }
+                ]
+            },
+        ),
+        _graph(
+            "/v1.0/sites",
+            {
+                "value": [
+                    {
+                        "webUrl": "https://contoso-my.sharepoint.com/personal/jane_smithson_contoso_com/Documents",
+                        "description": "Call Jane on 020 7946 0123 or +44 20 7946 0999",
+                    }
+                ]
+            },
+        ),
+        _graph(
+            f"/v1.0/users/{JANE}/authentication/methods",
+            {
+                "value": [
+                    {
+                        "phoneNumber": "+44 7700 900456",
+                        "displayName": "Jane's iPhone",
+                        "phoneType": "mobile",
+                    }
+                ]
+            },
+        ),
         _graph("/v1.0/reports/usage", {"value": [{"mobile": False, "userPrincipalName": "jane.smithson@contoso.com"}]}),
-        {"api": "exchange", "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand", "status": 200,
-         "cmdlet": {"CmdletName": "Get-Mailbox"},
-         "body": {"value": [{"DisplayName": "Jane Smithson", "Alias": "jsmithson", "Name": "Jane Smithson",
-                             "Phone": "07700900789", "PrimarySmtpAddress": "jane.smithson@contoso.com"}]}},
-        {"api": "dns", "name": "contoso.com", "rdtype": "TXT",
-         "answer": ["v=spf1 include:spf.protection.outlook.com -all", "MS=ms12345678"]},
+        {
+            "api": "exchange",
+            "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand",
+            "status": 200,
+            "cmdlet": {"CmdletName": "Get-Mailbox"},
+            "body": {
+                "value": [
+                    {
+                        "DisplayName": "Jane Smithson",
+                        "Alias": "jsmithson",
+                        "Name": "Jane Smithson",
+                        "Phone": "07700900789",
+                        "PrimarySmtpAddress": "jane.smithson@contoso.com",
+                    }
+                ]
+            },
+        },
+        {
+            "api": "dns",
+            "name": "contoso.com",
+            "rdtype": "TXT",
+            "answer": ["v=spf1 include:spf.protection.outlook.com -all", "MS=ms12345678"],
+        },
     ]
 
 
-SENSITIVE = ["Jane", "Smithson", "jsmithson", "contoso", "Contoso Widgets", "Finance Team", TENANT, CLIENT, JANE,
-             GROUP, "81.2.69.160", "2a00:23c5", "7700", "7946", "555-7788", "MS=ms12345678",
-             "Kilmarnock", "Ayrshire", "55.611", "4.495"]
+SENSITIVE = [
+    "Jane",
+    "Smithson",
+    "jsmithson",
+    "contoso",
+    "Contoso Widgets",
+    "Finance Team",
+    TENANT,
+    CLIENT,
+    JANE,
+    GROUP,
+    "81.2.69.160",
+    "2a00:23c5",
+    "7700",
+    "7946",
+    "555-7788",
+    "MS=ms12345678",
+    "Kilmarnock",
+    "Ayrshire",
+    "55.611",
+    "4.495",
+]
 
 
 @pytest.fixture(scope="module")
@@ -129,8 +224,12 @@ def test_ips_become_documentation_addresses(fixture):
 
 def test_sign_in_places_become_numbered_placeholders(fixture):
     first, second = fixture["entries"][3]["body"]["value"]
-    assert first["location"] == {"city": "Town 1", "state": "County 1", "countryOrRegion": "GB",
-                                 "geoCoordinates": {"altitude": None, "latitude": None, "longitude": None}}
+    assert first["location"] == {
+        "city": "Town 1",
+        "state": "County 1",
+        "countryOrRegion": "GB",
+        "geoCoordinates": {"altitude": None, "latitude": None, "longitude": None},
+    }
     assert "location" not in second
 
 
@@ -158,22 +257,28 @@ def test_sharepoint_drive_ids_have_their_guids_replaced():
     import base64
     import uuid
 
-    site, web, lst = "a5e1e000-1111-4222-8333-444455556666", "3eb00000-1111-4222-8333-444455556666", \
-        "11570000-1111-4222-8333-444455556666"
+    site, web, lst = (
+        "a5e1e000-1111-4222-8333-444455556666",
+        "3eb00000-1111-4222-8333-444455556666",
+        "11570000-1111-4222-8333-444455556666",
+    )
     drive = "b!" + base64.urlsafe_b64encode(b"".join(uuid.UUID(g).bytes_le for g in (site, web, lst))).decode()
     log = [
         _graph("/v1.0/organization", {"value": [{"id": TENANT, "verifiedDomains": [{"name": "contoso.com"}]}]}),
         _graph(f"/v1.0/sites/contoso.sharepoint.com,{site},{web}/drives", {"value": [{"id": drive}]}),
-        _graph(f"/v1.0/drives/{drive}/root/delta", {"@odata.deltaLink": f"{GRAPH}/v1.0/drives/{drive}/root/delta"
-                                                   "?token=x", "value": []}),
+        _graph(
+            f"/v1.0/drives/{drive}/root/delta",
+            {"@odata.deltaLink": f"{GRAPH}/v1.0/drives/{drive}/root/delta?token=x", "value": []},
+        ),
     ]
     fixture = scrub(log, TENANT, CLIENT)
     text = json.dumps(fixture)
     assert drive[2:] not in text and site not in text and web not in text
     fake = fixture["entries"][1]["body"]["value"][0]["id"]
     assert fake.startswith("b!") and len(fake) == len(drive)
-    fake_site, fake_web, _ = (str(uuid.UUID(bytes_le=base64.urlsafe_b64decode(fake[2:])[i:i + 16]))
-                              for i in (0, 16, 32))
+    fake_site, fake_web, _ = (
+        str(uuid.UUID(bytes_le=base64.urlsafe_b64decode(fake[2:])[i : i + 16])) for i in (0, 16, 32)
+    )
     # The same placeholders as the plain GUIDs in the site's address, so replayed requests still match.
     assert f",{fake_site},{fake_web}/drives" in fixture["entries"][1]["url"]
     assert fixture["entries"][2]["url"] == f"{GRAPH}/v1.0/drives/{fake}/root/delta"
@@ -218,8 +323,12 @@ def test_phone_leak_check():
     assert phone_leaks({"description": "ring 020 7946 0123"}) == ["020 7946 0123"]
     assert phone_leaks({"businessPhones": ["+1 555 0100"], "mobile": False, "phoneType": "mobile"}) == []
     # Dates, GUIDs, versions and request URLs aren't phone numbers.
-    clean = {"createdDateTime": "2026-04-01", "id": "00000000-0000-0000-0000-000000000002",
-             "version": "16.0.17126.20132", "url": "https://graph.microsoft.com/v1.0/users/07470699178"}
+    clean = {
+        "createdDateTime": "2026-04-01",
+        "id": "00000000-0000-0000-0000-000000000002",
+        "version": "16.0.17126.20132",
+        "url": "https://graph.microsoft.com/v1.0/users/07470699178",
+    }
     assert phone_leaks(clean) == []
 
 
@@ -237,16 +346,37 @@ def test_committed_fixture_has_no_real_phone_numbers():
 
 def test_device_numbers_and_free_text_are_redacted():
     log = raw_log() + [
-        {"api": "exchange", "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand", "status": 200,
-         "cmdlet": {"CmdletName": "Get-MobileDeviceStatistics", "Parameters": {"Mailbox": "jsmithson"}},
-         "body": {"value": [{"DeviceImei": "356938035643809", "DevicePhoneNumber": "+44 7700 900111",
-                             "RecoveryPassword": "1234-5678", "DeviceModel": "iPhone 15"}]}},
-        {"api": "exchange", "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand", "status": 200,
-         "cmdlet": {"CmdletName": "Get-MessageTraceV2", "Parameters": {}},
-         "body": {"value": [{"Subject": "Salary review", "RecipientAddress": "all@contoso.com"}]}},
-        _graph(f"/v1.0/users/{JANE}/mailboxSettings/automaticRepliesSetting", {
-            "status": "alwaysEnabled", "internalReplyMessage": "<p>Off sick until Friday</p>",
-            "externalReplyMessage": ""}),
+        {
+            "api": "exchange",
+            "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand",
+            "status": 200,
+            "cmdlet": {"CmdletName": "Get-MobileDeviceStatistics", "Parameters": {"Mailbox": "jsmithson"}},
+            "body": {
+                "value": [
+                    {
+                        "DeviceImei": "356938035643809",
+                        "DevicePhoneNumber": "+44 7700 900111",
+                        "RecoveryPassword": "1234-5678",
+                        "DeviceModel": "iPhone 15",
+                    }
+                ]
+            },
+        },
+        {
+            "api": "exchange",
+            "url": "https://outlook.office365.com/adminapi/beta/x/InvokeCommand",
+            "status": 200,
+            "cmdlet": {"CmdletName": "Get-MessageTraceV2", "Parameters": {}},
+            "body": {"value": [{"Subject": "Salary review", "RecipientAddress": "all@contoso.com"}]},
+        },
+        _graph(
+            f"/v1.0/users/{JANE}/mailboxSettings/automaticRepliesSetting",
+            {
+                "status": "alwaysEnabled",
+                "internalReplyMessage": "<p>Off sick until Friday</p>",
+                "externalReplyMessage": "",
+            },
+        ),
     ]
     entries = scrub(log, TENANT, CLIENT)["entries"]
     device = entries[-3]["body"]["value"][0]

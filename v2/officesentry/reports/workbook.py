@@ -24,13 +24,18 @@ DATE_FORMAT = "d mmm yyyy"
 DATETIME_FORMAT = "d mmm yyyy hh:mm"
 MIN_WIDTH, MAX_WIDTH = 8, 60
 # Severity flag cells: (background, text), matching the colours on the page.
-FLAG_FILLS = {"critical": ("FDECEA", "B42318"), "high": ("FDF0E6", "B54708"), "medium": ("FDF6E1", "8A5A00"),
-              "low": ("F0F2F5", "475467")}
+FLAG_FILLS = {
+    "critical": ("FDECEA", "B42318"),
+    "high": ("FDF0E6", "B54708"),
+    "medium": ("FDF6E1", "8A5A00"),
+    "low": ("F0F2F5", "475467"),
+}
 
 
 @dataclass
 class Cover:
     """What the summary sheet says about the workbook."""
+
     title: str
     client: str = ""  # tenant name, or "All tenants"
     generated_at: datetime | None = None
@@ -48,7 +53,7 @@ def _hex(colour: str) -> str:
 
 
 def _on(fill: str) -> str:
-    r, g, b = (int(fill[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    r, g, b = (int(fill[i : i + 2], 16) / 255 for i in (0, 2, 4))
     lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
     return "FFFFFF" if lum < 0.55 else INK
 
@@ -93,9 +98,18 @@ class Book:
             cell.alignment = Alignment(vertical="center", wrap_text=True)
         ws.row_dimensions[row].height = 20
 
-    def table(self, title: str, columns: list[str], rows: list[list], *, flags: list | None = None,
-              links: dict[tuple[int, int], str] | None = None, description: str = "", wrap: bool = True,
-              flag_name: str = "Flag"):
+    def table(
+        self,
+        title: str,
+        columns: list[str],
+        rows: list[list],
+        *,
+        flags: list | None = None,
+        links: dict[tuple[int, int], str] | None = None,
+        description: str = "",
+        wrap: bool = True,
+        flag_name: str = "Flag",
+    ):
         """A sheet of ``rows`` under ``columns``. ``flags`` (a severity per row) add a coloured Flag column
         (called ``flag_name``);
         ``links`` maps (row index, column index) to an https address."""

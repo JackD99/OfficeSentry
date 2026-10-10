@@ -53,16 +53,22 @@ def sync(conn, tenant, now: datetime | None = None) -> dict:
             if r.status == "unavailable":
                 continue
             current = by_key(r.findings)
-            existing = {row["object_id"]: row for row in conn.execute(
-                "SELECT * FROM findings WHERE tenant_id = ? AND rule_key = ?", (tenant["id"], r.key))}
+            existing = {
+                row["object_id"]: row
+                for row in conn.execute(
+                    "SELECT * FROM findings WHERE tenant_id = ? AND rule_key = ?", (tenant["id"], r.key)
+                )
+            }
             for key, f in current.items():
                 row = existing.get(key)
                 if row is None:
-                    opened.append(conn.execute(
-                        "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail,"
-                        " first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        (tenant["id"], r.key, key, f.severity, f.subject, f.detail, ts, ts),
-                    ).lastrowid)
+                    opened.append(
+                        conn.execute(
+                            "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail,"
+                            " first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (tenant["id"], r.key, key, f.severity, f.subject, f.detail, ts, ts),
+                        ).lastrowid
+                    )
                     stats["new"] += 1
                 else:
                     reopened = row["resolved_at"] is not None
@@ -101,8 +107,14 @@ def lifecycle_map(conn, tenant_id: int, now: datetime | None = None) -> dict[tup
     for row in conn.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (tenant_id,)):
         accepted = bool(row["accepted_at"]) and (row["accepted_until"] is None or row["accepted_until"] > ts)
         out[(row["rule_key"], row["object_id"])] = Lifecycle(
-            row["first_seen"], row["reopened_at"], accepted, row["accepted_by"], row["accepted_note"],
-            row["accepted_until"], row["id"])
+            row["first_seen"],
+            row["reopened_at"],
+            accepted,
+            row["accepted_by"],
+            row["accepted_note"],
+            row["accepted_until"],
+            row["id"],
+        )
     return out
 
 
@@ -121,5 +133,8 @@ def accept(conn, finding_id: int, username: str, note: str, until: str | None) -
 
 
 def unaccept(conn, finding_id: int) -> None:
-    conn.execute("UPDATE findings SET accepted_by = NULL, accepted_at = NULL, accepted_note = NULL,"
-                 " accepted_until = NULL WHERE id = ?", (finding_id,))
+    conn.execute(
+        "UPDATE findings SET accepted_by = NULL, accepted_at = NULL, accepted_note = NULL,"
+        " accepted_until = NULL WHERE id = ?",
+        (finding_id,),
+    )

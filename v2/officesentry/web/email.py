@@ -109,7 +109,9 @@ def _last_errors(schedule_ids: list[int]) -> dict[int, dict]:
         return {}
     rows = g.db.execute(
         f"SELECT * FROM email_deliveries WHERE id IN (SELECT MAX(id) FROM email_deliveries"
-        f" WHERE schedule_id IN ({','.join('?' * len(schedule_ids))}) GROUP BY schedule_id)", schedule_ids)
+        f" WHERE schedule_id IN ({','.join('?' * len(schedule_ids))}) GROUP BY schedule_id)",
+        schedule_ids,
+    )
     return {r["schedule_id"]: r for r in rows}
 
 
@@ -121,13 +123,15 @@ def _last_errors(schedule_ids: list[int]) -> dict[int, dict]:
 def tenant_emails(tenant_id: int):
     t = tenant_or_404(tenant_id)
     staff = _is_staff()
-    schedules = [_decorate(s) for s in g.db.execute(
-        "SELECT * FROM email_schedules WHERE tenant_id = ? ORDER BY id", (t["id"],))]
+    schedules = [
+        _decorate(s) for s in g.db.execute("SELECT * FROM email_schedules WHERE tenant_id = ? ORDER BY id", (t["id"],))
+    ]
     last = _last_errors([s["id"] for s in schedules])
     contacts = delivery.tenant_contacts(g.db, t["id"])
     kinds = "" if staff else " AND kind = 'report'"  # alerts go to the team only
-    deliveries = g.db.execute(f"SELECT * FROM email_deliveries WHERE tenant_id = ?{kinds} ORDER BY id DESC LIMIT 25",
-                              (t["id"],)).fetchall()
+    deliveries = g.db.execute(
+        f"SELECT * FROM email_deliveries WHERE tenant_id = ?{kinds} ORDER BY id DESC LIMIT 25", (t["id"],)
+    ).fetchall()
     if not staff:
         deliveries = [c for c in (_client_copy(d, contacts) for d in deliveries) if c]
     alert = _decorate_alert(g.db.execute("SELECT * FROM email_alerts WHERE tenant_id = ?", (t["id"],)).fetchone())
@@ -135,11 +139,23 @@ def tenant_emails(tenant_id: int):
     failing = [s for s in schedules if s["last_status"] == "failed"]
     settings = _settings()
     return render_template(
-        "schedules.html", tenant=t, staff=staff, schedules=schedules, last=last, deliveries=deliveries,
-        alert=alert, contacts=contacts, team=delivery.team_contacts(g.db),
-        upcoming=upcoming[0] if upcoming else None, failing=failing, mail_ready=mailer.is_configured(settings),
-        sent_30=g.db.execute(f"SELECT COUNT(*) FROM email_deliveries WHERE tenant_id = ? AND status = 'sent'"
-                             f" AND created_at >= ?{kinds}", (t["id"], _days_ago(30))).fetchone()[0])
+        "schedules.html",
+        tenant=t,
+        staff=staff,
+        schedules=schedules,
+        last=last,
+        deliveries=deliveries,
+        alert=alert,
+        contacts=contacts,
+        team=delivery.team_contacts(g.db),
+        upcoming=upcoming[0] if upcoming else None,
+        failing=failing,
+        mail_ready=mailer.is_configured(settings),
+        sent_30=g.db.execute(
+            f"SELECT COUNT(*) FROM email_deliveries WHERE tenant_id = ? AND status = 'sent' AND created_at >= ?{kinds}",
+            (t["id"], _days_ago(30)),
+        ).fetchone()[0],
+    )
 
 
 def _client_copy(d, contacts) -> dict | None:
@@ -166,8 +182,11 @@ def issued_report(tenant_id: int, report_id: int):
     if r is None:
         abort(404)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"issued:{r['filename']}")
-    return Response(bytes(r["data"]), mimetype=r["content_type"],
-                    headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'})
+    return Response(
+        bytes(r["data"]),
+        mimetype=r["content_type"],
+        headers={"Content-Disposition": f'attachment; filename="{r["filename"]}"'},
+    )
 
 
 def _days_ago(days: int) -> str:
@@ -178,9 +197,20 @@ def _days_ago(days: int) -> str:
 
 
 def _blank(kind: str, reports=None) -> dict:
-    return {"id": None, "kind": kind, "reports": reports or (["review"] if kind == "report" else []), "include_xlsx": 1,
-            "frequency": "monthly", "day_of_week": 0, "day_of_month": 1, "hour": 8, "timezone": "",
-            "message": "", "enabled": 1, "group_id": None}
+    return {
+        "id": None,
+        "kind": kind,
+        "reports": reports or (["review"] if kind == "report" else []),
+        "include_xlsx": 1,
+        "frequency": "monthly",
+        "day_of_week": 0,
+        "day_of_month": 1,
+        "hour": 8,
+        "timezone": "",
+        "message": "",
+        "enabled": 1,
+        "group_id": None,
+    }
 
 
 def _form_values(kind: str) -> dict:
@@ -201,8 +231,12 @@ def _form_values(kind: str) -> dict:
     }
     if values["group_id"] is not None and tenant_groups.get(g.db, values["group_id"]) is None:
         abort(400)
-    if values["frequency"] not in delivery.FREQUENCIES or not 0 <= values["day_of_week"] <= 6 \
-            or not 1 <= values["day_of_month"] <= 28 or not 0 <= values["hour"] <= 23:
+    if (
+        values["frequency"] not in delivery.FREQUENCIES
+        or not 0 <= values["day_of_week"] <= 6
+        or not 1 <= values["day_of_month"] <= 28
+        or not 0 <= values["hour"] <= 23
+    ):
         abort(400)
     if values["timezone"] and not delivery.valid_timezone(values["timezone"]):
         abort(400)
@@ -229,8 +263,9 @@ def _chosen_contacts(tenant_id: int | None) -> tuple[list[int], list[str]]:
 
 def _my_views(across: bool) -> dict[int, dict]:
     """The signed-in person's saved views that a schedule can send, by id."""
-    rows = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? ORDER BY name COLLATE NOCASE",
-                        (g.user["id"],)).fetchall()
+    rows = g.db.execute(
+        "SELECT * FROM saved_views WHERE user_id = ? ORDER BY name COLLATE NOCASE", (g.user["id"],)
+    ).fetchall()
     return {r["id"]: dict(r) for r in rows if delivery.can_schedule_view(r["report_key"], across)}
 
 
@@ -243,12 +278,20 @@ def _view_value(v: delivery.ScheduledView, mine: dict) -> str:
 def _view_options(schedule_id: int | None, across: bool) -> list[dict]:
     """The saved views the form offers, by report: the person's own, then copies the schedule already sends."""
     mine = _my_views(across)
-    options = [{"value": f"s{r['id']}", "name": r["name"], "report": delivery.view_report_title(r["report_key"]),
-                "note": ""} for r in mine.values()]
+    options = [
+        {"value": f"s{r['id']}", "name": r["name"], "report": delivery.view_report_title(r["report_key"]), "note": ""}
+        for r in mine.values()
+    ]
     for v in delivery.schedule_views(g.db, schedule_id):
         if _view_value(v, mine).startswith("k"):
-            options.append({"value": f"k{v.id}", "name": v.name, "report": v.report_title,
-                            "note": "saved by someone else" if v.saved_view_id else "its saved view was deleted"})
+            options.append(
+                {
+                    "value": f"k{v.id}",
+                    "name": v.name,
+                    "report": v.report_title,
+                    "note": "saved by someone else" if v.saved_view_id else "its saved view was deleted",
+                }
+            )
     return sorted(options, key=lambda o: (o["report"].lower(), o["name"].lower()))
 
 
@@ -281,17 +324,30 @@ def _render_form(tenant, values: dict, chosen: set[int], errors=()):
     sends_views = not across or delivery.VIEWS_KEY in values["reports"]
     mine = _my_views(across)
     view_values = {_view_value(v, mine): v.format for v in values.get("views", [])}
-    zones = list(dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] +
-                               ([values["timezone"]] if values["timezone"] else [])))
+    zones = list(
+        dict.fromkeys([cfg.timezone, *delivery.COMMON_TIMEZONES] + ([values["timezone"]] if values["timezone"] else []))
+    )
     return render_template(
-        "schedule_form.html", tenant=tenant, s=values, chosen=chosen, catalog=delivery.catalog(g.db),
+        "schedule_form.html",
+        tenant=tenant,
+        s=values,
+        chosen=chosen,
+        catalog=delivery.catalog(g.db),
         report_groups=report_groups(),
-        contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [], team=delivery.team_contacts(g.db),
-        frequencies=delivery.FREQUENCIES, days=delivery.DAYS, zones=zones, default_tz=cfg.timezone,
-        ordinal=delivery.ordinal, pdf_available=delivery.export.pdf_available(),
-        recipients_limit=mailer.MAX_RECIPIENTS, groups=tenant_groups.all_groups(g.db) if not tenant else [],
+        contacts=delivery.tenant_contacts(g.db, tenant["id"]) if tenant else [],
+        team=delivery.team_contacts(g.db),
+        frequencies=delivery.FREQUENCIES,
+        days=delivery.DAYS,
+        zones=zones,
+        default_tz=cfg.timezone,
+        ordinal=delivery.ordinal,
+        pdf_available=delivery.export.pdf_available(),
+        recipients_limit=mailer.MAX_RECIPIENTS,
+        groups=tenant_groups.all_groups(g.db) if not tenant else [],
         view_options=_view_options(values.get("id"), across) if sends_views else [],
-        view_values=view_values, view_formats=delivery.VIEW_FORMATS)
+        view_values=view_values,
+        view_formats=delivery.VIEW_FORMATS,
+    )
 
 
 def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: bool = False):
@@ -329,37 +385,61 @@ def _save_schedule(tenant, existing=None, coming_up: bool = False, saved_views: 
         tz = values["timezone"] or _cfg().timezone
         timing = ("frequency", "day_of_week", "day_of_month", "hour", "timezone")
         now = datetime.now(UTC)
-        fresh_period = delivery.initial_period(values["frequency"], values["day_of_week"], values["day_of_month"],
-                                               values["hour"], tz, now)
+        fresh_period = delivery.initial_period(
+            values["frequency"], values["day_of_week"], values["day_of_month"], values["hour"], tz, now
+        )
         cols = ("reports", "include_xlsx", "message", "enabled", "group_id", *timing)
-        params = [json.dumps(values["reports"]), values["include_xlsx"], values["message"], values["enabled"],
-                  values["group_id"], *(values[k] for k in timing)]
+        params = [
+            json.dumps(values["reports"]),
+            values["include_xlsx"],
+            values["message"],
+            values["enabled"],
+            values["group_id"],
+            *(values[k] for k in timing),
+        ]
         if existing is None:
             schedule_id = g.db.execute(
                 f"INSERT INTO email_schedules (kind, tenant_id, {', '.join(cols)}, last_period, created_by,"
                 f" created_at) VALUES (?, ?, {', '.join('?' * len(cols))}, ?, ?, ?)",
-                (kind, tenant_id, *params, fresh_period, g.user["username"], utcnow())).lastrowid
+                (kind, tenant_id, *params, fresh_period, g.user["username"], utcnow()),
+            ).lastrowid
             action = "email_schedule_created"
         else:
             schedule_id = existing["id"]
-            g.db.execute(f"UPDATE email_schedules SET {', '.join(c + ' = ?' for c in cols)} WHERE id = ?",
-                         (*params, schedule_id))
+            g.db.execute(
+                f"UPDATE email_schedules SET {', '.join(c + ' = ?' for c in cols)} WHERE id = ?", (*params, schedule_id)
+            )
             if any(existing[k] != values[k] for k in timing):
-                g.db.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                             (fresh_period, schedule_id))
+                g.db.execute(
+                    "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
+                    (fresh_period, schedule_id),
+                )
             action = "email_schedule_updated"
         delivery.set_recipients(g.db, "schedule", schedule_id, ids)
         if sends_views:
             delivery.set_schedule_views(g.db, schedule_id, values["views"])
         what = "coming up" if delivery.upcoming.KEY in values["reports"] else "saved views" if views_email else kind
-        views_note = f" with {plural(len(values['views']), 'saved view')}" if values["views"] and not views_email \
-            else ""
-        audit(g.db, g.user["username"], action, tenant_id,
-              f"{what} {values['frequency']}{views_note} to {plural(len(ids), 'recipient')}")
+        views_note = (
+            f" with {plural(len(values['views']), 'saved view')}" if values["views"] and not views_email else ""
+        )
+        audit(
+            g.db,
+            g.user["username"],
+            action,
+            tenant_id,
+            f"{what} {values['frequency']}{views_note} to {plural(len(ids), 'recipient')}",
+        )
     s = g.db.execute("SELECT * FROM email_schedules WHERE id = ?", (schedule_id,)).fetchone()
     nxt = delivery.next_send(s, _cfg().timezone)
-    flash("Saved. " + (f"Next email: {datefmt(nxt, '%a %-d %b, %H:%M')} ({nxt.tzname()})." if nxt
-                       else "It's paused, so nothing will be sent."), "success")
+    flash(
+        "Saved. "
+        + (
+            f"Next email: {datefmt(nxt, '%a %-d %b, %H:%M')} ({nxt.tzname()})."
+            if nxt
+            else "It's paused, so nothing will be sent."
+        ),
+        "success",
+    )
     return _back(tenant_id)
 
 
@@ -375,8 +455,9 @@ def new_schedule(tenant_id: int):
     picked = _my_views(False).get(request.args.get("view", type=int) or 0)
     if picked:
         values["reports"] = []
-        values["views"] = [delivery.ScheduledView(picked["report_key"], picked["name"], picked["query"], "pdf",
-                                                  picked["id"])]
+        values["views"] = [
+            delivery.ScheduledView(picked["report_key"], picked["name"], picked["query"], "pdf", picked["id"])
+        ]
     return _render_form(t, values, team_default)
 
 
@@ -410,8 +491,9 @@ def new_views():
     values = _blank("digest", [delivery.VIEWS_KEY])
     picked = _my_views(True).get(request.args.get("view", type=int) or 0)
     if picked:
-        values["views"] = [delivery.ScheduledView(picked["report_key"], picked["name"], picked["query"], "csv",
-                                                  picked["id"])]
+        values["views"] = [
+            delivery.ScheduledView(picked["report_key"], picked["name"], picked["query"], "csv", picked["id"])
+        ]
     return _render_form(None, values, {c["id"] for c in delivery.team_contacts(g.db)})
 
 
@@ -447,13 +529,21 @@ def toggle_schedule(schedule_id: int):
     g.db.execute("UPDATE email_schedules SET enabled = ? WHERE id = ?", (enabled, s["id"]))
     if enabled:  # resuming never sends a period that was missed while paused
         tz = delivery.schedule_tz(s, _cfg().timezone)
-        period = delivery.initial_period(s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], tz,
-                                         datetime.now(UTC))
+        period = delivery.initial_period(
+            s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], tz, datetime.now(UTC)
+        )
         if period:
-            g.db.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
-                         (period, s["id"]))
-    audit(g.db, g.user["username"], "email_schedule_resumed" if enabled else "email_schedule_paused",
-          s["tenant_id"], s["kind"])
+            g.db.execute(
+                "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
+                (period, s["id"]),
+            )
+    audit(
+        g.db,
+        g.user["username"],
+        "email_schedule_resumed" if enabled else "email_schedule_paused",
+        s["tenant_id"],
+        s["kind"],
+    )
     flash("Resumed." if enabled else "Paused. Nothing will be sent until you resume it.", "success")
     return _back(s["tenant_id"])
 
@@ -464,8 +554,9 @@ def send_now(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     if s["on_approval"]:
         flash("This report goes out when its month-end review is approved.", "error")
-        return redirect(url_for("reporting.review", period=month_end.current_period(_cfg().timezone),
-                                tenant_id=s["tenant_id"]))
+        return redirect(
+            url_for("reporting.review", period=month_end.current_period(_cfg().timezone), tenant_id=s["tenant_id"])
+        )
     if not delivery.recipients(g.db, "schedule", s["id"]):
         flash("Add someone to send it to first.", "error")
         return _back(s["tenant_id"])
@@ -495,9 +586,15 @@ def preview_schedule(schedule_id: int):
     s = _schedule_or_404(schedule_id)
     built = _build_preview(s)
     tenant = tenant_or_404(s["tenant_id"]) if s["tenant_id"] else None
-    return render_template("email_preview.html", tenant=tenant, s=_decorate(s), email=built.email,
-                           attachments=built.attachment_names, sender=mailer.sender_label(_settings()),
-                           body_url=url_for("email.preview_schedule_body", schedule_id=s["id"]))
+    return render_template(
+        "email_preview.html",
+        tenant=tenant,
+        s=_decorate(s),
+        email=built.email,
+        attachments=built.attachment_names,
+        sender=mailer.sender_label(_settings()),
+        body_url=url_for("email.preview_schedule_body", schedule_id=s["id"]),
+    )
 
 
 def _email_body(html: str):
@@ -517,19 +614,39 @@ def _alert_example(a):
     An alert for every tenant uses the tenant with the most recent such finding."""
     levels = delivery.ALERT_LEVELS[a["min_severity"]]
     marks = ",".join("?" * len(levels))
-    tenant_id = a["tenant_id"] or (g.db.execute(
-        f"SELECT tenant_id FROM findings WHERE resolved_at IS NULL AND severity IN ({marks})"
-        " ORDER BY first_seen DESC LIMIT 1", levels).fetchone() or [None])[0]
+    tenant_id = (
+        a["tenant_id"]
+        or (
+            g.db.execute(
+                f"SELECT tenant_id FROM findings WHERE resolved_at IS NULL AND severity IN ({marks})"
+                " ORDER BY first_seen DESC LIMIT 1",
+                levels,
+            ).fetchone()
+            or [None]
+        )[0]
+    )
     if tenant_id is None:
         return None
-    ids = [r[0] for r in g.db.execute(
-        f"SELECT id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND severity IN ({marks})"
-        " ORDER BY first_seen DESC LIMIT 20", (tenant_id, *levels))]
+    ids = [
+        r[0]
+        for r in g.db.execute(
+            f"SELECT id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND severity IN ({marks})"
+            " ORDER BY first_seen DESC LIMIT 20",
+            (tenant_id, *levels),
+        )
+    ]
     items = alerts.opened_items(g.db, tenant_id, ids, a["min_severity"])[:5]
     if not items:
         return None
-    return delivery.build_alert_email(current_app, g.db, a, store.get_tenant(g.db, tenant_id), items,
-                                      delivery.recipients(g.db, "alert", a["id"]), preview=True)
+    return delivery.build_alert_email(
+        current_app,
+        g.db,
+        a,
+        store.get_tenant(g.db, tenant_id),
+        items,
+        delivery.recipients(g.db, "alert", a["id"]),
+        preview=True,
+    )
 
 
 @bp.get("/alerts/<int:alert_id>/preview")
@@ -539,10 +656,16 @@ def preview_alert(alert_id: int):
     a = _alert_or_404(alert_id)
     built = _alert_example(a)
     tenant = tenant_or_404(a["tenant_id"]) if a["tenant_id"] else None
-    return render_template("email_preview.html", tenant=tenant, s=None, alert=_decorate_alert(a),
-                           email=built.email if built else None, attachments=[],
-                           sender=mailer.sender_label(_settings()),
-                           body_url=url_for("email.preview_alert_body", alert_id=a["id"]))
+    return render_template(
+        "email_preview.html",
+        tenant=tenant,
+        s=None,
+        alert=_decorate_alert(a),
+        email=built.email if built else None,
+        attachments=[],
+        sender=mailer.sender_label(_settings()),
+        body_url=url_for("email.preview_alert_body", alert_id=a["id"]),
+    )
 
 
 @bp.get("/alerts/<int:alert_id>/preview/body")
@@ -618,18 +741,21 @@ def _save_alert(tenant_id: int | None):
             flash(e, "error")
         if errors:
             return _back(tenant_id)
-        existing = g.db.execute("SELECT * FROM email_alerts WHERE IFNULL(tenant_id, 0) = ?",
-                                (tenant_id or 0,)).fetchone()
+        existing = g.db.execute(
+            "SELECT * FROM email_alerts WHERE IFNULL(tenant_id, 0) = ?", (tenant_id or 0,)
+        ).fetchone()
         if existing:
             alert_id = existing["id"]
             g.db.execute("UPDATE email_alerts SET min_severity = ?, enabled = 1 WHERE id = ?", (severity, alert_id))
         else:
             alert_id = g.db.execute(
-                "INSERT INTO email_alerts (tenant_id, min_severity, created_by, created_at)"
-                " VALUES (?, ?, ?, ?)", (tenant_id, severity, g.user["username"], utcnow())).lastrowid
+                "INSERT INTO email_alerts (tenant_id, min_severity, created_by, created_at) VALUES (?, ?, ?, ?)",
+                (tenant_id, severity, g.user["username"], utcnow()),
+            ).lastrowid
         delivery.set_recipients(g.db, "alert", alert_id, ids)
-        audit(g.db, g.user["username"], "email_alert_saved", tenant_id,
-              f"{severity} to {plural(len(ids), 'recipient')}")
+        audit(
+            g.db, g.user["username"], "email_alert_saved", tenant_id, f"{severity} to {plural(len(ids), 'recipient')}"
+        )
     flash("Alerts are on. You'll get an email when a scan finds something new.", "success")
     return _back(tenant_id)
 
@@ -687,33 +813,59 @@ def overview():
     marks = ",".join("?" * len(ids)) or "NULL"
     rows = g.db.execute(f"SELECT * FROM email_schedules WHERE tenant_id IN ({marks}) ORDER BY id", ids).fetchall()
     schedules = [_decorate(s) for s in rows]
-    schedules.sort(key=lambda s: (s["next"] is None, s["next"] or datetime.max.replace(tzinfo=UTC),
-                                  tenants[s["tenant_id"]]["name"].lower()))
-    digests = [_decorate(s) for s in g.db.execute(
-        "SELECT * FROM email_schedules WHERE kind = 'digest' ORDER BY id")] if admin else []
+    schedules.sort(
+        key=lambda s: (
+            s["next"] is None,
+            s["next"] or datetime.max.replace(tzinfo=UTC),
+            tenants[s["tenant_id"]]["name"].lower(),
+        )
+    )
+    digests = (
+        [_decorate(s) for s in g.db.execute("SELECT * FROM email_schedules WHERE kind = 'digest' ORDER BY id")]
+        if admin
+        else []
+    )
     coming_up = [s for s in digests if s["upcoming"]]
     view_emails = [s for s in digests if s["views"]]
     scope = f"tenant_id IN ({marks})" + (" OR tenant_id IS NULL" if admin else "")
-    deliveries = g.db.execute(f"SELECT * FROM email_deliveries WHERE {scope} ORDER BY id DESC LIMIT 30",
-                              ids).fetchall()
+    deliveries = g.db.execute(f"SELECT * FROM email_deliveries WHERE {scope} ORDER BY id DESC LIMIT 30", ids).fetchall()
     since = _days_ago(30)
-    stats = g.db.execute(f"SELECT SUM(status = 'sent') AS sent, SUM(status = 'failed') AS failed"
-                         f" FROM email_deliveries WHERE ({scope}) AND created_at >= ?", (*ids, since)).fetchone()
+    stats = g.db.execute(
+        f"SELECT SUM(status = 'sent') AS sent, SUM(status = 'failed') AS failed"
+        f" FROM email_deliveries WHERE ({scope}) AND created_at >= ?",
+        (*ids, since),
+    ).fetchone()
     every = schedules + digests
     failing = [s for s in every if s["last_status"] == "failed"]
     upcoming = sorted((s for s in every if s["next"] and s["recipients"]), key=lambda s: s["next"])
-    global_alert = _decorate_alert(g.db.execute("SELECT * FROM email_alerts WHERE tenant_id IS NULL").fetchone()) \
-        if admin else None
-    tenant_alerts = g.db.execute(f"SELECT COUNT(*) FROM email_alerts WHERE enabled = 1 AND tenant_id IN ({marks})",
-                                 ids).fetchone()[0]
+    global_alert = (
+        _decorate_alert(g.db.execute("SELECT * FROM email_alerts WHERE tenant_id IS NULL").fetchone())
+        if admin
+        else None
+    )
+    tenant_alerts = g.db.execute(
+        f"SELECT COUNT(*) FROM email_alerts WHERE enabled = 1 AND tenant_id IN ({marks})", ids
+    ).fetchone()[0]
     return render_template(
-        "emails.html", schedules=schedules, digests=[s for s in digests if not s["upcoming"] and not s["views"]],
-        coming_up=coming_up, view_emails=view_emails,
-        deliveries=deliveries, tenants=tenants,
-        failing=failing, last=_last_errors([s["id"] for s in failing]), upcoming=upcoming[0] if upcoming else None,
-        sent=stats["sent"] or 0, failed=stats["failed"] or 0, team=delivery.team_contacts(g.db),
-        global_alert=global_alert, tenant_alerts=tenant_alerts, admin=admin,
-        mail_ready=mailer.is_configured(_settings()), coverage=month_end.coverage(g.db, tenants.values()))
+        "emails.html",
+        schedules=schedules,
+        digests=[s for s in digests if not s["upcoming"] and not s["views"]],
+        coming_up=coming_up,
+        view_emails=view_emails,
+        deliveries=deliveries,
+        tenants=tenants,
+        failing=failing,
+        last=_last_errors([s["id"] for s in failing]),
+        upcoming=upcoming[0] if upcoming else None,
+        sent=stats["sent"] or 0,
+        failed=stats["failed"] or 0,
+        team=delivery.team_contacts(g.db),
+        global_alert=global_alert,
+        tenant_alerts=tenant_alerts,
+        admin=admin,
+        mail_ready=mailer.is_configured(_settings()),
+        coverage=month_end.coverage(g.db, tenants.values()),
+    )
 
 
 # -- Settings ---------------------------------------------------------------------------------
@@ -721,8 +873,10 @@ def overview():
 
 def _store(values: dict) -> None:
     for key, value in values.items():
-        g.db.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                     " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+        g.db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
 
 
 @bp.route("/admin/email", methods=["GET", "POST"])
@@ -738,10 +892,16 @@ def settings():
                 return redirect(url_for("email.settings"))
             transport = mailer.TRANSPORTS[mailer.transport(current)]
             look, inline = delivery.email_brand(g.db)
-            html = delivery.render(current_app, "emails/test.html", subject="Office Sentry test email",
-                                   transport=transport, **look)
-            email = Email(to=to, subject="Office Sentry test email", html=html, inline=inline,
-                          text=f"Email from Office Sentry is working. Sent through {transport}.")
+            html = delivery.render(
+                current_app, "emails/test.html", subject="Office Sentry test email", transport=transport, **look
+            )
+            email = Email(
+                to=to,
+                subject="Office Sentry test email",
+                html=html,
+                inline=inline,
+                text=f"Email from Office Sentry is working. Sent through {transport}.",
+            )
             try:
                 used = mailer.send(g.db, vault, email)
                 error = None
@@ -749,8 +909,16 @@ def settings():
             except MailError as exc:
                 used, error = None, str(exc)
                 flash(f"Test failed: {exc}", "error")
-            delivery.record(g.db, kind="test", email=email, subject=email.subject, error=error, transport=used,
-                             trigger="manual", user=g.user["username"])
+            delivery.record(
+                g.db,
+                kind="test",
+                email=email,
+                subject=email.subject,
+                error=error,
+                transport=used,
+                trigger="manual",
+                user=g.user["username"],
+            )
             return redirect(url_for("email.settings"))
 
         if request.form.get("action") == "mail_certificate":
@@ -770,17 +938,28 @@ def settings():
             if not host or not mailer.valid_email(sender.split("<")[-1].rstrip(">").strip()):
                 flash("Enter the SMTP server and a valid From address.", "error")
                 return redirect(url_for("email.settings"))
-            values |= {"smtp_host": host, "smtp_port": str(port), "smtp_security": security,
-                       "smtp_user": request.form.get("smtp_user", "").strip(), "smtp_from": sender}
+            values |= {
+                "smtp_host": host,
+                "smtp_port": str(port),
+                "smtp_security": security,
+                "smtp_user": request.form.get("smtp_user", "").strip(),
+                "smtp_from": sender,
+            }
             if security == "none" and values["smtp_user"] and not mailer.is_loopback(host):
-                flash("With no encryption the password would be sent unencrypted, so Office Sentry won't sign in "
-                      "that way. Choose STARTTLS or SSL/TLS, or leave the username empty for an internal relay "
-                      "that doesn't need a sign-in.", "error")
+                flash(
+                    "With no encryption the password would be sent unencrypted, so Office Sentry won't sign in "
+                    "that way. Choose STARTTLS or SSL/TLS, or leave the username empty for an internal relay "
+                    "that doesn't need a sign-in.",
+                    "error",
+                )
                 return redirect(url_for("email.settings"))
             password = request.form.get("smtp_password", "")
             # The stored password only goes to the server, port and security it was entered for.
             same_server = (current.get("smtp_host"), current.get("smtp_port"), current.get("smtp_security")) == (
-                host, str(port), security)
+                host,
+                str(port),
+                security,
+            )
             if password:
                 values["smtp_password_enc"] = vault.encrypt(password)
             elif current.get("smtp_password_enc") and not same_server:
@@ -793,17 +972,26 @@ def settings():
             secret = request.form.get("graph_secret", "")
             tenant_ok = mailer.GUID_RE.match(tenant) or mailer.valid_email(f"x@{tenant}")
             if not tenant_ok or not mailer.GUID_RE.match(client_id) or not mailer.valid_email(sender):
-                flash("Enter your tenant ID (or domain), the mail app's client ID and the mailbox to send from.",
-                      "error")
+                flash(
+                    "Enter your tenant ID (or domain), the mail app's client ID and the mailbox to send from.", "error"
+                )
                 return redirect(url_for("email.settings"))
             auth = request.form.get("graph_auth") or mailer.graph_auth(current)
             cloud = request.form.get("graph_cloud", clouds.DEFAULT)
             if auth not in mailer.GRAPH_AUTH or not clouds.valid(cloud):
                 abort(400)
-            same_app = (current.get("graph_tenant"), current.get("graph_client_id"), mailer.graph_cloud(current).key
-                        ) == (tenant, client_id, cloud)
-            values |= {"graph_tenant": tenant, "graph_client_id": client_id, "graph_sender": sender,
-                       "graph_auth": auth, "graph_cloud": cloud}
+            same_app = (
+                current.get("graph_tenant"),
+                current.get("graph_client_id"),
+                mailer.graph_cloud(current).key,
+            ) == (tenant, client_id, cloud)
+            values |= {
+                "graph_tenant": tenant,
+                "graph_client_id": client_id,
+                "graph_sender": sender,
+                "graph_auth": auth,
+                "graph_cloud": cloud,
+            }
             if auth == "secret":
                 # A secret only ever goes to the app it was entered for.
                 if secret:
@@ -813,23 +1001,36 @@ def settings():
                 if not (secret or values.get("graph_secret_enc", current.get("graph_secret_enc"))):
                     flash("Saved, but add the client secret before email can be sent.", "warning")
                 if current.get("graph_key_enc"):  # nor a certificate key
-                    values |= {"graph_cert_pem": "", "graph_key_enc": "", "graph_thumbprint": "",
-                               "graph_cert_not_after": "", "graph_cert_warned": ""}
-                    flash("The mail app's certificate was deleted from Office Sentry. Delete it from the mail app in "
-                          "Entra too (Certificates & secrets → Certificates).", "warning")
+                    values |= {
+                        "graph_cert_pem": "",
+                        "graph_key_enc": "",
+                        "graph_thumbprint": "",
+                        "graph_cert_not_after": "",
+                        "graph_cert_warned": "",
+                    }
+                    flash(
+                        "The mail app's certificate was deleted from Office Sentry. Delete it from the mail app in "
+                        "Entra too (Certificates & secrets → Certificates).",
+                        "warning",
+                    )
             else:
                 if current.get("graph_secret_enc"):  # a secret nothing uses shouldn't be kept
                     values["graph_secret_enc"] = ""
-                    flash("The client secret was deleted from Office Sentry. Delete it from the mail app in Entra "
-                          "too (Certificates & secrets → Client secrets).", "warning")
+                    flash(
+                        "The client secret was deleted from Office Sentry. Delete it from the mail app in Entra "
+                        "too (Certificates & secrets → Client secrets).",
+                        "warning",
+                    )
                 if not current.get("graph_key_enc"):
                     flash("Saved. Next: make the mail app's certificate and upload it to the app.", "warning")
             # Limiting the app to one mailbox was confirmed for that app and that mailbox only.
             ticked, was_scoped = request.form.get("graph_scoped") == "1", mailer.scoped(current)
             if was_scoped and not (same_app and current.get("graph_sender") == sender):
                 values |= {"graph_scoped_at": "", "graph_scoped_by": ""}
-                flash("The mail app or mailbox changed, so limit the app to the new mailbox and tick that step "
-                      "again.", "warning")
+                flash(
+                    "The mail app or mailbox changed, so limit the app to the new mailbox and tick that step again.",
+                    "warning",
+                )
             elif ticked and not was_scoped:
                 values |= {"graph_scoped_at": utcnow(), "graph_scoped_by": g.user["username"]}
             elif not ticked:
@@ -841,12 +1042,19 @@ def settings():
         return redirect(url_for("email.settings"))
     from ..cert_lifecycle import mail_expiry
 
-    return render_template("email_settings.html", s=current, transport=mailer.transport(current),
-                           ready=mailer.is_configured(current), has_password=bool(current.get("smtp_password_enc")),
-                           has_secret=bool(current.get("graph_secret_enc")), base_url=_cfg().base_url,
-                           auth=mailer.graph_auth(current) if current.get("graph_client_id") else "certificate",
-                           cloud=mailer.graph_cloud(current), scoped=mailer.scoped(current),
-                           certificate=mail_expiry(current | {"mail_transport": "graph", "graph_auth": "certificate"}))
+    return render_template(
+        "email_settings.html",
+        s=current,
+        transport=mailer.transport(current),
+        ready=mailer.is_configured(current),
+        has_password=bool(current.get("smtp_password_enc")),
+        has_secret=bool(current.get("graph_secret_enc")),
+        base_url=_cfg().base_url,
+        auth=mailer.graph_auth(current) if current.get("graph_client_id") else "certificate",
+        cloud=mailer.graph_cloud(current),
+        scoped=mailer.scoped(current),
+        certificate=mail_expiry(current | {"mail_transport": "graph", "graph_auth": "certificate"}),
+    )
 
 
 def _make_mail_certificate(vault, current: dict):
@@ -854,14 +1062,31 @@ def _make_mail_certificate(vault, current: dict):
     cert = generate_certificate("Office Sentry mail")
     replacing = bool(current.get("graph_thumbprint"))
     with transaction(g.db):
-        _store({"graph_cert_pem": cert.cert_pem, "graph_key_enc": vault.encrypt(cert.key_pem),
-                "graph_thumbprint": cert.thumbprint, "graph_cert_not_after": cert.not_after.strftime(ISO),
-                "graph_cert_warned": ""})
-        audit(g.db, g.user["username"], "mail_certificate_created",
-              detail=f"{cert.thumbprint}" + (f" replacing {current['graph_thumbprint']}" if replacing else ""))
-    flash("Certificate made. Download the .cer and upload it to the mail app (Certificates & secrets → "
-          "Certificates), then send a test." + (" Email fails until the new one is uploaded; delete the old one "
-                                               "from the app afterwards." if replacing else ""), "success")
+        _store(
+            {
+                "graph_cert_pem": cert.cert_pem,
+                "graph_key_enc": vault.encrypt(cert.key_pem),
+                "graph_thumbprint": cert.thumbprint,
+                "graph_cert_not_after": cert.not_after.strftime(ISO),
+                "graph_cert_warned": "",
+            }
+        )
+        audit(
+            g.db,
+            g.user["username"],
+            "mail_certificate_created",
+            detail=f"{cert.thumbprint}" + (f" replacing {current['graph_thumbprint']}" if replacing else ""),
+        )
+    flash(
+        "Certificate made. Download the .cer and upload it to the mail app (Certificates & secrets → "
+        "Certificates), then send a test."
+        + (
+            " Email fails until the new one is uploaded; delete the old one from the app afterwards."
+            if replacing
+            else ""
+        ),
+        "success",
+    )
     return redirect(url_for("email.settings") + "#mail-certificate")
 
 
@@ -872,5 +1097,8 @@ def mail_certificate():
     pem = _settings().get("graph_cert_pem")
     if not pem:
         abort(404)
-    return Response(cert_der(pem), mimetype="application/pkix-cert",
-                    headers={"Content-Disposition": "attachment; filename=office-sentry-mail.cer"})
+    return Response(
+        cert_der(pem),
+        mimetype="application/pkix-cert",
+        headers={"Content-Disposition": "attachment; filename=office-sentry-mail.cer"},
+    )

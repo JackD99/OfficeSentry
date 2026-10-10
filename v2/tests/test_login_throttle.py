@@ -11,8 +11,7 @@ HOME = "203.0.113.20"
 
 
 def _from(client, ip, username, password=PASSWORD):
-    return client.post("/login", data={"username": username, "password": password},
-                       environ_base={"REMOTE_ADDR": ip})
+    return client.post("/login", data={"username": username, "password": password}, environ_base={"REMOTE_ADDR": ip})
 
 
 def test_wrong_passwords_from_one_place_dont_lock_the_person_out(app, db):
@@ -27,8 +26,10 @@ def test_wrong_passwords_from_one_place_dont_lock_the_person_out(app, db):
     # ...but the admin, from their own address, signs straight in.
     assert _from(app.test_client(), HOME, "admin").status_code == 302
     # Only the first few were checked at all.
-    assert db.execute("SELECT COUNT(*) FROM login_attempts WHERE ip = ?", (ATTACKER,)).fetchone()[0] \
+    assert (
+        db.execute("SELECT COUNT(*) FROM login_attempts WHERE ip = ?", (ATTACKER,)).fetchone()[0]
         == throttle.PER_ADDRESS_AND_NAME
+    )
 
 
 def test_one_address_is_limited_across_names(app, db):
@@ -67,14 +68,14 @@ def test_forwarded_for_only_counts_behind_a_trusted_proxy(cfg, db):
     make_user(db, "admin")
     direct = create_app(cfg).test_client()
     for i in range(throttle.PER_ADDRESS_AND_NAME):
-        direct.post("/login", data={"username": "admin", "password": "wrong"},
-                    headers={"X-Forwarded-For": f"198.51.100.{i}"})
+        direct.post(
+            "/login", data={"username": "admin", "password": "wrong"}, headers={"X-Forwarded-For": f"198.51.100.{i}"}
+        )
     # Sent straight to the portal, the header is ignored: those five came from one address.
     assert login(direct, "admin").status_code == 429
     cfg.trusted_proxies = 1
     proxied = create_app(cfg).test_client()
-    resp = proxied.post("/login", data={"username": "admin", "password": PASSWORD},
-                        headers={"X-Forwarded-For": HOME})
+    resp = proxied.post("/login", data={"username": "admin", "password": PASSWORD}, headers={"X-Forwarded-For": HOME})
     assert resp.status_code == 302
 
 
@@ -96,7 +97,9 @@ def test_old_attempts_are_pruned(db):
     now = datetime.now(UTC)
     old = (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
     ancient = (now - timedelta(days=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db.executemany("INSERT INTO login_attempts (ts, ip, username, outcome) VALUES (?, ?, ?, ?)",
-                   [(old, ATTACKER, "x", "failed"), (old, HOME, "admin", "ok"), (ancient, HOME, "admin", "ok")])
+    db.executemany(
+        "INSERT INTO login_attempts (ts, ip, username, outcome) VALUES (?, ?, ?, ?)",
+        [(old, ATTACKER, "x", "failed"), (old, HOME, "admin", "ok"), (ancient, HOME, "admin", "ok")],
+    )
     assert throttle.prune(db) == 2
     assert db.execute("SELECT outcome, ts FROM login_attempts").fetchall()[0]["ts"] == old

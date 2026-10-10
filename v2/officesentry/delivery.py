@@ -73,12 +73,37 @@ VIEWS_KEY = "views"  # a digest schedule whose reports is ["views"]: saved views
 # Offered in the schedule form; the server's own timezone and the schedule's
 # current one are always added.
 COMMON_TIMEZONES = (
-    "UTC", "Europe/London", "Europe/Dublin", "Europe/Amsterdam", "Europe/Berlin", "Europe/Paris",
-    "Europe/Madrid", "Europe/Stockholm", "Europe/Helsinki", "Africa/Johannesburg", "Asia/Dubai",
-    "Asia/Kolkata", "Asia/Singapore", "Asia/Hong_Kong", "Asia/Tokyo", "Australia/Perth",
-    "Australia/Brisbane", "Australia/Adelaide", "Australia/Sydney", "Australia/Melbourne", "Pacific/Auckland",
-    "America/St_Johns", "America/Halifax", "America/New_York", "America/Toronto", "America/Chicago",
-    "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Vancouver", "America/Anchorage",
+    "UTC",
+    "Europe/London",
+    "Europe/Dublin",
+    "Europe/Amsterdam",
+    "Europe/Berlin",
+    "Europe/Paris",
+    "Europe/Madrid",
+    "Europe/Stockholm",
+    "Europe/Helsinki",
+    "Africa/Johannesburg",
+    "Asia/Dubai",
+    "Asia/Kolkata",
+    "Asia/Singapore",
+    "Asia/Hong_Kong",
+    "Asia/Tokyo",
+    "Australia/Perth",
+    "Australia/Brisbane",
+    "Australia/Adelaide",
+    "Australia/Sydney",
+    "Australia/Melbourne",
+    "Pacific/Auckland",
+    "America/St_Johns",
+    "America/Halifax",
+    "America/New_York",
+    "America/Toronto",
+    "America/Chicago",
+    "America/Denver",
+    "America/Phoenix",
+    "America/Los_Angeles",
+    "America/Vancouver",
+    "America/Anchorage",
     "Pacific/Honolulu",
 )
 
@@ -99,16 +124,32 @@ def catalog(conn=None) -> list[ReportOption]:
     """Every report a schedule can include. Detail reports registered later appear automatically, and with
     ``conn`` the MSP's report designs (``design:<id>``, PDF only) too."""
     options = [
-        ReportOption("review", monthly_review.TITLE,
-                     "Key figures, what needs attention, what changed and licence waste.", True, True),
-        ReportOption("evidence", "Insurance evidence pack",
-                     "The controls cyber-insurance questionnaires ask about, answered from the data.", True, True),
+        ReportOption(
+            "review",
+            monthly_review.TITLE,
+            "Key figures, what needs attention, what changed and licence waste.",
+            True,
+            True,
+        ),
+        ReportOption(
+            "evidence",
+            "Insurance evidence pack",
+            "The controls cyber-insurance questionnaires ask about, answered from the data.",
+            True,
+            True,
+        ),
     ]
     if conn is not None:
         for row in designs.list_designs(conn):
-            options.append(ReportOption(designs.key_of(row["id"]), row["name"],
-                                        row["description"] or "A report design: blocks you chose, as a PDF.",
-                                        True, False))
+            options.append(
+                ReportOption(
+                    designs.key_of(row["id"]),
+                    row["name"],
+                    row["description"] or "A report design: blocks you chose, as a PDF.",
+                    True,
+                    False,
+                )
+            )
     for key, (title, description, _collectors, _builder) in data_reports.REPORTS.items():
         options.append(ReportOption(f"data:{key}", title, description, False, True))
     return options
@@ -195,9 +236,12 @@ def can_schedule_view(key: str, across: bool = False) -> bool:
 def schedule_views(conn, schedule_id: int | None) -> list[ScheduledView]:
     if not schedule_id:
         return []
-    return [ScheduledView(r["report_key"], r["name"], r["query"], r["format"], r["saved_view_id"], r["id"])
-            for r in conn.execute("SELECT * FROM email_schedule_views WHERE schedule_id = ? ORDER BY position, id",
-                                  (schedule_id,))]
+    return [
+        ScheduledView(r["report_key"], r["name"], r["query"], r["format"], r["saved_view_id"], r["id"])
+        for r in conn.execute(
+            "SELECT * FROM email_schedule_views WHERE schedule_id = ? ORDER BY position, id", (schedule_id,)
+        )
+    ]
 
 
 def set_schedule_views(conn, schedule_id: int, chosen: list[ScheduledView]) -> None:
@@ -205,7 +249,8 @@ def set_schedule_views(conn, schedule_id: int, chosen: list[ScheduledView]) -> N
     conn.executemany(
         "INSERT INTO email_schedule_views (schedule_id, saved_view_id, report_key, name, query, format, position)"
         " VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [(schedule_id, v.saved_view_id, v.report_key, v.name, v.query, v.format, i) for i, v in enumerate(chosen)])
+        [(schedule_id, v.saved_view_id, v.report_key, v.name, v.query, v.format, i) for i, v in enumerate(chosen)],
+    )
 
 
 def view_format(fmt: str) -> str:
@@ -252,6 +297,7 @@ def view_files(app, conn, report, v: ScheduledView, stem: str, brand=None) -> li
     for table, filename in view_plan(v, stem):
         if filename.endswith(".pdf"):
             from .web.printing import cap_rows  # the web package imports this module
+
             files.append((filename, "application/pdf", _pdf(app, "reports/detail.html", report=cap_rows(report))))
         elif filename.endswith(".xlsx"):
             files.append((filename, XLSX, data_reports.to_xlsx(report, brand=brand or branding.load(conn))))
@@ -302,8 +348,9 @@ def period_key(frequency: str, d: date) -> str:
     return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
 
 
-def slot(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str,
-         now: datetime) -> tuple[str, datetime]:
+def slot(
+    frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str, now: datetime
+) -> tuple[str, datetime]:
     """The latest send time at or before ``now`` (UTC) and the period it belongs to.
 
     The schedule is due while its ``last_period`` isn't that period. Only the
@@ -319,8 +366,10 @@ def period_done(last: str | None, period: str) -> bool:
     sort in time order, so a period that was sent ahead of its slot (approved early) counts as done too."""
     if not last:
         return False
+
     def kind(key: str) -> str:  # "2026-10" monthly, "2026-W41" weekly, "2026-Q4" quarterly
         return "M" if key[5:6].isdigit() else key[5:6]
+
     return last == period or (kind(last) == kind(period) and last > period)
 
 
@@ -328,8 +377,7 @@ def schedule_slot(s, default_tz: str, now: datetime) -> tuple[str, datetime]:
     return slot(s["frequency"], s["day_of_week"], s["day_of_month"], s["hour"], schedule_tz(s, default_tz), now)
 
 
-def initial_period(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str,
-                   now: datetime) -> str:
+def initial_period(frequency: str, day_of_week: int, day_of_month: int, hour: int, tz: str, now: datetime) -> str:
     """A new or edited schedule counts its latest send time as done, so saving never sends straight away."""
     return slot(frequency, day_of_week, day_of_month, hour, tz, now)[0]
 
@@ -376,41 +424,49 @@ def period_label(frequency: str, local: datetime) -> str:
 
 
 def tenant_contacts(conn, tenant_id: int) -> list:
-    return conn.execute("SELECT * FROM contacts WHERE tenant_id = ? ORDER BY name COLLATE NOCASE, email",
-                        (tenant_id,)).fetchall()
+    return conn.execute(
+        "SELECT * FROM contacts WHERE tenant_id = ? ORDER BY name COLLATE NOCASE, email", (tenant_id,)
+    ).fetchall()
 
 
 def team_contacts(conn) -> list:
-    return conn.execute("SELECT * FROM contacts WHERE tenant_id IS NULL ORDER BY name COLLATE NOCASE, email"
-                        ).fetchall()
+    return conn.execute("SELECT * FROM contacts WHERE tenant_id IS NULL ORDER BY name COLLATE NOCASE, email").fetchall()
 
 
 def add_contact(conn, tenant_id: int | None, name: str, email: str) -> int:
     """Add a contact, or return the existing one with that address (filling in a missing name)."""
-    existing = conn.execute("SELECT * FROM contacts WHERE IFNULL(tenant_id, 0) = ? AND email = ?",
-                            (tenant_id or 0, email)).fetchone()
+    existing = conn.execute(
+        "SELECT * FROM contacts WHERE IFNULL(tenant_id, 0) = ? AND email = ?", (tenant_id or 0, email)
+    ).fetchone()
     if existing:
         if name and not existing["name"]:
             conn.execute("UPDATE contacts SET name = ? WHERE id = ?", (name, existing["id"]))
         return existing["id"]
-    return conn.execute("INSERT INTO contacts (tenant_id, name, email, created_at) VALUES (?, ?, ?, ?)",
-                        (tenant_id, name, email, utcnow())).lastrowid
+    return conn.execute(
+        "INSERT INTO contacts (tenant_id, name, email, created_at) VALUES (?, ?, ?, ?)",
+        (tenant_id, name, email, utcnow()),
+    ).lastrowid
 
 
 def recipients(conn, owner: str, owner_id: int) -> list:
-    table, col = ("email_schedule_recipients", "schedule_id") if owner == "schedule" else \
-        ("email_alert_recipients", "alert_id")
+    table, col = (
+        ("email_schedule_recipients", "schedule_id") if owner == "schedule" else ("email_alert_recipients", "alert_id")
+    )
     return conn.execute(
         f"SELECT c.* FROM contacts c JOIN {table} r ON r.contact_id = c.id WHERE r.{col} = ?"
-        " ORDER BY c.tenant_id IS NULL, c.name COLLATE NOCASE, c.email", (owner_id,)).fetchall()
+        " ORDER BY c.tenant_id IS NULL, c.name COLLATE NOCASE, c.email",
+        (owner_id,),
+    ).fetchall()
 
 
 def set_recipients(conn, owner: str, owner_id: int, contact_ids: list[int]) -> None:
-    table, col = ("email_schedule_recipients", "schedule_id") if owner == "schedule" else \
-        ("email_alert_recipients", "alert_id")
+    table, col = (
+        ("email_schedule_recipients", "schedule_id") if owner == "schedule" else ("email_alert_recipients", "alert_id")
+    )
     conn.execute(f"DELETE FROM {table} WHERE {col} = ?", (owner_id,))
-    conn.executemany(f"INSERT OR IGNORE INTO {table} ({col}, contact_id) VALUES (?, ?)",
-                     [(owner_id, cid) for cid in contact_ids])
+    conn.executemany(
+        f"INSERT OR IGNORE INTO {table} ({col}, contact_id) VALUES (?, ?)", [(owner_id, cid) for cid in contact_ids]
+    )
 
 
 def split_recipients(contacts) -> tuple[list[str], list[str]]:
@@ -449,8 +505,7 @@ def render(app, template: str, **context) -> str:
 
 def _pdf(app, template: str, **context) -> bytes:
     static = Path(app.static_folder)
-    html = render(app, template, pdf=True, css_href=(static / "report.css").as_uri(), pdf_available=True,
-                   **context)
+    html = render(app, template, pdf=True, css_href=(static / "report.css").as_uri(), pdf_available=True, **context)
     return export.to_pdf(html, static.as_uri() + "/")
 
 
@@ -463,8 +518,13 @@ def email_brand(conn) -> tuple[dict, list[tuple[str, str, bytes]]]:
     The logo is sent as an inline attachment (``cid:``): Outlook and Gmail don't show data: images.
     """
     brand = branding.load(conn)
-    ctx = {"msp_name": mailer.mail_settings(conn).get("msp_name") or brand.display_name,
-           "accent": brand.accent, "on_accent": brand.on_accent, "contact": brand.contact, "logo": None}
+    ctx = {
+        "msp_name": mailer.mail_settings(conn).get("msp_name") or brand.display_name,
+        "accent": brand.accent,
+        "on_accent": brand.on_accent,
+        "contact": brand.contact,
+        "logo": None,
+    }
     image = branding.logo_image(brand)
     size = branding.fit(branding.image_size(image[1]), 32, 200) if image else None
     if not size:
@@ -473,8 +533,9 @@ def email_brand(conn) -> tuple[dict, list[tuple[str, str, bytes]]]:
     return ctx, [(LOGO_CID, image[0], image[1])]
 
 
-def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None,
-                 review_context: dict | None = None, chosen_views=()) -> list[tuple[str, str, bytes]]:
+def _attachments(
+    app, conn, tenant, keys, include_xlsx, now, review=None, review_context: dict | None = None, chosen_views=()
+) -> list[tuple[str, str, bytes]]:
     """Build every file a bundle attaches. ``review_context`` is extra template context for the review PDF
     (the month-end commentary, recommendations and notes, see ``month_end.report_context``). Saved views
     (``chosen_views``) come after the reports."""
@@ -483,18 +544,24 @@ def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None,
     for key, filename in attachment_plan(tenant, keys, include_xlsx, conn):
         if key == "review":
             report = built.setdefault(key, review or monthly_review.build(conn, tenant, now))
-            data = _pdf(app, "reports/monthly_review.html", report=report, **(review_context or {})) \
-                if filename.endswith(".pdf") \
+            data = (
+                _pdf(app, "reports/monthly_review.html", report=report, **(review_context or {}))
+                if filename.endswith(".pdf")
                 else export.to_xlsx(report, brand=brand)
+            )
         elif key == "evidence":
             pack = built.setdefault(key, evidence.build(conn, tenant, now))
-            data = _pdf(app, "reports/evidence.html", pack=pack) if filename.endswith(".pdf") \
+            data = (
+                _pdf(app, "reports/evidence.html", pack=pack)
+                if filename.endswith(".pdf")
                 else evidence.to_xlsx(pack, brand=brand)
+            )
         elif (design_id := designs.id_of(key)) is not None:
             row = designs.get(conn, design_id)
             me = (review_context or {}).get("month_end") or {}
-            data = _pdf(app, "reports/design.html",
-                        **designs.context(conn, tenant, row, now, brand=brand, month_end=me))
+            data = _pdf(
+                app, "reports/design.html", **designs.context(conn, tenant, row, now, brand=brand, month_end=me)
+            )
         else:
             data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now), brand=brand)
         files.append((filename, "application/pdf" if filename.endswith(".pdf") else XLSX, data))
@@ -520,8 +587,9 @@ class Built:
     titles: list[str] = field(default_factory=list)  # what the attachments are, once each
 
 
-def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime | None = None,
-                       attach: bool = True) -> Built:
+def build_report_email(
+    app, conn, schedule, tenant, contacts, *, now: datetime | None = None, attach: bool = True
+) -> Built:
     now = now or datetime.now(UTC)
     keys = json.loads(schedule["reports"] or "[]")
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
@@ -530,19 +598,34 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     known = catalog_map(conn)
     plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]), conn)
     chosen = schedule_views(conn, schedule["id"])
-    files = [(known[k].title, name) for k, name in plan] + \
-        [(v.title, name) for v, name in view_attachments(tenant["name"], chosen)]
+    files = [(known[k].title, name) for k, name in plan] + [
+        (v.title, name) for v, name in view_attachments(tenant["name"], chosen)
+    ]
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
-    subject = fill_placeholders(_field(schedule, "subject", "") or "", tenant["name"], label).strip() \
+    subject = (
+        fill_placeholders(_field(schedule, "subject", "") or "", tenant["name"], label).strip()
         or f"{tenant['name']} security report · {label}"
+    )
     message = fill_placeholders(schedule["message"] or "", tenant["name"], label)
     look, inline = email_brand(conn)
     msp = look["msp_name"]
-    html = render(app, "emails/report.html", subject=subject, tenant=tenant, review=review, label=label,
-                   failing=failing[:6], more=max(0, len(failing) - 6), files=files, stale=stale,
-                   message=message, frequency=schedule["frequency"], **look,
-                   kpis=[k for k in review.kpis if k.value is not None])
+    html = render(
+        app,
+        "emails/report.html",
+        subject=subject,
+        tenant=tenant,
+        review=review,
+        label=label,
+        failing=failing[:6],
+        more=max(0, len(failing) - 6),
+        files=files,
+        stale=stale,
+        message=message,
+        frequency=schedule["frequency"],
+        **look,
+        kpis=[k for k in review.kpis if k.value is not None],
+    )
 
     lines = [f"{tenant['name']}: security report for {label}", ""]
     if message:
@@ -566,13 +649,27 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     attachments = []
     if attach:
         from . import month_end  # imports this module
+
         # The month's commentary, recommendations and client-visible notes go in the PDF too.
         context = month_end.report_context(conn, tenant["id"], f"{local.year}-{local.month:02d}", staff=False)
-        attachments = _attachments(app, conn, tenant, keys, bool(schedule["include_xlsx"]), now, review,
-                                   review_context=context, chosen_views=chosen)
-    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments, inline=inline), [name for _, name in files],
-                 list(dict.fromkeys(title for title, _ in files)))
+        attachments = _attachments(
+            app,
+            conn,
+            tenant,
+            keys,
+            bool(schedule["include_xlsx"]),
+            now,
+            review,
+            review_context=context,
+            chosen_views=chosen,
+        )
+    return Built(
+        Email(
+            to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html, attachments=attachments, inline=inline
+        ),
+        [name for _, name in files],
+        list(dict.fromkeys(title for title, _ in files)),
+    )
 
 
 def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None) -> dict:
@@ -584,30 +681,37 @@ def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None
     in_group = " AND id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else ""
     rows = []
     # Paused and archived tenants aren't being collected, so they stay out of the digest.
-    for t in conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
-                          f"{in_group} ORDER BY name COLLATE NOCASE", {"group": group_id}):
+    for t in conn.execute(
+        f"SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL{in_group} ORDER BY name COLLATE NOCASE",
+        {"group": group_id},
+    ):
         row = monthly_review.rollup_row(conn, t, now)
         counts = conn.execute(
             "SELECT"
             " SUM(resolved_at IS NULL AND severity IN ('critical', 'high')"
             "     AND (first_seen >= :since OR IFNULL(reopened_at, '') >= :since)) AS new_severe,"
             " SUM(resolved_at >= :since) AS fixed"
-            " FROM findings WHERE tenant_id = :tid", {"since": since, "tid": t["id"]}).fetchone()
+            " FROM findings WHERE tenant_id = :tid",
+            {"since": since, "tid": t["id"]},
+        ).fetchone()
         row["new_severe"] = counts["new_severe"] or 0
         row["fixed"] = counts["fixed"] or 0
         rows.append(row)
-    rows.sort(key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["new_severe"],
-                             r["tenant"]["name"].lower()))
+    rows.sort(
+        key=lambda r: (-r["counts"]["critical"], -r["counts"]["high"], -r["new_severe"], r["tenant"]["name"].lower())
+    )
     scores = [r["kpis"]["secure_score.pct"].value for r in rows if r["kpis"]["secure_score.pct"].value is not None]
     new_findings = conn.execute(
         "SELECT f.*, t.name AS tenant_name FROM findings f JOIN tenants t ON t.id = f.tenant_id"
         " WHERE t.enabled = 1 AND t.archived_at IS NULL"
-        + (" AND t.id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else "") +
-        " AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
+        + (" AND t.id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else "")
+        + " AND f.resolved_at IS NULL AND f.severity IN ('critical', 'high')"
         " AND (f.first_seen >= :since OR IFNULL(f.reopened_at, '') >= :since)"
         " AND (f.accepted_at IS NULL OR (f.accepted_until IS NOT NULL AND f.accepted_until <= :now))"
         " ORDER BY CASE f.severity WHEN 'critical' THEN 0 ELSE 1 END, t.name COLLATE NOCASE, f.rule_key"
-        " LIMIT 10", {"since": since, "now": now.strftime(ISO), "group": group_id}).fetchall()
+        " LIMIT 10",
+        {"since": since, "now": now.strftime(ISO), "group": group_id},
+    ).fetchall()
     return {
         "rows": rows,
         "group": group["name"] if group else None,
@@ -625,44 +729,88 @@ def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None
 
 def digest_xlsx(data: dict, brand=None, now: datetime | None = None) -> bytes:
     book = workbook.Book(brand.accent if brand else "")
-    header = ["Tenant", "Critical", "High", "Medium", "Low", "New critical/high", "Fixed", "Secure Score",
-              "Secure Score change", "Users with MFA", f"Licence waste / month ({data['currency']})",
-              "Data up to date"]
+    header = [
+        "Tenant",
+        "Critical",
+        "High",
+        "Medium",
+        "Low",
+        "New critical/high",
+        "Fixed",
+        "Secure Score",
+        "Secure Score change",
+        "Users with MFA",
+        f"Licence waste / month ({data['currency']})",
+        "Data up to date",
+    ]
     rows = []
     for r in data["rows"]:
         score, mfa, waste = (r["kpis"][k] for k in ("secure_score.pct", "mfa.registered_pct", "waste"))
-        rows.append([r["tenant"]["name"], r["counts"]["critical"], r["counts"]["high"], r["counts"]["medium"],
-                     r["counts"]["low"], r["new_severe"], r["fixed"],
-                     None if score.value is None else f"{score.value:g}%", score.delta,
-                     None if mfa.value is None else f"{mfa.value:g}%", waste.value,
-                     "No" if r["stale_data"] else "Yes"])
+        rows.append(
+            [
+                r["tenant"]["name"],
+                r["counts"]["critical"],
+                r["counts"]["high"],
+                r["counts"]["medium"],
+                r["counts"]["low"],
+                r["new_severe"],
+                r["fixed"],
+                None if score.value is None else f"{score.value:g}%",
+                score.delta,
+                None if mfa.value is None else f"{mfa.value:g}%",
+                waste.value,
+                "No" if r["stale_data"] else "Yes",
+            ]
+        )
     book.table("Tenants", header, rows, description="Every tenant, worst first")
     cover = workbook.Cover(
-        "Tenant digest", data.get("group") or "All tenants", now or datetime.now(UTC),
+        "Tenant digest",
+        data.get("group") or "All tenants",
+        now or datetime.now(UTC),
         brand.display_name if brand else "",
-        accent=brand.accent if brand else "", intro=f"Since {day(data['since'])}.",
-        facts=[("Tenants", data["tenants"], ""), ("Need attention", data["urgent"], "critical or high findings"),
-               ("New critical or high findings", data["new_severe"], ""), ("Fixed", data["fixed"], ""),
-               ("Average Secure Score", None if data["avg_score"] is None else f"{data['avg_score']:g}%", "")])
+        accent=brand.accent if brand else "",
+        intro=f"Since {day(data['since'])}.",
+        facts=[
+            ("Tenants", data["tenants"], ""),
+            ("Need attention", data["urgent"], "critical or high findings"),
+            ("New critical or high findings", data["new_severe"], ""),
+            ("Fixed", data["fixed"], ""),
+            ("Average Secure Score", None if data["avg_score"] is None else f"{data['avg_score']:g}%", ""),
+        ],
+    )
     return book.save(cover)
 
 
-def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = None,
-                       attach: bool = True) -> Built:
+def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = None, attach: bool = True) -> Built:
     now = now or datetime.now(UTC)
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
     label = period_label(schedule["frequency"], local)
     data = digest_data(conn, schedule["frequency"], now, schedule["group_id"])
     look, inline = email_brand(conn)
     subject = f"Tenant digest · {data['group']} · {label}" if data["group"] else f"Tenant digest · {label}"
-    filename = (f"tenant-digest-{tables.slug(data['group'])}-" if data["group"] else "tenant-digest-") + \
-        f"{local.strftime('%Y-%m-%d')}.xlsx"
-    html = render(app, "emails/digest.html", subject=subject, d=data, label=label, **look,
-                   message=schedule["message"], titles=RULE_TITLES, frequency=schedule["frequency"],
-                   files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [])
-    lines = [f"Tenant digest for {label}" + (f": {data['group']}" if data["group"] else ""), "",
-             f"Tenants: {data['tenants']}", f"Needing attention (critical or high): {data['urgent']}",
-             f"New critical or high findings: {data['new_severe']}", f"Fixed: {data['fixed']}"]
+    filename = (
+        f"tenant-digest-{tables.slug(data['group'])}-" if data["group"] else "tenant-digest-"
+    ) + f"{local.strftime('%Y-%m-%d')}.xlsx"
+    html = render(
+        app,
+        "emails/digest.html",
+        subject=subject,
+        d=data,
+        label=label,
+        **look,
+        message=schedule["message"],
+        titles=RULE_TITLES,
+        frequency=schedule["frequency"],
+        files=[("Every tenant's numbers", filename)] if schedule["include_xlsx"] else [],
+    )
+    lines = [
+        f"Tenant digest for {label}" + (f": {data['group']}" if data["group"] else ""),
+        "",
+        f"Tenants: {data['tenants']}",
+        f"Needing attention (critical or high): {data['urgent']}",
+        f"New critical or high findings: {data['new_severe']}",
+        f"Fixed: {data['fixed']}",
+    ]
     if data["avg_score"] is not None:
         lines.append(f"Average Secure Score: {data['avg_score']:g}%")
     lines += ["", "Tenants needing attention:"]
@@ -670,11 +818,16 @@ def build_digest_email(app, conn, schedule, contacts, *, now: datetime | None = 
         if r["counts"]["critical"] or r["counts"]["high"]:
             lines.append(f"  {r['tenant']['name']}: {r['counts']['critical']} critical, {r['counts']['high']} high")
     to, bcc = split_recipients(contacts)
-    attachments = [(filename, XLSX, digest_xlsx(data, branding.load(conn), now))] \
-        if attach and schedule["include_xlsx"] else []
+    attachments = (
+        [(filename, XLSX, digest_xlsx(data, branding.load(conn), now))] if attach and schedule["include_xlsx"] else []
+    )
     names = [filename] if schedule["include_xlsx"] else []
-    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments, inline=inline), names)
+    return Built(
+        Email(
+            to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html, attachments=attachments, inline=inline
+        ),
+        names,
+    )
 
 
 def is_upcoming(schedule) -> bool:
@@ -712,15 +865,18 @@ def upcoming_subject(counts: dict[str, int]) -> str:
     now, soon = counts[upcoming.NOW], counts[upcoming.DAYS_30]
     if not now and not soon:
         later = counts[upcoming.DAYS_60] + counts[upcoming.DAYS_90]
-        return f"Coming up: {plural(later, 'item')} in the next 90 days" if later else \
-            "Coming up: nothing due in the next 90 days"
-    parts = ([f"{now} need{'s' if now == 1 else ''} attention now"] if now else []) + \
-        ([f"{soon} due within 30 days"] if soon else [])
+        return (
+            f"Coming up: {plural(later, 'item')} in the next 90 days"
+            if later
+            else "Coming up: nothing due in the next 90 days"
+        )
+    parts = ([f"{now} need{'s' if now == 1 else ''} attention now"] if now else []) + (
+        [f"{soon} due within 30 days"] if soon else []
+    )
     return "Coming up: " + ", ".join(parts)
 
 
-def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None = None,
-                         attach: bool = True) -> Built:
+def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None = None, attach: bool = True) -> Built:
     """The Coming up email: everything due in the next 90 days across every active tenant, soonest first.
 
     It goes to the MSP's team only (like the tenant digest), so it covers every tenant and Office Sentry's own
@@ -728,17 +884,35 @@ def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None 
     now = now or datetime.now(UTC)
     local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
     label = period_label(schedule["frequency"], local)
-    up = upcoming.collect(conn, conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
-                                             " ORDER BY name COLLATE NOCASE").fetchall(), now, ours=True)
+    up = upcoming.collect(
+        conn,
+        conn.execute(
+            "SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL ORDER BY name COLLATE NOCASE"
+        ).fetchall(),
+        now,
+        ours=True,
+    )
     counts = up.counts()
     look, inline = email_brand(conn)
     subject = upcoming_subject(counts)
     filename = f"coming-up-{local.strftime('%Y-%m-%d')}.xlsx"
     windows = [(w, up.in_window(w)) for w in upcoming.WINDOWS if counts[w]]
-    html = render(app, "emails/upcoming.html", subject=subject, up=up, counts=counts, windows=windows,
-                  label=label, frequency=schedule["frequency"], message=schedule["message"], shown=EMAIL_ROWS,
-                  w=upcoming, base_url=_cfg(app).base_url.rstrip("/"), **look,
-                  files=[("Everything coming up", filename)] if schedule["include_xlsx"] else [])
+    html = render(
+        app,
+        "emails/upcoming.html",
+        subject=subject,
+        up=up,
+        counts=counts,
+        windows=windows,
+        label=label,
+        frequency=schedule["frequency"],
+        message=schedule["message"],
+        shown=EMAIL_ROWS,
+        w=upcoming,
+        base_url=_cfg(app).base_url.rstrip("/"),
+        **look,
+        files=[("Everything coming up", filename)] if schedule["include_xlsx"] else [],
+    )
     lines = [f"Coming up, {label}", ""]
     if schedule["message"]:
         lines += [schedule["message"], ""]
@@ -751,15 +925,23 @@ def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None 
         if len(items) > EMAIL_ROWS:
             lines.append(f"  And {len(items) - EMAIL_ROWS} more in Office Sentry.")
     to, bcc = split_recipients(contacts)
-    attachments = [(filename, XLSX, data_reports.to_xlsx(upcoming.report(up), brand=branding.load(conn)))] \
-        if attach and schedule["include_xlsx"] else []
-    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments, inline=inline), [filename] if schedule["include_xlsx"] else [])
+    attachments = (
+        [(filename, XLSX, data_reports.to_xlsx(upcoming.report(up), brand=branding.load(conn)))]
+        if attach and schedule["include_xlsx"]
+        else []
+    )
+    return Built(
+        Email(
+            to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html, attachments=attachments, inline=inline
+        ),
+        [filename] if schedule["include_xlsx"] else [],
+    )
 
 
 @dataclass
 class ViewResult:
     """One saved view across tenants, for the views email: its report narrowed to the tables the view shapes."""
+
     view: ScheduledView
     report: data_reports.DataReport
     counts: list[tuple[str, int]]  # (table title, rows after the filters)
@@ -772,8 +954,10 @@ def views_data(conn, chosen: list[ScheduledView], group_id: int | None, now: dat
     """Each view over every active tenant, or one group's, stacked like the All tenants "every row" page."""
     group = tenant_groups.get(conn, group_id)
     in_group = " AND id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else ""
-    tenants = conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
-                           f"{in_group} ORDER BY name COLLATE NOCASE", {"group": group_id}).fetchall()
+    tenants = conn.execute(
+        f"SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL{in_group} ORDER BY name COLLATE NOCASE",
+        {"group": group_id},
+    ).fetchall()
     label = group["name"] if group else "All tenants"
     results = []
     for v in chosen:
@@ -788,17 +972,20 @@ def views_data(conn, chosen: list[ScheduledView], group_id: int | None, now: dat
         out.sections = [report.sections[i] for i in keep]
         out.filtered = [line for line in report.filtered if any(line.startswith(f"{s.title}:") for s in out.sections)]
         if any(rows.truncated(s.title) for s in out.sections):
-            out.notice = (f"Tables keep the first {rollups.MAX_ROWS:,} rows across tenants. Filter the view further, "
-                          "or open each tenant's own report for the rest.")
+            out.notice = (
+                f"Tables keep the first {rollups.MAX_ROWS:,} rows across tenants. Filter the view further, "
+                "or open each tenant's own report for the rest."
+            )
         counts = [(s.title, len(s.rows)) for s in out.sections]
-        lines = [next((line for line in out.filtered if line.startswith(f"{title}:")), f"{title}: {plural(n, 'row')}.")
-                 for title, n in counts]
+        lines = [
+            next((line for line in out.filtered if line.startswith(f"{title}:")), f"{title}: {plural(n, 'row')}.")
+            for title, n in counts
+        ]
         results.append(ViewResult(v, out, counts, lines, slugs[keep[0]] if keep else "", len(rows.without)))
     return {"group": group["name"] if group else None, "label": label, "tenants": len(tenants), "views": results}
 
 
-def build_views_email(app, conn, schedule, contacts, *, now: datetime | None = None,
-                      attach: bool = True) -> Built:
+def build_views_email(app, conn, schedule, contacts, *, now: datetime | None = None, attach: bool = True) -> Built:
     """Saved views across every active tenant, or one group's, for the MSP's team. A CSV view sends one
     file per table it shapes; a PDF or XLSX has those tables."""
     now = now or datetime.now(UTC)
@@ -806,8 +993,13 @@ def build_views_email(app, conn, schedule, contacts, *, now: datetime | None = N
     label = period_label(schedule["frequency"], local)
     data = views_data(conn, schedule_views(conn, schedule["id"]), schedule["group_id"], now)
     names = [r.view.name for r in data["views"]]
-    lead = names[0] if len(names) == 1 else f"{names[0]} and {plural(len(names) - 1, 'more view')}" if names \
+    lead = (
+        names[0]
+        if len(names) == 1
+        else f"{names[0]} and {plural(len(names) - 1, 'more view')}"
+        if names
         else "Saved views"
+    )
     subject = f"{lead} · {data['label']} · {label}"
     brand = branding.load(conn)
     files, attachments = [], []
@@ -817,8 +1009,17 @@ def build_views_email(app, conn, schedule, contacts, *, now: datetime | None = N
         if attach:
             attachments += view_files(app, conn, r.report, r.view, stem, brand)
     look, inline = email_brand(conn)
-    html = render(app, "emails/views.html", subject=subject, d=data, label=label, frequency=schedule["frequency"],
-                  message=schedule["message"], files=files, **look)
+    html = render(
+        app,
+        "emails/views.html",
+        subject=subject,
+        d=data,
+        label=label,
+        frequency=schedule["frequency"],
+        message=schedule["message"],
+        files=files,
+        **look,
+    )
     lines = [f"Saved views for {label}: {data['label']}", ""]
     if schedule["message"]:
         lines += [schedule["message"], ""]
@@ -828,8 +1029,12 @@ def build_views_email(app, conn, schedule, contacts, *, now: datetime | None = N
     if files:
         lines += ["", "Attached:"] + [f"  {name} ({title})" for title, name in files]
     to, bcc = split_recipients(contacts)
-    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments, inline=inline), [name for _, name in files])
+    return Built(
+        Email(
+            to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html, attachments=attachments, inline=inline
+        ),
+        [name for _, name in files],
+    )
 
 
 def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[alerts.Item]:
@@ -841,14 +1046,14 @@ def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[al
     return [i for i in items if i.data["reopened"] or i.data["first_seen"] != first]
 
 
-def build_alert_email(app, conn, alert, tenant, items: list[alerts.Item], contacts, *,
-                      preview: bool = False) -> Built:
+def build_alert_email(app, conn, alert, tenant, items: list[alerts.Item], contacts, *, preview: bool = False) -> Built:
     n = len(items)
     level = "critical" if alert["min_severity"] == "critical" else "critical or high"
     subject = f"{n} new {level} finding{'s' if n != 1 else ''} in {tenant['name']}"
     look, inline = email_brand(conn)
-    html = render(app, "emails/alert.html", subject=subject, tenant=tenant, items=items,
-                  level=level, preview=preview, **look)
+    html = render(
+        app, "emails/alert.html", subject=subject, tenant=tenant, items=items, level=level, preview=preview, **look
+    )
     lines = [subject, ""]
     for i in items:
         lines.append(f"[{i.severity.upper()}] {i.title}: {i.subject}" + (f" ({i.detail})" if i.detail else ""))
@@ -859,19 +1064,52 @@ def build_alert_email(app, conn, alert, tenant, items: list[alerts.Item], contac
 # -- Sending and history ------------------------------------------------------------------
 
 
-def record(conn, *, kind: str, email: Email | None, subject: str, error: str | None, transport: str | None,
-            trigger: str, user: str | None, schedule_id=None, alert_id=None, tenant_id=None, period=None,
-            payload=None, attempt: int = 1, retry_at: str | None = None, to=(), bcc=()) -> int:
+def record(
+    conn,
+    *,
+    kind: str,
+    email: Email | None,
+    subject: str,
+    error: str | None,
+    transport: str | None,
+    trigger: str,
+    user: str | None,
+    schedule_id=None,
+    alert_id=None,
+    tenant_id=None,
+    period=None,
+    payload=None,
+    attempt: int = 1,
+    retry_at: str | None = None,
+    to=(),
+    bcc=(),
+) -> int:
     if email is not None:
         to, bcc = email.to, email.bcc
     return conn.execute(
         "INSERT INTO email_deliveries (kind, schedule_id, alert_id, tenant_id, period, subject, recipients, bcc,"
         " attachments, payload, attempt, retry_at, transport, trigger, status, error, sent_by, created_at)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (kind, schedule_id, alert_id, tenant_id, period, subject, ", ".join(to), ", ".join(bcc),
-         json.dumps([a[0] for a in email.attachments] if email else []), payload, attempt,
-         retry_at if error else None, transport, trigger, "failed" if error else "sent",
-         error[:1000] if error else None, user, utcnow()),
+        (
+            kind,
+            schedule_id,
+            alert_id,
+            tenant_id,
+            period,
+            subject,
+            ", ".join(to),
+            ", ".join(bcc),
+            json.dumps([a[0] for a in email.attachments] if email else []),
+            payload,
+            attempt,
+            retry_at if error else None,
+            transport,
+            trigger,
+            "failed" if error else "sent",
+            error[:1000] if error else None,
+            user,
+            utcnow(),
+        ),
     ).lastrowid
 
 
@@ -890,17 +1128,28 @@ def _attempt(conn, vault, build, kind: str) -> tuple[Email | None, str | None, s
     return email, transport, error
 
 
-def _send(conn, vault, build, *, kind: str, fallback_subject: str, trigger: str, user: str | None,
-          **fields) -> str | None:
+def _send(
+    conn, vault, build, *, kind: str, fallback_subject: str, trigger: str, user: str | None, **fields
+) -> str | None:
     """Build and send one email, and log it. Returns the error shown to people, or None."""
     email, transport, error = _attempt(conn, vault, build, kind)
-    record(conn, kind=kind, email=email, subject=email.subject if email else fallback_subject, error=error,
-            transport=transport, trigger=trigger, user=user, **fields)
+    record(
+        conn,
+        kind=kind,
+        email=email,
+        subject=email.subject if email else fallback_subject,
+        error=error,
+        transport=transport,
+        trigger=trigger,
+        user=user,
+        **fields,
+    )
     return error
 
 
-def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: str | None = None,
-                  now: datetime | None = None) -> str | None:
+def send_schedule(
+    app, conn, vault, schedule, *, trigger: str = "manual", user: str | None = None, now: datetime | None = None
+) -> str | None:
     """Send a report or digest schedule now. Returns an error message or None."""
     now = now or datetime.now(UTC)
     default_tz = _cfg(app).timezone
@@ -914,20 +1163,33 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
         def build():
             built.append(build_report_email(app, conn, schedule, tenant, contacts, now=now))
             return built[-1]
+
         fallback = f"{tenant['name']} security report"
     else:
         builder = digest_builder(schedule)
 
         def build():
             return builder(app, conn, schedule, contacts, now=now)
+
         fallback = schedule_titles(schedule, conn)[0]
     email, transport, error = _attempt(conn, vault, build, schedule["kind"])
     # Everything the send changes is written at once, so a worker that stops after sending doesn't leave the
     # period looking unsent (and send it again).
     with store.atomic(conn):
-        _after_send(conn, schedule, email, transport, error, period=period, trigger=trigger, user=user,
-                    now=now, fallback=fallback, archive=built[-1].email if error is None and built else None,
-                    tenant=tenant)
+        _after_send(
+            conn,
+            schedule,
+            email,
+            transport,
+            error,
+            period=period,
+            trigger=trigger,
+            user=user,
+            now=now,
+            fallback=fallback,
+            archive=built[-1].email if error is None and built else None,
+            tenant=tenant,
+        )
     if error is None and built:
         # After the commit, so a slow or failing webhook never holds the send's transaction.
         report_ready(app, conn, vault, tenant, period, built[-1].titles)
@@ -940,35 +1202,67 @@ def report_ready(app, conn, vault, tenant, period: str | None, titles: list[str]
     alerts.report_ready(conn, alerts.Alerting(_cfg(app).base_url, vault), tenant, period, titles, emailed=emailed)
 
 
-def _after_send(conn, schedule, email, transport, error, *, period: str, trigger: str,
-                user: str | None, now: datetime, fallback: str, archive: Email | None, tenant) -> None:
-    record(conn, kind=schedule["kind"], email=email, subject=email.subject if email else fallback, error=error,
-            transport=transport, trigger=trigger, user=user, schedule_id=schedule["id"],
-            tenant_id=schedule["tenant_id"], period=period)
+def _after_send(
+    conn,
+    schedule,
+    email,
+    transport,
+    error,
+    *,
+    period: str,
+    trigger: str,
+    user: str | None,
+    now: datetime,
+    fallback: str,
+    archive: Email | None,
+    tenant,
+) -> None:
+    record(
+        conn,
+        kind=schedule["kind"],
+        email=email,
+        subject=email.subject if email else fallback,
+        error=error,
+        transport=transport,
+        trigger=trigger,
+        user=user,
+        schedule_id=schedule["id"],
+        tenant_id=schedule["tenant_id"],
+        period=period,
+    )
     ts = now.strftime(ISO)
     if archive is not None:
         _archive(conn, schedule, tenant, archive, period=period, trigger=trigger, user=user, now=ts)
     if trigger == "schedule":
         if error is None:
-            conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
-                         " last_status = 'sent', last_sent_at = ? WHERE id = ?", (period, ts, schedule["id"]))
+            conn.execute(
+                "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
+                " last_status = 'sent', last_sent_at = ? WHERE id = ?",
+                (period, ts, schedule["id"]),
+            )
         else:
             attempts = schedule["attempts"] + 1
             if attempts >= MAX_ATTEMPTS:  # give up on this period; it shows as failed with a Retry button
-                conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
-                             " last_status = 'failed' WHERE id = ?", (period, schedule["id"]))
+                conn.execute(
+                    "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL,"
+                    " last_status = 'failed' WHERE id = ?",
+                    (period, schedule["id"]),
+                )
             else:
-                conn.execute("UPDATE email_schedules SET attempts = ?, retry_at = ?, last_status = 'failed'"
-                             " WHERE id = ?",
-                             (attempts, (now + RETRY_DELAYS[attempts - 1]).strftime(ISO), schedule["id"]))
+                conn.execute(
+                    "UPDATE email_schedules SET attempts = ?, retry_at = ?, last_status = 'failed' WHERE id = ?",
+                    (attempts, (now + RETRY_DELAYS[attempts - 1]).strftime(ISO), schedule["id"]),
+                )
     elif error is None:
         # Sent by hand: that counts as the latest send time's email, but never moves the schedule back from a
         # later period already done (a month approved and sent early), or the timer would send that again.
         last = conn.execute("SELECT last_period FROM email_schedules WHERE id = ?", (schedule["id"],)).fetchone()
         last = last["last_period"] if last else None
-        conn.execute("UPDATE email_schedules SET last_status = 'sent', last_sent_at = ?, last_period = ?,"
-                     " attempts = 0, retry_at = NULL WHERE id = ?",
-                     (ts, last if period_done(last, period) else period, schedule["id"]))
+        conn.execute(
+            "UPDATE email_schedules SET last_status = 'sent', last_sent_at = ?, last_period = ?,"
+            " attempts = 0, retry_at = NULL WHERE id = ?",
+            (ts, last if period_done(last, period) else period, schedule["id"]),
+        )
     else:
         conn.execute("UPDATE email_schedules SET last_status = 'failed' WHERE id = ?", (schedule["id"],))
 
@@ -977,8 +1271,19 @@ def _after_send(conn, schedule, email, transport, error, *, period: str, trigger
 LATER_PERIOD = "CASE WHEN last_period IS NULL OR last_period < ? THEN ? ELSE last_period END"
 
 
-def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tuple[str, str, bytes]], *,
-                user: str | None, now: datetime | None = None, on_sent=None) -> str | None:
+def send_frozen(
+    app,
+    conn,
+    vault,
+    schedule,
+    tenant,
+    period: str,
+    files: list[tuple[str, str, bytes]],
+    *,
+    user: str | None,
+    now: datetime | None = None,
+    on_sent=None,
+) -> str | None:
     """Email a report schedule's recipients the files approved for ``period`` (``month_end.approve``), exactly
     as they were frozen into ``issued_reports``, and count the period as done. Returns an error or None.
 
@@ -990,17 +1295,30 @@ def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tup
         built = build_report_email(app, conn, schedule, tenant, contacts, now=now, attach=False)
         built.email.attachments = list(files)
         return built
+
     email, transport, error = _attempt(conn, vault, build, "report")
     fallback = f"{tenant['name']} security report"
     with store.atomic(conn):
-        record(conn, kind="report", email=email, subject=email.subject if email else fallback, error=error,
-               transport=transport, trigger="manual", user=user, schedule_id=schedule["id"],
-               tenant_id=tenant["id"], period=period)
+        record(
+            conn,
+            kind="report",
+            email=email,
+            subject=email.subject if email else fallback,
+            error=error,
+            transport=transport,
+            trigger="manual",
+            user=user,
+            schedule_id=schedule["id"],
+            tenant_id=tenant["id"],
+            period=period,
+        )
         if error is None:
             # Re-issuing an earlier month never moves the schedule back, or the next tick sends again.
-            conn.execute(f"UPDATE email_schedules SET last_period = {LATER_PERIOD}, attempts = 0, retry_at = NULL,"
-                         " last_status = 'sent', last_sent_at = ? WHERE id = ?",
-                         (period, period, now.strftime(ISO), schedule["id"]))
+            conn.execute(
+                f"UPDATE email_schedules SET last_period = {LATER_PERIOD}, attempts = 0, retry_at = NULL,"
+                " last_status = 'sent', last_sent_at = ? WHERE id = ?",
+                (period, period, now.strftime(ISO), schedule["id"]),
+            )
             if on_sent is not None:
                 on_sent(conn)
         else:
@@ -1008,35 +1326,73 @@ def send_frozen(app, conn, vault, schedule, tenant, period: str, files: list[tup
     return error
 
 
-def _archive(conn, schedule, tenant, email: Email, *, period: str, trigger: str, user: str | None,
-             now: str) -> None:
+def _archive(conn, schedule, tenant, email: Email, *, period: str, trigger: str, user: str | None, now: str) -> None:
     """Keep a copy of every file a sent report email attached (``issued.py``). Never fails the send."""
     try:
         known = catalog_map(conn)
-        plan = {name: (key, known[key].title if key in known else name) for key, name in attachment_plan(
-            tenant, json.loads(schedule["reports"] or "[]"), bool(schedule["include_xlsx"]), conn)}
-        plan |= {name: (f"view:{v.report_key}", v.title)
-                 for v, name in view_attachments(tenant["name"], schedule_views(conn, schedule["id"]))}
-        files = [issued.IssuedFile(*plan.get(filename, ("", filename)), filename, content_type, data)
-                 for filename, content_type, data in email.attachments]
-        issued.archive(conn, tenant["id"], files, period=period, trigger=trigger, user=user, to=email.to,
-                       bcc=email.bcc, schedule_id=schedule["id"], now=now)
+        plan = {
+            name: (key, known[key].title if key in known else name)
+            for key, name in attachment_plan(
+                tenant, json.loads(schedule["reports"] or "[]"), bool(schedule["include_xlsx"]), conn
+            )
+        }
+        plan |= {
+            name: (f"view:{v.report_key}", v.title)
+            for v, name in view_attachments(tenant["name"], schedule_views(conn, schedule["id"]))
+        }
+        files = [
+            issued.IssuedFile(*plan.get(filename, ("", filename)), filename, content_type, data)
+            for filename, content_type, data in email.attachments
+        ]
+        issued.archive(
+            conn,
+            tenant["id"],
+            files,
+            period=period,
+            trigger=trigger,
+            user=user,
+            to=email.to,
+            bcc=email.bcc,
+            schedule_id=schedule["id"],
+            now=now,
+        )
     except Exception:
         log.exception("Keeping a copy of the reports sent to tenant %s failed", tenant["id"])
 
 
-def send_alert(app, conn, vault, alert, tenant, items: list[alerts.Item], *, trigger: str = "schedule",
-               user: str | None = None, attempt: int = 1, now: datetime | None = None) -> str | None:
+def send_alert(
+    app,
+    conn,
+    vault,
+    alert,
+    tenant,
+    items: list[alerts.Item],
+    *,
+    trigger: str = "schedule",
+    user: str | None = None,
+    attempt: int = 1,
+    now: datetime | None = None,
+) -> str | None:
     """Email one alert. An automatic send that fails is tried again by ``tick()`` with backoff."""
     now = now or datetime.now(UTC)
     contacts = recipients(conn, "alert", alert["id"])
     retry_at = None
     if trigger == "schedule" and attempt < MAX_ATTEMPTS:
         retry_at = (now + RETRY_DELAYS[attempt - 1]).strftime(ISO)
-    return _send(conn, vault, lambda: build_alert_email(app, conn, alert, tenant, items, contacts), kind="alert",
-                 fallback_subject=f"New findings in {tenant['name']}", trigger=trigger, user=user,
-                 alert_id=alert["id"], tenant_id=tenant["id"], payload=json.dumps([i.data["id"] for i in items]),
-                 attempt=attempt, retry_at=retry_at)
+    return _send(
+        conn,
+        vault,
+        lambda: build_alert_email(app, conn, alert, tenant, items, contacts),
+        kind="alert",
+        fallback_subject=f"New findings in {tenant['name']}",
+        trigger=trigger,
+        user=user,
+        alert_id=alert["id"],
+        tenant_id=tenant["id"],
+        payload=json.dumps([i.data["id"] for i in items]),
+        attempt=attempt,
+        retry_at=retry_at,
+    )
 
 
 def after_sync(app, conn, vault, tenant, finding_ids, run_id: int | None = None) -> int:
@@ -1048,8 +1404,10 @@ def after_sync(app, conn, vault, tenant, finding_ids, run_id: int | None = None)
     if not finding_ids:
         return 0
     attempted = 0
-    rows = conn.execute("SELECT * FROM email_alerts WHERE enabled = 1 AND (tenant_id IS NULL OR tenant_id = ?)"
-                        " ORDER BY id", (tenant["id"],)).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM email_alerts WHERE enabled = 1 AND (tenant_id IS NULL OR tenant_id = ?) ORDER BY id",
+        (tenant["id"],),
+    ).fetchall()
     for a in rows:
         try:
             items = alert_items(conn, tenant["id"], finding_ids, a["min_severity"])
@@ -1058,8 +1416,12 @@ def after_sync(app, conn, vault, tenant, finding_ids, run_id: int | None = None)
             error = send_alert(app, conn, vault, a, tenant, items)
             attempted += 1
             if run_id is not None:
-                store.log_event(conn, run_id, "warning" if error else "info",
-                                f"Alert email not sent: {error}"[:500] if error else "Alert email sent")
+                store.log_event(
+                    conn,
+                    run_id,
+                    "warning" if error else "info",
+                    f"Alert email not sent: {error}"[:500] if error else "Alert email sent",
+                )
         except Exception:
             log.exception("Alert email %s failed", a["id"])
     return attempted
@@ -1126,12 +1488,16 @@ def _tick_schedule(app, conn, vault, s, cfg, now: datetime, queue: bool = False)
     if s["kind"] == "report":
         tenant = store.get_tenant(conn, s["tenant_id"])
         # Collect anything older than OFFICESENTRY_MAX_AGE_HOURS first; checked again next minute.
-        if tenant["connection_id"] and not schedule.refresh_for_report(
-                conn, tenant["id"], due, cfg.max_age_hours, now):
+        if tenant["connection_id"] and not schedule.refresh_for_report(conn, tenant["id"], due, cfg.max_age_hours, now):
             return False
     if queue:
-        tasks.enqueue(conn, "send_schedule", key=send_key(s, period), tenant_id=s["tenant_id"],
-                      payload={"schedule_id": s["id"], "now": now.strftime(ISO)})
+        tasks.enqueue(
+            conn,
+            "send_schedule",
+            key=send_key(s, period),
+            tenant_id=s["tenant_id"],
+            payload={"schedule_id": s["id"], "now": now.strftime(ISO)},
+        )
     else:
         send_schedule(app, conn, vault, s, trigger="schedule", now=now)
     return True
@@ -1174,8 +1540,11 @@ def tick(app, conn, vault, cfg, now: datetime | None = None, queue: bool = False
         except Exception:
             log.exception("Scheduled email %s failed", s["id"])
     # Alert emails are sent when a collection opens findings (alerts.after_sync); here only failed ones retry.
-    for d in conn.execute("SELECT * FROM email_deliveries WHERE kind = 'alert' AND status = 'failed'"
-                          " AND retry_at IS NOT NULL AND retry_at <= ? ORDER BY id", (now.strftime(ISO),)).fetchall():
+    for d in conn.execute(
+        "SELECT * FROM email_deliveries WHERE kind = 'alert' AND status = 'failed'"
+        " AND retry_at IS NOT NULL AND retry_at <= ? ORDER BY id",
+        (now.strftime(ISO),),
+    ).fetchall():
         try:
             attempted += _retry_alert(app, conn, vault, d, now)
         except Exception:

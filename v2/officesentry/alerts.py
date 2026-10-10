@@ -45,14 +45,21 @@ log = logging.getLogger(__name__)
 
 FORMATS = {"teams": "Microsoft Teams (Workflows)", "slack": "Slack", "generic": "Generic JSON webhook"}
 ALERT_SEVERITIES = ("critical", "high", "medium", "low")
-DEFAULTS = {"alerts.enabled": "0", "alerts.format": "teams", "alerts.min_severity": "high",
-            "alerts.on_failures": "1", "alerts.on_recovery": "0", "alerts.url_enc": "", "alerts.secret_enc": "",
-            "alerts.on_reports": "0",
-            # Problems with Office Sentry itself (system_alerts.py), by email to the team contacts and here.
-            "alerts.system": "1"}
+DEFAULTS = {
+    "alerts.enabled": "0",
+    "alerts.format": "teams",
+    "alerts.min_severity": "high",
+    "alerts.on_failures": "1",
+    "alerts.on_recovery": "0",
+    "alerts.url_enc": "",
+    "alerts.secret_enc": "",
+    "alerts.on_reports": "0",
+    # Problems with Office Sentry itself (system_alerts.py), by email to the team contacts and here.
+    "alerts.system": "1",
+}
 # Settings encrypted with the vault; rotate-keys re-encrypts them (__main__.ENCRYPTED_SETTINGS).
 ENCRYPTED_KEYS = ("alerts.url_enc", "alerts.secret_enc")
-MAX_ITEMS = 10          # findings listed in a Teams or Slack message
+MAX_ITEMS = 10  # findings listed in a Teams or Slack message
 MAX_GENERIC_ITEMS = 100  # findings included in a generic payload
 TIMEOUT = 10
 ALLOW_PRIVATE_ENV = "OFFICESENTRY_ALLOW_PRIVATE_WEBHOOKS"
@@ -66,6 +73,7 @@ class AlertError(Exception):
 class Alerting:
     """What the worker needs to send alerts: links back to the portal, the vault for the URL, and the
     web app for rendering alert emails (None skips email)."""
+
     base_url: str
     vault: Vault
     app: Any = None
@@ -106,8 +114,10 @@ def save_settings(conn, values: dict) -> None:
     for key, value in values.items():
         if key not in DEFAULTS:
             raise KeyError(key)
-        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                     " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
 
 
 def url_problem(url: str) -> str | None:
@@ -162,8 +172,10 @@ def check_destination(url: str) -> str | None:
         ip = ipaddress.ip_address(exc.address)
         if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
             ip = ip.ipv4_mapped
-        raise AlertError(f"{host} resolves to an internal address ({ip}), so it was not called. "
-                         f"Set {ALLOW_PRIVATE_ENV}=1 to allow internal webhooks.") from None
+        raise AlertError(
+            f"{host} resolves to an internal address ({ip}), so it was not called. "
+            f"Set {ALLOW_PRIVATE_ENV}=1 to allow internal webhooks."
+        ) from None
 
 
 def sign(secret: str, body: bytes) -> str:
@@ -223,8 +235,12 @@ def _deliver(conn, alerting: Alerting, s: dict, message: Message, run_id: int | 
     try:
         audit(conn, None, outcome[0], tenant_id, outcome[1][:500])
         if run_id is not None:
-            log_event(conn, run_id, "info" if ok else "warning",
-                      ("Alert sent" if ok else "Alert not sent: " + outcome[1])[:500])
+            log_event(
+                conn,
+                run_id,
+                "info" if ok else "warning",
+                ("Alert sent" if ok else "Alert not sent: " + outcome[1])[:500],
+            )
     except Exception:
         log.exception("Recording an alert outcome failed")
     return ok
@@ -251,16 +267,28 @@ def opened_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[I
     titles = _rule_titles()
     rows = conn.execute(
         f"SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND id IN ({','.join('?' * len(ids))})",
-        (tenant_id, *ids)).fetchall()
+        (tenant_id, *ids),
+    ).fetchall()
     items = []
     for row in rows:
         if SEVERITY_RANK.get(row["severity"], len(SEVERITIES)) > limit:
             continue
         if row["accepted_at"] and (row["accepted_until"] is None or row["accepted_until"] > now):
             continue
-        items.append(Item(row["severity"], titles.get(row["rule_key"], row["rule_key"]), row["subject"],
-                          row["detail"], {"id": row["id"], "check": row["rule_key"], "first_seen": row["first_seen"],
-                                          "reopened": row["reopened_at"] is not None}))
+        items.append(
+            Item(
+                row["severity"],
+                titles.get(row["rule_key"], row["rule_key"]),
+                row["subject"],
+                row["detail"],
+                {
+                    "id": row["id"],
+                    "check": row["rule_key"],
+                    "first_seen": row["first_seen"],
+                    "reopened": row["reopened_at"] is not None,
+                },
+            )
+        )
     items.sort(key=lambda i: (SEVERITY_RANK.get(i.severity, 9), i.title.lower(), i.subject.lower()))
     return items
 
@@ -274,6 +302,7 @@ def after_sync(conn, alerting: Alerting | None, tenant, stats: dict, run_id: int
     if alerting.app is not None and stats.get("opened"):
         try:
             from . import delivery  # imports this module
+
             delivery.after_sync(alerting.app, conn, alerting.vault, tenant, stats["opened"], run_id)
         except Exception:
             log.exception("Sending alert emails failed")
@@ -293,8 +322,11 @@ def _webhook_after_sync(conn, alerting: Alerting, tenant, stats: dict, run_id: i
             event="findings.new",
             title=f"{tenant['name']}: {n} new finding{'s' if n != 1 else ''}",
             text=f"Office Sentry found {n} new or returning issue{'s' if n != 1 else ''} "
-                 f"rated {s['alerts.min_severity']} or worse.",
-            link=tenant_link(alerting.base_url, tenant), tenant=dict(tenant), items=items)
+            f"rated {s['alerts.min_severity']} or worse.",
+            link=tenant_link(alerting.base_url, tenant),
+            tenant=dict(tenant),
+            items=items,
+        )
         return _deliver(conn, alerting, s, message, run_id)
     except Exception:
         log.exception("Preparing a findings alert failed")
@@ -315,7 +347,8 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         previous = conn.execute(
             "SELECT status FROM runs WHERE tenant_id = ? AND collector = ? AND id < ?"
             " AND status IN ('succeeded', 'partial', 'failed') ORDER BY id DESC LIMIT 1",
-            (run["tenant_id"], run["collector"], run_id)).fetchone()
+            (run["tenant_id"], run["collector"], run_id),
+        ).fetchone()
         if previous is None:
             return None
         failed, was_failed = status == "failed", previous["status"] == "failed"
@@ -329,13 +362,23 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         link = tenant_link(alerting.base_url, tenant)
         if failed:
             error = (run["error"] or "no details").splitlines()[0][:300]
-            message = Message("collection.failed", f"{tenant['name']}: {name} collection failed",
-                              f"{name} worked last time but failed now: {error}", link, dict(tenant),
-                              extra={"collector": run["collector"], "run_id": run_id, "error": error})
+            message = Message(
+                "collection.failed",
+                f"{tenant['name']}: {name} collection failed",
+                f"{name} worked last time but failed now: {error}",
+                link,
+                dict(tenant),
+                extra={"collector": run["collector"], "run_id": run_id, "error": error},
+            )
         else:
-            message = Message("collection.recovered", f"{tenant['name']}: {name} collection working again",
-                              f"{name} collected successfully after failing.", link, dict(tenant),
-                              extra={"collector": run["collector"], "run_id": run_id})
+            message = Message(
+                "collection.recovered",
+                f"{tenant['name']}: {name} collection working again",
+                f"{name} collected successfully after failing.",
+                link,
+                dict(tenant),
+                extra={"collector": run["collector"], "run_id": run_id},
+            )
         return _deliver(conn, alerting, s, message, run_id)
     except Exception:
         log.exception("Preparing a collection alert failed")
@@ -353,19 +396,27 @@ def ready_title(tenant_name: str, label: str) -> str:
     return f"The {label} report for {tenant_name} is ready" if label else f"A report for {tenant_name} is ready"
 
 
-def report_ready_message(base_url: str, tenant, period: str | None, titles: list[str], *,
-                         emailed: bool = True) -> Message:
+def report_ready_message(
+    base_url: str, tenant, period: str | None, titles: list[str], *, emailed: bool = True
+) -> Message:
     """A link to the tenant's report history and what's in it. Never the files: they stay behind the sign-in."""
     label = issued.period_label(period)
     how = "Emailed to the client" if emailed else "Published to the client portal"
     text = f"{how}: {', '.join(titles)}." if titles else f"{how}."
-    return Message("report.ready", ready_title(tenant["name"], label), text, report_history_link(base_url, tenant),
-                   dict(tenant), extra={"period": period, "reports": list(titles), "emailed": emailed},
-                   button="Open the report history")
+    return Message(
+        "report.ready",
+        ready_title(tenant["name"], label),
+        text,
+        report_history_link(base_url, tenant),
+        dict(tenant),
+        extra={"period": period, "reports": list(titles), "emailed": emailed},
+        button="Open the report history",
+    )
 
 
-def report_ready(conn, alerting: Alerting | None, tenant, period: str | None, titles: list[str], *,
-                 emailed: bool = True) -> bool | None:
+def report_ready(
+    conn, alerting: Alerting | None, tenant, period: str | None, titles: list[str], *, emailed: bool = True
+) -> bool | None:
     """Post that a client's report went out (or was published to the portal), when that's turned on.
     Returns whether it was posted, None if not wanted. Never raises."""
     try:
@@ -374,8 +425,9 @@ def report_ready(conn, alerting: Alerting | None, tenant, period: str | None, ti
         s = settings(conn)
         if s["alerts.enabled"] != "1" or not s["alerts.url_enc"] or s["alerts.on_reports"] != "1":
             return None
-        return _deliver(conn, alerting, s,
-                        report_ready_message(alerting.base_url, tenant, period, titles, emailed=emailed))
+        return _deliver(
+            conn, alerting, s, report_ready_message(alerting.base_url, tenant, period, titles, emailed=emailed)
+        )
     except Exception:
         log.exception("Preparing a report-ready alert failed")
         return False
@@ -387,9 +439,12 @@ def test_message(base_url: str) -> Message:
 
 def sample_report_message(base_url: str) -> Message:
     """What a report-ready post looks like, for the settings page's test button. Names no real tenant."""
-    message = report_ready_message(base_url, {"id": 0, "name": "Contoso (example)", "tenant_ref": None},
-                                   datetime.now(UTC).strftime("%Y-%m"),
-                                   ["Monthly Security & Licensing Review", "Mail forwarding: Forwarding outside"])
+    message = report_ready_message(
+        base_url,
+        {"id": 0, "name": "Contoso (example)", "tenant_ref": None},
+        datetime.now(UTC).strftime("%Y-%m"),
+        ["Monthly Security & Licensing Review", "Mail forwarding: Forwarding outside"],
+    )
     message.event, message.link = "test", base_url.rstrip("/")
     return message
 
@@ -421,8 +476,11 @@ def _more(message: Message, shown: int) -> str | None:
 
 def _line(i: Item) -> str:
     # Check titles describe the passing state ("Every admin has MFA registered").
-    return f"{_clean(i.subject, 150)}" + (f": {_clean(i.detail, 200)}" if i.detail else "") \
+    return (
+        f"{_clean(i.subject, 150)}"
+        + (f": {_clean(i.detail, 200)}" if i.detail else "")
         + f" (check: {_clean(i.title, 120)})"
+    )
 
 
 def build_payload(fmt: str, message: Message) -> dict:
@@ -436,8 +494,12 @@ def teams_payload(message: Message) -> dict:
     ]
     shown = message.items[:MAX_ITEMS]
     if shown:
-        body.append({"type": "FactSet", "facts": [
-            {"title": i.severity.capitalize(), "value": _teams_text(_line(i))} for i in shown]})
+        body.append(
+            {
+                "type": "FactSet",
+                "facts": [{"title": i.severity.capitalize(), "value": _teams_text(_line(i))} for i in shown],
+            }
+        )
     if more := _more(message, len(shown)):
         body.append({"type": "TextBlock", "text": more.capitalize() + ".", "isSubtle": True, "wrap": True})
     card = {
@@ -447,9 +509,12 @@ def teams_payload(message: Message) -> dict:
         "body": body,
         "actions": [{"type": "Action.OpenUrl", "title": message.button, "url": message.link}],
     }
-    return {"type": "message",
-            "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "contentUrl": None,
-                             "content": card}]}
+    return {
+        "type": "message",
+        "attachments": [
+            {"contentType": "application/vnd.microsoft.card.adaptive", "contentUrl": None, "content": card}
+        ],
+    }
 
 
 def slack_payload(message: Message) -> dict:
@@ -463,8 +528,14 @@ def slack_payload(message: Message) -> dict:
         if more := _more(message, len(shown)):
             lines.append(f"_{more}_")
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)[:2900]}})
-    blocks.append({"type": "actions", "elements": [
-        {"type": "button", "text": {"type": "plain_text", "text": message.button}, "url": message.link}]})
+    blocks.append(
+        {
+            "type": "actions",
+            "elements": [
+                {"type": "button", "text": {"type": "plain_text", "text": message.button}, "url": message.link}
+            ],
+        }
+    )
     fallback = _slack_text(message.title) + (f": {plural(len(message.items), 'finding')}" if message.items else "")
     return {"text": fallback, "blocks": blocks}
 
@@ -477,11 +548,20 @@ def generic_payload(message: Message) -> dict:
         "text": message.text,
         "url": message.link,
         "sent_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "tenant": ({"id": message.tenant["id"], "name": message.tenant["name"],
-                    "tenant_ref": message.tenant.get("tenant_ref"), "url": message.link}
-                   if message.tenant else None),
-        "findings": [{"severity": i.severity, "check_title": i.title, "subject": i.subject, "detail": i.detail,
-                      **i.data} for i in shown],
+        "tenant": (
+            {
+                "id": message.tenant["id"],
+                "name": message.tenant["name"],
+                "tenant_ref": message.tenant.get("tenant_ref"),
+                "url": message.link,
+            }
+            if message.tenant
+            else None
+        ),
+        "findings": [
+            {"severity": i.severity, "check_title": i.title, "subject": i.subject, "detail": i.detail, **i.data}
+            for i in shown
+        ],
         "findings_total": len(message.items),
         "findings_more": max(0, len(message.items) - len(shown)),
     }

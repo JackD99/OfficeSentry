@@ -55,27 +55,44 @@ def _transport_rule(snap: TenantSnapshot, area: str):
     return (findings, checked, unknown), ""
 
 
-@rule("mta_sts", "Mail domains require encrypted delivery (MTA-STS)", "Email",
-      "Publish an MTA-STS policy so other mail servers only deliver to the domain over a verified, encrypted "
-      "connection: a TXT record at _mta-sts.<domain> (\"v=STSv1; id=20260101\") and a policy file at "
-      "https://mta-sts.<domain>/.well-known/mta-sts.txt listing the domain's MX hosts (for Microsoft 365, "
-      "\"mx: *.mail.protection.outlook.com\"). Start with \"mode: testing\" and TLS-RPT reports, then switch to "
-      "\"mode: enforce\" and change the id.")
+@rule(
+    "mta_sts",
+    "Mail domains require encrypted delivery (MTA-STS)",
+    "Email",
+    "Publish an MTA-STS policy so other mail servers only deliver to the domain over a verified, encrypted "
+    'connection: a TXT record at _mta-sts.<domain> ("v=STSv1; id=20260101") and a policy file at '
+    "https://mta-sts.<domain>/.well-known/mta-sts.txt listing the domain's MX hosts (for Microsoft 365, "
+    '"mx: *.mail.protection.outlook.com"). Start with "mode: testing" and TLS-RPT reports, then switch to '
+    '"mode: enforce" and change the id.',
+)
 def mta_sts(snap: TenantSnapshot, now: datetime):
     result, reason = _transport_rule(snap, "MTA-STS")
     if result is None:
         return _unavailable(reason)
     findings, mail, unknown = result
-    return _result("fail", f"{_subjects(findings)} of {plural(len(mail), 'mail domain')} "
-                           + verb(_subjects(findings), "doesn't", "don't") + " fully enforce MTA-STS", findings,
-                   unknown, "MTA-STS") if findings \
+    return (
+        _result(
+            "fail",
+            f"{_subjects(findings)} of {plural(len(mail), 'mail domain')} "
+            + verb(_subjects(findings), "doesn't", "don't")
+            + " fully enforce MTA-STS",
+            findings,
+            unknown,
+            "MTA-STS",
+        )
+        if findings
         else _result("pass", f"MTA-STS is enforced on {every(len(mail), 'mail domain')}", [], unknown, "MTA-STS")
+    )
 
 
-@rule("tls_rpt", "Encrypted delivery failures are reported (TLS-RPT)", "Email",
-      "Publish a TXT record at _smtp._tls.<domain> such as \"v=TLSRPTv1; rua=mailto:tls-reports@<domain>\" "
-      "(or a reporting service's address), so someone hears when other servers can't deliver mail encrypted, "
-      "before and after MTA-STS is enforced.")
+@rule(
+    "tls_rpt",
+    "Encrypted delivery failures are reported (TLS-RPT)",
+    "Email",
+    'Publish a TXT record at _smtp._tls.<domain> such as "v=TLSRPTv1; rua=mailto:tls-reports@<domain>" '
+    "(or a reporting service's address), so someone hears when other servers can't deliver mail encrypted, "
+    "before and after MTA-STS is enforced.",
+)
 def tls_rpt(snap: TenantSnapshot, now: datetime):
     result, reason = _transport_rule(snap, "TLS-RPT")
     if result is None:
@@ -84,16 +101,34 @@ def tls_rpt(snap: TenantSnapshot, now: datetime):
     scope = [h for h in mail if h.mta_sts or h.tls_rpt]
     if not scope:
         return _unavailable("TLS-RPT is checked on mail domains that use MTA-STS, and none do yet")
-    return _result("fail", f"{_subjects(findings)} of {plural(len(scope), 'domain')} without working TLS-RPT",
-                   findings, unknown, "TLS-RPT") if findings \
-        else _result("pass", f"TLS-RPT reports are set up on {every(len(scope), 'domain')} that "
-                             f"{verb(len(scope), 'uses', 'use')} MTA-STS or TLS-RPT", [], unknown, "TLS-RPT")
+    return (
+        _result(
+            "fail",
+            f"{_subjects(findings)} of {plural(len(scope), 'domain')} without working TLS-RPT",
+            findings,
+            unknown,
+            "TLS-RPT",
+        )
+        if findings
+        else _result(
+            "pass",
+            f"TLS-RPT reports are set up on {every(len(scope), 'domain')} that "
+            f"{verb(len(scope), 'uses', 'use')} MTA-STS or TLS-RPT",
+            [],
+            unknown,
+            "TLS-RPT",
+        )
+    )
 
 
-@rule("spf_record", "Every domain has a working SPF record", "Email",
-      "Publish one SPF record per domain ending in -all (or ~all while testing), e.g. "
-      "\"v=spf1 include:spf.protection.outlook.com -all\". Domains that never send mail should publish "
-      "\"v=spf1 -all\".")
+@rule(
+    "spf_record",
+    "Every domain has a working SPF record",
+    "Email",
+    "Publish one SPF record per domain ending in -all (or ~all while testing), e.g. "
+    '"v=spf1 include:spf.protection.outlook.com -all". Domains that never send mail should publish '
+    '"v=spf1 -all".',
+)
 def spf_record(snap: TenantSnapshot, now: datetime):
     result = _domain_rule(snap, "SPF")
     if result is None:
@@ -101,14 +136,20 @@ def spf_record(snap: TenantSnapshot, now: datetime):
     findings, rows, unknown = result
     if len(unknown) == len(rows):
         return _unavailable(DNS_FAILED)
-    return _result("fail", f"{plural(_subjects(findings), 'domain')} with SPF problems", findings, unknown, "SPF") \
-        if findings else _result("pass", f"SPF is correct on {every(len(rows) - len(unknown), 'domain')}", [],
-                                 unknown, "SPF")
+    return (
+        _result("fail", f"{plural(_subjects(findings), 'domain')} with SPF problems", findings, unknown, "SPF")
+        if findings
+        else _result("pass", f"SPF is correct on {every(len(rows) - len(unknown), 'domain')}", [], unknown, "SPF")
+    )
 
 
-@rule("dmarc_policy", "Every domain enforces DMARC", "Email",
-      "Publish a DMARC record with a rua= reporting address, start at p=none to see who sends as the domain, "
-      "then move to p=quarantine and p=reject. Without enforcement, spoofed mail from the domain is delivered.")
+@rule(
+    "dmarc_policy",
+    "Every domain enforces DMARC",
+    "Email",
+    "Publish a DMARC record with a rua= reporting address, start at p=none to see who sends as the domain, "
+    "then move to p=quarantine and p=reject. Without enforcement, spoofed mail from the domain is delivered.",
+)
 def dmarc_policy(snap: TenantSnapshot, now: datetime):
     result = _domain_rule(snap, "DMARC")
     if result is None:
@@ -116,15 +157,22 @@ def dmarc_policy(snap: TenantSnapshot, now: datetime):
     findings, rows, unknown = result
     if len(unknown) == len(rows):
         return _unavailable(DNS_FAILED)
-    return _result("fail", f"{plural(_subjects(findings), 'domain')} without DMARC enforcement", findings,
-                   unknown, "DMARC") \
-        if findings else _result("pass", f"DMARC is enforced on {every(len(rows) - len(unknown), 'domain')}", [],
-                                 unknown, "DMARC")
+    return (
+        _result(
+            "fail", f"{plural(_subjects(findings), 'domain')} without DMARC enforcement", findings, unknown, "DMARC"
+        )
+        if findings
+        else _result("pass", f"DMARC is enforced on {every(len(rows) - len(unknown), 'domain')}", [], unknown, "DMARC")
+    )
 
 
-@rule("dkim_enabled", "DKIM signing is on for every mail domain", "Email",
-      "Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), "
-      "publishing the two selector CNAME records it shows.")
+@rule(
+    "dkim_enabled",
+    "DKIM signing is on for every mail domain",
+    "Email",
+    "Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), "
+    "publishing the two selector CNAME records it shows.",
+)
 def dkim_enabled(snap: TenantSnapshot, now: datetime):
     result = _domain_rule(snap, "DKIM")
     if result is None:
@@ -133,6 +181,8 @@ def dkim_enabled(snap: TenantSnapshot, now: datetime):
     checked = [h for h in map(dnscheck.DomainHealth.from_dict, rows) if h.microsoft_365 and not h.unknown("DKIM")]
     if not checked:
         return _unavailable(DNS_FAILED if unknown else "No domain receives mail through Microsoft 365")
-    return _result("fail", f"{plural(len(findings), 'mail domain')} without DKIM", findings, unknown, "DKIM") \
-        if findings else _result("pass", f"DKIM is on for {every(len(checked), 'Microsoft 365 mail domain')}", [],
-                                 unknown, "DKIM")
+    return (
+        _result("fail", f"{plural(len(findings), 'mail domain')} without DKIM", findings, unknown, "DKIM")
+        if findings
+        else _result("pass", f"DKIM is on for {every(len(checked), 'Microsoft 365 mail domain')}", [], unknown, "DKIM")
+    )

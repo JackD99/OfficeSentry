@@ -33,8 +33,21 @@ def test_profile_brings_the_account_together(db, two_tenants):
     profile = user_profile.build(db, _tenant(db, alpha), "u1")
     assert profile.name == "Ann" and profile.upn == "ann@x.com"
     parts = {p.key: p for p in profile.parts}
-    assert list(parts) == ["licences", "usage", "mfa", "roles", "groups", "mailbox", "devices", "onedrive", "apps",
-                           "signins", "signin_history", "activity", "timeline"]
+    assert list(parts) == [
+        "licences",
+        "usage",
+        "mfa",
+        "roles",
+        "groups",
+        "mailbox",
+        "devices",
+        "onedrive",
+        "apps",
+        "signins",
+        "signin_history",
+        "activity",
+        "timeline",
+    ]
     assert parts["licences"].tables[0].rows[0][0] == "Microsoft 365 Business Premium"
     groups = {row[0]: row[2] for row in parts["groups"].tables[0].rows}
     assert groups["Sales"] == "Owner"  # an owner of the team
@@ -102,8 +115,16 @@ def test_pages_render_and_are_tenant_scoped(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}/users/u1")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
-    for heading in ("Needs attention", "Licences", "MFA and sign-in protection", "Teams and groups", "Mailbox",
-                    "Devices", "OneDrive", "History"):
+    for heading in (
+        "Needs attention",
+        "Licences",
+        "MFA and sign-in protection",
+        "Teams and groups",
+        "Mailbox",
+        "Devices",
+        "OneDrive",
+        "History",
+    ):
         assert heading in html, heading
     assert client.get(f"/tenants/{alpha}/users/nobody").status_code == 404
     xlsx = client.get(f"/tenants/{alpha}/users/u1.xlsx")
@@ -172,22 +193,25 @@ def test_leaver_checklist_for_a_blocked_account(db, two_tenants):
 
 def _set_mailbox_size(db, tenant_id, uid, size):
     unpack(db)
-    db.execute("UPDATE objects SET data = json_set(data, '$.totalBytes', ?) WHERE kind = 'mailbox_size'"
-               " AND object_id = ? AND run_id IN (SELECT id FROM runs WHERE tenant_id = ?)", (size, uid, tenant_id))
+    db.execute(
+        "UPDATE objects SET data = json_set(data, '$.totalBytes', ?) WHERE kind = 'mailbox_size'"
+        " AND object_id = ? AND run_id IN (SELECT id FROM runs WHERE tenant_id = ?)",
+        (size, uid, tenant_id),
+    )
 
 
 def test_leaver_mailbox_advice(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha, users=[dict(USERS[0], accountEnabled=False), *USERS[1:], gd.INFO_USER])
-    _set_mailbox_size(db, alpha, "u1", 5 * 1024 ** 3)
+    _set_mailbox_size(db, alpha, "u1", 5 * 1024**3)
     items = _reclaim(user_profile.build(db, _tenant(db, alpha), "u1"))
-    (found, mailbox), = [(found, todo) for (area, found), todo in items.items() if area == "Mailbox"]
+    ((found, mailbox),) = [(found, todo) for (area, found), todo in items.items() if area == "Mailbox"]
     assert "Convert it to a shared mailbox" in mailbox and "under 50 GB need no licence" in mailbox
     assert "5.0 GB" in found and "forwards to ann@gmail.com" in found
     # Ann can open info@: that access should go.
     assert any(area == "Mailbox access" and "info@x.com" in found for area, found in items)
 
-    _set_mailbox_size(db, alpha, "u1", 60 * 1024 ** 3)
+    _set_mailbox_size(db, alpha, "u1", 60 * 1024**3)
     items = _reclaim(user_profile.build(db, _tenant(db, alpha), "u1"))
     mailbox = next(todo for (area, _), todo in items.items() if area == "Mailbox")
     assert "over the 50 GB" in mailbox and "Convert it" not in mailbox
@@ -225,8 +249,15 @@ def test_leaver_sheet_lists_the_checklist(app, db, two_tenants):
     assert sheet.name == "Bob" and not sheet.enabled
     assert any(i.area == "Group owner" for i in sheet.checklist.items)
     with app.test_request_context():
-        html = render_template("reports/leaver.html", sheet=sheet, pdf=False, print_view=True, print_name="x",
-                               pdf_available=False, css_href="/static/report.css")
+        html = render_template(
+            "reports/leaver.html",
+            sheet=sheet,
+            pdf=False,
+            print_view=True,
+            print_name="x",
+            pdf_available=False,
+            css_href="/static/report.css",
+        )
     assert "Leaver checklist" in html and "Sign-off" in html and "Only owner of Project Phoenix" in html
 
 
@@ -236,8 +267,9 @@ def test_timeline_dates_a_rule_by_the_snapshot_it_first_appeared_in(db, two_tena
     earlier = (datetime.now(UTC) - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute("UPDATE runs SET finished_at = ? WHERE tenant_id = ?", (earlier, alpha))
     _seed(db, alpha)  # ...then Ann's rules appear
-    later = db.execute("SELECT MAX(finished_at) FROM runs WHERE tenant_id = ? AND collector = 'inbox_rules'",
-                       (alpha,)).fetchone()[0]
+    later = db.execute(
+        "SELECT MAX(finished_at) FROM runs WHERE tenant_id = ? AND collector = 'inbox_rules'", (alpha,)
+    ).fetchone()[0]
     profile = user_profile.build(db, _tenant(db, alpha), "u1")
     rows = {p.key: p for p in profile.parts}["timeline"].tables[0].rows
     rule = next(r for r in rows if r[2].startswith('Inbox rule "Copy to home" first seen'))

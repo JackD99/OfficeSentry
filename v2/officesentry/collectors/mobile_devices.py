@@ -17,13 +17,31 @@ from . import mailbox_window
 from .base import Collector, RunContext, register
 
 DEVICE_FIELDS = (
-    "Guid", "DeviceId", "DeviceType", "DeviceModel", "DeviceOS", "DeviceUserAgent", "FriendlyName",
-    "ClientType", "ClientVersion", "DeviceAccessState", "DeviceAccessStateReason", "IsManaged", "IsCompliant",
-    "IsDisabled", "FirstSyncTime", "UserDisplayName",
+    "Guid",
+    "DeviceId",
+    "DeviceType",
+    "DeviceModel",
+    "DeviceOS",
+    "DeviceUserAgent",
+    "FriendlyName",
+    "ClientType",
+    "ClientVersion",
+    "DeviceAccessState",
+    "DeviceAccessStateReason",
+    "IsManaged",
+    "IsCompliant",
+    "IsDisabled",
+    "FirstSyncTime",
+    "UserDisplayName",
 )
 SYNC_FIELDS = (
-    "LastSuccessSync", "LastSyncAttemptTime", "Status", "LastPolicyUpdateTime", "DeviceWipeRequestTime",
-    "DeviceWipeSentTime", "DeviceWipeAckTime",
+    "LastSuccessSync",
+    "LastSyncAttemptTime",
+    "Status",
+    "LastPolicyUpdateTime",
+    "DeviceWipeRequestTime",
+    "DeviceWipeSentTime",
+    "DeviceWipeAckTime",
 )
 FOLDER = "\\ExchangeActiveSyncDevices\\"
 
@@ -45,8 +63,15 @@ def mailbox_index(boxes: list[dict]) -> dict[str, dict]:
     """Mailboxes by every name a device's identity might use for them, lower-cased."""
     out: dict[str, dict] = {}
     for m in boxes:
-        for key in ("Name", "Alias", "ExternalDirectoryObjectId", "Guid", "PrimarySmtpAddress",
-                    "UserPrincipalName", "DisplayName"):
+        for key in (
+            "Name",
+            "Alias",
+            "ExternalDirectoryObjectId",
+            "Guid",
+            "PrimarySmtpAddress",
+            "UserPrincipalName",
+            "DisplayName",
+        ):
             if isinstance(m.get(key), str) and m[key]:
                 out.setdefault(m[key].lower(), m)
     return out
@@ -79,10 +104,15 @@ class MobileDevices(Collector):
             box = index.get(name.lower()) if name else None
             mailbox_id = (box or {}).get("_id") or name or "?"
             row = {f: d.get(f) for f in DEVICE_FIELDS}
-            row.update({"mailboxId": mailbox_id, "ownerName": name,
-                        "mailbox": (box or {}).get("PrimarySmtpAddress"),
-                        "mailboxType": (box or {}).get("RecipientTypeDetails"),
-                        "identity": d.get("Identity")})
+            row.update(
+                {
+                    "mailboxId": mailbox_id,
+                    "ownerName": name,
+                    "mailbox": (box or {}).get("PrimarySmtpAddress"),
+                    "mailboxType": (box or {}).get("RecipientTypeDetails"),
+                    "identity": d.get("Identity"),
+                }
+            )
             rows.append((_device_id(d), row))
             if name:
                 owners.setdefault(mailbox_id, {"_id": mailbox_id, "ident": (box or {}).get("Guid") or name})
@@ -99,8 +129,9 @@ class MobileDevices(Collector):
     @staticmethod
     def _statistics(ctx: RunContext, owners: list[dict]) -> dict[str, dict]:
         """Each device's last sync, by device ID and identity: read this run, or kept from an earlier run."""
-        window = mailbox_window.plan(ctx, MobileDevices.key, "mobile_device_sync", owners, lambda o: o["_id"],
-                                     "mobile device sync times")
+        window = mailbox_window.plan(
+            ctx, MobileDevices.key, "mobile_device_sync", owners, lambda o: o["_id"], "mobile device sync times"
+        )
         found, failed = [], 0
         for owner in window.mailboxes:
             try:

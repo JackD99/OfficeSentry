@@ -46,14 +46,26 @@ def usage_part(p: Person) -> Part | None:
         result.facts.append(("Email", f"{e.get('sent') or 0:,} sent, {e.get('received') or 0:,} received"))
     if row.get("teamsCounts"):
         t = row["teamsCounts"]
-        result.facts.append(("Teams", f"{_plural(t.get('messages') or 0, 'message')}, "
-                                      f"{_plural(t.get('meetings') or 0, 'meeting')}, "
-                                      f"{_plural(t.get('calls') or 0, 'call')}"))
+        result.facts.append(
+            (
+                "Teams",
+                f"{_plural(t.get('messages') or 0, 'message')}, "
+                f"{_plural(t.get('meetings') or 0, 'meeting')}, "
+                f"{_plural(t.get('calls') or 0, 'call')}",
+            )
+        )
     if row.get("activations"):
         table = Section("Office installs", ["Product", "Windows", "Mac", "Mobile", "Last activated"])
         for a in row["activations"]:
-            table.add([a.get("product"), a.get("windows") or 0, a.get("mac") or 0, a.get("mobile") or 0,
-                       _day(a.get("lastActivated"))])
+            table.add(
+                [
+                    a.get("product"),
+                    a.get("windows") or 0,
+                    a.get("mac") or 0,
+                    a.get("mobile") or 0,
+                    _day(a.get("lastActivated")),
+                ]
+            )
         result.tables.append(table)
 
     _, skus = _licences(p)
@@ -67,15 +79,27 @@ def usage_part(p: Person) -> Part | None:
         table = Section("Cheaper licence options", ["Licence", "Option", "Why", "Saving / month"])
         for sg in suggestions:
             saving = sg.saving(prices)
-            table.add([sku_name(sg.current), sg.action, sg.why + (f". {sg.caution}" if sg.caution else ""),
-                       Money(saving, currency) if saving else ""], "low")
-            p.flag("low", f"{sku_name(sg.current)}: {sg.action.lower() if sg.target == '' else sg.action}. {sg.why}."
-                   + (f" Saves {Money(saving, currency)} a month." if saving else ""), "usage")
+            table.add(
+                [
+                    sku_name(sg.current),
+                    sg.action,
+                    sg.why + (f". {sg.caution}" if sg.caution else ""),
+                    Money(saving, currency) if saving else "",
+                ],
+                "low",
+            )
+            p.flag(
+                "low",
+                f"{sku_name(sg.current)}: {sg.action.lower() if sg.target == '' else sg.action}. {sg.why}."
+                + (f" Saves {Money(saving, currency)} a month." if saving else ""),
+                "usage",
+            )
         result.tables.append(table)
     if used:
         result.summary = ", ".join(used)
     else:
         result.summary, result.tone = f"No activity in {days} days", "warn" if held else None
-    result.note = ("From Microsoft's usage reports, which run a couple of days behind"
-                   + (f" (as of {_day(status.get('reportDate'))})." if status.get("reportDate") else "."))
+    result.note = "From Microsoft's usage reports, which run a couple of days behind" + (
+        f" (as of {_day(status.get('reportDate'))})." if status.get("reportDate") else "."
+    )
     return result
