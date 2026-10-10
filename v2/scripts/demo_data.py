@@ -424,7 +424,7 @@ def replies(t: dict, users: list[dict], now: datetime, first: bool) -> dict:
                 "scheduledEndDateTime": when(end), "internalReplyMessage": f"<p>{text}</p>",
                 "externalReplyMessage": f"<p>{text}</p>"}
     out = {staff[4]["id"]: on("I'm on leave until 2 September. For anything urgent please email the office.")}
-    if not first:
+    if not first and len(staff) > 13:  # scale_data.py's smallest tenants have fewer staff
         out[staff[10]["id"]] = on("I'm at a conference this week and will reply on Monday.", "contactsOnly")
         out[staff[13]["id"]] = on("I'm on holiday from next Monday for two weeks.", status="scheduled",
                                   start=now + timedelta(days=4), end=now + timedelta(days=18))

@@ -48,6 +48,26 @@ def secret_token_provider(tenant_ref: str, client_id: str, secret: str, resource
     return token
 
 
+def federated_token_provider(tenant_ref: str, client_id: str, assertion: Callable[[], str], resource: str,
+                             cloud: str | None = None) -> Callable[[], str]:
+    """Federated-credential variant: ``assertion`` returns a token another identity provider issued (GitHub
+    Actions' OIDC token, for the live canary), which the app trusts instead of holding a secret."""
+    import msal
+
+    _check_resource(resource, cloud)
+    app = msal.ConfidentialClientApplication(
+        client_id=client_id, authority=authority(tenant_ref, cloud), client_credential={"client_assertion": assertion})
+
+    def token() -> str:
+        result = app.acquire_token_for_client(scopes=[f"{resource}/.default"])
+        if "access_token" not in result:
+            raise TokenError(result.get("error", "auth_failed"),
+                             result.get("error_description", "token request failed"))
+        return result["access_token"]
+
+    return token
+
+
 def certificate_token_provider(tenant_ref: str, client_id: str, key_pem: str, thumbprint: str,
                                resource: str, cloud: str | None = None) -> Callable[[], str]:
     """Return a callable giving a token for ``resource`` (e.g. https://graph.microsoft.com).

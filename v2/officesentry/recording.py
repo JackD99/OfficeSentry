@@ -56,6 +56,8 @@ FAKE_DOMAIN = "sentrytest"
 LIST_LIMIT = {"/v1.0/security/secureScores": 5}
 # Keys that name people or devices wherever they appear in authentication methods.
 DEVICE_KEYS = {"displayName", "model", "deviceTag", "phoneAppVersion", "phoneNumber", "emailAddress"}
+# Headers Microsoft sends on an API it is retiring (RFC 9745 and RFC 8594); kept so the live canary can report them.
+NOTICE_HEADERS = ("Deprecation", "Sunset")
 
 
 # IDs that Office Sentry's own code looks for (role templates, guest access levels, Microsoft
@@ -111,6 +113,9 @@ class RecordingSession(requests.Session):
             return resp
         if retry:
             entry["retry_after"] = retry
+        notices = {h: resp.headers[h] for h in NOTICE_HEADERS if resp.headers.get(h)}
+        if notices:
+            entry["headers"] = notices
         self.log.append(entry)
         return resp
 
@@ -447,6 +452,8 @@ def scrub(log: list, tenant_id: str, client_id: str) -> dict:
                "body": s.walk(body, device="/authentication/methods" in path)}
         if e["api"] == "exchange":
             out["cmdlet"] = s.walk(e["cmdlet"])
+        if e.get("headers"):
+            out["headers"] = {k: s.text(v) for k, v in e["headers"].items()}
         entries.append(out)
     fixture = {"tenant_id": s.guid(tenant_id.lower()), "client_id": s.guid(client_id.lower()), "entries": entries}
     # URLs are checked for IDs and domains only: a person named "admin" isn't leaked by /admin/sharepoint.

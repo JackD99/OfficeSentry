@@ -78,7 +78,7 @@ def mock(rsps, fixture: dict, stand_ins: dict[str, dict] | None = None,
             missing.append(label)
             return 404, {}, json.dumps({"error": {"code": "NotRecorded", "message": f"not in fixture: {label}"}})
         e = recorded.pop(0) if len(recorded) > 1 else recorded[0]
-        return e["status"], {}, json.dumps(e["body"]) if e["body"] is not None else ""
+        return e["status"], e.get("headers") or {}, json.dumps(e["body"]) if e["body"] is not None else ""
 
     patterns = [(re.compile("".join("[^/]+" if part == "{id}" else re.escape(part)
                                     for part in re.split(r"(\{id\})", path)) + r"\Z"), body)

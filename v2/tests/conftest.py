@@ -18,12 +18,17 @@ PASSWORD_HASH = generate_password_hash(PASSWORD, method="pbkdf2:sha256:1")
 def pytest_addoption(parser):
     # tests/browser: screenshots and accessibility in a real browser (tests/browser/README.md).
     parser.addoption("--ui", action="store_true", help="run the browser tests in tests/browser")
-    parser.addoption("--update", action="store_true", help="with --ui: save new screenshot baselines")
+    parser.addoption("--update", action="store_true",
+                     help="with --ui or --nightly: save new screenshot or PDF page baselines")
     parser.addoption("--save-all", action="store_true", help="with --ui: save every capture in tests/browser/output")
+    # tests/nightly: release upgrades, PDF snapshots and the 200-tenant timing run (tests/nightly/README.md).
+    parser.addoption("--nightly", action="store_true", help="run the slow scheduled suite in tests/nightly")
 
 
 def pytest_ignore_collect(collection_path, config):
     if collection_path.name == "browser" and not config.getoption("--ui"):
+        return True
+    if collection_path.name == "nightly" and not config.getoption("--nightly"):
         return True
     return None
 
