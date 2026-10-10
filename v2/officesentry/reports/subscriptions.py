@@ -20,6 +20,7 @@ from ..text import plural
 from .data_reports import DataReport, Highlight, Rows, Section
 from .identity_reports import Money
 from .monthly_review import setting
+from .registry import report
 
 # companySubscription.status and subscribedSku.capabilityStatus, in words.
 STATUS = {"Enabled": "Active", "Warning": "Grace period", "Suspended": "Suspended", "LockedOut": "Locked out",
@@ -75,6 +76,17 @@ def _label(u: dict) -> str:
     return u.get("userPrincipalName") or u.get("displayName") or u.get("_id", "?")
 
 
+@report(
+    "subscriptions",
+    "Licences and subscriptions",
+    "Every subscription with licences bought, assigned and available, its cost and renewal date, "
+    "trials and lapsing subscriptions, and who has which licence, directly or by group.",
+    ("tenant_profile", "users", "groups"),
+    group="tenant",
+    order=20,
+    keywords="licenses skus products renewal expiry expiring trial suspended grace period billing invoice "
+    "true-up group-based licensing assignment errors usage location csp partner center",
+)
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     skus = snap.objects("tenant_profile", "subscribed_sku")
     if skus is None:
@@ -345,11 +357,3 @@ def _groups(groups: dict, by_group: dict, names: dict) -> Section:
     for _, row, flag in sorted(rows, key=lambda r: r[0]):
         section.add(row, flag)
     return section
-
-
-REPORTS = {
-    "subscriptions": ("Licences and subscriptions",
-                      "Every subscription with licences bought, assigned and available, its cost and renewal date, "
-                      "trials and lapsing subscriptions, and who has which licence, directly or by group.",
-                      ("tenant_profile", "users", "groups"), build),
-}

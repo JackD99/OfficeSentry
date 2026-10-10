@@ -22,10 +22,10 @@ from urllib.parse import urlencode
 
 from flask import Blueprint, abort, g, render_template, request, url_for
 
+from ..checks.apps import app_risks
 from ..mailflow import inbox_rule_risk, mailbox_forwarding
 from ..reports import sign_in_reports
 from ..reports.views import slug
-from ..rules import app_risks
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .access import roles_required, visible_tenants

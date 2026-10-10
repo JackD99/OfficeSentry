@@ -13,6 +13,7 @@ from .. import identity_protection as ip
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import DataReport, Rows, Section, Tile
+from .registry import report
 
 NOT_COLLECTED = "Risky users haven't been collected yet. Refresh \"Risky users\" on the tenant page."
 NO_P2 = ("Risky users come from Entra ID Protection, which needs Entra ID P2 (included in Microsoft 365 E5, or as "
@@ -30,6 +31,17 @@ def _utc(value) -> str:
     return value[:16].replace("T", " ") if isinstance(value, str) and len(value) >= 16 else ""
 
 
+@report(
+    "risky-users",
+    "Risky users",
+    "Accounts Entra ID Protection rates at risk or confirmed compromised, and the risk resolved "
+    "recently (needs Entra ID P2).",
+    ("risky_users", "tenant_profile"),
+    group="identity",
+    order=70,
+    keywords="identity protection risk compromised hacked breach leaked credentials at risk p2 "
+    "remediated dismissed",
+)
 def risky_users_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if why := clouds.missing(clouds.of(snap.tenant), "risky_users"):
         report.unavailable = why
@@ -93,11 +105,3 @@ def risky_users_report(snap: TenantSnapshot, now: datetime, report: DataReport) 
                        "Times are UTC.")
     if status.get("truncated"):
         report.notes.append(f"Only the first {status.get('read', 0):,} risky users were read.")
-
-
-REPORTS = {
-    "risky-users": ("Risky users",
-                    "Accounts Entra ID Protection rates at risk or confirmed compromised, and the risk resolved "
-                    "recently (needs Entra ID P2).",
-                    ("risky_users", "tenant_profile"), risky_users_report),
-}
