@@ -9,7 +9,8 @@
   collection failed for most tenants (``last_slot``);
 * **backup**: the newest backup and the last attempt (``backups.read_status``);
 * **disk**: how full the data folder's disk is;
-* **certificates**: app certificates near expiry (``cert_lifecycle.expiring``).
+* **certificates**: app certificates near expiry (``cert_lifecycle.expiring``);
+* **erase**: whether what deleted tenants left on disk has been erased (``lifecycle.erase``).
 
 Each check is ``ok``, ``warn`` (needs attention, the portal still works) or ``fail``
 (the portal or worker can't do its job). ``/health/ready`` answers 503 when any check
@@ -31,7 +32,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, backups, cert_lifecycle, schedule, worker
+from . import __version__, backups, cert_lifecycle, lifecycle, schedule, worker
 from .db import latest_version, schema_version
 from .devices import parse_ts
 from .text import duration, plural
@@ -418,6 +419,36 @@ def check_certificates(conn, cfg, now) -> Check:
     )
 
 
+ERASE_LATE = timedelta(hours=6)  # a delete still not erased after this, with no failure recorded, needs a look
+
+
+def check_erase(conn, cfg, now) -> Check:
+    state = lifecycle.erase_state(conn)
+    waited = lifecycle.erase_waiting(state, now)
+    data = {"waiting": state is not None, "waiting_hours": _hours(waited) if waited else None}
+    if state is None:
+        return Check("erase", "Deleted clients", OK, "Everything deleted has been erased", data=data)
+    if state.get("error"):
+        return Check(
+            "erase",
+            "Deleted clients",
+            WARN,
+            "A deleted client's data isn't fully erased from the server yet",
+            state["error"].rstrip(".") + ". It's tried again every hour, and each try is in the Activity log.",
+            data,
+        )
+    if waited and waited > ERASE_LATE:
+        return Check(
+            "erase",
+            "Deleted clients",
+            WARN,
+            f"Erasing a deleted client's data has waited {duration(waited.total_seconds())}",
+            "The background worker does it. " + WORKER_FIX,
+            data,
+        )
+    return Check("erase", "Deleted clients", OK, "Erasing a deleted client's data now", data=data)
+
+
 CHECKS = (
     ("database", check_database),
     ("schema", check_schema),
@@ -426,6 +457,7 @@ CHECKS = (
     ("backup", check_backup),
     ("disk", check_disk),
     ("certificates", check_certificates),
+    ("erase", check_erase),
 )
 LABELS = {
     "database": "Database",
@@ -435,6 +467,7 @@ LABELS = {
     "backup": "Backups",
     "disk": "Disk space",
     "certificates": "Certificates",
+    "erase": "Deleted clients",
 }
 # A check that can't even run counts as failed when the portal can't work without it.
 CRITICAL = {"database", "schema", "worker", "disk"}

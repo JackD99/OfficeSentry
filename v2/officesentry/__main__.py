@@ -471,6 +471,9 @@ def cmd_delete_tenant(args, cfg):
         + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "")
         + "."
     )
+    print(
+        "The worker erases its last copies from the files on disk in the background; System status says if that fails."
+    )
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
 

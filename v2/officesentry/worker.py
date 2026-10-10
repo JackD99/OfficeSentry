@@ -454,12 +454,14 @@ JOB_MODULES = (
     "officesentry.state_history",
     "officesentry.system_alerts",
     "officesentry.onboarding",
+    "officesentry.lifecycle",
 )
 TASK_MODULES = (
     "officesentry.delivery",
     "officesentry.month_end",
     "officesentry.reports.precomputed",
     "officesentry.onboarding",
+    "officesentry.lifecycle",
 )
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 

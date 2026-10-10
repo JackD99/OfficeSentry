@@ -109,7 +109,16 @@ def test_the_token_or_an_admin_sees_every_check(client, db, two_tenants):
     ):
         body = resp.json
         assert resp.status_code == 200 and body["ok"] is True and body["status"] in ("ok", "warn")
-        assert set(body["checks"]) == {"database", "schema", "worker", "collection", "backup", "disk", "certificates"}
+        assert set(body["checks"]) == {
+            "database",
+            "schema",
+            "worker",
+            "collection",
+            "backup",
+            "disk",
+            "certificates",
+            "erase",
+        }
         assert body["checks"]["schema"]["version"] == latest_version()
         assert body["checks"]["worker"]["status"] == "ok" and body["checks"]["worker"]["age_seconds"] < 60
         assert body["checks"]["disk"]["used_percent"] == 40.0
