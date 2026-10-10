@@ -29,8 +29,16 @@ def test_report_components_page(client, db):
     make_user(db, "analyst", role="analyst")
     login(client, "analyst")
     page = client.get("/styleguide/report").get_data(as_text=True)
-    for part in ('class="verdict tone-critical"', 'class="verdict tone-ok"', 'class="kpi"', 'class="breakdown keep"',
-                 'class="actions"', 'class="chg chg-resolved"', 'class="sev sev-info"', '<table class="data">'):
+    for part in (
+        'class="verdict tone-critical"',
+        'class="verdict tone-ok"',
+        'class="kpi"',
+        'class="breakdown keep"',
+        'class="actions"',
+        'class="chg chg-resolved"',
+        'class="sev sev-info"',
+        '<table class="data">',
+    ):
         assert part in page, part
 
 

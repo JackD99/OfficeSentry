@@ -51,8 +51,11 @@ def test_parallel_wrong_passwords_cannot_exceed_the_limit(live, db, monkeypatch)
     _slow(monkeypatch, auth, "check_password_hash", checked, lambda h, _p: h == victim_hash)
 
     def guess(i):
-        return _browser().post(f"{live}/login", data={"username": "victim", "password": f"wrong-{i}"},
-                               allow_redirects=False).status_code
+        return (
+            _browser()
+            .post(f"{live}/login", data={"username": "victim", "password": f"wrong-{i}"}, allow_redirects=False)
+            .status_code
+        )
 
     with ThreadPoolExecutor(max_workers=40) as pool:
         codes = list(pool.map(guess, range(40)))

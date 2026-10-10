@@ -42,8 +42,9 @@ _QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"')
 def doh_lookup(name: str, rdtype: str, session: requests.Session | None = None) -> list[str]:
     """``dnscheck.lookup`` over DNS-over-HTTPS (JSON), with the same answers and errors."""
     try:
-        resp = (session or requests).get(DOH_URL, params={"name": name, "type": rdtype},
-                                         headers={"Accept": "application/dns-json"}, timeout=10)
+        resp = (session or requests).get(
+            DOH_URL, params={"name": name, "type": rdtype}, headers={"Accept": "application/dns-json"}, timeout=10
+        )
         resp.raise_for_status()
         data = resp.json()
     except (requests.RequestException, ValueError) as exc:
@@ -67,11 +68,18 @@ def _wrap(provider, error_cls):
             return provider()
         except TokenError as exc:
             raise error_cls(401, exc.code, exc.message) from exc
+
     return token
 
 
-def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
-        record: Path | None = None, connection_id: int | None = None, dns_over_https: bool = False) -> int:
+def run(
+    cfg: Config,
+    only: list[str] | None = None,
+    out_dir: Path | None = None,
+    record: Path | None = None,
+    connection_id: int | None = None,
+    dns_over_https: bool = False,
+) -> int:
     missing = [k for k in ENV if not os.environ.get(k)]
     if missing:
         print("Missing environment variables: " + ", ".join(missing))
@@ -100,16 +108,25 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
     if row and connection_id is not None and row["connection_id"] is None:
         conn.execute("UPDATE tenants SET connection_id = ? WHERE id = ?", (connection_id, tenant_id))
     # The test app is Office Sentry's own, so checks shouldn't flag it. Its client ID isn't secret.
-    conn.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)"
-                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (client_id,))
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)"
+        " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (client_id,),
+    )
 
     log: list = []
     session = recording.RecordingSession(log) if record else None
-    graph = GraphClient(_wrap(secret_token_provider(tenant_ref, client_id, secret, cloud.graph, cloud.key),
-                              GraphError), session=session, cloud=cloud.key)
-    exo = ExchangeClient(tenant_ref, _wrap(secret_token_provider(tenant_ref, client_id, secret, cloud.exchange,
-                                                                 cloud.key), ExchangeError),
-                         session=session, cloud=cloud.key)
+    graph = GraphClient(
+        _wrap(secret_token_provider(tenant_ref, client_id, secret, cloud.graph, cloud.key), GraphError),
+        session=session,
+        cloud=cloud.key,
+    )
+    exo = ExchangeClient(
+        tenant_ref,
+        _wrap(secret_token_provider(tenant_ref, client_id, secret, cloud.exchange, cloud.key), ExchangeError),
+        session=session,
+        cloud=cloud.key,
+    )
     real_lookup = dnscheck.lookup
     answers: list = []
     dnscheck.lookup = recording.recording_lookup(answers, doh_lookup if dns_over_https else real_lookup)
@@ -132,8 +149,10 @@ def run(cfg: Config, only: list[str] | None = None, out_dir: Path | None = None,
         failures += status == "failed"
     dnscheck.lookup = real_lookup
     if answers and not any(a["answer"] for a in answers):
-        print("\nEvery DNS lookup came back empty, so the domain checks are wrong. If this machine's DNS is "
-              "blocked, run again with --dns-over-https.")
+        print(
+            "\nEvery DNS lookup came back empty, so the domain checks are wrong. If this machine's DNS is "
+            "blocked, run again with --dns-over-https."
+        )
     if failures == len(keys) and consented is None:
         # Nothing came back, so there may be no admin consent yet; the portal says "Awaiting consent".
         conn.execute("UPDATE tenants SET consented_at = NULL WHERE id = ?", (tenant_id,))

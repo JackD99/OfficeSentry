@@ -14,8 +14,10 @@ from datetime import date, datetime
 from markupsafe import Markup, escape
 
 # 2026-08-20 | 2026-08-20 22:42 | 2026-08-20T22:42:05Z, optionally followed by " (45d)" or " (expired)".
-DATE_CELL = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?Z?)?"
-                       r"(?: \((\d+)d\)| \((expired)\))?$")
+DATE_CELL = re.compile(
+    r"^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?Z?)?"
+    r"(?: \((\d+)d\)| \((expired)\))?$"
+)
 PERCENT = re.compile(r"^(-?\d+(?:\.\d+)?)%$")
 SIGNED = re.compile(r"^[+-]\d{1,9}$")
 WHOLE = re.compile(r"^(0|[1-9]\d{0,8})$")
@@ -34,8 +36,9 @@ def parse_date(value) -> tuple[date | datetime, str] | None:
         return None
     y, mo, d, hh, mm, ss, days, expired = m.groups()
     try:
-        when = (datetime(int(y), int(mo), int(d), int(hh), int(mm), int(ss or 0)) if hh
-                else date(int(y), int(mo), int(d)))
+        when = (
+            datetime(int(y), int(mo), int(d), int(hh), int(mm), int(ss or 0)) if hh else date(int(y), int(mo), int(d))
+        )
     except ValueError:
         return None
     return when, days or expired or ""
@@ -72,7 +75,7 @@ def breakable(text: str) -> Markup:
             if BREAK_AFTER.fullmatch(piece):
                 out.append(escape(piece) + WBR)
             else:  # a run with nowhere to break (a code or hash) gets a chance every LONG_TOKEN characters
-                out.append(WBR.join(escape(piece[i:i + LONG_TOKEN]) for i in range(0, len(piece), LONG_TOKEN)))
+                out.append(WBR.join(escape(piece[i : i + LONG_TOKEN]) for i in range(0, len(piece), LONG_TOKEN)))
     return Markup().join(out)
 
 

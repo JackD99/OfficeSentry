@@ -44,14 +44,23 @@ def _signins(count=60, upns=("ann@x.com", "bob@x.com", "cat@x.com"), prefix="si"
     for n in range(count):
         if n % 4:
             when -= timedelta(hours=step_hours)
-        row = gd._signin(n, _iso(when), upns[n % len(upns)], f"u{n % len(upns)}", [0, 0, 50126, 50074][n % 4],
-                         ip=f"198.51.100.{n % 5}", country=["GB", "FR"][n % 2], mfa=bool(n % 3))
+        row = gd._signin(
+            n,
+            _iso(when),
+            upns[n % len(upns)],
+            f"u{n % len(upns)}",
+            [0, 0, 50126, 50074][n % 4],
+            ip=f"198.51.100.{n % 5}",
+            country=["GB", "FR"][n % 2],
+            mfa=bool(n % 3),
+        )
         out.append({**row, "id": f"{prefix}-{n}"})
     return out
 
 
-def _fake_log(rows, *, path="/auditLogs/signIns", root=BETA, field="createdDateTime", page=7,
-              fail=lambda flt, skip, n: None):
+def _fake_log(
+    rows, *, path="/auditLogs/signIns", root=BETA, field="createdDateTime", page=7, fail=lambda flt, skip, n: None
+):
     """A fake log honouring ``ge``/``le`` filters, newest first, in pages. ``fail(filter, skip, call)`` may
     return an HTTP status to answer instead, or raise to simulate a crash."""
     calls = {"n": 0}
@@ -65,20 +74,27 @@ def _fake_log(rows, *, path="/auditLogs/signIns", root=BETA, field="createdDateT
             return status, {}, json.dumps({"error": {"code": "GatewayTimeout", "message": "Request timed out"}})
         clauses = [c.split(" ") for c in flt.split(" and ")]
         ops = {"ge": str.__ge__, "le": str.__le__}
-        match = sorted((r for r in rows if all(ops[op](r[field], v) for _, op, v in clauses)),
-                       key=lambda r: r[field], reverse=True)
-        body = {"value": match[skip:skip + page]}
+        match = sorted(
+            (r for r in rows if all(ops[op](r[field], v) for _, op, v in clauses)), key=lambda r: r[field], reverse=True
+        )
+        body = {"value": match[skip : skip + page]}
         if skip + page < len(match):
             body["@odata.nextLink"] = f"{root}{path}?$filter={flt}&$skiptoken={skip + page}"
         return 200, {}, json.dumps(body)
+
     responses.add_callback(responses.GET, f"{root}{path}", callback=handler, content_type="application/json")
     return calls
 
 
 def _ctx(db, tenant_id):
     lines = []
-    return SimpleNamespace(conn=db, tenant={"id": tenant_id}, log=lines.append, lines=lines,
-                           graph=GraphClient(lambda: "t", sleep=lambda s: None))
+    return SimpleNamespace(
+        conn=db,
+        tenant={"id": tenant_id},
+        log=lines.append,
+        lines=lines,
+        graph=GraphClient(lambda: "t", sleep=lambda s: None),
+    )
 
 
 def _ingest(db, tenant_id, budget=100, **kwargs):
@@ -90,20 +106,27 @@ def _stored(db, tenant_id, start=NOW - timedelta(days=40), end=NOW + timedelta(d
 
 
 def _daily(db, tenant_id):
-    return {(r.day, r.user, r.app, r.country): (r.succeeded, r.failed, r.interrupted, r.mfa, r.single_factor)
-            for r in events.daily_between(db, tenant_id, "2026-08-01", "2026-12-31")}
+    return {
+        (r.day, r.user, r.app, r.country): (r.succeeded, r.failed, r.interrupted, r.mfa, r.single_factor)
+        for r in events.daily_between(db, tenant_id, "2026-08-01", "2026-12-31")
+    }
 
 
 def _expected_daily(rows):
     from officesentry import signins
+
     out = {}
     for s in rows:
         k = (s["createdDateTime"][:10], s["userPrincipalName"], s["appDisplayName"], s["location"]["countryOrRegion"])
         ok, failed, interrupted, mfa, single = out.get(k, (0, 0, 0, 0, 0))
         result = signins.outcome(s["status"]["errorCode"])
-        out[k] = (ok + (result == "success"), failed + (result == "failure"), interrupted + (result == "interrupted"),
-                  mfa + (result == "success" and signins.mfa_used(s) is True),
-                  single + (result == "success" and signins.mfa_used(s) is False))
+        out[k] = (
+            ok + (result == "success"),
+            failed + (result == "failure"),
+            interrupted + (result == "interrupted"),
+            mfa + (result == "success" and signins.mfa_used(s) is True),
+            single + (result == "success" and signins.mfa_used(s) is False),
+        )
     return out
 
 
@@ -118,6 +141,7 @@ def test_a_crash_mid_collection_loses_nothing_and_resumes(db, two_tenants, monke
     def crash(flt, skip, n):
         if n == 4:
             raise Crash
+
     _fake_log(rows, fail=crash)
     with pytest.raises(Crash):
         _ingest(db, alpha)
@@ -140,6 +164,7 @@ def test_a_crash_mid_collection_loses_nothing_and_resumes(db, two_tenants, monke
         if saves["n"] == 4:
             raise Crash
         real(conn, tenant_id, cov)
+
     monkeypatch.setattr(events, "save_coverage", dies)
     with pytest.raises(Crash):
         _ingest(db, alpha)
@@ -225,8 +250,12 @@ def test_ranges_microsoft_no_longer_keeps_are_lost_or_move_the_start():
     now = 100 * day
     floor = now - 30 * day
     # Never read at the bottom: the history just starts later. In the middle: lost, and remembered.
-    cov = events.Coverage("signins", since=floor - 10 * day, read_to=now - day,
-                          gaps=[[floor - 3 * day, floor - day], [floor - 10 * day, floor - 8 * day]])
+    cov = events.Coverage(
+        "signins",
+        since=floor - 10 * day,
+        read_to=now - day,
+        gaps=[[floor - 3 * day, floor - day], [floor - 10 * day, floor - 8 * day]],
+    )
     events._extend(cov, now, floor)
     assert cov.since == floor - 8 * day
     assert cov.lost == [[floor - 3 * day, floor - day]]
@@ -237,8 +266,10 @@ def test_ranges_microsoft_no_longer_keeps_are_lost_or_move_the_start():
 @responses.activate
 def test_directory_audits_are_kept_compressed_and_read_back_as_microsoft_sent_them(db, two_tenants):
     alpha, _ = two_tenants
-    audits = [{**ad.GLOBAL_ADMIN_GRANT, "activityDateTime": _iso(NOW - timedelta(days=2))},
-              {**ad.CA_DISABLED, "activityDateTime": _iso(NOW - timedelta(days=1))}]
+    audits = [
+        {**ad.GLOBAL_ADMIN_GRANT, "activityDateTime": _iso(NOW - timedelta(days=2))},
+        {**ad.CA_DISABLED, "activityDateTime": _iso(NOW - timedelta(days=1))},
+    ]
     _fake_log(audits, path="/auditLogs/directoryAudits", root=V1, field="activityDateTime")
     got = events.ingest(_ctx(db, alpha), events.AUDIT_LOG, 30, 10)
     assert got.new == 2
@@ -273,14 +304,19 @@ def test_tenants_never_see_each_others_events_and_deletion_is_clean(db, two_tena
     assert events.counts(db, bravo)["signins"] == len(b_rows)
     for path in (events.root(db)).rglob("*.db"):
         import sqlite3
+
         with sqlite3.connect(path) as raw:
             table = events.TABLE[path.parent.name]
             assert not raw.execute(f"SELECT 1 FROM {table} WHERE tenant = ?", (alpha_key,)).fetchone()
             assert not raw.execute("SELECT 1 FROM label WHERE value LIKE 'ann@%'").fetchone()
 
     # A new tenant never gets the deleted one's key, so leftovers could never show under it.
-    gamma = store.create_tenant(db, "Gamma", "gamma.onmicrosoft.com",
-                                db.execute("SELECT connection_id FROM tenants WHERE id = ?", (bravo,)).fetchone()[0])
+    gamma = store.create_tenant(
+        db,
+        "Gamma",
+        "gamma.onmicrosoft.com",
+        db.execute("SELECT connection_id FROM tenants WHERE id = ?", (bravo,)).fetchone()[0],
+    )
     assert events.tenant_key(db, gamma, create=True) > max(alpha_key, events.tenant_key(db, bravo))
 
 

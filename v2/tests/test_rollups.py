@@ -36,10 +36,13 @@ def _backdate(db, tenant_id: int, days: int) -> None:
 
 
 def test_csv_neutralises_formulas_and_keeps_numbers():
-    table = tables.Table("T", ["Name", "Count"], [["=HYPERLINK(\"http://x\")", 3], ["+cmd", -2], ["@SUM(A1)", 1.5],
-                                                  ["plain", None], [True, ["a", "b"]]])
+    table = tables.Table(
+        "T",
+        ["Name", "Count"],
+        [['=HYPERLINK("http://x")', 3], ["+cmd", -2], ["@SUM(A1)", 1.5], ["plain", None], [True, ["a", "b"]]],
+    )
     rows = _csv(tables.to_csv(table))
-    assert rows[1] == ["'=HYPERLINK(\"http://x\")", "3"]
+    assert rows[1] == ['\'=HYPERLINK("http://x")', "3"]
     assert rows[2] == ["'+cmd", "-2"]
     assert rows[3][0] == "'@SUM(A1)"
     assert rows[4] == ["plain", ""]
@@ -47,8 +50,12 @@ def test_csv_neutralises_formulas_and_keeps_numbers():
 
 
 def test_xlsx_never_contains_formulas_and_names_sheets_safely():
-    body = tables.to_xlsx([tables.Table("Mail: forwarding/rules [all]", ["A"], [["=1+1"]]),
-                           tables.Table("Mail: forwarding/rules [all]", ["A"], [["x"]])])
+    body = tables.to_xlsx(
+        [
+            tables.Table("Mail: forwarding/rules [all]", ["A"], [["=1+1"]]),
+            tables.Table("Mail: forwarding/rules [all]", ["A"], [["x"]]),
+        ]
+    )
     wb = load_workbook(io.BytesIO(body))
     assert len(wb.sheetnames) == 2 and len(set(wb.sheetnames)) == 2
     assert all(len(n) <= 31 and not set(n) & set("[]:*?/\\") for n in wb.sheetnames)
@@ -136,8 +143,12 @@ def test_clients_get_their_own_downloads_but_no_cross_tenant_pages(client, db, t
     assert client.get("/across/review").status_code == 403
     assert client.get("/changes").status_code == 403
     assert client.get(f"/tenants/{alpha}/changes").status_code == 200
-    for url in (f"/tenants/{alpha}/report.csv", f"/tenants/{alpha}/evidence.csv",
-                f"/tenants/{alpha}/data/mailboxes.csv", f"/tenants/{alpha}/changes.csv"):
+    for url in (
+        f"/tenants/{alpha}/report.csv",
+        f"/tenants/{alpha}/evidence.csv",
+        f"/tenants/{alpha}/data/mailboxes.csv",
+        f"/tenants/{alpha}/changes.csv",
+    ):
         resp = client.get(url)
         assert resp.status_code == 200 and resp.mimetype == "text/csv", url
     assert client.get(f"/tenants/{bravo}/report.csv").status_code == 404
@@ -151,7 +162,7 @@ def test_detail_report_csv_downloads_one_table(client, db, two_tenants):
     report = data_reports.build(db, db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone(), "guests")
     for i, section in enumerate(report.sections, 1):
         rows = _csv(client.get(f"/tenants/{alpha}/data/guests.csv?section={i}").data)
-        assert rows[0][:len(section.columns)] == section.columns
+        assert rows[0][: len(section.columns)] == section.columns
         assert len(rows) == len(section.rows) + 1
     assert client.get(f"/tenants/{alpha}/data/guests.csv?section=99").status_code == 404
     assert client.get(f"/tenants/{alpha}/data/nope.csv").status_code == 404
@@ -165,8 +176,10 @@ def test_detail_report_csv_downloads_one_table(client, db, two_tenants):
 def test_compare_sections_matches_rows_and_ignores_time_columns():
     old = Section("Guests", ["Guest", "Invitation", "Last sign-in"])
     new = Section("Guests", ["Guest", "Invitation", "Last sign-in"])
-    for s, rows in ((old, [["a@x", "Accepted", "2026-08-01"], ["b@x", "Not accepted", "Never"]]),
-                    (new, [["a@x", "Accepted", "2026-09-30"], ["b@x", "Accepted", "Never"], ["c@x", "Accepted", ""]])):
+    for s, rows in (
+        (old, [["a@x", "Accepted", "2026-08-01"], ["b@x", "Not accepted", "Never"]]),
+        (new, [["a@x", "Accepted", "2026-09-30"], ["b@x", "Accepted", "Never"], ["c@x", "Accepted", ""]]),
+    ):
         for row in rows:
             s.add(row)
     diff = month_changes.compare_sections(old, new)
@@ -191,9 +204,16 @@ def test_change_report_compares_every_report_with_the_start_of_the_period(client
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     _backdate(db, alpha, 40)
-    newcomer = {"id": "u9", "displayName": "Visitor", "userPrincipalName": "v#EXT#@y.com", "mail": "v@y.com",
-                "userType": "Guest", "accountEnabled": True, "assignedLicenses": [],
-                "createdDateTime": "2026-09-20T00:00:00Z"}
+    newcomer = {
+        "id": "u9",
+        "displayName": "Visitor",
+        "userPrincipalName": "v#EXT#@y.com",
+        "mail": "v@y.com",
+        "userType": "Guest",
+        "accountEnabled": True,
+        "assignedLicenses": [],
+        "createdDateTime": "2026-09-20T00:00:00Z",
+    }
     seed_tenant(db, alpha, users=[u for u in USERS if u["id"] != "u3"] + [newcomer])
 
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()

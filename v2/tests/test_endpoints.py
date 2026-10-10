@@ -38,8 +38,11 @@ def test_every_beta_call_says_why():
 
 
 def test_recorded_beta_calls_are_listed_as_beta():
-    beta = {endpoints.graph_key(e["url"]) for e in replay.load()["entries"]
-            if e["api"] == "graph" and endpoints.split(e["url"])[0] == "beta"}
+    beta = {
+        endpoints.graph_key(e["url"])
+        for e in replay.load()["entries"]
+        if e["api"] == "graph" and endpoints.split(e["url"])[0] == "beta"
+    }
     assert beta, "the recording has beta calls"
     for key in beta:
         version, _, path = key.partition(" ")
@@ -74,8 +77,10 @@ def test_permission_fields_cover_what_is_read():
 def test_recorded_calls_ask_only_for_supported_fields():
     """Asking these two calls for every field brings back fields Microsoft retired, with Deprecation and Sunset
     headers. The recording shows what the collectors really send."""
-    narrowed = {("beta", "/auditLogs/signIns"): events.SIGNIN_FIELDS,
-                ("v1.0", "/drives/{drive}/items/{item}/permissions"): sharepoint.PERMISSION_FIELDS}
+    narrowed = {
+        ("beta", "/auditLogs/signIns"): events.SIGNIN_FIELDS,
+        ("v1.0", "/drives/{drive}/items/{item}/permissions"): sharepoint.PERMISSION_FIELDS,
+    }
     seen = set()
     for e in replay.load()["entries"]:
         if e["api"] != "graph" or (entry := endpoints.graph(e["url"])) is None:

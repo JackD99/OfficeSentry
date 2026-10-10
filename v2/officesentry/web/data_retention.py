@@ -20,10 +20,16 @@ def _cfg():
 def settings():
     cfg = _cfg()
     policy = retention.load(g.db, cfg)
-    return render_template("retention.html", p=policy, d=retention.defaults(cfg),
-                           counts=retention.dry_run(g.db, policy, cfg.timezone), limits=retention.LIMITS,
-                           describe=retention.describe, audit_floor=retention.AUDIT_FLOOR_DAYS,
-                           issued_floor=retention.ISSUED_FLOOR_DAYS)
+    return render_template(
+        "retention.html",
+        p=policy,
+        d=retention.defaults(cfg),
+        counts=retention.dry_run(g.db, policy, cfg.timezone),
+        limits=retention.LIMITS,
+        describe=retention.describe,
+        audit_floor=retention.AUDIT_FLOOR_DAYS,
+        issued_floor=retention.ISSUED_FLOOR_DAYS,
+    )
 
 
 @bp.post("/retention")
@@ -39,6 +45,7 @@ def save():
         retention.save(g.db, policy)
         if changed:
             audit(g.db, g.user["username"], "retention_updated", detail="; ".join(changed))
-    flash("Retention saved. The worker applies it in its next daily pass." if changed
-          else "Nothing changed.", "success")
+    flash(
+        "Retention saved. The worker applies it in its next daily pass." if changed else "Nothing changed.", "success"
+    )
     return redirect(url_for("retention.settings"))

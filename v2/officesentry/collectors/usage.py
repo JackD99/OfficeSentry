@@ -56,12 +56,21 @@ def _recent(last: str | None, report_date: str | None) -> bool:
 
 def _new_row(upn: str, report_date: str | None) -> dict:
     return {
-        "upn": upn, "name": None, "concealed": concealed(upn), "reportDate": report_date, "products": [],
+        "upn": upn,
+        "name": None,
+        "concealed": concealed(upn),
+        "reportDate": report_date,
+        "products": [],
         "licensed": {k: False for k in FIELDS},
         "lastActive": {k: None for k, _ in SERVICES},
         "active": {k: False for k, _ in SERVICES},
-        "platforms": None, "apps": {}, "activations": [], "email": None, "teamsCounts": None,
-        "copilotLastActive": None, "copilotActive": None,
+        "platforms": None,
+        "apps": {},
+        "activations": [],
+        "email": None,
+        "teamsCounts": None,
+        "copilotLastActive": None,
+        "copilotActive": None,
     }
 
 
@@ -98,11 +107,12 @@ def merge_apps(rows: dict[str, dict], items: list[dict]) -> None:
         row = _row(rows, r)
         if row is None:
             continue
-        details = next((d for d in r.get("details") or [] if _int(d.get("reportPeriod")) == ACTIVE_DAYS),
-                       (r.get("details") or [{}])[0])
+        details = next(
+            (d for d in r.get("details") or [] if _int(d.get("reportPeriod")) == ACTIVE_DAYS),
+            (r.get("details") or [{}])[0],
+        )
         row["platforms"] = {k: bool(details.get(k)) for k, _ in PLATFORMS}
-        row["apps"] = {app: [p for p, _ in PLATFORMS if details.get(f"{app}{p[0].upper()}{p[1:]}")]
-                       for app, _ in APPS}
+        row["apps"] = {app: [p for p, _ in PLATFORMS if details.get(f"{app}{p[0].upper()}{p[1:]}")] for app, _ in APPS}
         row["apps"] = {app: where for app, where in row["apps"].items() if where or details.get(app)}
         last = _day(r.get("lastActivityDate"))
         row["lastActive"]["office"] = last
@@ -115,19 +125,28 @@ def merge_activations(rows: dict[str, dict], items: list[dict]) -> None:
         row = _row(rows, r)
         if row is None:
             continue
-        row["activations"] = [{
-            "product": a.get("productType"), "windows": _int(a.get("windows")), "mac": _int(a.get("mac")),
-            "mobile": _int(a.get("ios")) + _int(a.get("android")) + _int(a.get("windows10Mobile")),
-            "shared": bool(a.get("activatedOnSharedComputer")), "lastActivated": _day(a.get("lastActivatedDate")),
-        } for a in r.get("userActivationCounts") or []]
+        row["activations"] = [
+            {
+                "product": a.get("productType"),
+                "windows": _int(a.get("windows")),
+                "mac": _int(a.get("mac")),
+                "mobile": _int(a.get("ios")) + _int(a.get("android")) + _int(a.get("windows10Mobile")),
+                "shared": bool(a.get("activatedOnSharedComputer")),
+                "lastActivated": _day(a.get("lastActivatedDate")),
+            }
+            for a in r.get("userActivationCounts") or []
+        ]
 
 
 def merge_email(rows: dict[str, dict], items: list[dict]) -> None:
     for r in items:
         row = _row(rows, r)
         if row is not None:
-            row["email"] = {"sent": _int(r.get("sendCount")), "received": _int(r.get("receiveCount")),
-                            "read": _int(r.get("readCount"))}
+            row["email"] = {
+                "sent": _int(r.get("sendCount")),
+                "received": _int(r.get("receiveCount")),
+                "read": _int(r.get("readCount")),
+            }
             if not row["name"] and not row["concealed"]:
                 row["name"] = r.get("displayName")
 
@@ -140,7 +159,8 @@ def merge_teams(rows: dict[str, dict], items: list[dict]) -> None:
         if row is not None:
             row["teamsCounts"] = {
                 "messages": _int(r.get("teamChatMessageCount")) + _int(r.get("privateChatMessageCount")),
-                "calls": _int(r.get("callCount")), "meetings": _int(r.get("meetingCount")),
+                "calls": _int(r.get("callCount")),
+                "meetings": _int(r.get("meetingCount")),
             }
 
 
@@ -160,8 +180,10 @@ def _has_copilot(rows: dict[str, dict]) -> bool:
 class Usage(Collector):
     key = COLLECTOR
     title = "Microsoft 365 usage"
-    description = (f"Who used email, Teams, OneDrive, SharePoint and the Office apps in the last {ACTIVE_DAYS} "
-                   "days, from Microsoft's usage reports.")
+    description = (
+        f"Who used email, Teams, OneDrive, SharePoint and the Office apps in the last {ACTIVE_DAYS} "
+        "days, from Microsoft's usage reports."
+    )
     permissions = ("Reports.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
@@ -173,8 +195,12 @@ class Usage(Collector):
             return
         read = {}
         cloud = clouds.of(ctx.tenant)
-        for name, path, merge in (("apps", APP_USERS, merge_apps), ("activations", ACTIVATIONS, merge_activations),
-                                  ("email", EMAIL, merge_email), ("teams", TEAMS, merge_teams)):
+        for name, path, merge in (
+            ("apps", APP_USERS, merge_apps),
+            ("activations", ACTIVATIONS, merge_activations),
+            ("email", EMAIL, merge_email),
+            ("teams", TEAMS, merge_teams),
+        ):
             if why := clouds.missing(cloud, f"usage.{name}"):
                 read[name] = False
                 ctx.warn(why)
@@ -201,8 +227,21 @@ class Usage(Collector):
 
         hidden = any(r["concealed"] for r in rows.values())
         report_date = max((r["reportDate"] for r in rows.values() if r["reportDate"]), default=None)
-        ctx.objects("usage_status", [("status", {"available": True, "concealed": hidden, "reportDate": report_date,
-                                                 "days": ACTIVE_DAYS, "read": read})])
+        ctx.objects(
+            "usage_status",
+            [
+                (
+                    "status",
+                    {
+                        "available": True,
+                        "concealed": hidden,
+                        "reportDate": report_date,
+                        "days": ACTIVE_DAYS,
+                        "read": read,
+                    },
+                )
+            ],
+        )
         if hidden:
             ctx.log("Microsoft is concealing names in usage reports; people show as codes", "warning")
         ctx.objects("user_usage", list(rows.items()))
@@ -213,6 +252,10 @@ class Usage(Collector):
         for key, _ in SERVICES:
             ctx.metric(f"usage.active.{key}", sum(r["active"][key] for r in rows.values()))
         if read["apps"]:
-            ctx.metric("usage.desktop_apps",
-                       sum(bool((r["platforms"] or {}).get("windows") or (r["platforms"] or {}).get("mac"))
-                           for r in rows.values()))
+            ctx.metric(
+                "usage.desktop_apps",
+                sum(
+                    bool((r["platforms"] or {}).get("windows") or (r["platforms"] or {}).get("mac"))
+                    for r in rows.values()
+                ),
+            )

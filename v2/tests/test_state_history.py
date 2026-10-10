@@ -31,8 +31,9 @@ def iso(days_ago: float) -> str:
     return (NOW - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _collect(db, tenant_id, objects: dict[str, list[tuple[str, dict]]], collector="users", days_ago=None,
-             status="succeeded") -> int:
+def _collect(
+    db, tenant_id, objects: dict[str, list[tuple[str, dict]]], collector="users", days_ago=None, status="succeeded"
+) -> int:
     """One run of ``collector`` storing ``objects`` ({kind: [(id, data)]}), finished as the worker finishes runs."""
     rid = store.enqueue_run(db, tenant_id, collector)
     db.execute("UPDATE runs SET status = 'running' WHERE id = ?", (rid,))
@@ -46,8 +47,11 @@ def _collect(db, tenant_id, objects: dict[str, list[tuple[str, dict]]], collecto
 
 
 def _versions(db, kind="user"):
-    return db.execute("SELECT v.object_id, v.from_run, v.to_run FROM state_versions v JOIN state_series s"
-                      " ON s.id = v.series_id WHERE s.kind = ? ORDER BY v.object_id, v.from_run", (kind,)).fetchall()
+    return db.execute(
+        "SELECT v.object_id, v.from_run, v.to_run FROM state_versions v JOIN state_series s"
+        " ON s.id = v.series_id WHERE s.kind = ? ORDER BY v.object_id, v.from_run",
+        (kind,),
+    ).fetchall()
 
 
 def _same_reads(db, run_ids):
@@ -63,15 +67,18 @@ def person(name, signed_in="2026-10-01T09:00:00Z", **extra):
 # -- Versions --------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("data", [
-    {"displayName": "Ann", "lastSignInDateTime": "2026-10-01T09:00:00Z", "z": 1},
-    {"displayName": "Ann", "lastSignInDateTime": None},
-    {"displayName": "Ann"},
-    {"lastSignInDateTime": "x", "lastNonInteractiveSignInDateTime": "y"},
-    ["not", "a", "dict"],
-    "text",
-    None,
-])
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"displayName": "Ann", "lastSignInDateTime": "2026-10-01T09:00:00Z", "z": 1},
+        {"displayName": "Ann", "lastSignInDateTime": None},
+        {"displayName": "Ann"},
+        {"lastSignInDateTime": "x", "lastNonInteractiveSignInDateTime": "y"},
+        ["not", "a", "dict"],
+        "text",
+        None,
+    ],
+)
 def test_fast_changing_fields_split_off_and_merge_back_exactly(data):
     stable, moving = state_history.split("user", data)
     assert store._line("u1", state_history.merge(stable, moving)) == store._line("u1", data)
@@ -81,16 +88,36 @@ def test_fast_changing_fields_split_off_and_merge_back_exactly(data):
 
 def test_each_version_is_stored_once_and_every_run_reads_back(db, two_tenants):
     alpha = two_tenants[0]
-    first = _collect(db, alpha, {"user": [("a", person("Ann")), ("b", person("Bob")), ("c", person("Cat"))],
-                                 "group": [("g", {"name": "Staff"})]})
+    first = _collect(
+        db,
+        alpha,
+        {
+            "user": [("a", person("Ann")), ("b", person("Bob")), ("c", person("Cat"))],
+            "group": [("g", {"name": "Staff"})],
+        },
+    )
     # Only sign-in times moved: no new versions, just the night's values.
-    second = _collect(db, alpha, {"user": [("a", person("Ann", "2026-10-02T09:00:00Z")), ("b", person("Bob")),
-                                           ("c", person("Cat", None))], "group": [("g", {"name": "Staff"})]})
+    second = _collect(
+        db,
+        alpha,
+        {
+            "user": [("a", person("Ann", "2026-10-02T09:00:00Z")), ("b", person("Bob")), ("c", person("Cat", None))],
+            "group": [("g", {"name": "Staff"})],
+        },
+    )
     # Bob renamed, Cat gone, Dan new, the group kind gone altogether.
-    third = _collect(db, alpha, {"user": [("a", person("Ann", "2026-10-03T09:00:00Z")),
-                                          ("b", person("Robert")), ("d", person("Dan"))]})
+    third = _collect(
+        db,
+        alpha,
+        {"user": [("a", person("Ann", "2026-10-03T09:00:00Z")), ("b", person("Robert")), ("d", person("Dan"))]},
+    )
     assert [tuple(v) for v in _versions(db)] == [
-        ("a", first, None), ("b", first, third), ("b", third, None), ("c", first, third), ("d", third, None)]
+        ("a", first, None),
+        ("b", first, third),
+        ("b", third, None),
+        ("c", first, third),
+        ("d", third, None),
+    ]
     assert [tuple(v) for v in _versions(db, "group")] == [("g", first, third)]
     _same_reads(db, [first, second, third])
     assert state_history.find_object(db, second, "user", "a")["lastSignInDateTime"] == "2026-10-02T09:00:00Z"
@@ -99,10 +126,12 @@ def test_each_version_is_stored_once_and_every_run_reads_back(db, two_tenants):
     assert state_history.find_object(db, first, "user", "zz") is None
     assert state_history.run_objects(db, third, "user", limit=2) == store.run_objects(db, third, "user", limit=2)
     for oid in "abcd":
-        assert state_history.object_copies(db, alpha, "users", "user", oid) == \
-            store.object_copies(db, alpha, "users", "user", oid)
-    assert state_history.matching_objects(db, alpha, "users", "user", "displayName", "Bob") == \
-        store.matching_objects(db, alpha, "users", "user", "displayName", "Bob")
+        assert state_history.object_copies(db, alpha, "users", "user", oid) == store.object_copies(
+            db, alpha, "users", "user", oid
+        )
+    assert state_history.matching_objects(db, alpha, "users", "user", "displayName", "Bob") == store.matching_objects(
+        db, alpha, "users", "user", "displayName", "Bob"
+    )
     # The other tenant has nothing, and a kind a run never stored reads as empty.
     assert state_history.run_objects(db, third, "device") == []
     assert db.execute("SELECT COUNT(*) FROM state_series WHERE tenant_id = ?", (two_tenants[1],)).fetchone()[0] == 0
@@ -158,8 +187,12 @@ def test_runs_go_in_in_order_and_only_once(db, two_tenants):
 def test_failed_runs_and_sign_in_detail_are_not_recorded(db, two_tenants):
     alpha = two_tenants[0]
     failed = _collect(db, alpha, {"user": [("a", person("Ann"))]}, status="failed")
-    signins = _collect(db, alpha, {"sign_in_account": [("ann@x.com", {"count": 3})],
-                                   "sign_in_note": [("n", {"x": 1})]}, collector="sign_ins")
+    signins = _collect(
+        db,
+        alpha,
+        {"sign_in_account": [("ann@x.com", {"count": 3})], "sign_in_note": [("n", {"x": 1})]},
+        collector="sign_ins",
+    )
     assert state_history.recorded(db, failed) is None
     assert {r[0] for r in db.execute("SELECT kind FROM state_series")} == {"sign_in_note"}
     # Reading still answers for them, from the snapshot.
@@ -204,8 +237,18 @@ def _before_history(db, tenant_id, nights=3):
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(state_history, "record_finished", lambda conn, run_id: False)
         for n in range(nights):
-            ids.append(_collect(db, tenant_id, {"user": [("a", person("Ann", f"2026-10-0{n + 1}T09:00:00Z")),
-                                                         ("b", person("Bob" if n < 2 else "Robert"))]}))
+            ids.append(
+                _collect(
+                    db,
+                    tenant_id,
+                    {
+                        "user": [
+                            ("a", person("Ann", f"2026-10-0{n + 1}T09:00:00Z")),
+                            ("b", person("Bob" if n < 2 else "Robert")),
+                        ]
+                    },
+                )
+            )
             ids.append(_collect(db, tenant_id, {"group": [("g", {"name": f"Staff {n // 2}"})]}, collector="groups"))
     return ids
 
@@ -215,8 +258,9 @@ def test_the_backfill_records_old_runs_oldest_first_a_little_at_a_time(db, two_t
     ticks = iter([0.0] + [0.0] * 2 + [10.0] * 50)  # time for two runs, then out of time
     assert state_history.catch_up(db, seconds=5, clock=lambda: next(ticks)) == (2, False)
     assert [r[0] for r in db.execute("SELECT run_id FROM state_runs ORDER BY run_id")] == ids[:2]
-    assert db.execute("SELECT value FROM settings WHERE key = ?", (state_history.WATERMARK,)).fetchone()[0] == \
-        str(ids[1])
+    assert db.execute("SELECT value FROM settings WHERE key = ?", (state_history.WATERMARK,)).fetchone()[0] == str(
+        ids[1]
+    )
     # A run finishing now waits for the backfill to reach its data source's earlier runs, then goes in as usual.
     late = _collect(db, two_tenants[0], {"user": [("a", person("Ann"))]})
     assert state_history.recorded(db, late) is None
@@ -237,8 +281,10 @@ def test_the_backfill_passes_over_pruned_runs_and_waits_for_running_ones(db, two
     assert state_history.recorded(db, ids[2]) is None
     assert state_history.recorded(db, later) is not None
     # The watermark stays below the run still going, so it's recorded once it finishes.
-    assert int(db.execute("SELECT value FROM settings WHERE key = ?", (state_history.WATERMARK,)).fetchone()[0]) \
+    assert (
+        int(db.execute("SELECT value FROM settings WHERE key = ?", (state_history.WATERMARK,)).fetchone()[0])
         == running - 1
+    )
     store.add_objects(db, running, "user", [("z", person("Zed"))])
     store.finish_run(db, running, "succeeded")
     assert state_history.catch_up(db, seconds=None) == (1, True)
@@ -307,8 +353,9 @@ def test_retention_forgets_old_state_but_keeps_each_sources_latest(db, two_tenan
     alpha = two_tenants[0]
     old = _collect(db, alpha, {"user": [("a", person("Ann")), ("b", person("Bob"))]}, days_ago=900)
     mid = _collect(db, alpha, {"user": [("a", person("Ann")), ("c", person("Cat"))]}, days_ago=800)
-    recent = _collect(db, alpha, {"user": [("a", person("Ann", "2026-10-09T09:00:00Z")), ("c", person("Cat"))]},
-                      days_ago=10)
+    recent = _collect(
+        db, alpha, {"user": [("a", person("Ann", "2026-10-09T09:00:00Z")), ("c", person("Cat"))]}, days_ago=10
+    )
     only = _collect(db, alpha, {"group": [("g", {"name": "Staff"})]}, collector="groups", days_ago=1000)
     expected = {rid: state_history.run_objects(db, rid) for rid in (recent, only)}
     assert retention.dry_run(db, retention.Policy())["state_months"] == 2
@@ -332,8 +379,9 @@ def test_deleting_a_tenant_deletes_its_history(db, two_tenants):
     for table in ("state_series", "state_runs", "state_packs"):
         assert not db.execute(f"SELECT 1 FROM {table} WHERE tenant_id = ?", (alpha,)).fetchone(), table
     for table in ("state_versions", "state_volatile"):
-        assert not db.execute(f"SELECT 1 FROM {table} WHERE series_id NOT IN (SELECT id FROM state_series)"
-                              ).fetchone(), table
+        assert not db.execute(
+            f"SELECT 1 FROM {table} WHERE series_id NOT IN (SELECT id FROM state_series)"
+        ).fetchone(), table
     assert db.execute("SELECT COUNT(*) FROM state_runs WHERE tenant_id = ?", (bravo,)).fetchone()[0] > 20
 
 
@@ -399,8 +447,10 @@ def test_the_history_command(cfg, db, two_tenants, monkeypatch, capsys):
     main(["history", "--dry-run"])
     assert "Nothing to record" in capsys.readouterr().out
     # A pack damaged on disk is found.
-    db.execute("UPDATE state_packs SET data = ? WHERE id = (SELECT MIN(id) FROM state_packs)",
-               (store.PACK_ZLIB + __import__("zlib").compress(b'["a", {"displayName": "Mallory"}]'),))
+    db.execute(
+        "UPDATE state_packs SET data = ? WHERE id = (SELECT MIN(id) FROM state_packs)",
+        (store.PACK_ZLIB + __import__("zlib").compress(b'["a", {"displayName": "Mallory"}]'),),
+    )
     with pytest.raises(SystemExit):
         main(["history", "--verify"])
     assert "differ from the snapshot" in capsys.readouterr().out
@@ -425,8 +475,13 @@ def recorded(tmp_path_factory):
         cfg = load_config(data_dir=tmp_path_factory.mktemp("history"), testing=True, secure_cookies=False)
     conn = connect(cfg.db_path)
     migrate(conn)
-    cid = store.create_connection(conn, Vault(cfg.encryption_keys), "Test app", generate_certificate("test"),
-                                  client_id="11111111-2222-3333-4444-555555555555")
+    cid = store.create_connection(
+        conn,
+        Vault(cfg.encryption_keys),
+        "Test app",
+        generate_certificate("test"),
+        client_id="11111111-2222-3333-4444-555555555555",
+    )
     tenants = [store.create_tenant(conn, name, f"{name.lower()}.onmicrosoft.com", cid) for name in ("Alpha", "Bravo")]
     for tid in tenants:
         seed_tenant(conn, tid, users=[*USERS, gd.INFO_USER], inbox_rules={})
@@ -480,8 +535,9 @@ def test_every_report_is_identical_from_the_history(recorded, key, monkeypatch):
 def test_checks_and_change_feeds_are_identical_from_the_history(recorded, monkeypatch):
     a, b = _both(recorded, lambda conn, t: evaluate(TenantSnapshot(conn, t), NOW), monkeypatch)
     assert a == b and "pass" in a
-    a, b = _both(recorded, lambda conn, t: evaluate(TenantSnapshot(conn, t, as_of=NOW - timedelta(days=20)), NOW),
-                 monkeypatch)
+    a, b = _both(
+        recorded, lambda conn, t: evaluate(TenantSnapshot(conn, t, as_of=NOW - timedelta(days=20)), NOW), monkeypatch
+    )
     assert a == b
     a, b = _both(recorded, lambda conn, t: changes.all_changes(conn, t["id"], iso(20)), monkeypatch)
     assert a == b and "Change(" in a
@@ -498,8 +554,11 @@ def test_account_pages_and_their_history_are_identical_from_the_history(recorded
 def test_cross_tenant_pages_are_identical_from_the_history(recorded, monkeypatch):
     conn, tenants = recorded
     rows = [store.get_tenant(conn, t) for t in tenants]
-    for fn in (lambda: rollups.check_matrix(conn, rows, NOW), lambda: month_changes.across(conn, rows, now=NOW),
-               lambda: [rollups.build(conn, rows, key, NOW) for key in data_reports.REPORTS]):
+    for fn in (
+        lambda: rollups.check_matrix(conn, rows, NOW),
+        lambda: month_changes.across(conn, rows, now=NOW),
+        lambda: [rollups.build(conn, rows, key, NOW) for key in data_reports.REPORTS],
+    ):
         a = _same(fn())
         with monkeypatch.context() as mp:
             for name in READERS:

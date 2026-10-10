@@ -15,7 +15,8 @@ from tests.seed import seed_tenant
 from tests.test_email import _schedule
 
 PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
 
 
 def test_cells_read_as_words_in_pdfs_and_as_values_in_spreadsheets():
@@ -38,11 +39,23 @@ def test_cells_read_as_words_in_pdfs_and_as_values_in_spreadsheets():
 
 def test_workbook_sheets_are_styled_filterable_and_typed():
     book = workbook.Book("#0d7a5f")
-    book.table("Devices", ["Device", "Last check-in", "Share", "Count"],
-               [["LAPTOP-1", "2026-08-20 (45d)", "60%", 3], ["=HYPERLINK(1)", "2026-10-01 22:42", "Under 1%", 0]],
-               flags=["high", None])
-    data = book.save(workbook.Cover("Devices", "Alpha Ltd", datetime(2026, 10, 4, 9, 30, tzinfo=UTC), "Harbour IT",
-                                    "alpha.onmicrosoft.com", "#0d7a5f", facts=[("Devices", 2, "")]))
+    book.table(
+        "Devices",
+        ["Device", "Last check-in", "Share", "Count"],
+        [["LAPTOP-1", "2026-08-20 (45d)", "60%", 3], ["=HYPERLINK(1)", "2026-10-01 22:42", "Under 1%", 0]],
+        flags=["high", None],
+    )
+    data = book.save(
+        workbook.Cover(
+            "Devices",
+            "Alpha Ltd",
+            datetime(2026, 10, 4, 9, 30, tzinfo=UTC),
+            "Harbour IT",
+            "alpha.onmicrosoft.com",
+            "#0d7a5f",
+            facts=[("Devices", 2, "")],
+        )
+    )
     wb = load_workbook(io.BytesIO(data))
     assert wb.sheetnames == ["Summary", "Devices"]
     summary = [c for row in wb["Summary"].iter_rows(values_only=True) for c in row if c]
@@ -84,14 +97,19 @@ def test_report_email_carries_the_brand_and_counts_every_failing_check(client, d
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     logo = branding.logo_data_uri(PNG)
-    for key, value in (("brand_name", "Harbour IT"), ("brand_accent", "#0d7a5f"), ("brand_logo", logo),
-                       ("brand_contact", "help@harbourit.example")):
+    for key, value in (
+        ("brand_name", "Harbour IT"),
+        ("brand_accent", "#0d7a5f"),
+        ("brand_logo", logo),
+        ("brand_contact", "help@harbourit.example"),
+    ):
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     sid = _schedule(db, alpha, [delivery.add_contact(db, alpha, "IT", "it@client.com")])
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
     schedule = db.execute("SELECT * FROM email_schedules WHERE id = ?", (sid,)).fetchone()
-    built = delivery.build_report_email(client.application, db, schedule, tenant,
-                                        delivery.recipients(db, "schedule", sid), attach=False)
+    built = delivery.build_report_email(
+        client.application, db, schedule, tenant, delivery.recipients(db, "schedule", sid), attach=False
+    )
     email = built.email
     failing = len(build(db, tenant).failing)
     assert failing > 6 and f"{failing} checks need attention" in email.html  # not just the 6 listed
@@ -103,9 +121,16 @@ def test_report_email_carries_the_brand_and_counts_every_failing_check(client, d
     related = [p for p in msg.walk() if p.get("Content-ID") == "<brand-logo>"]
     assert related and related[0].get_content_type() == "image/png"
     inline = [a for a in mailer.graph_payload(email)["message"]["attachments"] if a.get("isInline")]
-    assert inline == [{"@odata.type": "#microsoft.graph.fileAttachment", "name": "brand-logo.png",
-                       "contentType": "image/png", "contentBytes": base64.b64encode(PNG).decode(),
-                       "isInline": True, "contentId": "brand-logo"}]
+    assert inline == [
+        {
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": "brand-logo.png",
+            "contentType": "image/png",
+            "contentBytes": base64.b64encode(PNG).decode(),
+            "isInline": True,
+            "contentId": "brand-logo",
+        }
+    ]
     make_user(db, "admin")
     login(client, "admin")
     body = client.get(f"/schedules/{sid}/preview/body").get_data(as_text=True)

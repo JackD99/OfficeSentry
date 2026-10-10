@@ -10,8 +10,15 @@ from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import USERS
 
-ZED = {"id": "u9", "displayName": "Zed Quinn", "userPrincipalName": "zed.quinn@x.com", "userType": "Member",
-       "accountEnabled": True, "assignedLicenses": [], "signInActivity": {}}
+ZED = {
+    "id": "u9",
+    "displayName": "Zed Quinn",
+    "userPrincipalName": "zed.quinn@x.com",
+    "userType": "Member",
+    "accountEnabled": True,
+    "assignedLicenses": [],
+    "signInActivity": {},
+}
 
 
 def _hits(app, db, tenant_id, q):
@@ -114,8 +121,17 @@ def test_only_granted_tenants_are_searched(app, client, db, two_tenants):
 
 def test_more_results_are_counted_and_listed_per_tenant(client, db, two_tenants):
     alpha, _ = two_tenants
-    many = [{"id": f"m{i}", "displayName": f"Temp worker {i}", "userPrincipalName": f"temp{i}@x.com",
-             "userType": "Member", "accountEnabled": True, "assignedLicenses": []} for i in range(12)]
+    many = [
+        {
+            "id": f"m{i}",
+            "displayName": f"Temp worker {i}",
+            "userPrincipalName": f"temp{i}@x.com",
+            "userType": "Member",
+            "accountEnabled": True,
+            "assignedLicenses": [],
+        }
+        for i in range(12)
+    ]
     seed_tenant(db, alpha, users=[*USERS, *many])
     make_user(db, "admin")
     login(client, "admin")

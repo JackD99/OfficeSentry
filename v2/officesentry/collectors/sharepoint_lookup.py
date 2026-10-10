@@ -42,8 +42,14 @@ class Lookups:
     Microsoft for; a stored lookup is reused only if it has all of them.
     """
 
-    def __init__(self, ctx: RunContext, collector: str, site_fields: str = SITE_FIELDS,
-                 drive_fields: str = DRIVE_FIELDS, now: datetime | None = None):
+    def __init__(
+        self,
+        ctx: RunContext,
+        collector: str,
+        site_fields: str = SITE_FIELDS,
+        drive_fields: str = DRIVE_FIELDS,
+        now: datetime | None = None,
+    ):
         self.ctx = ctx
         self.site_fields, self.drive_fields = site_fields, drive_fields
         self.now = now or datetime.now(UTC)
@@ -66,7 +72,8 @@ class Lookups:
                     self._sites, self._sites_complete, self.reused_sites = rows[0]["sites"], True, True
             for row in store.run_objects(ctx.conn, run["id"], "lookup_onedrive"):
                 usable = (row.get("drive") is None and row["checked"] >= no_drive_since) or (
-                    fresh and row.get("drive") and _covers(row.get("fields"), drive_fields))
+                    fresh and row.get("drive") and _covers(row.get("fields"), drive_fields)
+                )
                 current = self._known.get(row["_id"])
                 if usable and (current is None or row["checked"] > current["checked"]):
                     self._known[row["_id"]] = {k: row.get(k) for k in ("drive", "fields", "checked")}
@@ -101,10 +108,12 @@ class Lookups:
         """Store this run's lookups for the other collector, and "has none" for the nights after."""
         if self._sites is not None:
             fields = self.site_fields
-            self.ctx.objects("lookup_sites", [("sites", {"sites": self._sites, "fields": fields,
-                                                         "complete": self._sites_complete})])
+            self.ctx.objects(
+                "lookup_sites", [("sites", {"sites": self._sites, "fields": fields, "complete": self._sites_complete})]
+            )
         self.ctx.objects("lookup_onedrive", list(self._drives.items()))
         reused = (["the site list"] if self.reused_sites else []) + (
-            [plural(self.reused_drives, "OneDrive lookup")] if self.reused_drives else [])
+            [plural(self.reused_drives, "OneDrive lookup")] if self.reused_drives else []
+        )
         if reused:
             self.ctx.log(f"Reused {' and '.join(reused)} from earlier SharePoint collections")

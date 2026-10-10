@@ -33,6 +33,9 @@ def test_text_files_are_opened_as_utf8():
     for folder in ("officesentry", "tests", "scripts"):
         for path in sorted((ROOT / folder).rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
-            missing += [f"{path.relative_to(ROOT)}:{node.lineno}" for node in ast.walk(tree)
-                        if isinstance(node, ast.Call) and _missing_encoding(node)]
-    assert not missing, "Pass encoding=\"utf-8\" to: " + ", ".join(missing)
+            missing += [
+                f"{path.relative_to(ROOT)}:{node.lineno}"
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and _missing_encoding(node)
+            ]
+    assert not missing, 'Pass encoding="utf-8" to: ' + ", ".join(missing)

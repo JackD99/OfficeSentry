@@ -25,10 +25,21 @@ ACTIVE_DAYS = 30
 COLLECTOR = "m365_usage"
 
 # (key, label) in the order pages show them. "office" is the Office apps on any platform.
-SERVICES = (("exchange", "Email"), ("teams", "Teams"), ("onedrive", "OneDrive"), ("sharepoint", "SharePoint"),
-            ("office", "Office apps"))
-APPS = (("outlook", "Outlook"), ("word", "Word"), ("excel", "Excel"), ("powerPoint", "PowerPoint"),
-        ("oneNote", "OneNote"), ("teams", "Teams"))
+SERVICES = (
+    ("exchange", "Email"),
+    ("teams", "Teams"),
+    ("onedrive", "OneDrive"),
+    ("sharepoint", "SharePoint"),
+    ("office", "Office apps"),
+)
+APPS = (
+    ("outlook", "Outlook"),
+    ("word", "Word"),
+    ("excel", "Excel"),
+    ("powerPoint", "PowerPoint"),
+    ("oneNote", "OneNote"),
+    ("teams", "Teams"),
+)
 PLATFORMS = (("windows", "Windows"), ("mac", "Mac"), ("mobile", "Mobile"), ("web", "Web"))
 
 HASHED = re.compile(r"^[0-9A-Fa-f]{32}$")
@@ -36,8 +47,8 @@ HASHED = re.compile(r"^[0-9A-Fa-f]{32}$")
 CONCEALED_NOTICE = (
     "Microsoft is hiding people's names in this tenant's usage reports, so people show as codes and can't be "
     "matched to their accounts or licences by name. To show names: sign in to admin.microsoft.com as a Global "
-    "Admin, open Settings, then Org settings, then Reports on the Services tab. Untick \"Display concealed user, "
-    "group, and site names in all reports\" and save. Names appear after the next collection."
+    'Admin, open Settings, then Org settings, then Reports on the Services tab. Untick "Display concealed user, '
+    'group, and site names in all reports" and save. Names appear after the next collection.'
 )
 
 # -- Licences -------------------------------------------------------------------------------
@@ -58,14 +69,24 @@ WITHOUT_DESKTOP = {
     "ENTERPRISEPREMIUM": None,
 }
 # Suites that include a mailbox, so someone who only uses email could have an Exchange Online plan instead.
-MAIL_SUITES = {"O365_BUSINESS_ESSENTIALS", "O365_BUSINESS_PREMIUM", "SPB", "STANDARDPACK", "ENTERPRISEPACK",
-               "ENTERPRISEPREMIUM", "SPE_E3", "SPE_E5", "SPE_F1", "DESKLESSPACK"}
+MAIL_SUITES = {
+    "O365_BUSINESS_ESSENTIALS",
+    "O365_BUSINESS_PREMIUM",
+    "SPB",
+    "STANDARDPACK",
+    "ENTERPRISEPACK",
+    "ENTERPRISEPREMIUM",
+    "SPE_E3",
+    "SPE_E5",
+    "SPE_F1",
+    "DESKLESSPACK",
+}
 # Suites whose security features (Intune, Entra ID P1, Defender) a mail-only plan doesn't have.
 SECURITY_SUITES = {"SPB", "SPE_E3", "SPE_E5", "ENTERPRISEPREMIUM"}
 # Plans right-sizing can suggest; the prices page lists them so savings can be priced.
 TARGETS = ("O365_BUSINESS_ESSENTIALS", "STANDARDPACK", EXCHANGE_P1, EXCHANGE_P2)
 # Exchange Online Plan 1 holds 50 GB with no archive; leave headroom before suggesting it.
-PLAN1_MAX_BYTES = 45 * 1024 ** 3
+PLAN1_MAX_BYTES = 45 * 1024**3
 
 _BY_PRODUCT = {name.upper(): part for part, name in SKU_NAMES.items()}
 
@@ -112,8 +133,9 @@ def person(snap: TenantSnapshot, upn: str | None) -> dict | None:
 
 def licensed(row: dict) -> bool:
     """Holds a licence for a service, or any product that isn't a free one (Power Automate Free and the like)."""
-    return any((row.get("licensed") or {}).values()) or any("FREE" not in (p or "").upper()
-                                                             for p in row.get("products") or [])
+    return any((row.get("licensed") or {}).values()) or any(
+        "FREE" not in (p or "").upper() for p in row.get("products") or []
+    )
 
 
 def any_activity(row: dict) -> bool:
@@ -184,6 +206,7 @@ class Suggestion:
 @dataclass
 class Holder:
     """The paid licences one person holds, and where that came from."""
+
     parts: list[str] = field(default_factory=list)
     from_products: bool = False  # read from the usage report's product names, not the account
 
@@ -198,7 +221,7 @@ def paid_parts(row: dict, user: dict | None, sku_parts: dict[str, str]) -> Holde
 
 
 def _gb(n: float) -> str:
-    return f"{n / 1024 ** 3:.1f} GB"
+    return f"{n / 1024**3:.1f} GB"
 
 
 def rightsize(row: dict, held: list[str], mailbox: dict | None = None) -> list[Suggestion]:
@@ -216,29 +239,61 @@ def rightsize(row: dict, held: list[str], mailbox: dict | None = None) -> list[S
         received = (row.get("email") or {}).get("received") or 0
         if received and (row.get("licensed") or {}).get("exchange"):
             # Removing the licence deletes the mailbox; a shared mailbox keeps it for free (up to 50 GB).
-            return [Suggestion(p, "", f"{why}, but the mailbox still received {plural(received, 'message')}. A shared "
-                                      "mailbox keeps it without a licence", keep_mailbox=True) for p in held]
+            return [
+                Suggestion(
+                    p,
+                    "",
+                    f"{why}, but the mailbox still received {plural(received, 'message')}. A shared "
+                    "mailbox keeps it without a licence",
+                    keep_mailbox=True,
+                )
+                for p in held
+            ]
         return [Suggestion(p, "", why) for p in held]
     out: list[Suggestion] = []
     if COPILOT in held and row.get("copilotActive") is False:
         out.append(Suggestion(COPILOT, "", f"Hasn't used Copilot in the last {ACTIVE_DAYS} days"))
-    big = bool(mailbox and ((mailbox.get("totalBytes") or 0) > PLAN1_MAX_BYTES or mailbox.get("archive")
-                            or mailbox.get("litigationHold")))
+    big = bool(
+        mailbox
+        and (
+            (mailbox.get("totalBytes") or 0) > PLAN1_MAX_BYTES
+            or mailbox.get("archive")
+            or mailbox.get("litigationHold")
+        )
+    )
     suites = [p for p in held if p in MAIL_SUITES or p in WITHOUT_DESKTOP]
     for part in suites:
         if part in MAIL_SUITES and email_only(row):
             target = EXCHANGE_P2 if big else EXCHANGE_P1
-            caution = ("It also includes Intune, Entra ID P1 and Defender, which an Exchange Online plan doesn't. "
-                       "Check the account doesn't rely on them." if part in SECURITY_SUITES else "")
+            caution = (
+                "It also includes Intune, Entra ID P1 and Defender, which an Exchange Online plan doesn't. "
+                "Check the account doesn't rely on them."
+                if part in SECURITY_SUITES
+                else ""
+            )
             out.append(Suggestion(part, target, f"Only used email in the last {ACTIVE_DAYS} days", caution))
         elif part in WITHOUT_DESKTOP and desktop_use(row) is False:
             target = WITHOUT_DESKTOP[part]
-            caution = ("No plan matches it without desktop apps; compare the web-only plans with the security "
-                       "features they need." if target is None else "")
-            out.append(Suggestion(part, target, f"Hasn't used the desktop Office apps (Windows or Mac) in the last "
-                                                f"{ACTIVE_DAYS} days", caution))
+            caution = (
+                "No plan matches it without desktop apps; compare the web-only plans with the security "
+                "features they need."
+                if target is None
+                else ""
+            )
+            out.append(
+                Suggestion(
+                    part,
+                    target,
+                    f"Hasn't used the desktop Office apps (Windows or Mac) in the last {ACTIVE_DAYS} days",
+                    caution,
+                )
+            )
     if EXCHANGE_P2 in held and mailbox and not big:
-        out.append(Suggestion(EXCHANGE_P2, EXCHANGE_P1,
-                              f"Mailbox is {_gb(mailbox.get('totalBytes') or 0)}, under Plan 1's 50 GB, with no "
-                              "archive or hold"))
+        out.append(
+            Suggestion(
+                EXCHANGE_P2,
+                EXCHANGE_P1,
+                f"Mailbox is {_gb(mailbox.get('totalBytes') or 0)}, under Plan 1's 50 GB, with no archive or hold",
+            )
+        )
     return out

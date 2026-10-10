@@ -10,15 +10,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
-STALE_DAYS = 90       # an Entra device not seen for this long is probably gone
-NO_SYNC_DAYS = 30     # an Intune device that hasn't checked in for this long isn't getting policy
+STALE_DAYS = 90  # an Entra device not seen for this long is probably gone
+NO_SYNC_DAYS = 30  # an Intune device that hasn't checked in for this long isn't getting policy
 
 
 @dataclass(frozen=True)
 class WindowsRelease:
     name: str
     min_build: int
-    pro_end: date         # Home, Pro, Pro for Workstations, Business
+    pro_end: date  # Home, Pro, Pro for Workstations, Business
     enterprise_end: date  # Enterprise, Education, IoT Enterprise (non-LTSC)
 
 
@@ -59,18 +59,32 @@ def windows_support(version: str | None, today: date) -> OsSupport:
     if release is None:
         return OsSupport("Windows", "unknown", None, f"Unrecognised Windows version {version or '(none)'}")
     if release.enterprise_end < today:
-        extra = " Extended Security Updates or LTSC can cover it; otherwise upgrade." \
-            if release.name == "Windows 10" else ""
-        return OsSupport(release.name, "ended", release.enterprise_end,
-                         f"{release.name} stopped getting security updates on {release.enterprise_end:%d %b %Y}."
-                         + extra)
+        extra = (
+            " Extended Security Updates or LTSC can cover it; otherwise upgrade."
+            if release.name == "Windows 10"
+            else ""
+        )
+        return OsSupport(
+            release.name,
+            "ended",
+            release.enterprise_end,
+            f"{release.name} stopped getting security updates on {release.enterprise_end:%d %b %Y}." + extra,
+        )
     if release.pro_end < today:
-        return OsSupport(release.name, "pro_ended", release.pro_end,
-                         f"{release.name}: updates for Home and Pro ended {release.pro_end:%d %b %Y} "
-                         f"(Enterprise and Education: {release.enterprise_end:%d %b %Y}).")
+        return OsSupport(
+            release.name,
+            "pro_ended",
+            release.pro_end,
+            f"{release.name}: updates for Home and Pro ended {release.pro_end:%d %b %Y} "
+            f"(Enterprise and Education: {release.enterprise_end:%d %b %Y}).",
+        )
     if (release.pro_end - today).days <= SOON_DAYS:
-        return OsSupport(release.name, "ending", release.pro_end,
-                         f"{release.name}: updates for Home and Pro end {release.pro_end:%d %b %Y}.")
+        return OsSupport(
+            release.name,
+            "ending",
+            release.pro_end,
+            f"{release.name}: updates for Home and Pro end {release.pro_end:%d %b %Y}.",
+        )
     return OsSupport(release.name, "supported", release.pro_end, f"{release.name}, supported")
 
 

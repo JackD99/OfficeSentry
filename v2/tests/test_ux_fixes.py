@@ -17,8 +17,19 @@ from tests.seed import seed_tenant
 STATIC = Path(__file__).resolve().parents[1] / "officesentry" / "web" / "static"
 NOW = datetime.now(UTC)
 PERIOD = f"{NOW.year}-{NOW.month:02d}"
-SETTINGS = ("/admin/tenants", "/admin/groups", "/admin/connections", "/admin/prices", "/admin/email", "/admin/alerts",
-            "/admin/branding", "/admin/retention", "/admin/users", "/admin/activity", "/admin/status")
+SETTINGS = (
+    "/admin/tenants",
+    "/admin/groups",
+    "/admin/connections",
+    "/admin/prices",
+    "/admin/email",
+    "/admin/alerts",
+    "/admin/branding",
+    "/admin/retention",
+    "/admin/users",
+    "/admin/activity",
+    "/admin/status",
+)
 
 
 # -- Sidebar -----------------------------------------------------------------------------------
@@ -28,18 +39,18 @@ def test_settings_are_one_sidebar_entry_with_their_own_row(client, db):
     make_user(db, "admin")
     login(client, "admin")
     home = client.get("/").get_data(as_text=True)
-    sidebar = home[home.index('<aside class="sidebar"'):home.index("</aside>")]
+    sidebar = home[home.index('<aside class="sidebar"') : home.index("</aside>")]
     assert sidebar.count(">Settings</span></a>") == 1
     assert "Client tenants" not in sidebar and "Activity log" not in sidebar
     assert 'class="settings-nav"' not in home  # only on settings pages
     for path in SETTINGS:
         page = client.get(path).get_data(as_text=True)
-        nav = page[page.index('<nav class="settings-nav"'):]
-        nav = nav[:nav.index("</nav>")]
+        nav = page[page.index('<nav class="settings-nav"') :]
+        nav = nav[: nav.index("</nav>")]
         assert nav.count("<a ") == len(SETTINGS), path
         assert nav.count('aria-current="page"') == 1, path
         assert f'href="{path}" class="active"' in nav, path
-        side = page[page.index('<aside class="sidebar"'):page.index("</aside>")]
+        side = page[page.index('<aside class="sidebar"') : page.index("</aside>")]
         assert 'class="active" aria-current="page">' in side and side.count("aria-current") == 1, path
 
 
@@ -68,10 +79,22 @@ def test_sidebar_scrolls_on_short_screens():
 
 
 def _review(client, db, tenant_id):
-    client.post("/reporting/plans/new", data={
-        "name": "Monthly", "reports": ["review"], "include_xlsx": "1", "day_of_month": "1", "hour": "8",
-        "timezone": "UTC", "subject": "{client} report", "message": "Hello", "mode": "approval",
-        "delivery": "email", "tenants": [str(tenant_id)]})
+    client.post(
+        "/reporting/plans/new",
+        data={
+            "name": "Monthly",
+            "reports": ["review"],
+            "include_xlsx": "1",
+            "day_of_month": "1",
+            "hour": "8",
+            "timezone": "UTC",
+            "subject": "{client} report",
+            "message": "Hello",
+            "mode": "approval",
+            "delivery": "email",
+            "tenants": [str(tenant_id)],
+        },
+    )
     return client.get(f"/reporting/{PERIOD}/{tenant_id}").get_data(as_text=True)
 
 
@@ -81,8 +104,8 @@ def test_suggestion_buttons_say_what_they_add(client, db, two_tenants):
     make_user(db, "admin")
     login(client, "admin")
     page = _review(client, db, alpha)
-    suggestions = page[page.index('<ul class="suggest-list">'):]
-    suggestions = suggestions[:suggestions.index("</ul>")]
+    suggestions = page[page.index('<ul class="suggest-list">') :]
+    suggestions = suggestions[: suggestions.index("</ul>")]
     buttons = re.findall(r"<button[^>]*>", suggestions)
     assert buttons and all('aria-label="Add: ' in b for b in buttons)
 
@@ -94,8 +117,8 @@ def test_approve_bar_submits_the_approve_form(client, db, two_tenants):
     login(client, "admin")
     page = _review(client, db, alpha)
     assert 'id="approve-form"' in page
-    bar = page[page.index('<div class="approve-bar">'):]
-    assert 'form="approve-form"' in bar[:bar.index("</div>")]
+    bar = page[page.index('<div class="approve-bar">') :]
+    assert 'form="approve-form"' in bar[: bar.index("</div>")]
 
 
 def test_analysts_get_no_approve_bar(client, db, two_tenants):
@@ -123,7 +146,8 @@ def _tokens(block: str) -> dict[str, str]:
 def _luminance(colour: str) -> float:
     def channel(c):
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-    r, g, b = (channel(int(colour[i:i + 2], 16) / 255) for i in (1, 3, 5))
+
+    r, g, b = (channel(int(colour[i : i + 2], 16) / 255) for i in (1, 3, 5))
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
@@ -134,9 +158,9 @@ def _ratio(a: str, b: str) -> float:
 
 def test_text_colours_meet_wcag_aa():
     css = (STATIC / "tokens.css").read_text(encoding="utf-8")
-    light = _tokens(css[css.index(":root {"):css.index("}", css.index(":root {"))])
+    light = _tokens(css[css.index(":root {") : css.index("}", css.index(":root {"))])
     dark_start = css.index(":root:not(", css.index("@media (prefers-color-scheme: dark)"))
-    dark = {**light, **_tokens(css[dark_start:css.index("}", dark_start)])}
+    dark = {**light, **_tokens(css[dark_start : css.index("}", dark_start)])}
     for theme in (light, dark):
         for text in ("text", "text-2", "muted", "faint"):
             for background in ("bg", "surface", "surface-2", "sunken"):
@@ -189,8 +213,14 @@ def test_changes_tab_groups_detail_reports_by_area(client, db, two_tenants):
     page = client.get(f"/tenants/{alpha}/changes").get_data(as_text=True)
     areas = re.findall(r'<details class="card flush change-area"[^>]*>\s*<summary><h2>([^<]+?) <', page)
     assert areas and len(areas) == len(set(areas))
-    assert set(areas) <= {"Identity and access", "Email", "Files and Teams", "Devices and apps",
-                          "Tenant and licences", "More reports"}
+    assert set(areas) <= {
+        "Identity and access",
+        "Email",
+        "Files and Teams",
+        "Devices and apps",
+        "Tenant and licences",
+        "More reports",
+    }
     assert page.count('class="change-report"') >= len(areas)
 
 

@@ -10,16 +10,43 @@ from ..text import day, every, plural
 from .base import SEVERITY_RANK, Finding, _unavailable, rule
 
 HIGH_RISK_PERMISSIONS = {
-    "Mail.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite", "full_access_as_app",
-    "Exchange.ManageAsApp", "Files.Read.All", "Files.ReadWrite.All", "Sites.Read.All", "Sites.ReadWrite.All",
-    "Sites.FullControl.All", "Directory.ReadWrite.All", "User.ReadWrite.All", "Group.ReadWrite.All",
-    "RoleManagement.ReadWrite.Directory", "Application.ReadWrite.All", "AppRoleAssignment.ReadWrite.All",
-    "Policy.ReadWrite.ConditionalAccess", "UserAuthenticationMethod.ReadWrite.All", "Domain.ReadWrite.All",
+    "Mail.Read",
+    "Mail.ReadWrite",
+    "Mail.Send",
+    "MailboxSettings.ReadWrite",
+    "full_access_as_app",
+    "Exchange.ManageAsApp",
+    "Files.Read.All",
+    "Files.ReadWrite.All",
+    "Sites.Read.All",
+    "Sites.ReadWrite.All",
+    "Sites.FullControl.All",
+    "Directory.ReadWrite.All",
+    "User.ReadWrite.All",
+    "Group.ReadWrite.All",
+    "RoleManagement.ReadWrite.Directory",
+    "Application.ReadWrite.All",
+    "AppRoleAssignment.ReadWrite.All",
+    "Policy.ReadWrite.ConditionalAccess",
+    "UserAuthenticationMethod.ReadWrite.All",
+    "Domain.ReadWrite.All",
 }
 SENSITIVE_DELEGATED = {
-    "Mail.Read", "Mail.ReadWrite", "Mail.Send", "Mail.Read.Shared", "Mail.ReadWrite.Shared", "full_access_as_user",
-    "EWS.AccessAsUser.All", "Files.Read.All", "Files.ReadWrite.All", "Sites.Read.All", "Sites.ReadWrite.All",
-    "Directory.ReadWrite.All", "Directory.AccessAsUser.All", "User.ReadWrite.All", "MailboxSettings.ReadWrite",
+    "Mail.Read",
+    "Mail.ReadWrite",
+    "Mail.Send",
+    "Mail.Read.Shared",
+    "Mail.ReadWrite.Shared",
+    "full_access_as_user",
+    "EWS.AccessAsUser.All",
+    "Files.Read.All",
+    "Files.ReadWrite.All",
+    "Sites.Read.All",
+    "Sites.ReadWrite.All",
+    "Directory.ReadWrite.All",
+    "Directory.AccessAsUser.All",
+    "User.ReadWrite.All",
+    "MailboxSettings.ReadWrite",
 }
 
 
@@ -59,18 +86,31 @@ def app_risks(snap: TenantSnapshot) -> list[dict] | None:
             severity = "low"
         else:
             severity = None
-        out.append({"id": sp["_id"], "name": sp.get("displayName") or sp["_id"],
-                    "publisher": sp.get("verifiedPublisher") or sp.get("publisherName") or "",
-                    "verified": verified, "app_permissions": app_perms, "tenant_scopes": sorted(tenant_scopes),
-                    "user_scopes": sorted(user_scopes), "users": len(users), "severity": severity,
-                    "risky": risky_app + [s for s in risky_tenant + risky_user if s not in risky_app]})
+        out.append(
+            {
+                "id": sp["_id"],
+                "name": sp.get("displayName") or sp["_id"],
+                "publisher": sp.get("verifiedPublisher") or sp.get("publisherName") or "",
+                "verified": verified,
+                "app_permissions": app_perms,
+                "tenant_scopes": sorted(tenant_scopes),
+                "user_scopes": sorted(user_scopes),
+                "users": len(users),
+                "severity": severity,
+                "risky": risky_app + [s for s in risky_tenant + risky_user if s not in risky_app],
+            }
+        )
     out.sort(key=lambda a: (SEVERITY_RANK.get(a["severity"] or "info", 9), a["name"].lower()))
     return out
 
 
-@rule("risky_app_permissions", "Third-party apps hold only the access they need", "Apps",
-      "Review each app with the client. Remove apps nobody recognises (Enterprise applications > Delete), "
-      "and for the rest confirm the vendor and that it still needs mailbox or file access.")
+@rule(
+    "risky_app_permissions",
+    "Third-party apps hold only the access they need",
+    "Apps",
+    "Review each app with the client. Remove apps nobody recognises (Enterprise applications > Delete), "
+    "and for the rest confirm the vendor and that it still needs mailbox or file access.",
+)
 def risky_app_permissions(snap: TenantSnapshot, now: datetime):
     apps = app_risks(snap)
     if apps is None:
@@ -87,9 +127,11 @@ def risky_app_permissions(snap: TenantSnapshot, now: datetime):
         else:
             how = f"consented by {plural(a['users'], 'user')}"
         findings.append(Finding(a["severity"], a["name"], f"{', '.join(a['risky'])} ({how}; {who})", a["id"]))
-    return ("fail", f"{plural(len(findings), 'app')} with access to mail, files or the directory", findings) \
-        if findings \
+    return (
+        ("fail", f"{plural(len(findings), 'app')} with access to mail, files or the directory", findings)
+        if findings
         else ("pass", f"No third-party app holds high-risk access ({plural(len(apps), 'app')} reviewed)", [])
+    )
 
 
 def _authorization_policy(snap: TenantSnapshot):
@@ -105,25 +147,36 @@ def user_consent_level(policy: dict) -> str:
     return "limited" if assigned else "off"
 
 
-@rule("user_consent", "Users can't consent to apps on their own", "Apps",
-      "Set user consent to \"Allow user consent for apps from verified publishers, for selected permissions\" "
-      "or turn it off and use the admin consent workflow. Consent phishing relies on this setting.")
+@rule(
+    "user_consent",
+    "Users can't consent to apps on their own",
+    "Apps",
+    'Set user consent to "Allow user consent for apps from verified publishers, for selected permissions" '
+    "or turn it off and use the admin consent workflow. Consent phishing relies on this setting.",
+)
 def user_consent(snap: TenantSnapshot, now: datetime):
     policy = _authorization_policy(snap)
     if policy is None:
         return _unavailable("Consent settings haven't been collected yet")
     level = user_consent_level(policy)
     if level == "any":
-        return ("fail", "Users can consent to any app", [Finding(
-            "medium", "Tenant", "Any user can grant any app access to their mail and files")])
+        return (
+            "fail",
+            "Users can consent to any app",
+            [Finding("medium", "Tenant", "Any user can grant any app access to their mail and files")],
+        )
     if level == "limited":
         return ("pass", "Users can consent only to verified publishers' low-risk permissions", [])
     return ("pass", "User consent is turned off", [])
 
 
-@rule("app_credentials", "App secrets and certificates are current", "Apps",
-      "Renew credentials before they expire to avoid an outage, and delete app registrations whose "
-      "credentials have all expired if nothing uses them any more.")
+@rule(
+    "app_credentials",
+    "App secrets and certificates are current",
+    "Apps",
+    "Renew credentials before they expire to avoid an outage, and delete app registrations whose "
+    "credentials have all expired if nothing uses them any more.",
+)
 def app_credentials(snap: TenantSnapshot, now: datetime):
     apps = snap.objects("app_consents", "application")
     if apps is None:
@@ -137,11 +190,22 @@ def app_credentials(snap: TenantSnapshot, now: datetime):
         latest = max(ends)
         latest_ts = devices.parse_ts(latest).timestamp()
         if latest_ts < now.timestamp():
-            findings.append(Finding("low", a.get("displayName") or a["_id"],
-                                    f"{every(len(ends), 'credential', start=True)} expired, last on {day(latest)}",
-                                    a["_id"]))
+            findings.append(
+                Finding(
+                    "low",
+                    a.get("displayName") or a["_id"],
+                    f"{every(len(ends), 'credential', start=True)} expired, last on {day(latest)}",
+                    a["_id"],
+                )
+            )
         elif latest_ts < soon:
-            findings.append(Finding("medium", a.get("displayName") or a["_id"],
-                                    f"Last valid credential expires {day(latest)}", a["_id"]))
-    return ("fail", f"{plural(len(findings), 'app registration')} with expiring or expired credentials", findings) \
-        if findings else ("pass", "No app registration credentials expire in the next 30 days", [])
+            findings.append(
+                Finding(
+                    "medium", a.get("displayName") or a["_id"], f"Last valid credential expires {day(latest)}", a["_id"]
+                )
+            )
+    return (
+        ("fail", f"{plural(len(findings), 'app registration')} with expiring or expired credentials", findings)
+        if findings
+        else ("pass", "No app registration credentials expire in the next 30 days", [])
+    )

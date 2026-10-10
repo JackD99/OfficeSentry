@@ -16,16 +16,28 @@ MAX_RECOMMENDATIONS = 8
 
 def _recommendations(report) -> list[dict]:
     """Failing checks, worst first, then accepted risks: what the MSP is working on with the client."""
-    recs = [{
-        "title": r.title, "action": r.action, "summary": r.summary, "severity": r.severity or "info",
-        "status": "New" if any(getattr(f, "new", False) for f in r.findings) else "Open",
-        "tone": "bad" if r.severity in ("critical", "high") else "warn",
-    } for r in report.failing]
+    recs = [
+        {
+            "title": r.title,
+            "action": r.action,
+            "summary": r.summary,
+            "severity": r.severity or "info",
+            "status": "New" if any(getattr(f, "new", False) for f in r.findings) else "Open",
+            "tone": "bad" if r.severity in ("critical", "high") else "warn",
+        }
+        for r in report.failing
+    ]
     accepted: dict[str, dict] = {}
     for r, _f, _life in report.accepted:
         if r.key not in accepted and r.status == "accepted":
-            accepted[r.key] = {"title": r.title, "action": "", "summary": r.summary, "severity": "",
-                               "status": "Accepted risk", "tone": "info"}
+            accepted[r.key] = {
+                "title": r.title,
+                "action": "",
+                "summary": r.summary,
+                "severity": "",
+                "status": "Accepted risk",
+                "tone": "info",
+            }
     return recs + list(accepted.values())
 
 

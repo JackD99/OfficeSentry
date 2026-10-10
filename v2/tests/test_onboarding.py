@@ -17,8 +17,13 @@ def _discovery(domain, tenant_guid=None, status=200):
     if tenant_guid is None:
         responses.get(url, status=status, json={"error": "invalid_tenant"})
     else:
-        responses.get(url, json={"issuer": f"https://login.microsoftonline.com/{tenant_guid}/v2.0",
-                                 "token_endpoint": f"https://login.microsoftonline.com/{tenant_guid}/oauth2/v2.0/token"})
+        responses.get(
+            url,
+            json={
+                "issuer": f"https://login.microsoftonline.com/{tenant_guid}/v2.0",
+                "token_endpoint": f"https://login.microsoftonline.com/{tenant_guid}/oauth2/v2.0/token",
+            },
+        )
 
 
 def _consent_state(client, tenant_id):
@@ -32,15 +37,18 @@ def test_admin_adds_tenant_and_records_consent(client, db, connection_id):
     _discovery("contoso.onmicrosoft.com", GUID)
     make_user(db, "admin")
     login(client, "admin")
-    resp = client.post("/tenants/new", data={"name": "Contoso", "tenant_ref": "contoso.onmicrosoft.com",
-                                             "connection_id": connection_id})
+    resp = client.post(
+        "/tenants/new",
+        data={"name": "Contoso", "tenant_ref": "contoso.onmicrosoft.com", "connection_id": connection_id},
+    )
     tenant_id = int(resp.headers["Location"].rsplit("/", 1)[1])
     query = _consent_state(client, tenant_id)
     assert query["client_id"] == ["11111111-2222-3333-4444-555555555555"]
     assert query["redirect_uri"][0].endswith("/consent/callback")
 
-    resp = client.get("/consent/callback", query_string={
-        "admin_consent": "True", "tenant": GUID, "state": query["state"][0]})
+    resp = client.get(
+        "/consent/callback", query_string={"admin_consent": "True", "tenant": GUID, "state": query["state"][0]}
+    )
     assert resp.status_code == 302
     t = store.get_tenant(db, tenant_id)
     assert t["consented_at"] and t["tenant_ref"] == GUID
@@ -60,8 +68,10 @@ def test_consent_from_wrong_tenant_is_refused(client, db, connection_id):
     login(client, "admin")
     tenant_id = store.create_tenant(db, "Pinned", GUID, connection_id)
     state = _consent_state(client, tenant_id)["state"][0]
-    client.get("/consent/callback", query_string={
-        "admin_consent": "True", "tenant": "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee", "state": state})
+    client.get(
+        "/consent/callback",
+        query_string={"admin_consent": "True", "tenant": "ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee", "state": state},
+    )
     assert store.get_tenant(db, tenant_id)["consented_at"] is None
 
 
@@ -164,8 +174,7 @@ def test_requested_permissions_are_read_only():
 
 
 def test_required_resource_access_maps_role_ids():
-    sp = {"appRoles": [{"value": p, "id": f"id-{p}", "allowedMemberTypes": ["Application"]}
-                       for p in GRAPH_PERMISSIONS]}
+    sp = {"appRoles": [{"value": p, "id": f"id-{p}", "allowedMemberTypes": ["Application"]} for p in GRAPH_PERMISSIONS]}
     access = required_resource_access(sp)[0]["resourceAccess"]
     assert {a["id"] for a in access} == {f"id-{p}" for p in GRAPH_PERMISSIONS}
     assert all(a["type"] == "Role" for a in access)

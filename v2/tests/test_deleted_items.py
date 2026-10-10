@@ -26,8 +26,10 @@ def test_recycle_bin_report_lists_days_left_and_flags_what_goes_soon(db, two_ten
     assert users["Old Guest"][0][2] == "Guest" and users["Old Guest"][1] == "low"
     assert users["Eve Recent"][0][8] == "30 days" and users["Eve Recent"][1] is None
     assert s["Deleted users"].rows[0][0] == "Old Guest"  # fewest days left first
-    groups = {r[0]: (r, f) for r, f in zip(s["Deleted teams and groups"].rows, s["Deleted teams and groups"].flags,
-                                           strict=True)}
+    groups = {
+        r[0]: (r, f)
+        for r, f in zip(s["Deleted teams and groups"].rows, s["Deleted teams and groups"].flags, strict=True)
+    }
     assert groups["Project Falcon"][0][1] == "Team" and groups["Project Falcon"][1] == "medium"
     assert groups["Marketing"][0][1] == "Microsoft 365 group" and groups["Marketing"][1] is None
     tiles = {t.label: t for t in report.tiles}

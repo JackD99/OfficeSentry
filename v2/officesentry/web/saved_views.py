@@ -34,9 +34,13 @@ def store(conn, user_id: int, key: str, name: str, query: str) -> None:
         conn.execute(
             "INSERT INTO saved_views (user_id, report_key, name, query, created_at) VALUES (?, ?, ?, ?, ?)"
             " ON CONFLICT(user_id, report_key, name) DO UPDATE SET query = excluded.query",
-            (user_id, key, name, query, utcnow()))
-        conn.execute("UPDATE email_schedule_views SET query = ? WHERE saved_view_id = (SELECT id FROM saved_views"
-                     " WHERE user_id = ? AND report_key = ? AND name = ?)", (query, user_id, key, name))
+            (user_id, key, name, query, utcnow()),
+        )
+        conn.execute(
+            "UPDATE email_schedule_views SET query = ? WHERE saved_view_id = (SELECT id FROM saved_views"
+            " WHERE user_id = ? AND report_key = ? AND name = ?)",
+            (query, user_id, key, name),
+        )
 
 
 def _back(default: str) -> str:
@@ -61,8 +65,11 @@ def save(key: str):
         flash(f"You can keep up to {MAX_VIEWS} views. Delete one you don't use first.", "error")
         return redirect(f"{page}?{query}")
     store(g.db, g.user["id"], key, name, query)
-    flash(f"Saved “{name}”. It's under Views on this {'page' if key in findings_report.TITLES else 'report'}"
-          " for every tenant.", "success")
+    flash(
+        f"Saved “{name}”. It's under Views on this {'page' if key in findings_report.TITLES else 'report'}"
+        " for every tenant.",
+        "success",
+    )
     return redirect(f"{page}?{query}")
 
 

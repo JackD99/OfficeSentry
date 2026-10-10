@@ -61,8 +61,14 @@ def test_connection_check_missing_permissions_and_no_global_reader(db, two_tenan
 
 def test_connection_check_flags_global_administrator(db, two_tenants):
     alpha, _ = two_tenants
-    roles = gd.OUR_ROLE_ASSIGNMENTS + [{"id": "a-ga", "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10",
-                                        "principalId": gd.OUR_SP["id"], "directoryScopeId": "/"}]
+    roles = gd.OUR_ROLE_ASSIGNMENTS + [
+        {
+            "id": "a-ga",
+            "roleDefinitionId": "62e90394-69f5-4237-9190-012177145e10",
+            "principalId": gd.OUR_SP["id"],
+            "directoryScopeId": "/",
+        }
+    ]
     _, result, _ = _check(db, alpha, roles=roles)
     assert result["global_reader"] and result["too_powerful"] == ["Global Administrator"]
     check = tenant_health.assess(db, store.get_tenant(db, alpha)).check("global_reader")
@@ -73,19 +79,24 @@ def test_extra_permissions_and_roles_are_warnings(client, db, two_tenants, monke
     """The read-only promise per tenant: anything granted beyond what Office Sentry asks for is shown."""
     alpha, _ = two_tenants
     granted = gd.our_assignments
-    extra = [{"id": "our-mail", "resourceId": "sp-graph", "appRoleId": "r-mailread", "principalId": gd.OUR_SP["id"]},
-             {"id": "our-exo-full", "resourceId": "sp-exchange", "appRoleId": "r-exo-full",
-              "principalId": gd.OUR_SP["id"]}]
+    extra = [
+        {"id": "our-mail", "resourceId": "sp-graph", "appRoleId": "r-mailread", "principalId": gd.OUR_SP["id"]},
+        {"id": "our-exo-full", "resourceId": "sp-exchange", "appRoleId": "r-exo-full", "principalId": gd.OUR_SP["id"]},
+    ]
     monkeypatch.setattr(gd, "our_assignments", lambda missing=(): granted(missing) + extra)
-    roles = gd.OUR_ROLE_ASSIGNMENTS + [{"id": "a-dr", "roleDefinitionId": gd.READER, "principalId": gd.OUR_SP["id"],
-                                        "directoryScopeId": "/"}]
+    roles = gd.OUR_ROLE_ASSIGNMENTS + [
+        {"id": "a-dr", "roleDefinitionId": gd.READER, "principalId": gd.OUR_SP["id"], "directoryScopeId": "/"}
+    ]
     _, result, _ = _check(db, alpha, roles=roles)
     assert result["other"] == ["Mail.Read", "full_access_as_app"] and result["missing"] == []
 
     health = tenant_health.assess(db, store.get_tenant(db, alpha))
     perms = health.check("extra_permissions")
-    assert perms.state == "warn" and "2 permissions Office Sentry doesn't ask for: Mail.Read, full_access_as_app" \
-        in perms.summary and "Enterprise applications" in perms.fix
+    assert (
+        perms.state == "warn"
+        and "2 permissions Office Sentry doesn't ask for: Mail.Read, full_access_as_app" in perms.summary
+        and "Enterprise applications" in perms.fix
+    )
     reader = health.check("global_reader")  # any role besides Global Reader, not only the famous two
     assert reader.state == "warn" and "also holds Directory Readers" in reader.summary
     assert health.check("permissions").state == "ok"
@@ -120,7 +131,9 @@ def test_sign_in_failure_is_explained(db, two_tenants):
     def broken(tenant, connection):
         def token():
             raise GraphError(401, "invalid_client", "AADSTS700027: Client assertion failed. Trace ID: x")
+
         return GraphClient(token)
+
     store.enqueue_run(db, alpha, "connection")
     assert execute_run(db, store.claim_next_run(db), broken) == "failed"
     health = tenant_health.assess(db, store.get_tenant(db, alpha))
@@ -154,8 +167,10 @@ def test_first_data_queues_the_first_collection(db, connection_id):
         mock_tenant(rsps)
         store.enqueue_run(db, t, "connection")  # "Check connection now" after the client consented themselves
         assert execute_run(db, store.claim_next_run(db), _graph) == "succeeded"
-    queued = [r["collector"] for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? AND status ="
-                                                 " 'queued' ORDER BY id", (t,))]
+    queued = [
+        r["collector"]
+        for r in db.execute("SELECT collector FROM runs WHERE tenant_id = ? AND status = 'queued' ORDER BY id", (t,))
+    ]
     assert "users" in queued and "connection" not in queued
     assert store.get_tenant(db, t)["consented_at"]
 
@@ -196,8 +211,11 @@ def test_paused_and_archived_tenants_are_not_collected(db, cfg, two_tenants):
     assert schedule_tick(db, cfg, now) == 0
 
     # A run queued in the same moment as the pause is never claimed.
-    db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at)"
-               " VALUES (?, 'users', 'queued', 'manual', '2026-10-01T00:00:00Z')", (alpha,))
+    db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at)"
+        " VALUES (?, 'users', 'queued', 'manual', '2026-10-01T00:00:00Z')",
+        (alpha,),
+    )
     assert store.claim_next_run(db) is None
 
     lifecycle.resume(db, store.get_tenant(db, alpha), "admin")
@@ -211,9 +229,12 @@ def test_paused_and_archived_tenants_are_not_collected(db, cfg, two_tenants):
 
 def test_paused_tenant_sends_no_scheduled_email(app, db, two_tenants, vault, cfg):
     alpha, _ = two_tenants
-    sid = db.execute("INSERT INTO email_schedules (kind, tenant_id, reports, frequency, day_of_month, hour,"
-                     " timezone, created_at) VALUES ('report', ?, '[\"review\"]', 'monthly', 1, 0, 'UTC',"
-                     " '2026-01-01T00:00:00Z')", (alpha,)).lastrowid
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, frequency, day_of_month, hour,"
+        " timezone, created_at) VALUES ('report', ?, '[\"review\"]', 'monthly', 1, 0, 'UTC',"
+        " '2026-01-01T00:00:00Z')",
+        (alpha,),
+    ).lastrowid
     delivery.set_recipients(db, "schedule", sid, [delivery.add_contact(db, alpha, "", "a@x.com")])
     lifecycle.pause(db, store.get_tenant(db, alpha), "admin")
     assert delivery.tick(app, db, vault, cfg, datetime(2026, 10, 2, 9, 0, tzinfo=UTC)) == 0
@@ -270,8 +291,10 @@ def test_only_admins_change_tenants(client, db, two_tenants, role):
     make_user(db, "someone", role=role, all_tenants=role == "analyst", tenants=[alpha])
     login(client, "someone")
     for action in ADMIN_ONLY:
-        resp = client.post(f"/tenants/{alpha}/{action}", data={"name": "Hacked", "tenant_ref": "x.example.com",
-                                                                "confirm_name": "Alpha Ltd"})
+        resp = client.post(
+            f"/tenants/{alpha}/{action}",
+            data={"name": "Hacked", "tenant_ref": "x.example.com", "confirm_name": "Alpha Ltd"},
+        )
         assert resp.status_code == 403, action
     assert client.get(f"/tenants/{alpha}/offboard").status_code == 403
     t = store.get_tenant(db, alpha)
@@ -299,8 +322,12 @@ def test_edit_tenant(client, db, two_tenants, connection_id):
     alpha, bravo = two_tenants
     make_user(db, "admin")
     login(client, "admin")
-    form = {"name": "Alpha Group", "tenant_ref": "alpha.onmicrosoft.com", "connection_id": connection_id,
-            "notes": "Contract renews in May"}
+    form = {
+        "name": "Alpha Group",
+        "tenant_ref": "alpha.onmicrosoft.com",
+        "connection_id": connection_id,
+        "notes": "Contract renews in May",
+    }
     client.post(f"/tenants/{alpha}/edit", data=form)
     t = store.get_tenant(db, alpha)
     assert t["name"] == "Alpha Group" and t["notes"] == "Contract renews in May" and t["consented_at"]
@@ -309,23 +336,31 @@ def test_edit_tenant(client, db, two_tenants, connection_id):
     client.post(f"/tenants/{alpha}/edit", data=form | {"tenant_ref": "alpha-group.onmicrosoft.com"})
     t = store.get_tenant(db, alpha)
     assert t["tenant_ref"] == "alpha-group.onmicrosoft.com" and t["consented_at"] is None
-    page = client.post(f"/tenants/{alpha}/edit", data=form | {"tenant_ref": "bravo.onmicrosoft.com"},
-                       follow_redirects=True).get_data(as_text=True)
+    page = client.post(
+        f"/tenants/{alpha}/edit", data=form | {"tenant_ref": "bravo.onmicrosoft.com"}, follow_redirects=True
+    ).get_data(as_text=True)
     assert "Another tenant already uses" in page
 
     # Once data has come in, only a domain -> GUID change is allowed.
     seed_tenant(db, bravo)
-    page = client.post(f"/tenants/{bravo}/edit", data=form | {"name": "Bravo", "tenant_ref": "other.example.com"},
-                       follow_redirects=True).get_data(as_text=True)
+    page = client.post(
+        f"/tenants/{bravo}/edit",
+        data=form | {"name": "Bravo", "tenant_ref": "other.example.com"},
+        follow_redirects=True,
+    ).get_data(as_text=True)
     assert "can&#39;t change" in page and store.get_tenant(db, bravo)["tenant_ref"] == "bravo.onmicrosoft.com"
     guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     with responses.RequestsMock() as rsps:
-        rsps.get("https://login.microsoftonline.com/bravo.onmicrosoft.com/v2.0/.well-known/openid-configuration",
-                 json={"issuer": f"https://login.microsoftonline.com/{guid}/v2.0"})
+        rsps.get(
+            "https://login.microsoftonline.com/bravo.onmicrosoft.com/v2.0/.well-known/openid-configuration",
+            json={"issuer": f"https://login.microsoftonline.com/{guid}/v2.0"},
+        )
         # ...and only to the GUID Microsoft publishes for that domain, not another client's.
-        page = client.post(f"/tenants/{bravo}/edit", data=form | {
-            "name": "Bravo", "tenant_ref": "99999999-8888-7777-6666-555555555555"},
-            follow_redirects=True).get_data(as_text=True)
+        page = client.post(
+            f"/tenants/{bravo}/edit",
+            data=form | {"name": "Bravo", "tenant_ref": "99999999-8888-7777-6666-555555555555"},
+            follow_redirects=True,
+        ).get_data(as_text=True)
         assert "isn&#39;t the tenant ID" in page
         assert store.get_tenant(db, bravo)["tenant_ref"] == "bravo.onmicrosoft.com"
         client.post(f"/tenants/{bravo}/edit", data=form | {"name": "Bravo", "tenant_ref": guid})
@@ -336,22 +371,32 @@ def test_edit_tenant(client, db, two_tenants, connection_id):
 
 
 def _tenant_rows(db, tenant_id) -> dict:
-    return {t: db.execute(f"SELECT COUNT(*) FROM {t} WHERE tenant_id = ?", (tenant_id,)).fetchone()[0]
-            for t in lifecycle._tenant_tables(db) if t not in lifecycle.KEPT}
+    return {
+        t: db.execute(f"SELECT COUNT(*) FROM {t} WHERE tenant_id = ?", (tenant_id,)).fetchone()[0]
+        for t in lifecycle._tenant_tables(db)
+        if t not in lifecycle.KEPT
+    }
 
 
 def _populate(db, tenant_id):
     seed_tenant(db, tenant_id)
     contact = delivery.add_contact(db, tenant_id, "IT", f"it{tenant_id}@client.com")
-    sid = db.execute("INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, created_at)"
-                     " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, '2026-01-01T00:00:00Z')",
-                     (tenant_id,)).lastrowid
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, created_at)"
+        " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, '2026-01-01T00:00:00Z')",
+        (tenant_id,),
+    ).lastrowid
     delivery.set_recipients(db, "schedule", sid, [contact])
-    aid = db.execute("INSERT INTO email_alerts (tenant_id, min_severity, created_at)"
-                     " VALUES (?, 'high', '2026-01-01T00:00:00Z')", (tenant_id,)).lastrowid
+    aid = db.execute(
+        "INSERT INTO email_alerts (tenant_id, min_severity, created_at) VALUES (?, 'high', '2026-01-01T00:00:00Z')",
+        (tenant_id,),
+    ).lastrowid
     delivery.set_recipients(db, "alert", aid, [contact])
-    db.execute("INSERT INTO email_deliveries (kind, schedule_id, tenant_id, subject, recipients, status, created_at)"
-               " VALUES ('report', ?, ?, 'x', 'it@client.com', 'sent', '2026-01-01T00:00:00Z')", (sid, tenant_id))
+    db.execute(
+        "INSERT INTO email_deliveries (kind, schedule_id, tenant_id, subject, recipients, status, created_at)"
+        " VALUES ('report', ?, ?, 'x', 'it@client.com', 'sent', '2026-01-01T00:00:00Z')",
+        (sid, tenant_id),
+    )
 
 
 def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, two_tenants):
@@ -363,8 +408,11 @@ def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, 
     only_alpha = make_user(db, "alpha-it", role="client", tenants=[alpha])
     both = make_user(db, "group-it", role="client", tenants=[alpha, bravo])
     analyst = make_user(db, "lead", role="analyst", tenants=[alpha, bravo])
-    db.execute("INSERT INTO saved_views (user_id, report_key, name, query, created_at)"
-               " VALUES (?, 'mailboxes', 'Mine', 'x=1', '2026-01-01T00:00:00Z')", (analyst,))
+    db.execute(
+        "INSERT INTO saved_views (user_id, report_key, name, query, created_at)"
+        " VALUES (?, 'mailboxes', 'Mine', 'x=1', '2026-01-01T00:00:00Z')",
+        (analyst,),
+    )
     alpha_runs = [r["id"] for r in db.execute("SELECT id FROM runs WHERE tenant_id = ?", (alpha,))]
     before_bravo = _tenant_rows(db, bravo)
     bravo_objects = lifecycle.stored(db, bravo)["objects"]
@@ -383,8 +431,9 @@ def test_offboard_deletes_everything_tenant_scoped_and_nothing_else(client, db, 
     client.post(f"/tenants/{alpha}/delete", data={"confirm_name": "Alpha Ltd", "delete_users": [str(both)]})
     assert store.get_tenant(db, alpha) is not None
 
-    resp = client.post(f"/tenants/{alpha}/delete", data={"confirm_name": "Alpha Ltd",
-                                                          "delete_users": [str(only_alpha)]})
+    resp = client.post(
+        f"/tenants/{alpha}/delete", data={"confirm_name": "Alpha Ltd", "delete_users": [str(only_alpha)]}
+    )
     assert resp.status_code == 302
     assert store.get_tenant(db, alpha) is None
     assert not any(_tenant_rows(db, alpha).values()) and not lifecycle.leftovers(db, alpha, alpha_runs)
@@ -410,19 +459,29 @@ def test_offboarding_erases_client_people_from_the_log_and_the_database_file(app
     alpha, bravo = two_tenants
     person = "dana.erase-me@alpha-client.example"
     run = store.enqueue_run(db, alpha, "users")
-    db.execute("INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, 'user', 'u1', ?)",
-               (run, json.dumps({"userPrincipalName": person, "pad": "x" * 5000})))
+    db.execute(
+        "INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, 'user', 'u1', ?)",
+        (run, json.dumps({"userPrincipalName": person, "pad": "x" * 5000})),
+    )
     make_user(db, "admin")
     client_user = make_user(db, "it@alpha-client.example", role="client", tenants=[alpha])
     staff = app.test_client()
     login(staff, "admin")
     staff.post(f"/tenants/{alpha}/contacts", data={"name": "Dana", "email": person})
-    audit_rows = [("finding_accepted", f"mfa_registered:{person}"), ("contact_removed", person),
-                  ("alert_failed", f"Alert to {person} failed")]
-    db.executemany("INSERT INTO audit_log (ts, username, action, tenant_id, detail) VALUES (?, 'admin', ?, ?, ?)",
-                   [("2026-01-01T00:00:00Z", a, alpha, d) for a, d in audit_rows])
-    db.execute("INSERT INTO audit_log (ts, username, action, tenant_id, detail) VALUES ('2026-01-01T00:00:00Z',"
-               " 'admin', 'finding_accepted', ?, 'mfa_registered:kept@bravo.example')", (bravo,))
+    audit_rows = [
+        ("finding_accepted", f"mfa_registered:{person}"),
+        ("contact_removed", person),
+        ("alert_failed", f"Alert to {person} failed"),
+    ]
+    db.executemany(
+        "INSERT INTO audit_log (ts, username, action, tenant_id, detail) VALUES (?, 'admin', ?, ?, ?)",
+        [("2026-01-01T00:00:00Z", a, alpha, d) for a, d in audit_rows],
+    )
+    db.execute(
+        "INSERT INTO audit_log (ts, username, action, tenant_id, detail) VALUES ('2026-01-01T00:00:00Z',"
+        " 'admin', 'finding_accepted', ?, 'mfa_registered:kept@bravo.example')",
+        (bravo,),
+    )
     login(app.test_client(), "it@alpha-client.example")  # the client's own sign-ins, with their address
     assert person.encode() in _on_disk(cfg)
 
@@ -436,8 +495,9 @@ def test_offboarding_erases_client_people_from_the_log_and_the_database_file(app
     assert "removed when the tenant was deleted" in accepted["detail"]
     # The deleted client account's own activity no longer names them or their address.
     assert not any(r["username"] == "it@alpha-client.example" for r in log)
-    assert any(r["action"] == "login" and r["username"].startswith("deleted client account") and r["ip"] is None
-               for r in log)
+    assert any(
+        r["action"] == "login" and r["username"].startswith("deleted client account") and r["ip"] is None for r in log
+    )
     # The offboarding record itself stays, and other tenants' rows are untouched.
     deleted = next(r for r in log if r["action"] == "tenant_deleted")
     assert deleted["username"] == "admin" and "Alpha Ltd" in deleted["detail"]
@@ -474,8 +534,10 @@ def test_delete_tenant_command(cfg, db, two_tenants, capsys):
         with pytest.raises(SystemExit):
             main(["delete-tenant", str(alpha)])
     assert store.get_tenant(db, alpha) is not None
-    with patch("officesentry.__main__.load_config", return_value=cfg), \
-            patch("builtins.input", return_value="Alpha Ltd"):
+    with (
+        patch("officesentry.__main__.load_config", return_value=cfg),
+        patch("builtins.input", return_value="Alpha Ltd"),
+    ):
         main(["delete-tenant", str(alpha), "--delete-client-users"])
     assert store.get_tenant(db, alpha) is None and store.get_tenant(db, bravo) is not None
     assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0

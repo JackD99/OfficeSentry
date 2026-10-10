@@ -12,10 +12,12 @@ from ..graph import GraphError, PermissionMissing
 from .base import Collector, RunContext, register
 from .groups import group_kind
 
-GROUP_FIELDS = ("id,displayName,groupTypes,mailEnabled,securityEnabled,membershipRule,membershipRuleProcessingState,"
-                "onPremisesSyncEnabled,isAssignableToRole,resourceProvisioningOptions,createdDateTime,mail")
-GROUP_LIMIT = 2000   # security groups and distribution lists whose members are read (one call each, mostly)
-MEMBER_PAGES = 20    # 999 members a page
+GROUP_FIELDS = (
+    "id,displayName,groupTypes,mailEnabled,securityEnabled,membershipRule,membershipRuleProcessingState,"
+    "onPremisesSyncEnabled,isAssignableToRole,resourceProvisioningOptions,createdDateTime,mail"
+)
+GROUP_LIMIT = 2000  # security groups and distribution lists whose members are read (one call each, mostly)
+MEMBER_PAGES = 20  # 999 members a page
 CHILDREN_KEPT = 200  # groups inside a group, by ID
 
 
@@ -41,18 +43,21 @@ def _summary(group: dict) -> dict:
 class GroupNesting(Collector):
     key = "group_nesting"
     title = "Group nesting"
-    description = ("How many members each security group and distribution list has, the groups inside each, and "
-                   "dynamic membership rules.")
+    description = (
+        "How many members each security group and distribution list has, the groups inside each, and "
+        "dynamic membership rules."
+    )
     permissions = ("Directory.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
         groups = ctx.paged(ctx.graph.get_all("/groups", params={"$select": GROUP_FIELDS, "$top": "999"}))
         rows = {g["id"]: _summary(g) for g in groups if g.get("id")}
-        others = sorted((gid for gid, g in rows.items() if g["kind"] != "microsoft365"),
-                        key=lambda gid: (rows[gid]["displayName"] or "").lower())
+        others = sorted(
+            (gid for gid, g in rows.items() if g["kind"] != "microsoft365"),
+            key=lambda gid: (rows[gid]["displayName"] or "").lower(),
+        )
         if len(others) > GROUP_LIMIT:
-            ctx.warn(f"Read members of the first {GROUP_LIMIT} of {len(others)} security groups and distribution "
-                     "lists")
+            ctx.warn(f"Read members of the first {GROUP_LIMIT} of {len(others)} security groups and distribution lists")
         for gid in others[:GROUP_LIMIT]:
             try:
                 rows[gid].update(self._members(ctx, gid))
@@ -71,9 +76,18 @@ class GroupNesting(Collector):
 
     @staticmethod
     def _members(ctx: RunContext, gid: str) -> dict:
-        result = ctx.graph.get_all(f"/groups/{gid}/members", params={"$select": "id", "$top": "999"},
-                                   max_pages=MEMBER_PAGES)
-        groups = [m["id"] for m in result.items
-                  if (m.get("@odata.type") or "").endswith(".group") and isinstance(m.get("id"), str)]
-        return {"examined": True, "memberCount": len(result.items), "membersComplete": not result.truncated,
-                "groupIds": groups[:CHILDREN_KEPT], "groupCount": len(groups)}
+        result = ctx.graph.get_all(
+            f"/groups/{gid}/members", params={"$select": "id", "$top": "999"}, max_pages=MEMBER_PAGES
+        )
+        groups = [
+            m["id"]
+            for m in result.items
+            if (m.get("@odata.type") or "").endswith(".group") and isinstance(m.get("id"), str)
+        ]
+        return {
+            "examined": True,
+            "memberCount": len(result.items),
+            "membersComplete": not result.truncated,
+            "groupIds": groups[:CHILDREN_KEPT],
+            "groupCount": len(groups),
+        }

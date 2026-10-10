@@ -35,8 +35,9 @@ class MailboxWindow:
         ctx.objects(f"{self.kind}_coverage", [("checked", {"checkedAt": self.checked_at})])
 
 
-def plan(ctx: RunContext, collector: str, kind: str, mailboxes: list, mailbox_id: Callable[[object], str],
-         what: str) -> MailboxWindow:
+def plan(
+    ctx: RunContext, collector: str, kind: str, mailboxes: list, mailbox_id: Callable[[object], str], what: str
+) -> MailboxWindow:
     """Choose this run's mailboxes for ``kind`` rows (which carry a ``mailboxId``); warn if that isn't all."""
     limit = PER_MAILBOX_LIMIT
     now = datetime.now(UTC).isoformat(timespec="microseconds")
@@ -53,18 +54,25 @@ def plan(ctx: RunContext, collector: str, kind: str, mailboxes: list, mailbox_id
     rest = {i: earlier[i] for i in ids - chosen if i in earlier}
     carried = []
     if previous and rest:
-        carried = [(r["_id"], {k: v for k, v in r.items() if k not in ("_id", "_kind")})
-                   for r in store.run_objects(ctx.conn, previous["id"], kind) if r.get("mailboxId") in rest]
+        carried = [
+            (r["_id"], {k: v for k, v in r.items() if k not in ("_id", "_kind")})
+            for r in store.run_objects(ctx.conn, previous["id"], kind)
+            if r.get("mailboxId") in rest
+        ]
 
     never = len(ids) - len(chosen) - len(rest)
-    message = (f"Checked {what} for {len(chosen)} of {plural(len(ids), 'mailbox')} this run ({limit} per run, "
-               f"so each mailbox is checked about every {math.ceil(len(ids) / limit)} runs)")
+    message = (
+        f"Checked {what} for {len(chosen)} of {plural(len(ids), 'mailbox')} this run ({limit} per run, "
+        f"so each mailbox is checked about every {math.ceil(len(ids) / limit)} runs)"
+    )
     if rest:
         oldest, newest = min(rest.values())[:10], max(rest.values())[:10]
-        message += (f"; showing earlier results for {plural(len(rest), 'mailbox')}, last checked "
-                    + (f"on {oldest}" if oldest == newest else f"between {oldest} and {newest}"))
+        message += f"; showing earlier results for {plural(len(rest), 'mailbox')}, last checked " + (
+            f"on {oldest}" if oldest == newest else f"between {oldest} and {newest}"
+        )
     if never:
         message += f"; {plural(never, 'mailbox')} not checked yet"
     ctx.warn(message)
-    return MailboxWindow(kind, [m for m in mailboxes if mailbox_id(m) in chosen], carried, len(rest),
-                         rest | dict.fromkeys(chosen, now))
+    return MailboxWindow(
+        kind, [m for m in mailboxes if mailbox_id(m) in chosen], carried, len(rest), rest | dict.fromkeys(chosen, now)
+    )

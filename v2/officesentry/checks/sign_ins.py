@@ -10,18 +10,25 @@ from ..text import plural
 from .base import Finding, _unavailable, rule
 
 
-@rule("risky_sign_ins", "No risky sign-ins succeeded", "Identity",
-      "Check each sign-in with the person. If they don't recognise it, reset their password, sign them out "
-      "everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm the "
-      "account compromised in Entra ID Protection. Add a Conditional Access policy that asks for MFA on medium "
-      "and high sign-in risk. The Sign-in activity report lists every risky sign-in.")
+@rule(
+    "risky_sign_ins",
+    "No risky sign-ins succeeded",
+    "Identity",
+    "Check each sign-in with the person. If they don't recognise it, reset their password, sign them out "
+    "everywhere (revoke sessions), and check their MFA methods, inbox rules and app consents; then confirm the "
+    "account compromised in Entra ID Protection. Add a Conditional Access policy that asks for MFA on medium "
+    "and high sign-in risk. The Sign-in activity report lists every risky sign-in.",
+)
 def risky_sign_ins(snap: TenantSnapshot, now: datetime):
     status = signins.status(snap)
     if status is None:
         return _unavailable("Sign-in activity hasn't been collected yet")
     if not status.get("available"):
-        return _unavailable("Office Sentry can't read the sign-in log (AuditLog.Read.All)"
-                            if status.get("reason") == "permission" else "The sign-in log needs Entra ID P1")
+        return _unavailable(
+            "Office Sentry can't read the sign-in log (AuditLog.Read.All)"
+            if status.get("reason") == "permission"
+            else "The sign-in log needs Entra ID P1"
+        )
     if not status.get("riskVisible"):
         return _unavailable("Sign-in risk needs Entra ID P2")
     days = status.get("days") if isinstance(status.get("days"), int) else signins.WINDOW_DAYS
@@ -40,12 +47,17 @@ def risky_sign_ins(snap: TenantSnapshot, now: datetime):
         when = latest.get("time")[:10] if isinstance(latest.get("time"), str) else ""
         level = latest.get("level") if isinstance(latest.get("level"), str) else "unknown"
         state = signins.RISK_STATES.get(latest.get("state") if isinstance(latest.get("state"), str) else "", "")
-        detail = (f"{plural(len(hits), 'successful risky sign-in')}; latest{' ' + when if when else ''} from "
-                  f"{signins.country(latest.get('country'))} ({level} risk"
-                  f"{', ' + state.lower() if state else ''})")
+        detail = (
+            f"{plural(len(hits), 'successful risky sign-in')}; latest{' ' + when if when else ''} from "
+            f"{signins.country(latest.get('country'))} ({level} risk"
+            f"{', ' + state.lower() if state else ''})"
+        )
         uid = latest.get("userId") if isinstance(latest.get("userId"), str) else user
         findings.append(Finding(severity, user, detail, uid))
     if findings:
-        return ("fail", f"{plural(len(findings), 'account')} signed in despite medium or high sign-in risk "
-                        f"in the last {days} days", findings)
+        return (
+            "fail",
+            f"{plural(len(findings), 'account')} signed in despite medium or high sign-in risk in the last {days} days",
+            findings,
+        )
     return ("pass", f"No risky sign-ins succeeded in the last {days} days", [])

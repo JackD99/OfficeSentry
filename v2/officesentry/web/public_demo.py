@@ -23,8 +23,9 @@ MARKER = "public_demo"
 USERNAME = "demo"
 ROLES = ("analyst", "client")  # never "admin"
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
-NOTICE = ("This is the demo, so nothing can be changed here. Install Office Sentry to try it on your own "
-          "clients' tenants.")
+NOTICE = (
+    "This is the demo, so nothing can be changed here. Install Office Sentry to try it on your own clients' tenants."
+)
 
 
 def _cfg():

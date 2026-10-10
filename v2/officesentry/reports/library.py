@@ -31,50 +31,124 @@ class Use:
 
 
 USES: tuple[Use, ...] = (
-    Use("offboarding", "Offboarding check",
+    Use(
+        "offboarding",
+        "Offboarding check",
         "Someone has left: check their access is gone, their mail isn't forwarded and their licences come back.",
-        ("inactive", "licences", "mailboxes", "inbox-rules", "mailbox-permissions", "mailbox-holds", "onedrive",
-         "shared-files", "admins", "devices", "groups", "group-membership", "deleted-items")),
-    Use("quarterly", "Quarterly review",
+        (
+            "inactive",
+            "licences",
+            "mailboxes",
+            "inbox-rules",
+            "mailbox-permissions",
+            "mailbox-holds",
+            "onedrive",
+            "shared-files",
+            "admins",
+            "devices",
+            "groups",
+            "group-membership",
+            "deleted-items",
+        ),
+    ),
+    Use(
+        "quarterly",
+        "Quarterly review",
         "What a client review meeting covers: the summary, what changed, and the trends behind it.",
-        ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests")),
-    Use("insurance", "Insurance renewal",
+        ("review", "changes", "secure-score", "mfa", "admins", "conditional-access", "licences", "guests"),
+    ),
+    Use(
+        "insurance",
+        "Insurance renewal",
         "The controls cyber insurers ask about, and the reports that prove each one.",
-        ("evidence", "mfa", "auth-methods", "admins", "conditional-access", "legacy-auth", "domains", "mailboxes",
-         "devices", "admin-activity", "sign-ins", "risky-users")),
-    Use("phishing-resistant", "Phishing-resistant MFA rollout",
+        (
+            "evidence",
+            "mfa",
+            "auth-methods",
+            "admins",
+            "conditional-access",
+            "legacy-auth",
+            "domains",
+            "mailboxes",
+            "devices",
+            "admin-activity",
+            "sign-ins",
+            "risky-users",
+        ),
+    ),
+    Use(
+        "phishing-resistant",
+        "Phishing-resistant MFA rollout",
         "Moving admins, then everyone, to passkeys: who signs in with what, what the methods policy allows, and "
         "which Conditional Access policies require it.",
-        ("auth-methods", "mfa", "admins", "conditional-access", "legacy-auth")),
-    Use("sharing", "External sharing",
+        ("auth-methods", "mfa", "admins", "conditional-access", "legacy-auth"),
+    ),
+    Use(
+        "sharing",
+        "External sharing",
         "Who outside the organisation can reach what: guests, shared files and sites, and mailbox access.",
-        ("guests", "shared-files", "sharepoint", "onedrive", "groups", "group-membership", "tenant-settings",
-         "mailbox-permissions")),
-    Use("storage", "Storage cleanup",
+        (
+            "guests",
+            "shared-files",
+            "sharepoint",
+            "onedrive",
+            "groups",
+            "group-membership",
+            "tenant-settings",
+            "mailbox-permissions",
+        ),
+    ),
+    Use(
+        "storage",
+        "Storage cleanup",
         "What's filling SharePoint, OneDrive and mailboxes, and what can go.",
-        ("sharepoint-storage", "sharepoint", "onedrive", "mailbox-size", "shared-mailboxes",
-         "mailbox-holds")),
-    Use("licences", "Licence savings",
+        ("sharepoint-storage", "sharepoint", "onedrive", "mailbox-size", "shared-mailboxes", "mailbox-holds"),
+    ),
+    Use(
+        "licences",
+        "Licence savings",
         "Paid licences nobody uses, people who could have a cheaper one, accounts that could be shared mailboxes, "
         "and people who've stopped signing in.",
-        ("licences", "licence-rightsizing", "usage", "inactive", "shared-mailboxes")),
-    Use("compromise", "Investigate a compromised account",
+        ("licences", "licence-rightsizing", "usage", "inactive", "shared-mailboxes"),
+    ),
+    Use(
+        "compromise",
+        "Investigate a compromised account",
         "Someone may have someone else's password: where and how they signed in, failed and risky sign-ins, "
         "mail rules and forwarding, new app consents and what admins changed.",
-        ("sign-ins", "risky-users", "inbox-rules", "mailboxes", "mailbox-permissions", "legacy-auth", "apps",
-         "admin-activity", "mfa")),
-    Use("renewal", "Licence renewal",
+        (
+            "sign-ins",
+            "risky-users",
+            "inbox-rules",
+            "mailboxes",
+            "mailbox-permissions",
+            "legacy-auth",
+            "apps",
+            "admin-activity",
+            "mfa",
+        ),
+    ),
+    Use(
+        "renewal",
+        "Licence renewal",
         "Before a renewal or true-up: what's bought, used and spare, what it costs, and which subscriptions and "
         "trials end soon.",
-        ("subscriptions", "licences", "licence-rightsizing", "usage")),
-    Use("billing", "Billing check",
+        ("subscriptions", "licences", "licence-rightsizing", "usage"),
+    ),
+    Use(
+        "billing",
+        "Billing check",
         "Check the client's bill against the tenant: products, quantities, prices, trials and suspended "
         "subscriptions, and licence assignment errors.",
-        ("subscriptions", "licences")),
-    Use("cleanup", "Directory clean-up",
+        ("subscriptions", "licences"),
+    ),
+    Use(
+        "cleanup",
+        "Directory clean-up",
         "What nobody uses any more: stale accounts, apps unused for months that still hold permissions, empty and "
         "nested groups, managers who have left, and what's in the recycle bin.",
-        ("inactive", "unused-apps", "group-structure", "all-users", "apps", "deleted-items", "devices")),
+        ("inactive", "unused-apps", "group-structure", "all-users", "apps", "deleted-items", "devices"),
+    ),
 )
 
 
@@ -102,16 +176,36 @@ class Area:
 
 
 SUMMARIES = (
-    ("review", "Monthly review", "Security and licensing summary with recommendations, ready to send to the client.",
-     "review", "summary pdf client report recommendations"),
-    ("evidence", "Questionnaires and evidence", "Answers to paste into cyber insurance, supplier security and "
-     "Cyber Essentials questions, with the evidence behind each.",
-     "evidence", "cyber insurance questionnaire controls supplier vendor due diligence cyber essentials iasme "
-     "danzell proposal renewal form"),
-    ("changes", "What changed", "Configuration changes, new and fixed findings, and figures that moved.",
-     "changes", "month over month history drift differences"),
-    ("findings", "Findings", "Every open finding from the checks, worst first, with accepted risks.",
-     "findings", "issues checks risks problems"),
+    (
+        "review",
+        "Monthly review",
+        "Security and licensing summary with recommendations, ready to send to the client.",
+        "review",
+        "summary pdf client report recommendations",
+    ),
+    (
+        "evidence",
+        "Questionnaires and evidence",
+        "Answers to paste into cyber insurance, supplier security and "
+        "Cyber Essentials questions, with the evidence behind each.",
+        "evidence",
+        "cyber insurance questionnaire controls supplier vendor due diligence cyber essentials iasme "
+        "danzell proposal renewal form",
+    ),
+    (
+        "changes",
+        "What changed",
+        "Configuration changes, new and fixed findings, and figures that moved.",
+        "changes",
+        "month over month history drift differences",
+    ),
+    (
+        "findings",
+        "Findings",
+        "Every open finding from the checks, worst first, with accepted risks.",
+        "findings",
+        "issues checks risks problems",
+    ),
 )
 
 
@@ -121,15 +215,35 @@ def catalogue() -> list[Area]:
     for use in USES:
         for key in use.reports:
             uses.setdefault(key, []).append(use.key)
-    areas = [Area("summaries", SUMMARY_AREA, [
-        Entry(key, title, desc, SUMMARY_AREA, kind, tuple(uses.get(key, ())),
-              f"{title} {desc} {words}".lower())
-        for key, title, desc, kind, words in SUMMARIES])]
+    areas = [
+        Area(
+            "summaries",
+            SUMMARY_AREA,
+            [
+                Entry(key, title, desc, SUMMARY_AREA, kind, tuple(uses.get(key, ())), f"{title} {desc} {words}".lower())
+                for key, title, desc, kind, words in SUMMARIES
+            ],
+        )
+    ]
     for group in data_reports.grouped():
-        areas.append(Area(group.key, group.title, [
-            Entry(key, title, desc, group.title, "data", tuple(uses.get(key, ())),
-                  f"{title} {desc} {group.title} {KEYWORDS.get(key, '')}".lower())
-            for key, title, desc in group.reports]))
+        areas.append(
+            Area(
+                group.key,
+                group.title,
+                [
+                    Entry(
+                        key,
+                        title,
+                        desc,
+                        group.title,
+                        "data",
+                        tuple(uses.get(key, ())),
+                        f"{title} {desc} {group.title} {KEYWORDS.get(key, '')}".lower(),
+                    )
+                    for key, title, desc in group.reports
+                ],
+            )
+        )
     return areas
 
 

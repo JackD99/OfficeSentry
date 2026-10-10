@@ -125,23 +125,35 @@ def _person(t: Tenant, u: dict, _v: str) -> Hit:
         words.append("guest")
     if u.get("accountEnabled") is False:
         words.append("sign-in blocked")
-    return Hit("Person", _text(u.get("displayName")) or _text(u.get("userPrincipalName")) or u["_id"],
-               ", ".join(w for w in words if w), t.person(u["_id"]) or t.overview, account=True)
+    return Hit(
+        "Person",
+        _text(u.get("displayName")) or _text(u.get("userPrincipalName")) or u["_id"],
+        ", ".join(w for w in words if w),
+        t.person(u["_id"]) or t.overview,
+        account=True,
+    )
 
 
 def _mailbox(t: Tenant, m: dict, _v: str) -> Hit:
     href = t.person(m.get("ExternalDirectoryObjectId"))
     kind = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", _text(m.get("RecipientTypeDetails"))).lower() or "mailbox"
     alias = _text(m.get("Alias"))
-    return Hit("Mailbox", _text(m.get("DisplayName")) or _text(m.get("PrimarySmtpAddress")),
-               ", ".join(w for w in (_text(m.get("PrimarySmtpAddress")), kind, f"alias {alias}" if alias else "")
-                         if w),
-               href or t.report("shared-mailboxes"), account=bool(href))
+    return Hit(
+        "Mailbox",
+        _text(m.get("DisplayName")) or _text(m.get("PrimarySmtpAddress")),
+        ", ".join(w for w in (_text(m.get("PrimarySmtpAddress")), kind, f"alias {alias}" if alias else "") if w),
+        href or t.report("shared-mailboxes"),
+        account=bool(href),
+    )
 
 
 def _forwarding(t: Tenant, m: dict, target: str) -> Hit:
-    return Hit("Forwarding", f"{_text(m.get('PrimarySmtpAddress'))} forwards to {target}",
-               "Set by an admin on the mailbox", t.report("mailboxes", "Forwarding", "Forwards to", target))
+    return Hit(
+        "Forwarding",
+        f"{_text(m.get('PrimarySmtpAddress'))} forwards to {target}",
+        "Set by an admin on the mailbox",
+        t.report("mailboxes", "Forwarding", "Forwards to", target),
+    )
 
 
 def _rule_targets(r: dict) -> list[str]:
@@ -150,59 +162,81 @@ def _rule_targets(r: dict) -> list[str]:
 
 def _rule(t: Tenant, r: dict, target: str) -> Hit:
     state = "" if r.get("isEnabled", True) else " (turned off)"
-    return Hit("Inbox rule", f"{_text(r.get('mailbox'))} sends mail to {target}",
-               f"Inbox rule \"{_text(r.get('displayName'))}\"{state}",
-               t.report("mailboxes", "Forwarding", "Forwards to", target))
+    return Hit(
+        "Inbox rule",
+        f"{_text(r.get('mailbox'))} sends mail to {target}",
+        f'Inbox rule "{_text(r.get("displayName"))}"{state}',
+        t.report("mailboxes", "Forwarding", "Forwards to", target),
+    )
 
 
 def _location(t: Tenant, loc: dict, ip: str) -> Hit:
     user = _text(loc.get("user"))
     href = t.person(user)
-    return Hit("Sign-in address", f"{user} signed in from {ip}",
-               ", ".join(w for w in (_text(loc.get("country")), ", ".join(loc.get("cities") or [])) if w)
-               + " (last 7 days)", href or t.report("sign-ins"))
+    return Hit(
+        "Sign-in address",
+        f"{user} signed in from {ip}",
+        ", ".join(w for w in (_text(loc.get("country")), ", ".join(loc.get("cities") or [])) if w) + " (last 7 days)",
+        href or t.report("sign-ins"),
+    )
 
 
 def _failure_ip(t: Tenant, i: dict, ip: str) -> Hit:
     failures, tried = int(i.get("failures") or 0), int(i.get("accounts") or 0)
     listed = tried >= 2 or failures >= sign_in_reports.REPEATED_FAILURES  # the report's own threshold
-    return Hit("Failed sign-ins", f"{ip}: {plural(failures, 'failed sign-in')} against {plural(tried, 'account')}",
-               ", ".join(i.get("users") or []),
-               t.report("sign-ins", sign_in_reports.ADDRESSES, "IP address", ip) if listed else t.report("sign-ins"))
+    return Hit(
+        "Failed sign-ins",
+        f"{ip}: {plural(failures, 'failed sign-in')} against {plural(tried, 'account')}",
+        ", ".join(i.get("users") or []),
+        t.report("sign-ins", sign_in_reports.ADDRESSES, "IP address", ip) if listed else t.report("sign-ins"),
+    )
 
 
 def _risky(t: Tenant, r: dict, ip: str) -> Hit:
-    return Hit("Risky sign-in", f"{_text(r.get('user'))} from {ip}",
-               ", ".join(w for w in (_text(r.get("level")).capitalize(), _text(r.get("time"))[:10]) if w),
-               t.report("sign-ins", sign_in_reports.RISKY, "IP address", ip))
+    return Hit(
+        "Risky sign-in",
+        f"{_text(r.get('user'))} from {ip}",
+        ", ".join(w for w in (_text(r.get("level")).capitalize(), _text(r.get("time"))[:10]) if w),
+        t.report("sign-ins", sign_in_reports.RISKY, "IP address", ip),
+    )
 
 
 def _app(t: Tenant, sp: dict, _v: str) -> Hit:
     name = _text(sp.get("displayName")) or sp["_id"]
-    publisher = "Microsoft" if sp.get("microsoft") else (
-        _text(sp.get("verifiedPublisher")) or _text(sp.get("publisherName")) or "Unverified publisher")
-    href = (t.report("apps", "Third-party apps with access", "App", name) if name in t.risky_apps
-            else t.report("apps"))
+    publisher = (
+        "Microsoft"
+        if sp.get("microsoft")
+        else (_text(sp.get("verifiedPublisher")) or _text(sp.get("publisherName")) or "Unverified publisher")
+    )
+    href = t.report("apps", "Third-party apps with access", "App", name) if name in t.risky_apps else t.report("apps")
     return Hit("App", name, f"{publisher}, app ID {_text(sp.get('appId'))}", href)
 
 
 def _registration(t: Tenant, a: dict, _v: str) -> Hit:
     name = _text(a.get("displayName")) or a["_id"]
-    return Hit("App registration", name, f"Registered in this tenant, app ID {_text(a.get('appId'))}",
-               t.report("apps", "App registrations and their credentials", "App", name))
+    return Hit(
+        "App registration",
+        name,
+        f"Registered in this tenant, app ID {_text(a.get('appId'))}",
+        t.report("apps", "App registrations and their credentials", "App", name),
+    )
 
 
 def _managed_device(t: Tenant, d: dict, _v: str) -> Hit:
     name = _text(d.get("deviceName"))
-    return Hit("Device", name, ", ".join(w for w in (_text(d.get("operatingSystem")),
-                                                    _text(d.get("userPrincipalName"))) if w),
-               t.report("devices", "Managed devices", "Device", name))
+    return Hit(
+        "Device",
+        name,
+        ", ".join(w for w in (_text(d.get("operatingSystem")), _text(d.get("userPrincipalName"))) if w),
+        t.report("devices", "Managed devices", "Device", name),
+    )
 
 
 def _entra_device(t: Tenant, d: dict, _v: str) -> Hit:
     name = _text(d.get("displayName"))
-    return Hit("Device", name, _text(d.get("operatingSystem")),
-               t.report("devices", "Entra ID device records", "Device", name))
+    return Hit(
+        "Device", name, _text(d.get("operatingSystem")), t.report("devices", "Entra ID device records", "Device", name)
+    )
 
 
 def _domain_names(org: dict) -> list[str]:
@@ -211,15 +245,29 @@ def _domain_names(org: dict) -> list[str]:
 
 def _domain(t: Tenant, _org: dict, name: str) -> Hit:
     checked = name.lower() in t.checked_domains
-    return Hit("Domain", name, "Verified domain" + ("" if checked else ", not checked in DNS"),
-               t.report("domains", "Domains", "Domain", name) if checked else t.overview)
+    return Hit(
+        "Domain",
+        name,
+        "Verified domain" + ("" if checked else ", not checked in DNS"),
+        t.report("domains", "Domains", "Domain", name) if checked else t.overview,
+    )
 
 
 # In the order results are listed within a tenant.
 KINDS: tuple[Kind, ...] = (
     Kind("users", "user", lambda u: (u.get("displayName"), u.get("userPrincipalName"), u.get("mail")), _person),
-    Kind("mailboxes", "mailbox", lambda m: (m.get("DisplayName"), m.get("PrimarySmtpAddress"),
-                                            m.get("UserPrincipalName"), m.get("Alias"), m.get("Name")), _mailbox),
+    Kind(
+        "mailboxes",
+        "mailbox",
+        lambda m: (
+            m.get("DisplayName"),
+            m.get("PrimarySmtpAddress"),
+            m.get("UserPrincipalName"),
+            m.get("Alias"),
+            m.get("Name"),
+        ),
+        _mailbox,
+    ),
     Kind("mailboxes", "mailbox", lambda m: (mailbox_forwarding(m),), _forwarding),
     Kind("inbox_rules", "inbox_rule", _rule_targets, _rule),
     Kind("sign_ins", "sign_in_failure_ip", lambda i: (i.get("ip"),), _failure_ip, ip=True),
@@ -288,6 +336,14 @@ def index():
             if total >= TOTAL:
                 truncated = tenant is not tenants[-1]
                 break
-    return render_template("search.html", q=q, short=short, groups=groups, truncated=truncated,
-                           one=tenants[0] if one is not None else None, searched=len(tenants),
-                           shown=PER_TENANT if one is not None else SHOWN, min_length=MIN_LENGTH)
+    return render_template(
+        "search.html",
+        q=q,
+        short=short,
+        groups=groups,
+        truncated=truncated,
+        one=tenants[0] if one is not None else None,
+        searched=len(tenants),
+        shown=PER_TENANT if one is not None else SHOWN,
+        min_length=MIN_LENGTH,
+    )

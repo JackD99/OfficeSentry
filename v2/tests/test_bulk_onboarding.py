@@ -46,10 +46,12 @@ def _link(app, db, tenant_id):
 
 
 def test_parse_reads_excel_style_files(db, two_tenants):
-    text = ("﻿Name,Domain,Groups,Contact Email,Contact Name,Cloud\r\n"
-            "Contoso,contoso.com,Tier 1; London,jane@contoso.com,Jane Smith,\r\n"
-            "Gov Co,gov.onmicrosoft.us,,,,GCC High\r\n"
-            "Alpha again,ALPHA.onmicrosoft.com,,,,\r\n")
+    text = (
+        "﻿Name,Domain,Groups,Contact Email,Contact Name,Cloud\r\n"
+        "Contoso,contoso.com,Tier 1; London,jane@contoso.com,Jane Smith,\r\n"
+        "Gov Co,gov.onmicrosoft.us,,,,GCC High\r\n"
+        "Alpha again,ALPHA.onmicrosoft.com,,,,\r\n"
+    )
     parsed = onboarding.parse(db, text)
     assert parsed.error is None
     contoso, gov, alpha = parsed.rows
@@ -61,14 +63,19 @@ def test_parse_reads_excel_style_files(db, two_tenants):
 
 
 def test_parse_explains_every_problem(db):
-    text = ("name,tenant,contact,cloud\n"
-            ",nope,x@nowhere,\n"
-            "Dup,dup.onmicrosoft.com,Jo <jo@dup.com>,\n"
-            "Dup again,DUP.onmicrosoft.com,,\n"
-            "Mars,mars.onmicrosoft.com,,Mars\n")
+    text = (
+        "name,tenant,contact,cloud\n"
+        ",nope,x@nowhere,\n"
+        "Dup,dup.onmicrosoft.com,Jo <jo@dup.com>,\n"
+        "Dup again,DUP.onmicrosoft.com,,\n"
+        "Mars,mars.onmicrosoft.com,,Mars\n"
+    )
     rows = onboarding.parse(db, text).rows
-    assert rows[0].problems == ["No name.", "“nope” isn't a tenant ID or a domain like contoso.onmicrosoft.com.",
-                                "“x@nowhere” isn't an email address."]
+    assert rows[0].problems == [
+        "No name.",
+        "“nope” isn't a tenant ID or a domain like contoso.onmicrosoft.com.",
+        "“x@nowhere” isn't an email address.",
+    ]
     assert rows[1].ok and rows[1].contact_name == "Jo"
     assert rows[2].problems == ["The same tenant as line 3."]
     assert "The cloud should be" in rows[3].problems[0]
@@ -108,15 +115,14 @@ def test_import_fifty_tenants_previews_then_adds(client, db, connection_id):
     page = client.get("/admin/onboarding").get_data(as_text=True)
     assert "0 of 50 tenants fully connected." in page and page.count('data-copy-text="https://login') == 50
     again = client.post("/admin/onboarding/import", data={"text": text}).get_data(as_text=True)
-    assert "Will be added</div><div class=\"value\">0<" in again and 'name="confirm"' not in again
+    assert 'Will be added</div><div class="value">0<' in again and 'name="confirm"' not in again
     assert again.count("Already in Office Sentry as") == 50
 
 
 def test_imported_tenants_are_only_seen_by_people_granted_them(client, app, db, connection_id):
     _admin(client, db)
     client.post("/admin/onboarding/import", data={"text": _csv(3, "Tier 1"), "confirm": "1"})
-    client.post("/admin/onboarding/import", data={"text": _csv(2, "Tier 2").replace("client", "other"),
-                                                  "confirm": "1"})
+    client.post("/admin/onboarding/import", data={"text": _csv(2, "Tier 2").replace("client", "other"), "confirm": "1"})
     tier1 = db.execute("SELECT id FROM tenant_groups WHERE name = 'Tier 1'").fetchone()["id"]
     by_group = make_user(db, "lead", role="analyst")
     db.execute("INSERT INTO user_tenant_groups (user_id, group_id) VALUES (?, ?)", (by_group, tier1))
@@ -175,8 +181,9 @@ def test_states_from_stored_data(db, two_tenants):
     assert onboarding.state(t(), row(), None).detail.endswith("can't sign in yet. Not there yet.")
     db.execute("UPDATE tenants SET consented_at = '2026-10-09T10:10:00Z'")
     assert onboarding.state(t(), row(), None).key == "consented"
-    assert onboarding.state(t(), row(), {"roles_checked": True, "global_reader": False}).label == \
-        "Global Reader missing"
+    assert (
+        onboarding.state(t(), row(), {"roles_checked": True, "global_reader": False}).label == "Global Reader missing"
+    )
     assert onboarding.state(t(), row(), {"roles_checked": True, "global_reader": True}).key == "connected"
 
 
@@ -194,16 +201,22 @@ def test_client_link_is_stable_and_never_records_consent_itself(app, client, db,
     assert store.get_tenant(db, alpha)["consented_at"] is None
     assert onboarding.row_for(db, alpha)["approved_at"]
     assert tasks.pending(db, f"consent_check:{alpha}")["priority"] == tasks.PRIORITY_WAITING
-    assert db.execute("SELECT detail FROM audit_log WHERE action = 'client_consent_returned'").fetchone()[0] == \
-        "1 attempt"
+    assert (
+        db.execute("SELECT detail FROM audit_log WHERE action = 'client_consent_returned'").fetchone()[0] == "1 attempt"
+    )
 
 
 def test_client_return_shows_no_microsoft_text(app, client, db, two_tenants):
     alpha, _ = two_tenants
     _, state = _link(app, db, alpha)
-    page = client.get("/consent/callback", query_string={
-        "state": state, "error": "access_denied",
-        "error_description": "AADSTS65004: User declined to consent. <script>Visit evil.example</script>"})
+    page = client.get(
+        "/consent/callback",
+        query_string={
+            "state": state,
+            "error": "access_denied",
+            "error_description": "AADSTS65004: User declined to consent. <script>Visit evil.example</script>",
+        },
+    )
     text = page.get_data(as_text=True)
     assert "Access wasn't approved" in text and "AADSTS65004" in text
     assert "evil.example" not in text and "declined" not in text
@@ -233,8 +246,12 @@ def test_approving_again_after_new_permissions_rereads_them(app, client, db, two
     alpha, _ = two_tenants  # already consented
     _, state = _link(app, db, alpha)
     client.get("/consent/callback", query_string={"state": state, "admin_consent": "True"})
-    assert db.execute("SELECT collector FROM runs WHERE tenant_id = ? AND status = 'queued'",
-                      (alpha,)).fetchone()["collector"] == "connection"
+    assert (
+        db.execute("SELECT collector FROM runs WHERE tenant_id = ? AND status = 'queued'", (alpha,)).fetchone()[
+            "collector"
+        ]
+        == "connection"
+    )
 
 
 # -- Confirming consent by signing in ------------------------------------------------------------
@@ -243,16 +260,33 @@ def test_approving_again_after_new_permissions_rereads_them(app, client, db, two
 def _sign_in_works(rsps, organisation="Alpha Ltd", guid=GUID):
     """Microsoft's sign-in for the app (as MSAL calls it), its public metadata naming ``guid`` as the domain's
     tenant ID, and the one Graph read the check makes."""
-    metadata = {"issuer": f"{LOGIN}/{guid}/v2.0", "token_endpoint": f"{LOGIN}/{guid}/oauth2/v2.0/token",
-                "authorization_endpoint": f"{LOGIN}/{guid}/oauth2/v2.0/authorize"}
-    rsps.add_callback(responses.GET, re.compile(re.escape(LOGIN) + r"/[^/]+/v2\.0/\.well-known/openid-configuration"),
-                      callback=lambda request: (200, {}, json.dumps(metadata)))
-    rsps.get(re.compile(re.escape(LOGIN) + r"/common/discovery/instance"), json={
-        "tenant_discovery_endpoint": f"{LOGIN}/common/v2.0/.well-known/openid-configuration",
-        "metadata": [{"preferred_network": "login.microsoftonline.com", "preferred_cache": "login.windows.net",
-                      "aliases": ["login.microsoftonline.com", "login.windows.net"]}]})
-    rsps.post(re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"),
-              json={"access_token": "tok", "expires_in": 3600, "token_type": "Bearer"})
+    metadata = {
+        "issuer": f"{LOGIN}/{guid}/v2.0",
+        "token_endpoint": f"{LOGIN}/{guid}/oauth2/v2.0/token",
+        "authorization_endpoint": f"{LOGIN}/{guid}/oauth2/v2.0/authorize",
+    }
+    rsps.add_callback(
+        responses.GET,
+        re.compile(re.escape(LOGIN) + r"/[^/]+/v2\.0/\.well-known/openid-configuration"),
+        callback=lambda request: (200, {}, json.dumps(metadata)),
+    )
+    rsps.get(
+        re.compile(re.escape(LOGIN) + r"/common/discovery/instance"),
+        json={
+            "tenant_discovery_endpoint": f"{LOGIN}/common/v2.0/.well-known/openid-configuration",
+            "metadata": [
+                {
+                    "preferred_network": "login.microsoftonline.com",
+                    "preferred_cache": "login.windows.net",
+                    "aliases": ["login.microsoftonline.com", "login.windows.net"],
+                }
+            ],
+        },
+    )
+    rsps.post(
+        re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"),
+        json={"access_token": "tok", "expires_in": 3600, "token_type": "Bearer"},
+    )
     rsps.get(f"{GRAPH_ROOT}/v1.0/organization", json={"value": [{"displayName": organisation}]})
 
 
@@ -271,8 +305,10 @@ def test_check_records_consent_swaps_in_the_tenant_id_and_starts_collection(app,
     assert "connection" in queued and "tenant_profile" in queued
     graph = [c for c in calls if c.url.startswith(GRAPH_ROOT)]
     assert graph and all(c.method == "GET" for c in graph)  # signing in to check never writes to the tenant
-    assert db.execute("SELECT detail FROM audit_log WHERE action = 'consent_confirmed'").fetchone()[0] == \
-        f"Alpha Ltd; tenant ID {GUID}"
+    assert (
+        db.execute("SELECT detail FROM audit_log WHERE action = 'consent_confirmed'").fetchone()[0]
+        == f"Alpha Ltd; tenant ID {GUID}"
+    )
 
     # The first collection reads Global Reader: missing, then assigned.
     from officesentry.graph import GraphClient
@@ -296,9 +332,15 @@ def test_failed_check_says_why_and_records_nothing(app, db, vault, cfg, two_tena
     onboarding.client_approved(db, store.get_tenant(db, alpha))
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         mock_sign_in(rsps, [])
-        rsps.replace(responses.POST, re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"), status=400,
-                     json={"error": "unauthorized_client",
-                           "error_description": "AADSTS700016: Application with identifier 'x' was not found."})
+        rsps.replace(
+            responses.POST,
+            re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"),
+            status=400,
+            json={
+                "error": "unauthorized_client",
+                "error_description": "AADSTS700016: Application with identifier 'x' was not found.",
+            },
+        )
         tasks.drain(app, db, vault, cfg)
     t, row = store.get_tenant(db, alpha), onboarding.row_for(db, alpha)
     assert t["consented_at"] is None and "doesn't have the app yet" in row["check_error"]
@@ -311,10 +353,14 @@ def test_checks_are_queued_soon_after_approval_then_less_often(db, two_tenants):
     db.execute("UPDATE tenants SET consented_at = NULL")
     now = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
     iso = lambda dt: dt.strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
-    db.execute("INSERT INTO onboarding (tenant_id, approved_at, checked_at) VALUES (?, ?, ?)",
-               (alpha, iso(now - timedelta(minutes=10)), iso(now - timedelta(minutes=1))))
-    db.execute("INSERT INTO onboarding (tenant_id, sent_at, checked_at) VALUES (?, ?, ?)",
-               (bravo, iso(now - timedelta(days=3)), iso(now - timedelta(minutes=50))))
+    db.execute(
+        "INSERT INTO onboarding (tenant_id, approved_at, checked_at) VALUES (?, ?, ?)",
+        (alpha, iso(now - timedelta(minutes=10)), iso(now - timedelta(minutes=1))),
+    )
+    db.execute(
+        "INSERT INTO onboarding (tenant_id, sent_at, checked_at) VALUES (?, ?, ?)",
+        (bravo, iso(now - timedelta(days=3)), iso(now - timedelta(minutes=50))),
+    )
     assert onboarding.due(db, now) == []
     assert onboarding.due(db, now + timedelta(minutes=1)) == [alpha]
     assert onboarding.due(db, now + timedelta(minutes=10)) == [alpha, bravo]
@@ -331,8 +377,9 @@ def test_bulk_actions_on_the_tracker(client, db, two_tenants):
     assert onboarding.row_for(db, alpha)["sent_by"] == "admin"
     waiting = client.get("/admin/onboarding?show=all&state=client").get_data(as_text=True)
     assert "Alpha Ltd" in waiting and "Bravo Inc" not in waiting  # bravo consented already
-    page = client.post("/admin/onboarding/bulk", data={"action": "check", "tenant": [alpha, bravo]},
-                       follow_redirects=True).get_data(as_text=True)
+    page = client.post(
+        "/admin/onboarding/bulk", data={"action": "check", "tenant": [alpha, bravo]}, follow_redirects=True
+    ).get_data(as_text=True)
     assert "Checking 1 tenant by signing in" in page
     assert tasks.pending(db, f"consent_check:{alpha}") and not tasks.pending(db, f"consent_check:{bravo}")
     client.post("/admin/onboarding/bulk", data={"action": "unsent", "tenant": [alpha]})
@@ -347,11 +394,12 @@ def test_send_page_email_and_mail_merge(client, db, two_tenants):
     alpha, _ = two_tenants
     db.execute("UPDATE tenants SET consented_at = NULL WHERE id = ?", (alpha,))
     _admin(client, db)
-    client.post(f"/admin/onboarding/{alpha}/contact", data={"contact_name": "Jane Smith",
-                                                             "contact_email": "jane@alpha.com"})
+    client.post(
+        f"/admin/onboarding/{alpha}/contact", data={"contact_name": "Jane Smith", "contact_email": "jane@alpha.com"}
+    )
     page = client.get(f"/admin/onboarding/{alpha}").get_data(as_text=True)
     assert "Hi Jane," in page and "Alpha Ltd&#39;s Microsoft 365 security" in page
-    assert 'select &#34;Test app&#34;' in page and "Privileged Role Administrator" in page
+    assert "select &#34;Test app&#34;" in page and "Privileged Role Administrator" in page
     assert "mailto:jane@alpha.com?subject=" in page
     bad = client.post(f"/admin/onboarding/{alpha}/contact", data={"contact_email": "nope"}, follow_redirects=True)
     assert "That isn&#39;t an email address." in bad.get_data(as_text=True)

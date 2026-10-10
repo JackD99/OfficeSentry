@@ -17,9 +17,16 @@ from tests.test_collection_performance import _plan
 from tests.test_collectors import USERS
 from tests.test_rollups import _backdate
 
-NEWCOMER = {"id": "u9", "displayName": "Visitor", "userPrincipalName": "v#EXT#@y.com", "mail": "v@y.com",
-            "userType": "Guest", "accountEnabled": True, "assignedLicenses": [],
-            "createdDateTime": "2026-09-20T00:00:00Z"}
+NEWCOMER = {
+    "id": "u9",
+    "displayName": "Visitor",
+    "userPrincipalName": "v#EXT#@y.com",
+    "mail": "v@y.com",
+    "userType": "Guest",
+    "accountEnabled": True,
+    "assignedLicenses": [],
+    "createdDateTime": "2026-09-20T00:00:00Z",
+}
 
 
 @pytest.fixture
@@ -29,12 +36,14 @@ def history(db, two_tenants):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     _backdate(db, alpha, 40)
-    db.execute("UPDATE findings SET first_seen = ?", ((datetime.now(UTC) - timedelta(days=40)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"),))
+    db.execute(
+        "UPDATE findings SET first_seen = ?", ((datetime.now(UTC) - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ"),)
+    )
     seed_tenant(db, alpha, users=[u for u in USERS if u["id"] != "u3"] + [NEWCOMER], precompute=True)
     seed_tenant(db, bravo, precompute=True)
-    target = db.execute("SELECT id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL ORDER BY id LIMIT 1",
-                        (alpha,)).fetchone()
+    target = db.execute(
+        "SELECT id FROM findings WHERE tenant_id = ? AND resolved_at IS NULL ORDER BY id LIMIT 1", (alpha,)
+    ).fetchone()
     findings.accept(db, target["id"], "admin", "known", None)
     return alpha, bravo
 
@@ -44,13 +53,27 @@ def _tenants(db):
 
 
 def _summaries(summaries) -> list:
-    return [(s.tenant["id"], s.changes, s.new_findings, s.new_severe, s.fixed, s.has_baseline, s.areas, s.error,
-             {k: (f.before, f.after, f.delta) for k, f in s.figures.items()}) for s in summaries]
+    return [
+        (
+            s.tenant["id"],
+            s.changes,
+            s.new_findings,
+            s.new_severe,
+            s.fixed,
+            s.has_baseline,
+            s.areas,
+            s.error,
+            {k: (f.before, f.after, f.delta) for k, f in s.figures.items()},
+        )
+        for s in summaries
+    ]
 
 
 def _stored(db, kind: str) -> dict[int, dict]:
-    return {r["tenant_id"]: json.loads(r["data"])
-            for r in db.execute("SELECT tenant_id, data FROM summary_cache WHERE kind = ?", (kind,))}
+    return {
+        r["tenant_id"]: json.loads(r["data"])
+        for r in db.execute("SELECT tenant_id, data FROM summary_cache WHERE kind = ?", (kind,))
+    }
 
 
 # -- Parity -------------------------------------------------------------------------------------
@@ -86,11 +109,17 @@ def test_pages_read_the_stored_rows(client, db, history):
     login(client, "admin")
     client.get("/changes")
     client.get("/across/checks")
-    db.execute("UPDATE summary_cache SET data = json_set(data, '$.areas', json_array('Stored area'))"
-               " WHERE kind = 'changes:30' AND tenant_id = ?", (alpha,))
+    db.execute(
+        "UPDATE summary_cache SET data = json_set(data, '$.areas', json_array('Stored area'))"
+        " WHERE kind = 'changes:30' AND tenant_id = ?",
+        (alpha,),
+    )
     some_check = next(iter(_stored(db, "checks")[alpha]["cells"]))
-    db.execute("UPDATE summary_cache SET data = json_set(data, ?, json_array('fail', 'Stored summary', 'high', 7))"
-               " WHERE kind = 'checks' AND tenant_id = ?", (f"$.cells.{some_check}", alpha))
+    db.execute(
+        "UPDATE summary_cache SET data = json_set(data, ?, json_array('fail', 'Stored summary', 'high', 7))"
+        " WHERE kind = 'checks' AND tenant_id = ?",
+        (f"$.cells.{some_check}", alpha),
+    )
     assert "Stored area" in client.get("/changes").get_data(as_text=True)
     assert "Stored area" in client.get("/changes.csv").get_data(as_text=True)
     assert "Stored summary" in client.get("/across/checks").get_data(as_text=True)
@@ -116,21 +145,27 @@ def test_rows_follow_new_collections_accepted_risks_and_findings(db, history):
         row = next(r for r in rollups.check_matrix(db, _tenants(db)).rows if r.tenant["id"] == bravo)
         return row.cells[key]
 
-    open_ = db.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL ORDER BY id LIMIT 1",
-                       (bravo,)).fetchone()
-    others = db.execute("SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND rule_key = ?",
-                        (bravo, open_["rule_key"])).fetchone()[0]
+    open_ = db.execute(
+        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL ORDER BY id LIMIT 1", (bravo,)
+    ).fetchone()
+    others = db.execute(
+        "SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND resolved_at IS NULL AND rule_key = ?",
+        (bravo, open_["rule_key"]),
+    ).fetchone()[0]
     assert cell(open_["rule_key"]).status == "fail"
-    for f in db.execute("SELECT id FROM findings WHERE tenant_id = ? AND rule_key = ? AND resolved_at IS NULL",
-                        (bravo, open_["rule_key"])).fetchall():
+    for f in db.execute(
+        "SELECT id FROM findings WHERE tenant_id = ? AND rule_key = ? AND resolved_at IS NULL",
+        (bravo, open_["rule_key"]),
+    ).fetchall():
         findings.accept(db, f["id"], "admin", "known", None)
     assert cell(open_["rule_key"]).status == "accepted", others
     findings.unaccept(db, open_["id"])
     assert cell(open_["rule_key"]).status == "fail"
     # An acceptance that runs out counts as of now, without anything else changing.
     past = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db.execute("UPDATE findings SET accepted_until = ? WHERE tenant_id = ? AND rule_key = ?",
-               (past, bravo, open_["rule_key"]))
+    db.execute(
+        "UPDATE findings SET accepted_until = ? WHERE tenant_id = ? AND rule_key = ?", (past, bravo, open_["rule_key"])
+    )
     assert cell(open_["rule_key"]).status == "fail"
 
 
@@ -138,12 +173,16 @@ def test_a_row_built_yesterday_isnt_used_today(db, history):
     alpha, _ = history
     month_changes.across(db, _tenants(db), 30)
     yesterday = (datetime.now(UTC) - timedelta(days=1)).date().isoformat()
-    row = db.execute("SELECT fingerprint FROM summary_cache WHERE tenant_id = ? AND kind = 'changes:30'",
-                     (alpha,)).fetchone()
+    row = db.execute(
+        "SELECT fingerprint FROM summary_cache WHERE tenant_id = ? AND kind = 'changes:30'", (alpha,)
+    ).fetchone()
     parts = json.loads(row["fingerprint"])
     parts[1] = yesterday
-    db.execute("UPDATE summary_cache SET fingerprint = ?, data = json_set(data, '$.changes', 4242)"
-               " WHERE tenant_id = ? AND kind = 'changes:30'", (json.dumps(parts), alpha))
+    db.execute(
+        "UPDATE summary_cache SET fingerprint = ?, data = json_set(data, '$.changes', 4242)"
+        " WHERE tenant_id = ? AND kind = 'changes:30'",
+        (json.dumps(parts), alpha),
+    )
     assert _change_count(db, alpha) != 4242
 
 
@@ -166,8 +205,11 @@ def test_the_start_of_the_period_is_part_of_the_row(db, two_tenants):
 def test_rebuild_ignores_rows_that_look_current(db, history):
     alpha, _ = history
     precomputed.refresh(db, store.get_tenant(db, alpha))
-    db.execute("UPDATE summary_cache SET data = json_set(data, '$.changes', 4242) WHERE tenant_id = ?"
-               " AND kind LIKE 'changes:%'", (alpha,))
+    db.execute(
+        "UPDATE summary_cache SET data = json_set(data, '$.changes', 4242) WHERE tenant_id = ?"
+        " AND kind LIKE 'changes:%'",
+        (alpha,),
+    )
     precomputed.refresh(db, store.get_tenant(db, alpha))
     assert _stored(db, "changes:30")[alpha]["changes"] == 4242  # still matches: left alone
     precomputed.refresh(db, store.get_tenant(db, alpha), rebuild=True)
@@ -206,11 +248,16 @@ def test_the_daily_pass_queues_every_tenant_and_rebuilds_after_pruning(cfg, db, 
 def test_new_lookups_use_an_index(db, two_tenants):
     db.execute("ANALYZE")
     for sql, args in [
-        ("SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL AND finished_at <= ?"
-         " ORDER BY finished_at DESC, id DESC LIMIT 1", (1, "2026-01-01T00:00:00Z")),
+        (
+            "SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL AND finished_at <= ?"
+            " ORDER BY finished_at DESC, id DESC LIMIT 1",
+            (1, "2026-01-01T00:00:00Z"),
+        ),
         ("SELECT COUNT(*) FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (1,)),
-        ("SELECT tenant_id, fingerprint, data FROM summary_cache WHERE kind = ? AND tenant_id IN (?, ?)",
-         ("checks", 1, 2)),
+        (
+            "SELECT tenant_id, fingerprint, data FROM summary_cache WHERE kind = ? AND tenant_id IN (?, ?)",
+            ("checks", 1, 2),
+        ),
     ]:
         plan = _plan(db, sql, *args)
         assert "SCAN runs" not in plan and "SCAN findings" not in plan and "SCAN summary_cache" not in plan, sql

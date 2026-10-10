@@ -116,10 +116,19 @@ def test_inbox_rule_folders_come_from_exchange(db, two_tenants):
     # Graph refuses to name a folder without mail access, so Get-InboxRule does. Graph's rule ID is Exchange's
     # RuleIdentity in base64 with - for / (as on the real test tenant), so it's found even when renamed.
     alpha, beta = two_tenants
-    rule = {"id": "AQAAAIPT-P8=", "displayName": "Tidy", "isEnabled": True, "sequence": 1,
-            "conditions": {"subjectContains": ["invoice"]}, "actions": {"moveToFolder": "AAMkAD1", "markAsRead": True}}
-    moved = {"Name": "Tidy (renamed)", "RuleIdentity": 18445850733396885505,
-             "MoveToFolder": "ann@x.com:\\Deleted Items"}
+    rule = {
+        "id": "AQAAAIPT-P8=",
+        "displayName": "Tidy",
+        "isEnabled": True,
+        "sequence": 1,
+        "conditions": {"subjectContains": ["invoice"]},
+        "actions": {"moveToFolder": "AAMkAD1", "markAsRead": True},
+    }
+    moved = {
+        "Name": "Tidy (renamed)",
+        "RuleIdentity": 18445850733396885505,
+        "MoveToFolder": "ann@x.com:\\Deleted Items",
+    }
     exchange = dict(gd.EXCHANGE, **{"Get-InboxRule": {"u1": [moved]}})
     seed_tenant(db, alpha, inbox_rules={"u1": [rule]}, exchange=exchange)
     snap = TenantSnapshot(db, store.get_tenant(db, alpha))
@@ -170,8 +179,10 @@ def test_admin_mfa_coverage_flags_excluded_breakglass(seeded):
 
 def test_no_exchange_licence_makes_mail_checks_unavailable(db, two_tenants):
     alpha, _ = two_tenants
-    skus = [dict(gd_sku, servicePlans=[p for p in gd_sku["servicePlans"] if "EXCHANGE" not in p["servicePlanName"]])
-            for gd_sku in __import__("tests.test_collectors", fromlist=["SKUS"]).SKUS]
+    skus = [
+        dict(gd_sku, servicePlans=[p for p in gd_sku["servicePlans"] if "EXCHANGE" not in p["servicePlanName"]])
+        for gd_sku in __import__("tests.test_collectors", fromlist=["SKUS"]).SKUS
+    ]
     seed_tenant(db, alpha, skus=skus)
     r = {x.key: x for x in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)))}
     for key in ("external_forwarding", "shared_mailbox_signin", "mailbox_auditing", "smtp_auth"):
@@ -188,8 +199,10 @@ def test_exchange_access_denied_fails_only_that_run(db, two_tenants):
     from officesentry.worker import execute_run
     from tests.seed import exchange_factory, mock_tenant
 
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
         mock_tenant(rsps, exchange=False)
         rsps.post(re.compile(re.escape(EXCHANGE_ROOT) + r"/.*"), status=401)
         statuses = {}
@@ -197,11 +210,14 @@ def test_exchange_access_denied_fails_only_that_run(db, two_tenants):
             store.enqueue_run(db, alpha, key)
         while (run := store.claim_next_run(db)) is not None:
             statuses[run["collector"]] = execute_run(
-                db, run, lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None), exchange_factory)
+                db, run, lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None), exchange_factory
+            )
     assert statuses["mailboxes"] == "failed"
     assert statuses["inbox_rules"] == "succeeded"  # falls back to licensed users via Graph
-    run = store.latest_run(db, alpha, "mailboxes") or db.execute(
-        "SELECT * FROM runs WHERE collector = 'mailboxes' ORDER BY id DESC").fetchone()
+    run = (
+        store.latest_run(db, alpha, "mailboxes")
+        or db.execute("SELECT * FROM runs WHERE collector = 'mailboxes' ORDER BY id DESC").fetchone()
+    )
     assert "Global Reader" in run["error"]
 
 
@@ -209,16 +225,22 @@ def test_exchange_access_denied_fails_only_that_run(db, two_tenants):
 
 
 def _directory(**groups):
-    return coverage.Directory(groups={k: {"displayName": k, "members": v} for k, v in groups.items()},
-                              user_roles={"admin": {"role-ga"}}, role_names={"role-ga": "Global Administrator"},
-                              names={})
+    return coverage.Directory(
+        groups={k: {"displayName": k, "members": v} for k, v in groups.items()},
+        user_roles={"admin": {"role-ga"}},
+        role_names={"role-ga": "Global Administrator"},
+        names={},
+    )
 
 
 def _policy(**users):
-    return {"id": "p", "displayName": "P", "state": "enabled",
-            "conditions": {"users": users, "applications": {"includeApplications": ["All"]},
-                           "clientAppTypes": ["all"]},
-            "grantControls": {"builtInControls": ["mfa"]}}
+    return {
+        "id": "p",
+        "displayName": "P",
+        "state": "enabled",
+        "conditions": {"users": users, "applications": {"includeApplications": ["All"]}, "clientAppTypes": ["all"]},
+        "grantControls": {"builtInControls": ["mfa"]},
+    }
 
 
 def test_coverage_groups_roles_and_unknown_membership():
@@ -251,8 +273,13 @@ def test_user_coverage_lists_gaps_first(seeded):
 
 def test_mfa_exclusion_names_the_group(db, two_tenants):
     alpha, _ = two_tenants
-    policy = dict(gd.CA_MFA_ALL, conditions=dict(gd.CA_MFA_ALL["conditions"], users={
-        "includeUsers": ["All"], "excludeUsers": [], "excludeGroups": ["grp-bg"]}))
+    policy = dict(
+        gd.CA_MFA_ALL,
+        conditions=dict(
+            gd.CA_MFA_ALL["conditions"],
+            users={"includeUsers": ["All"], "excludeUsers": [], "excludeGroups": ["grp-bg"]},
+        ),
+    )
     seed_tenant(db, alpha, ca=[policy])
     r = {x.key: x for x in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)))}
     assert [f.subject for f in r["mfa_enforced"].findings] == ["Break glass"]
@@ -281,8 +308,10 @@ def test_detail_reports_build(db, two_tenants):
     tenant = store.get_tenant(db, alpha)
     mail = {s.title: s for s in build(db, tenant, "mailboxes").sections}
     assert [(r[0], r[1], r[3]) for r in mail["Forwarding"].rows] == [
-        ("ann@x.com", "ann@gmail.com", "Yes"), ("ann@x.com", "ann.home@gmail.com", "Yes"),
-        ("info@x.com", "boss@x.com", "No")]
+        ("ann@x.com", "ann@gmail.com", "Yes"),
+        ("ann@x.com", "ann.home@gmail.com", "Yes"),
+        ("info@x.com", "boss@x.com", "No"),
+    ]
     assert mail["Forwarding"].flagged == 2
     assert [r[2] for r in mail["What stops forwarding"].rows] == ["Blocked (Microsoft's default)", "Allowed"]
     apps = {s.title: s for s in build(db, tenant, "apps").sections}
@@ -317,6 +346,7 @@ def test_detail_report_pages_and_access(client, db, two_tenants):
     resp = client.get(f"/tenants/{alpha}/data/mailboxes.xlsx")
     assert resp.status_code == 200
     from io import BytesIO
+
     wb = load_workbook(BytesIO(resp.data))
     assert "Forwarding" in wb.sheetnames
 
@@ -327,8 +357,9 @@ def test_changes_include_new_forwarding_and_app_permissions(db, two_tenants):
     from officesentry.changes import all_changes
 
     alpha, _ = two_tenants
-    quiet = dict(gd.EXCHANGE, **{"Get-Mailbox": [dict(m, ForwardingSmtpAddress=None)
-                                                 for m in gd.EXCHANGE["Get-Mailbox"]]})
+    quiet = dict(
+        gd.EXCHANGE, **{"Get-Mailbox": [dict(m, ForwardingSmtpAddress=None) for m in gd.EXCHANGE["Get-Mailbox"]]}
+    )
     seed_tenant(db, alpha, exchange=quiet)
     old = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     unpack(db)
@@ -347,12 +378,18 @@ def test_exchange_allow_list_is_get_only():
 
     assert all(c.startswith("Get-") for c in READ_ONLY_CMDLETS)
     assert set(EXCHANGE_PERMISSIONS) == {"Exchange.ManageAsApp"}
-    graph = {"appRoles": [{"value": p, "id": p, "allowedMemberTypes": ["Application"]}
-                          for p in __import__("officesentry.entra", fromlist=["x"]).GRAPH_PERMISSIONS]}
+    graph = {
+        "appRoles": [
+            {"value": p, "id": p, "allowedMemberTypes": ["Application"]}
+            for p in __import__("officesentry.entra", fromlist=["x"]).GRAPH_PERMISSIONS
+        ]
+    }
     exo = {"appRoles": [{"value": "Exchange.ManageAsApp", "id": "exo-id", "allowedMemberTypes": ["Application"]}]}
     access = required_resource_access(graph, exo)
-    assert access[1] == {"resourceAppId": "00000002-0000-0ff1-ce00-000000000000",
-                         "resourceAccess": [{"id": "exo-id", "type": "Role"}]}
+    assert access[1] == {
+        "resourceAppId": "00000002-0000-0ff1-ce00-000000000000",
+        "resourceAccess": [{"id": "exo-id", "type": "Role"}],
+    }
 
 
 def test_live_test_command_runs_every_collector(cfg, db, monkeypatch, capsys):
@@ -366,9 +403,11 @@ def test_live_test_command_runs_every_collector(cfg, db, monkeypatch, capsys):
     assert livetest.run(cfg) == 2  # variables missing
     for k in livetest.ENV:
         monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")
-    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: (lambda: "tok"))
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: lambda: "tok")
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
         mock_tenant(rsps)
         assert livetest.run(cfg) == 0
     out = capsys.readouterr().out
@@ -384,9 +423,11 @@ def test_live_test_runs_only_the_collectors_asked_for_on_a_new_tenant(cfg, db, m
 
     for k in livetest.ENV:
         monkeypatch.setenv(k, "tid" if k.endswith("TENANT_ID") else "x")
-    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: (lambda: "tok"))
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps, \
-            patch("officesentry.dnscheck.lookup", gd.fake_dns):
+    monkeypatch.setattr(livetest, "secret_token_provider", lambda *a: lambda: "tok")
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
         mock_tenant(rsps)
         assert livetest.run(cfg, ["users", "groups"]) == 0
     ran = [r["collector"] for r in db.execute("SELECT collector FROM runs ORDER BY id")]
@@ -404,9 +445,17 @@ def test_live_test_can_look_dns_up_over_https():
     from officesentry.livetest import DOH_URL, doh_lookup
 
     def answer(rdtype, *data, status=0):
-        responses.get(DOH_URL, match=[responses.matchers.query_param_matcher(
-            {"name": "x.example", "type": rdtype})], json={"Status": status, "Answer": [
-                {"name": "x.example.", "type": {"TXT": 16, "MX": 15, "CNAME": 5}[rdtype], "data": d} for d in data]})
+        responses.get(
+            DOH_URL,
+            match=[responses.matchers.query_param_matcher({"name": "x.example", "type": rdtype})],
+            json={
+                "Status": status,
+                "Answer": [
+                    {"name": "x.example.", "type": {"TXT": 16, "MX": 15, "CNAME": 5}[rdtype], "data": d} for d in data
+                ],
+            },
+        )
+
     answer("MX", "20 backup.example.", "10 X-Example.mail.protection.outlook.com.")
     answer("TXT", '"v=spf1 include:spf.protection.outlook.com" " -all"', '"say \\"hi\\""')
     answer("CNAME", "selector1-x._domainkey.contoso.onmicrosoft.com.")

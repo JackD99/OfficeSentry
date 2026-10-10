@@ -34,6 +34,7 @@ STAFF = ("admin", "analyst")
 @dataclass
 class Scope:
     """What a group-aware page shows: the chosen group (or None) and the groups worth offering."""
+
     group: tenant_groups.Option | None = None
     options: list = field(default_factory=list)
     visible: int = 0  # tenants the person sees in all
@@ -75,6 +76,7 @@ def scoped_tenants() -> list:
 def group_aware(view):
     """For staff pages that list tenants: ``?group=`` picks a group (kept on the session) and redirects to
     the same URL without it. Put it under ``@login_required`` or ``@roles_required``."""
+
     @wraps(view)
     def wrapper(*args, **kwargs):
         if g.user["role"] not in STAFF:
@@ -89,6 +91,7 @@ def group_aware(view):
             return redirect(request.path + (f"?{urlencode(rest)}" if rest else ""))
         scope()
         return view(*args, **kwargs)
+
     return wrapper
 
 
@@ -108,8 +111,12 @@ def _all_tenants():
 
 
 def _categories() -> list[str]:
-    used = [r[0] for r in g.db.execute("SELECT DISTINCT category FROM tenant_groups WHERE category <> ''"
-                                       " ORDER BY category COLLATE NOCASE")]
+    used = [
+        r[0]
+        for r in g.db.execute(
+            "SELECT DISTINCT category FROM tenant_groups WHERE category <> '' ORDER BY category COLLATE NOCASE"
+        )
+    ]
     return list(dict.fromkeys(used + list(tenant_groups.SUGGESTED_CATEGORIES)))
 
 
@@ -119,9 +126,14 @@ def index():
     groups = tenant_groups.all_groups(g.db)
     tenants = [t for t in _all_tenants() if not t["archived_at"]]
     grouped = {r[0] for r in g.db.execute("SELECT DISTINCT m.tenant_id FROM tenant_group_members m")}
-    return render_template("groups.html", groups=groups, categories=_categories(), tenant_count=len(tenants),
-                           ungrouped=sum(1 for t in tenants if t["id"] not in grouped),
-                           by_category=_by_category(groups))
+    return render_template(
+        "groups.html",
+        groups=groups,
+        categories=_categories(),
+        tenant_count=len(tenants),
+        ungrouped=sum(1 for t in tenants if t["id"] not in grouped),
+        by_category=_by_category(groups),
+    )
 
 
 def _by_category(groups) -> list[tuple[str, list]]:
@@ -166,17 +178,29 @@ def edit(group_id: int):
         with transaction(g.db):
             tenant_groups.update(g.db, group_id, values)
             added, removed = tenant_groups.set_members(g.db, group_id, chosen)
-            audit(g.db, g.user["username"], "tenant_group_updated",
-                  detail=f"{values['name']}: {plural(len(chosen), 'tenant')} (+{added} -{removed})")
+            audit(
+                g.db,
+                g.user["username"],
+                "tenant_group_updated",
+                detail=f"{values['name']}: {plural(len(chosen), 'tenant')} (+{added} -{removed})",
+            )
         flash(f"Saved. “{values['name']}” has {plural(len(chosen), 'tenant')}.", "success")
         return redirect(url_for("groups.index"))
     analysts = g.db.execute(
         "SELECT u.username FROM users u JOIN user_tenant_groups ug ON ug.user_id = u.id"
-        " WHERE ug.group_id = ? AND u.role = 'analyst' ORDER BY u.username COLLATE NOCASE", (group_id,)).fetchall()
-    return render_template("group_edit.html", group=group, tenants=tenants,
-                           chosen=tenant_groups.members(g.db, group_id), categories=_categories(),
-                           usage=tenant_groups.usage(g.db, group_id), analysts=[a["username"] for a in analysts],
-                           others=tenant_groups.of_tenants(g.db, [t["id"] for t in tenants]))
+        " WHERE ug.group_id = ? AND u.role = 'analyst' ORDER BY u.username COLLATE NOCASE",
+        (group_id,),
+    ).fetchall()
+    return render_template(
+        "group_edit.html",
+        group=group,
+        tenants=tenants,
+        chosen=tenant_groups.members(g.db, group_id),
+        categories=_categories(),
+        usage=tenant_groups.usage(g.db, group_id),
+        analysts=[a["username"] for a in analysts],
+        others=tenant_groups.of_tenants(g.db, [t["id"] for t in tenants]),
+    )
 
 
 @bp.post("/admin/groups/<int:group_id>/delete")

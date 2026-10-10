@@ -23,8 +23,10 @@ ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 def _bars(html: str) -> list[tuple[str, str]]:
     """(label, value) of each bar, in order."""
-    return [(unescape(a), unescape(b)) for a, b in
-            re.findall(r'<span class="bar-label">(.*?)</span>.*?<span class="bar-value">(.*?)</span>', html)]
+    return [
+        (unescape(a), unescape(b))
+        for a, b in re.findall(r'<span class="bar-label">(.*?)</span>.*?<span class="bar-value">(.*?)</span>', html)
+    ]
 
 
 def _hrefs(html: str) -> list[str]:
@@ -47,8 +49,12 @@ def _countries() -> Section:
 
 
 def test_bars_escape_text_and_carry_a_legend_for_two_series():
-    html = charts.bars([charts.Bar("<b>A</b>", [3, 1], "4", href="/x?f=a&b"), charts.Bar("B", [0, 0], "0")],
-                       label='Chart "one"', series=[("Yes", "1"), ("No", "bad")], title="By thing")
+    html = charts.bars(
+        [charts.Bar("<b>A</b>", [3, 1], "4", href="/x?f=a&b"), charts.Bar("B", [0, 0], "0")],
+        label='Chart "one"',
+        series=[("Yes", "1"), ("No", "bad")],
+        title="By thing",
+    )
     assert "<b>" not in html and "&lt;b&gt;A&lt;/b&gt;" in html and 'aria-label="Chart &quot;one&quot;"' in html
     assert 'class="legend"' in html and "Yes" in html and "No" in html
     assert 'href="/x?f=a&amp;b"' in html and "aria-current" not in html and "aria-pressed" not in html
@@ -92,12 +98,11 @@ def test_bars_link_to_their_rows_and_the_chart_follows_the_filter():
 def test_list_cells_count_each_item_once_and_the_rest_fold_into_other():
     s = Section("Admins", ["Account", "Roles"])
     s.chart = Chart("Roles", title="By role", top=2)
-    for name, roles in (("a", ["Global", "User"]), ("b", ["Global", "Global"]), ("c", ["Exchange"]),
-                        ("d", ["Teams"])):
+    for name, roles in (("a", ["Global", "User"]), ("b", ["Global", "Global"]), ("c", ["Exchange"]), ("d", ["Teams"])):
         s.add([name, roles])
     html = views.figures(_report(s)).sections[0].figure
     assert _bars(html) == [("Global", "2"), ("Exchange", "1"), ("Other (2)", "2")]
-    assert "<span class=\"chart-title\">By role</span>" in html
+    assert '<span class="chart-title">By role</span>' in html
     assert views.chart(s, "admins", []) == ""  # no rows left, no chart
 
 
@@ -172,8 +177,10 @@ def test_a_small_wobble_stays_small():
 
 
 def _metric(db, tenant_id, key, value, when):
-    db.execute("INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (NULL, ?, ?, ?, ?)",
-               (tenant_id, key, value, when.strftime(ISO)))
+    db.execute(
+        "INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) VALUES (NULL, ?, ?, ?, ?)",
+        (tenant_id, key, value, when.strftime(ISO)),
+    )
 
 
 def test_metric_trend_takes_each_days_last_value(db, two_tenants):
@@ -203,11 +210,11 @@ def test_report_tiles_carry_their_trend(client, db, two_tenants):
 
 
 def test_forecast_runs_to_the_quota_or_three_months_ahead():
-    gb = 1024 ** 3
+    gb = 1024**3
     points = [(date(2026, 8, 1), 50 * gb), (date(2026, 9, 9), 60 * gb), (date(2026, 10, 9), 90 * gb)]
-    (day, value), = forecast(points, NOW)  # 30 GB in 30 days, a GB a day
+    ((day, value),) = forecast(points, NOW)  # 30 GB in 30 days, a GB a day
     assert day == date(2026, 10, 9) + timedelta(days=91) and round(value / gb) == 181
-    (day, value), = forecast(points, NOW, quota=100 * gb)
+    ((day, value),) = forecast(points, NOW, quota=100 * gb)
     assert day == date(2026, 10, 19) and round(value / gb) == 100  # the day it reaches the limit
     assert forecast(points, NOW, quota=80 * gb) == []  # already over
     assert forecast(list(reversed(points[1:])), NOW) == []  # shrinking
@@ -218,24 +225,38 @@ def test_forecast_runs_to_the_quota_or_three_months_ahead():
 
 
 def _row(tenant_id, history, critical=0, high=0):
-    return {"tenant": {"id": tenant_id}, "kpis": {"secure_score.pct": SimpleNamespace(history=history)},
-            "counts": {"critical": critical, "high": high}}
+    return {
+        "tenant": {"id": tenant_id},
+        "kpis": {"secure_score.pct": SimpleNamespace(history=history)},
+        "counts": {"critical": critical, "high": high},
+    }
 
 
 def test_dashboard_trends_average_the_score_and_count_open_severe_findings(db, two_tenants):
     alpha, bravo = two_tenants
     day = lambda n: (NOW - timedelta(days=n)).date().isoformat()  # noqa: E731
-    rows = [_row(alpha, [[day(80), 40], [day(40), 50], [day(1), 60]], critical=1, high=1),
-            _row(bravo, [[day(80), 60], [day(1), 80]])]
+    rows = [
+        _row(alpha, [[day(80), 40], [day(40), 50], [day(1), 60]], critical=1, high=1),
+        _row(bravo, [[day(80), 60], [day(1), 80]]),
+    ]
     ran = (NOW - timedelta(days=50)).strftime(ISO)
-    db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at, started_at, finished_at) "
-               "VALUES (?, 'x', 'succeeded', 'manual', ?, ?, ?)", (alpha, ran, ran, ran))
+    db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at, started_at, finished_at) "
+        "VALUES (?, 'x', 'succeeded', 'manual', ?, ?, ?)",
+        (alpha, ran, ran, ran),
+    )
     for first, resolved, accepted in ((30, None, None), (45, 10, None), (45, None, 20)):
-        db.execute("INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen,"
-                   " last_seen, resolved_at, accepted_at) VALUES (?, ?, '', 'high', '', '', ?, ?, ?, ?)",
-                   (alpha, f"r{first}{resolved}{accepted}", (NOW - timedelta(days=first)).strftime(ISO),
-                    NOW.strftime(ISO), *[(NOW - timedelta(days=d)).strftime(ISO) if d else None
-                                         for d in (resolved, accepted)]))
+        db.execute(
+            "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen,"
+            " last_seen, resolved_at, accepted_at) VALUES (?, ?, '', 'high', '', '', ?, ?, ?, ?)",
+            (
+                alpha,
+                f"r{first}{resolved}{accepted}",
+                (NOW - timedelta(days=first)).strftime(ISO),
+                NOW.strftime(ISO),
+                *[(NOW - timedelta(days=d)).strftime(ISO) if d else None for d in (resolved, accepted)],
+            ),
+        )
     out = dashboard_trends(db, rows, NOW)
     score = out["score_trend"]
     assert score.values[0] == 50 and score.values[-1] == 70 and score.first == "50%" and score.last == "70%"

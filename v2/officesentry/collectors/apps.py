@@ -6,8 +6,11 @@ from ..graph import GraphError
 from .base import Collector, RunContext, register
 
 # Tenants that own Microsoft's first-party apps. cdc5aeea... owns e.g. Microsoft Graph Command Line Tools.
-MICROSOFT_TENANTS = {"f8cdef31-a31e-4b4a-93e4-5f571e91255a", "72f988bf-86f1-41af-91ab-2d7cd011db47",
-                     "cdc5aeea-15c5-4db6-b079-fcadd2505dc2"}
+MICROSOFT_TENANTS = {
+    "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+    "72f988bf-86f1-41af-91ab-2d7cd011db47",
+    "cdc5aeea-15c5-4db6-b079-fcadd2505dc2",
+}
 APP_LIMIT = 1000
 
 
@@ -27,28 +30,48 @@ class AppConsents(Collector):
     permissions = ("Application.Read.All", "Directory.Read.All")
 
     def collect(self, ctx: RunContext) -> None:
-        sps = ctx.paged(ctx.graph.get_all("/servicePrincipals", params={
-            "$select": "id,appId,displayName,appOwnerOrganizationId,publisherName,verifiedPublisher,"
-                       "servicePrincipalType,accountEnabled,homepage", "$top": "999"}))
+        sps = ctx.paged(
+            ctx.graph.get_all(
+                "/servicePrincipals",
+                params={
+                    "$select": "id,appId,displayName,appOwnerOrganizationId,publisherName,verifiedPublisher,"
+                    "servicePrincipalType,accountEnabled,homepage",
+                    "$top": "999",
+                },
+            )
+        )
         by_id = {}
         for sp in sps:
             by_id[sp["id"]] = {
-                "appId": sp.get("appId"), "displayName": sp.get("displayName"),
+                "appId": sp.get("appId"),
+                "displayName": sp.get("displayName"),
                 "publisherName": sp.get("publisherName"),
                 "verifiedPublisher": (sp.get("verifiedPublisher") or {}).get("displayName"),
                 "ownerTenant": sp.get("appOwnerOrganizationId"),
                 "microsoft": sp.get("appOwnerOrganizationId") in MICROSOFT_TENANTS,
                 "ownTenant": sp.get("appOwnerOrganizationId") == ctx.tenant.get("tenant_ref"),
-                "type": sp.get("servicePrincipalType"), "accountEnabled": sp.get("accountEnabled"),
+                "type": sp.get("servicePrincipalType"),
+                "accountEnabled": sp.get("accountEnabled"),
             }
 
         grants = ctx.paged(ctx.graph.get_all("/oauth2PermissionGrants", params={"$top": "999"}))
-        ctx.objects("delegated_grant", [(g["id"], {
-            "clientId": g.get("clientId"), "consentType": g.get("consentType"), "principalId": g.get("principalId"),
-            "resourceId": g.get("resourceId"),
-            "resource": (by_id.get(g.get("resourceId")) or {}).get("displayName"),
-            "scopes": sorted((g.get("scope") or "").split()),
-        }) for g in grants])
+        ctx.objects(
+            "delegated_grant",
+            [
+                (
+                    g["id"],
+                    {
+                        "clientId": g.get("clientId"),
+                        "consentType": g.get("consentType"),
+                        "principalId": g.get("principalId"),
+                        "resourceId": g.get("resourceId"),
+                        "resource": (by_id.get(g.get("resourceId")) or {}).get("displayName"),
+                        "scopes": sorted((g.get("scope") or "").split()),
+                    },
+                )
+                for g in grants
+            ],
+        )
 
         third_party = [sid for sid, sp in by_id.items() if not sp["microsoft"] and sp["type"] == "Application"]
         if len(third_party) > APP_LIMIT:
@@ -66,23 +89,49 @@ class AppConsents(Collector):
                 rid = a.get("resourceId")
                 if rid not in role_names:
                     role_names[rid] = self._app_roles(ctx, rid)
-                rows.append((a["id"], {
-                    "clientId": sid, "resourceId": rid, "resource": a.get("resourceDisplayName"),
-                    "permission": role_names[rid].get(a.get("appRoleId"), a.get("appRoleId")),
-                    "createdDateTime": a.get("createdDateTime"),
-                }))
+                rows.append(
+                    (
+                        a["id"],
+                        {
+                            "clientId": sid,
+                            "resourceId": rid,
+                            "resource": a.get("resourceDisplayName"),
+                            "permission": role_names[rid].get(a.get("appRoleId"), a.get("appRoleId")),
+                            "createdDateTime": a.get("createdDateTime"),
+                        },
+                    )
+                )
         ctx.objects("app_permission", rows)
         ctx.objects("service_principal", list(by_id.items()))
 
-        apps = ctx.paged(ctx.graph.get_all("/applications", params={
-            "$select": "id,appId,displayName,createdDateTime,passwordCredentials,keyCredentials", "$top": "999"}))
-        ctx.objects("application", [(a["id"], {
-            "appId": a.get("appId"), "displayName": a.get("displayName"),
-            "createdDateTime": a.get("createdDateTime"), "credentials": _credentials(a),
-        }) for a in apps])
+        apps = ctx.paged(
+            ctx.graph.get_all(
+                "/applications",
+                params={
+                    "$select": "id,appId,displayName,createdDateTime,passwordCredentials,keyCredentials",
+                    "$top": "999",
+                },
+            )
+        )
+        ctx.objects(
+            "application",
+            [
+                (
+                    a["id"],
+                    {
+                        "appId": a.get("appId"),
+                        "displayName": a.get("displayName"),
+                        "createdDateTime": a.get("createdDateTime"),
+                        "credentials": _credentials(a),
+                    },
+                )
+                for a in apps
+            ],
+        )
 
-        ctx.metric("apps.third_party", sum(1 for sp in by_id.values() if not sp["microsoft"]
-                                           and sp["type"] == "Application"))
+        ctx.metric(
+            "apps.third_party", sum(1 for sp in by_id.values() if not sp["microsoft"] and sp["type"] == "Application")
+        )
         ctx.metric("apps.application_permissions", len(rows))
         ctx.metric("apps.tenant_wide_delegated_grants", sum(g.get("consentType") == "AllPrincipals" for g in grants))
 

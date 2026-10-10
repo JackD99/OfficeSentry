@@ -30,9 +30,12 @@ def _run(db, tenant_id, collector="users"):
 
 
 def _kinds(db, run_id):
-    return [(r["kind"], r["object_id"], isinstance(r["data"], bytes), r["items"])
-            for r in db.execute("SELECT kind, object_id, data, items FROM objects WHERE run_id = ?"
-                                " ORDER BY kind, object_id", (run_id,))]
+    return [
+        (r["kind"], r["object_id"], isinstance(r["data"], bytes), r["items"])
+        for r in db.execute(
+            "SELECT kind, object_id, data, items FROM objects WHERE run_id = ? ORDER BY kind, object_id", (run_id,)
+        )
+    ]
 
 
 # -- Packs ---------------------------------------------------------------------------------------
@@ -45,7 +48,11 @@ def test_a_second_batch_of_a_kind_replaces_ids_and_keeps_order(db, two_tenants):
     store.add_objects(db, rid, "user", [])
     store.add_objects(db, rid, "group", [("g", {"x": None})])
     assert [(o["_kind"], o["_id"], o.get("n")) for o in store.run_objects(db, rid)] == [
-        ("group", "g", None), ("user", "a", 4), ("user", "b", 1), ("user", "c", 3)]
+        ("group", "g", None),
+        ("user", "a", 4),
+        ("user", "b", 1),
+        ("user", "c", 3),
+    ]
     assert _kinds(db, rid) == [("group", "g", True, 1), ("user", "a", True, 3)]
     store.finish_run(db, rid, "succeeded")
     assert db.execute("SELECT object_count FROM runs WHERE id = ?", (rid,)).fetchone()[0] == 4
@@ -83,8 +90,12 @@ def test_ids_and_values_that_need_escaping_survive(db, two_tenants):
 def test_matching_objects_reads_old_and_new_rows(db, two_tenants):
     alpha = two_tenants[0]
     old = _run(db, alpha, "admin_roles")
-    store.add_objects(db, old, "role_assignment", [("r1", {"principalId": "p1"}), ("r2", {"principalId": "p2"}),
-                                                   ("r3", {"principalId": 7}), ("r4", ["p1"])])
+    store.add_objects(
+        db,
+        old,
+        "role_assignment",
+        [("r1", {"principalId": "p1"}), ("r2", {"principalId": "p2"}), ("r3", {"principalId": 7}), ("r4", ["p1"])],
+    )
     store.finish_run(db, old, "succeeded")
     unpack(db)
     new = _run(db, alpha, "admin_roles")
@@ -92,18 +103,23 @@ def test_matching_objects_reads_old_and_new_rows(db, two_tenants):
     store.finish_run(db, new, "succeeded")
     got = store.matching_objects(db, alpha, "admin_roles", "role_assignment", "principalId", "p1")
     assert [(object_id, run_id) for object_id, _, run_id, _ in got] == [("r1", old), ("r1", new), ("r5", new)]
-    finished = [r["finished_at"] for r in db.execute("SELECT finished_at FROM runs WHERE id IN (?, ?) ORDER BY id",
-                                                      (old, new))]
+    finished = [
+        r["finished_at"] for r in db.execute("SELECT finished_at FROM runs WHERE id IN (?, ?) ORDER BY id", (old, new))
+    ]
     assert store.object_copies(db, alpha, "admin_roles", "role_assignment", "r1") == [
-        (finished[0], {"principalId": "p1"}), (finished[1], {"principalId": "p1"})]
+        (finished[0], {"principalId": "p1"}),
+        (finished[1], {"principalId": "p1"}),
+    ]
     assert store.object_copies(db, alpha, "admin_roles", "role_assignment", "r2") == [
-        (finished[0], {"principalId": "p2"})]
+        (finished[0], {"principalId": "p2"})
+    ]
 
 
 def test_an_unknown_pack_format_is_refused(db, two_tenants):
     rid = _run(db, two_tenants[0])
-    db.execute("INSERT INTO objects (run_id, kind, object_id, data, items) VALUES (?, 'user', 'a', ?, 1)",
-               (rid, b"\x09nope"))
+    db.execute(
+        "INSERT INTO objects (run_id, kind, object_id, data, items) VALUES (?, 'user', 'a', ?, 1)", (rid, b"\x09nope")
+    )
     with pytest.raises(ValueError, match="unknown object pack format"):
         store.run_objects(db, rid)
 
@@ -120,8 +136,9 @@ def test_counts_read_objects_not_rows(db, two_tenants):
     old = (NOW - timedelta(days=400)).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute("UPDATE runs SET finished_at = ? WHERE id = ?", (old, rid))
     marks = ",".join("?" * len(retention.SIGNIN_KINDS))
-    expected = db.execute(f"SELECT COALESCE(SUM(items), 0) FROM objects WHERE kind IN ({marks})",
-                          retention.SIGNIN_KINDS).fetchone()[0]
+    expected = db.execute(
+        f"SELECT COALESCE(SUM(items), 0) FROM objects WHERE kind IN ({marks})", retention.SIGNIN_KINDS
+    ).fetchone()[0]
     assert retention.prune_signin_detail(db, 30) == expected > 0
 
 
@@ -191,8 +208,7 @@ def test_the_upgrade_itself_is_instant_and_changes_no_rows(cfg, monkeypatch):
     migrate(conn)
     tid = store.create_tenant(conn, "Old", "old.onmicrosoft.com", None)
     rid = store.enqueue_run(conn, tid, "users")
-    conn.execute("INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, 'user', 'u1', '{\"n\": 1}')",
-                 (rid,))
+    conn.execute("INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, 'user', 'u1', '{\"n\": 1}')", (rid,))
     monkeypatch.setattr(db_module, "migration_files", lambda: every)
     migrate(conn)
     row = conn.execute("SELECT data, items FROM objects").fetchone()
@@ -250,8 +266,13 @@ def twins(tmp_path_factory):
         cfg = load_config(data_dir=tmp_path_factory.mktemp("parity"), testing=True, secure_cookies=False)
     packed = connect(cfg.db_path)
     migrate(packed)
-    cid = store.create_connection(packed, Vault(cfg.encryption_keys), "Test app", generate_certificate("test"),
-                                  client_id="11111111-2222-3333-4444-555555555555")
+    cid = store.create_connection(
+        packed,
+        Vault(cfg.encryption_keys),
+        "Test app",
+        generate_certificate("test"),
+        client_id="11111111-2222-3333-4444-555555555555",
+    )
     tenants = [store.create_tenant(packed, name, f"{name.lower()}.onmicrosoft.com", cid) for name in ("Alpha", "Bravo")]
     for tid in tenants:
         seed_tenant(packed, tid, users=[*USERS, gd.INFO_USER], inbox_rules={})
@@ -310,9 +331,11 @@ def test_account_pages_and_their_history_are_identical(twins):
 
 def test_cross_tenant_pages_are_identical(twins):
     packed, plain, tenants = twins
-    for fn in (lambda conn, ts: rollups.check_matrix(conn, ts, NOW),
-               lambda conn, ts: month_changes.across(conn, ts, now=NOW),
-               lambda conn, ts: [rollups.build(conn, ts, key, NOW) for key in list(data_reports.REPORTS)[:8]]):
+    for fn in (
+        lambda conn, ts: rollups.check_matrix(conn, ts, NOW),
+        lambda conn, ts: month_changes.across(conn, ts, now=NOW),
+        lambda conn, ts: [rollups.build(conn, ts, key, NOW) for key in list(data_reports.REPORTS)[:8]],
+    ):
         a = fn(packed, [store.get_tenant(packed, t) for t in tenants])
         b = fn(plain, [store.get_tenant(plain, t) for t in tenants])
         assert _same(a) == _same(b)
@@ -322,6 +345,8 @@ def test_packed_storage_is_several_times_smaller(twins):
     packed, plain, _ = twins
     size = {}
     for name, conn in (("packed", packed), ("plain", plain)):
-        size[name] = sum(len(r[0]) if isinstance(r[0], bytes) else len(r[0].encode()) + len(r[1])
-                         for r in conn.execute("SELECT data, object_id FROM objects"))
+        size[name] = sum(
+            len(r[0]) if isinstance(r[0], bytes) else len(r[0].encode()) + len(r[1])
+            for r in conn.execute("SELECT data, object_id FROM objects")
+        )
     assert size["packed"] * 3 < size["plain"], size

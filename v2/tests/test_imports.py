@@ -38,7 +38,7 @@ def _imports(name: str, path: Path, modules: dict[str, Path], top_level: bool) -
         if isinstance(node, ast.Import):
             found.update(a.name for a in node.names if a.name in modules)
         elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
-            base = package[:len(package) - node.level + 1] if node.level else []
+            base = package[: len(package) - node.level + 1] if node.level else []
             source = ".".join(base + ([node.module] if node.module else [])) if node.level else node.module
             for alias in node.names:
                 if f"{source}.{alias.name}" in modules:

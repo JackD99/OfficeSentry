@@ -72,8 +72,11 @@ def test_nothing_can_be_changed(demo_app, db):
     assert len(posts) > 50
     for rule in posts:
         url = re.sub(r"<(?:int:)?\w+>", "1", rule.rule)
-        resp = client.post(url, data={"username": "x", "password": "y", "name": "Changed"},
-                           headers={"Referer": "http://localhost/tenants/1"})
+        resp = client.post(
+            url,
+            data={"username": "x", "password": "y", "name": "Changed"},
+            headers={"Referer": "http://localhost/tenants/1"},
+        )
         assert resp.status_code == 302, rule.endpoint
         assert resp.headers["Location"] == "/tenants/1", rule.endpoint
     assert _tables(db) == before

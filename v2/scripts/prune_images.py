@@ -46,9 +46,15 @@ def to_delete(versions: list[dict], keep: int) -> list[dict]:
 
 
 def _call(method: str, url: str, token: str):
-    req = urllib.request.Request(url, method=method, headers={  # noqa: S310 (always API, https)
-        "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"})
+    req = urllib.request.Request(  # noqa: S310 (always API, https)
+        url,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
         body = resp.read()
     return json.loads(body) if body else None

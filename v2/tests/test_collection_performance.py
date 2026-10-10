@@ -94,11 +94,17 @@ def test_collector_threads_share_the_queue(cfg, db, two_tenants, monkeypatch):
 def test_hot_run_lookups_use_an_index(db, two_tenants):
     db.execute("ANALYZE")
     for sql, args in [
-        ("SELECT * FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
-         " ORDER BY finished_at DESC, id DESC LIMIT 1", (1, "users")),
+        (
+            "SELECT * FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
+            " ORDER BY finished_at DESC, id DESC LIMIT 1",
+            (1, "users"),
+        ),
         ("SELECT 1 FROM runs WHERE tenant_id = ? AND collector = ? AND scheduled_for = ?", (1, "users", "x")),
-        ("SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL"
-         " ORDER BY finished_at DESC, id DESC LIMIT 1", (1,)),
+        (
+            "SELECT finished_at, id FROM runs WHERE tenant_id = ? AND finished_at IS NOT NULL"
+            " ORDER BY finished_at DESC, id DESC LIMIT 1",
+            (1,),
+        ),
     ]:
         assert "SCAN runs" not in _plan(db, sql, *args), sql
 
@@ -109,6 +115,7 @@ def test_hot_run_lookups_use_an_index(db, two_tenants):
 def _same(a: dict, b: dict) -> bool:
     def norm(row):
         return {**row, "kpis": {k: vars(v) for k, v in row["kpis"].items()}}
+
     return norm(a) == norm(b)
 
 
@@ -132,16 +139,19 @@ def test_cached_rollup_row_follows_accepted_risks_runs_and_prices(db, two_tenant
         return monthly_review.rollup_row(db, store.get_tenant(db, alpha), cached=True)
 
     before = row()
-    target = db.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
-                        " ORDER BY id LIMIT 1", (alpha,)).fetchone()
+    target = db.execute(
+        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL ORDER BY id LIMIT 1", (alpha,)
+    ).fetchone()
     findings.accept(db, target["id"], "admin", "known", None)
     accepted = row()
     assert sum(accepted["counts"].values()) == sum(before["counts"].values()) - 1
     findings.unaccept(db, target["id"])
     assert _same(row(), before)
 
-    db.execute("INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES ('SPB', 18.1, ?)",
-               (datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),))
+    db.execute(
+        "INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES ('SPB', 18.1, ?)",
+        (datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),),
+    )
     assert _same(row(), monthly_review.rollup_row(db, tenant))
 
     seed_tenant(db, alpha, users=[])  # a new collection changes the figures
@@ -192,7 +202,9 @@ def test_old_run_logs_keep_only_warnings_and_errors(db, two_tenants):
 
     assert store.prune_run_logs(db) == 2
     assert [r[0] for r in db.execute("SELECT level FROM run_events WHERE run_id = ? ORDER BY id", (old,))] == [
-        "warning", "error"]
+        "warning",
+        "error",
+    ]
     assert db.execute("SELECT COUNT(*) FROM run_events WHERE run_id = ?", (recent,)).fetchone()[0] == 1
     assert store.prune_run_logs(db) == 0  # carries on from where it stopped
 
@@ -208,8 +220,11 @@ def test_findings_sync_once_when_a_tenants_queue_drains(cfg, db, two_tenants, mo
         return "succeeded"
 
     monkeypatch.setattr(worker, "_collect", fake_collect)
-    monkeypatch.setattr(worker.findings, "sync", lambda conn, tenant: synced.append(tenant["id"]) or {
-        "new": 0, "reopened": 0, "resolved": 0, "opened": []})
+    monkeypatch.setattr(
+        worker.findings,
+        "sync",
+        lambda conn, tenant: synced.append(tenant["id"]) or {"new": 0, "reopened": 0, "resolved": 0, "opened": []},
+    )
     worker.run_worker(cfg, once=True, graph_factory=lambda *a: None, exchange_factory=lambda *a: None)
     assert sorted(synced) == sorted(two_tenants)  # not once per collector
 
@@ -243,8 +258,9 @@ def test_token_providers_are_reused_per_tenant_and_certificate(monkeypatch):
 
 def test_each_collector_thread_has_its_own_http_session():
     sessions = []
-    threads = [threading.Thread(target=lambda: sessions.append((worker._session(), worker._session())))
-               for _ in range(2)]
+    threads = [
+        threading.Thread(target=lambda: sessions.append((worker._session(), worker._session()))) for _ in range(2)
+    ]
     for t in threads:
         t.start()
     for t in threads:

@@ -22,7 +22,11 @@ EXPECTED = {
     "commercial": ("https://login.microsoftonline.com", "https://graph.microsoft.com", "https://outlook.office365.com"),
     "gcc_high": ("https://login.microsoftonline.us", "https://graph.microsoft.us", "https://outlook.office365.us"),
     "dod": ("https://login.microsoftonline.us", "https://dod-graph.microsoft.us", "https://webmail.apps.mil"),
-    "china": ("https://login.chinacloudapi.cn", "https://microsoftgraph.chinacloudapi.cn", "https://partner.outlook.cn"),
+    "china": (
+        "https://login.chinacloudapi.cn",
+        "https://microsoftgraph.chinacloudapi.cn",
+        "https://partner.outlook.cn",
+    ),
 }
 
 
@@ -45,9 +49,14 @@ def _mock_sign_in(rsps, login_host: str) -> list:
         "authorization_endpoint": f"{login_host}/{TENANT}/oauth2/v2.0/authorize",
         "issuer": f"{login_host}/{TENANT}/v2.0",
     }
-    rsps.add(responses.GET, re.compile(r"https://[^/]+/common/discovery/instance.*"),
-             json={"tenant_discovery_endpoint": f"{login_host}/{TENANT}/v2.0/.well-known/openid-configuration",
-                   "metadata": []})
+    rsps.add(
+        responses.GET,
+        re.compile(r"https://[^/]+/common/discovery/instance.*"),
+        json={
+            "tenant_discovery_endpoint": f"{login_host}/{TENANT}/v2.0/.well-known/openid-configuration",
+            "metadata": [],
+        },
+    )
     rsps.add(responses.GET, re.compile(re.escape(login_host) + r"/.*/openid-configuration.*"), json=discovery)
 
     def token(request):
@@ -91,8 +100,9 @@ def test_graph_base_url_and_next_link_stay_on_the_clouds_host(key):
     assert client.get("/organization", version="beta")["value"] == [{"id": "org"}]
 
     # A nextLink to commercial Graph (or anywhere else) never gets this cloud's token.
-    responses.get(f"{graph}/v1.0/groups",
-                  json={"value": [], "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups?p=2"})
+    responses.get(
+        f"{graph}/v1.0/groups", json={"value": [], "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups?p=2"}
+    )
     with pytest.raises(ValueError, match="refusing"):
         client.get_all("/groups")
     with pytest.raises(ValueError, match="refusing"):
@@ -105,8 +115,9 @@ def test_commercial_client_refuses_national_cloud_links():
     assert client.root == GRAPH_ROOT
     with pytest.raises(ValueError, match="refusing"):
         GraphClient.build_url("https://graph.microsoft.us/v1.0/users")
-    responses.get(f"{GRAPH_ROOT}/v1.0/users",
-                  json={"value": [], "@odata.nextLink": "https://graph.microsoft.us/v1.0/users?p=2"})
+    responses.get(
+        f"{GRAPH_ROOT}/v1.0/users", json={"value": [], "@odata.nextLink": "https://graph.microsoft.us/v1.0/users?p=2"}
+    )
     with pytest.raises(ValueError, match="refusing"):
         client.get_all("/users")
 
@@ -117,8 +128,10 @@ def test_exchange_root_per_cloud(key):
     root = clouds.get(key).exchange
     exo = ExchangeClient("tid", lambda: "tok", cloud=key)
     assert exo.url == f"{root}/adminapi/beta/tid/InvokeCommand"
-    responses.post(exo.url, json={"value": [{"Name": "a"}],
-                                  "@odata.nextLink": "https://outlook.office365.com/adminapi/beta/tid/x?p=2"})
+    responses.post(
+        exo.url,
+        json={"value": [{"Name": "a"}], "@odata.nextLink": "https://outlook.office365.com/adminapi/beta/tid/x?p=2"},
+    )
     if key == "commercial":
         responses.post("https://outlook.office365.com/adminapi/beta/tid/x?p=2", json={"value": []})
         assert exo.invoke("Get-Mailbox") == [{"Name": "a"}]
@@ -138,8 +151,7 @@ def test_admin_consent_url_per_cloud():
 
 def test_connection_check_signs_in_to_the_tenants_cloud(monkeypatch):
     seen = []
-    monkeypatch.setattr(connection_check, "certificate_token_provider",
-                        lambda *a: seen.append(a) or (lambda: "tok"))
+    monkeypatch.setattr(connection_check, "certificate_token_provider", lambda *a: seen.append(a) or (lambda: "tok"))
     with responses.RequestsMock() as rsps:
         rsps.get("https://graph.microsoft.us/v1.0/organization", json={"value": [{"displayName": "Gov Ltd"}]})
         result = connection_check.check("t", "c", "key", "thumb", "gcc_high")
@@ -149,12 +161,16 @@ def test_connection_check_signs_in_to_the_tenants_cloud(monkeypatch):
 
 def test_tenant_id_for_domain_uses_the_clouds_sign_in_host():
     with responses.RequestsMock() as rsps:
-        rsps.get("https://login.chinacloudapi.cn/contoso.partner.onmschina.cn/v2.0/.well-known/openid-configuration",
-                 json={"issuer": f"https://login.chinacloudapi.cn/{TENANT}/v2.0"})
+        rsps.get(
+            "https://login.chinacloudapi.cn/contoso.partner.onmschina.cn/v2.0/.well-known/openid-configuration",
+            json={"issuer": f"https://login.chinacloudapi.cn/{TENANT}/v2.0"},
+        )
         assert discovery.tenant_id_for_domain("contoso.partner.onmschina.cn", cloud="china") == TENANT
     with responses.RequestsMock() as rsps:  # an answer naming another host isn't believed
-        rsps.get("https://login.microsoftonline.us/contoso.onmicrosoft.us/v2.0/.well-known/openid-configuration",
-                 json={"issuer": f"https://login.microsoftonline.com/{TENANT}/v2.0"})
+        rsps.get(
+            "https://login.microsoftonline.us/contoso.onmicrosoft.us/v2.0/.well-known/openid-configuration",
+            json={"issuer": f"https://login.microsoftonline.com/{TENANT}/v2.0"},
+        )
         assert discovery.tenant_id_for_domain("contoso.onmicrosoft.us", cloud="gcc_high") is None
 
 
@@ -174,8 +190,9 @@ def test_worker_needs_an_app_from_the_tenants_cloud(db, vault, connection_id):
         connection_cloud(gov, commercial)
     with pytest.raises(NotConnected, match="GCC High"):
         connection_cloud(gov, None)
-    gov_app = store.create_connection(db, vault, "Gov app", generate_certificate("gov"), client_id=CLIENT,
-                                      cloud="gcc_high")
+    gov_app = store.create_connection(
+        db, vault, "Gov app", generate_certificate("gov"), client_id=CLIENT, cloud="gcc_high"
+    )
     assert connection_cloud(gov, dict(store.get_connection(db, gov_app))) == "gcc_high"
     assert connection_cloud({"cloud": "commercial"}, commercial) == "commercial"
 
@@ -197,8 +214,7 @@ def test_run_for_a_tenant_without_an_app_in_its_cloud_says_so(db, connection_id)
 
 
 def test_collector_microsoft_doesnt_offer_in_the_cloud_is_partial(db, vault):
-    app = store.create_connection(db, vault, "China app", generate_certificate("cn"), client_id=CLIENT,
-                                  cloud="china")
+    app = store.create_connection(db, vault, "China app", generate_certificate("cn"), client_id=CLIENT, cloud="china")
     tid = store.create_tenant(db, "CN", "cn.partner.onmschina.cn", app, "china")
     store.enqueue_run(db, tid, "secure_score")
     run = store.claim_next_run(db)
@@ -215,8 +231,15 @@ def test_add_and_edit_tenant_with_a_cloud(client, db, vault, connection_id):
     assert "US Government GCC High" in page and "China (operated by 21Vianet)" in page
 
     # No GCC High app yet: the tenant is added without one, and its page says to set one up.
-    resp = client.post("/tenants/new", data={"name": "Gov Ltd", "tenant_ref": "gov.onmicrosoft.us",
-                                             "connection_id": connection_id, "cloud": "gcc_high"})
+    resp = client.post(
+        "/tenants/new",
+        data={
+            "name": "Gov Ltd",
+            "tenant_ref": "gov.onmicrosoft.us",
+            "connection_id": connection_id,
+            "cloud": "gcc_high",
+        },
+    )
     tid = int(resp.headers["Location"].rsplit("/", 1)[1])
     t = store.get_tenant(db, tid)
     assert t["cloud"] == "gcc_high" and t["connection_id"] is None
@@ -225,25 +248,37 @@ def test_add_and_edit_tenant_with_a_cloud(client, db, vault, connection_id):
     assert "adminconsent" not in page
 
     # With a GCC High app, the consent link is on the US Government sign-in host.
-    gov_app = store.create_connection(db, vault, "Gov app", generate_certificate("gov"), client_id=CLIENT,
-                                      cloud="gcc_high")
-    client.post(f"/tenants/{tid}/edit", data={"name": "Gov Ltd", "tenant_ref": "gov.onmicrosoft.us",
-                                              "connection_id": gov_app, "cloud": "gcc_high"})
+    gov_app = store.create_connection(
+        db, vault, "Gov app", generate_certificate("gov"), client_id=CLIENT, cloud="gcc_high"
+    )
+    client.post(
+        f"/tenants/{tid}/edit",
+        data={"name": "Gov Ltd", "tenant_ref": "gov.onmicrosoft.us", "connection_id": gov_app, "cloud": "gcc_high"},
+    )
     assert store.get_tenant(db, tid)["connection_id"] == gov_app
     page = client.get(f"/tenants/{tid}").get_data(as_text=True)
     assert "https://login.microsoftonline.us/gov.onmicrosoft.us/adminconsent" in page
     assert "Set up an app for" not in page
 
     # The commercial app can't be chosen for it.
-    page = client.post(f"/tenants/{tid}/edit", data={"name": "Gov Ltd", "tenant_ref": "gov.onmicrosoft.us",
-                                                     "connection_id": connection_id, "cloud": "gcc_high"},
-                       follow_redirects=True).get_data(as_text=True)
+    page = client.post(
+        f"/tenants/{tid}/edit",
+        data={
+            "name": "Gov Ltd",
+            "tenant_ref": "gov.onmicrosoft.us",
+            "connection_id": connection_id,
+            "cloud": "gcc_high",
+        },
+        follow_redirects=True,
+    ).get_data(as_text=True)
     assert "can&#39;t sign in to a US Government GCC High tenant" in page
     assert store.get_tenant(db, tid)["connection_id"] == gov_app
 
     # An unknown cloud is refused outright.
-    assert client.post("/tenants/new", data={"name": "X", "tenant_ref": "x.onmicrosoft.com",
-                                             "cloud": "mars"}).status_code == 400
+    assert (
+        client.post("/tenants/new", data={"name": "X", "tenant_ref": "x.onmicrosoft.com", "cloud": "mars"}).status_code
+        == 400
+    )
 
 
 def test_commercial_tenant_unchanged(client, db, two_tenants):

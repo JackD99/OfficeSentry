@@ -52,7 +52,7 @@ def sheet_name(title: str, used: set[str]) -> str:
     base, n = name, 2
     while name.lower() in used:
         suffix = f" ({n})"
-        name = base[:31 - len(suffix)] + suffix
+        name = base[: 31 - len(suffix)] + suffix
         n += 1
     used.add(name.lower())
     return name

@@ -1,4 +1,4 @@
-"""The docs/checks.md generator runs and covers every check, collector and detail report."""
+"""The docs/checks.md generator runs, covers every check, collector and detail report, and matches the file."""
 
 import importlib.util
 from pathlib import Path
@@ -40,3 +40,11 @@ def test_catalogue_finds_the_collectors_a_check_reads():
 def test_catalogue_is_deterministic():
     gen = _generator()
     assert gen.render() == gen.render()
+
+
+def test_committed_catalogue_matches_the_code():
+    committed = (SCRIPT.parents[1] / "docs" / "checks.md").read_text(encoding="utf-8")
+    assert committed == _generator().render(), (
+        "docs/checks.md is out of date; from v2/, run "
+        "PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md"
+    )

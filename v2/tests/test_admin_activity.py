@@ -43,13 +43,19 @@ def _report(db, tenant_id):
 
 def _rule(db, tenant_id):
     return {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, tenant_id)))}[
-        "domain_federation_changed"]
+        "domain_federation_changed"
+    ]
 
 
 def _profile(db, tenant_id, factory, p1=True):
-    skus = SKUS if p1 else [{**s, "servicePlans": [p for p in s["servicePlans"]
-                                                    if not p["servicePlanName"].startswith("AAD_PREMIUM")]}
-                            for s in SKUS]
+    skus = (
+        SKUS
+        if p1
+        else [
+            {**s, "servicePlans": [p for p in s["servicePlans"] if not p["servicePlanName"].startswith("AAD_PREMIUM")]}
+            for s in SKUS
+        ]
+    )
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": skus})
     responses.get(f"{V1}/directory/subscriptions", json={"value": []})
@@ -89,7 +95,11 @@ def test_events_are_normalised(db, two_tenants, factory):
     grant = e[ad.GLOBAL_ADMIN_GRANT["id"]]
     assert (grant["actor"], grant["actor_type"], grant["ip"]) == ("admin@x.com", "user", "203.0.113.40")
     assert (grant["kind"], grant["area"], grant["detail"], grant["targets"]) == (
-        "role_grant", "Admin roles", "Global Administrator", ["bob@x.com"])
+        "role_grant",
+        "Admin roles",
+        "Global Administrator",
+        ["bob@x.com"],
+    )
     pim = e[ad.PIM_ELIGIBLE["id"]]
     assert (pim["detail"], pim["targets"]) == ("Exchange Administrator", ["ann@x.com"])
     assert e[ad.ROLE_REMOVED["id"]]["detail"] == "Global Administrator"  # from the old value
@@ -98,10 +108,11 @@ def test_events_are_normalised(db, two_tenants, factory):
     assert secret["activity"] == "Update application – Certificates and secrets management"  # trailing space
     assert (secret["detail"], secret["credential_added"]) == ("Added certificate", True)
     assert (e[ad.SECRET_REMOVED["id"]]["detail"], e[ad.SECRET_REMOVED["id"]]["credential_added"]) == (
-        "Removed secret", False)
+        "Removed secret",
+        False,
+    )
     sp = e[ad.SP_CREDENTIAL["id"]]
-    assert (sp["actor"], sp["actor_type"], sp["ip"], sp["credential_added"]) == (
-        "Contoso Automation", "app", "", True)
+    assert (sp["actor"], sp["actor_type"], sp["ip"], sp["credential_added"]) == ("Contoso Automation", "app", "", True)
 
     ca = e[ad.CA_DISABLED["id"]]
     assert (ca["detail"], ca["ca_disabled"]) == ("On → Off", True)
@@ -135,7 +146,7 @@ def test_follows_pages(db, two_tenants, factory):
 def test_page_budget_warns_instead_of_silently_truncating(db, two_tenants, factory, monkeypatch):
     alpha, _ = two_tenants
     monkeypatch.setattr(collector, "PAGE_BUDGET", 2)
-    pages = [ad.DIRECTORY_AUDITS[i:i + 3] for i in range(0, len(ad.DIRECTORY_AUDITS), 3)]
+    pages = [ad.DIRECTORY_AUDITS[i : i + 3] for i in range(0, len(ad.DIRECTORY_AUDITS), 3)]
     for i, page in enumerate(pages):
         url = AUDITS if i == 0 else f"{AUDITS}?$skiptoken={i}"
         body = {"value": page}
@@ -172,22 +183,31 @@ def test_window_with_entra_p1(db, two_tenants, factory):
 def test_window_without_entra_p1(db, two_tenants, factory):
     alpha, _ = two_tenants
     _profile(db, alpha, factory, p1=False)
-    recent = [e for e in ad.DIRECTORY_AUDITS if parse_ts(e["activityDateTime"])
-              > datetime.now(UTC) - timedelta(days=7)]
+    recent = [e for e in ad.DIRECTORY_AUDITS if parse_ts(e["activityDateTime"]) > datetime.now(UTC) - timedelta(days=7)]
     responses.get(AUDITS, json={"value": recent})
     run_id, _ = _run(db, alpha, "admin_activity", factory)
     assert _window(db, run_id)["retention_days"] == 7
     _, sections = _report(db, alpha)
-    assert "the last 7 days (the tenant's audit log keeps only 7 days without Entra ID P1)" in \
-        sections["Changes to review"].intro
+    assert (
+        "the last 7 days (the tenant's audit log keeps only 7 days without Entra ID P1)"
+        in sections["Changes to review"].intro
+    )
     assert _rule(db, alpha).summary.endswith("in the last 7 days")
 
 
 @responses.activate
 def test_audit_log_forbidden_is_partial(db, two_tenants, factory):
     alpha, _ = two_tenants
-    responses.get(AUDITS, status=403, json={"error": {"code": "Authorization_RequestDenied",
-                                                      "message": "Insufficient privileges to complete the operation."}})
+    responses.get(
+        AUDITS,
+        status=403,
+        json={
+            "error": {
+                "code": "Authorization_RequestDenied",
+                "message": "Insufficient privileges to complete the operation.",
+            }
+        },
+    )
     run_id, status = _run(db, alpha, "admin_activity", factory)
     assert status == "partial"
     assert _window(db, run_id)["available"] is False
@@ -235,14 +255,16 @@ def test_admin_activity_report(db, two_tenants):
     review = sections["Changes to review"]
     got = [(row[1], flag) for row, flag in zip(review.rows, review.flags, strict=True)]
     assert got[0] == ("Set domain authentication", "high")
-    assert sorted(got[1:]) == sorted([
-        ("Add service principal credentials", "medium"),
-        ("Update application – Certificates and secrets management", "medium"),
-        ("Add member to role", "medium"),
-        ("Add eligible member to role in PIM completed (permanent)", "medium"),
-        ("Update conditional access policy", "medium"),
-        ("Delete conditional access policy", "medium"),
-    ])
+    assert sorted(got[1:]) == sorted(
+        [
+            ("Add service principal credentials", "medium"),
+            ("Update application – Certificates and secrets management", "medium"),
+            ("Add member to role", "medium"),
+            ("Add eligible member to role in PIM completed (permanent)", "medium"),
+            ("Update conditional access policy", "medium"),
+            ("Delete conditional access policy", "medium"),
+        ]
+    )
     assert not any("mallory@x.com" == row[3] for row in review.rows)  # the failed grant is left out
     mediums = [row[0] for row, flag in zip(review.rows, review.flags, strict=True) if flag == "medium"]
     assert mediums == sorted(mediums, reverse=True)  # newest first within a severity
@@ -269,8 +291,14 @@ def test_admin_activity_report_without_data(db, two_tenants):
 
 def test_admin_activity_page_and_xlsx(client, db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
-    hostile = ad.event("x1", "ApplicationManagement", "Consent to application", ad.ago(1), ad.by_user("ann@x.com"),
-                       [ad.target("ServicePrincipal", "<script>alert(1)</script>")])
+    hostile = ad.event(
+        "x1",
+        "ApplicationManagement",
+        "Consent to application",
+        ad.ago(1),
+        ad.by_user("ann@x.com"),
+        [ad.target("ServicePrincipal", "<script>alert(1)</script>")],
+    )
     monkeypatch.setattr(ad, "DIRECTORY_AUDITS", [hostile] + ad.DIRECTORY_AUDITS)
     seed_tenant(db, alpha)
     make_user(db, "admin")

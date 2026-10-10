@@ -44,11 +44,15 @@ def _group_object(snap: TenantSnapshot, kind: str, what: str):
     return rows[0], ""
 
 
-@rule("ownerless_groups", "Every team and Microsoft 365 group has an owner", "Groups",
-      "Make an active person, ideally two, an owner of each listed team or group (Teams admin center or Microsoft "
-      "365 admin center > Teams & groups). Owners approve members and guests and renew the group; without one, "
-      "nobody looks after its files and conversations. The ownerless group policy (Microsoft 365 admin center > "
-      "Settings > Org settings > Microsoft 365 Groups) asks members to take over when the last owner leaves.")
+@rule(
+    "ownerless_groups",
+    "Every team and Microsoft 365 group has an owner",
+    "Groups",
+    "Make an active person, ideally two, an owner of each listed team or group (Teams admin center or Microsoft "
+    "365 admin center > Teams & groups). Owners approve members and guests and renew the group; without one, "
+    "nobody looks after its files and conversations. The ownerless group policy (Microsoft 365 admin center > "
+    "Settings > Org settings > Microsoft 365 Groups) asks members to take over when the last owner leaves.",
+)
 def ownerless_groups(snap: TenantSnapshot, now: datetime):
     groups = m365_groups(snap)
     if groups is None:
@@ -61,18 +65,34 @@ def ownerless_groups(snap: TenantSnapshot, now: datetime):
     findings = []
     for g in checked:
         if problem := group_owner_problem(g):
-            findings.append(Finding("medium" if g.get("isTeam") else "low", g.get("displayName") or g["_id"],
-                                    f"{group_type(g)}, {problem[0].lower()}{problem[1:]}", g["_id"]))
+            findings.append(
+                Finding(
+                    "medium" if g.get("isTeam") else "low",
+                    g.get("displayName") or g["_id"],
+                    f"{group_type(g)}, {problem[0].lower()}{problem[1:]}",
+                    g["_id"],
+                )
+            )
     scope = f" ({len(checked)} of {len(groups)} checked)" if len(checked) < len(groups) else ""
-    return ("fail", f"{plural(len(findings), 'team or group')} without an owner{scope}", findings) if findings else \
-        ("pass", f"{every(len(checked), 'team or group', start=True)} {verb(len(checked), 'has', 'have')} an "
-                 f"owner{scope}", [])
+    return (
+        ("fail", f"{plural(len(findings), 'team or group')} without an owner{scope}", findings)
+        if findings
+        else (
+            "pass",
+            f"{every(len(checked), 'team or group', start=True)} {verb(len(checked), 'has', 'have')} an owner{scope}",
+            [],
+        )
+    )
 
 
-@rule("group_creation", "Only chosen people can create teams and groups", "Groups",
-      "Limit who can create teams and Microsoft 365 groups to a security group of people who will look after them "
-      "(the Group.Unified directory setting, changed with Microsoft Graph PowerShell; needs Entra ID P1). "
-      "Otherwise anyone can create a team, add guests to it and leave it behind.")
+@rule(
+    "group_creation",
+    "Only chosen people can create teams and groups",
+    "Groups",
+    "Limit who can create teams and Microsoft 365 groups to a security group of people who will look after them "
+    "(the Group.Unified directory setting, changed with Microsoft Graph PowerShell; needs Entra ID P1). "
+    "Otherwise anyone can create a team, add guests to it and leave it behind.",
+)
 def group_creation(snap: TenantSnapshot, now: datetime):
     settings, reason = _group_object(snap, "group_settings", "Group settings")
     if settings is None:
@@ -81,17 +101,29 @@ def group_creation(snap: TenantSnapshot, now: datetime):
         if snap.capabilities.get("entra_p1") is False:
             return _unavailable("Anyone can create teams and groups; limiting who can needs Entra ID P1")
         default = " (Microsoft's default)" if settings.get("source") == "default" else ""
-        return ("fail", "Anyone can create teams and groups", [Finding(
-            "low", "Tenant", f"Every user can create teams and Microsoft 365 groups{default}")])
+        return (
+            "fail",
+            "Anyone can create teams and groups",
+            [Finding("low", "Tenant", f"Every user can create teams and Microsoft 365 groups{default}")],
+        )
     allowed = settings.get("allowedGroupName") or settings.get("allowedGroupId")
-    return ("pass", f"Only admins and members of {allowed} can create teams and groups" if allowed
-            else "Only admins can create teams and groups", [])
+    return (
+        "pass",
+        f"Only admins and members of {allowed} can create teams and groups"
+        if allowed
+        else "Only admins can create teams and groups",
+        [],
+    )
 
 
-@rule("group_expiration", "Unused groups and teams expire", "Groups",
-      "Set a Microsoft 365 group expiration policy for all groups (Entra admin center > Groups > Expiration), for "
-      "example 365 days. Groups in use renew automatically, owners are asked to renew the rest, and an expired "
-      "group can be restored for 30 days. Needs Entra ID P1.")
+@rule(
+    "group_expiration",
+    "Unused groups and teams expire",
+    "Groups",
+    "Set a Microsoft 365 group expiration policy for all groups (Entra admin center > Groups > Expiration), for "
+    "example 365 days. Groups in use renew automatically, owners are asked to renew the rest, and an expired "
+    "group can be restored for 30 days. Needs Entra ID P1.",
+)
 def group_expiration(snap: TenantSnapshot, now: datetime):
     policy, reason = _group_object(snap, "expiration_policy", "The group expiration policy")
     groups = m365_groups(snap)
@@ -105,15 +137,36 @@ def group_expiration(snap: TenantSnapshot, now: datetime):
         never = [g for g in groups if not g.get("expirationDateTime")]
         if not never:
             return ("pass", f"Expiration covers every team and group ({days} days)", [])
-        return ("fail", "Expiration covers selected groups only", [Finding(
-            "low", "Tenant", f"{len(never)} of {plural(len(groups), 'team or group')} "
-                            + verb(len(never), "never expires", "never expire"))])
+        return (
+            "fail",
+            "Expiration covers selected groups only",
+            [
+                Finding(
+                    "low",
+                    "Tenant",
+                    f"{len(never)} of {plural(len(groups), 'team or group')} "
+                    + verb(len(never), "never expires", "never expire"),
+                )
+            ],
+        )
     if snap.capabilities.get("entra_p1") is False:
         return _unavailable("Group expiration needs Entra ID P1")
     if not groups:
-        return ("fail", "No expiration policy", [Finding(
-            "info", "Tenant", "No expiration policy; the tenant has no teams or Microsoft 365 groups yet")])
-    return ("fail", "No expiration policy", [Finding(
-        "low", "Tenant", f"No expiration policy: {plural(len(groups), 'team or group')} "
-                         f"{verb(len(groups), 'is', 'are')} kept until someone deletes "
-                         f"{verb(len(groups), 'it', 'them')}")])
+        return (
+            "fail",
+            "No expiration policy",
+            [Finding("info", "Tenant", "No expiration policy; the tenant has no teams or Microsoft 365 groups yet")],
+        )
+    return (
+        "fail",
+        "No expiration policy",
+        [
+            Finding(
+                "low",
+                "Tenant",
+                f"No expiration policy: {plural(len(groups), 'team or group')} "
+                f"{verb(len(groups), 'is', 'are')} kept until someone deletes "
+                f"{verb(len(groups), 'it', 'them')}",
+            )
+        ],
+    )

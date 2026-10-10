@@ -82,15 +82,25 @@ def overview():
         for e in area.entries:
             e.href = _library_href(e, tenant["id"] if tenant else None) if tenants else ""
             e.across = _library_href(e, None) if staff and tenant else ""
-    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? ORDER BY report_key, name COLLATE NOCASE",
-                         (g.user["id"],)).fetchall()
+    saved = g.db.execute(
+        "SELECT * FROM saved_views WHERE user_id = ? ORDER BY report_key, name COLLATE NOCASE", (g.user["id"],)
+    ).fetchall()
     titles = {k: v[0] for k, v in data_reports.REPORTS.items()} | findings_report.TITLES
-    settings = [(url_for(ep), title, words) for ep, title, words in SETTINGS_PAGES] \
-        if g.user["role"] == "admin" else []
-    return render_template("library.html", areas=[a for a in areas if a.entries], tenants=tenants, tenant=tenant,
-                           staff=staff, use=use, uses=library.uses(), total=library.count(), settings=settings,
-                           saved=[v for v in saved if v["report_key"] in titles], titles=titles,
-                           saved_view_url=page_url)
+    settings = [(url_for(ep), title, words) for ep, title, words in SETTINGS_PAGES] if g.user["role"] == "admin" else []
+    return render_template(
+        "library.html",
+        areas=[a for a in areas if a.entries],
+        tenants=tenants,
+        tenant=tenant,
+        staff=staff,
+        use=use,
+        uses=library.uses(),
+        total=library.count(),
+        settings=settings,
+        saved=[v for v in saved if v["report_key"] in titles],
+        titles=titles,
+        saved_view_url=page_url,
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/report")
@@ -98,8 +108,13 @@ def overview():
 def tenant_report(tenant_id: int):
     t = tenant_or_404(tenant_id)
     report = build(g.db, t)
-    return render_template("reports/monthly_review.html", report=report, pdf=False,
-                           css_href=url_for("static", filename="report.css"), **report_extras(t, page=True))
+    return render_template(
+        "reports/monthly_review.html",
+        report=report,
+        pdf=False,
+        css_href=url_for("static", filename="report.css"),
+        **report_extras(t, page=True),
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/report.pdf")
@@ -107,8 +122,9 @@ def tenant_report(tenant_id: int):
 def tenant_report_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf")
-    return pdf_response("reports/monthly_review.html", _filename(t, "pdf")[:-4], report=build(g.db, t),
-                        **report_extras(t, page=False))
+    return pdf_response(
+        "reports/monthly_review.html", _filename(t, "pdf")[:-4], report=build(g.db, t), **report_extras(t, page=False)
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/report.xlsx")
@@ -145,9 +161,18 @@ def evidence_pack(tenant_id: int):
     sheet = questionnaires.sheet(pack, view) if view != CONTROLS_VIEW else None
     copy_all = questionnaires.to_text(sheet, branding.load(g.db).display_name) if sheet else ""
     show = request.args.get("show") if request.args.get("show") in ("input", "attention") else ""
-    return render_template("evidence_page.html", pack=pack, sheet=sheet, view=view, sets=questionnaires.SETS,
-                           copy_all=copy_all, show=show, answers=evidence_answers.ANSWERS,
-                           staff=g.user["role"] in STAFF, max_note=evidence_answers.MAX_NOTE)
+    return render_template(
+        "evidence_page.html",
+        pack=pack,
+        sheet=sheet,
+        view=view,
+        sets=questionnaires.SETS,
+        copy_all=copy_all,
+        show=show,
+        answers=evidence_answers.ANSWERS,
+        staff=g.user["role"] in STAFF,
+        max_note=evidence_answers.MAX_NOTE,
+    )
 
 
 @bp.post("/tenants/<int:tenant_id>/evidence/answers/<key>")
@@ -170,8 +195,9 @@ def evidence_answer(tenant_id: int, key: str):
     if answer not in evidence_answers.ANSWERS:
         abort(400)
     suggested = next(a.suggested for a in evidence.build(g.db, t).answers if a.key == key)
-    evidence_answers.set_override(g.db, t["id"], key, answer, request.form.get("note", ""), suggested,
-                                  g.user["username"])
+    evidence_answers.set_override(
+        g.db, t["id"], key, answer, request.form.get("note", ""), suggested, g.user["username"]
+    )
     flash("Answer saved for this client. Every question set that asks it, and the downloads, now use it.", "success")
     return redirect(back)
 
@@ -185,11 +211,18 @@ def evidence_pdf(tenant_id: int):
     pack = evidence.build(g.db, t)
     if key in questionnaires.SETS:
         audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.pdf")
-        return pdf_response("reports/answer_sheet.html", _evidence_name(t, "pdf")[:-4] + f"-{key}",
-                            sheet=questionnaires.sheet(pack, key))
+        return pdf_response(
+            "reports/answer_sheet.html",
+            _evidence_name(t, "pdf")[:-4] + f"-{key}",
+            sheet=questionnaires.sheet(pack, key),
+        )
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.pdf")
-    return pdf_response("reports/evidence.html", _evidence_name(t, "pdf")[:-4], pack=pack,
-                        sheet=questionnaires.sheet(pack, questionnaires.DEFAULT))
+    return pdf_response(
+        "reports/evidence.html",
+        _evidence_name(t, "pdf")[:-4],
+        pack=pack,
+        sheet=questionnaires.sheet(pack, questionnaires.DEFAULT),
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.xlsx")
@@ -217,8 +250,11 @@ def evidence_text(tenant_id: int):
     key = key if key in questionnaires.SETS else questionnaires.DEFAULT
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.txt")
     body = questionnaires.to_text(questionnaires.sheet(evidence.build(g.db, t), key), branding.load(g.db).display_name)
-    return Response(body, mimetype="text/plain; charset=utf-8", headers={
-        "Content-Disposition": f'attachment; filename="{_evidence_name(t, "txt")[:-4]}-{key}.txt"'})
+    return Response(
+        body,
+        mimetype="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{_evidence_name(t, "txt")[:-4]}-{key}.txt"'},
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/data")
@@ -248,11 +284,21 @@ def data_report(tenant_id: int, key: str):
     active = next(gr for gr in groups if any(k == key for k, _, _ in gr.reports))
     report = data_reports.build(g.db, t, key)
     view = views.View.parse(request.args)
-    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
-                         (g.user["id"], key)).fetchall()
-    return render_template("data_report.html", tenant=t, report=report, groups=groups, group=active,
-                           tables=views.table_views(report, view, request.path), view_query=view.query(),
-                           links=views.headline_links(report, request.path), saved=saved)
+    saved = g.db.execute(
+        "SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
+        (g.user["id"], key),
+    ).fetchall()
+    return render_template(
+        "data_report.html",
+        tenant=t,
+        report=report,
+        groups=groups,
+        group=active,
+        tables=views.table_views(report, view, request.path),
+        view_query=view.query(),
+        links=views.headline_links(report, request.path),
+        saved=saved,
+    )
 
 
 def _viewed(report):
@@ -288,8 +334,10 @@ def data_report_xlsx(tenant_id: int, key: str):
 
 def _known_skus() -> list[tuple[str, str]]:
     """Every paid SKU part number seen in any tenant's latest licence snapshot, plus right-sizing's targets."""
-    runs = g.db.execute("SELECT MAX(id) AS id FROM runs WHERE collector = 'tenant_profile'"
-                        " AND status IN ('succeeded', 'partial') GROUP BY tenant_id").fetchall()
+    runs = g.db.execute(
+        "SELECT MAX(id) AS id FROM runs WHERE collector = 'tenant_profile'"
+        " AND status IN ('succeeded', 'partial') GROUP BY tenant_id"
+    ).fetchall()
     parts = {s.get("skuPartNumber") for r in runs for s in store.run_objects(g.db, r["id"], "subscribed_sku")}
     parts = {p for p in parts if p and isinstance(p, str)}
     parts |= {r["sku_part_number"] for r in g.db.execute("SELECT sku_part_number FROM sku_prices")}
@@ -306,8 +354,11 @@ def prices():
         if currency not in CURRENCIES:
             abort(400)
         with transaction(g.db):
-            g.db.execute("INSERT INTO settings (key, value) VALUES ('currency', ?)"
-                         " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (currency,))
+            g.db.execute(
+                "INSERT INTO settings (key, value) VALUES ('currency', ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (currency,),
+            )
             for part, _ in _known_skus():
                 raw = request.form.get(f"price:{part}", "").strip()
                 if raw == "":
@@ -330,8 +381,13 @@ def prices():
         flash("Prices saved.", "success")
         return redirect(url_for("reports.prices"))
     current = {r["sku_part_number"]: r["monthly_price"] for r in g.db.execute("SELECT * FROM sku_prices")}
-    return render_template("prices.html", skus=_known_skus(), current=current,
-                           currency=setting(g.db, "currency", "GBP"), currencies=CURRENCIES)
+    return render_template(
+        "prices.html",
+        skus=_known_skus(),
+        current=current,
+        currency=setting(g.db, "currency", "GBP"),
+        currencies=CURRENCIES,
+    )
 
 
 # -- Findings ------------------------------------------------------------------
@@ -340,17 +396,27 @@ def prices():
 def _findings_page(t, resolved: bool):
     report = findings_report.build(g.db, t, resolved=resolved)
     view = views.View.parse(request.args)
-    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
-                         (g.user["id"], report.key)).fetchall()
+    saved = g.db.execute(
+        "SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
+        (g.user["id"], report.key),
+    ).fetchall()
     rows = g.db.execute("SELECT * FROM findings WHERE tenant_id = ?", (t["id"],)).fetchall()
     unresolved = [f for f in rows if not f["resolved_at"]]
     current = [f for f in unresolved if not findings_report.is_accepted(f, report.generated_at)]
     lapsed = {f["id"]: f for f in current if f["accepted_at"]}  # past their review date, back among the open ones
     counts = {"open": len(current), "resolved": len(rows) - len(unresolved)}
-    return render_template("findings.html", tenant=t, report=report, resolved=resolved, view_query=view.query(),
-                           tables=views.table_views(report, view, request.path), saved=saved, lapsed=lapsed,
-                           links=views.headline_links(report, request.path),
-                           counts=counts)
+    return render_template(
+        "findings.html",
+        tenant=t,
+        report=report,
+        resolved=resolved,
+        view_query=view.query(),
+        tables=views.table_views(report, view, request.path),
+        saved=saved,
+        lapsed=lapsed,
+        links=views.headline_links(report, request.path),
+        counts=counts,
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/findings")

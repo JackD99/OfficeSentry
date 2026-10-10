@@ -9,8 +9,8 @@ keys that decrypt its stored certificates and passwords in a second one
 ## What you need
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
-  installed. A small VM (2 CPUs, 2 GB RAM) is a reasonable start; disk use
-  grows with the number of tenants and users (see [How much disk](#how-much-disk)).
+  installed, with at least 2 CPUs and 4 GB of RAM. Disk use grows with the
+  number of tenants and users (see [How much disk](#how-much-disk)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
 
@@ -473,8 +473,8 @@ steps are known before they're needed.
 Before every upgrade that changes the database, the portal also saves a copy
 as `/data/backups/pre-upgrade-v<old>-to-v<new>-<time>-from-<release>.db`, where
 `<release>` is the Office Sentry version that copy goes with (the last 3 are
-kept). It's made before the upgrade starts, so the portal keeps working while
-a large database is copied. It isn't compressed, so the older version you'd
+kept). It's made before the upgrade starts, while the portal is down (see
+[Updating](#updating)). It isn't compressed, so the older version you'd
 go back to can always restore it. If it can't (a full disk, say), it doesn't
 upgrade and says why.
 
@@ -606,7 +606,9 @@ docker compose up -d
 
 The portal upgrades the database on start, before the worker starts, after
 saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
-version now running shows at the foot of the menu and at `/health`.
+portal is down from `up -d` until the copy and the upgrade finish: seconds
+for a small database, minutes for a large one, so update at a quiet time. The version now
+running shows at the foot of the menu and at `/health`.
 
 If the release notes change `docker-compose.yml` or `Caddyfile`, download
 the new ones as well; they are attached to every release.
@@ -695,7 +697,7 @@ removes it at the end.
 *Servers → Add server*:
 
 - **Image** Ubuntu 24.04. **Type** shared vCPU, x86, 2 vCPUs and 4 GB (the
-  smallest is fine to start). Check its disk against
+  minimum in [What you need](#what-you-need)). Check its disk against
   [How much disk](#how-much-disk); a bigger type can be chosen later.
 - **Networking** public IPv4 (and IPv6 if you like).
 - **SSH keys** none needed.
