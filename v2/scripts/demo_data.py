@@ -1392,13 +1392,15 @@ def main() -> None:
             db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
             print(f"Added {len(ids)} demo tenants to {cfg.db_path} for the public demo site")
             return
-        password = args.password or secrets.token_urlsafe(12)
+        generated = secrets.token_urlsafe(12) if args.password is None else None
         db.execute(
             "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
-            (args.admin, generate_password_hash(password), utcnow()),
+            (args.admin, generate_password_hash(args.password or generated), utcnow()),
         )
         print(f"Added {len(ids)} demo tenants to {cfg.db_path}")
-        print(f"Sign in as {args.admin} / {password}")
+        # A password the operator chose isn't echoed back (it would land in shell and CI logs); a generated
+        # one has to be, since this is the only time anyone sees it.
+        print(f"Sign in as {args.admin} / {generated}" if generated else f"Sign in as {args.admin}")
         print(f"Start the portal: OFFICESENTRY_DATA_DIR={args.data_dir} python -m officesentry web")
 
 
