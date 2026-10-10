@@ -35,7 +35,7 @@ None. The sign-in and directory audit logs were already read; they're now read i
 
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
 have been read up to, migration 0031 adds `summary_cache` for the precomputed rows under Changed, and
-migration 0032 adds each person's home page to `users`. The portal saves a `pre-upgrade-*` copy first, as
+migration 0035 adds each person's home page to `users`. The portal saves a `pre-upgrade-*` copy first, as
 always. The precomputed rows fill in as the worker gets to each tenant; until then the pages build them as
 before.
 
@@ -60,6 +60,12 @@ before.
 - A tenant's Activity history page (Changes → Activity history, staff only): how far back each log is
   detailed from, the last 30 days, sign-ins per day, each month with a CSV of every sign-in, and admin
   changes worth a second look.
+- Questionnaires and evidence (a tenant's Reports → Questionnaires): answers for cyber insurance proposal
+  forms, supplier security questionnaires and Cyber Essentials (IASME's Danzell set, by question number), in
+  each form's wording and ready to copy and paste, with the Microsoft 365 data and date behind each one.
+  Questions Microsoft 365 can't answer (backups, firewalls, plans) show a text to complete, with the
+  missing parts in brackets; an answer written once fills every form that asks it. Downloads: a PDF answer
+  sheet, XLSX, CSV and plain text per form.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
 
