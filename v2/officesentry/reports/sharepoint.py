@@ -14,6 +14,7 @@ from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart
 from .data_reports import DataReport, Link, Rows, Section, Tile, _date
+from .registry import report
 
 INACTIVE_DAYS = 90
 GROWTH_DAYS = 30
@@ -154,6 +155,15 @@ def _as_of(status: dict) -> str:
 # -- SharePoint sites ---------------------------------------------------------------
 
 
+@report(
+    "sharepoint",
+    "SharePoint sites",
+    "Storage and growth, inactive sites, and which sites are shared outside.",
+    ("sharepoint_usage",),
+    group="files",
+    order=10,
+    keywords="sites storage sharing anyone links",
+)
 def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = _usage(snap, report)
     if status is None:
@@ -228,6 +238,15 @@ def _counts(row: dict, *keys: str) -> dict:
     return {**row, **{k: row.get(k) or 0 for k in keys}}
 
 
+@report(
+    "onedrive",
+    "OneDrive",
+    "Each person's OneDrive: storage, activity, sharing, and OneDrives of people who've left.",
+    ("sharepoint_usage", "users", "shared_files"),
+    group="files",
+    order=30,
+    keywords="personal storage leavers",
+)
 def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = _usage(snap, report)
     if status is None:
@@ -334,6 +353,16 @@ def _link_words(link: dict) -> str:
             "blocksDownload": "View, no download"}.get(link.get("type"), link.get("type") or "")
 
 
+@report(
+    "shared-files",
+    "Shared files",
+    "Every file and folder shared with anyone, people outside, or the whole "
+    "organisation.",
+    ("shared_files", "sharepoint_usage"),
+    group="files",
+    order=40,
+    keywords="anyone links external sharing links",
+)
 def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("shared_files", "scan_status") or [None])[0]
     if status is None:
@@ -403,13 +432,3 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                sorted({_link_words(x) for x in i["links"] if x.get("scope") == "organization"}),
                _date(i.get("lastModified"))])
     report.sections = [a, b, c]
-
-
-REPORTS = {
-    "sharepoint": ("SharePoint sites", "Storage and growth, inactive sites, and which sites are shared outside.",
-                   ("sharepoint_usage",), sites),
-    "onedrive": ("OneDrive", "Each person's OneDrive: storage, activity, sharing, and OneDrives of people who've left.",
-                 ("sharepoint_usage", "users", "shared_files"), onedrive),
-    "shared-files": ("Shared files", "Every file and folder shared with anyone, people outside, or the whole "
-                     "organisation.", ("shared_files", "sharepoint_usage"), shared_files),
-}

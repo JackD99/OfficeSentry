@@ -1,4 +1,4 @@
-"""Checks on how strong people's sign-in methods are. Imported at the bottom of ``rules.py``.
+"""Checks on how strong people's sign-in methods are.
 
 Whether people have MFA at all is ``users_mfa_registered`` and ``admin_mfa``;
 these go one step further: admins on phishing-resistant methods, and nobody
@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .authmethods import PHONE, strength
-from .rules import Finding, _label, _unavailable, rule
-from .snapshot import TenantSnapshot
-from .text import every, plural, verb
+from ..authmethods import PHONE, strength
+from ..snapshot import TenantSnapshot
+from ..text import every, plural, verb
+from .base import Finding, _label, _unavailable, rule
 
 
 def _registration(snap: TenantSnapshot) -> tuple[dict[str, dict] | None, str]:
