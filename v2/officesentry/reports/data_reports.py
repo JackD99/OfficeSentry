@@ -1408,7 +1408,39 @@ def build(
         report.unavailable = f"This report couldn't be built: {type(exc).__name__}"
     if as_of is None:  # comparisons of older data don't need links
         link_people(report.sections, report.tenant["id"], people_index(snap))
+    elif snap.as_of:
+        _no_longer_held(conn, snap, collectors, report)
     return report
+
+
+def _no_longer_held(conn, snap: TenantSnapshot, collectors, report: DataReport) -> None:
+    """On a past day, say which data was collected by then but isn't held any more (sign-in detail, which
+    retention keeps for less time than the daily history), rather than that it was never collected."""
+    from .. import retention, state_history  # here: the history imports the worker's schedule
+
+    def held(collector: str) -> bool:
+        run = snap.runs.get(collector)
+        if run is None:  # collected by then, or not?
+            return not conn.execute(
+                "SELECT 1 FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
+                " AND finished_at <= ? LIMIT 1",
+                (report.tenant["id"], collector, snap.as_of),
+            ).fetchone()
+        return collector not in retention.SIGNIN_COLLECTORS or bool(
+            conn.execute(f"SELECT 1 FROM runs WHERE id = ? AND {state_history.HOLDS_OBJECTS}", (run["id"],)).fetchone()
+        )
+
+    gone = [REGISTRY[c].title for c in collectors if not held(c)]
+    if not gone:
+        return
+    note = (
+        f"{' and '.join(gone)} from that day {verb(len(gone), 'is', 'are')} no longer held: the retention "
+        f"policy keeps {'it' if len(gone) == 1 else 'them'} for less time than the daily history."
+    )
+    if report.unavailable or not report.sections:
+        report.unavailable = note
+    else:
+        report.notice = f"{report.notice} {note}".strip()
 
 
 def section_table(section: Section) -> Table:

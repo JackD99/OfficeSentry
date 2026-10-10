@@ -72,6 +72,8 @@ VOLATILE: dict[str, tuple[str, ...]] = {
 
 # A run still holds its snapshot: it stored nothing, or retention hasn't removed what it stored.
 HOLDS_OBJECTS = "(runs.object_count = 0 OR EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id))"
+# A run whose data can be read: from its snapshot, or rebuilt from the history.
+READABLE = f"({HOLDS_OBJECTS} OR EXISTS (SELECT 1 FROM state_runs s WHERE s.run_id = runs.id))"
 
 
 def _skipped() -> frozenset[str]:
@@ -317,6 +319,27 @@ def run_objects(conn, run_id: int, kind: str | None = None, limit: int | None = 
         if limit and len(out) >= limit:
             return out[:limit]
     return out
+
+
+def objects_of(conn, run_id: int, kind: str | None = None) -> list[dict]:
+    """A run's objects: from its snapshot while it has one, as every page reads them, else rebuilt from the
+    history. How a past date is read (``TenantSnapshot(as_of=...)``, change feeds)."""
+    if conn.execute(f"SELECT 1 FROM runs WHERE id = ? AND {HOLDS_OBJECTS}", (run_id,)).fetchone():
+        return _stored_objects(conn, run_id, kind)
+    return run_objects(conn, run_id, kind)
+
+
+def earliest(conn, tenant_id: int) -> str | None:
+    """When the oldest data that can still be read for a tenant was collected (None: nothing yet)."""
+    found = [
+        conn.execute("SELECT MIN(finished_at) FROM state_runs WHERE tenant_id = ?", (tenant_id,)).fetchone()[0],
+        conn.execute(
+            "SELECT MIN(finished_at) FROM runs WHERE tenant_id = ? AND status IN ('succeeded', 'partial')"
+            f" AND {HOLDS_OBJECTS}",
+            (tenant_id,),
+        ).fetchone()[0],
+    ]
+    return min((f for f in found if f), default=None)
 
 
 def find_object(conn, run_id: int, kind: str, object_id: str):

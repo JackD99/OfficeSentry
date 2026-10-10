@@ -16,6 +16,7 @@ from tests import graphdata as gd
 from tests import groupdata as grp
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
+from tests.stored import unpack
 from tests.test_collectors import USERS
 
 V1, BETA = f"{GRAPH_ROOT}/v1.0", f"{GRAPH_ROOT}/beta"
@@ -54,7 +55,7 @@ def test_app_sign_ins_keeps_each_apps_latest_sign_in_by_kind(db, two_tenants):
     assert set(apps) == {"app-zoom", "app-evil", "00000003-0000-0000-c000-000000000000"}
     assert apps["app-zoom"]["delegatedClient"] and apps["app-zoom"]["appClient"] is None
     assert apps["app-evil"]["appClient"] == apps["app-evil"]["last"]
-    status = store.run_objects(db, run_id, "sign_in_status")[0]
+    status = store.run_objects(db, run_id, "app_sign_in_status")[0]
     assert status["available"] is True and status["apps"] == 3
     assert all(c.request.method == "GET" for c in responses.calls)
 
@@ -74,7 +75,7 @@ def test_app_sign_ins_without_the_licence_or_permission_say_why(db, two_tenants)
     )
     run_id, status = _run(db, alpha, "app_sign_ins")
     assert status == "partial"
-    assert store.run_objects(db, run_id, "sign_in_status")[0]["reason"] == "licence"
+    assert store.run_objects(db, run_id, "app_sign_in_status")[0]["reason"] == "licence"
     report = build(db, store.get_tenant(db, alpha), "unused-apps")
     assert "Entra ID P1" in report.unavailable
 
@@ -90,7 +91,7 @@ def test_app_sign_ins_without_the_licence_or_permission_say_why(db, two_tenants)
         },
     )
     run_id, status = _run(db, bravo, "app_sign_ins")
-    assert store.run_objects(db, run_id, "sign_in_status")[0]["reason"] == "permission"
+    assert store.run_objects(db, run_id, "app_sign_in_status")[0]["reason"] == "permission"
     assert "AuditLog.Read.All" in build(db, store.get_tenant(db, bravo), "unused-apps").unavailable
 
 
@@ -151,6 +152,15 @@ def test_unused_apps_flags_apps_unused_for_90_days_that_still_hold_permissions(d
     assert tiles["Unused for 90+ days"].value == 2 and tiles["Unused for 90+ days"].tone == "warn"
     assert tiles["Unused but still has access"].value == 1 and tiles["Unused but still has access"].tone == "bad"
     assert tiles["No sign-in on record"].value == 1 and tiles["Used in the last 30 days"].value == 1
+
+
+def test_unused_apps_reads_a_collection_from_before_the_status_kind(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    unpack(db)
+    db.execute("UPDATE objects SET kind = 'sign_in_status' WHERE kind = 'app_sign_in_status'")
+    report = build(db, store.get_tenant(db, alpha), "unused-apps", datetime.now(UTC))
+    assert report.unavailable is None and "Mail Sync Pro" in _rows(_sections(report)["Enterprise apps"])
 
 
 def test_all_users_lists_every_account_with_manager_and_flags_blocked_managers(db, two_tenants):
