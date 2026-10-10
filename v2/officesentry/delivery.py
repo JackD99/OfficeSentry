@@ -37,6 +37,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 from . import alerts, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
+from .checks import RULES
 from .db import utcnow
 from .mailer import Email, MailError
 from .reports import (
@@ -51,7 +52,6 @@ from .reports import (
     views,
     workbook,
 )
-from .rules import RULES
 from .text import day, plural
 
 log = logging.getLogger(__name__)

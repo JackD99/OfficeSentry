@@ -34,10 +34,10 @@ from urllib.parse import urlsplit
 import requests
 
 from . import issued, outbound
+from .checks import RULES, SEVERITIES, SEVERITY_RANK
 from .collectors import REGISTRY
 from .crypto import Vault
 from .db import audit
-from .rules import RULES, SEVERITIES, SEVERITY_RANK
 from .store import log_event
 from .text import plural
 

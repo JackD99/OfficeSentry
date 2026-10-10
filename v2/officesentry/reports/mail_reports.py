@@ -13,6 +13,7 @@ from ..licences import last_sign_in
 from ..mailflow import inbox_rule_risk, is_external, tenant_domains
 from ..snapshot import TenantSnapshot
 from .data_reports import DataReport, Highlight, Rows, Section, _describe_actions, _describe_conditions, _type
+from .registry import report
 
 NOT_COLLECTED = "Mailbox data hasn't been collected yet. Refresh Mailboxes on the tenant page."
 RESOURCE_TYPES = {"SharedMailbox": "Shared", "RoomMailbox": "Room", "EquipmentMailbox": "Equipment"}
@@ -47,6 +48,15 @@ def _plural(n: int, word: str) -> str:
 # -- Inbox rules -------------------------------------------------------------------
 
 
+@report(
+    "inbox-rules",
+    "Inbox rules",
+    "Rules that forward, delete or hide mail, and every rule in every mailbox.",
+    ("inbox_rules", "mailboxes"),
+    group="email",
+    order=20,
+    keywords="forward delete move rules mailbox compromise",
+)
 def inbox_rules(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     rules = snap.objects("inbox_rules", "inbox_rule")
     if rules is None:
@@ -167,6 +177,15 @@ def _account(user: dict | None, label: str, domains: set[str]) -> tuple[str, str
     return "Active", None
 
 
+@report(
+    "mailbox-permissions",
+    "Mailbox permissions",
+    "Who can open, send as or send on behalf of each mailbox, by person and by mailbox.",
+    ("mailboxes", "users"),
+    group="email",
+    order=30,
+    keywords="full access send as delegates",
+)
 def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     boxes = snap.objects("mailboxes", "mailbox")
     if boxes is None:
@@ -223,6 +242,16 @@ def mailbox_permissions(snap: TenantSnapshot, now: datetime, report: DataReport)
 # -- Shared and resource mailboxes --------------------------------------------------------
 
 
+@report(
+    "shared-mailboxes",
+    "Shared mailboxes",
+    "Shared, room and equipment mailboxes that can be signed in to, "
+    "and who uses them.",
+    ("mailboxes", "users", "mailbox_usage"),
+    group="email",
+    order=40,
+    keywords="rooms equipment sign-in",
+)
 def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     boxes = snap.objects("mailboxes", "mailbox")
     if boxes is None:
@@ -276,6 +305,15 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
 # -- Mailbox size and quota ----------------------------------------------------------------
 
 
+@report(
+    "mailbox-size",
+    "Mailbox size",
+    "Every mailbox's size against its quota, largest share of quota first.",
+    ("mailbox_usage",),
+    group="email",
+    order=50,
+    keywords="quota storage full large",
+)
 def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     sizes = snap.objects("mailbox_usage", "mailbox_size")
     if sizes is None:
@@ -325,6 +363,16 @@ def _percent(value: float | None) -> str:
 # -- Legacy sign-ins and SMTP AUTH ----------------------------------------------------------------
 
 
+@report(
+    "legacy-auth",
+    "Legacy sign-ins",
+    "Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, "
+    "and which mailboxes still allow them.",
+    ("legacy_signins", "mailboxes"),
+    group="identity",
+    order=100,
+    keywords="basic auth smtp imap pop old protocols",
+)
 def legacy_auth(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("legacy_signins", "legacy_signin_status") or [None])[0]
     signins = snap.objects("legacy_signins", "legacy_signin")
@@ -396,17 +444,3 @@ def legacy_auth(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
 
 
 LEGACY_ROWS = Rows("Legacy sign-ins in the last 30 days")
-
-REPORTS = {
-    "inbox-rules": ("Inbox rules", "Rules that forward, delete or hide mail, and every rule in every mailbox.",
-                    ("inbox_rules", "mailboxes"), inbox_rules),
-    "mailbox-permissions": ("Mailbox permissions",
-                            "Who can open, send as or send on behalf of each mailbox, by person and by mailbox.",
-                            ("mailboxes", "users"), mailbox_permissions),
-    "shared-mailboxes": ("Shared mailboxes", "Shared, room and equipment mailboxes that can be signed in to, "
-                         "and who uses them.", ("mailboxes", "users", "mailbox_usage"), shared_mailboxes),
-    "mailbox-size": ("Mailbox size", "Every mailbox's size against its quota, largest share of quota first.",
-                     ("mailbox_usage",), mailbox_size),
-    "legacy-auth": ("Legacy sign-ins", "Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, "
-                    "and which mailboxes still allow them.", ("legacy_signins", "mailboxes"), legacy_auth),
-}

@@ -36,7 +36,7 @@ None. The sign-in and directory audit logs were already read; they're now read i
 Yes: migration 0030 adds two small tables (`event_tenants`, `event_cursors`) for where each tenant's logs
 have been read up to, and migration 0031 adds `summary_cache` for the precomputed rows under Changed. The
 portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows fill in as the worker gets to each
-tenant; until then the pages build them as before. Migration 0032 adds `email_schedule_views`, the saved
+tenant; until then the pages build them as before. Migration 0033 adds `email_schedule_views`, the saved
 views a scheduled email sends.
 
 ### Added
