@@ -184,6 +184,16 @@ copied collection reads back exactly as its snapshot.
 - The page a client approves access from (*What Office Sentry reads*) and the consent pack now say what is
   kept from the sign-in and audit logs, and for how long, list every Exchange command, and mention the
   MTA-STS policy file fetched over HTTPS.
+- Tenants on Office 365 G3 (GCC), A3 education or F3 frontline plans are no longer treated as having no
+  Exchange or SharePoint, which left their mailbox, inbox rule and SharePoint reports empty.
+- Windows Server is no longer reported as Windows 10 past end of support (or Server 2025 as Windows 11),
+  on the Devices report or in the supported Windows check.
+- An evidence pack control whose only check fails for the whole organisation (mailbox auditing turned off)
+  reads "Not in place", as the questionnaire answer does, instead of "Partly in place".
+- Re-issuing a month sends only the files of the new approval: a report since dropped from the plan, or a
+  file named after the tenant's old name, is no longer attached again.
+- What changed no longer lists every inactive account, deleted item and renewal as changed because its day
+  count moved with the calendar.
 
 ### Security
 

@@ -71,7 +71,25 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": no_intune})
     responses.get(f"{V1}/directory/subscriptions", json={"value": []})
-    responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES})
+    # Hybrid-joined servers: Windows Server 2022 and 2025, and a 2022 whose record just says "Windows".
+    servers = [
+        {
+            **dd.ENTRA_DEVICES[3],
+            "id": f"srv{n}",
+            "deviceId": f"d-srv{n}",
+            "displayName": f"SRV-{n}",
+            "operatingSystem": os_name,
+            "operatingSystemVersion": version,
+        }
+        for n, (os_name, version) in enumerate(
+            (
+                ("Windows Server", "10.0.20348.2700"),
+                ("Windows Server 2025", "10.0.26100.1"),
+                ("Windows", "10.0.20348.2700"),
+            )
+        )
+    ]
+    responses.get(f"{V1}/devices", json={"value": dd.ENTRA_DEVICES + servers})
     assert _run(db, alpha, "tenant_profile", factory)[1] == "succeeded"
     assert _run(db, alpha, "devices", factory)[1] == "succeeded"
     assert not any("managedDevices" in c.request.url for c in responses.calls)
@@ -80,7 +98,11 @@ def test_tenant_without_intune_collects_entra_only(db, two_tenants, factory):
     assert "Intune" in r["device_compliance"].summary
     # Without Intune, Windows support comes from devices active in Entra (OLD-PC is stale, so skipped).
     assert r["supported_windows"].status == "fail"
-    assert [f.subject for f in r["supported_windows"].findings] == ["LAPTOP-BOB"]
+    assert [f.subject for f in r["supported_windows"].findings] == ["LAPTOP-BOB"]  # no server is "Windows 10"
+    report = data_reports.build(db, store.get_tenant(db, alpha), "devices")
+    systems = {row[0]: row[1] for row in report.sections[0].rows}
+    assert systems["Windows Server"] == 1 and systems["Windows Server 2025"] == 1
+    assert "Windows 10" in systems and systems["Windows 10"] == 1  # LAPTOP-BOB only
 
 
 @responses.activate
