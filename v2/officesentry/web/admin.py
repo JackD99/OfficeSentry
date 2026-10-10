@@ -66,7 +66,7 @@ def create_user():
     username = request.form.get("username", "").strip()
     role = request.form.get("role", "")
     password = request.form.get("password", "")
-    problem = password_problem(password)
+    problem = password_problem(password, username=username)
     if not username or len(username) > 64:
         problem = "Enter a username (up to 64 characters)."
     elif role not in ROLES:
@@ -129,7 +129,7 @@ def edit_user(user_id: int):
                 f"tenants={sorted(grants)}" + (f" groups={sorted(group_grants)}" if group_grants else ""),
             )
         if request.form.get("password"):
-            if problem := password_problem(request.form["password"]):
+            if problem := password_problem(request.form["password"], username=user["username"]):
                 flash(problem, "error")
             else:
                 g.db.execute(

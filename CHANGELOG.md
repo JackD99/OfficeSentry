@@ -50,6 +50,14 @@ No.
 - A nightly backup whose activity history copy failed says the database was copied and what failed, rather
   than "No backup made", and still removes old copies.
 
+### Security
+
+- Passwords on lists of commonly used passwords (`password1234`, `qwerty123456` and 20,000 more of 12
+  characters or longer), or containing the person's username or "officesentry", are refused wherever a
+  password is chosen: first-run setup, the account page, the forced change after an admin's reset, and the
+  admin's user forms. Existing passwords aren't checked until they're changed.
+
+
 ## 2.1.0 (2026-10-10)
 
 The first release from the public repository. The headlines: home pages for technicians and account

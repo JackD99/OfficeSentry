@@ -8,6 +8,7 @@ import time
 
 import pytest
 from flask import Flask
+from werkzeug.security import check_password_hash
 
 from officesentry import totp
 from officesentry.__main__ import main as cli
@@ -382,3 +383,75 @@ def test_rotate_keys_new_replaces_both_keys(cfg, db, vault, connection_id, monke
     assert new.decrypt(db.execute("SELECT value FROM settings WHERE key = 'smtp_password_enc'").fetchone()[0]) == "smtp"
     assert new.decrypt(db.execute("SELECT value FROM settings WHERE key = 'graph_secret_enc'").fetchone()[0]) == "graph"
     assert "PRIVATE KEY" in new.decrypt(db.execute("SELECT key_enc FROM app_connections").fetchone()[0])
+
+
+# -- Passwords people may not choose ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("password", "username", "words"),
+    [
+        ("password1234", "ann", "commonly used"),  # on the list
+        ("Qwerty123456", "ann", "commonly used"),  # the list is checked lower-cased
+        ("123456789012", "ann", "commonly used"),
+        ("ann.patel-2026!", "ann.patel@harbour.example", "username"),  # the part before the @
+        ("MyOfficeSentry1", "ann", "product"),
+        ("short", "ann", "at least 12"),
+        ("correct horse battery", "ann", None),
+        ("Ann is not long", "ann", None),  # a username under four characters isn't a reason
+    ],
+)
+def test_common_and_personal_passwords_are_refused(password, username, words):
+    from officesentry.web.auth import password_problem
+
+    problem = password_problem(password, username=username)
+    assert (words in problem) if words else problem is None, problem
+
+
+def test_the_common_password_list_is_large_and_all_long_enough():
+    from officesentry import passwords
+
+    common = passwords.common_passwords()
+    assert len(common) >= 20_000 and all(len(p) >= passwords.MIN_LENGTH for p in common)
+    assert "password1234" in common and "passwordpassword" in common
+
+
+def test_every_password_form_refuses_a_common_password(client, db, cfg):
+    """Setup, the account page, an admin's user forms and the forced change after a reset."""
+
+    client.get(f"/setup?token={setup_token(cfg.data_dir)}")  # the token moves into the session
+    resp = client.post(
+        "/setup",
+        data={"username": "first", "password": "password1234", "confirm": "password1234"},
+        follow_redirects=True,
+    )
+    assert b"commonly used" in resp.data and db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    admin = make_user(db, "admin")
+    login(client, "admin")
+    resp = client.post(
+        "/account/password",
+        data={"current": PASSWORD, "password": "admin-password1", "confirm": "admin-password1"},
+        follow_redirects=True,
+    )
+    assert b"username" in resp.data
+    assert check_password_hash(
+        db.execute("SELECT password_hash FROM users WHERE id = ?", (admin,)).fetchone()[0], PASSWORD
+    )
+    resp = client.post(
+        "/admin/users", data={"username": "bob", "role": "analyst", "password": "qwertyqwerty"}, follow_redirects=True
+    )
+    assert b"commonly used" in resp.data and db.execute("SELECT 1 FROM users WHERE username = 'bob'").fetchone() is None
+    bob = make_user(db, "robert", role="analyst")
+    resp = client.post(
+        f"/admin/users/{bob}", data={"role": "analyst", "password": "robert-the-builder"}, follow_redirects=True
+    )
+    assert b"username" in resp.data
+    # The forced change after an admin's reset: the person can't pick a common one either.
+    db.execute("UPDATE users SET must_change_password = 1 WHERE id = ?", (bob,))
+    other = client.application.test_client()
+    assert login(other, "robert").headers["Location"].endswith("/login/new-password")
+    resp = other.post(
+        "/login/new-password", data={"password": "qwerty123456", "confirm": "qwerty123456"}, follow_redirects=True
+    )
+    assert b"commonly used" in resp.data
+    assert db.execute("SELECT must_change_password FROM users WHERE id = ?", (bob,)).fetchone()[0] == 1

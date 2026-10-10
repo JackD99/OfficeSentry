@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from flask import Blueprint, current_app, flash, g, make_response, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .. import home, throttle, totp
+from .. import home, passwords, throttle, totp
 from ..config import clear_setup_token, setup_token
 from ..db import audit, audit_counted, transaction, utcnow
 from ..text import plural
@@ -38,12 +38,14 @@ _DUMMY_HASH = generate_password_hash("not-a-real-password")
 _SIGN_IN_FAILED = "Invalid username or password, or the account is temporarily locked."
 
 
-def password_problem(password: str, confirm: str | None = None) -> str | None:
+def password_problem(password: str, confirm: str | None = None, username: str | None = None) -> str | None:
+    """Why this password can't be used, or None: too short, a mismatch with ``confirm``, one of the commonly
+    used passwords, or one containing the person's ``username`` or the product's name (``passwords.py``)."""
     if len(password) < MIN_PASSWORD:
         return f"Password must be at least {MIN_PASSWORD} characters."
     if confirm is not None and password != confirm:
         return "Passwords don't match."
-    return None
+    return passwords.problem(password, username)
 
 
 def _cfg():
@@ -208,7 +210,7 @@ def new_password():
         return redirect(url_for("auth.login"))
     if request.method == "POST":
         password = request.form.get("password", "")
-        problem = password_problem(password, request.form.get("confirm", ""))
+        problem = password_problem(password, request.form.get("confirm", ""), user["username"])
         if not problem and check_password_hash(user["password_hash"], password):
             problem = "Choose a new password, not the one you were given."
         if problem:
@@ -475,7 +477,7 @@ def setup():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        problem = password_problem(password, request.form.get("confirm", ""))
+        problem = password_problem(password, request.form.get("confirm", ""), username)
         if not username or len(username) > 64:
             problem = "Enter a username (up to 64 characters)."
         if problem:
@@ -526,7 +528,9 @@ def change_password():
     # Wrong guesses count towards the lock, like any other password check on a signed-in session.
     if not _confirm_password("current", "Current password is wrong."):
         return redirect(url_for("auth.account"))
-    if problem := password_problem(request.form.get("password", ""), request.form.get("confirm", "")):
+    if problem := password_problem(
+        request.form.get("password", ""), request.form.get("confirm", ""), g.user["username"]
+    ):
         flash(problem, "error")
         return redirect(url_for("auth.account"))
     g.db.execute(
