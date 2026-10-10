@@ -43,6 +43,13 @@ migration 0033 adds `email_schedule_views`, the saved views a scheduled email se
 person's home page to `users`. The portal saves a `pre-upgrade-*` copy first, as always. The precomputed rows
 fill in as the worker gets to each tenant; until then the pages build them as before.
 
+Migration 0036 adds five empty tables for the daily history (`state_*`): the upgrade is instant and changes
+no existing rows. The worker then copies the snapshots retention kept into the history in the background, a
+few seconds a minute, oldest first, pausing while the disk is over 85% full. At 200 tenants that took about
+12 minutes of worker time and 0.07 GB. To see the room it needs first, run `python -m officesentry history
+--dry-run` (it writes nothing); `history` shows how far it has got, and `history --verify` checks that every
+copied collection reads back exactly as its snapshot.
+
 ### Added
 
 - Home pages by role, each opening with one sentence that says what needs attention. **Today**, for
@@ -121,6 +128,12 @@ fill in as the worker gets to each tenant; until then the pages build them as be
 - Empty, nested and dynamic groups report: groups with no members, groups inside other groups (and how many
   levels deep), and dynamic groups with their rules, flagging paused ones.
 - A "Directory clean-up" job on the Reports page that groups these with Inactive accounts and the recycle bin.
+
+- Daily history: each collected object is stored once per version, with the collections it was valid
+  between, instead of a full copy per collection. It's written alongside the snapshots (which every page
+  still reads) and checked against each one as it's written, so a tenant can be shown as it was on any day.
+  Kept for 25 months by default (Settings → Data retention, "Daily history"); about 2.5 MB a night at 200
+  tenants ([v2/DEPLOY.md, "How long data is kept"](v2/DEPLOY.md#how-long-data-is-kept)).
 
 ### Changed
 

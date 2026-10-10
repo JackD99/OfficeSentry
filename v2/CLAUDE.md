@@ -655,7 +655,44 @@ the worker (the `compact` command does it all and shrinks the file). So:
   `test_compressed_storage.py` checks every report, check, change feed and
   account page is identical from packed and unpacked rows.
 - `scripts/scale_data.py` builds N tenants with two years of history for
-  sizing and timing (`--plain --compact` measures before and after).
+  sizing and timing (`--plain --compact` measures before and after,
+  `--history` the daily history below).
+
+## Daily history (state history)
+
+`state_history.py` (schema in `migrations/0036`) stores each collected object
+once per version instead of a copy per run: `state_versions` rows (per
+`state_series`: tenant, collector, kind) say from which recorded run an
+object's content held and until which (`to_run`, NULL while current), and the
+content is a line in a `state_packs` pack of what changed in that run. Fields
+that change nearly every night (`VOLATILE`: last sign-ins, mailbox sizes,
+usage dates) stay out of the versions, in `state_volatile` rows of only what
+moved, with a full row every `KEYFRAME_ROWS`. Sign-in detail
+(`retention.SIGNIN_KINDS`) isn't recorded; reading falls back to the snapshot
+for it and for runs not recorded yet.
+
+It runs in **shadow mode**: collections still write `objects` and every page
+reads that. `worker._run_collector` records each successful run as it
+finishes (`record_finished`, never failing the run) once its data source's
+earlier runs are, and the `state_history` periodic job records the rest
+oldest first a few seconds a minute (`catch_up`, resumable from a watermark),
+which backfills the snapshots kept from before the upgrade. Both pause while
+the disk is over `system_health.DISK_WARN` full. Every recorded run is read
+back and compared with its snapshot (`verify_run`); a difference is logged and
+counted in `status()`. So:
+
+- A data source's runs are recorded in run ID order; `record_run` refuses an
+  older one. Rebuild a run with `state_history.run_objects`, `find_object`,
+  `object_copies` and `matching_objects`, which answer like `store`'s.
+- A new kind with a field that changes every night: add it to `VOLATILE`.
+- `test_state_history.py` swaps `store`'s readers for these and checks every
+  report, check, change feed, account page and cross-tenant page is identical.
+- Retention: `retention.state_months` (Daily history, 25 months by default)
+  via `state_history.prune`, which always keeps each data source's latest run
+  and rewrites the first kept run's fast-changing fields as a full row.
+- `python -m officesentry history` shows progress; `--dry-run` estimates the
+  room and time the backfill needs without writing, `--backfill` does it now
+  and `--verify` checks every run that still has its snapshot.
 
 ## Activity history
 
@@ -721,6 +758,7 @@ and `python -m officesentry <command>`:
 | `check-backup FILE [--record]` | check a backup opens and passes SQLite's integrity check, without restoring it (the restore drill) |
 | `restore FILE [--force]` | replace the database with a backup (refuses while the worker runs) |
 | `compact` | compress snapshots stored before compression now and shrink the database file |
+| `history [--dry-run\|--backfill\|--verify]` | the daily history: progress, an estimate of the backfill without writing, the backfill now, or a check that it reads back as the snapshots |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
 | `live-test [--record FILE]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture |
 
