@@ -26,7 +26,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from . import alerts, mailer, store
+from . import alerts, mailer, sso, store
 from .certs import GeneratedCert, generate_certificate
 from .db import audit, transaction, utcnow
 from .devices import parse_ts
@@ -65,7 +65,7 @@ def level(days: int | None) -> str | None:
 
 @dataclass
 class Expiry:
-    kind: str  # "connection" (an app connection's certificate) or "mail" (the mail app's)
+    kind: str  # "connection" (an app connection's certificate), "mail" (the mail app's) or "sign_in" (staff sign-in)
     id: int | None  # the app connection, for kind "connection"
     name: str
     thumbprint: str
@@ -96,7 +96,11 @@ class Expiry:
     @property
     def stops(self) -> str:
         """What stops when it expires."""
-        return "Email from Office Sentry" if self.kind == "mail" else "Collection from every client tenant"
+        if self.kind == "mail":
+            return "Email from Office Sentry"
+        if self.kind == "sign_in":
+            return "Signing in with Microsoft"
+        return "Collection from every client tenant"
 
     @property
     def consequence(self) -> str:
@@ -104,7 +108,9 @@ class Expiry:
 
     @property
     def headline(self) -> str:
-        what = "The mail app's certificate" if self.kind == "mail" else f"The {self.name} certificate"
+        what = {"mail": "The mail app's certificate", "sign_in": "The sign-in app's certificate"}.get(
+            self.kind, f"The {self.name} certificate"
+        )
         return f"{what} {self.when}."
 
 
@@ -142,6 +148,25 @@ def mail_expiry(settings: dict, now: datetime | None = None) -> Expiry | None:
     )
 
 
+def sign_in_expiry(settings: dict, now: datetime | None = None) -> Expiry | None:
+    """The staff sign-in app's certificate, when Microsoft sign-in is set up (``sso.py``)."""
+    if not sso.is_configured(settings):
+        return None
+    days = days_left(settings.get("sso_cert_not_after"), now)
+    if days is None:
+        return None
+    return Expiry(
+        "sign_in",
+        None,
+        settings.get("sso_app_name") or sso.DEFAULT_NAME,
+        settings.get("sso_thumbprint") or "",
+        settings["sso_cert_not_after"],
+        days,
+        level(days),
+        replacing=bool(settings.get("sso_next_thumbprint")),
+    )
+
+
 def expiring(conn, now: datetime | None = None) -> list[Expiry]:
     """Certificates in use that are within 60 days of expiry or past it, the soonest first.
 
@@ -149,6 +174,7 @@ def expiring(conn, now: datetime | None = None) -> list[Expiry]:
     """
     found = [connection_expiry(c, now) for c in store.list_connections(conn) if c["client_id"]]
     found.append(mail_expiry(mailer.mail_settings(conn), now))
+    found.append(sign_in_expiry(sso.settings(conn), now))
     return sorted((e for e in found if e and e.level), key=lambda e: e.days)
 
 
@@ -273,23 +299,32 @@ def _warned(conn, e: Expiry) -> str | None:
     if e.kind == "connection":
         row = conn.execute("SELECT expiry_warned FROM app_connections WHERE id = ?", (e.id,)).fetchone()
         return row["expiry_warned"] if row else None
-    stored = mailer.mail_settings(conn).get("graph_cert_warned") or ""
-    thumbprint, _, warned = stored.partition(":")
-    return warned if thumbprint == e.thumbprint else None  # a new mail certificate starts again
+    key = "sso_cert_warned" if e.kind == "sign_in" else "graph_cert_warned"
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    thumbprint, _, warned = (row["value"] if row else "").partition(":")
+    return warned if thumbprint == e.thumbprint else None  # a new certificate starts again
 
 
 def _mark_warned(conn, e: Expiry) -> None:
     if e.kind == "connection":
         conn.execute("UPDATE app_connections SET expiry_warned = ? WHERE id = ?", (e.level, e.id))
     else:
+        key = "sso_cert_warned" if e.kind == "sign_in" else "graph_cert_warned"
         conn.execute(
-            "INSERT INTO settings (key, value) VALUES ('graph_cert_warned', ?)"
-            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (f"{e.thumbprint}:{e.level}",),
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, f"{e.thumbprint}:{e.level}"),
         )
 
 
 def fix_steps(e: Expiry) -> str:
+    if e.kind == "sign_in":
+        return (
+            "Open Settings → Staff sign-in in Office Sentry and press Make a new certificate. Upload its .cer to "
+            "the sign-in app in Entra, then switch to it."
+            if not e.replacing
+            else "A replacement is ready. Open Settings → Staff sign-in, check its .cer is on the app in Entra and "
+            "switch to it."
+        )
     if e.kind == "mail":
         return (
             "Open Settings → Email delivery in Office Sentry, make a new certificate, upload its .cer to the "
@@ -304,6 +339,8 @@ def fix_steps(e: Expiry) -> str:
 
 
 def _href(base_url: str, e: Expiry) -> str:
+    if e.kind == "sign_in":
+        return base_url.rstrip("/") + "/admin/sign-in"
     return base_url.rstrip("/") + ("/admin/email" if e.kind == "mail" else f"/admin/connections#conn-{e.id}")
 
 

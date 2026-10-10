@@ -72,6 +72,8 @@ SECTIONS = [
             blurb="HTTPS, a Hetzner server from your phone, backups, updates and Windows."),
         Doc("v2/docs/onboarding-a-client.md", "onboarding",
             blurb="Consent, Global Reader, the first collection, connection health and offboarding."),
+        Doc("v2/docs/staff-sign-in.md", "staff-sign-in",
+            blurb="Let your team sign in with their Microsoft account, with roles assigned in Entra."),
         Doc("v2/docs/troubleshooting.md", "troubleshooting",
             blurb="The common setup and collection errors, and how to fix them."),
     ]),

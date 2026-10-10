@@ -246,7 +246,9 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
 - **Tenant isolation.** Deny by default: people see only the tenants they're granted, every tenant page goes
   through one access check, and anything else returns 404. Clients see only their own reports.
-- **The portal itself:** two-step sign-in for everyone on new installs, client accounts included; wrong passwords
+- **The portal itself:** staff can sign in with their own Microsoft account (Entra ID, under your Conditional
+  Access and MFA; roles assigned in Entra), or with two-step sign-in, which is required for everyone on new
+  installs, client accounts included; wrong passwords
   slow down the address they come from rather than locking the account, so nobody can lock a colleague out;
   server-side sessions, CSRF protection, a strict Content Security Policy with no external assets, and encrypted
   secrets with key rotation.
@@ -297,6 +299,7 @@ consent page, mailboxes failing without Global Reader and the worker not running
 
 - [Technical reference](v2/README.md): every report and check, Exchange data, sign-in security, setup and layout
 - [Running it on your own server](v2/DEPLOY.md)
+- [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md): let your team sign in with their Entra ID account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access

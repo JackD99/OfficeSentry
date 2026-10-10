@@ -10,6 +10,7 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .. import __version__, system_alerts, system_health, worker
+from .. import sso as staff_sign_in
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import connect, migrate
@@ -41,6 +42,9 @@ from . import (
     tenant_admin,
     tenants,
     upcoming,
+)
+from . import (
+    sso as sso_web,
 )
 
 csrf = CSRFProtect()
@@ -143,8 +147,11 @@ def create_app(cfg: Config | None = None) -> Flask:
         worker_down = admin and not worker.is_alive(g.db)
         # ...and when a certificate Office Sentry signs in with is within 60 days of expiring.
         # Not on the page that already says so in full.
-        here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
+        here = {"admin.connections": "connection", "email.settings": "mail", "sso.settings_page": "sign_in"}.get(
+            request.endpoint
+        )
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
+        sign_in = staff_sign_in.settings(g.db) if g.get("db") is not None else {}
         return {
             "current_user": user,
             "csp_nonce": g.get("csp_nonce", ""),
@@ -154,6 +161,9 @@ def create_app(cfg: Config | None = None) -> Flask:
             "group_scope": g.get("group_scope"),
             "public_demo": bool(g.get("public_demo")),
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
+            # Sign in with Microsoft (sso.py): the sign-in page's button, and whether staff may still use passwords.
+            "microsoft_sign_in": staff_sign_in.enabled(sign_in),
+            "staff_passwords_off": sign_in.get("sso_passwords") == "off",
         }
 
     @app.errorhandler(403)
@@ -212,4 +222,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(system.bp)
     app.register_blueprint(styleguide.bp)
     app.register_blueprint(designs.bp)
+    app.register_blueprint(sso_web.bp)
     return app

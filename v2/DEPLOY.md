@@ -154,6 +154,12 @@ portal or the worker stops.
 
 ## Sign-in protection
 
+**Staff can sign in with their Microsoft account** instead of a password and authenticator code: an admin
+sets it up under *Settings → Staff sign-in* in about two minutes, and
+[docs/staff-sign-in.md](docs/staff-sign-in.md) walks through it, including turning passwords off for staff
+and turning them back on from the server (`python -m officesentry staff-sign-in --passwords on`) if
+Microsoft sign-in ever breaks. The rest of this section is about password sign-ins.
+
 Wrong passwords never lock an account, so nobody can keep you out just by
 knowing your username. Instead, Office Sentry slows down **where** the
 wrong passwords come from (15-minute sliding window):

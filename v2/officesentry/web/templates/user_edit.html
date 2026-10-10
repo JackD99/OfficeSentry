@@ -8,9 +8,10 @@
 <form method="post" class="card narrow-lg">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset class="choices">
-    <legend>Role</legend>
+    <legend>Role{% if user.entra_oid %} <span class="faint small">(set in Entra)</span>{% endif %}</legend>
+    {% if user.entra_oid %}<p class="muted small m0">{{ user.username }} signs in with Microsoft, so the role comes from the app role assigned in Entra at each sign-in. Change it there.</p>{% endif %}
     {% for r in roles %}
-    <label class="choice"><input type="radio" name="role" value="{{ r }}" {% if r == user.role %}checked{% endif %}>
+    <label class="choice"><input type="radio" name="role" value="{{ r }}" {% if r == user.role %}checked{% endif %}{% if user.entra_oid %} disabled{% endif %}>
       <span><span class="strong">{{ r|capitalize }}</span><span class="hint">{{ ROLE_HELP.get(r, '') }}</span></span></label>
     {% endfor %}
   </fieldset>
@@ -30,14 +31,15 @@
     </div>
   </fieldset>
   {% endif %}
-  <label>New password <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
-    <span class="hint">Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.</span></label>
+  <label>{{ 'Password' if user.password_hash == '!' else 'New password' }} <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
+    <span class="hint">{% if user.password_hash == '!' %}This account signs in with Microsoft and has no password. Set one only as a fallback; they choose their own at their first password sign-in.{% else %}Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.{% endif %}</span></label>
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
   <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>
 <section class="card narrow-lg">
   <h2>Sign-in security</h2>
   <dl class="kv">
+    {% if user.entra_oid %}<dt>Microsoft account</dt><dd><span class="pill ok">Connected</span> <span class="mono small">{{ user.entra_upn }}</span></dd>{% endif %}
     <dt>Two-step sign-in</dt>
     <dd>{% if user.totp_enabled_at %}<span class="pill ok">On</span>{% elif two_step_required %}<span class="pill warn">Not set up</span> <span class="muted small">They'll be asked to set it up at their next sign-in.</span>{% else %}<span class="pill">Off</span>{% endif %}</dd>
     <dt>Signed in on</dt>
@@ -50,6 +52,8 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Unlock now</button></form>{% endif %}
     {% if sessions %}<form method="post" action="{{ url_for('admin.sign_out_user', user_id=user.id) }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Sign out everywhere{{ ' else' if user.id == current_user.id else '' }}</button></form>{% endif %}
+    {% if user.entra_oid %}<form method="post" action="{{ url_for('sso.admin_disconnect', user_id=user.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Disconnect {{ user.username }} from Microsoft? They'll sign in with a password.">Disconnect Microsoft account</button></form>{% endif %}
     {% if user.totp_enabled_at %}<form method="post" action="{{ url_for('admin.reset_two_step', user_id=user.id) }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Reset two-step sign-in for {{ user.username }}? They'll be signed out and set it up again with their new phone.">Reset two-step sign-in</button></form>{% endif %}
   </div>

@@ -11,7 +11,7 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from . import alerts, mailer, store
+from . import alerts, mailer, sso, store
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -63,6 +63,22 @@ def cmd_create_admin(args, cfg):
     print(f"Created admin {args.username}")
 
 
+def cmd_staff_sign_in(args, cfg):
+    """The break-glass switches for Microsoft sign-in, from the server (no sign-in needed)."""
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    with transaction(conn):
+        if args.passwords:
+            sso.save(conn, {"sso_passwords": args.passwords})
+            audit(conn, "cli", "staff_sign_in_changed", detail=f"passwords={args.passwords}")
+        if args.off:
+            sso.save(conn, {"sso_enabled": "", "sso_passwords": "on"})
+            audit(conn, "cli", "staff_sign_in_changed", detail="microsoft=off passwords=on")
+    s = sso.settings(conn)
+    state = "on" if sso.enabled(s) else ("set up but off" if sso.is_configured(s) else "not set up")
+    print(f"Microsoft sign-in: {state}. Passwords for staff: {s.get('sso_passwords') or 'on'}.")
+
+
 def cmd_setup_link(args, cfg):
     """Print the one-time link for creating the first admin in the browser."""
     conn = connect(cfg.db_path)
@@ -104,7 +120,7 @@ ENCRYPTED_COLUMNS = (
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.
-ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS)
+ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *sso.ENCRYPTED_KEYS)
 
 
 def unregistered_encrypted(conn) -> list[str]:
@@ -542,6 +558,13 @@ def main(argv=None):
 
     link = sub.add_parser("setup-link", help="print the one-time link for creating the first admin")
     link.set_defaults(func=cmd_setup_link)
+
+    staff = sub.add_parser(
+        "staff-sign-in", help="show, or switch from the server, how staff sign in (Microsoft or passwords)"
+    )
+    staff.add_argument("--passwords", choices=("on", "off"), help="let staff sign in with passwords again (on), or not")
+    staff.add_argument("--off", action="store_true", help="turn Microsoft sign-in off (passwords come back on)")
+    staff.set_defaults(func=cmd_staff_sign_in)
 
     health = sub.add_parser("healthcheck", help="exit 0 if the web portal or worker is healthy (for Docker)")
     health.add_argument("service", choices=["web", "worker"])

@@ -10,15 +10,26 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 
 ### Action required
 
-None.
+None. Microsoft sign-in is off until an admin sets it up.
 
 ### New Microsoft permissions
 
-None.
+None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
+permissions.
 
 ### Database upgrade
 
-No.
+Yes (migration 37: Microsoft account links on users, how each session was started).
+
+### Added
+
+- **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
+  roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
+  work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
+  sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
+  turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
+  server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
 
 ### Fixed
 

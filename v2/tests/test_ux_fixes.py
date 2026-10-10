@@ -27,6 +27,7 @@ SETTINGS = (
     "/admin/branding",
     "/admin/retention",
     "/admin/users",
+    "/admin/sign-in",
     "/admin/activity",
     "/admin/status",
 )
