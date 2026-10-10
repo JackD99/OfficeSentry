@@ -2,7 +2,9 @@
 
 * Every view needs ``@login_required`` or ``@roles_required(...)``; there is
   no anonymous access except login, first-run setup, /health and the MSP's
-  brand colours and logo (``/brand.css``, ``/brand/logo``) for the sign-in page.
+  brand colours and logo (``/brand.css``, ``/brand/logo``) for the sign-in page,
+  and the thank-you page a client's administrator reaches through a signed
+  consent link (``/consent/callback``, see ``onboarding.client_returned``).
   On the public demo site (``public_demo.py``) every visitor is the read-only
   demo user, which is never an admin.
 * Any view that touches a tenant must load it through ``tenant_or_404()``,

@@ -384,8 +384,8 @@ never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
-`send_schedule` (`delivery.py`) and `precompute` (`reports/precomputed.py`,
-below other work). Queue with `tasks.enqueue(conn, kind,
+`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`) and
+`precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
 Claimed runs and tasks carry a lease (`store.LEASE`) that the heartbeat
@@ -551,6 +551,22 @@ change is audited; note text is never put in the audit log.
   connection still waiting for its client ID in that cloud.
 - Tenant admin routes are in `web/tenant_admin.py`: viewing health is admin
   and analyst, every change is admin-only and audited.
+- Onboarding many clients (`onboarding.py`, admin pages `/admin/onboarding*`
+  in `web/onboarding.py`, table `onboarding` from `migrations/0034`): CSV
+  import (`parse` previews, `create` adds in one transaction, groups created
+  as needed), each tenant's state (`onboarding.state`, from stored data only),
+  the client link, email text and consent pack PDF. A **client link**
+  (`web/onboarding.client_link`, state signed with salt `client-consent`,
+  naming the tenant's id and `created_at`) differs from an admin's own consent
+  link: it never expires and comes back to `/consent/callback` without a
+  sign-in. That route is the one exception to "every route needs a
+  decorator": it hands a client state to the public `client_returned` page and
+  everything else to `_consent_return` (`@roles_required("admin")`). The
+  public page never records consent and never shows Microsoft's text; it
+  notes `approved_at` and queues a `consent_check` task. Only
+  `onboarding.confirm` (signing in as the app, `connection_check.check`)
+  sets `consented_at` for a client link; the `consent_checks` periodic job
+  re-checks tenants still waiting (`onboarding.due`). No Partner Center calls.
 
 ## Report designs
 

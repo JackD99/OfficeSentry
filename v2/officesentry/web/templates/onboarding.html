@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf, downloads %}
+{% block title %}Onboarding · Office Sentry{% endblock %}
+{% block content %}
+{% set waiting = counts.sent + counts.approved %}
+<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client tenants</a><span>/</span><span>Onboarding</span></div>
+<div class="page-head">
+  <div>
+    <h1>Onboarding</h1>
+    <div class="sub">{% if total %}{{ counts.connected }} of {{ total|plural('tenant') }} fully connected.
+      {% if waiting %}{{ waiting }} waiting on {{ 'its client' if waiting == 1 else 'their clients' }}.{% endif %}
+      {% if counts.not_sent %}{{ counts.not_sent }} not sent yet.{% endif %}
+      {% else %}Add your clients from a spreadsheet, send each one their consent link, and watch them connect.{% endif %}</div>
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('onboarding.import_tenants') }}">{{ icon('plus') }} Import from CSV</a>
+    <a class="btn" href="{{ url_for('tenants.new_tenant') }}">Add one tenant</a>
+  </div>
+</div>
+
+{% if total %}
+<div class="tiles">
+  {% for key, label, foot, tone in [('not_sent', 'Not sent', 'consent link not sent yet', ''),
+                                    ('waiting', 'Waiting on client', 'sent, or approved and being confirmed', ''),
+                                    ('global_reader', 'Global Reader missing', 'consented, mailbox reports not yet', 'warn'),
+                                    ('connected', 'Connected', 'consent and Global Reader in place', 'ok')] %}
+  {% set n = waiting if key == 'waiting' else counts[key] %}
+  <a class="tile link{{ ' tone-' ~ tone if tone and n }}" href="{{ url_for('onboarding.index', show='all', state='client' if key == 'waiting' else key) }}">
+    <div class="label">{{ label }}</div><div class="value">{{ n }}</div><div class="foot">{{ foot }}</div></a>
+  {% endfor %}
+</div>
+
+<div class="toolbar-row">
+  <nav class="seg" aria-label="Show">
+    {% for key, name in filters.items() %}<a href="{{ url_for('onboarding.index', show=key) }}"{% if show == key and not state %} aria-current="page"{% endif %}>{{ name }}<span class="count">{{ total - counts.connected if key == 'waiting' else total }}</span></a>{% endfor %}
+    {% if state %}<a href="{{ url_for('onboarding.index', show='all', state=state) }}" aria-current="page">{{ 'Waiting on client' if state == 'client' else states[state][0] }}<span class="count">{{ entries|length }}</span></a>{% endif %}
+  </nav>
+  {{ downloads([('Consent links (CSV)', url_for('onboarding.export'), 'Every tenant that hasn\'t consented yet, with its contact and consent link, for a mail merge')]) }}
+</div>
+
+<section class="card flush">
+  {% if entries %}
+  <form method="post" action="{{ url_for('onboarding.bulk') }}" id="bulk">{{ csrf() }}<input type="hidden" name="show" value="{{ show }}"></form>
+  <div class="scroll-x">
+  <table class="stack-sm onboarding-table" id="onboarding-table">
+    <thead><tr><th><input type="checkbox" data-check-all aria-label="Select every tenant shown"></th><th>Client</th><th>Contact</th><th>State</th><th>Consent link</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for e in entries %}{% set t = e.tenant %}{% set link = links.get(t.id) %}
+    <tr>
+      <td><input type="checkbox" name="tenant" value="{{ t.id }}" form="bulk" aria-label="Select {{ t.name }}"></td>
+      <td data-label="Client" class="who"><a class="strong" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
+      <td data-label="Contact" class="wrap">{% if e.row and (e.row.contact_name or e.row.contact_email) %}{{ e.row.contact_name or e.row.contact_email }}{% if e.row.contact_name and e.row.contact_email %}<span class="sub">{{ e.row.contact_email }}</span>{% endif %}{% else %}<span class="faint">—</span>{% endif %}</td>
+      <td data-label="State" class="wrap"><span class="pill {{ e.state.tone }}">{{ e.state.label }}</span>
+        <span class="sub">{{ e.state.detail }}{% if e.state.key == 'sent' %} Sent {{ ts(e.row.sent_at) }}.{% endif %}</span></td>
+      <td data-label="Consent link">{% if t.consented_at %}<span class="faint">Not needed</span>
+        {% elif link %}<button type="button" class="sm" data-copy-text="{{ link }}">Copy link</button>
+        {% else %}<span class="small bad-text">{{ e.problem }}</span>{% endif %}</td>
+      <td class="num"><a class="btn sm ghost" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ 'Open' if t.consented_at else 'Send…' }}</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="action-row">
+    <button form="bulk" name="action" value="sent">{{ icon('send') }} Mark as sent</button>
+    <button form="bulk" name="action" value="check">{{ icon('refresh') }} Check consent now</button>
+    <button form="bulk" name="action" value="unsent" class="ghost">Mark as not sent</button>
+    <span class="muted small hint">For the tenants you tick.</span>
+  </div>
+  {% else %}
+  <div class="empty compact"><p>{% if state %}{% if state == 'client' %}No tenants are waiting on their client.{% else %}No tenants are {{ states[state][0]|lower }}.{% endif %}{% else %}Every tenant is connected.{% endif %}
+    <a href="{{ url_for('onboarding.index', show='all') }}">Show all tenants</a></p></div>
+  {% endif %}
+</section>
+<p class="footnote">Office Sentry confirms consent by signing in to each tenant, never on someone's word: within minutes of a client approving, then hourly for a month after you mark a link as sent. Global Reader is checked with every collection. A Partner Center (GDAP) admin with the Privileged Role Administrator role can approve for a client too; see <em>Onboarding a client</em> in the docs.</p>
+{% else %}
+<div class="card empty">
+  <h3>No tenants yet</h3>
+  <p>Import your clients from a spreadsheet (name, tenant ID or domain, and optionally a group and a contact), or add them one at a time.</p>
+  <div class="form-actions center-actions"><a class="btn primary" href="{{ url_for('onboarding.import_tenants') }}">{{ icon('plus') }} Import from CSV</a>
+    <a class="btn" href="{{ url_for('tenants.new_tenant') }}">Add one tenant</a></div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  document.querySelectorAll('[data-copy-text]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(button.dataset.copyText).then(function () {
+        var label = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(function () { button.textContent = label; }, 2000);
+      });
+    });
+  });
+  var all = document.querySelector('[data-check-all]');
+  if (all) all.addEventListener('change', function () {
+    document.querySelectorAll('input[name="tenant"]').forEach(function (box) { box.checked = all.checked; });
+  });
+})();
+</script>
+{% endblock %}

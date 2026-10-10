@@ -60,10 +60,10 @@
       {% elif s.key == 'consent' %}
         {% if s.done %}Granted {{ ts(tenant.consented_at) }}.
         {% else %}
-          A Global Administrator of {{ tenant.name }} approves Office Sentry's read-only permissions. Open the link yourself, in this browser, if you are one: Office Sentry then records it and starts collecting straight away. Or send it to them (it works for one hour) and press <em>Check connection now</em> once they've approved.
+          A Global Administrator of {{ tenant.name }} approves Office Sentry's read-only permissions. Open the link yourself, in this browser, if you are one (or hold Privileged Role Administrator through GDAP): Office Sentry then records it and starts collecting straight away. Or send the client their own link with <em>Send to client</em>: Office Sentry notices when they've approved.
           {% if not consent_link and not admin %}<p class="small muted m0">Only an Office Sentry admin can open the consent link.</p>{% endif %}
           {% if nxt and s.key == nxt.key %}
-          <div class="step-action">{{ consent_button(consent_link, 'Grant admin consent', 'btn primary') }}{% if can_check %}{{ check_button(tenant, back, 'Check connection now', '') }}{% endif %}</div>
+          <div class="step-action">{{ consent_button(consent_link, 'Grant admin consent', 'btn primary') }}{% if admin %}<a class="btn" href="{{ url_for('onboarding.send', tenant_id=tenant.id) }}">{{ icon('send') }} Send to client</a>{% endif %}{% if can_check %}{{ check_button(tenant, back, 'Check connection now', '') }}{% endif %}</div>
           {% if admin %}<details class="by-hand small"><summary>If Microsoft shows an error</summary>
             <ul class="small"><li>The app registration in your own Entra tenant needs Office Sentry's certificate (Certificates &amp; secrets → upload the .cer from <a href="{{ url_for('admin.connections') }}">App connection</a>; a client secret isn't enough) and the redirect URI <code>{{ redirect_uri }}</code> (Authentication → Web). A new certificate takes 5 to 10 minutes to work.</li></ul>
           </details>{% endif %}

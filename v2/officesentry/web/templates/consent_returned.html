@@ -1,0 +1,21 @@
+{#- Public: a client's Global Administrator back from Microsoft's consent page (web/onboarding.client_returned).
+    Names no tenant and shows none of Microsoft's text, only a known explanation. -#}
+{% extends "base.html" %}
+{% block title %}{{ 'Thank you' if approved else 'Not approved' }} · {{ brand.display_name }}{% endblock %}
+{% macro message() %}
+{% if approved %}
+<h1>Thank you</h1>
+<p>You've approved read-only access for {{ brand.display_name }}'s Microsoft 365 reports. Office Sentry is checking it can sign in now; nothing else happens until then.</p>
+<h2 class="h3">One more step, for mailbox reports</h2>
+<p>In the Microsoft Entra admin centre (<a href="{{ cloud.admin_centre }}" rel="noopener">{{ cloud.admin_centre.split('//')[-1] }}</a>), go to <strong>Roles and admins</strong> → <strong>Global Reader</strong> → <strong>Add assignments</strong> and select <strong>{{ app }}</strong>. Global Reader can view settings but can't change anything.</p>
+<p class="muted small">You can close this page.</p>
+{% else %}
+<h1>Access wasn't approved</h1>
+{% if problem %}<p>{{ problem.title }}{% if problem.code %} <span class="muted">({{ problem.code }})</span>{% endif %}</p>{% endif %}
+<p>Nothing was changed. If you meant to approve, open the link again and sign in with a <strong>Global Administrator</strong> account of your organisation, or ask {{ brand.display_name }} for help.</p>
+{% endif %}
+{% if brand.contact %}<p class="small">{{ brand.display_name }} · {{ brand.contact }}</p>{% endif %}
+{% endmacro %}
+{# Signed out (the client) gets the sign-in card layout; someone signed in to the portal, the page. #}
+{% block auth %}{{ message() }}{% endblock %}
+{% block content %}<div class="card narrow-lg">{{ message() }}</div>{% endblock %}
