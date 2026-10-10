@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from . import store
 from .collectors import REGISTRY
 from .entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
+from .formatting import capability
 from .schedule import nightly_collectors
 from .text import plural
 
@@ -190,8 +191,6 @@ def assess(conn, tenant, now: datetime | None = None) -> Health:
     # -- Licences ---------------------------------------------------------------------------
     caps = store.tenant_capabilities(tenant)
     if "tenant_profile" in succeeded:
-        from .web.filters import capability
-
         found = [capability(k) for k, v in sorted(caps.items()) if v]
         checks.append(Check("licences", "Licences found", "info",
                             ", ".join(found) if found else "None of the features Office Sentry checks for.",

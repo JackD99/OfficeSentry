@@ -22,8 +22,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from ..checks import RULES, SEVERITY_RANK, evaluate
 from ..findings import finding_key, lifecycle_map
-from ..rules import RULES, SEVERITY_RANK, evaluate
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from . import data_reports, evidence, views

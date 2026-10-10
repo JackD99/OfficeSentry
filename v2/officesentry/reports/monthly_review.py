@@ -14,12 +14,12 @@ from functools import cache
 from pathlib import Path
 
 from ..changes import Change, all_changes
+from ..checks import SEVERITY_RANK, Finding, RuleResult, evaluate
 from ..collectors import REGISTRY
 from ..db import utcnow
 from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
-from ..rules import SEVERITY_RANK, Finding, RuleResult, evaluate
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .charts import line_chart

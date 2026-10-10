@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 
 from .. import clouds, coverage
 from ..devices import parse_day, parse_ts
+from ..formatting import money
 from ..licences import (
     FREE_SKUS,
     FREE_UNIT_THRESHOLD,
@@ -29,6 +30,7 @@ from ..text import plural
 from .charts import line_chart
 from .data_reports import Chart, DataReport, Highlight, Rows, Section, metric_trend
 from .monthly_review import _secure_score_points, setting
+from .registry import report
 
 NEVER_SIGNED_IN_GRACE = 30  # days after creation before "never signed in" counts as inactive (see licences.is_stale)
 P1 = "Entra ID P1"
@@ -45,7 +47,6 @@ class Money(float):
         return obj
 
     def __str__(self) -> str:
-        from ..web.filters import money  # the web package imports reports, so import late
         return money(float(self), self.currency, 2)
 
 
@@ -245,6 +246,15 @@ GAP_TEXT = {
 }
 
 
+@report(
+    "mfa",
+    "MFA coverage",
+    "Who has set up MFA, who is required to use it, and where the two don't match.",
+    ("users", "mfa_registration", "conditional_access", "per_user_mfa", "admin_roles"),
+    group="identity",
+    order=10,
+    keywords="multi-factor two-factor 2fa authenticator authentication methods registration",
+)
 def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     if users is None:
@@ -341,6 +351,15 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
 BREAK_GLASS_NAME = re.compile(r"break.?glass|emergency|\bbg[-_.]?admin|\beaa\b", re.IGNORECASE)
 
 
+@report(
+    "admins",
+    "Admins and roles",
+    "Every admin role holder with MFA, PIM and sign-in status, and a break-glass check.",
+    ("admin_roles", "users", "mfa_registration", "conditional_access"),
+    group="identity",
+    order=30,
+    keywords="administrators global admin privileged roles pim break-glass",
+)
 def admins(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     roles = _roles(snap)
     if roles is None:
@@ -491,6 +510,15 @@ def _break_glass(roles: dict[str, dict], users: dict[str, dict], reg: Registrati
 # -- Licence waste ---------------------------------------------------------------------------
 
 
+@report(
+    "licences",
+    "Licence waste",
+    "Paid licences nobody uses, in money, and the accounts holding them.",
+    ("tenant_profile", "users"),
+    group="tenant",
+    order=30,
+    keywords="licenses waste cost money unused subscriptions",
+)
 def licences(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     skus = snap.objects("tenant_profile", "subscribed_sku")
     if skus is None:
@@ -607,6 +635,15 @@ def _inactive_for(user: dict, now: datetime) -> tuple[str, int | None]:
     return bucket, days
 
 
+@report(
+    "inactive",
+    "Inactive accounts",
+    "Members and guests who haven't signed in for a long time, and old invitations.",
+    ("users", "admin_roles", "tenant_profile"),
+    group="identity",
+    order=50,
+    keywords="stale dormant leavers unused accounts sign-in last login",
+)
 def inactive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     if users is None:
@@ -702,6 +739,15 @@ def _num(value: float) -> int | float:
 # -- Secure Score trend --------------------------------------------------------------------------
 
 
+@report(
+    "secure-score",
+    "Secure Score trend",
+    "Secure Score over time, which controls changed, and where the points are.",
+    ("secure_score",),
+    group="tenant",
+    order=10,
+    keywords="score trend controls",
+)
 def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if why := clouds.missing(clouds.of(snap.tenant), "secure_score"):
         report.unavailable = why
@@ -820,16 +866,3 @@ def secure_score(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
 
 
 # -- Registry ----------------------------------------------------------------------------------
-
-REPORTS = {
-    "mfa": ("MFA coverage", "Who has set up MFA, who is required to use it, and where the two don't match.",
-            ("users", "mfa_registration", "conditional_access", "per_user_mfa", "admin_roles"), mfa),
-    "admins": ("Admins and roles", "Every admin role holder with MFA, PIM and sign-in status, and a break-glass check.",
-               ("admin_roles", "users", "mfa_registration", "conditional_access"), admins),
-    "licences": ("Licence waste", "Paid licences nobody uses, in money, and the accounts holding them.",
-                 ("tenant_profile", "users"), licences),
-    "inactive": ("Inactive accounts", "Members and guests who haven't signed in for a long time, and old invitations.",
-                 ("users", "admin_roles", "tenant_profile"), inactive),
-    "secure-score": ("Secure Score trend", "Secure Score over time, which controls changed, and where the points are.",
-                     ("secure_score",), secure_score),
-}

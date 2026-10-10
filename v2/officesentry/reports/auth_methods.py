@@ -37,6 +37,7 @@ from ..snapshot import TenantSnapshot
 from ..text import plural
 from .data_reports import Chart, DataReport, Highlight, Rows, Section
 from .identity_reports import P1, Registration, _label, _roles
+from .registry import report
 
 PEOPLE = "Sign-in methods by person"
 PASSWORDS = "Password age"
@@ -330,6 +331,19 @@ def _passwords(users: list[dict], reg: Registration, now: datetime) -> tuple[Sec
     return section, stats
 
 
+@report(
+    "auth-methods",
+    "Passwords and sign-in methods",
+    "How people sign in and how strong that is: methods by strength, admins without phishing-"
+    "resistant MFA, the methods policy, and password age and expiry.",
+    ("mfa_registration", "auth_methods_policy", "users", "admin_roles", "conditional_access",
+    "directory_sync"),
+    group="identity",
+    order=20,
+    keywords="passkeys fido2 security keys windows hello phishing-resistant passwordless sms text message "
+    "voice call authenticator sspr self-service password reset expiry expiration never expires "
+    "password age authentication strengths methods policy registration campaign nudge",
+)
 def auth_methods(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     if users is None:
@@ -392,12 +406,3 @@ def auth_methods(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                   "Probably still the first password", "warn" if pw["never_used"] else None,
                   Rows(PASSWORDS, {"Last sign-in": "Never"}, flagged=True)),
     ]
-
-
-REPORTS = {
-    "auth-methods": ("Passwords and sign-in methods",
-                     "How people sign in and how strong that is: methods by strength, admins without phishing-"
-                     "resistant MFA, the methods policy, and password age and expiry.",
-                     ("mfa_registration", "auth_methods_policy", "users", "admin_roles", "conditional_access",
-                      "directory_sync"), auth_methods),
-}

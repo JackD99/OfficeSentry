@@ -54,6 +54,12 @@ tenant; until then the pages build them as before.
 - A tenant's Activity history page (Changes → Activity history, staff only): how far back each log is
   detailed from, the last 30 days, sign-ins per day, each month with a CSV of every sign-in, and admin
   changes worth a second look.
+- Questionnaires and evidence (a tenant's Reports → Questionnaires): answers for cyber insurance proposal
+  forms, supplier security questionnaires and Cyber Essentials (IASME's Danzell set, by question number), in
+  each form's wording and ready to copy and paste, with the Microsoft 365 data and date behind each one.
+  Questions Microsoft 365 can't answer (backups, firewalls, plans) show a text to complete, with the
+  missing parts in brackets; an answer written once fills every form that asks it. Downloads: a PDF answer
+  sheet, XLSX, CSV and plain text per form.
 - Charts on the busiest report tables (sign-ins by country and by app, licences, MFA methods, admin roles,
   security gaps, device compliance, mailbox and site storage): each bar opens the rows behind it, and the
   chart follows the table's filters, on the page and in the PDF.
