@@ -468,10 +468,19 @@ class ApprovalError(Exception):
 
 
 def frozen_files(conn, tenant_id: int, period: str) -> list:
-    """The latest approved version of each file for the period."""
-    return conn.execute(
-        "SELECT * FROM issued_reports WHERE id IN (SELECT MAX(id) FROM issued_reports WHERE tenant_id = ?"
-        " AND period = ? AND trigger = 'approval' GROUP BY filename) ORDER BY id", (tenant_id, period)).fetchall()
+    """The files of the period's latest approval: what a re-issue sends. A file an earlier approval had and
+    this one doesn't (a report dropped from the plan, or named after the tenant's old name) isn't sent.
+
+    One approval stores each of its files once, in one transaction (``freeze``), so its rows are the newest
+    run of rows with one approval time and no file name twice."""
+    batch: list = []
+    for row in conn.execute("SELECT * FROM issued_reports WHERE tenant_id = ? AND period = ? AND trigger = 'approval'"
+                            " ORDER BY id DESC", (tenant_id, period)):
+        if batch and (row["approved_at"] != batch[0]["approved_at"]
+                      or any(row["filename"] == b["filename"] for b in batch)):
+            break
+        batch.append(row)
+    return batch[::-1]
 
 
 def render_files(app, conn, tenant, period: str, now: datetime | None = None) -> list[tuple[str, str, bytes]]:

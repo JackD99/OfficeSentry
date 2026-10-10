@@ -150,6 +150,19 @@ copied collection reads back exactly as its snapshot.
 - Sizes from 1 TB to 10 TB show two decimals ("1.28 TB of 1.45 TB"), so used, free and total add up on
   the SharePoint storage report.
 
+### Fixed
+
+- Tenants on Office 365 G3 (GCC), A3 education or F3 frontline plans are no longer treated as having no
+  Exchange or SharePoint, which left their mailbox, inbox rule and SharePoint reports empty.
+- Windows Server is no longer reported as Windows 10 past end of support (or Server 2025 as Windows 11),
+  on the Devices report or in the supported Windows check.
+- An evidence pack control whose only check fails for the whole organisation (mailbox auditing turned off)
+  reads "Not in place", as the questionnaire answer does, instead of "Partly in place".
+- Re-issuing a month sends only the files of the new approval: a report since dropped from the plan, or a
+  file named after the tenant's old name, is no longer attached again.
+- What changed no longer lists every inactive account, deleted item and renewal as changed because its day
+  count moved with the calendar.
+
 ### Security
 
 - Encrypted off-site backups with restic to any S3-compatible storage, a weekly restore drill that proves

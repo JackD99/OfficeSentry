@@ -22,7 +22,9 @@ class WindowsRelease:
     enterprise_end: date  # Enterprise, Education, IoT Enterprise (non-LTSC)
 
 
-# Newest first; a build belongs to the first release whose min_build it reaches.
+# Newest first; a build belongs to the first release whose min_build it reaches. Builds between the last
+# Windows 10 and the first Windows 11 (20348 is Windows Server 2022) are no PC release.
+LAST_WINDOWS_10 = 19045
 WINDOWS_RELEASES = (
     WindowsRelease("Windows 11 25H2", 26200, date(2027, 10, 12), date(2028, 10, 10)),
     WindowsRelease("Windows 11 24H2", 26100, date(2026, 10, 13), date(2027, 10, 12)),
@@ -93,8 +95,13 @@ def objects(snap, kind: str) -> list[dict] | None:
     return None if rows is None else [clean(r) for r in rows if isinstance(r, dict)]
 
 
+def is_server(device: dict) -> bool:
+    return "server" in (device.get("operatingSystem") or "").lower()
+
+
 def is_windows(device: dict) -> bool:
-    return (device.get("operatingSystem") or "").lower().startswith("windows")
+    """Windows on a PC. Windows Server shares Windows 10 and 11 build numbers but not their support dates."""
+    return (device.get("operatingSystem") or "").lower().startswith("windows") and not is_server(device)
 
 
 def is_computer(device: dict) -> bool:
@@ -138,6 +145,6 @@ def os_label(device: dict) -> str:
 
 def _release(version: str | None) -> WindowsRelease | None:
     build = windows_build(version)
-    if build is None:
+    if build is None or LAST_WINDOWS_10 < build < WINDOWS_RELEASES[-2].min_build:
         return None
     return next((r for r in WINDOWS_RELEASES if build >= r.min_build), None)

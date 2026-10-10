@@ -21,6 +21,7 @@ every tenant's report. Nothing here calls Microsoft.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -144,9 +145,21 @@ def _text(value) -> str:
     return "blank" if value in ("", None) else str(value)
 
 
+# Columns that count days from now: an account inactive for 170 days then is 200 days now, with nothing changed.
+DAY_COUNT_COLUMNS = frozenset({"Days", "Days waiting", "Days left", "Ends within"})
+# Day counts inside text cells (the Devices report's problems), compared without the number.
+DAY_COUNT_TEXT = re.compile(r"(No check-in for )\d+( days?)")
+
+
 def _volatile(column: str) -> bool:
     """Columns that change with the passing of time rather than with the tenant."""
-    return column.startswith("Last ") or column.endswith("(UTC)") or "change" in column.lower()
+    return column.startswith("Last ") or column.endswith("(UTC)") or "change" in column.lower() \
+        or column in DAY_COUNT_COLUMNS
+
+
+def _same(value) -> str:
+    """A cell as compared: text, with day counts that only move with the clock taken out."""
+    return DAY_COUNT_TEXT.sub(r"\1N\2", str(value))
 
 
 def _keyed(section: data_reports.Section, width: int):
@@ -173,7 +186,7 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
     keep = [i for i, c in enumerate(columns) if not _volatile(c)]
 
     def stable(row):
-        return tuple(str(row[i]) for i in keep if i < len(row))
+        return tuple(_same(row[i]) for i in keep if i < len(row))
 
     old_rows, new_rows = (old.rows if old else []), (new.rows if new else [])
     out = SectionChanges(ref.title, columns)
@@ -207,7 +220,7 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
                 continue
             was = before[key]
             diffs = [(columns[i], was[i] if i < len(was) else "", row[i] if i < len(row) else "")
-                     for i in keep if str(was[i] if i < len(was) else "") != str(row[i] if i < len(row) else "")]
+                     for i in keep if _same(was[i] if i < len(was) else "") != _same(row[i] if i < len(row) else "")]
             if diffs:
                 out.changes.append(RowChange("changed", row, diffs))
         out.changes += [RowChange("removed", row) for key, row in before.items() if key not in after]

@@ -91,8 +91,12 @@ def _status(results: list[RuleResult]) -> str:
         return NOT_ASSESSED
     if all(r.status == "pass" for r in ran):
         return IN_PLACE if len(ran) == len(results) else PARTLY
-    severe = any(f.severity in ("critical", "high") for r in ran if r.status == "fail" for f in r.findings)
-    if severe and not any(r.status == "pass" for r in ran):
+    if any(r.status == "pass" for r in ran):
+        return PARTLY
+    # Nothing that ran passed. The control is missing when a finding is serious or is about the whole
+    # organisation (mailbox auditing turned off, at medium); findings about a few accounts are gaps in it.
+    failing = [f for r in ran if r.status == "fail" for f in r.findings]
+    if any(f.severity in ("critical", "high") or f.subject in WHOLE_ORGANISATION for f in failing):
         return NOT_IN_PLACE
     return PARTLY
 

@@ -11,6 +11,8 @@ next renews, lapses or is deleted.
 
 from __future__ import annotations
 
+import re
+
 from .. import store
 from ..graph import GraphError
 from .base import Collector, RunContext, register
@@ -25,25 +27,36 @@ CAPABILITY_PLANS = {
     "INTUNE_A": "intune",
     "ATP_ENTERPRISE": "defender_o365_p1",
     "THREAT_INTELLIGENCE": "defender_o365_p2",
-    "EXCHANGE_S_STANDARD": "exchange",
-    "EXCHANGE_S_ENTERPRISE": "exchange",
-    "EXCHANGE_S_DESKLESS": "exchange",
-    "EXCHANGE_S_ESSENTIALS": "exchange",
-    "SHAREPOINTSTANDARD": "sharepoint",
-    "SHAREPOINTENTERPRISE": "sharepoint",
+}
+# Mailboxes and SharePoint come in families of plans named per edition and cloud: EXCHANGE_S_ENTERPRISE in
+# E3, _GOV in Office 365 G3 (GCC runs on the commercial cloud), the same name in A3 education, DESKLESS in F3
+# frontline, EXCHANGE_B_STANDARD in Business. The foundation, archive and add-on plans that ride along with
+# other products (Power BI, Project) give no mailbox, and Office for the web or extra storage no sites.
+CAPABILITY_FAMILIES = {
+    "exchange": (re.compile(r"EXCHANGE_[SBL]_"), re.compile(r"FOUNDATION|ARCHIVE|ADDON")),
+    "sharepoint": (re.compile(r"SHAREPOINT"), re.compile(r"WAC|STORAGE|PROJECT|ADDON")),
 }
 IMPLIED = {"entra_p2": "entra_p1", "defender_o365_p2": "defender_o365_p1"}
 
 
+def capability_of(plan_name: str) -> str | None:
+    if plan_name in CAPABILITY_PLANS:
+        return CAPABILITY_PLANS[plan_name]
+    for flag, (family, not_it) in CAPABILITY_FAMILIES.items():
+        if family.match(plan_name) and not not_it.search(plan_name):
+            return flag
+    return None
+
+
 def capabilities_from_skus(skus: list[dict]) -> dict:
-    caps = {flag: False for flag in set(CAPABILITY_PLANS.values())}
+    caps = {flag: False for flag in (*CAPABILITY_PLANS.values(), *CAPABILITY_FAMILIES)}
     for sku in skus:
         if sku.get("capabilityStatus") not in ("Enabled", "Warning"):
             continue
         if (sku.get("prepaidUnits") or {}).get("enabled", 0) <= 0:
             continue
         for plan in sku.get("servicePlans", []):
-            flag = CAPABILITY_PLANS.get(plan.get("servicePlanName"))
+            flag = capability_of(plan.get("servicePlanName") or "")
             if flag and plan.get("provisioningStatus") in ("Success", "PendingActivation", "PendingProvisioning"):
                 caps[flag] = True
     for higher, lower in IMPLIED.items():
