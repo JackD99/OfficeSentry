@@ -81,6 +81,20 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     be signed in to, their last sign-in, who has access, and their size.
   - *Mailbox size*: each mailbox's size against its send quota
     (`Get-MailboxStatistics`), with mailboxes over 90% flagged.
+  - *Mailbox size trend*: each mailbox's growth over one and three months
+    from Office Sentry's own kept snapshots, the date each will fill at that
+    rate, and the tenant's total month by month.
+  - *Automatic replies*: mailboxes sending an out-of-office reply (Graph,
+    `MailboxSettings.Read`), who outside hears it, and replies on for over 30
+    days on an active account, dated from the kept snapshots.
+  - *Mobile devices*: phones and tablets syncing mail (`Get-MobileDevice` and
+    `Get-MobileDeviceStatistics`), with which app and when each last synced;
+    leavers' devices still connected, ones waiting for approval and ones
+    unused for 90 days come first.
+  - *Distribution lists*: members, owners and who outside can mail each list,
+    with empty, ownerless and unused lists flagged. How much mail each gets is
+    counted from the message trace (`Get-MessageTraceV2`, read 10 days at a
+    time from where the last run stopped) and kept per day for 90 days.
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.
