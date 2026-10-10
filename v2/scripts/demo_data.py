@@ -620,6 +620,19 @@ def logo_png(name: str, accent: str) -> bytes | None:
     return out.getvalue()
 
 
+def groups(db, ids: list[int]) -> None:
+    """A few tenant groups, so the group picker and the Tenant groups page have something to show."""
+    from officesentry import tenant_groups
+
+    north, fabrikam, contoso = ids[:3]
+    for name, category, description, members in (
+            ("Healthcare", "Sector", "Clinics and practices: patient data, so insurers ask more.", [fabrikam]),
+            ("Professional services", "Sector", "", [north, contoso]),
+            ("Managed+", "Tier", "Monthly review meeting and quarterly projects.", [fabrikam, contoso])):
+        gid = tenant_groups.create(db, {"name": name, "category": category, "description": description}, "demo")
+        tenant_groups.set_members(db, gid, members)
+
+
 def populate(db, vault, *, msp: str = "Harbour IT", accent: str = "#0d7a5f",
              contact: str = "help@harbourit.example · 0161 496 0000") -> list[int]:
     """Add the demo tenants, their history, prices and MSP branding to a migrated database."""
@@ -638,6 +651,7 @@ def populate(db, vault, *, msp: str = "Harbour IT", accent: str = "#0d7a5f",
         collect(db, tid, t, now, first=False)
         metric_history(db, tid, now)
         ids.append(tid)
+    groups(db, ids)
     for part, price in PRICES.items():
         db.execute("INSERT OR REPLACE INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)",
                    (part, price, utcnow()))
