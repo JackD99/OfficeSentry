@@ -32,3 +32,4 @@ desktop.ini
 # Example exports made from fictional demo data (v2/scripts/screenshots.py)
 !examples/*.xlsx
 v2/tests/browser/output/
+v2/tests/nightly/output/

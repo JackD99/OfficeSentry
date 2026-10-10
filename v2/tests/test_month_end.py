@@ -183,7 +183,8 @@ def test_queue_lists_planned_tenants_with_states_and_flags(client, db, two_tenan
     assert "No data collected yet" in page  # Bravo has never been collected
     rows = {r.tenant["name"]: r for r in month_end.queue(db, db.execute("SELECT * FROM tenants").fetchall(), PERIOD)}
     assert rows["Alpha Ltd"].state == "in_review" and rows["Bravo Inc"].state == "draft"
-    assert rows["Alpha Ltd"].verdict.label and rows["Bravo Inc"].flags == ["No data collected yet"]
+    assert rows["Alpha Ltd"].verdict.label
+    assert rows["Bravo Inc"].flags == ["No data collected yet", "Nobody to email"]
     mine = client.get(f"/reporting/{PERIOD}?show=mine").get_data(as_text=True)
     assert "Alpha Ltd" in mine and "Bravo Inc" not in mine
     assert client.get("/reporting").headers["Location"].endswith(f"/reporting/{PERIOD}")
@@ -490,6 +491,8 @@ def test_issuing_an_earlier_month_never_moves_the_schedule_back(app, db, two_ten
         month_end.freeze(app, db, tenant, "2026-09", "admin", now=oct5)
         assert month_end.deliver(app, db, vault, tenant, "2026-09", "admin", now=oct5) is None
     assert len(sends()) == 1
+    # Approved in October, but it's September's report and says so.
+    assert sends()[0][2]["Subject"] == "Alpha Ltd security report · September 2026"
     assert [r[0] for r in db.execute("SELECT last_period FROM email_schedules ORDER BY tenant_id")] == [
         "2026-10",
         "2026-10",
@@ -559,3 +562,135 @@ def test_send_now_after_an_early_approval_does_not_send_the_month_again(app, db,
     oct28 = datetime(2026, 10, 28, 9, 0, tzinfo=UTC)
     db.execute("UPDATE runs SET finished_at = ?", (oct28.strftime("%Y-%m-%dT%H:%M:%SZ"),))
     assert delivery.tick(app, db, vault, cfg, oct28) == 0 and len(sends()) == 2
+
+
+def test_plan_recipients_keep_the_team_copy_and_say_who_is_left_off(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    limit = delivery.mailer.MAX_RECIPIENTS
+    clients = [delivery.add_contact(db, alpha, f"Person {i:02d}", f"p{i:02d}@alpha.com") for i in range(limit + 3)]
+    team = [delivery.add_contact(db, None, name, f"{name.lower()}@msp.com") for name in ("Ann", "Bob")]
+    _admin(client, db)
+    _plan(client, [alpha, bravo], bcc_team="1")
+    alpha_schedule, bravo_schedule = (
+        r["id"] for r in db.execute("SELECT id FROM email_schedules ORDER BY tenant_id").fetchall()
+    )
+    # The first 20 client contacts by name, and the team's hidden copy is never the part cut.
+    got = [c["id"] for c in delivery.recipients(db, "schedule", alpha_schedule)]
+    assert got == clients[:limit] + team
+    assert delivery.split_recipients(delivery.recipients(db, "schedule", alpha_schedule))[1] == [
+        "ann@msp.com",
+        "bob@msp.com",
+    ]
+
+    cov = month_end.coverage(db, db.execute("SELECT * FROM tenants ORDER BY id").fetchall())
+    row = next(r for r in cov.rows if r.tenant["id"] == alpha)
+    assert row.gaps == ["left_off"] and row.left_off == 3
+    assert "1 has more contacts than one email can go to" in cov.headline
+    page = client.get("/reporting/plans").get_data(as_text=True)
+    assert "3 contacts left off" in page and "Review contacts" in page
+    form = client.get(f"/reporting/plans/{db.execute('SELECT id FROM report_plans').fetchone()[0]}")
+    assert f"23 contacts: the first {limit} get it" in form.get_data(as_text=True)
+
+    # Another contact keeps the limit and the team copy.
+    client.post(f"/tenants/{alpha}/contacts", data={"name": "Aaron", "email": "aaron@alpha.com"})
+    got = [c["email"] for c in delivery.recipients(db, "schedule", alpha_schedule)]
+    assert len(got) == limit + 2 and got[0] == "aaron@alpha.com" and got[-2:] == ["ann@msp.com", "bob@msp.com"]
+    # A client's first contact brings the team's hidden copy with it, as applying the plan would have.
+    assert delivery.recipients(db, "schedule", bravo_schedule) == []
+    client.post(f"/tenants/{bravo}/contacts", data={"name": "", "email": "it@bravo.com"})
+    assert [c["email"] for c in delivery.recipients(db, "schedule", bravo_schedule)] == [
+        "it@bravo.com",
+        "ann@msp.com",
+        "bob@msp.com",
+    ]
+
+
+def test_approving_with_nobody_to_email_is_not_called_sent(client, db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7 frozen")
+    _smtp_ready(db)
+    _admin(client, db)
+    _plan(client, [alpha], include_xlsx="")
+    review_page = client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    assert "nobody to email yet" in review_page and "Add a contact" in review_page
+    assert "Nobody to email" in client.get(f"/reporting/{PERIOD}").get_data(as_text=True)
+
+    client.post(f"/reporting/{PERIOD}/{alpha}/approve")
+    work(client)
+    assert sends() == []
+    # Approved and kept in the report history, but not Sent: nobody got it.
+    assert month_end.state_of(db, alpha, PERIOD) == "approved"
+    r = month_end.review(db, alpha, PERIOD)
+    assert r["error"].startswith("Nobody to email: Alpha Ltd has no contacts") and r["sent_at"] is None
+    frozen = month_end.frozen_files(db, alpha, PERIOD)
+    assert frozen and all(f["recipients"] == "" for f in frozen)
+    # The month is done, so an automatic timer never emails a live copy of it later.
+    assert db.execute("SELECT last_period FROM email_schedules").fetchone()[0] == PERIOD
+    row = month_end.queue(db, db.execute("SELECT * FROM tenants").fetchall(), PERIOD)[0]
+    assert row.state_label == "Approved" and row.error
+    page = client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    assert "Approved, but the email didn't send." in page and "Send again" in page
+    actions = [a[0] for a in db.execute("SELECT action FROM audit_log WHERE action LIKE 'report_%'")]
+    assert "report_send_failed" in actions and "report_sent" not in actions
+
+    # Once the client has a contact, Send again emails those same files and the month is Sent.
+    client.post(f"/tenants/{alpha}/contacts", data={"name": "IT", "email": "it@alpha.com"})
+    client.post(f"/reporting/{PERIOD}/{alpha}/send")
+    work(client)
+    ((_, _, msg, to),) = sends()
+    assert to == ["it@alpha.com"]
+    assert {p.get_filename(): p.get_payload(decode=True) for p in msg.iter_attachments()} == {
+        f["filename"]: bytes(f["data"]) for f in frozen
+    }
+    assert month_end.state_of(db, alpha, PERIOD) == "sent" and month_end.review(db, alpha, PERIOD)["error"] is None
+
+
+def test_reissue_form_says_the_client_sees_the_reason(client, db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    _smtp_ready(db)
+    _admin(client, db)
+    delivery.add_contact(db, alpha, "IT", "it@alpha.com")
+    _plan(client, [alpha], include_xlsx="")
+    client.post(f"/reporting/{PERIOD}/{alpha}/approve")
+    work(client)
+    page = client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    assert "The client sees this next to the new version in their report history" in page
+    db.execute("UPDATE issued_reports SET issued_at = '2026-10-01T08:00:00Z'")  # the first version, earlier
+    client.post(f"/reporting/{PERIOD}/{alpha}/approve", data={"reason": "Corrected the licence count"})
+    work(client)
+    make_user(db, "client", role="client", tenants=[alpha])
+    client.post("/logout")
+    login(client, "client")
+    assert "Corrected the licence count" in client.get(f"/tenants/{alpha}/report-history").get_data(as_text=True)
+
+
+def test_reissue_after_a_report_left_the_plan_sends_only_the_plans_files(app, db, two_tenants, vault, cfg, monkeypatch):
+    alpha, _ = two_tenants
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7")
+    seed_tenant(db, alpha)
+    _smtp_ready(db)
+    delivery.add_contact(db, alpha, "", "it@alpha.com")
+    schedule = _auto_plan(db, alpha, mode="approval", now=datetime(2026, 9, 15, tzinfo=UTC))
+    db.execute(
+        "UPDATE report_plans SET reports = ? WHERE id = ?", ('["review", "data:mailboxes"]', schedule["plan_id"])
+    )
+    tenant = store.get_tenant(db, alpha)
+    oct5 = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
+    assert month_end.approve(app, db, vault, tenant, "2026-10", "admin", now=oct5) is None
+    ((_, _, first, _),) = sends()
+    assert len(list(first.iter_attachments())) == 2
+    # Mailboxes leaves the plan, the tenant is renamed, and the month is issued again.
+    db.execute("UPDATE report_plans SET reports = '[\"review\"]' WHERE id = ?", (schedule["plan_id"],))
+    db.execute("UPDATE tenants SET name = 'Alpha Group' WHERE id = ?", (alpha,))
+    tenant = store.get_tenant(db, alpha)
+    assert (
+        month_end.approve(app, db, vault, tenant, "2026-10", "admin", reason="Renamed", now=oct5.replace(hour=10))
+        is None
+    )
+    second = sends()[-1][2]
+    names = [p.get_filename() for p in second.iter_attachments()]
+    assert names == ["security-review-alpha-group.pdf"]
+    assert [f["filename"] for f in month_end.frozen_files(db, alpha, "2026-10")] == names
