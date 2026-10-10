@@ -463,6 +463,11 @@ fieldset.choices.compact { grid-template-columns: 1fr 1fr; padding: var(--space-
 fieldset.choices.compact label.choice { padding: var(--space-1-5) var(--space-2); font-size: var(--fs-sm); }
 .choice-title { display: flex; gap: var(--space-2); align-items: center; font-weight: 600; color: var(--text); }
 .choice .grow { flex: 1; }
+.view-choice { display: flex; gap: var(--space-2); align-items: center; padding-right: var(--space-2-5); border-radius: var(--radius-sm); }
+.view-choice:hover { background: var(--surface-2); }
+.view-choice:has(input:checked) { background: var(--accent-soft); }
+.view-choice label.choice { flex: 1; min-width: 0; background: transparent; }
+.view-choice select { width: auto; flex: none; margin: 0; padding: 5px 9px; }
 .fmt { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: .03em; color: var(--muted); border: 1px solid var(--border-strong); border-radius: var(--radius-xs); padding: 0 5px; }
 .step-no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-xs); margin-right: var(--space-1-5); vertical-align: 1px; }
 .schedule-form .card h2 { margin-bottom: var(--space-3-5); }
@@ -704,6 +709,7 @@ details.menu[open] > summary { margin: 0; background: var(--sunken); }
 .menu-panel.wide { width: 380px; }
 .menu-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding: var(--space-0-5) var(--space-1) var(--space-2); font-size: var(--fs-sm); }
 .menu-head a { font-weight: 500; }
+.menu-link { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-2); padding: var(--space-2) var(--space-1) 0; border-top: 1px solid var(--border); font-weight: 500; }
 .menu-group { padding: var(--space-2) var(--space-1); border-top: 1px solid var(--border); }
 .menu-label { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); margin-bottom: var(--space-1-5); }
 .opts { display: flex; flex-wrap: wrap; gap: var(--space-1-5); }

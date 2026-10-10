@@ -6,7 +6,10 @@ Sent by the worker when:
     tenant has no more runs queued, so normally once per nightly collection);
   * a collector run fails after its previous run succeeded (state changes only,
     so a tenant that keeps failing doesn't alert every night);
-  * optionally, a collector that was failing works again.
+  * optionally, a collector that was failing works again;
+  * optionally, a client's report was sent or published (``report_ready``): a link to the tenant's
+    report history, never the files themselves, so only people signed in and granted the tenant can
+    open them.
 
 Settings live in the ``settings`` table. The webhook URL (which usually carries
 its own access key) and the optional signing secret are encrypted with the
@@ -30,7 +33,7 @@ from urllib.parse import urlsplit
 
 import requests
 
-from . import outbound
+from . import issued, outbound
 from .collectors import REGISTRY
 from .crypto import Vault
 from .db import audit
@@ -44,6 +47,7 @@ FORMATS = {"teams": "Microsoft Teams (Workflows)", "slack": "Slack", "generic": 
 ALERT_SEVERITIES = ("critical", "high", "medium", "low")
 DEFAULTS = {"alerts.enabled": "0", "alerts.format": "teams", "alerts.min_severity": "high",
             "alerts.on_failures": "1", "alerts.on_recovery": "0", "alerts.url_enc": "", "alerts.secret_enc": "",
+            "alerts.on_reports": "0",
             # Problems with Office Sentry itself (system_alerts.py), by email to the team contacts and here.
             "alerts.system": "1"}
 # Settings encrypted with the vault; rotate-keys re-encrypts them (__main__.ENCRYPTED_SETTINGS).
@@ -78,13 +82,15 @@ class Item:
 
 @dataclass
 class Message:
-    event: str  # findings.new | collection.failed | collection.recovered | certificate.expiry | system.* | test
+    event: str  # findings.new | collection.failed | collection.recovered | report.ready | certificate.expiry
+    #             | system.* | test
     title: str
     text: str
     link: str
     tenant: dict | None = None
     items: list[Item] = field(default_factory=list)
     extra: dict = field(default_factory=dict)
+    button: str = "Open in Office Sentry"
 
 
 # -- Settings ----------------------------------------------------------------
@@ -336,8 +342,56 @@ def after_run(conn, alerting: Alerting | None, run_id: int, status: str) -> bool
         return False
 
 
+def report_history_link(base_url: str, tenant) -> str:
+    return f"{tenant_link(base_url, tenant)}/report-history"
+
+
+def ready_title(tenant_name: str, label: str) -> str:
+    """ "The October 2026 report for Contoso is ready" (a period label from ``issued.period_label``)."""
+    if label.lower().startswith("week"):
+        return f"The report for {tenant_name} for {label[:1].lower() + label[1:]} is ready"
+    return f"The {label} report for {tenant_name} is ready" if label else f"A report for {tenant_name} is ready"
+
+
+def report_ready_message(base_url: str, tenant, period: str | None, titles: list[str], *,
+                         emailed: bool = True) -> Message:
+    """A link to the tenant's report history and what's in it. Never the files: they stay behind the sign-in."""
+    label = issued.period_label(period)
+    how = "Emailed to the client" if emailed else "Published to the client portal"
+    text = f"{how}: {', '.join(titles)}." if titles else f"{how}."
+    return Message("report.ready", ready_title(tenant["name"], label), text, report_history_link(base_url, tenant),
+                   dict(tenant), extra={"period": period, "reports": list(titles), "emailed": emailed},
+                   button="Open the report history")
+
+
+def report_ready(conn, alerting: Alerting | None, tenant, period: str | None, titles: list[str], *,
+                 emailed: bool = True) -> bool | None:
+    """Post that a client's report went out (or was published to the portal), when that's turned on.
+    Returns whether it was posted, None if not wanted. Never raises."""
+    try:
+        if alerting is None or tenant is None:
+            return None
+        s = settings(conn)
+        if s["alerts.enabled"] != "1" or not s["alerts.url_enc"] or s["alerts.on_reports"] != "1":
+            return None
+        return _deliver(conn, alerting, s,
+                        report_ready_message(alerting.base_url, tenant, period, titles, emailed=emailed))
+    except Exception:
+        log.exception("Preparing a report-ready alert failed")
+        return False
+
+
 def test_message(base_url: str) -> Message:
     return Message("test", "Office Sentry test alert", "Alerts from Office Sentry are working.", base_url.rstrip("/"))
+
+
+def sample_report_message(base_url: str) -> Message:
+    """What a report-ready post looks like, for the settings page's test button. Names no real tenant."""
+    message = report_ready_message(base_url, {"id": 0, "name": "Contoso (example)", "tenant_ref": None},
+                                   datetime.now(UTC).strftime("%Y-%m"),
+                                   ["Monthly Security & Licensing Review", "Mail forwarding: Forwarding outside"])
+    message.event, message.link = "test", base_url.rstrip("/")
+    return message
 
 
 # -- Payloads ----------------------------------------------------------------
@@ -391,7 +445,7 @@ def teams_payload(message: Message) -> dict:
         "type": "AdaptiveCard",
         "version": "1.4",
         "body": body,
-        "actions": [{"type": "Action.OpenUrl", "title": "Open in Office Sentry", "url": message.link}],
+        "actions": [{"type": "Action.OpenUrl", "title": message.button, "url": message.link}],
     }
     return {"type": "message",
             "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "contentUrl": None,
@@ -410,7 +464,7 @@ def slack_payload(message: Message) -> dict:
             lines.append(f"_{more}_")
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)[:2900]}})
     blocks.append({"type": "actions", "elements": [
-        {"type": "button", "text": {"type": "plain_text", "text": "Open in Office Sentry"}, "url": message.link}]})
+        {"type": "button", "text": {"type": "plain_text", "text": message.button}, "url": message.link}]})
     fallback = _slack_text(message.title) + (f": {plural(len(message.items), 'finding')}" if message.items else "")
     return {"text": fallback, "blocks": blocks}
 

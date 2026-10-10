@@ -25,11 +25,12 @@ internal addresses.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -38,7 +39,18 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 from . import alerts, issued, mailer, schedule, store, tasks, tenant_groups, upcoming
 from .db import utcnow
 from .mailer import Email, MailError
-from .reports import branding, data_reports, evidence, export, monthly_review, tables, workbook
+from .reports import (
+    branding,
+    data_reports,
+    evidence,
+    export,
+    findings_report,
+    monthly_review,
+    rollups,
+    tables,
+    views,
+    workbook,
+)
 from .rules import RULES
 from .text import day, plural
 
@@ -53,6 +65,9 @@ MAX_ATTEMPTS = len(RETRY_DELAYS) + 1
 DIGEST_LOOKBACK = {"weekly": timedelta(days=7), "monthly": timedelta(days=30), "quarterly": timedelta(days=91)}
 RULE_TITLES = {r.key: r.title for r in RULES}
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+CSV = "text/csv; charset=utf-8"
+VIEW_FORMATS = {"pdf": "PDF", "xlsx": "XLSX", "csv": "CSV"}
+VIEWS_KEY = "views"  # a digest schedule whose reports is ["views"]: saved views across tenants, team only
 
 # Offered in the schedule form; the server's own timezone and the schedule's
 # current one are always added.
@@ -123,6 +138,118 @@ def attachment_plan(tenant, keys: list[str], include_xlsx: bool) -> list[tuple[s
         else:
             out.append((key, f"{key[5:]}-{slug}.xlsx"))
     return out
+
+
+# -- Saved views ---------------------------------------------------------------------------
+#
+# A schedule can send people's saved views (web/saved_views.py): a report with its filters, hidden columns
+# and sort, as a PDF, XLSX or CSV (one file per table the view shapes). A report schedule sends them for its
+# tenant; a views schedule (a digest whose reports is ["views"]) stacks every tenant's rows, or one group's,
+# like the All tenants "every row" page, and goes to the team only.
+
+
+@dataclass(frozen=True)
+class ScheduledView:
+    report_key: str  # a detail report key, or findings_report.KEY / RESOLVED_KEY (tenant schedules only)
+    name: str
+    query: str
+    format: str  # a key of VIEW_FORMATS
+    saved_view_id: int | None = None
+    id: int | None = None  # its email_schedule_views row, once saved
+
+    @property
+    def report_title(self) -> str:
+        return view_report_title(self.report_key)
+
+    @property
+    def title(self) -> str:
+        return f"{self.report_title}: {self.name}"
+
+    def view(self) -> views.View:
+        return views.View.parse(self.query)
+
+
+def view_report_title(key: str) -> str:
+    if key in findings_report.TITLES:
+        return findings_report.TITLES[key]
+    return data_reports.REPORTS[key][0] if key in data_reports.REPORTS else key
+
+
+def can_schedule_view(key: str, across: bool = False) -> bool:
+    """Whether a saved view of report ``key`` can be emailed: any detail report, and for one tenant the
+    Findings pages too (they have no every-tenant version)."""
+    return key in data_reports.REPORTS or (not across and key in findings_report.TITLES)
+
+
+def schedule_views(conn, schedule_id: int | None) -> list[ScheduledView]:
+    if not schedule_id:
+        return []
+    return [ScheduledView(r["report_key"], r["name"], r["query"], r["format"], r["saved_view_id"], r["id"])
+            for r in conn.execute("SELECT * FROM email_schedule_views WHERE schedule_id = ? ORDER BY position, id",
+                                  (schedule_id,))]
+
+
+def set_schedule_views(conn, schedule_id: int, chosen: list[ScheduledView]) -> None:
+    conn.execute("DELETE FROM email_schedule_views WHERE schedule_id = ?", (schedule_id,))
+    conn.executemany(
+        "INSERT INTO email_schedule_views (schedule_id, saved_view_id, report_key, name, query, format, position)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [(schedule_id, v.saved_view_id, v.report_key, v.name, v.query, v.format, i) for i, v in enumerate(chosen)])
+
+
+def view_format(fmt: str) -> str:
+    """The format a view is sent in: a PDF needs WeasyPrint, so without it the spreadsheet goes instead."""
+    return "xlsx" if fmt == "pdf" and not export.pdf_available() else fmt
+
+
+def view_tables(v: ScheduledView) -> list[str]:
+    """The slugs of the tables a view filters, sorts or hides columns of, in the order it names them."""
+    return list(dict.fromkeys(value.partition("/")[0] for _, value in v.view().params()))
+
+
+def view_plan(v: ScheduledView, stem: str) -> list[tuple[str, str]]:
+    """(table slug or "", filename) for each file a view attaches. Builds nothing: a CSV is one file per
+    table the view shapes."""
+    fmt = view_format(v.format)
+    if fmt != "csv":
+        return [("", f"{stem}.{fmt}")]
+    return [(t, f"{stem}-{t}.csv") for t in view_tables(v)]
+
+
+def view_stem(v: ScheduledView, who: str) -> str:
+    return f"{tables.slug(v.report_key)}-{tables.slug(v.name)}-{tables.slug(who)}"
+
+
+def view_attachments(who: str, chosen: list[ScheduledView]) -> list[tuple[ScheduledView, str]]:
+    """(view, filename) for every file the views attach, in order. ``who`` is the tenant or group name."""
+    return [(v, name) for v in chosen for _, name in view_plan(v, view_stem(v, who))]
+
+
+def view_report(conn, tenant, v: ScheduledView, now: datetime) -> data_reports.DataReport:
+    """One tenant's report with the view applied, as its page, PDF and downloads show it."""
+    if v.report_key in findings_report.TITLES:
+        report = findings_report.build(conn, tenant, resolved=v.report_key == findings_report.RESOLVED_KEY, now=now)
+    else:
+        report = data_reports.build(conn, tenant, v.report_key, now)
+    return views.apply(report, v.view())
+
+
+def view_files(app, conn, report, v: ScheduledView, stem: str, brand=None) -> list[tuple[str, str, bytes]]:
+    """The files for one view of an already viewed ``report``: the names ``view_plan`` promised (a CSV for a
+    table the report no longer has is left out)."""
+    files = []
+    for table, filename in view_plan(v, stem):
+        if filename.endswith(".pdf"):
+            from .web.printing import cap_rows  # the web package imports this module
+            files.append((filename, "application/pdf", _pdf(app, "reports/detail.html", report=cap_rows(report))))
+        elif filename.endswith(".xlsx"):
+            files.append((filename, XLSX, data_reports.to_xlsx(report, brand=brand or branding.load(conn))))
+        else:
+            slugs = views.table_slugs(report)
+            if table in slugs:
+                section = report.sections[slugs.index(table)]
+                files.append((filename, CSV, tables.to_csv(data_reports.section_table(section))))
+    return files
 
 
 # -- When ------------------------------------------------------------------------------
@@ -336,9 +463,10 @@ def email_brand(conn) -> tuple[dict, list[tuple[str, str, bytes]]]:
 
 
 def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None,
-                 review_context: dict | None = None) -> list[tuple[str, str, bytes]]:
+                 review_context: dict | None = None, chosen_views=()) -> list[tuple[str, str, bytes]]:
     """Build every file a bundle attaches. ``review_context`` is extra template context for the review PDF
-    (the month-end commentary, recommendations and notes, see ``month_end.report_context``)."""
+    (the month-end commentary, recommendations and notes, see ``month_end.report_context``). Saved views
+    (``chosen_views``) come after the reports."""
     files, built = [], {}
     brand = branding.load(conn)
     for key, filename in attachment_plan(tenant, keys, include_xlsx):
@@ -354,6 +482,8 @@ def _attachments(app, conn, tenant, keys, include_xlsx, now, review=None,
         else:
             data = data_reports.to_xlsx(data_reports.build(conn, tenant, key[5:], now), brand=brand)
         files.append((filename, "application/pdf" if filename.endswith(".pdf") else XLSX, data))
+    for v in chosen_views:
+        files += view_files(app, conn, view_report(conn, tenant, v, now), v, view_stem(v, tenant["name"]), brand)
     return files
 
 
@@ -371,6 +501,7 @@ def fill_placeholders(template: str, client: str, month: str) -> str:
 class Built:
     email: Email
     attachment_names: list[str]
+    titles: list[str] = field(default_factory=list)  # what the attachments are, once each
 
 
 def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime | None = None,
@@ -382,7 +513,9 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
     review = monthly_review.build(conn, tenant, now)
     known = catalog_map()
     plan = attachment_plan(tenant, keys, bool(schedule["include_xlsx"]))
-    files = [(known[k].title, name) for k, name in plan]
+    chosen = schedule_views(conn, schedule["id"])
+    files = [(known[k].title, name) for k, name in plan] + \
+        [(v.title, name) for v, name in view_attachments(tenant["name"], chosen)]
     failing = review.failing
     stale = any(f.stale for f in review.freshness)
     subject = fill_placeholders(_field(schedule, "subject", "") or "", tenant["name"], label).strip() \
@@ -420,9 +553,10 @@ def build_report_email(app, conn, schedule, tenant, contacts, *, now: datetime |
         # The month's commentary, recommendations and client-visible notes go in the PDF too.
         context = month_end.report_context(conn, tenant["id"], f"{local.year}-{local.month:02d}", staff=False)
         attachments = _attachments(app, conn, tenant, keys, bool(schedule["include_xlsx"]), now, review,
-                                   review_context=context)
+                                   review_context=context, chosen_views=chosen)
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
-                       attachments=attachments, inline=inline), [name for _, name in files])
+                       attachments=attachments, inline=inline), [name for _, name in files],
+                 list(dict.fromkeys(title for title, _ in files)))
 
 
 def digest_data(conn, frequency: str, now: datetime, group_id: int | None = None) -> dict:
@@ -532,9 +666,25 @@ def is_upcoming(schedule) -> bool:
     return schedule["kind"] == "digest" and upcoming.KEY in json.loads(schedule["reports"] or "[]")
 
 
-def schedule_titles(schedule) -> list[str]:
+def is_views(schedule) -> bool:
+    """A digest schedule that sends saved views across every tenant (or one group) to the team."""
+    return schedule["kind"] == "digest" and VIEWS_KEY in json.loads(schedule["reports"] or "[]")
+
+
+def digest_builder(schedule):
+    """What builds a digest schedule's email: the tenant digest, Coming up, or saved views."""
+    if is_views(schedule):
+        return build_views_email
+    return build_upcoming_email if is_upcoming(schedule) else build_digest_email
+
+
+def schedule_titles(schedule, conn=None) -> list[str]:
+    """What the schedule sends, for lists. With ``conn`` its saved views are named too."""
+    chosen = [v.title for v in schedule_views(conn, schedule["id"])] if conn is not None else []
     if schedule["kind"] == "report":
-        return report_titles(schedule["reports"])
+        return report_titles(schedule["reports"]) + chosen
+    if is_views(schedule):
+        return chosen or ["Saved views"]
     return [upcoming.TITLE] if is_upcoming(schedule) else ["Tenant digest"]
 
 
@@ -589,6 +739,81 @@ def build_upcoming_email(app, conn, schedule, contacts, *, now: datetime | None 
         if attach and schedule["include_xlsx"] else []
     return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
                        attachments=attachments, inline=inline), [filename] if schedule["include_xlsx"] else [])
+
+
+@dataclass
+class ViewResult:
+    """One saved view across tenants, for the views email: its report narrowed to the tables the view shapes."""
+    view: ScheduledView
+    report: data_reports.DataReport
+    counts: list[tuple[str, int]]  # (table title, rows after the filters)
+    lines: list[str]  # each table in words: its filters and rows ("Forwarding: 7 of 9 rows, ...")
+    table: str  # the first table's slug, for the link to its "every row" page
+    without: int  # tenants with no data for the report
+
+
+def views_data(conn, chosen: list[ScheduledView], group_id: int | None, now: datetime) -> dict:
+    """Each view over every active tenant, or one group's, stacked like the All tenants "every row" page."""
+    group = tenant_groups.get(conn, group_id)
+    in_group = " AND id IN (SELECT tenant_id FROM tenant_group_members WHERE group_id = :group)" if group else ""
+    tenants = conn.execute("SELECT * FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
+                           f"{in_group} ORDER BY name COLLATE NOCASE", {"group": group_id}).fetchall()
+    label = group["name"] if group else "All tenants"
+    results = []
+    for v in chosen:
+        if not can_schedule_view(v.report_key, across=True):
+            continue
+        rows = rollups.all_rows(conn, tenants, v.report_key, now, label=label)
+        report = views.apply(rows.report, v.view())
+        touched = set(view_tables(v))
+        slugs = views.table_slugs(report)
+        keep = [i for i, slug in enumerate(slugs) if slug in touched] or list(range(len(slugs)))
+        out = copy.copy(report)
+        out.sections = [report.sections[i] for i in keep]
+        out.filtered = [line for line in report.filtered if any(line.startswith(f"{s.title}:") for s in out.sections)]
+        if any(rows.truncated(s.title) for s in out.sections):
+            out.notice = (f"Tables keep the first {rollups.MAX_ROWS:,} rows across tenants. Filter the view further, "
+                          "or open each tenant's own report for the rest.")
+        counts = [(s.title, len(s.rows)) for s in out.sections]
+        lines = [next((line for line in out.filtered if line.startswith(f"{title}:")), f"{title}: {plural(n, 'row')}.")
+                 for title, n in counts]
+        results.append(ViewResult(v, out, counts, lines, slugs[keep[0]] if keep else "", len(rows.without)))
+    return {"group": group["name"] if group else None, "label": label, "tenants": len(tenants), "views": results}
+
+
+def build_views_email(app, conn, schedule, contacts, *, now: datetime | None = None,
+                      attach: bool = True) -> Built:
+    """Saved views across every active tenant, or one group's, for the MSP's team. A CSV view sends one
+    file per table it shapes; a PDF or XLSX has those tables."""
+    now = now or datetime.now(UTC)
+    local = now.astimezone(ZoneInfo(schedule_tz(schedule, _cfg(app).timezone)))
+    label = period_label(schedule["frequency"], local)
+    data = views_data(conn, schedule_views(conn, schedule["id"]), schedule["group_id"], now)
+    names = [r.view.name for r in data["views"]]
+    lead = names[0] if len(names) == 1 else f"{names[0]} and {plural(len(names) - 1, 'more view')}" if names \
+        else "Saved views"
+    subject = f"{lead} · {data['label']} · {label}"
+    brand = branding.load(conn)
+    files, attachments = [], []
+    for r in data["views"]:
+        stem = view_stem(r.view, data["label"])
+        files += [(r.view.title, name) for _, name in view_plan(r.view, stem)]
+        if attach:
+            attachments += view_files(app, conn, r.report, r.view, stem, brand)
+    look, inline = email_brand(conn)
+    html = render(app, "emails/views.html", subject=subject, d=data, label=label, frequency=schedule["frequency"],
+                  message=schedule["message"], files=files, **look)
+    lines = [f"Saved views for {label}: {data['label']}", ""]
+    if schedule["message"]:
+        lines += [schedule["message"], ""]
+    for r in data["views"]:
+        lines.append(r.view.title)
+        lines += [f"  {line}" for line in r.lines]
+    if files:
+        lines += ["", "Attached:"] + [f"  {name} ({title})" for title, name in files]
+    to, bcc = split_recipients(contacts)
+    return Built(Email(to=to, bcc=bcc, subject=subject, text="\n".join(lines), html=html,
+                       attachments=attachments, inline=inline), [name for _, name in files])
 
 
 def alert_items(conn, tenant_id: int, finding_ids, min_severity: str) -> list[alerts.Item]:
@@ -675,7 +900,7 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
             return built[-1]
         fallback = f"{tenant['name']} security report"
     else:
-        builder = build_upcoming_email if is_upcoming(schedule) else build_digest_email
+        builder = digest_builder(schedule)
 
         def build():
             return builder(app, conn, schedule, contacts, now=now)
@@ -687,7 +912,16 @@ def send_schedule(app, conn, vault, schedule, *, trigger: str = "manual", user: 
         _after_send(conn, schedule, email, transport, error, period=period, due=due, trigger=trigger, user=user,
                     now=now, fallback=fallback, archive=built[-1].email if error is None and built else None,
                     tenant=tenant)
+    if error is None and built:
+        # After the commit, so a slow or failing webhook never holds the send's transaction.
+        report_ready(app, conn, vault, tenant, period, built[-1].titles)
     return error
+
+
+def report_ready(app, conn, vault, tenant, period: str | None, titles: list[str], *, emailed: bool = True) -> None:
+    """Tell the webhook (Teams, Slack or your own) a client's report is in its report history, when the admin
+    turned that on. A link only: the files stay behind the portal's sign-in. Never raises."""
+    alerts.report_ready(conn, alerts.Alerting(_cfg(app).base_url, vault), tenant, period, titles, emailed=emailed)
 
 
 def _after_send(conn, schedule, email, transport, error, *, period: str, due: datetime, trigger: str,
@@ -763,14 +997,13 @@ def _archive(conn, schedule, tenant, email: Email, *, period: str, trigger: str,
              now: str) -> None:
     """Keep a copy of every file a sent report email attached (``issued.py``). Never fails the send."""
     try:
-        plan = dict((name, key) for key, name in attachment_plan(
-            tenant, json.loads(schedule["reports"] or "[]"), bool(schedule["include_xlsx"])))
         known = catalog_map()
-        files = []
-        for filename, content_type, data in email.attachments:
-            key = plan.get(filename, "")
-            files.append(issued.IssuedFile(key, known[key].title if key in known else filename, filename,
-                                           content_type, data))
+        plan = {name: (key, known[key].title) for key, name in attachment_plan(
+            tenant, json.loads(schedule["reports"] or "[]"), bool(schedule["include_xlsx"]))}
+        plan |= {name: (f"view:{v.report_key}", v.title)
+                 for v, name in view_attachments(tenant["name"], schedule_views(conn, schedule["id"]))}
+        files = [issued.IssuedFile(*plan.get(filename, ("", filename)), filename, content_type, data)
+                 for filename, content_type, data in email.attachments]
         issued.archive(conn, tenant["id"], files, period=period, trigger=trigger, user=user, to=email.to,
                        bcc=email.bcc, schedule_id=schedule["id"], now=now)
     except Exception:

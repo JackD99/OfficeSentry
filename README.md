@@ -131,8 +131,10 @@ of every detail report.
 ### Emailed reports and alerts
 
 Send any mix of reports weekly, monthly or quarterly at a time in the client's timezone: the client's people get
-the email, your team a hidden copy. Stale data is collected again first. There's a cross-tenant digest for your
-team, alert emails when a scan finds something new and critical, and Teams, Slack or webhook alerts. Every send is
+the email, your team a hidden copy. Saved views go too, with your filters, columns and sort, for one client or
+across every tenant. Stale data is collected again first. There's a cross-tenant digest for your team, alert
+emails when a scan finds something new and critical, and Teams, Slack or webhook alerts, including "the October
+report for Contoso is ready" with a link into the portal. Every send is
 logged, failures retry automatically, and you can preview at desktop and phone width.
 
 <table>

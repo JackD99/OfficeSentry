@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
-from ..db import audit, transaction, utcnow
+from ..db import audit
 from ..reports import branding, data_reports, evidence, month_changes, rollups, tables, views, workbook
 from ..reports.monthly_review import build as build_review
 from ..rules import RULES
@@ -19,6 +19,7 @@ from .access import login_required, roles_required, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
 from .saved_views import MAX_VIEWS
+from .saved_views import store as store_view
 
 bp = Blueprint("across", __name__)
 
@@ -172,11 +173,7 @@ def save_rows_view(key: str, table: str):
     if count >= MAX_VIEWS:
         flash(f"You can keep up to {MAX_VIEWS} views. Delete one you don't use first.", "error")
         return redirect(f"{page}?{query}")
-    with transaction(g.db):
-        g.db.execute(
-            "INSERT INTO saved_views (user_id, report_key, name, query, created_at) VALUES (?, ?, ?, ?, ?)"
-            " ON CONFLICT(user_id, report_key, name) DO UPDATE SET query = excluded.query",
-            (g.user["id"], key, name, query, utcnow()))
+    store_view(g.db, g.user["id"], key, name, query)
     flash(f"Saved “{name}”. It's under Views on this report, here and for every tenant.", "success")
     return redirect(f"{page}?{query}")
 

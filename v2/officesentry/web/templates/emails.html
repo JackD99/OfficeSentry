@@ -16,7 +16,7 @@
 
 <div class="tiles">
   {{ next_tile(upcoming, (tenants[upcoming.tenant_id].name if upcoming.tenant_id else upcoming.titles[0]) if upcoming else '') }}
-  <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests + coming_up)|selectattr('enabled')|list|length }}</div>
+  <div class="tile"><div class="label">Scheduled emails</div><div class="value">{{ (schedules + digests + coming_up + view_emails)|selectattr('enabled')|list|length }}</div>
     <div class="foot">{{ schedules|map(attribute='tenant_id')|unique|list|length }} of {{ tenants|length }} tenants covered</div></div>
   <div class="tile"><div class="label">Sent in the last 30 days</div><div class="value">{{ sent }}</div>
     <div class="foot">{{ tenant_alerts }} tenant alert{{ 's' if tenant_alerts != 1 }} on</div></div>
@@ -74,6 +74,17 @@
     {% else %}
     <p class="muted small">A weekly email for your team of what falls due in the next 90 days: renewals and trials, expiring app secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks to review. <a href="{{ url_for('upcoming.index') }}">See it now</a>.</p>
     <a class="btn primary sm" href="{{ url_for('email.new_upcoming') }}">{{ icon('plus') }} Set up the weekly email</a>
+    {% endif %}
+  </section>
+
+  <section class="card" id="saved-views">
+    <div class="card-head"><h2>{{ icon('eye') }} Saved views</h2></div>
+    {% if view_emails %}
+    <ul class="list sched-list compact-sched">{% for s in view_emails %}{{ schedule_item(s) }}{% endfor %}</ul>
+    <a class="btn sm" href="{{ url_for('email.new_views') }}">{{ icon('plus') }} Another one</a>
+    {% else %}
+    <p class="muted small">Email your team a saved view of any report with every tenant's rows, or one group's: say, mailboxes forwarding outside, every Monday as a CSV. To send a view for one client, add it to that client's scheduled email.</p>
+    <a class="btn primary sm" href="{{ url_for('email.new_views') }}">{{ icon('plus') }} Email a saved view</a>
     {% endif %}
   </section>
 
