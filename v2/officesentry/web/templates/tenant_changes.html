@@ -6,18 +6,26 @@
 <div class="toolbar">
   <nav class="subtabs m0" aria-label="Period">
     {% for d in periods %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, days=d) }}"{% if d == days %} class="active" aria-current="page"{% endif %}>Last {{ d }} days</a>{% endfor %}
+    {% if period %}<a href="{{ url_for('across.tenant_changes', tenant_id=tenant.id, **query) }}" class="active" aria-current="page">Chosen dates</a>{% endif %}
   </nav>
   <div class="toolbar-actions">
-    {{ downloads([('PDF', url_for('across.tenant_changes_pdf', tenant_id=tenant.id, days=days), ''),
-                  ('XLSX', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='xlsx', days=days), ''),
-                  ('CSV', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='csv', days=days), 'Every change in one table')]) }}
+    {{ downloads([('PDF', url_for('across.tenant_changes_pdf', tenant_id=tenant.id, **query), ''),
+                  ('XLSX', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='xlsx', **query), ''),
+                  ('CSV', url_for('across.tenant_changes_download', tenant_id=tenant.id, ext='csv', **query), 'Every change in one table')]) }}
   </div>
 </div>
 
-<p class="muted small">From {{ report.since|day }} to {{ report.until|day }}.{% if report.baseline %} Compared with data collected {{ report.baseline|day }}.{% endif %}</p>
+{#- The period as two dates: change either and the page compares those two days instead. -#}
+<form class="date-pick" method="get" action="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">
+  <label>From <input type="date" name="from" value="{{ report.since.date().isoformat() }}"{% if earliest %} min="{{ earliest.isoformat() }}"{% endif %} max="{{ today.isoformat() }}" required></label>
+  <label>to <input type="date" name="to" value="{{ (report.until.date() if period and period.end else today).isoformat() }}"{% if earliest %} min="{{ earliest.isoformat() }}"{% endif %} max="{{ today.isoformat() }}"></label>
+  <button class="sm">Compare</button>
+  {% if report.baseline %}<span class="faint">Compared with data collected {{ report.baseline|day }}.</span>{% endif %}
+</form>
+{% if period and period.note %}<div class="callout">{{ icon('clock') }}<div>{{ period.note }}</div></div>{% endif %}
 
 {% if not report.has_baseline %}
-<div class="callout">{{ icon('clock') }}<div><strong>No data from {{ days }} days ago yet</strong>
+<div class="callout">{{ icon('clock') }}<div><strong>No data from {{ report.since|day }} yet</strong>
   <p class="m0">Office Sentry started collecting this tenant more recently, so there's nothing to compare against. New and fixed findings still show below. Try a shorter period, or check back once collection has run for longer.</p></div></div>
 {% endif %}
 {% for note in report.notes %}<div class="callout warn">{{ icon('alert') }}<div>{{ note }}</div></div>{% endfor %}
@@ -40,12 +48,12 @@
     <div class="card-head"><h2>Key figures</h2></div>
     {% if report.figures %}
     <table class="compact-sm">
-      <thead><tr><th>Measure</th><th class="num">{{ report.since|day }}</th><th class="num">Now</th></tr></thead>
+      <thead><tr><th>Measure</th><th class="num">{{ report.since|day }}</th><th class="num">{{ report.until|day if period and period.end else 'Now' }}</th></tr></thead>
       <tbody>
       {% for f in report.figures %}
       <tr><td>{{ f.label }}</td>
         <td class="num" data-label="{{ report.since|day }}">{% if f.before is not none %}{{ '%g'|format(f.before) }}{{ f.unit }}{% else %}<span class="faint">–</span>{% endif %}</td>
-        <td class="num" data-label="Now">{{ '%g'|format(f.after) }}{{ f.unit }}{% if f.delta %} <span class="delta {{ f.trend }} tiny">{{ '%+g'|format(f.delta) }}</span>{% endif %}</td></tr>
+        <td class="num" data-label="{{ report.until|day if period and period.end else 'Now' }}">{{ '%g'|format(f.after) }}{{ f.unit }}{% if f.delta %} <span class="delta {{ f.trend }} tiny">{{ '%+g'|format(f.delta) }}</span>{% endif %}</td></tr>
       {% endfor %}
       </tbody>
     </table>

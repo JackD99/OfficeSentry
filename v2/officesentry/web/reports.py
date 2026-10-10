@@ -22,6 +22,7 @@ from ..reports import (
     views,
 )
 from ..reports.monthly_review import build, setting
+from . import as_of
 from .access import login_required, roles_required, tenant_or_404, visible_tenants
 from .printing import pdf_response
 from .reporting import report_extras
@@ -246,13 +247,17 @@ def data_report(tenant_id: int, key: str):
         abort(404)
     groups = data_reports.grouped()
     active = next(gr for gr in groups if any(k == key for k, _, _ in gr.reports))
-    report = data_reports.build(g.db, t, key)
+    day = as_of.day(g.db, t["id"], request.args.get("on"))
+    report = data_reports.build(g.db, t, key, as_of=day.as_of)
     view = views.View.parse(request.args)
     saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
                          (g.user["id"], key)).fetchall()
+    # A past day stays in every link the tables make (filters, sorting, the rows behind a figure).
+    path = request.path + (f"?on={day.on.isoformat()}" if day.on else "")
     return render_template("data_report.html", tenant=t, report=report, groups=groups, group=active,
-                           tables=views.table_views(report, view, request.path), view_query=view.query(),
-                           links=views.headline_links(report, request.path), saved=saved)
+                           tables=views.table_views(report, view, path), view_query=view.query(),
+                           links=views.headline_links(report, path), saved=saved, day=day, base=path,
+                           day_query=f"on={day.on.isoformat()}" if day.on else "")
 
 
 def _viewed(report):
@@ -268,7 +273,10 @@ def data_report_pdf(tenant_id: int, key: str):
         abort(404)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.pdf")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
-    return pdf_response("reports/detail.html", f"{key}-{slug}", report=_viewed(data_reports.build(g.db, t, key)))
+    day = as_of.day(g.db, t["id"], request.args.get("on"))
+    name = f"{key}-{slug}" + (f"-{day.on.isoformat()}" if day.on else "")
+    return pdf_response("reports/detail.html", name, report=_viewed(data_reports.build(g.db, t, key, as_of=day.as_of)),
+                        day=day)
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.xlsx")
@@ -279,10 +287,12 @@ def data_report_xlsx(tenant_id: int, key: str):
         abort(404)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
+    day = as_of.day(g.db, t["id"], request.args.get("on"))
+    name = f"{key}-{slug}" + (f"-{day.on.isoformat()}" if day.on else "")
     return Response(
-        data_reports.to_xlsx(_viewed(data_reports.build(g.db, t, key)), brand=branding.load(g.db)),
+        data_reports.to_xlsx(_viewed(data_reports.build(g.db, t, key, as_of=day.as_of)), brand=branding.load(g.db)),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={key}-{slug}.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename={name}.xlsx"},
     )
 
 

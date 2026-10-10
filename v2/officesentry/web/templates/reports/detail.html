@@ -10,13 +10,14 @@
 {% block client %}{{ report.tenant.name }}{% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}
-  {{ ui.meta('Date', report.generated_at|day) }}
+  {% if day is defined and day.on %}{{ ui.meta('As it was on', day.label) }}{% else %}{{ ui.meta('Date', report.generated_at|day) }}{% endif %}
   {{ ui.meta('Data collected', (collected|max)|when if collected else 'Not collected yet') }}
   {{ ui.meta('Microsoft 365 tenant', report.tenant.tenant_ref) }}
 {% endblock %}
 
 {% block body %}
 <p class="lede">{{ report.description }}</p>
+{% if day is defined and day.on %}<div class="callout"><strong>As it was on {{ day.label }}.</strong> {{ day.note or 'This is the data Office Sentry held for this tenant at the end of that day.' }}</div>{% endif %}
 {% if report.unavailable %}
 <div class="callout"><strong>Not available.</strong> {{ report.unavailable }}</div>
 {% else %}

@@ -568,7 +568,8 @@ class TableView:
 
 def link(path: str, view: View, anchor: str = "") -> str:
     query = view.query()
-    return f"{path}{'?' + query if query else ''}{'#' + anchor if anchor else ''}"
+    joined = ("&" if "?" in path else "?") + query if query else ""  # the path may carry its own (a past day)
+    return f"{path}{joined}{'#' + anchor if anchor else ''}"
 
 
 def anchor(table: str) -> str:

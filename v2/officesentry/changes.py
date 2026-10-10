@@ -1,4 +1,8 @@
-"""What changed between two snapshots of a tenant (e.g. now vs 4 weeks ago)."""
+"""What changed between two snapshots of a tenant (e.g. now vs 4 weeks ago, or between any two dates).
+
+Each feed compares the data held at ``before`` with the latest data, or with the data held at ``until``
+when that's given. Runs whose snapshot retention removed are read from the daily history
+(``state_history``)."""
 
 from __future__ import annotations
 
@@ -20,23 +24,31 @@ class Change:
 
 
 def _baseline_run(conn, tenant_id: int, collector: str, before: str):
+    from .state_history import READABLE
+
     return conn.execute(
         "SELECT * FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
-        " AND finished_at <= ?"
-        # Skip runs whose objects the retention policy has removed.
-        " AND (object_count = 0 OR EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id))"
-        " ORDER BY finished_at DESC, id DESC LIMIT 1",
+        # Skip runs that can't be read: retention removed their objects and the daily history doesn't have them.
+        f" AND finished_at <= ? AND {READABLE} ORDER BY finished_at DESC, id DESC LIMIT 1",
         (tenant_id, collector, before),
     ).fetchone()
 
 
-def _pair(conn, tenant_id: int, collector: str, kind: str, before: str):
-    latest = store.latest_run(conn, tenant_id, collector)
+def _end_run(conn, tenant_id: int, collector: str, until: str | None):
+    """The run compared against the baseline: the latest, or the last one by ``until``."""
+    return store.latest_run(conn, tenant_id, collector) if until is None else \
+        _baseline_run(conn, tenant_id, collector, until)
+
+
+def _pair(conn, tenant_id: int, collector: str, kind: str, before: str, until: str | None = None):
+    from .state_history import objects_of
+
+    latest = _end_run(conn, tenant_id, collector, until)
     base = _baseline_run(conn, tenant_id, collector, before)
     if latest is None or base is None or latest["id"] == base["id"]:
         return None
-    old = store.run_objects(conn, base["id"], kind)
-    new = store.run_objects(conn, latest["id"], kind)
+    old = objects_of(conn, base["id"], kind)
+    new = objects_of(conn, latest["id"], kind) if until else store.run_objects(conn, latest["id"], kind)
     return {o["_id"]: o for o in old}, {o["_id"]: o for o in new}
 
 
@@ -44,8 +56,8 @@ def _who(o: dict) -> str:
     return o.get("userPrincipalName") or o.get("displayName") or o.get("_id", "?")
 
 
-def admin_changes(conn, tenant_id: int, before: str) -> list[Change]:
-    pair = _pair(conn, tenant_id, "admin_roles", "role_assignment", before)
+def admin_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
+    pair = _pair(conn, tenant_id, "admin_roles", "role_assignment", before, until)
     if pair is None:
         return []
 
@@ -61,8 +73,8 @@ def admin_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return out
 
 
-def user_changes(conn, tenant_id: int, before: str) -> list[Change]:
-    pair = _pair(conn, tenant_id, "users", "user", before)
+def user_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
+    pair = _pair(conn, tenant_id, "users", "user", before, until)
     if pair is None:
         return []
     old, new = pair
@@ -82,8 +94,8 @@ def user_changes(conn, tenant_id: int, before: str) -> list[Change]:
 STATE_NAMES = {"enabled": "on", "disabled": "off", "enabledForReportingButNotEnforced": "report-only"}
 
 
-def ca_changes(conn, tenant_id: int, before: str) -> list[Change]:
-    pair = _pair(conn, tenant_id, "conditional_access", "ca_policy", before)
+def ca_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
+    pair = _pair(conn, tenant_id, "conditional_access", "ca_policy", before, until)
     if pair is None:
         return []
     old, new = pair
@@ -104,10 +116,10 @@ def ca_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return out
 
 
-def forwarding_changes(conn, tenant_id: int, before: str) -> list[Change]:
+def forwarding_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
     from .mailflow import mailbox_forwarding
 
-    pair = _pair(conn, tenant_id, "mailboxes", "mailbox", before)
+    pair = _pair(conn, tenant_id, "mailboxes", "mailbox", before, until)
     if pair is None:
         return []
     old, new = pair
@@ -122,12 +134,14 @@ def forwarding_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return out
 
 
-def app_changes(conn, tenant_id: int, before: str) -> list[Change]:
-    pair = _pair(conn, tenant_id, "app_consents", "app_permission", before)
+def app_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
+    from .state_history import objects_of
+
+    pair = _pair(conn, tenant_id, "app_consents", "app_permission", before, until)
     if pair is None:
         return []
-    latest = store.latest_run(conn, tenant_id, "app_consents")
-    names = {o["_id"]: o.get("displayName") for o in store.run_objects(conn, latest["id"], "service_principal")}
+    latest = _end_run(conn, tenant_id, "app_consents", until)
+    names = {o["_id"]: o.get("displayName") for o in objects_of(conn, latest["id"], "service_principal")}
 
     def keyed(rows):
         return {(o.get("clientId"), o.get("permission")) for o in rows.values()
@@ -142,14 +156,14 @@ def app_changes(conn, tenant_id: int, before: str) -> list[Change]:
 COMPLIANCE_WORDS = {"compliant": "compliant", "noncompliant": "not compliant", "inGracePeriod": "in grace period"}
 
 
-def _device_pair(conn, tenant_id: int, kind: str, before: str):
-    pair = _pair(conn, tenant_id, "devices", kind, before)
+def _device_pair(conn, tenant_id: int, kind: str, before: str, until: str | None = None):
+    pair = _pair(conn, tenant_id, "devices", kind, before, until)
     return None if pair is None else tuple({k: clean_device(d) for k, d in side.items()} for side in pair)
 
 
-def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
+def device_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
     """Intune enrolments, retirements and compliance or encryption lost; Entra records without Intune."""
-    pair = _device_pair(conn, tenant_id, "managed_device", before)
+    pair = _device_pair(conn, tenant_id, "managed_device", before, until)
     if pair is not None and (pair[0] or pair[1]):
         old, new = pair
         out = []
@@ -170,7 +184,7 @@ def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
         out += [Change("Devices", "removed", d.get("deviceName") or did, "Removed from Intune")
                 for did, d in old.items() if did not in new]
         return out
-    pair = _device_pair(conn, tenant_id, "entra_device", before)
+    pair = _device_pair(conn, tenant_id, "entra_device", before, until)
     if pair is None:
         return []
     old, new = pair
@@ -180,9 +194,9 @@ def device_changes(conn, tenant_id: int, before: str) -> list[Change]:
                   for did, d in old.items() if did not in new]
 
 
-def group_changes(conn, tenant_id: int, before: str) -> list[Change]:
+def group_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
     """Teams and Microsoft 365 groups created or deleted, and those left without an enabled owner."""
-    pair = _pair(conn, tenant_id, "groups", "group", before)
+    pair = _pair(conn, tenant_id, "groups", "group", before, until)
     if pair is None:
         return []
     old, new = ({gid: g for gid, g in rows.items() if g.get("kind") == "microsoft365"} for rows in pair)
@@ -200,13 +214,13 @@ def group_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return out
 
 
-def audit_changes(conn, tenant_id: int, before: str) -> list[Change]:
-    """Admin changes worth a second look since ``before``, each with its own date, from the activity history
-    (snapshot comparisons only see what differs between two collections)."""
+def audit_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
+    """Admin changes worth a second look since ``before`` (until ``until``), each with its own date, from the
+    activity history (snapshot comparisons only see what differs between two collections)."""
     since = parse_ts(before)
     if since is None:
         return []
-    history = adminactivity.from_history(conn, tenant_id, since, datetime.now(UTC))
+    history = adminactivity.from_history(conn, tenant_id, since, parse_ts(until) if until else datetime.now(UTC))
     if history is None:
         return []
     out = []
@@ -221,12 +235,12 @@ def audit_changes(conn, tenant_id: int, before: str) -> list[Change]:
     return out
 
 
-def all_changes(conn, tenant_id: int, before: str) -> list[Change]:
+def all_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
     out: list[Change] = []
     for feed in (admin_changes, ca_changes, user_changes, forwarding_changes, app_changes, device_changes,
                  group_changes, audit_changes):
         try:
-            out += feed(conn, tenant_id, before)
+            out += feed(conn, tenant_id, before, until)
         except Exception:  # one unreadable feed mustn't take the monthly review down
             logging.getLogger(__name__).exception("Change feed %s failed", feed.__name__)
     return out

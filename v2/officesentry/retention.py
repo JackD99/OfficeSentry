@@ -58,6 +58,8 @@ AUDIT_FLOOR_DAYS = 365
 ISSUED_FLOOR_DAYS = 365
 
 # Objects that hold sign-in detail: who signed in, from which address, country and city.
+# The data sources that store them.
+SIGNIN_COLLECTORS = ("sign_ins", "mail_usage")
 SIGNIN_KINDS = ("sign_in_status", "sign_in_account", "sign_in_location", "sign_in_country", "sign_in_app",
                 "sign_in_failure", "sign_in_failure_ip", "risky_sign_in", "legacy_signin", "legacy_signin_status")
 
@@ -203,7 +205,7 @@ def _delete_ids(conn, table: str, ids: list[int], batch: int) -> int:
 
 _SIGNIN_MARKS = ",".join("?" * len(SIGNIN_KINDS))
 _SIGNIN_RUNS = (
-    "SELECT id FROM runs WHERE collector IN ('sign_ins', 'mail_usage') AND finished_at < ?"
+    f"SELECT id FROM runs WHERE collector IN {SIGNIN_COLLECTORS} AND finished_at < ?"
     f" AND EXISTS (SELECT 1 FROM objects o WHERE o.run_id = runs.id AND o.kind IN ({_SIGNIN_MARKS})) ORDER BY id")
 
 

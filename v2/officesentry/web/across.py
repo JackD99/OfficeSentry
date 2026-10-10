@@ -25,6 +25,7 @@ from ..reports import (
     workbook,
 )
 from ..reports.monthly_review import build as build_review
+from . import as_of
 from .access import login_required, roles_required, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
@@ -298,11 +299,25 @@ def changes_download(ext: str):
     return _download(body, f"all-tenants-changes-{days}-days", ext)
 
 
-def _tenant_changes(t, days: int) -> dict:
-    report = month_changes.build(g.db, t, days)
+def _tenant_changes(t) -> dict:
+    """A tenant's Changes page: the last ``days``, or between the ``from`` and ``to`` dates (any two days the
+    data reaches back to)."""
+    period = as_of.period(g.db, t["id"], request.args.get("from"), request.args.get("to"))
+    if period is None:
+        days = _days()
+        report = month_changes.build(g.db, t, days)
+        query, slug, title = {"days": days}, f"{days}-days", f"What changed in the last {days} days"
+    else:
+        days = None
+        report = month_changes.build(g.db, t, since=period.since, until=period.until)
+        end = report.until if period.end else datetime.now(UTC)
+        query = period.query
+        slug = f"{period.start.isoformat()}-to-{end:%Y-%m-%d}"
+        title = f"What changed from {period.start.day} {period.start:%b %Y} to {end.day} {end:%b %Y}"
     unchanged = [r for r in report.reports if not r.count and not r.note]
-    return {"report": report, "days": days, "unchanged": unchanged, "titles": RULE_TITLES,
-            "areas": _change_areas(report)}
+    return {"report": report, "days": days, "period": period, "query": query, "slug": slug, "title": title,
+            "earliest": as_of.earliest(g.db, t["id"]), "today": datetime.now(UTC).date(),
+            "unchanged": unchanged, "titles": RULE_TITLES, "areas": _change_areas(report)}
 
 
 def _change_areas(report) -> list[tuple[str, list]]:
@@ -318,18 +333,16 @@ def _change_areas(report) -> list[tuple[str, list]]:
 @login_required
 def tenant_changes(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    return render_template("tenant_changes.html", tenant=t, periods=month_changes.PERIODS,
-                           **_tenant_changes(t, _days()))
+    return render_template("tenant_changes.html", tenant=t, periods=month_changes.PERIODS, **_tenant_changes(t))
 
 
 @bp.get("/tenants/<int:tenant_id>/changes.pdf")
 @login_required
 def tenant_changes_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
-    days = _days()
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"changes-{days}d.pdf")
-    return pdf_response("reports/tenant_changes.html", f"changes-{days}-days-{tables.slug(t['name'])}",
-                        **_tenant_changes(t, days))
+    page = _tenant_changes(t)
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"changes-{page['slug']}.pdf")
+    return pdf_response("reports/tenant_changes.html", f"changes-{page['slug']}-{tables.slug(t['name'])}", **page)
 
 
 @bp.get("/tenants/<int:tenant_id>/changes.csv", defaults={"ext": "csv"})
@@ -337,17 +350,17 @@ def tenant_changes_pdf(tenant_id: int):
 @login_required
 def tenant_changes_download(tenant_id: int, ext: str):
     t = tenant_or_404(tenant_id)
-    days = _days()
-    report = month_changes.build(g.db, t, days)
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"changes-{days}d.{ext}")
+    page = _tenant_changes(t)
+    report = page["report"]
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"changes-{page['slug']}.{ext}")
     if ext == "csv":
         body = tables.to_csv(month_changes.all_changes_table(report))
     else:
         body = tables.to_xlsx(month_changes.to_tables(report), cover=_cover(
-            f"What changed in the last {days} days", t["name"], tenant_ref=t["tenant_ref"],
+            page["title"], t["name"], tenant_ref=t["tenant_ref"],
             facts=[("Changes", report.total, ""), ("New findings", len(report.new_findings), ""),
                    ("Fixed findings", len(report.fixed_findings), "")]))
-    return _download(body, f"changes-{days}-days-{tables.slug(t['name'])}", ext)
+    return _download(body, f"changes-{page['slug']}-{tables.slug(t['name'])}", ext)
 
 
 # -- CSV for per-tenant reports -------------------------------------------------------
@@ -359,7 +372,8 @@ def data_report_csv(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if key not in data_reports.REPORTS:
         abort(404)
-    report = views.apply(data_reports.build(g.db, t, key), views.View.parse(request.args))
+    day = as_of.day(g.db, t["id"], request.args.get("on"))
+    report = views.apply(data_reports.build(g.db, t, key, as_of=day.as_of), views.View.parse(request.args))
     report_tables = data_reports.to_tables(report)
     index = request.args.get("section", 1, type=int)
     if not 1 <= index <= len(report_tables):

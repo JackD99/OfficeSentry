@@ -4,7 +4,7 @@
 {% set compact_cover = true %}
 {% set document = true %}
 
-{% block doc_title %}What changed in the last {{ days }} days{% endblock %}
+{% block doc_title %}{{ title }}{% endblock %}
 {% block client %}{{ report.tenant.name }}{% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}
@@ -15,7 +15,7 @@
 
 {% block body %}
 {% if not report.has_baseline %}
-<div class="callout"><strong>No data from {{ days }} days ago yet.</strong> Collection started more recently, so there's nothing to compare against. New and fixed findings still show below.</div>
+<div class="callout"><strong>No data from {{ report.since|day }} yet.</strong> Collection started more recently, so there's nothing to compare against. New and fixed findings still show below.</div>
 {% endif %}
 {% for note in report.notes %}<div class="callout warn">{{ note }}</div>{% endfor %}
 {% set score = (report.figures|selectattr('key', 'equalto', 'secure_score.pct')|list or [none])[0] %}
@@ -31,7 +31,7 @@
 <section class="doc-section keep">
   <h2>Key figures</h2>
   <div class="table-wrap"><table class="data">
-    <thead><tr><th>Measure</th><th class="num">{{ report.since|day }}</th><th class="num">Now</th><th class="num">Change</th></tr></thead>
+    <thead><tr><th>Measure</th><th class="num">{{ report.since|day }}</th><th class="num">{{ report.until|day if period and period.end else 'Now' }}</th><th class="num">Change</th></tr></thead>
     <tbody>{% for f in report.figures %}
     <tr><td>{{ f.label }}</td>
       <td class="num">{% if f.before is not none %}{{ '%g'|format(f.before) }}{{ f.unit }}{% else %}–{% endif %}</td>
