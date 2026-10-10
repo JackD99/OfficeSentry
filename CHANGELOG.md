@@ -6,6 +6,36 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
+## 2.1.1 (unreleased)
+
+### Action required
+
+None.
+
+### New Microsoft permissions
+
+None.
+
+### Database upgrade
+
+No.
+
+### Fixed
+
+- A report email retried after midnight, sent again with Retry the next week, or approved late now names
+  the month, week or quarter it was for, and carries that month's commentary, instead of the day it went out.
+- A tenant nothing has been collected for yet is no longer emailed an empty report: the send fails with the
+  reason and is retried.
+- Send now and Retry wait while the timer is already sending that schedule's period, so a period can't go
+  out twice. A failed Send now is logged as a failure.
+- Approving a month-end report for a client with nobody to email no longer marks the month Sent: it stays
+  Approved, flagged "Nobody to email" in the queue, with a Send again once a contact is added.
+- A month-end email to a client with more than 20 contacts keeps the team's hidden copy, and Monthly report
+  coverage names the contacts left off.
+- The weekly digest's count of new critical and high findings leaves out accepted risks, as its list does.
+- The plain-text part of a report email leads with the verdict and says when the data is old.
+- Pausing and resuming an email schedule is saved as one change.
+
 ## 2.1.0 (2026-10-10)
 
 The first release from the public repository. The headlines: home pages for technicians and account

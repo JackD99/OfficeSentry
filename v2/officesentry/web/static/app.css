@@ -482,6 +482,7 @@ p .person { vertical-align: 1px; }
 .deliveries td:first-child { min-width: 220px; }
 .callout .grow { flex: 1; min-width: 0; }
 .callout form { flex: none; }
+.callout .callout-actions { margin-top: var(--space-2); }
 .label-sm { font-weight: 600; font-size: var(--fs-sm); color: var(--text-2); margin: var(--space-3-5) 0 var(--space-1-5); }
 .label-sm .muted { font-weight: 400; }
 .check-list { display: grid; gap: var(--space-0-5); }

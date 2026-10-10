@@ -493,6 +493,14 @@ month is sent or published (`month_end.deliver`), `delivery.report_ready` posts
 report history and the file names, never the files. Email templates live in
 `web/templates/emails/` and use inline styles and tables only (email clients
 ignore stylesheets). Clients never see team contacts, hidden copies or errors.
+An email names the period of its schedule's latest send time
+(`delivery.email_period`, `period_label`), never the clock's, so a retry after
+midnight or a Retry next week still says, and carries the commentary of, the
+month it was for; a month-end send passes its `period`. A report schedule
+never emails a tenant nothing has been collected for (`nothing_collected`: the
+send fails with the reason and retries), and Send now and Retry refuse while
+the timer's `send_schedule` task for the period is queued or running
+(`being_sent`), so nobody sends a period twice.
 
 **Coming up** (`upcoming.py`, page `/upcoming` in `web/upcoming.py`, admin and analyst) lists what falls
 due in the next 90 days across the visible, active tenants: subscription renewals and trials (lapsing ones
@@ -553,8 +561,12 @@ transaction re-checks the state, stores them in `issued_reports` (`freeze`:
 trigger `approval`, `approved_by`/`approved_at`) and checkpoints "frozen";
 then emails those exact bytes (`deliver` and `delivery.send_frozen`, which
 record the email, mark the schedule's period done and the month Sent in one
-transaction) or, for portal-only plans or no recipients, leaves them in the
-report history. A worker that dies between freeze and send sends once on
+transaction) or, for portal-only plans, leaves them in the report history. An
+email plan with nobody to send to keeps them in the report history too, but
+the month stays Approved with the reason (`report_reviews.error`), flagged
+"Nobody to email" in the queue, until Send again reaches someone. A plan
+email goes to the client's first `mailer.MAX_RECIPIENTS` contacts plus the
+team's hidden copy (`_plan_recipients`); `coverage()` names anyone left off. A worker that dies between freeze and send sends once on
 retry, without freezing again (`tests/test_tasks.py`). Approving an issued month again is a re-issue: it needs a reason and
 stores the next version. Roles: admin and analyst review, comment, assign and
 edit recommendations and notes; only admins edit plans and approve, send or
