@@ -17,7 +17,7 @@ from .data_reports import DataReport, Rows, Section, Tile, _type
 from .mail_reports import NOT_COLLECTED, _no_exchange, _size, _text
 from .registry import report
 
-GB = 1024 ** 3
+GB = 1024**3
 # A mailbox without an archive is "large" at 80% of what it may send (40 GB of a 50 GB quota), or at
 # 40 GB when Exchange reported no quota.
 NEAR_QUOTA = 0.8
@@ -90,12 +90,19 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     size_rows = snap.objects("mailbox_usage", "mailbox_size")
     sizes = {s.get("mailboxId"): s for s in size_rows or []}
 
-    every = Section(EVERY, ["Mailbox", "Type", "Account", "Litigation hold", "Archive", "Mailbox size"],
-                    empty="No mailboxes.")
-    leavers = Section(LEAVERS, ["Mailbox", "Type", "Why it looks like a leaver", "Archive", "Mailbox size"],
-                      empty="Every leaver's mailbox is on litigation hold, or there are no leavers.")
-    large = Section(LARGE, ["Mailbox", "Type", "Mailbox size", "Stops sending at", "Used"],
-                    empty="No mailbox without an archive is close to its quota.")
+    every = Section(
+        EVERY, ["Mailbox", "Type", "Account", "Litigation hold", "Archive", "Mailbox size"], empty="No mailboxes."
+    )
+    leavers = Section(
+        LEAVERS,
+        ["Mailbox", "Type", "Why it looks like a leaver", "Archive", "Mailbox size"],
+        empty="Every leaver's mailbox is on litigation hold, or there are no leavers.",
+    )
+    large = Section(
+        LARGE,
+        ["Mailbox", "Type", "Mailbox size", "Stops sending at", "Used"],
+        empty="No mailbox without an archive is close to its quota.",
+    )
     held = archived = 0
     for m in sorted(boxes, key=lambda m: _text(m.get("PrimarySmtpAddress")).lower()):
         size = sizes.get(m["_id"]) or {}
@@ -103,41 +110,70 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         hold, archive = _on_hold(m, size), _archive_on(m, size)
         held += hold
         archived += archive
-        address, kind, total = m.get("PrimarySmtpAddress"), _type(m.get("RecipientTypeDetails")), \
-            _size(size.get("totalBytes"))
+        address, kind, total = (
+            m.get("PrimarySmtpAddress"),
+            _type(m.get("RecipientTypeDetails")),
+            _size(size.get("totalBytes")),
+        )
         why = _leaver(m, user)
         if why and not hold:
             leavers.add([address, kind, why, archive, total], "medium")
-        every.add([address, kind, _account(user), hold, archive, total],
-                  "medium" if why and not hold else None)
+        every.add([address, kind, _account(user), hold, archive, total], "medium" if why and not hold else None)
         big, used = _large(size)
         if big and not archive:
-            large.add([address, kind, total, _size(size.get("sendQuotaBytes")) or "No limit",
-                       f"{used:.0%}" if used is not None else ""], "low")
+            large.add(
+                [
+                    address,
+                    kind,
+                    total,
+                    _size(size.get("sendQuotaBytes")) or "No limit",
+                    f"{used:.0%}" if used is not None else "",
+                ],
+                "low",
+            )
 
     n = len(boxes)
-    every.intro = (f"{held} of {plural(n, 'mailbox')} {verb(held, 'is', 'are')} on litigation hold and "
-                   f"{archived} {verb(archived, 'has', 'have')} an archive turned on.")
-    leavers.intro = (f"{plural(len(leavers.rows), 'mailbox')} of people who seem to have left "
-                     f"{verb(len(leavers.rows), 'is', 'are')} not on litigation hold. A hold keeps every message, "
-                     "including deleted ones, after the leaver's licence is removed or the mailbox is converted; "
-                     "without one, mail can be deleted and is gone for good once the licence goes. If the client "
-                     "needs to keep a leaver's mail, put the mailbox on hold (Exchange admin centre, Recipients > "
-                     "Mailboxes > the mailbox > Others > Manage litigation hold) before removing the licence.")
+    every.intro = (
+        f"{held} of {plural(n, 'mailbox')} {verb(held, 'is', 'are')} on litigation hold and "
+        f"{archived} {verb(archived, 'has', 'have')} an archive turned on."
+    )
+    leavers.intro = (
+        f"{plural(len(leavers.rows), 'mailbox')} of people who seem to have left "
+        f"{verb(len(leavers.rows), 'is', 'are')} not on litigation hold. A hold keeps every message, "
+        "including deleted ones, after the leaver's licence is removed or the mailbox is converted; "
+        "without one, mail can be deleted and is gone for good once the licence goes. If the client "
+        "needs to keep a leaver's mail, put the mailbox on hold (Exchange admin centre, Recipients > "
+        "Mailboxes > the mailbox > Others > Manage litigation hold) before removing the licence."
+    )
     if size_rows is None:
         large.intro = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the tenant page."
     else:
-        large.intro = (f"{plural(len(large.rows), 'mailbox')} without an archive "
-                       f"{verb(len(large.rows), 'is', 'are')} over {NEAR_QUOTA:.0%} of quota (or over "
-                       f"{LARGE_BYTES // GB} GB). Turning on the archive moves old mail out of the mailbox before "
-                       "sending stops.")
+        large.intro = (
+            f"{plural(len(large.rows), 'mailbox')} without an archive "
+            f"{verb(len(large.rows), 'is', 'are')} over {NEAR_QUOTA:.0%} of quota (or over "
+            f"{LARGE_BYTES // GB} GB). Turning on the archive moves old mail out of the mailbox before "
+            "sending stops."
+        )
 
     report.tiles = [
-        Tile("Mailboxes on litigation hold", f"{held} of {n}", "Mail kept even if deleted",
-             rows=Rows(EVERY, {"Litigation hold": "Yes"})),
-        Tile("Archive turned on", f"{archived} of {n}", "Mailboxes with an online archive",
-             rows=Rows(EVERY, {"Archive": "Yes"})),
-        Tile("Leavers' mailboxes without a hold", len(leavers.rows), "Blocked or converted, not on hold",
-             "warn" if leavers.rows else "ok", Rows(LEAVERS)),
+        Tile(
+            "Mailboxes on litigation hold",
+            f"{held} of {n}",
+            "Mail kept even if deleted",
+            rows=Rows(EVERY, {"Litigation hold": "Yes"}),
+        ),
+        Tile(
+            "Archive turned on",
+            f"{archived} of {n}",
+            "Mailboxes with an online archive",
+            rows=Rows(EVERY, {"Archive": "Yes"}),
+        ),
+        Tile(
+            "Leavers' mailboxes without a hold",
+            len(leavers.rows),
+            "Blocked or converted, not on hold",
+            "warn" if leavers.rows else "ok",
+            Rows(LEAVERS),
+        ),
     ]
     report.sections = [every, leavers, large]

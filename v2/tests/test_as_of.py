@@ -37,8 +37,10 @@ def then_and_now(db, two_tenants):
     old = [r[0] for r in db.execute("SELECT id FROM runs WHERE tenant_id = ?", (alpha,))]
     marks = ",".join("?" * len(old))
     then = (NOW - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db.execute(f"UPDATE runs SET created_at = ?, started_at = ?, finished_at = ? WHERE id IN ({marks})",
-               (then, then, then, *old))
+    db.execute(
+        f"UPDATE runs SET created_at = ?, started_at = ?, finished_at = ? WHERE id IN ({marks})",
+        (then, then, then, *old),
+    )
     db.execute(f"UPDATE state_runs SET finished_at = ? WHERE run_id IN ({marks})", (then, *old))
     seed_tenant(db, alpha, users=_with_guest("gwen@now.example", bob=False))
     db.execute(f"DELETE FROM objects WHERE run_id IN ({marks})", old)  # as the retention policy does
@@ -61,7 +63,8 @@ def test_a_day_is_moved_into_the_data_held(db, then_and_now):
     assert as_of.earliest(db, then_and_now) == first
     assert as_of.day(db, then_and_now, day(30)).on == TODAY - timedelta(days=30)
     assert as_of.day(db, then_and_now, day(30)).as_of == datetime.combine(
-        TODAY - timedelta(days=30), datetime.max.time().replace(microsecond=0), UTC)
+        TODAY - timedelta(days=30), datetime.max.time().replace(microsecond=0), UTC
+    )
     early = as_of.day(db, then_and_now, day(400))
     assert early.on == first and "starts on" in early.note
     for raw in (None, "", "nonsense", TODAY.isoformat(), "2999-01-01", "2026-02-30"):
@@ -81,7 +84,8 @@ def test_a_period_is_put_in_order_and_moved_into_the_data_held(db, then_and_now)
     # From the first day: as the data stood at its end, since nothing came before it.
     assert early.since == as_of.end_of(first)
     assert as_of.period(db, then_and_now, day(20), None).since == datetime.combine(
-        TODAY - timedelta(days=20), datetime.min.time(), UTC)
+        TODAY - timedelta(days=20), datetime.min.time(), UTC
+    )
 
 
 def test_a_tenant_with_no_data_has_no_past_days(db, two_tenants):
@@ -96,9 +100,14 @@ def test_a_past_day_is_rebuilt_from_the_history_once_the_snapshot_has_gone(db, t
     tenant = store.get_tenant(db, then_and_now)
     then = TenantSnapshot(db, tenant, as_of=as_of.end_of(TODAY - timedelta(days=30)))
     assert {u.get("mail") or u["displayName"] for u in then.objects("users", "user")} == {
-        "Ann", "Bob", "gwen@then.example"}
+        "Ann",
+        "Bob",
+        "gwen@then.example",
+    }
     assert {u.get("mail") or u["displayName"] for u in TenantSnapshot(db, tenant).objects("users", "user")} == {
-        "Ann", "gwen@now.example"}
+        "Ann",
+        "gwen@now.example",
+    }
     # Before the first collection there is nothing to read.
     assert TenantSnapshot(db, tenant, as_of=NOW - timedelta(days=90)).objects("users", "user") is None
 
@@ -146,8 +155,9 @@ def test_a_report_shows_the_tenant_as_it_was_on_a_chosen_day(admin, then_and_now
 
 
 def test_a_past_day_keeps_the_filters_and_saved_views(admin, db, then_and_now):
-    page = admin.get(f"/tenants/{then_and_now}/data/guests?on={day(30)}&hide=guest-accounts/invited"
-                     ).get_data(as_text=True)
+    page = admin.get(f"/tenants/{then_and_now}/data/guests?on={day(30)}&hide=guest-accounts/invited").get_data(
+        as_text=True
+    )
     assert '<input type="hidden" name="hide" value="guest-accounts/invited">' in page
     assert f'href="/tenants/{then_and_now}/data/guests?on={day(30)}"' in page  # the views menu's Reset
 
@@ -179,9 +189,13 @@ def test_a_past_day_is_only_shown_for_the_tenants_a_user_can_see(client, db, two
     alpha, bravo = two_tenants
     make_user(db, "bravo-only", role="analyst", tenants=(bravo,))
     login(client, "bravo-only")
-    for path in (f"/tenants/{alpha}/data/guests?on={day(30)}", f"/tenants/{alpha}/data/guests.csv?on={day(30)}",
-                 f"/tenants/{alpha}/data/guests.pdf?on={day(30)}", f"/tenants/{alpha}/changes?from={day(60)}",
-                 f"/tenants/{alpha}/changes.xlsx?from={day(60)}&to={day(1)}"):
+    for path in (
+        f"/tenants/{alpha}/data/guests?on={day(30)}",
+        f"/tenants/{alpha}/data/guests.csv?on={day(30)}",
+        f"/tenants/{alpha}/data/guests.pdf?on={day(30)}",
+        f"/tenants/{alpha}/changes?from={day(60)}",
+        f"/tenants/{alpha}/changes.xlsx?from={day(60)}&to={day(1)}",
+    ):
         assert client.get(path).status_code == 404, path
 
 

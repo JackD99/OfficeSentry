@@ -572,7 +572,7 @@ whatever cloud the clients are in.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'
-pytest && ruff check .
+pytest && ruff format . && ruff check .
 OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:8000
 python -m officesentry worker                                 # second terminal
 ```

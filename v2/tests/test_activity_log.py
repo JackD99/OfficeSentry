@@ -21,7 +21,9 @@ def test_failed_sign_ins_with_unknown_names_cant_flood_the_log(client, db):
     rows = db.execute("SELECT * FROM audit_log ORDER BY id").fetchall()[before:]
     # One counted row for the failures and one for the attempts that were then slowed down, not 30.
     assert [(r["action"], r["detail"], r["ip"], r["username"]) for r in rows] == [
-        ("login_failed_unknown", "20 attempts", ATTACKER, None), ("login_throttled", "10 attempts", ATTACKER, None)]
+        ("login_failed_unknown", "20 attempts", ATTACKER, None),
+        ("login_throttled", "10 attempts", ATTACKER, None),
+    ]
     assert not any("nobody" in str(tuple(r)) for r in rows)
 
 
@@ -37,23 +39,35 @@ def test_audit_rows_record_the_address(client, db):
 
 def test_old_sign_in_noise_is_pruned_but_changes_are_kept(db):
     old = (datetime.now(UTC) - timedelta(days=AUDIT_NOISE_DAYS + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    db.executemany("INSERT INTO audit_log (ts, username, action) VALUES (?, ?, ?)",
-                   [(old, "a", "login_failed"), (old, None, "login_failed_unknown"), (old, "a", "user_updated"),
-                    (old, "a", "account_locked")])
+    db.executemany(
+        "INSERT INTO audit_log (ts, username, action) VALUES (?, ?, ?)",
+        [
+            (old, "a", "login_failed"),
+            (old, None, "login_failed_unknown"),
+            (old, "a", "user_updated"),
+            (old, "a", "account_locked"),
+        ],
+    )
     audit(db, "a", "login_failed")  # recent
     assert prune_audit(db) == 2
     assert sorted(r[0] for r in db.execute("SELECT action FROM audit_log")) == [
-        "account_locked", "login_failed", "user_updated"]
+        "account_locked",
+        "login_failed",
+        "user_updated",
+    ]
 
 
 def _seed(db, connection_id):
     alpha = store.create_tenant(db, "Alpha Ltd", "alpha.onmicrosoft.com", connection_id)
-    rows = [("2026-09-01T10:00:00Z", "ana", "collect_requested", alpha, "users"),
-            ("2026-09-02T10:00:00Z", "bob", "tenant_updated", alpha, "=HYPERLINK(\"x\")"),
-            ("2026-09-03T10:00:00Z", "ana", "login", None, ""),
-            ("2026-09-04T10:00:00Z", "ana", "tenant_deleted", 999, "Gone Ltd (gone.example.com)")]
-    db.executemany("INSERT INTO audit_log (ts, username, action, tenant_id, detail, ip)"
-                   " VALUES (?, ?, ?, ?, ?, '192.0.2.1')", rows)
+    rows = [
+        ("2026-09-01T10:00:00Z", "ana", "collect_requested", alpha, "users"),
+        ("2026-09-02T10:00:00Z", "bob", "tenant_updated", alpha, '=HYPERLINK("x")'),
+        ("2026-09-03T10:00:00Z", "ana", "login", None, ""),
+        ("2026-09-04T10:00:00Z", "ana", "tenant_deleted", 999, "Gone Ltd (gone.example.com)"),
+    ]
+    db.executemany(
+        "INSERT INTO audit_log (ts, username, action, tenant_id, detail, ip) VALUES (?, ?, ?, ?, ?, '192.0.2.1')", rows
+    )
     return alpha
 
 
@@ -73,10 +87,12 @@ def test_activity_log_filters_pages_and_exports(client, db, connection_id):
     assert "Tenant #999 (deleted or not visible)" in page
 
     page = client.get("/admin/activity", query_string={"user": "ana", "action": "collect_requested"}).get_data(
-        as_text=True)
+        as_text=True
+    )
     assert "Collect requested" in page and "Tenant updated" not in page.split("<tbody>")[1]
-    page = client.get("/admin/activity", query_string={"tenant": alpha, "from": "2026-09-02", "to": "2026-09-02"}
-                      ).get_data(as_text=True)
+    page = client.get(
+        "/admin/activity", query_string={"tenant": alpha, "from": "2026-09-02", "to": "2026-09-02"}
+    ).get_data(as_text=True)
     body = page.split("<tbody>")[1]
     assert "Tenant updated" in body and "Collect requested" not in body
 

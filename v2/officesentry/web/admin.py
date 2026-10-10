@@ -52,8 +52,9 @@ def users():
     two_step = {
         "policy": cfg.mfa_policy(g.db),
         "from_env": cfg.require_mfa_explicit,
-        "clients_without": sum(1 for u in rows if u["role"] == "client" and not u["totp_enabled_at"]
-                               and not u["disabled"]),
+        "clients_without": sum(
+            1 for u in rows if u["role"] == "client" and not u["totp_enabled_at"] and not u["disabled"]
+        ),
     }
     group_grants = dict(g.db.execute("SELECT user_id, COUNT(*) FROM user_tenant_groups GROUP BY user_id").fetchall())
     return render_template("users.html", users=rows, roles=ROLES, two_step=two_step, group_grants=group_grants)
@@ -103,10 +104,12 @@ def edit_user(user_id: int):
         grants = {int(x) for x in request.form.getlist("tenants") if x.isdigit()} & valid_ids
         # Only analysts can be granted a whole group (access.visible_tenants ignores it for anyone else).
         valid_groups = {gr["id"] for gr in tenant_groups.all_groups(g.db)}
-        group_grants = ({int(x) for x in request.form.getlist("groups") if x.isdigit()} & valid_groups
-                        if role == "analyst" else set())
-        changed_access = (role != user["role"] or disabled != user["disabled"]
-                          or all_tenants != user["all_tenants"])
+        group_grants = (
+            {int(x) for x in request.form.getlist("groups") if x.isdigit()} & valid_groups
+            if role == "analyst"
+            else set()
+        )
+        changed_access = role != user["role"] or disabled != user["disabled"] or all_tenants != user["all_tenants"]
         with transaction(g.db):
             g.db.execute(
                 "UPDATE users SET role = ?, all_tenants = ?, disabled = ?,"
@@ -114,28 +117,40 @@ def edit_user(user_id: int):
                 (role, all_tenants, disabled, int(changed_access), user_id),
             )
             g.db.execute("DELETE FROM user_tenants WHERE user_id = ?", (user_id,))
-            g.db.executemany("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)",
-                             [(user_id, t) for t in sorted(grants)])
+            g.db.executemany(
+                "INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", [(user_id, t) for t in sorted(grants)]
+            )
             tenant_groups.set_user_groups(g.db, user_id, group_grants)
-            audit(g.db, g.user["username"], "user_updated",
-                  detail=f"{user['username']}: role={role} all={all_tenants} disabled={disabled} "
-                         f"tenants={sorted(grants)}" + (f" groups={sorted(group_grants)}" if group_grants else ""))
+            audit(
+                g.db,
+                g.user["username"],
+                "user_updated",
+                detail=f"{user['username']}: role={role} all={all_tenants} disabled={disabled} "
+                f"tenants={sorted(grants)}" + (f" groups={sorted(group_grants)}" if group_grants else ""),
+            )
         if request.form.get("password"):
             if problem := password_problem(request.form["password"]):
                 flash(problem, "error")
             else:
-                g.db.execute("UPDATE users SET password_hash = ?, session_version = session_version + 1,"
-                             " failed_logins = 0, locked_until = NULL, must_change_password = 1 WHERE id = ?",
-                             (generate_password_hash(request.form["password"]), user_id))
+                g.db.execute(
+                    "UPDATE users SET password_hash = ?, session_version = session_version + 1,"
+                    " failed_logins = 0, locked_until = NULL, must_change_password = 1 WHERE id = ?",
+                    (generate_password_hash(request.form["password"]), user_id),
+                )
                 audit(g.db, g.user["username"], "user_password_reset", detail=user["username"])
         flash("Saved.", "success")
         return redirect(url_for("admin.edit_user", user_id=user_id))
-    granted = {r["tenant_id"] for r in g.db.execute(
-        "SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
+    granted = {r["tenant_id"] for r in g.db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
     return render_template(
-        "user_edit.html", user=user, tenants=tenants, granted=granted, roles=ROLES,
-        groups=tenant_groups.all_groups(g.db), granted_groups=tenant_groups.user_groups(g.db, user_id),
-        sessions=sessions.list_for(user_id), locked=_is_locked(user),
+        "user_edit.html",
+        user=user,
+        tenants=tenants,
+        granted=granted,
+        roles=ROLES,
+        groups=tenant_groups.all_groups(g.db),
+        granted_groups=tenant_groups.user_groups(g.db, user_id),
+        sessions=sessions.list_for(user_id),
+        locked=_is_locked(user),
         failures=throttle.recent_failures(g.db, user["username"]),
         two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
     )
@@ -151,15 +166,17 @@ def reset_two_step(user_id: int):
     """For a lost phone: remove their authenticator and sign them out. They set it up again at next sign-in."""
     user = _user_or_404(user_id)
     with transaction(g.db):
-        g.db.execute("UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
-                     " totp_last_step = NULL, session_version = session_version + 1 WHERE id = ?", (user_id,))
+        g.db.execute(
+            "UPDATE users SET totp_secret_enc = NULL, totp_pending_enc = NULL, totp_enabled_at = NULL,"
+            " totp_last_step = NULL, session_version = session_version + 1 WHERE id = ?",
+            (user_id,),
+        )
         g.db.execute("DELETE FROM user_recovery_codes WHERE user_id = ?", (user_id,))
         g.db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         audit(g.db, g.user["username"], "user_two_step_reset", detail=user["username"])
     if user_id == g.user["id"]:
         return redirect(url_for("auth.login"))
-    flash(f"Two-step sign-in reset for {user['username']}. They'll set it up again next time they sign in.",
-          "success")
+    flash(f"Two-step sign-in reset for {user['username']}. They'll set it up again next time they sign in.", "success")
     return redirect(url_for("admin.edit_user", user_id=user_id))
 
 
@@ -220,17 +237,25 @@ def _address_problem() -> str | None:
 def connections():
     rows = store.list_connections(g.db)
     sign_in = app_setup.current(g.db, g.user["id"])
-    if sign_in and sign_in["status"] == "done" and g.db.execute(
-            "SELECT 1 FROM tenants WHERE connection_id = ?", (sign_in["connection_id"],)).fetchone():
+    if (
+        sign_in
+        and sign_in["status"] == "done"
+        and g.db.execute("SELECT 1 FROM tenants WHERE connection_id = ?", (sign_in["connection_id"],)).fetchone()
+    ):
         app_setup.cancel(g.db, g.user["id"])  # the first tenant is added: the wizard is finished
         sign_in = None
     return render_template(
-        "connections.html", connections=rows, permissions=GRAPH_PERMISSIONS,
-        exchange_permissions=EXCHANGE_PERMISSIONS, redirect_uri=_redirect_uri(),
+        "connections.html",
+        connections=rows,
+        permissions=GRAPH_PERMISSIONS,
+        exchange_permissions=EXCHANGE_PERMISSIONS,
+        redirect_uri=_redirect_uri(),
         expiry={c["id"]: cert_lifecycle.connection_expiry(c) for c in rows},
         test_tenant={c["id"]: cert_lifecycle.test_tenant(g.db, c["id"]) for c in rows if c["next_thumbprint"]},
-        sign_in=sign_in, seconds_left=app_setup.seconds_left(sign_in) if sign_in else 0,
-        opened_at=_address_problem(), default_app_name=app_setup.DEFAULT_NAME,
+        sign_in=sign_in,
+        seconds_left=app_setup.seconds_left(sign_in) if sign_in else 0,
+        opened_at=_address_problem(),
+        default_app_name=app_setup.DEFAULT_NAME,
         ready_clouds={clouds.of(c).key for c in rows if c["client_id"]},
         pending_clouds={clouds.of(c).key for c in rows if not c["client_id"]},
     )
@@ -267,15 +292,28 @@ def start_setup():
     tenant = app_setup.tenant_ref(request.form.get("tenant", ""))
     name = request.form.get("name", "").strip()[:100] or app_setup.DEFAULT_NAME
     if tenant is None:
-        flash("Enter your tenant's domain (like contoso.onmicrosoft.com) or its Directory (tenant) ID, "
-              "or leave it blank.", "error")
+        flash(
+            "Enter your tenant's domain (like contoso.onmicrosoft.com) or its Directory (tenant) ID, "
+            "or leave it blank.",
+            "error",
+        )
     elif app_setup.ready_connection(g.db, cloud):
-        flash(f"You already have an app for {clouds.get(cloud).label}, so there's nothing to create. "
-              "Add tenants with it, or replace its certificate below if that's what you need.", "error")
+        flash(
+            f"You already have an app for {clouds.get(cloud).label}, so there's nothing to create. "
+            "Add tenants with it, or replace its certificate below if that's what you need.",
+            "error",
+        )
     else:
         try:
-            app_setup.start(g.db, current_app.extensions["officesentry.vault"], g.user["id"], g.user["username"],
-                            tenant, cloud, name)
+            app_setup.start(
+                g.db,
+                current_app.extensions["officesentry.vault"],
+                g.user["id"],
+                g.user["username"],
+                tenant,
+                cloud,
+                name,
+            )
         except entra.SignInError as exc:
             flash(str(exc), "error")
     return _to_setup()
@@ -286,16 +324,23 @@ def start_setup():
 def check_setup():
     """One step of the wizard. The page calls this every few seconds while it waits (JSON); without
     JavaScript, the "I've signed in" button posts it and comes back to the page."""
-    row = app_setup.check(g.db, current_app.extensions["officesentry.vault"], g.user["id"], g.user["username"],
-                          _redirect_uri())
+    row = app_setup.check(
+        g.db, current_app.extensions["officesentry.vault"], g.user["id"], g.user["username"], _redirect_uri()
+    )
     if request.accept_mimetypes.best == "application/json":
         if row is None:
             return jsonify(status="none")
-        return jsonify(status=row["status"], note=row["error"] if row["status"] == "waiting" else None,
-                       wait=row["poll_seconds"], seconds_left=app_setup.seconds_left(row))
+        return jsonify(
+            status=row["status"],
+            note=row["error"] if row["status"] == "waiting" else None,
+            wait=row["poll_seconds"],
+            seconds_left=app_setup.seconds_left(row),
+        )
     if row is not None and row["status"] == "waiting" and not row["error"]:
-        flash("Microsoft says sign-in hasn't finished yet. Enter the code on Microsoft's page, then check again.",
-              "warning")
+        flash(
+            "Microsoft says sign-in hasn't finished yet. Enter the code on Microsoft's page, then check again.",
+            "warning",
+        )
     return _to_setup()
 
 
@@ -327,8 +372,13 @@ def set_client_id(conn_id: int):
             from ..connection_check import check
 
             connection = store.get_connection(g.db, conn_id)
-            result = check(home, client_id, current_app.extensions["officesentry.vault"].decrypt(
-                connection["key_enc"]), connection["thumbprint"], clouds.of(connection).key)
+            result = check(
+                home,
+                client_id,
+                current_app.extensions["officesentry.vault"].decrypt(connection["key_enc"]),
+                connection["thumbprint"],
+                clouds.of(connection).key,
+            )
             if result.ok:
                 flash(f"Client ID saved and checked: {result.title} The certificate works.", "success")
             else:
@@ -350,8 +400,11 @@ def download_certificate(conn_id: int):
         pem, name = connection["next_cert_pem"], f"office-sentry-{conn_id}-new"
     else:
         pem, name = connection["cert_pem"], f"office-sentry-{conn_id}"
-    return Response(cert_der(pem), mimetype="application/pkix-cert",
-                    headers={"Content-Disposition": f"attachment; filename={name}.cer"})
+    return Response(
+        cert_der(pem),
+        mimetype="application/pkix-cert",
+        headers={"Content-Disposition": f"attachment; filename={name}.cer"},
+    )
 
 
 # -- Replacing a connection's certificate (cert_lifecycle) -----------------------------------
@@ -378,8 +431,11 @@ def _rollover(conn_id: int, step) -> bool:
 def start_rollover(conn_id: int):
     vault = current_app.extensions["officesentry.vault"]
     if _rollover(conn_id, lambda: cert_lifecycle.start(g.db, vault, conn_id, g.user["username"])):
-        flash("New certificate made. Collection keeps using the current one until you switch. Next: upload the "
-              "new .cer to the app registration.", "success")
+        flash(
+            "New certificate made. Collection keeps using the current one until you switch. Next: upload the "
+            "new .cer to the app registration.",
+            "success",
+        )
     return _to_connection(conn_id)
 
 
@@ -388,13 +444,15 @@ def start_rollover(conn_id: int):
 def test_rollover(conn_id: int):
     tenant_ref = request.form.get("tenant_ref", "").strip().lower()
     if not GUID_RE.match(tenant_ref) and not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", tenant_ref):
-        flash("Enter a tenant ID or domain to sign in to: your own tenant's, or a client's that has consented.",
-              "error")
+        flash(
+            "Enter a tenant ID or domain to sign in to: your own tenant's, or a client's that has consented.", "error"
+        )
         return _to_connection(conn_id)
     vault = current_app.extensions["officesentry.vault"]
     outcome = []
-    if _rollover(conn_id, lambda: outcome.append(
-            cert_lifecycle.test(g.db, vault, conn_id, tenant_ref, g.user["username"]))):
+    if _rollover(
+        conn_id, lambda: outcome.append(cert_lifecycle.test(g.db, vault, conn_id, tenant_ref, g.user["username"]))
+    ):
         result = outcome[0]
         if result.ok:
             flash(f"The new certificate works: {result.title} You can switch to it now.", "success")
@@ -407,8 +465,11 @@ def test_rollover(conn_id: int):
 @roles_required("admin")
 def switch_rollover(conn_id: int):
     if _rollover(conn_id, lambda: cert_lifecycle.switch(g.db, conn_id, g.user["username"])):
-        flash("Switched. Collection signs in with the new certificate from now on. Last step: remove the old "
-              "certificate from the app registration.", "success")
+        flash(
+            "Switched. Collection signs in with the new certificate from now on. Last step: remove the old "
+            "certificate from the app registration.",
+            "success",
+        )
     return _to_connection(conn_id)
 
 
@@ -416,8 +477,9 @@ def switch_rollover(conn_id: int):
 @roles_required("admin")
 def cancel_rollover(conn_id: int):
     if _rollover(conn_id, lambda: cert_lifecycle.cancel(g.db, conn_id, g.user["username"])):
-        flash("Replacement cancelled. If you uploaded its .cer to the app registration, delete it there too.",
-              "success")
+        flash(
+            "Replacement cancelled. If you uploaded its .cer to the app registration, delete it there too.", "success"
+        )
     return _to_connection(conn_id)
 
 

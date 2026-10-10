@@ -28,37 +28,55 @@ def _setting(snap: TenantSnapshot, key: str) -> tuple[dict | None, str]:
     return policy, ""
 
 
-@rule("tenant_creation", "Users can't create new tenants", "Tenant settings",
-      "Set \"Restrict non-admin users from creating tenants\" to Yes (Entra admin center > Users > User "
-      "settings). A tenant a user creates sits outside the client's policies, with that user as its Global "
-      "Administrator.")
+@rule(
+    "tenant_creation",
+    "Users can't create new tenants",
+    "Tenant settings",
+    'Set "Restrict non-admin users from creating tenants" to Yes (Entra admin center > Users > User '
+    "settings). A tenant a user creates sits outside the client's policies, with that user as its Global "
+    "Administrator.",
+)
 def tenant_creation(snap: TenantSnapshot, now: datetime):
     policy, reason = _setting(snap, "allowedToCreateTenants")
     if policy is None:
         return _unavailable(reason)
     if policy["allowedToCreateTenants"]:
-        return ("fail", "Any user can create a new Entra ID tenant", [Finding(
-            "low", "Tenant", "Users can create tenants outside the client's control")])
+        return (
+            "fail",
+            "Any user can create a new Entra ID tenant",
+            [Finding("low", "Tenant", "Users can create tenants outside the client's control")],
+        )
     return ("pass", "Only admins can create tenants", [])
 
 
-@rule("app_registration", "Users can't register apps", "Tenant settings",
-      "Set \"Users can register applications\" to No (Entra admin center > Users > User settings) and give "
-      "the Application Developer role to the people who need it.")
+@rule(
+    "app_registration",
+    "Users can't register apps",
+    "Tenant settings",
+    'Set "Users can register applications" to No (Entra admin center > Users > User settings) and give '
+    "the Application Developer role to the people who need it.",
+)
 def app_registration(snap: TenantSnapshot, now: datetime):
     policy, reason = _setting(snap, "allowedToCreateApps")
     if policy is None:
         return _unavailable(reason)
     if policy["allowedToCreateApps"]:
-        return ("fail", "Any user can register an app", [Finding(
-            "low", "Tenant", "Users can register apps that nobody reviews")])
+        return (
+            "fail",
+            "Any user can register an app",
+            [Finding("low", "Tenant", "Users can register apps that nobody reviews")],
+        )
     return ("pass", "Only admins and app developers can register apps", [])
 
 
-@rule("guest_access_level", "Guests have limited directory access", "Tenant settings",
-      "Set guest user access to \"Guest users have limited access to properties and memberships of directory "
-      "objects\", or to the most restrictive option (Entra admin center > External Identities > External "
-      "collaboration settings).")
+@rule(
+    "guest_access_level",
+    "Guests have limited directory access",
+    "Tenant settings",
+    'Set guest user access to "Guest users have limited access to properties and memberships of directory '
+    'objects", or to the most restrictive option (Entra admin center > External Identities > External '
+    "collaboration settings).",
+)
 def guest_access_level(snap: TenantSnapshot, now: datetime):
     policy, reason = _setting(snap, "guestUserRoleId")
     if policy is None:
@@ -66,8 +84,11 @@ def guest_access_level(snap: TenantSnapshot, now: datetime):
     role = policy["guestUserRoleId"]
     level = GUEST_ROLES.get(role) if isinstance(role, str) else None
     if level == "member":
-        return ("fail", "Guests have the same directory access as members", [Finding(
-            "medium", "Tenant", "Guests can look up every user and group and their details")])
+        return (
+            "fail",
+            "Guests have the same directory access as members",
+            [Finding("medium", "Tenant", "Guests can look up every user and group and their details")],
+        )
     if level == "limited":
         return ("pass", "Guests have limited access to directory objects (the default)", [])
     if level == "restricted":
@@ -75,16 +96,23 @@ def guest_access_level(snap: TenantSnapshot, now: datetime):
     return _unavailable(f"Unrecognised guest access setting {policy['guestUserRoleId']}")
 
 
-@rule("email_verified_join", "People can't join the tenant just by verifying an email address", "Tenant settings",
-      "Turn off email-verified sign-up with Microsoft Graph PowerShell (Update-MgPolicyAuthorizationPolicy "
-      "-AllowEmailVerifiedUsersToJoinOrganization:$false), so accounts are only created by admins or invitation.")
+@rule(
+    "email_verified_join",
+    "People can't join the tenant just by verifying an email address",
+    "Tenant settings",
+    "Turn off email-verified sign-up with Microsoft Graph PowerShell (Update-MgPolicyAuthorizationPolicy "
+    "-AllowEmailVerifiedUsersToJoinOrganization:$false), so accounts are only created by admins or invitation.",
+)
 def email_verified_join(snap: TenantSnapshot, now: datetime):
     policy, reason = _setting(snap, "allowEmailVerifiedUsersToJoinOrganization")
     if policy is None:
         return _unavailable(reason)
     if policy["allowEmailVerifiedUsersToJoinOrganization"]:
-        return ("fail", "People can join by verifying an email address", [Finding(
-            "low", "Tenant", "Anyone with a mailbox on one of the client's domains can create an account")])
+        return (
+            "fail",
+            "People can join by verifying an email address",
+            [Finding("low", "Tenant", "Anyone with a mailbox on one of the client's domains can create an account")],
+        )
     return ("pass", "Nobody can join just by verifying an email address", [])
 
 
@@ -95,10 +123,14 @@ def admin_consent_missing(policy: dict) -> str:
     return "Microsoft didn't return the admin consent request settings (see the run's warnings)"
 
 
-@rule("admin_consent_workflow", "Users have a way to get apps approved", "Tenant settings",
-      "Turn on admin consent requests (Entra admin center > Enterprise apps > Consent and permissions > Admin "
-      "consent settings) and choose reviewers, so users blocked from consenting can ask instead of looking for "
-      "a workaround.")
+@rule(
+    "admin_consent_workflow",
+    "Users have a way to get apps approved",
+    "Tenant settings",
+    "Turn on admin consent requests (Entra admin center > Enterprise apps > Consent and permissions > Admin "
+    "consent settings) and choose reviewers, so users blocked from consenting can ask instead of looking for "
+    "a workaround.",
+)
 def admin_consent_workflow(snap: TenantSnapshot, now: datetime):
     policy = _authorization_policy(snap)
     if policy is None:
@@ -110,17 +142,36 @@ def admin_consent_workflow(snap: TenantSnapshot, now: datetime):
     if workflow.get("isEnabled"):
         reviewers = len(workflow.get("reviewers") or [])
         if not reviewers:
-            return ("fail", "Admin consent requests are on but have no reviewers", [Finding(
-                "low", "Tenant", "Users can send requests, but nobody can approve them")])
+            return (
+                "fail",
+                "Admin consent requests are on but have no reviewers",
+                [Finding("low", "Tenant", "Users can send requests, but nobody can approve them")],
+            )
         return ("pass", f"Users can ask an admin: requests are on, with {plural(reviewers, 'reviewer')}", [])
     consent = user_consent_level(policy)
     if consent == "any":
-        return ("pass", "Users can consent to most apps themselves, so admin consent requests are off "
-                        "(see the user consent check)", [])
+        return (
+            "pass",
+            "Users can consent to most apps themselves, so admin consent requests are off (see the user consent check)",
+            [],
+        )
     if consent == "limited":
         # Microsoft's default for new tenants: worth turning on, but not a standing failure.
-        return ("pass", "Users can consent to low-risk apps themselves; admin consent requests are off, so they "
-                        "can't ask for anything else", [])
-    return ("fail", "Users can't consent to apps and have no way to ask", [Finding(
-        "low", "Tenant", "User consent and admin consent requests are both off, so users are blocked from "
-                         "any app that needs consent, with no way to ask for it")])
+        return (
+            "pass",
+            "Users can consent to low-risk apps themselves; admin consent requests are off, so they "
+            "can't ask for anything else",
+            [],
+        )
+    return (
+        "fail",
+        "Users can't consent to apps and have no way to ask",
+        [
+            Finding(
+                "low",
+                "Tenant",
+                "User consent and admin consent requests are both off, so users are blocked from "
+                "any app that needs consent, with no way to ask for it",
+            )
+        ],
+    )

@@ -90,8 +90,9 @@ class RowChange:
     @property
     def detail(self) -> str:
         if self.kind != "changed":
-            return "; ".join(f"{c}: {v}" for c, v in zip(self.columns[1:], self.row[1:], strict=False)
-                             if v not in ("", None))
+            return "; ".join(
+                f"{c}: {v}" for c, v in zip(self.columns[1:], self.row[1:], strict=False) if v not in ("", None)
+            )
         return "; ".join(f"{c}: {_text(a)} → {_text(b)}" for c, a, b in self.diffs)
 
 
@@ -206,8 +207,11 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
                 out.changes.append(RowChange("added", row))
                 continue
             was = before[key]
-            diffs = [(columns[i], was[i] if i < len(was) else "", row[i] if i < len(row) else "")
-                     for i in keep if str(was[i] if i < len(was) else "") != str(row[i] if i < len(row) else "")]
+            diffs = [
+                (columns[i], was[i] if i < len(was) else "", row[i] if i < len(row) else "")
+                for i in keep
+                if str(was[i] if i < len(was) else "") != str(row[i] if i < len(row) else "")
+            ]
             if diffs:
                 out.changes.append(RowChange("changed", row, diffs))
         out.changes += [RowChange("removed", row) for key, row in before.items() if key not in after]
@@ -216,8 +220,9 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
     return out
 
 
-def compare_report(conn, tenant, key: str, since: datetime, now: datetime,
-                   old_snap: TenantSnapshot, new_snap: TenantSnapshot) -> ReportChanges:
+def compare_report(
+    conn, tenant, key: str, since: datetime, now: datetime, old_snap: TenantSnapshot, new_snap: TenantSnapshot
+) -> ReportChanges:
     title, _description, collectors, _builder = data_reports.REPORTS[key]
     result = ReportChanges(key, title)
     old_runs = [old_snap.runs.get(c) for c in collectors]
@@ -246,12 +251,16 @@ def _figures(conn, tenant_id: int, since: str, until: str | None = None) -> list
     for key, label, unit, better in FIGURES:
         latest = conn.execute(
             "SELECT value FROM metrics WHERE tenant_id = ? AND key = ? AND captured_at <= ?"
-            " ORDER BY captured_at DESC, rowid DESC LIMIT 1", (tenant_id, key, until or "9999")).fetchone()
+            " ORDER BY captured_at DESC, rowid DESC LIMIT 1",
+            (tenant_id, key, until or "9999"),
+        ).fetchone()
         if latest is None:
             continue
         before = conn.execute(
             "SELECT value FROM metrics WHERE tenant_id = ? AND key = ? AND captured_at <= ?"
-            " ORDER BY captured_at DESC, rowid DESC LIMIT 1", (tenant_id, key, since)).fetchone()
+            " ORDER BY captured_at DESC, rowid DESC LIMIT 1",
+            (tenant_id, key, since),
+        ).fetchone()
         out.append(Figure(key, label, unit, better, before["value"] if before else None, latest["value"]))
     return out
 
@@ -260,11 +269,16 @@ def _new_findings(conn, tenant_id: int, since: str, until: str | None = None) ->
     """Findings opened or reopened since ``since`` that are still open (or, with ``until``, that were opened
     or reopened between the two and still open at ``until``)."""
     if until is None:
-        return conn.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
-                            " AND (first_seen >= ? OR reopened_at >= ?)", (tenant_id, since, since)).fetchall()
-    return conn.execute("SELECT * FROM findings WHERE tenant_id = ? AND (resolved_at IS NULL OR resolved_at > ?)"
-                        " AND ((first_seen >= ? AND first_seen <= ?) OR (reopened_at >= ? AND reopened_at <= ?))",
-                        (tenant_id, until, since, until, since, until)).fetchall()
+        return conn.execute(
+            "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
+            " AND (first_seen >= ? OR reopened_at >= ?)",
+            (tenant_id, since, since),
+        ).fetchall()
+    return conn.execute(
+        "SELECT * FROM findings WHERE tenant_id = ? AND (resolved_at IS NULL OR resolved_at > ?)"
+        " AND ((first_seen >= ? AND first_seen <= ?) OR (reopened_at >= ? AND reopened_at <= ?))",
+        (tenant_id, until, since, until, since, until),
+    ).fetchall()
 
 
 def _fixed(conn, tenant_id: int, since: str, until: str | None) -> list:
@@ -272,8 +286,14 @@ def _fixed(conn, tenant_id: int, since: str, until: str | None) -> list:
     return [r for r in rows if r["resolved_at"] <= until] if until else list(rows)
 
 
-def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None, since: datetime | None = None,
-          until: datetime | None = None) -> TenantChanges:
+def build(
+    conn,
+    tenant,
+    days: int = DEFAULT_DAYS,
+    now: datetime | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> TenantChanges:
     """What changed over the last ``days``, or between ``since`` and ``until``: any two dates, the end one read
     as the data stood then (``TenantSnapshot(as_of=until)``)."""
     now = until or now or datetime.now(UTC)
@@ -294,8 +314,10 @@ def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None, s
         # Collection started inside the period: everything it found is a first look, not a change.
         new_findings = []
         if any(new_snap.runs.values()):
-            notes.append("Collection for this tenant started during this period, so its findings are on the "
-                         "Findings tab rather than counted as new here.")
+            notes.append(
+                "Collection for this tenant started during this period, so its findings are on the "
+                "Findings tab rather than counted as new here."
+            )
     order = lambda r: (SEV_RANK.get(r["severity"], 9), r["rule_key"], r["subject"])  # noqa: E731
 
     try:
@@ -311,14 +333,24 @@ def build(conn, tenant, days: int = DEFAULT_DAYS, now: datetime | None = None, s
             reports.append(compare_report(conn, tenant, key, since, now, old_snap, new_snap))
         except Exception as exc:
             logging.getLogger(__name__).exception("Comparing %s failed for tenant %s", key, tenant["id"])
-            reports.append(ReportChanges(key, data_reports.REPORTS[key][0],
-                                         note=f"Couldn't be compared ({type(exc).__name__})."))
+            reports.append(
+                ReportChanges(key, data_reports.REPORTS[key][0], note=f"Couldn't be compared ({type(exc).__name__}).")
+            )
 
     figures = _figures(conn, tenant["id"], since_iso, until_iso)
     figures.sort(key=lambda f: not f.delta)  # what moved first
-    return TenantChanges(tenant, since, now, figures,
-                         sorted(new_findings, key=order), sorted(fixed, key=order), key_changes, reports,
-                         baseline, notes)
+    return TenantChanges(
+        tenant,
+        since,
+        now,
+        figures,
+        sorted(new_findings, key=order),
+        sorted(fixed, key=order),
+        key_changes,
+        reports,
+        baseline,
+        notes,
+    )
 
 
 RULE_TITLES = {r.key: r.title for r in RULES}
@@ -327,33 +359,74 @@ RULE_TITLES = {r.key: r.title for r in RULES}
 def to_tables(tc: TenantChanges) -> list[Table]:
     period = f"{tc.since.day} {tc.since:%b %Y} to {tc.until.day} {tc.until:%b %Y}"
     tables = [
-        Table("Key figures", ["Measure", f"On {tc.since.day} {tc.since:%b %Y}", "Now", "Change"],
-              [[f.label, f.before, f.after, f.delta] for f in tc.figures]),
-        Table("New findings", ["Severity", "Check", "Subject", "Detail", "First seen"],
-              [[r["severity"], RULE_TITLES.get(r["rule_key"], r["rule_key"]), r["subject"], r["detail"],
-                (r["reopened_at"] or r["first_seen"])[:10]] for r in tc.new_findings]),
-        Table("Fixed findings", ["Severity", "Check", "Subject", "Fixed on"],
-              [[r["severity"], RULE_TITLES.get(r["rule_key"], r["rule_key"]), r["subject"], r["resolved_at"][:10]]
-               for r in tc.fixed_findings]),
-        Table("Key changes", ["Area", "Change", "Subject", "Detail"],
-              [[c.area, c.kind.capitalize(), c.subject, c.detail] for c in tc.key_changes]),
-        Table("Changes by report", ["Report", "Table", "Change", "Subject", "Detail"],
-              [[r.title, s.title, c.kind.capitalize(), c.subject, c.detail]
-               for r in tc.reports for s in r.sections for c in s.changes]),
+        Table(
+            "Key figures",
+            ["Measure", f"On {tc.since.day} {tc.since:%b %Y}", "Now", "Change"],
+            [[f.label, f.before, f.after, f.delta] for f in tc.figures],
+        ),
+        Table(
+            "New findings",
+            ["Severity", "Check", "Subject", "Detail", "First seen"],
+            [
+                [
+                    r["severity"],
+                    RULE_TITLES.get(r["rule_key"], r["rule_key"]),
+                    r["subject"],
+                    r["detail"],
+                    (r["reopened_at"] or r["first_seen"])[:10],
+                ]
+                for r in tc.new_findings
+            ],
+        ),
+        Table(
+            "Fixed findings",
+            ["Severity", "Check", "Subject", "Fixed on"],
+            [
+                [r["severity"], RULE_TITLES.get(r["rule_key"], r["rule_key"]), r["subject"], r["resolved_at"][:10]]
+                for r in tc.fixed_findings
+            ],
+        ),
+        Table(
+            "Key changes",
+            ["Area", "Change", "Subject", "Detail"],
+            [[c.area, c.kind.capitalize(), c.subject, c.detail] for c in tc.key_changes],
+        ),
+        Table(
+            "Changes by report",
+            ["Report", "Table", "Change", "Subject", "Detail"],
+            [
+                [r.title, s.title, c.kind.capitalize(), c.subject, c.detail]
+                for r in tc.reports
+                for s in r.sections
+                for c in s.changes
+            ],
+        ),
     ]
-    tables.append(Table("About", ["Item", "Value"], [
-        ["Tenant", tc.tenant["name"]], ["Tenant ID", tc.tenant["tenant_ref"]], ["Period", period],
-        ["Starting data collected (UTC)", (tc.baseline or "none")[:16].replace("T", " ")],
-        *[["Note", n] for n in tc.notes],
-    ]))
+    tables.append(
+        Table(
+            "About",
+            ["Item", "Value"],
+            [
+                ["Tenant", tc.tenant["name"]],
+                ["Tenant ID", tc.tenant["tenant_ref"]],
+                ["Period", period],
+                ["Starting data collected (UTC)", (tc.baseline or "none")[:16].replace("T", " ")],
+                *[["Note", n] for n in tc.notes],
+            ],
+        )
+    )
     return tables
 
 
 def all_changes_table(tc: TenantChanges) -> Table:
     """Key changes and report changes in one flat table, for CSV."""
     rows = [[c.area, "", c.kind.capitalize(), c.subject, c.detail] for c in tc.key_changes]
-    rows += [[r.title, s.title, c.kind.capitalize(), c.subject, c.detail]
-             for r in tc.reports for s in r.sections for c in s.changes]
+    rows += [
+        [r.title, s.title, c.kind.capitalize(), c.subject, c.detail]
+        for r in tc.reports
+        for s in r.sections
+        for c in s.changes
+    ]
     return Table("Changes", ["Area or report", "Table", "Change", "Subject", "Detail"], rows)
 
 
@@ -375,13 +448,21 @@ class Summary:
 
 def summarise(tc: TenantChanges) -> Summary:
     areas = list(dict.fromkeys([c.area for c in tc.key_changes] + [r.title for r in tc.reports if r.count]))
-    return Summary(tc.tenant, tc.total, len(tc.new_findings),
-                   sum(1 for r in tc.new_findings if r["severity"] in ("critical", "high")), len(tc.fixed_findings),
-                   {f.key: f for f in tc.figures}, tc.has_baseline, areas)
+    return Summary(
+        tc.tenant,
+        tc.total,
+        len(tc.new_findings),
+        sum(1 for r in tc.new_findings if r["severity"] in ("critical", "high")),
+        len(tc.fixed_findings),
+        {f.key: f for f in tc.figures},
+        tc.has_baseline,
+        areas,
+    )
 
 
-def across(conn, tenants, days: int = DEFAULT_DAYS, now: datetime | None = None,
-           rebuild: bool = False) -> list[Summary]:
+def across(
+    conn, tenants, days: int = DEFAULT_DAYS, now: datetime | None = None, rebuild: bool = False
+) -> list[Summary]:
     """Every tenant's summary, most important first.
 
     Without ``now`` (the pages, which show the present), each tenant's change count and areas come
@@ -410,25 +491,61 @@ def _summary(conn, tenant, days: int, now: datetime, stored: Rows | None) -> Sum
     data = stored.get(tenant, fingerprint)
     if data is None:
         summary = summarise(build(conn, tenant, days, now))
-        stored.save(tenant, fingerprint, {"changes": summary.changes, "areas": summary.areas,
-                                         "has_baseline": summary.has_baseline})
+        stored.save(
+            tenant,
+            fingerprint,
+            {"changes": summary.changes, "areas": summary.areas, "has_baseline": summary.has_baseline},
+        )
         return summary
     since_iso = since.strftime(ISO)
     new = _new_findings(conn, tenant["id"], since_iso) if data["has_baseline"] else []
-    return Summary(dict(tenant), data["changes"], len(new),
-                   sum(1 for r in new if r["severity"] in ("critical", "high")),
-                   len(resolved_since(conn, tenant["id"], since_iso)),
-                   {f.key: f for f in _figures(conn, tenant["id"], since_iso)}, data["has_baseline"], data["areas"])
+    return Summary(
+        dict(tenant),
+        data["changes"],
+        len(new),
+        sum(1 for r in new if r["severity"] in ("critical", "high")),
+        len(resolved_since(conn, tenant["id"], since_iso)),
+        {f.key: f for f in _figures(conn, tenant["id"], since_iso)},
+        data["has_baseline"],
+        data["areas"],
+    )
 
 
 def across_table(summaries: list[Summary], days: int) -> Table:
     rows = []
     for s in summaries:
         score, mfa = s.figures.get("secure_score.pct"), s.figures.get("mfa.registered_pct")
-        rows.append([s.tenant["name"], s.tenant["tenant_ref"], s.changes, s.new_findings, s.new_severe, s.fixed,
-                     score.after if score else None, score.delta if score else None,
-                     mfa.after if mfa else None, mfa.delta if mfa else None, ", ".join(s.areas),
-                     "" if s.has_baseline else f"No data from {days} days ago to compare with"])
-    return Table(f"Changes, last {days} days", [
-        "Tenant", "Tenant ID", "Changes", "New findings", "New critical or high", "Fixed findings",
-        "Secure Score %", "Secure Score change", "Users with MFA %", "MFA change", "What changed", "Note"], rows)
+        rows.append(
+            [
+                s.tenant["name"],
+                s.tenant["tenant_ref"],
+                s.changes,
+                s.new_findings,
+                s.new_severe,
+                s.fixed,
+                score.after if score else None,
+                score.delta if score else None,
+                mfa.after if mfa else None,
+                mfa.delta if mfa else None,
+                ", ".join(s.areas),
+                "" if s.has_baseline else f"No data from {days} days ago to compare with",
+            ]
+        )
+    return Table(
+        f"Changes, last {days} days",
+        [
+            "Tenant",
+            "Tenant ID",
+            "Changes",
+            "New findings",
+            "New critical or high",
+            "Fixed findings",
+            "Secure Score %",
+            "Secure Score change",
+            "Users with MFA %",
+            "MFA change",
+            "What changed",
+            "Note",
+        ],
+        rows,
+    )

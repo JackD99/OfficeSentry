@@ -45,6 +45,7 @@ def login_required(view):
         if g.get("user") is None:
             return redirect(url_for("auth.login", next=request.full_path.rstrip("?")))
         return view(*args, **kwargs)
+
     return wrapper
 
 
@@ -60,7 +61,9 @@ def roles_required(*roles: str):
             if g.user["role"] not in roles:
                 abort(403)
             return view(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -94,9 +97,12 @@ def can_see_tenant(conn, user, tenant_id: int) -> bool:
         return False
     if sees_all_tenants(user):
         return True
-    return conn.execute(
-        f"SELECT 1 WHERE :tid IN ({_GRANTED})", {"uid": user["id"], "role": user["role"], "tid": tenant_id}
-    ).fetchone() is not None
+    return (
+        conn.execute(
+            f"SELECT 1 WHERE :tid IN ({_GRANTED})", {"uid": user["id"], "role": user["role"], "tid": tenant_id}
+        ).fetchone()
+        is not None
+    )
 
 
 def tenant_or_404(tenant_id: int):

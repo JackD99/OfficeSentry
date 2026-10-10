@@ -95,8 +95,10 @@ def test_plain_text_strips_html_and_cuts():
 
 def test_nothing_private_is_stored(db, tenant):
     unpack(db)
-    rows = db.execute("SELECT o.data FROM objects o JOIN runs r ON r.id = o.run_id WHERE r.collector IN "
-                      "('mobile_devices', 'auto_replies', 'distribution_lists')").fetchall()
+    rows = db.execute(
+        "SELECT o.data FROM objects o JOIN runs r ON r.id = o.run_id WHERE r.collector IN "
+        "('mobile_devices', 'auto_replies', 'distribution_lists')"
+    ).fetchall()
     assert len(rows) > 5
     for (data,) in rows:
         assert not any(word in data for word in FORBIDDEN), data
@@ -109,17 +111,27 @@ def test_only_get_cmdlets_and_documented_parameters(db, two_tenants):
     def recorder(request):
         sent.append(json.loads(request.body)["CmdletInput"])
         return exchange_callback(gd.EXCHANGE)(request)
+
     factory = GRAPH
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         mock_tenant(rsps, users=USERS, exchange=False)
-        rsps.add_callback(responses.POST, re.compile(re.escape(EXCHANGE_ROOT) + r"/adminapi/beta/[^/]+/InvokeCommand"),
-                          callback=recorder, content_type="application/json")
+        rsps.add_callback(
+            responses.POST,
+            re.compile(re.escape(EXCHANGE_ROOT) + r"/adminapi/beta/[^/]+/InvokeCommand"),
+            callback=recorder,
+            content_type="application/json",
+        )
         for key in ("mailboxes", "mobile_devices", "distribution_lists"):
             store.enqueue_run(db, alpha, key)
             assert execute_run(db, store.claim_next_run(db), factory, exchange_factory) == "succeeded"
     names = {c["CmdletName"] for c in sent}
-    assert {"Get-MobileDevice", "Get-MobileDeviceStatistics", "Get-DistributionGroup", "Get-DistributionGroupMember",
-            "Get-MessageTraceV2"} <= names
+    assert {
+        "Get-MobileDevice",
+        "Get-MobileDeviceStatistics",
+        "Get-DistributionGroup",
+        "Get-DistributionGroupMember",
+        "Get-MessageTraceV2",
+    } <= names
     assert all(n.startswith("Get-") for n in names)
     trace = next(c["Parameters"] for c in sent if c["CmdletName"] == "Get-MessageTraceV2")
     assert trace["Status"] == ["Expanded"] and trace["ResultSize"] == 5000
@@ -168,7 +180,13 @@ def test_every_device_row(db, tenant):
 
 def test_platform_names():
     assert [platform(v) for v in ("iOS 17", "Android 14", "Windows 10.0", "", None, "BlackBerry")] == [
-        "iOS", "Android", "Windows", "Other", "Other", "Other"]
+        "iOS",
+        "Android",
+        "Windows",
+        "Other",
+        "Other",
+        "Other",
+    ]
 
 
 # -- Automatic replies -------------------------------------------------------------------------------------
@@ -176,8 +194,11 @@ def test_platform_names():
 
 def test_reply_state():
     now = datetime(2026, 10, 10, 12, tzinfo=UTC)
-    sched = {"status": "scheduled", "start": {"dateTime": "2026-10-09T08:00:00.0000000", "timeZone": "UTC"},
-             "end": {"dateTime": "2026-10-12T08:00:00.0000000", "timeZone": "UTC"}}
+    sched = {
+        "status": "scheduled",
+        "start": {"dateTime": "2026-10-09T08:00:00.0000000", "timeZone": "UTC"},
+        "end": {"dateTime": "2026-10-12T08:00:00.0000000", "timeZone": "UTC"},
+    }
     assert state({"status": "alwaysEnabled"}, now) == ON
     assert state(sched, now) == SCHEDULED_ON
     assert state(sched, now - timedelta(days=3)) == UPCOMING
@@ -191,8 +212,11 @@ def test_auto_replies(db, tenant):
     assert len(every.rows) == 1  # the disabled one isn't kept
     row = every.rows[0]
     assert row[:7] == ["ann@x.com", "User", "On", "", "", "Everyone", datetime.now(UTC).date().isoformat()]
-    assert row[7:] == ["Active", "I'm out of the office until Monday. For urgent things call Bob.",
-                       "Thanks for your email & sorry, I'm away."]
+    assert row[7:] == [
+        "Active",
+        "I'm out of the office until Monday. For urgent things call Bob.",
+        "Thanks for your email & sorry, I'm away.",
+    ]
     assert every.flags == [None]  # first seen today, so not forgotten
     tiles = _tiles(report)
     assert (tiles["Replying now"].value, tiles["Replying outside the organisation"].value) == (1, 1)
@@ -201,8 +225,9 @@ def test_auto_replies(db, tenant):
 
 
 def test_a_reply_left_on_for_weeks_is_flagged(db, tenant):
-    first = db.execute("SELECT id FROM runs WHERE tenant_id = ? AND collector = 'auto_replies'",
-                       (tenant["id"],)).fetchone()["id"]
+    first = db.execute(
+        "SELECT id FROM runs WHERE tenant_id = ? AND collector = 'auto_replies'", (tenant["id"],)
+    ).fetchone()["id"]
     _backdate(db, first, 40)
     _collect(db, tenant["id"], "auto_replies")
     report, s = _report(db, tenant, "auto-replies")
@@ -224,9 +249,15 @@ def test_scheduled_reply_to_contacts(db, two_tenants):
     alpha, _ = two_tenants
     soon = (datetime.now(UTC) + timedelta(days=5)).strftime("%Y-%m-%dT08:00:00.0000000")
     later = (datetime.now(UTC) + timedelta(days=12)).strftime("%Y-%m-%dT08:00:00.0000000")
-    seed_tenant(db, alpha, users=USERS, auto_replies={
-        "u1": xd.auto_reply("disabled"),
-        "u7": xd.auto_reply("scheduled", "contactsOnly", soon, later, "Closed for the holiday", "We're closed")})
+    seed_tenant(
+        db,
+        alpha,
+        users=USERS,
+        auto_replies={
+            "u1": xd.auto_reply("disabled"),
+            "u7": xd.auto_reply("scheduled", "contactsOnly", soon, later, "Closed for the holiday", "We're closed"),
+        },
+    )
     report, s = _report(db, store.get_tenant(db, alpha), "auto-replies")
     row = s["Mailboxes with an automatic reply"].rows[0]
     assert row[:7] == ["info@x.com", "Shared", "Scheduled", soon[:10], later[:10], "Contacts only", ""]
@@ -241,8 +272,16 @@ def test_distribution_lists(db, tenant):
     assert [x.title for x in report.sections] == ["Lists that need attention", "Every list", "Members"]
     every = {r[0]: r for r in s["Every list"].rows}
     assert set(every) == {"Everyone", "Sales", "Old project"}  # the room list is left out
-    assert every["Everyone"][1:9] == ["everyone@x.com", "Distribution list", 3, "ann@x.com", 0, "Yes", 3,
-                                      xd.ago(days=1)[:10]]
+    assert every["Everyone"][1:9] == [
+        "everyone@x.com",
+        "Distribution list",
+        3,
+        "ann@x.com",
+        0,
+        "Yes",
+        3,
+        xd.ago(days=1)[:10],
+    ]
     assert every["Sales"][2:8] == ["Mail-enabled security", 2, "bob@x.com", 1, "No", 1]
     assert every["Old project"][3:9] == [0, "None", 0, "No", 0, ""]
     assert str(every["Everyone"][4]) == "ann@x.com"
@@ -254,8 +293,16 @@ def test_distribution_lists(db, tenant):
     assert any("less than 30 days" in n for n in report.notes)
 
     tiles = _tiles(report)
-    assert [tiles[k].value for k in ("Distribution lists", "Empty lists", "Without an owner", "No mail in 90 days",
-                                     "Open to outside senders")] == [3, 1, 2, 0, 1]
+    assert [
+        tiles[k].value
+        for k in (
+            "Distribution lists",
+            "Empty lists",
+            "Without an owner",
+            "No mail in 90 days",
+            "Open to outside senders",
+        )
+    ] == [3, 1, 2, 0, 1]
     members = s["Members"].rows
     assert ["Sales", "Partner", "pat@partner.example", "External contact"] in members
     assert ["Everyone", "Sales", "sales@x.com", "Security group"] in members
@@ -271,9 +318,14 @@ def _trace_callback(data, rows, calls):
             return plain(request)
         p = body["Parameters"]
         calls.append(p)
-        found = [r for r in rows if r["RecipientAddress"] in p["RecipientAddress"]
-                 and p["StartDate"] <= r["Received"][:19] + "Z" < p["EndDate"]]
+        found = [
+            r
+            for r in rows
+            if r["RecipientAddress"] in p["RecipientAddress"]
+            and p["StartDate"] <= r["Received"][:19] + "Z" < p["EndDate"]
+        ]
         return 200, {}, json.dumps({"value": found})
+
     return callback
 
 
@@ -285,8 +337,9 @@ def test_list_activity_adds_up_across_runs_without_counting_twice(db, two_tenant
     first = db.execute("SELECT id FROM runs WHERE collector = 'distribution_lists'").fetchone()["id"]
     _backdate(db, first, 2)
     unpack(db)
-    for rowid, data in db.execute("SELECT rowid, data FROM objects WHERE run_id = ? AND kind = 'dl_activity'",
-                                  (first,)).fetchall():
+    for rowid, data in db.execute(
+        "SELECT rowid, data FROM objects WHERE run_id = ? AND kind = 'dl_activity'", (first,)
+    ).fetchall():
         entry = json.loads(data)
         entry["readTo"] = xd.ago(days=2)[:19] + "Z"
         db.execute("UPDATE objects SET data = ? WHERE rowid = ?", (json.dumps(entry), rowid))
@@ -295,8 +348,12 @@ def test_list_activity_adds_up_across_runs_without_counting_twice(db, two_tenant
     every_message = [*xd.MESSAGE_TRACE, xd._trace("oldproject@x.com", xd.ago(days=1, hours=2), 9)]
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         mock_tenant(rsps, users=USERS, exchange=False)
-        rsps.add_callback(responses.POST, re.compile(re.escape(EXCHANGE_ROOT) + r"/adminapi/beta/[^/]+/InvokeCommand"),
-                          callback=_trace_callback(gd.EXCHANGE, every_message, calls), content_type="application/json")
+        rsps.add_callback(
+            responses.POST,
+            re.compile(re.escape(EXCHANGE_ROOT) + r"/adminapi/beta/[^/]+/InvokeCommand"),
+            callback=_trace_callback(gd.EXCHANGE, every_message, calls),
+            content_type="application/json",
+        )
         store.enqueue_run(db, alpha, "distribution_lists")
         assert execute_run(db, store.claim_next_run(db), GRAPH, exchange_factory) == "succeeded"
     assert calls and all(c["StartDate"] == xd.ago(days=2)[:19] + "Z" for c in calls)
@@ -311,8 +368,9 @@ def test_list_activity_adds_up_across_runs_without_counting_twice(db, two_tenant
 def test_unused_list_is_flagged_once_watched_long_enough(db, tenant):
     unpack(db)
     run = db.execute("SELECT id FROM runs WHERE collector = 'distribution_lists'").fetchone()["id"]
-    for rowid, data in db.execute("SELECT rowid, data FROM objects WHERE run_id = ? AND kind = 'dl_activity'",
-                                  (run,)).fetchall():
+    for rowid, data in db.execute(
+        "SELECT rowid, data FROM objects WHERE run_id = ? AND kind = 'dl_activity'", (run,)
+    ).fetchall():
         entry = json.loads(data)
         entry["watchedFrom"] = xd.ago(days=120)[:19] + "Z"
         db.execute("UPDATE objects SET data = ? WHERE rowid = ?", (json.dumps(entry), rowid))
@@ -353,7 +411,7 @@ def test_trace_query_budget_leaves_the_rest_for_next_run(db, two_tenants, monkey
 # -- Mailbox size trend ------------------------------------------------------------------------------------
 
 
-GB = 1024 ** 3
+GB = 1024**3
 
 
 def _sizes(ann_gb: float, info_gb: float):

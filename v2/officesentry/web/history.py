@@ -24,8 +24,9 @@ def activity(tenant_id: int):
     t = tenant_or_404(tenant_id)
     policy = retention.load(g.db, current_app.extensions["officesentry.config"])
     page = activity_history.build(g.db, t["id"], policy)
-    return render_template("activity_history.html", tenant=t, page=page, describe=retention.describe,
-                           ranges=activity_history.ranges_text)
+    return render_template(
+        "activity_history.html", tenant=t, page=page, describe=retention.describe, ranges=activity_history.ranges_text
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/activity/sign-ins-<period>.csv")
@@ -46,8 +47,11 @@ def signins_csv(tenant_id: int, period: str):
             conn.close()
 
     filename = f"sign-ins-{period}-{tables.slug(t['name'])}.csv"
-    return Response(rows(), mimetype="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    return Response(
+        rows(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _lines(conn, tenant_id: int, period: str):

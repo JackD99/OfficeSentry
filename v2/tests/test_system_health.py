@@ -23,8 +23,10 @@ def _iso(dt: datetime) -> str:
 
 
 def _beat(db, at: datetime) -> None:
-    db.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-               (worker.HEARTBEAT_KEY, _iso(at)))
+    db.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (worker.HEARTBEAT_KEY, _iso(at)),
+    )
 
 
 def _disk(monkeypatch, used: float) -> None:
@@ -33,25 +35,43 @@ def _disk(monkeypatch, used: float) -> None:
 
 def _run(db, tenant_id, status, collector="users", slot=None, created=None, error=None):
     created = created or _iso(NOW - timedelta(hours=9))
-    return db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, scheduled_for, created_at,"
-                      " finished_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                      (tenant_id, collector, status, "schedule" if slot else "manual", slot, created,
-                       None if status in ("queued", "running") else created, error)).lastrowid
+    return db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, scheduled_for, created_at,"
+        " finished_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            tenant_id,
+            collector,
+            status,
+            "schedule" if slot else "manual",
+            slot,
+            created,
+            None if status in ("queued", "running") else created,
+            error,
+        ),
+    ).lastrowid
 
 
 @pytest.fixture
 def public_dns(monkeypatch):
     monkeypatch.delenv(alerts.ALLOW_PRIVATE_ENV, raising=False)
-    monkeypatch.setattr(socket, "getaddrinfo",
-                        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))])
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))],
+    )
 
 
 @pytest.fixture
 def channels(db, vault, public_dns, monkeypatch):
     """Email to the team (through Microsoft 365) and a generic webhook, both set up."""
-    for key, value in {"mail_transport": "graph", "graph_auth": "secret", "graph_tenant": "msp.onmicrosoft.com",
-                       "graph_client_id": "11111111-2222-3333-4444-555555555555",
-                       "graph_secret_enc": vault.encrypt("shh"), "graph_sender": "reports@msp.com"}.items():
+    for key, value in {
+        "mail_transport": "graph",
+        "graph_auth": "secret",
+        "graph_tenant": "msp.onmicrosoft.com",
+        "graph_client_id": "11111111-2222-3333-4444-555555555555",
+        "graph_secret_enc": vault.encrypt("shh"),
+        "graph_sender": "reports@msp.com",
+    }.items():
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
     delivery.add_contact(db, None, "Ops", "ops@msp.com")
@@ -83,8 +103,10 @@ def test_the_token_or_an_admin_sees_every_check(client, db, two_tenants):
     token = system_health.new_token(db)
     stored = db.execute("SELECT value FROM settings WHERE key = ?", (system_health.TOKEN_KEY,)).fetchone()[0]
     assert token not in stored and len(stored) == 64  # only its hash
-    for resp in (client.get(f"/health/ready?token={token}"),
-                 client.get("/health/ready", headers={"Authorization": f"Bearer {token}"})):
+    for resp in (
+        client.get(f"/health/ready?token={token}"),
+        client.get("/health/ready", headers={"Authorization": f"Bearer {token}"}),
+    ):
         body = resp.json
         assert resp.status_code == 200 and body["ok"] is True and body["status"] in ("ok", "warn")
         assert set(body["checks"]) == {"database", "schema", "worker", "collection", "backup", "disk", "certificates"}
@@ -126,6 +148,7 @@ def test_a_full_disk_or_a_database_from_another_release_is_not_ready(client, cfg
 def test_a_check_that_breaks_is_reported_not_raised(cfg, db, monkeypatch):
     def broken(*a):
         raise OSError("gone")
+
     monkeypatch.setattr(system_health, "disk_usage", broken)
     check = system_health.assess(db, cfg).check("disk")
     assert check.status == "fail" and check.summary == "Couldn't be checked (OSError)"
@@ -164,8 +187,13 @@ def test_backup_status(cfg, db):
 
     # The weekly restore drill may be 8 days old; a nightly copy only 26 hours.
     status["offsite"] = {"ok": True, "last_attempt": _iso(NOW), "last_success": _iso(NOW), "detail": "", "error": ""}
-    status["restore_check"] = {"ok": True, "last_attempt": _iso(NOW - timedelta(days=6)),
-                               "last_success": _iso(NOW - timedelta(days=6)), "detail": "", "error": ""}
+    status["restore_check"] = {
+        "ok": True,
+        "last_attempt": _iso(NOW - timedelta(days=6)),
+        "last_success": _iso(NOW - timedelta(days=6)),
+        "detail": "",
+        "error": "",
+    }
     (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
     assert system_health.check_backup(db, cfg, NOW).summary == "Last backup 0 seconds ago"
     assert system_health.check_backup(db, cfg, NOW + timedelta(hours=27)).summary == "No backup for 27 hours"
@@ -173,8 +201,14 @@ def test_backup_status(cfg, db):
     (cfg.data_dir / backups.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
     check = system_health.check_backup(db, cfg, NOW + timedelta(days=3))
     assert check.summary == "No restore check for 9 days"
-    backups.record_status(cfg.data_dir, "restore_check", False, "the copy didn't open",
-                          detail="officesentry-20261009-034500.db.gz", now=NOW + timedelta(days=3))
+    backups.record_status(
+        cfg.data_dir,
+        "restore_check",
+        False,
+        "the copy didn't open",
+        detail="officesentry-20261009-034500.db.gz",
+        now=NOW + timedelta(days=3),
+    )
     check = system_health.check_backup(db, cfg, NOW + timedelta(days=3))
     assert check.summary == "The last restore check failed" and "restore-drill" in check.fix
     stored = backups.read_status(cfg.data_dir)
@@ -201,6 +235,7 @@ def test_the_backup_command_records_its_outcome(cfg, db, monkeypatch, capsys):
 
     def full(*a, **k):
         raise OSError(28, "No space left on device")
+
     monkeypatch.setattr(backups, "backup", full)
     with pytest.raises(SystemExit):
         main(["backup"])
@@ -220,6 +255,7 @@ def test_a_damaged_status_file_reads_as_none(cfg, db):
 
 def test_most_tenants_failing_the_last_slot(cfg, db, two_tenants, connection_id):
     from officesentry import store
+
     alpha, bravo = two_tenants
     charlie = store.create_tenant(db, "Charlie", "charlie.onmicrosoft.com", connection_id)
     db.execute("UPDATE tenants SET consented_at = '2026-01-01T00:00:00Z'")
@@ -277,10 +313,12 @@ def test_worker_down_alerts_once_reminds_daily_and_says_when_it_is_back(cfg, db,
         assert system_alerts.update(app, db, vault, cfg, ("worker",), NOW) == [("worker", "start")]
         assert system_alerts.update(app, db, vault, cfg, ("worker",), NOW + timedelta(hours=1)) == []
         assert system_alerts.update(app, db, vault, cfg, ("worker",), NOW + timedelta(hours=24)) == [
-            ("worker", "reminder")]
+            ("worker", "reminder")
+        ]
         _beat(db, NOW + timedelta(hours=25))
         assert system_alerts.update(app, db, vault, cfg, ("worker",), NOW + timedelta(hours=25)) == [
-            ("worker", "resolved")]
+            ("worker", "resolved")
+        ]
         mails, hooks = _sent(rsps)
     assert [h["event"] for h in hooks] == ["system.worker", "system.worker", "system.worker.resolved"]
     assert hooks[0]["title"] == "Office Sentry's background worker has stopped"
@@ -290,14 +328,17 @@ def test_worker_down_alerts_once_reminds_daily_and_says_when_it_is_back(cfg, db,
     assert [m["subject"] for m in mails] == [
         "Action needed: Office Sentry's background worker has stopped",
         "Action needed: Still not fixed: Office Sentry's background worker has stopped",
-        "Resolved: Office Sentry's background worker is running again"]
+        "Resolved: Office Sentry's background worker is running again",
+    ]
     assert [r["emailAddress"]["address"] for r in mails[0]["toRecipients"]] == ["ops@msp.com"]
     assert "Open System status" in mails[0]["body"]["content"]
     assert system_alerts.states(db) == {}
     rows = db.execute("SELECT detail FROM audit_log WHERE action = 'system_alert' ORDER BY id").fetchall()
-    assert [r[0] for r in rows] == ["Worker stopped, start: email sent; webhook sent",
-                                    "Worker stopped, reminder: email sent; webhook sent",
-                                    "Worker stopped, resolved: email sent; webhook sent"]
+    assert [r[0] for r in rows] == [
+        "Worker stopped, start: email sent; webhook sent",
+        "Worker stopped, reminder: email sent; webhook sent",
+        "Worker stopped, resolved: email sent; webhook sent",
+    ]
 
 
 def test_a_restart_does_not_alert(cfg, db, vault, channels):
@@ -313,7 +354,8 @@ def test_a_restart_does_not_alert(cfg, db, vault, channels):
         rsps.post(HOOK, status=202)
         # It stopped again and has been gone 18 minutes since its last heartbeat.
         assert system_alerts.update(None, db, vault, cfg, ("worker",), NOW + timedelta(minutes=20)) == [
-            ("worker", "start")]
+            ("worker", "start")
+        ]
         assert len(rsps.calls) == 1  # webhook only: without the app there's no email to render
 
 
@@ -327,7 +369,8 @@ def test_disk_alert_and_its_margin(cfg, db, vault, channels, monkeypatch):
         assert "disk" in system_alerts.states(db)
         _disk(monkeypatch, 79)
         assert system_alerts.update(None, db, vault, cfg, ("disk",), NOW + timedelta(minutes=2)) == [
-            ("disk", "resolved")]
+            ("disk", "resolved")
+        ]
         _, hooks = _sent(rsps)
     assert hooks[0]["title"] == "Office Sentry's disk is 87% full" and hooks[0]["system"]["used_percent"] == 87
     assert hooks[1]["title"] == "Office Sentry's disk is under 80% full again"
@@ -337,8 +380,7 @@ def test_backup_alert_only_once_backups_are_set_up(cfg, db, vault, channels):
     with responses.RequestsMock() as rsps:
         assert system_alerts.update(None, db, vault, cfg, ("backup",), NOW) == []  # never set up: page only
         rsps.post(HOOK, status=202)
-        backups.record_status(cfg.data_dir, "local", False, "No backup made: database disk image is malformed",
-                              now=NOW)
+        backups.record_status(cfg.data_dir, "local", False, "No backup made: database disk image is malformed", now=NOW)
         assert system_alerts.update(None, db, vault, cfg, ("backup",), NOW) == [("backup", "start")]
         _, hooks = _sent(rsps)
     assert hooks[0]["title"] == "Office Sentry's backup needs attention: the last backup failed"
@@ -377,8 +419,11 @@ def test_the_worker_runs_the_job_and_the_portal_watches_the_worker(cfg, db, vaul
     assert "system_alerts" in schedule.PERIODIC and seen == [system_alerts.WORKER_KEYS]
     assert system_alerts.start_watchdog(None, cfg) is False  # not in tests
     started = []
-    monkeypatch.setattr(system_alerts.threading, "Thread",
-                        lambda **kw: type("T", (), {"start": lambda self: started.append(kw["name"])})())
+    monkeypatch.setattr(
+        system_alerts.threading,
+        "Thread",
+        lambda **kw: type("T", (), {"start": lambda self: started.append(kw["name"])})(),
+    )
     monkeypatch.setattr(system_alerts, "_watching", {"pid": None})
     cfg.testing = False
     assert system_alerts.start_watchdog(None, cfg) is True
@@ -402,8 +447,11 @@ def test_status_page_leads_with_what_needs_attention(client, db, monkeypatch, tw
     worker.beat(db)
     _disk(monkeypatch, 40)
     backups.record_status(client.application.extensions["officesentry.config"].data_dir, "local", True)
-    db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at, finished_at)"
-               " VALUES (1, 'users', 'succeeded', 'manual', ?, ?)", (_iso(datetime.now(UTC)),) * 2)
+    db.execute(
+        "INSERT INTO runs (tenant_id, collector, status, trigger, created_at, finished_at)"
+        " VALUES (1, 'users', 'succeeded', 'manual', ?, ?)",
+        (_iso(datetime.now(UTC)),) * 2,
+    )
     page = client.get("/admin/status").get_data(as_text=True)
     assert "Everything is working." in page and "Needs attention" not in page
 

@@ -40,15 +40,17 @@ RULE_TITLES = {r.key: r.title for r in RULES}
 
 def _download(body: bytes, filename: str, ext: str) -> Response:
     mimetype = XLSX if ext == "xlsx" else "text/csv; charset=utf-8"
-    return Response(body, mimetype=mimetype,
-                    headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'})
+    return Response(
+        body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'}
+    )
 
 
 def _cover(title: str, client: str, intro: str = "", tenant_ref: str = "", facts=()) -> workbook.Cover:
     """The summary sheet of an XLSX download: what it is, for whom, by whom and when."""
     brand = branding.load(g.db)
-    return workbook.Cover(title, client, datetime.now(UTC), brand.display_name, tenant_ref, brand.accent, intro,
-                          list(facts))
+    return workbook.Cover(
+        title, client, datetime.now(UTC), brand.display_name, tenant_ref, brand.accent, intro, list(facts)
+    )
 
 
 def _days() -> int:
@@ -93,9 +95,13 @@ def rollup(key: str):
 def _all_rows(key: str) -> rollups.AllRows:
     if key not in data_reports.REPORTS:
         abort(404)
-    return rollups.all_rows(g.db, scoped_tenants(), key,
-                            href=lambda t: url_for("reports.data_report", tenant_id=t["id"], key=key),
-                            label=scope().label)
+    return rollups.all_rows(
+        g.db,
+        scoped_tenants(),
+        key,
+        href=lambda t: url_for("reports.data_report", tenant_id=t["id"], key=key),
+        label=scope().label,
+    )
 
 
 def _table_or_404(data: rollups.AllRows, table: str) -> int:
@@ -114,11 +120,13 @@ def rows_index(key: str):
     slugs = views.table_slugs(data.report)
     table = request.args.get("table", "")
     if table not in slugs:
-        table = next((s for s, sec in zip(slugs, data.report.sections, strict=True) if sec.rows),
-                     slugs[0] if slugs else "")
+        table = next(
+            (s for s, sec in zip(slugs, data.report.sections, strict=True) if sec.rows), slugs[0] if slugs else ""
+        )
     if not table:
-        return render_template("rollup_rows.html", data=data, key=key, tv=None, table="", tables=[], saved=[],
-                               view_query="", **_picker())
+        return render_template(
+            "rollup_rows.html", data=data, key=key, tv=None, table="", tables=[], saved=[], view_query="", **_picker()
+        )
     query = views.View.parse(request.args).query()
     return redirect(url_for("across.rows", key=key, table=table) + (f"?{query}" if query else ""))
 
@@ -130,14 +138,23 @@ def rows(key: str, table: str):
     data = _all_rows(key)
     index = _table_or_404(data, table)
     view = views.View.parse(request.args)
-    saved = g.db.execute("SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
-                         (g.user["id"], key)).fetchall()
+    saved = g.db.execute(
+        "SELECT * FROM saved_views WHERE user_id = ? AND report_key = ? ORDER BY name COLLATE NOCASE",
+        (g.user["id"], key),
+    ).fetchall()
     return render_template(
-        "rollup_rows.html", data=data, key=key, table=table,
+        "rollup_rows.html",
+        data=data,
+        key=key,
+        table=table,
         tv=views.table_view(data.report, index, view, request.path),
         tables=list(zip(views.table_slugs(data.report), data.report.sections, strict=True)),
-        truncated=data.truncated(data.report.sections[index].title), max_rows=rollups.MAX_ROWS,
-        view_query=view.query(), saved=saved, **_picker())
+        truncated=data.truncated(data.report.sections[index].title),
+        max_rows=rollups.MAX_ROWS,
+        view_query=view.query(),
+        saved=saved,
+        **_picker(),
+    )
 
 
 def _rows_report(key: str, table: str):
@@ -204,8 +221,14 @@ def checks():
     categories = matrix.categories
     category = request.args.get("category", "")
     chosen = next((c for c in categories if views.slug(c[0]) == category), None)
-    return render_template("check_matrix.html", matrix=matrix, categories=categories, chosen=chosen,
-                           slugs={c[0]: views.slug(c[0]) for c in categories}, **_picker())
+    return render_template(
+        "check_matrix.html",
+        matrix=matrix,
+        categories=categories,
+        chosen=chosen,
+        slugs={c[0]: views.slug(c[0]) for c in categories},
+        **_picker(),
+    )
 
 
 @bp.get("/across/checks.csv", defaults={"ext": "csv"})
@@ -216,9 +239,19 @@ def checks_download(ext: str):
     matrix = _check_matrix()
     table = matrix.to_table()
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"checks.{ext}")
-    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
-        "Checks", scope().label, "Every check's result for every tenant.",
-        facts=[("Tenants", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")]))
+    body = (
+        tables.to_csv(table)
+        if ext == "csv"
+        else tables.to_xlsx(
+            [table],
+            cover=_cover(
+                "Checks",
+                scope().label,
+                "Every check's result for every tenant.",
+                facts=[("Tenants", len(matrix.rows), ""), ("With failing checks", matrix.with_failures, "")],
+            ),
+        )
+    )
     return _download(body, "all-tenants-checks", ext)
 
 
@@ -230,10 +263,23 @@ def rollup_download(key: str, ext: str):
     data = _rollup_or_404(key)
     table = data.to_table()
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"{key}.{ext}")
-    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
-        data.title, scope().label, data.description,
-        facts=[("Tenants", len(data.rows), ""), ("Need attention", data.with_attention, ""),
-               ("No data for this report", data.without_data, "")]))
+    body = (
+        tables.to_csv(table)
+        if ext == "csv"
+        else tables.to_xlsx(
+            [table],
+            cover=_cover(
+                data.title,
+                scope().label,
+                data.description,
+                facts=[
+                    ("Tenants", len(data.rows), ""),
+                    ("Need attention", data.with_attention, ""),
+                    ("No data for this report", data.without_data, ""),
+                ],
+            ),
+        )
+    )
     return _download(body, f"all-tenants-{tables.slug(data.title)}", ext)
 
 
@@ -251,8 +297,11 @@ def rollup_pdf(key: str):
 
 def _across_changes(days: int):
     summaries = month_changes.across(g.db, scoped_tenants(), days)
-    scored = [s.figures["secure_score.pct"].delta for s in summaries
-              if "secure_score.pct" in s.figures and s.figures["secure_score.pct"].delta is not None]
+    scored = [
+        s.figures["secure_score.pct"].delta
+        for s in summaries
+        if "secure_score.pct" in s.figures and s.figures["secure_score.pct"].delta is not None
+    ]
     totals = {
         "changed": sum(1 for s in summaries if s.changes or s.new_findings or s.fixed),
         "new_severe": sum(s.new_severe for s in summaries),
@@ -270,8 +319,7 @@ def _across_changes(days: int):
 def changes():
     days = _days()
     summaries, totals = _across_changes(days)
-    return render_template("changes.html", summaries=summaries, totals=totals, days=days,
-                           periods=month_changes.PERIODS)
+    return render_template("changes.html", summaries=summaries, totals=totals, days=days, periods=month_changes.PERIODS)
 
 
 @bp.get("/changes.pdf")
@@ -281,8 +329,14 @@ def changes_pdf():
     days = _days()
     summaries, totals = _across_changes(days)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.pdf")
-    return pdf_response("reports/changes.html", f"all-tenants-changes-{days}-days", summaries=summaries,
-                        totals=totals, days=days, generated_at=datetime.now(UTC))
+    return pdf_response(
+        "reports/changes.html",
+        f"all-tenants-changes-{days}-days",
+        summaries=summaries,
+        totals=totals,
+        days=days,
+        generated_at=datetime.now(UTC),
+    )
 
 
 @bp.get("/changes.csv", defaults={"ext": "csv"})
@@ -293,9 +347,18 @@ def changes_download(ext: str):
     days = _days()
     table = month_changes.across_table(month_changes.across(g.db, scoped_tenants(), days), days)
     audit(g.db, g.user["username"], "rollup_downloaded", None, f"changes-{days}d.{ext}")
-    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
-        f"What changed in the last {days} days", scope().label,
-        f"Changes in every tenant over the last {days} days, most important first."))
+    body = (
+        tables.to_csv(table)
+        if ext == "csv"
+        else tables.to_xlsx(
+            [table],
+            cover=_cover(
+                f"What changed in the last {days} days",
+                scope().label,
+                f"Changes in every tenant over the last {days} days, most important first.",
+            ),
+        )
+    )
     return _download(body, f"all-tenants-changes-{days}-days", ext)
 
 
@@ -315,9 +378,19 @@ def _tenant_changes(t) -> dict:
         slug = f"{period.start.isoformat()}-to-{end:%Y-%m-%d}"
         title = f"What changed from {period.start.day} {period.start:%b %Y} to {end.day} {end:%b %Y}"
     unchanged = [r for r in report.reports if not r.count and not r.note]
-    return {"report": report, "days": days, "period": period, "query": query, "slug": slug, "title": title,
-            "earliest": as_of.earliest(g.db, t["id"]), "today": datetime.now(UTC).date(),
-            "unchanged": unchanged, "titles": RULE_TITLES, "areas": _change_areas(report)}
+    return {
+        "report": report,
+        "days": days,
+        "period": period,
+        "query": query,
+        "slug": slug,
+        "title": title,
+        "earliest": as_of.earliest(g.db, t["id"]),
+        "today": datetime.now(UTC).date(),
+        "unchanged": unchanged,
+        "titles": RULE_TITLES,
+        "areas": _change_areas(report),
+    }
 
 
 def _change_areas(report) -> list[tuple[str, list]]:
@@ -356,10 +429,19 @@ def tenant_changes_download(tenant_id: int, ext: str):
     if ext == "csv":
         body = tables.to_csv(month_changes.all_changes_table(report))
     else:
-        body = tables.to_xlsx(month_changes.to_tables(report), cover=_cover(
-            page["title"], t["name"], tenant_ref=t["tenant_ref"],
-            facts=[("Changes", report.total, ""), ("New findings", len(report.new_findings), ""),
-                   ("Fixed findings", len(report.fixed_findings), "")]))
+        body = tables.to_xlsx(
+            month_changes.to_tables(report),
+            cover=_cover(
+                page["title"],
+                t["name"],
+                tenant_ref=t["tenant_ref"],
+                facts=[
+                    ("Changes", report.total, ""),
+                    ("New findings", len(report.new_findings), ""),
+                    ("Fixed findings", len(report.fixed_findings), ""),
+                ],
+            ),
+        )
     return _download(body, f"changes-{page['slug']}-{tables.slug(t['name'])}", ext)
 
 
@@ -389,9 +471,15 @@ def review_csv(tenant_id: int):
     """The monthly review's findings, one row per affected account or object."""
     t = tenant_or_404(tenant_id)
     report = build_review(g.db, t)
-    table = tables.Table("Findings", ["Severity", "Category", "Check", "Subject", "Detail", "New", "Recommendation"], [
-        [f.severity, r.category, r.title, f.subject, f.detail, getattr(f, "new", False), r.recommendation]
-        for r in report.failing for f in r.findings])
+    table = tables.Table(
+        "Findings",
+        ["Severity", "Category", "Check", "Subject", "Detail", "New", "Recommendation"],
+        [
+            [f.severity, r.category, r.title, f.subject, f.detail, getattr(f, "new", False), r.recommendation]
+            for r in report.failing
+            for f in r.findings
+        ],
+    )
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "findings.csv")
     return _download(tables.to_csv(table), f"security-review-findings-{tables.slug(t['name'])}", "csv")
 
@@ -404,14 +492,30 @@ def evidence_csv(tenant_id: int):
     pack = evidence.build(g.db, t)
     key = request.args.get("set")
     if key in questionnaires.SETS:
-        table = tables.Table(questionnaires.SETS[key].title, questionnaires.COLUMNS,
-                             questionnaires.rows(questionnaires.sheet(pack, key)))
+        table = tables.Table(
+            questionnaires.SETS[key].title, questionnaires.COLUMNS, questionnaires.rows(questionnaires.sheet(pack, key))
+        )
         audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.csv")
         return _download(tables.to_csv(table), f"security-evidence-{tables.slug(t['name'])}-{key}", "csv")
-    table = tables.Table("Evidence", ["Section", "Question", "Answer", "Why", "Answered by", "Evidence", "Gaps"], [
-        ["Questionnaire", question, answer, why, by, source, ""]
-        for question, answer, why, by, source in evidence.answer_rows(pack)] + [
-        ["Controls", c.control.question, c.status, "", "", " ".join(c.evidence), " ".join(x.strip() for x in c.gaps)]
-        for c in pack.controls])
+    table = tables.Table(
+        "Evidence",
+        ["Section", "Question", "Answer", "Why", "Answered by", "Evidence", "Gaps"],
+        [
+            ["Questionnaire", question, answer, why, by, source, ""]
+            for question, answer, why, by, source in evidence.answer_rows(pack)
+        ]
+        + [
+            [
+                "Controls",
+                c.control.question,
+                c.status,
+                "",
+                "",
+                " ".join(c.evidence),
+                " ".join(x.strip() for x in c.gaps),
+            ]
+            for c in pack.controls
+        ],
+    )
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.csv")
     return _download(tables.to_csv(table), f"security-evidence-{tables.slug(t['name'])}", "csv")

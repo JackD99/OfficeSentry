@@ -73,7 +73,8 @@ def period_start(period: str) -> str:
 def plans(conn) -> list:
     return conn.execute(
         "SELECT p.*, (SELECT COUNT(*) FROM report_plan_tenants pt WHERE pt.plan_id = p.id) AS tenants"
-        " FROM report_plans p ORDER BY p.name COLLATE NOCASE").fetchall()
+        " FROM report_plans p ORDER BY p.name COLLATE NOCASE"
+    ).fetchall()
 
 
 def get_plan(conn, plan_id: int):
@@ -96,8 +97,19 @@ def waits_for_approval(plan) -> bool:
     return plan["mode"] == "approval" or plan["delivery"] == "portal"
 
 
-PLAN_COLUMNS = ("name", "reports", "include_xlsx", "day_of_month", "hour", "timezone", "subject", "message",
-                "mode", "delivery", "bcc_team")
+PLAN_COLUMNS = (
+    "name",
+    "reports",
+    "include_xlsx",
+    "day_of_month",
+    "hour",
+    "timezone",
+    "subject",
+    "message",
+    "mode",
+    "delivery",
+    "bcc_team",
+)
 
 
 def save_plan(conn, values: dict, user: str, plan_id: int | None = None) -> int:
@@ -105,9 +117,13 @@ def save_plan(conn, values: dict, user: str, plan_id: int | None = None) -> int:
     if plan_id is None:
         return conn.execute(
             f"INSERT INTO report_plans ({', '.join(PLAN_COLUMNS)}, created_by, created_at, updated_at)"
-            f" VALUES ({', '.join('?' * len(PLAN_COLUMNS))}, ?, ?, ?)", (*params, user, utcnow(), utcnow())).lastrowid
-    conn.execute(f"UPDATE report_plans SET {', '.join(c + ' = ?' for c in PLAN_COLUMNS)}, updated_at = ?"
-                 " WHERE id = ?", (*params, utcnow(), plan_id))
+            f" VALUES ({', '.join('?' * len(PLAN_COLUMNS))}, ?, ?, ?)",
+            (*params, user, utcnow(), utcnow()),
+        ).lastrowid
+    conn.execute(
+        f"UPDATE report_plans SET {', '.join(c + ' = ?' for c in PLAN_COLUMNS)}, updated_at = ? WHERE id = ?",
+        (*params, utcnow(), plan_id),
+    )
     return plan_id
 
 
@@ -117,7 +133,7 @@ def _plan_recipients(conn, plan, tenant_id: int) -> list[int]:
     ids = [c["id"] for c in delivery.tenant_contacts(conn, tenant_id)]
     if ids and plan["bcc_team"]:
         ids += [c["id"] for c in delivery.team_contacts(conn)]
-    return ids[:delivery.mailer.MAX_RECIPIENTS]
+    return ids[: delivery.mailer.MAX_RECIPIENTS]
 
 
 def apply_plan(conn, plan, tenant_ids: list[int], user: str, default_tz: str, now: datetime | None = None) -> int:
@@ -128,36 +144,59 @@ def apply_plan(conn, plan, tenant_ids: list[int], user: str, default_tz: str, no
     now = now or datetime.now(UTC)
     tz = plan["timezone"] or default_tz
     fresh = delivery.initial_period("monthly", 0, plan["day_of_month"], plan["hour"], tz, now)
-    cols = {"reports": plan["reports"], "include_xlsx": plan["include_xlsx"], "message": plan["message"],
-            "subject": plan["subject"], "frequency": "monthly", "day_of_week": 0,
-            "day_of_month": plan["day_of_month"], "hour": plan["hour"], "timezone": plan["timezone"],
-            "enabled": 1, "plan_id": plan["id"], "on_approval": int(waits_for_approval(plan))}
+    cols = {
+        "reports": plan["reports"],
+        "include_xlsx": plan["include_xlsx"],
+        "message": plan["message"],
+        "subject": plan["subject"],
+        "frequency": "monthly",
+        "day_of_week": 0,
+        "day_of_month": plan["day_of_month"],
+        "hour": plan["hour"],
+        "timezone": plan["timezone"],
+        "enabled": 1,
+        "plan_id": plan["id"],
+        "on_approval": int(waits_for_approval(plan)),
+    }
     timing = ("day_of_month", "hour", "timezone")
     for tenant_id in tenant_ids:
         link = conn.execute("SELECT * FROM report_plan_tenants WHERE tenant_id = ?", (tenant_id,)).fetchone()
-        schedule = conn.execute("SELECT * FROM email_schedules WHERE id = ?",
-                                (link["schedule_id"],)).fetchone() if link and link["schedule_id"] else None
+        schedule = (
+            conn.execute("SELECT * FROM email_schedules WHERE id = ?", (link["schedule_id"],)).fetchone()
+            if link and link["schedule_id"]
+            else None
+        )
         if schedule is None:
             schedule_id = conn.execute(
                 f"INSERT INTO email_schedules (kind, tenant_id, {', '.join(cols)}, last_period, created_by,"
                 f" created_at) VALUES ('report', ?, {', '.join('?' * len(cols))}, ?, ?, ?)",
-                (tenant_id, *cols.values(), fresh, user, utcnow())).lastrowid
+                (tenant_id, *cols.values(), fresh, user, utcnow()),
+            ).lastrowid
         else:
             schedule_id = schedule["id"]
-            conn.execute(f"UPDATE email_schedules SET {', '.join(c + ' = ?' for c in cols)} WHERE id = ?",
-                         (*cols.values(), schedule_id))
+            conn.execute(
+                f"UPDATE email_schedules SET {', '.join(c + ' = ?' for c in cols)} WHERE id = ?",
+                (*cols.values(), schedule_id),
+            )
             # Re-timed, or switched between automatic and send on approval: start counting from now, so
             # a month nobody approved isn't emailed by the timer. Never move back past a period already done.
-            if (any(schedule[k] != cols[k] for k in timing) or schedule["frequency"] != "monthly"
-                    or schedule["on_approval"] != cols["on_approval"]):
+            if (
+                any(schedule[k] != cols[k] for k in timing)
+                or schedule["frequency"] != "monthly"
+                or schedule["on_approval"] != cols["on_approval"]
+            ):
                 start = fresh if schedule["frequency"] != "monthly" else max(fresh, schedule["last_period"] or "")
-                conn.execute("UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL"
-                             " WHERE id = ?", (start, schedule_id))
+                conn.execute(
+                    "UPDATE email_schedules SET last_period = ?, attempts = 0, retry_at = NULL WHERE id = ?",
+                    (start, schedule_id),
+                )
         delivery.set_recipients(conn, "schedule", schedule_id, _plan_recipients(conn, plan, tenant_id))
         conn.execute(
             "INSERT INTO report_plan_tenants (tenant_id, plan_id, schedule_id, added_by, added_at)"
             " VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant_id) DO UPDATE SET plan_id = excluded.plan_id,"
-            " schedule_id = excluded.schedule_id", (tenant_id, plan["id"], schedule_id, user, utcnow()))
+            " schedule_id = excluded.schedule_id",
+            (tenant_id, plan["id"], schedule_id, user, utcnow()),
+        )
     return len(tenant_ids)
 
 
@@ -181,8 +220,10 @@ def contact_added(conn, tenant_id: int, contact_id: int) -> None:
     """A new client contact joins the tenant's plan email, so the plan keeps reaching everyone."""
     plan, link = plan_for(conn, tenant_id)
     if plan is not None and link["schedule_id"] and plan["delivery"] == "email":
-        conn.execute("INSERT OR IGNORE INTO email_schedule_recipients (schedule_id, contact_id) VALUES (?, ?)",
-                     (link["schedule_id"], contact_id))
+        conn.execute(
+            "INSERT OR IGNORE INTO email_schedule_recipients (schedule_id, contact_id) VALUES (?, ?)",
+            (link["schedule_id"], contact_id),
+        )
 
 
 # -- Coverage ---------------------------------------------------------------------------------
@@ -192,10 +233,10 @@ def contact_added(conn, tenant_id: int, contact_id: int) -> None:
 class CoverageRow:
     tenant: dict
     plan: str | None
-    monthly: int            # enabled monthly report schedules (or a portal-only plan)
+    monthly: int  # enabled monthly report schedules (or a portal-only plan)
     contacts: int
-    recipients: int         # people on those schedules
-    gaps: list[str] = field(default_factory=list)   # no_report | no_contacts | no_recipients
+    recipients: int  # people on those schedules
+    gaps: list[str] = field(default_factory=list)  # no_report | no_contacts | no_recipients
 
 
 @dataclass
@@ -220,8 +261,9 @@ class Coverage:
 
     @property
     def headline(self) -> str:
-        text = f"{self.covered} of {plural(self.total, 'client')} {'has' if self.total == 1 else 'have'}" \
-               " a monthly report"
+        text = (
+            f"{self.covered} of {plural(self.total, 'client')} {'has' if self.total == 1 else 'have'} a monthly report"
+        )
         parts = []
         if self.count("no_contacts"):
             n = self.count("no_contacts")
@@ -240,13 +282,15 @@ def coverage(conn, tenants) -> Coverage:
             paused += 1
             continue
         plan, _ = plan_for(conn, t["id"])
-        schedules = conn.execute("SELECT * FROM email_schedules WHERE tenant_id = ? AND kind = 'report'"
-                                 " AND enabled = 1 AND frequency = 'monthly'", (t["id"],)).fetchall()
+        schedules = conn.execute(
+            "SELECT * FROM email_schedules WHERE tenant_id = ? AND kind = 'report'"
+            " AND enabled = 1 AND frequency = 'monthly'",
+            (t["id"],),
+        ).fetchall()
         contacts = len(delivery.tenant_contacts(conn, t["id"]))
         people = {c["id"] for s in schedules for c in delivery.recipients(conn, "schedule", s["id"])}
         portal = plan is not None and plan["delivery"] == "portal"
-        row = CoverageRow(dict(t), plan["name"] if plan else None, len(schedules) or int(portal), contacts,
-                          len(people))
+        row = CoverageRow(dict(t), plan["name"] if plan else None, len(schedules) or int(portal), contacts, len(people))
         if not row.monthly:
             row.gaps.append("no_report")
         if not contacts and not portal:
@@ -261,21 +305,26 @@ def coverage(conn, tenants) -> Coverage:
 
 
 def review(conn, tenant_id: int, period: str):
-    return conn.execute("SELECT * FROM report_reviews WHERE tenant_id = ? AND period = ?",
-                        (tenant_id, period)).fetchone()
+    return conn.execute(
+        "SELECT * FROM report_reviews WHERE tenant_id = ? AND period = ?", (tenant_id, period)
+    ).fetchone()
 
 
 def update_review(conn, tenant_id: int, period: str, user: str | None, **fields) -> None:
     """Create the month's review row if it's still implicit (Draft, or Sent by an automatic plan), keeping
     that state, then set ``fields``."""
     if review(conn, tenant_id, period) is None:
-        conn.execute("INSERT INTO report_reviews (tenant_id, period, state, updated_by, updated_at)"
-                     " VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant_id, period) DO NOTHING",
-                     (tenant_id, period, state_of(conn, tenant_id, period), user, utcnow()))
+        conn.execute(
+            "INSERT INTO report_reviews (tenant_id, period, state, updated_by, updated_at)"
+            " VALUES (?, ?, ?, ?, ?) ON CONFLICT(tenant_id, period) DO NOTHING",
+            (tenant_id, period, state_of(conn, tenant_id, period), user, utcnow()),
+        )
     if fields:
-        conn.execute(f"UPDATE report_reviews SET {', '.join(k + ' = ?' for k in fields)}, updated_by = ?,"
-                     " updated_at = ? WHERE tenant_id = ? AND period = ?",
-                     (*fields.values(), user, utcnow(), tenant_id, period))
+        conn.execute(
+            f"UPDATE report_reviews SET {', '.join(k + ' = ?' for k in fields)}, updated_by = ?,"
+            " updated_at = ? WHERE tenant_id = ? AND period = ?",
+            (*fields.values(), user, utcnow(), tenant_id, period),
+        )
 
 
 def state_of(conn, tenant_id: int, period: str, row=None) -> str:
@@ -286,7 +335,8 @@ def state_of(conn, tenant_id: int, period: str, row=None) -> str:
     sent = conn.execute(
         "SELECT 1 FROM issued_reports WHERE tenant_id = ? AND period = ? AND (trigger = 'approval' OR schedule_id ="
         " (SELECT schedule_id FROM report_plan_tenants WHERE tenant_id = ?)) LIMIT 1",
-        (tenant_id, period, tenant_id)).fetchone()
+        (tenant_id, period, tenant_id),
+    ).fetchone()
     return "sent" if sent else "draft"
 
 
@@ -333,8 +383,9 @@ class QueueRow:
 
 
 def _last_report_at(conn, tenant_id: int, period: str) -> str:
-    row = conn.execute("SELECT MAX(issued_at) FROM issued_reports WHERE tenant_id = ? AND period < ?",
-                       (tenant_id, period)).fetchone()
+    row = conn.execute(
+        "SELECT MAX(issued_at) FROM issued_reports WHERE tenant_id = ? AND period < ?", (tenant_id, period)
+    ).fetchone()
     return row[0] or period_start(shift_period(period, -1))
 
 
@@ -345,7 +396,8 @@ def flags_for(conn, tenant, report, period: str, now: datetime) -> tuple[int, li
         "SELECT SUM(severity IN ('critical', 'high')) AS severe, SUM(severity = 'critical') AS critical"
         " FROM findings WHERE tenant_id = :t AND resolved_at IS NULL AND accepted_at IS NULL"
         " AND (first_seen >= :since OR IFNULL(reopened_at, '') >= :since)",
-        {"t": tenant["id"], "since": since}).fetchone()
+        {"t": tenant["id"], "since": since},
+    ).fetchone()
     flags = []
     if counts["critical"]:
         flags.append(f"{plural(counts['critical'], 'new critical finding')}")
@@ -374,10 +426,21 @@ def queue(conn, tenants, period: str, now: datetime | None = None) -> list[Queue
         state = state_of(conn, t["id"], period, r)
         report = monthly_review.build(conn, t, now)
         severe, flags = flags_for(conn, t, report, period, now)
-        rows.append(QueueRow(dict(t), dict(plan), state, r["reviewer"] if r else None,
-                             summary.monthly(report).verdict, severe, flags,
-                             sent_at=r["sent_at"] if r else None, error=r["error"] if r else None,
-                             paused=not t["enabled"], task=dict(jobs[t["id"]]) if t["id"] in jobs else None))
+        rows.append(
+            QueueRow(
+                dict(t),
+                dict(plan),
+                state,
+                r["reviewer"] if r else None,
+                summary.monthly(report).verdict,
+                severe,
+                flags,
+                sent_at=r["sent_at"] if r else None,
+                error=r["error"] if r else None,
+                paused=not t["enabled"],
+                task=dict(jobs[t["id"]]) if t["id"] in jobs else None,
+            )
+        )
     rows.sort(key=lambda q: (list(STATES).index(q.state), -len(q.flags), q.tenant["name"].lower()))
     return rows
 
@@ -386,24 +449,38 @@ def queue(conn, tenants, period: str, now: datetime | None = None) -> list[Queue
 
 
 def actions(conn, tenant_id: int) -> list:
-    return conn.execute("SELECT * FROM report_actions WHERE tenant_id = ? ORDER BY position, id",
-                        (tenant_id,)).fetchall()
+    return conn.execute(
+        "SELECT * FROM report_actions WHERE tenant_id = ? ORDER BY position, id", (tenant_id,)
+    ).fetchall()
 
 
-def add_action(conn, tenant_id: int, title: str, detail: str, user: str, *, rule_key: str | None = None,
-               status: str = "planned", target_month: str | None = None) -> int:
-    position = conn.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM report_actions WHERE tenant_id = ?",
-                            (tenant_id,)).fetchone()[0]
+def add_action(
+    conn,
+    tenant_id: int,
+    title: str,
+    detail: str,
+    user: str,
+    *,
+    rule_key: str | None = None,
+    status: str = "planned",
+    target_month: str | None = None,
+) -> int:
+    position = conn.execute(
+        "SELECT COALESCE(MAX(position), 0) + 1 FROM report_actions WHERE tenant_id = ?", (tenant_id,)
+    ).fetchone()[0]
     return conn.execute(
         "INSERT INTO report_actions (tenant_id, title, detail, rule_key, status, target_month, position,"
         " created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (tenant_id, title, detail, rule_key, status, target_month, position, user, utcnow(), utcnow())).lastrowid
+        (tenant_id, title, detail, rule_key, status, target_month, position, user, utcnow(), utcnow()),
+    ).lastrowid
 
 
 def update_action(conn, action, status: str, target_month: str | None) -> None:
     done_at = (action["done_at"] or utcnow()) if status == "done" else None
-    conn.execute("UPDATE report_actions SET status = ?, target_month = ?, done_at = ?, updated_at = ? WHERE id = ?",
-                 (status, target_month, done_at, utcnow(), action["id"]))
+    conn.execute(
+        "UPDATE report_actions SET status = ?, target_month = ?, done_at = ?, updated_at = ? WHERE id = ?",
+        (status, target_month, done_at, utcnow(), action["id"]),
+    )
 
 
 def move_action(conn, action, direction: int) -> None:
@@ -425,18 +502,35 @@ def suggestions(conn, tenant) -> list[dict]:
     Each is ``{"rule_key", "kind", "title", "detail", "severity", "effort"}``. ``rule_key`` is a project's
     ``project:<key>``, a check's key or ``signal:<key>``; the title is what lands on the client's report."""
     found = projects.assess(conn, tenant)
-    out = [{"rule_key": f"project:{rec.project.key}", "kind": "project", "title": f"{rec.project.title} project",
-            "detail": rec.project.pitch, "severity": rec.severity, "effort": rec.effort}
-           for rec in found.projects if rec.status != "declined"]
-    out += [{"rule_key": r.key, "kind": "quick", "title": r.action or r.title, "detail": r.summary,
-             "severity": r.severity, "effort": r.effort} for r in found.quick_fixes]
+    out = [
+        {
+            "rule_key": f"project:{rec.project.key}",
+            "kind": "project",
+            "title": f"{rec.project.title} project",
+            "detail": rec.project.pitch,
+            "severity": rec.severity,
+            "effort": rec.effort,
+        }
+        for rec in found.projects
+        if rec.status != "declined"
+    ]
+    out += [
+        {
+            "rule_key": r.key,
+            "kind": "quick",
+            "title": r.action or r.title,
+            "detail": r.summary,
+            "severity": r.severity,
+            "effort": r.effort,
+        }
+        for r in found.quick_fixes
+    ]
     return out
 
 
 def notes(conn, tenant_id: int, staff: bool) -> list:
     where = "" if staff else " AND visibility = 'client'"
-    return conn.execute(f"SELECT * FROM finding_notes WHERE tenant_id = ?{where} ORDER BY id",
-                        (tenant_id,)).fetchall()
+    return conn.execute(f"SELECT * FROM finding_notes WHERE tenant_id = ?{where} ORDER BY id", (tenant_id,)).fetchall()
 
 
 def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_only: bool = False) -> dict:
@@ -450,14 +544,27 @@ def report_context(conn, tenant_id: int, period: str, *, staff: bool, approved_o
     if approved_only and state_of(conn, tenant_id, period, r) not in ("approved", "sent"):
         return {"month_end": {"commentary": "", "actions": [], "notes": {}, "staff": False, "period": period}}
     recent = period_start(shift_period(period, -1))
-    items = [dict(a, status_label=ACTION_STATUSES[a["status"]],
-                  target_label=issued.period_label(a["target_month"]) if a["target_month"] else "")
-             for a in actions(conn, tenant_id) if a["status"] != "done" or (a["done_at"] or "") >= recent]
+    items = [
+        dict(
+            a,
+            status_label=ACTION_STATUSES[a["status"]],
+            target_label=issued.period_label(a["target_month"]) if a["target_month"] else "",
+        )
+        for a in actions(conn, tenant_id)
+        if a["status"] != "done" or (a["done_at"] or "") >= recent
+    ]
     by_rule: dict[str, list] = {}
     for n in notes(conn, tenant_id, staff):
         by_rule.setdefault(n["rule_key"], []).append(dict(n))
-    return {"month_end": {"commentary": r["commentary"] if r else "", "actions": items, "notes": by_rule,
-                          "staff": staff, "period": period}}
+    return {
+        "month_end": {
+            "commentary": r["commentary"] if r else "",
+            "actions": items,
+            "notes": by_rule,
+            "staff": staff,
+            "period": period,
+        }
+    }
 
 
 # -- Approval ----------------------------------------------------------------------------------------
@@ -471,7 +578,9 @@ def frozen_files(conn, tenant_id: int, period: str) -> list:
     """The latest approved version of each file for the period."""
     return conn.execute(
         "SELECT * FROM issued_reports WHERE id IN (SELECT MAX(id) FROM issued_reports WHERE tenant_id = ?"
-        " AND period = ? AND trigger = 'approval' GROUP BY filename) ORDER BY id", (tenant_id, period)).fetchall()
+        " AND period = ? AND trigger = 'approval' GROUP BY filename) ORDER BY id",
+        (tenant_id, period),
+    ).fetchall()
 
 
 def render_files(app, conn, tenant, period: str, now: datetime | None = None) -> list[tuple[str, str, bytes]]:
@@ -483,12 +592,29 @@ def render_files(app, conn, tenant, period: str, now: datetime | None = None) ->
         raise ApprovalError(f"{tenant['name']} isn't on a report plan")
     keys = json.loads(plan["reports"] or "[]")
     report = monthly_review.build(conn, tenant, now)
-    return delivery._attachments(app, conn, tenant, keys, bool(plan["include_xlsx"]), now, report,
-                                 review_context=report_context(conn, tenant["id"], period, staff=False))
+    return delivery._attachments(
+        app,
+        conn,
+        tenant,
+        keys,
+        bool(plan["include_xlsx"]),
+        now,
+        report,
+        review_context=report_context(conn, tenant["id"], period, staff=False),
+    )
 
 
-def freeze(app, conn, tenant, period: str, user: str, *, reason: str | None = None,
-           now: datetime | None = None, files: list[tuple[str, str, bytes]] | None = None) -> list[int]:
+def freeze(
+    app,
+    conn,
+    tenant,
+    period: str,
+    user: str,
+    *,
+    reason: str | None = None,
+    now: datetime | None = None,
+    files: list[tuple[str, str, bytes]] | None = None,
+) -> list[int]:
     """Store the plan's files for the month, with the month's commentary and client-visible notes, in
     issued_reports and mark the month approved. ``files`` from ``render_files`` (built here when not given)."""
     now = now or datetime.now(UTC)
@@ -501,14 +627,31 @@ def freeze(app, conn, tenant, period: str, user: str, *, reason: str | None = No
     by_name = {name: key for key, name in delivery.attachment_plan(tenant, keys, bool(plan["include_xlsx"]), conn)}
     known = delivery.catalog_map(conn)
     stamp = now.strftime(ISO)
-    ids = issued.archive(conn, tenant["id"], [
-        issued.IssuedFile(by_name.get(name, ""), known[by_name[name]].title if by_name.get(name) in known else name,
-                          name, content_type, data) for name, content_type, data in files],
-        period=period, trigger="approval", user=user, schedule_id=link["schedule_id"], now=stamp)
-    conn.execute(f"UPDATE issued_reports SET approved_by = ?, approved_at = ?, reason = ?"
-                 f" WHERE id IN ({','.join('?' * len(ids))})", (user, stamp, reason, *ids))
-    update_review(conn, tenant["id"], period, user, state="approved", approved_by=user, approved_at=stamp,
-                  error=None)
+    ids = issued.archive(
+        conn,
+        tenant["id"],
+        [
+            issued.IssuedFile(
+                by_name.get(name, ""),
+                known[by_name[name]].title if by_name.get(name) in known else name,
+                name,
+                content_type,
+                data,
+            )
+            for name, content_type, data in files
+        ],
+        period=period,
+        trigger="approval",
+        user=user,
+        schedule_id=link["schedule_id"],
+        now=stamp,
+    )
+    conn.execute(
+        f"UPDATE issued_reports SET approved_by = ?, approved_at = ?, reason = ?"
+        f" WHERE id IN ({','.join('?' * len(ids))})",
+        (user, stamp, reason, *ids),
+    )
+    update_review(conn, tenant["id"], period, user, state="approved", approved_by=user, approved_at=stamp, error=None)
     return ids
 
 
@@ -524,8 +667,11 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
     rows = frozen_files(conn, tenant["id"], period)
     if plan is None or not rows:
         return "Approve it first"
-    schedule = conn.execute("SELECT * FROM email_schedules WHERE id = ?",
-                            (link["schedule_id"],)).fetchone() if link["schedule_id"] else None
+    schedule = (
+        conn.execute("SELECT * FROM email_schedules WHERE id = ?", (link["schedule_id"],)).fetchone()
+        if link["schedule_id"]
+        else None
+    )
     contacts = delivery.recipients(conn, "schedule", schedule["id"]) if schedule else []
 
     def sent(conn) -> None:
@@ -536,13 +682,16 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
         to, bcc = delivery.split_recipients(contacts)
 
         def emailed(conn) -> None:
-            conn.execute(f"UPDATE issued_reports SET recipients = ?, bcc = ? WHERE id IN ({','.join('?' * len(rows))})",
-                         (", ".join(to), ", ".join(bcc), *[r["id"] for r in rows]))
+            conn.execute(
+                f"UPDATE issued_reports SET recipients = ?, bcc = ? WHERE id IN ({','.join('?' * len(rows))})",
+                (", ".join(to), ", ".join(bcc), *[r["id"] for r in rows]),
+            )
             sent(conn)
 
         files = [(r["filename"], r["content_type"], bytes(r["data"])) for r in rows]
-        error = delivery.send_frozen(app, conn, vault, schedule, tenant, period, files, user=user, now=now,
-                                     on_sent=emailed)
+        error = delivery.send_frozen(
+            app, conn, vault, schedule, tenant, period, files, user=user, now=now, on_sent=emailed
+        )
         if error:
             with store.atomic(conn):
                 update_review(conn, tenant["id"], period, user, error=error[:1000])
@@ -553,16 +702,21 @@ def deliver(app, conn, vault, tenant, period: str, user: str, now: datetime | No
     with store.atomic(conn):
         if schedule is not None:
             # Published only: the period is done, so an automatic schedule doesn't send it again.
-            conn.execute(f"UPDATE email_schedules SET last_period = {delivery.LATER_PERIOD}, attempts = 0,"
-                         " retry_at = NULL WHERE id = ?", (period, period, schedule["id"]))
+            conn.execute(
+                f"UPDATE email_schedules SET last_period = {delivery.LATER_PERIOD}, attempts = 0,"
+                " retry_at = NULL WHERE id = ?",
+                (period, period, schedule["id"]),
+            )
         sent(conn)
-    delivery.report_ready(app, conn, vault, tenant, period, list(dict.fromkeys(r["title"] for r in rows)),
-                          emailed=False)
+    delivery.report_ready(
+        app, conn, vault, tenant, period, list(dict.fromkeys(r["title"] for r in rows)), emailed=False
+    )
     return None
 
 
-def approve(app, conn, vault, tenant, period: str, user: str, *, reason: str | None = None,
-            now: datetime | None = None) -> str | None:
+def approve(
+    app, conn, vault, tenant, period: str, user: str, *, reason: str | None = None, now: datetime | None = None
+) -> str | None:
     """Freeze and send (or publish) in this thread. Approving a month that was already approved is a re-issue
     and needs ``reason``; it stores the next version. Returns a send error, or None. The portal queues
     ``queue_approval`` instead, which does the same in the worker."""
@@ -581,13 +735,28 @@ def approval_key(tenant_id: int, period: str) -> str:
     return f"approve:{tenant_id}:{period}"
 
 
-def queue_approval(conn, tenant, period: str, user: str, *, reason: str | None = None, send_only: bool = False,
-                   batch: str | None = None) -> int:
+def queue_approval(
+    conn,
+    tenant,
+    period: str,
+    user: str,
+    *,
+    reason: str | None = None,
+    send_only: bool = False,
+    batch: str | None = None,
+) -> int:
     """Queue approving (freeze, then send or publish) a client's month, or with ``send_only`` sending the
     approved files again. Asking while one is queued or running returns that one, so it happens once."""
-    return tasks.enqueue(conn, "approve", key=approval_key(tenant["id"], period), tenant_id=tenant["id"],
-                         payload={"period": period, "user": user, "reason": reason, "send_only": send_only},
-                         batch=batch, priority=tasks.PRIORITY_WAITING, user=user)
+    return tasks.enqueue(
+        conn,
+        "approve",
+        key=approval_key(tenant["id"], period),
+        tenant_id=tenant["id"],
+        payload={"period": period, "user": user, "reason": reason, "send_only": send_only},
+        batch=batch,
+        priority=tasks.PRIORITY_WAITING,
+        user=user,
+    )
 
 
 def approval_task(conn, tenant_id: int, period: str):
@@ -597,8 +766,11 @@ def approval_task(conn, tenant_id: int, period: str):
 
 def approval_tasks(conn, period: str) -> dict:
     """{tenant id: latest approval task} for the month."""
-    rows = conn.execute("SELECT * FROM tasks WHERE id IN (SELECT MAX(id) FROM tasks WHERE kind = 'approve'"
-                        " AND key LIKE ? GROUP BY tenant_id)", (f"approve:%:{period}",)).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM tasks WHERE id IN (SELECT MAX(id) FROM tasks WHERE kind = 'approve'"
+        " AND key LIKE ? GROUP BY tenant_id)",
+        (f"approve:%:{period}",),
+    ).fetchall()
     return {r["tenant_id"]: r for r in rows}
 
 
@@ -607,8 +779,9 @@ def new_batch(period: str) -> str:
 
 
 def latest_batch(conn, period: str) -> str | None:
-    row = conn.execute("SELECT batch FROM tasks WHERE batch LIKE ? ORDER BY id DESC LIMIT 1",
-                       (f"approve:{period}:%",)).fetchone()
+    row = conn.execute(
+        "SELECT batch FROM tasks WHERE batch LIKE ? ORDER BY id DESC LIMIT 1", (f"approve:{period}:%",)
+    ).fetchone()
     return row["batch"] if row else None
 
 
@@ -642,8 +815,13 @@ def _approve_task(ctx: tasks.TaskContext) -> dict:
             if state_of(conn, tenant["id"], period) in ("approved", "sent") and not reason:
                 return {"state": state_of(conn, tenant["id"], period), "skipped": "already issued"}
             freeze(ctx.app, conn, tenant, period, user, reason=reason, files=files)
-            audit(conn, user, "report_reissued" if reason else "report_approved", tenant["id"],
-                  period + (f": {reason[:200]}" if reason else ""))
+            audit(
+                conn,
+                user,
+                "report_reissued" if reason else "report_approved",
+                tenant["id"],
+                period + (f": {reason[:200]}" if reason else ""),
+            )
             ctx.checkpoint("frozen")
     if state_of(conn, tenant["id"], period) == "sent":
         return {"state": "sent"}  # an earlier attempt sent it and then stopped
@@ -659,4 +837,5 @@ def emailed(plan, conn, tenant_id: int) -> bool:
     """Whether approving emails anyone (else it only publishes to the report history)."""
     _, link = plan_for(conn, tenant_id)
     return plan["delivery"] == "email" and bool(
-        link and link["schedule_id"] and delivery.recipients(conn, "schedule", link["schedule_id"]))
+        link and link["schedule_id"] and delivery.recipients(conn, "schedule", link["schedule_id"])
+    )

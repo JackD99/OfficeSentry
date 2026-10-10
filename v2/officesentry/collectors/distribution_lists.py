@@ -23,12 +23,31 @@ from ..text import plural
 from .base import Collector, RunContext, register
 
 GROUP_FIELDS = (
-    "ExternalDirectoryObjectId", "Guid", "Name", "DisplayName", "PrimarySmtpAddress", "RecipientTypeDetails",
-    "ManagedBy", "MemberJoinRestriction", "MemberDepartRestriction", "RequireSenderAuthenticationEnabled",
-    "HiddenFromAddressListsEnabled", "ModerationEnabled", "IsDirSynced", "WhenCreatedUTC", "WhenChangedUTC",
+    "ExternalDirectoryObjectId",
+    "Guid",
+    "Name",
+    "DisplayName",
+    "PrimarySmtpAddress",
+    "RecipientTypeDetails",
+    "ManagedBy",
+    "MemberJoinRestriction",
+    "MemberDepartRestriction",
+    "RequireSenderAuthenticationEnabled",
+    "HiddenFromAddressListsEnabled",
+    "ModerationEnabled",
+    "IsDirSynced",
+    "WhenCreatedUTC",
+    "WhenChangedUTC",
 )
-MEMBER_FIELDS = ("Name", "DisplayName", "PrimarySmtpAddress", "ExternalEmailAddress", "RecipientType",
-                 "RecipientTypeDetails", "ExternalDirectoryObjectId")
+MEMBER_FIELDS = (
+    "Name",
+    "DisplayName",
+    "PrimarySmtpAddress",
+    "ExternalEmailAddress",
+    "RecipientType",
+    "RecipientTypeDetails",
+    "ExternalDirectoryObjectId",
+)
 LIST_LIMIT = 1000  # lists whose members are read each run
 MEMBERS_KEPT = 200  # members stored per list; counts are always complete
 OWNERS_KEPT = 20
@@ -42,8 +61,13 @@ KEEP_DAYS = 90  # per-day counts kept, the longest window the report shows
 
 GROUP_TYPES = {"MailUniversalSecurityGroup", "MailUniversalDistributionGroup", "MailNonUniversalGroup"}
 EXTERNAL_TYPES = {"MailContact", "MailUser", "GuestMailUser"}
-NESTED_TYPES = {"MailUniversalDistributionGroup", "MailUniversalSecurityGroup", "MailNonUniversalGroup",
-                "DynamicDistributionGroup", "GroupMailbox"}
+NESTED_TYPES = {
+    "MailUniversalDistributionGroup",
+    "MailUniversalSecurityGroup",
+    "MailNonUniversalGroup",
+    "DynamicDistributionGroup",
+    "GroupMailbox",
+}
 
 
 def _iso(dt: datetime) -> str:
@@ -57,9 +81,12 @@ def _list_id(g: dict) -> str:
 def _member(m: dict) -> dict:
     kind = m.get("RecipientTypeDetails") or m.get("RecipientType") or ""
     external = str(m.get("ExternalEmailAddress") or "").removeprefix("SMTP:").removeprefix("smtp:")
-    return {"name": m.get("DisplayName") or m.get("Name"),
-            "address": m.get("PrimarySmtpAddress") or external or None,
-            "type": kind, "id": m.get("ExternalDirectoryObjectId")}
+    return {
+        "name": m.get("DisplayName") or m.get("Name"),
+        "address": m.get("PrimarySmtpAddress") or external or None,
+        "type": kind,
+        "id": m.get("ExternalDirectoryObjectId"),
+    }
 
 
 @register
@@ -74,8 +101,11 @@ class DistributionLists(Collector):
             ctx.log("Tenant has no Exchange Online licence; nothing to collect")
             ctx.objects("distribution_list", [])
             return
-        groups = [g for g in ctx.exchange.invoke("Get-DistributionGroup", {"ResultSize": "Unlimited"})
-                  if g.get("RecipientTypeDetails") != "RoomList"]
+        groups = [
+            g
+            for g in ctx.exchange.invoke("Get-DistributionGroup", {"ResultSize": "Unlimited"})
+            if g.get("RecipientTypeDetails") != "RoomList"
+        ]
         groups.sort(key=lambda g: str(g.get("DisplayName") or g.get("Name") or "").lower())
         if len(groups) > LIST_LIMIT:
             ctx.warn(f"Read members for the first {LIST_LIMIT} of {len(groups)} distribution lists")
@@ -86,8 +116,10 @@ class DistributionLists(Collector):
             row.update({"ManagedBy": owners[:OWNERS_KEPT], "ownerCount": len(owners), "membersRead": False})
             if i < LIST_LIMIT:
                 try:
-                    members = ctx.exchange.invoke("Get-DistributionGroupMember", {
-                        "Identity": g.get("Guid") or g.get("PrimarySmtpAddress"), "ResultSize": "Unlimited"})
+                    members = ctx.exchange.invoke(
+                        "Get-DistributionGroupMember",
+                        {"Identity": g.get("Guid") or g.get("PrimarySmtpAddress"), "ResultSize": "Unlimited"},
+                    )
                 except ExchangeAccessDenied:
                     raise
                 except ExchangeError:
@@ -95,12 +127,15 @@ class DistributionLists(Collector):
                     members = None
                 if members is not None:
                     found = [_member(m) for m in members]
-                    row.update({
-                        "membersRead": True, "memberCount": len(found),
-                        "externalCount": sum(m["type"] in EXTERNAL_TYPES for m in found),
-                        "nestedCount": sum(m["type"] in NESTED_TYPES for m in found),
-                        "members": found[:MEMBERS_KEPT],
-                    })
+                    row.update(
+                        {
+                            "membersRead": True,
+                            "memberCount": len(found),
+                            "externalCount": sum(m["type"] in EXTERNAL_TYPES for m in found),
+                            "nestedCount": sum(m["type"] in NESTED_TYPES for m in found),
+                            "members": found[:MEMBERS_KEPT],
+                        }
+                    )
             rows.append((_list_id(g), row))
         if failed:
             ctx.warn(f"Could not read the members of {plural(failed, 'distribution list')}")
@@ -109,8 +144,9 @@ class DistributionLists(Collector):
 
         data = [r for _, r in rows]
         ctx.metric("mail.distribution_lists", len(data))
-        ctx.metric("mail.distribution_lists_empty", sum(r.get("membersRead") and not r.get("memberCount")
-                                                        for r in data))
+        ctx.metric(
+            "mail.distribution_lists_empty", sum(r.get("membersRead") and not r.get("memberCount") for r in data)
+        )
 
     @staticmethod
     def _activity(ctx: RunContext, lists: list[dict]) -> None:
@@ -127,8 +163,12 @@ class DistributionLists(Collector):
                 continue
             old = kept.get(address.lower()) or {}
             read_to = parse_ts(old.get("readTo"))
-            entry = {"days": dict(old.get("days") or {}), "last": old.get("last"),
-                     "readTo": old.get("readTo"), "watchedFrom": old.get("watchedFrom")}
+            entry = {
+                "days": dict(old.get("days") or {}),
+                "last": old.get("last"),
+                "readTo": old.get("readTo"),
+                "watchedFrom": old.get("watchedFrom"),
+            }
             if read_to is None or read_to < earliest:
                 # A new list, or one last read longer ago than a query reaches: watching starts again here,
                 # and the date of an earlier last message is still kept.
@@ -144,7 +184,7 @@ class DistributionLists(Collector):
         try:
             for start, addresses in sorted(by_start.items()):
                 for i in range(0, len(addresses), TRACE_ADDRESSES):
-                    chunk = addresses[i:i + TRACE_ADDRESSES]
+                    chunk = addresses[i : i + TRACE_ADDRESSES]
                     if queries >= TRACE_QUERIES:
                         behind += len(chunk)
                         continue
@@ -165,24 +205,31 @@ class DistributionLists(Collector):
                         counts[address]["readTo"] = _iso(end)
         except ExchangeError as exc:  # access denied included: lists are still worth showing without activity
             ctx.log(f"The message trace isn't available, so list activity wasn't read: {exc.message}", "warning")
-            ctx.objects("dl_activity_status", [("status", {"available": False, "reason": exc.message[:300],
-                                                           "checkedAt": _iso(now)})])
-            ctx.objects("dl_activity", [(a, {k: v for k, v in kept[a].items() if not k.startswith("_")})
-                                        for a in sorted(kept)])
+            ctx.objects(
+                "dl_activity_status",
+                [("status", {"available": False, "reason": exc.message[:300], "checkedAt": _iso(now)})],
+            )
+            ctx.objects(
+                "dl_activity", [(a, {k: v for k, v in kept[a].items() if not k.startswith("_")}) for a in sorted(kept)]
+            )
             return
         if behind:
-            ctx.warn(f"Read the message trace for some distribution lists only (Microsoft allows "
-                     f"{TRACE_QUERIES} queries a run here); {plural(behind, 'list')} carry on next run")
+            ctx.warn(
+                f"Read the message trace for some distribution lists only (Microsoft allows "
+                f"{TRACE_QUERIES} queries a run here); {plural(behind, 'list')} carry on next run"
+            )
         cutoff = (now - timedelta(days=KEEP_DAYS)).date().isoformat()
         for entry in counts.values():
             entry["days"] = {d: n for d, n in sorted(entry["days"].items()) if d >= cutoff}
         ctx.objects("dl_activity", sorted(counts.items()))
-        ctx.objects("dl_activity_status", [("status", {"available": True, "checkedAt": _iso(now),
-                                                       "readTo": _iso(end)})])
+        ctx.objects(
+            "dl_activity_status", [("status", {"available": True, "checkedAt": _iso(now), "readTo": _iso(end)})]
+        )
 
     @staticmethod
-    def _trace(ctx: RunContext, chunk: list[str], start: str, end: datetime,
-               queries: int) -> tuple[list[dict] | None, int]:
+    def _trace(
+        ctx: RunContext, chunk: list[str], start: str, end: datetime, queries: int
+    ) -> tuple[list[dict] | None, int]:
         """Every "Expanded" trace row for the lists in ``chunk`` from ``start`` to ``end``, following Microsoft's
         StartingRecipientAddress paging; None if the run's query budget runs out first."""
         rows: list[dict] = []
@@ -190,8 +237,13 @@ class DistributionLists(Collector):
         while True:
             if queries >= TRACE_QUERIES:
                 return None, queries
-            params = {"RecipientAddress": chunk, "Status": ["Expanded"], "StartDate": start,
-                      "EndDate": _iso(upper), "ResultSize": TRACE_PAGE}
+            params = {
+                "RecipientAddress": chunk,
+                "Status": ["Expanded"],
+                "StartDate": start,
+                "EndDate": _iso(upper),
+                "ResultSize": TRACE_PAGE,
+            }
             if starting:
                 params["StartingRecipientAddress"] = starting
             found = ctx.exchange.invoke("Get-MessageTraceV2", params)

@@ -7,16 +7,17 @@ name: v2
 # there), pull requests get the full matrix and the Windows job by themselves: the jobs below check
 # github.event.repository.private, so nothing needs editing on the day.
 #
-# Pull requests that only touch Markdown, docs/, examples/ or website/ skip the jobs (website.yml builds the
-# site), but "CI passed" always runs and reports, so it can be the one required check on main: it fails when
-# any job failed or was cancelled, and passes when they passed or were skipped for a docs-only change. It also
-# needs the sign-off check (DCO) on pull requests from outside contributors (CONTRIBUTING.md, "Signing off").
+# Pull requests and pushes to main that only touch Markdown, docs/, examples/ or website/ skip the jobs
+# (website.yml builds the site), but "CI passed" always runs and reports, so it can be the one required check
+# on main: it fails when any job failed or was cancelled, and passes when they passed or were skipped for a
+# docs-only change. It also needs the sign-off check (DCO) on pull requests from outside contributors
+# (CONTRIBUTING.md, "Signing off"). A docs-only push to main still gets a passing run, so the release workflow
+# can release that commit: its code is the code the push before it tested.
 on:
+  # No paths-ignore: a skipped workflow never reports, a required check that never reports blocks the merge,
+  # and a commit on main with no run can't be released. The "changes" job decides instead.
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**', 'examples/**', 'website/**']
-  # No paths-ignore here: a skipped workflow never reports, and a required check that never reports blocks
-  # the merge. The "changes" job decides instead.
   pull_request:
   workflow_dispatch:
   schedule:
@@ -36,7 +37,8 @@ defaults:
     working-directory: v2
 
 jobs:
-  # Whether the pull request changes anything but docs. Every other event tests everything.
+  # Whether the pull request, or the push to main, changes anything but docs. Every other event tests
+  # everything.
   changes:
     name: What changed
     runs-on: ubuntu-24.04
@@ -50,18 +52,26 @@ jobs:
     outputs:
       code: ${{ steps.files.outputs.code }}
     steps:
+      - if: github.event_name == 'push'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - id: files
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          elif [ "$GITHUB_EVENT_NAME" = push ] && [ -n "$BEFORE" ] && [ "${BEFORE//0/}" != "" ] \
+              && git fetch -q --depth=1 origin "$BEFORE"; then
+            # What main had before this push, against what it has now.
+            files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+          else
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
           code=false
-          # The same patterns as paths-ignore on push (in a case pattern, * also matches /).
+          # In a case pattern, * also matches /.
           while IFS= read -r f; do
             case "$f" in
               *.md|docs/*|examples/*|website/*) ;;
@@ -82,9 +92,15 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: v2/pyproject.toml
-      - run: pip install 'ruff>=0.6'
+          cache-dependency-path: v2/requirements-dev.txt
+      # The ruff the dev lock pins, with its hashes, so a new ruff release can't turn the lint red on its own
+      # (Dependabot moves the lock, and the lint with it).
+      - name: Install ruff from the dev lock
+        run: |
+          awk '/^ruff==/ {p = 1} p {print} p && !/\\$/ {exit}' requirements-dev.txt > "$RUNNER_TEMP/ruff.txt"
+          pip install --require-hashes --no-deps -r "$RUNNER_TEMP/ruff.txt"
       - run: ruff check .
+      - run: ruff format --check .
 
   test:
     name: test (Python ${{ matrix.python }})
@@ -216,8 +232,12 @@ jobs:
           cache: pip
           cache-dependency-path: v2/pyproject.toml
       - run: pip install -r ../.github/requirements-ci.txt
-      # Exactly what the Docker image installs: the hash-pinned lock, without resolving anything.
+      # Every hash-pinned lock, without resolving anything: what the Docker image installs, what CI tests
+      # with, the browser tests and the website build.
       - run: pip-audit --strict --disable-pip -r requirements.txt
+      - run: pip-audit --strict --disable-pip -r requirements-dev.txt
+      - run: pip-audit --strict --disable-pip -r tests/browser/requirements.txt
+      - run: pip-audit --strict --disable-pip -r ../website/requirements.txt
 
   # Developer Certificate of Origin (CONTRIBUTING.md, "Signing off"): every commit in a pull request from
   # outside the project carries a Signed-off-by line with its author's email. The maintainer's own pull

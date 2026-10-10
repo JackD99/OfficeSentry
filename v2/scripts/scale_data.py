@@ -62,10 +62,14 @@ def _unpack(db) -> None:
     """Objects as stored before compression: one row of JSON text per object."""
     for row in db.execute("SELECT run_id, kind, object_id, data FROM objects WHERE typeof(data) = 'blob'").fetchall():
         objects = [json.loads(line) for line in store.pack_lines(row["data"])]
-        db.execute("DELETE FROM objects WHERE run_id = ? AND kind = ? AND object_id = ?",
-                   (row["run_id"], row["kind"], row["object_id"]))
-        db.executemany("INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, ?, ?, ?)",
-                       [(row["run_id"], row["kind"], i, json.dumps(d, sort_keys=True)) for i, d in objects])
+        db.execute(
+            "DELETE FROM objects WHERE run_id = ? AND kind = ? AND object_id = ?",
+            (row["run_id"], row["kind"], row["object_id"]),
+        )
+        db.executemany(
+            "INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, ?, ?, ?)",
+            [(row["run_id"], row["kind"], i, json.dumps(d, sort_keys=True)) for i, d in objects],
+        )
 
 
 def build_templates(path: Path, vault, plain: bool) -> list[dict]:
@@ -79,8 +83,12 @@ def build_templates(path: Path, vault, plain: bool) -> list[dict]:
         t = dict(demo_data.TENANTS[i % len(demo_data.TENANTS)], staff=staff)
         tid = store.create_tenant(db, f"Template {i + 1}", f"template{i + 1}.onmicrosoft.com", cid)
         demo_data.collect(db, tid, t, now, first=False)
-        runs = {r["collector"]: r["id"] for r in db.execute(
-            "SELECT collector, MAX(id) AS id FROM runs WHERE tenant_id = ? GROUP BY collector", (tid,))}
+        runs = {
+            r["collector"]: r["id"]
+            for r in db.execute(
+                "SELECT collector, MAX(id) AS id FROM runs WHERE tenant_id = ? GROUP BY collector", (tid,)
+            )
+        }
         users = store.run_objects(db, runs["users"], "user") if "users" in runs else []
         out.append({"tenant": tid, "users": len(users), "runs": runs})
         print(f"  template {i + 1}: {len(users)} accounts, {len(runs)} collectors", flush=True)
@@ -105,11 +113,16 @@ def kept_days(days: int) -> set[int]:
 def add_tenant(db, n: int, template: dict, days: int, keep: set[int], cid: int) -> None:
     """One tenant: a copy of ``template`` with ``days`` nights of history."""
     tid = store.create_tenant(db, f"Client {n:04}", f"client{n:04}.onmicrosoft.com", cid)
-    db.execute("UPDATE tenants SET consented_at = ?, capabilities = (SELECT capabilities FROM tpl.tenants"
-               " WHERE id = ?) WHERE id = ?", (_iso(datetime.now(UTC)), template["tenant"], tid))
+    db.execute(
+        "UPDATE tenants SET consented_at = ?, capabilities = (SELECT capabilities FROM tpl.tenants"
+        " WHERE id = ?) WHERE id = ?",
+        (_iso(datetime.now(UTC)), template["tenant"], tid),
+    )
     end = datetime.now(UTC).replace(hour=2, minute=0, second=0, microsecond=0)
-    db.execute("CREATE TEMP TABLE IF NOT EXISTS plan (run_id INTEGER, template_run INTEGER, at TEXT,"
-               " objects INTEGER, log INTEGER)")
+    db.execute(
+        "CREATE TEMP TABLE IF NOT EXISTS plan (run_id INTEGER, template_run INTEGER, at TEXT,"
+        " objects INTEGER, log INTEGER)"
+    )
     db.execute("DELETE FROM plan")
     for ago in range(days - 1, -1, -1):
         night = end - timedelta(days=ago)
@@ -118,14 +131,23 @@ def add_tenant(db, n: int, template: dict, days: int, keep: set[int], cid: int) 
             run_id = db.execute(
                 "INSERT INTO runs (tenant_id, collector, status, trigger, scheduled_for, created_at, started_at,"
                 " finished_at, object_count) SELECT ?, ?, status, 'schedule', ?, ?, ?, ?, object_count"
-                " FROM tpl.runs WHERE id = ?", (tid, collector, at, at, at, at, template_run)).lastrowid
+                " FROM tpl.runs WHERE id = ?",
+                (tid, collector, at, at, at, at, template_run),
+            ).lastrowid
             db.execute("INSERT INTO plan VALUES (?, ?, ?, ?, ?)", (run_id, template_run, at, ago in keep, ago < 90))
-    db.execute("INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) SELECT p.run_id, ?, m.key,"
-               " m.value, p.at FROM plan p JOIN tpl.metrics m ON m.run_id = p.template_run", (tid,))
-    db.execute("INSERT INTO run_events (run_id, ts, level, message) SELECT p.run_id, p.at, e.level, e.message"
-               " FROM plan p JOIN tpl.run_events e ON e.run_id = p.template_run WHERE p.log ORDER BY p.run_id, e.id")
-    db.execute("INSERT INTO objects (run_id, kind, object_id, data, items) SELECT p.run_id, o.kind, o.object_id,"
-               " o.data, o.items FROM plan p JOIN tpl.objects o ON o.run_id = p.template_run WHERE p.objects")
+    db.execute(
+        "INSERT INTO metrics (run_id, tenant_id, key, value, captured_at) SELECT p.run_id, ?, m.key,"
+        " m.value, p.at FROM plan p JOIN tpl.metrics m ON m.run_id = p.template_run",
+        (tid,),
+    )
+    db.execute(
+        "INSERT INTO run_events (run_id, ts, level, message) SELECT p.run_id, p.at, e.level, e.message"
+        " FROM plan p JOIN tpl.run_events e ON e.run_id = p.template_run WHERE p.log ORDER BY p.run_id, e.id"
+    )
+    db.execute(
+        "INSERT INTO objects (run_id, kind, object_id, data, items) SELECT p.run_id, o.kind, o.object_id,"
+        " o.data, o.items FROM plan p JOIN tpl.objects o ON o.run_id = p.template_run WHERE p.objects"
+    )
 
 
 def table_sizes(db) -> list[tuple[str, int]]:
@@ -142,8 +164,10 @@ def report(db, db_path: Path, label: str) -> None:
     db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     gb = db_path.stat().st_size / 1e9
     objects = db.execute("SELECT COALESCE(SUM(items), 0) FROM objects").fetchone()[0]
-    print(f"\n{label}: {gb:.2f} GB, {objects:,} objects in {db.execute('SELECT COUNT(*) FROM objects').fetchone()[0]:,}"
-          " rows")
+    print(
+        f"\n{label}: {gb:.2f} GB, {objects:,} objects in {db.execute('SELECT COUNT(*) FROM objects').fetchone()[0]:,}"
+        " rows"
+    )
     for table, size in table_sizes(db)[:6]:
         print(f"  {table:24} {size / 1e9:6.2f} GB")
 
@@ -196,14 +220,18 @@ def measure_history(db, nights: int, churn: float, active: float) -> None:
     db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     backfilled = state_bytes(db)
     st = state_history.status(db)
-    print(f"\nDaily history backfill: {done:,} runs in {took:.0f} s ({took / max(done, 1) * 1000:.1f} ms a run), "
-          f"{st['objects']:,} objects as {st['versions']:,} versions: {backfilled / 1e9:.3f} GB "
-          f"(the kept snapshots take {snapshots / 1e9:.3f} GB)")
+    print(
+        f"\nDaily history backfill: {done:,} runs in {took:.0f} s ({took / max(done, 1) * 1000:.1f} ms a run), "
+        f"{st['objects']:,} objects as {st['versions']:,} versions: {backfilled / 1e9:.3f} GB "
+        f"(the kept snapshots take {snapshots / 1e9:.3f} GB)"
+    )
     if not nights:
         return
     rng = random.Random(7)  # noqa: S311 (test data)
-    series = db.execute("SELECT run_id, tenant_id, collector, finished_at FROM state_runs WHERE run_id IN"
-                        " (SELECT MAX(run_id) FROM state_runs GROUP BY tenant_id, collector)").fetchall()
+    series = db.execute(
+        "SELECT run_id, tenant_id, collector, finished_at FROM state_runs WHERE run_id IN"
+        " (SELECT MAX(run_id) FROM state_runs GROUP BY tenant_id, collector)"
+    ).fetchall()
     latest = {(r["tenant_id"], r["collector"]): state_history._snapshot(db, r["run_id"]) for r in series}
     start, recorded = time.monotonic(), 0
     for night in range(1, nights + 1):
@@ -211,9 +239,11 @@ def measure_history(db, nights: int, churn: float, active: float) -> None:
             for (tenant_id, collector), objects in latest.items():
                 objects = latest[tenant_id, collector] = _churned(objects, night, rng, churn, active)
                 at = _iso(datetime.now(UTC) + timedelta(days=night))
-                run_id = db.execute("INSERT INTO runs (tenant_id, collector, status, trigger, created_at, started_at,"
-                                    " finished_at, object_count) VALUES (?, ?, 'succeeded', 'schedule', ?, ?, ?, ?)",
-                                    (tenant_id, collector, at, at, at, sum(map(len, objects.values())))).lastrowid
+                run_id = db.execute(
+                    "INSERT INTO runs (tenant_id, collector, status, trigger, created_at, started_at,"
+                    " finished_at, object_count) VALUES (?, ?, 'succeeded', 'schedule', ?, ?, ?, ?)",
+                    (tenant_id, collector, at, at, at, sum(map(len, objects.values()))),
+                ).lastrowid
                 run = {"id": run_id, "tenant_id": tenant_id, "collector": collector, "finished_at": at}
                 state_history.record_run(db, run, objects)
                 recorded += 1
@@ -224,11 +254,15 @@ def measure_history(db, nights: int, churn: float, active: float) -> None:
     grown = state_bytes(db)
     per_night = (grown - backfilled) / nights
     st = state_history.status(db)
-    print(f"Daily history after {nights} more nights ({churn:.1%} of objects changed and {active:.0%} of sign-ins "
-          f"and sizes moved each night): {grown / 1e9:.3f} GB, {st['versions']:,} versions; "
-          f"{per_night / 1e6:.1f} MB a night, {took / recorded * 1000:.1f} ms a run")
-    print(f"  At 25 months (760 nights): about {(backfilled + per_night * 760) / 1e9:.2f} GB for a day-by-day "
-          f"history, against {snapshots / 1e9:.2f} GB for the snapshots kept today")
+    print(
+        f"Daily history after {nights} more nights ({churn:.1%} of objects changed and {active:.0%} of sign-ins "
+        f"and sizes moved each night): {grown / 1e9:.3f} GB, {st['versions']:,} versions; "
+        f"{per_night / 1e6:.1f} MB a night, {took / recorded * 1000:.1f} ms a run"
+    )
+    print(
+        f"  At 25 months (760 nights): about {(backfilled + per_night * 760) / 1e9:.2f} GB for a day-by-day "
+        f"history, against {snapshots / 1e9:.2f} GB for the snapshots kept today"
+    )
     for table, size in table_sizes(db):
         if table.startswith("state_"):
             print(f"  {table:24} {size / 1e9:6.3f} GB")
@@ -245,8 +279,9 @@ def main() -> None:
     parser.add_argument("--history", action="store_true", help="then backfill and measure the daily history")
     parser.add_argument("--history-nights", type=int, default=30, help="with --history: nights to record after it")
     parser.add_argument("--churn", type=float, default=0.01, help="with --history: share of objects edited a night")
-    parser.add_argument("--active", type=float, default=0.7,
-                        help="with --history: share whose sign-in times and sizes move a night")
+    parser.add_argument(
+        "--active", type=float, default=0.7, help="with --history: share whose sign-in times and sizes move a night"
+    )
     args = parser.parse_args()
 
     from officesentry.config import load_config
@@ -278,8 +313,10 @@ def main() -> None:
     db.execute("DETACH DATABASE tpl")
     (args.data_dir / "templates.db").unlink()
     db.execute("ANALYZE")
-    print(f"\n{args.tenants} tenants, {accounts / args.tenants:.0f} accounts on average, {args.days} nights, "
-          f"objects kept for {len(keep)} of them")
+    print(
+        f"\n{args.tenants} tenants, {accounts / args.tenants:.0f} accounts on average, {args.days} nights, "
+        f"objects kept for {len(keep)} of them"
+    )
     report(db, cfg.db_path, "Database (plain, as before compression)" if args.plain else "Database (compressed)")
     if not args.no_backup:
         timed_backup(cfg.db_path)
@@ -295,8 +332,10 @@ def main() -> None:
     if args.history:
         measure_history(db, args.history_nights, args.churn, args.active)
     db.close()
-    print(f"\nDone in {time.monotonic() - started:.0f} s. Portal: OFFICESENTRY_DATA_DIR={args.data_dir} "
-          "python -m officesentry web (create an admin with create-admin first)")
+    print(
+        f"\nDone in {time.monotonic() - started:.0f} s. Portal: OFFICESENTRY_DATA_DIR={args.data_dir} "
+        "python -m officesentry web (create an admin with create-admin first)"
+    )
 
 
 if __name__ == "__main__":

@@ -54,8 +54,11 @@ def claims(endpoint: Endpoint | None, app: str, tenant: str, *, graph: bool = Tr
     out = []
     for name in names:
         limit = LIMITS[name]
-        key = {"app": f"{name}|{app}", "tenant": f"{name}|{app}|{tenant}",
-               "api": f"{name}|{app}|{tenant}|{endpoint.path if endpoint else ''}"}[limit.scope]
+        key = {
+            "app": f"{name}|{app}",
+            "tenant": f"{name}|{app}|{tenant}",
+            "api": f"{name}|{app}|{tenant}|{endpoint.path if endpoint else ''}",
+        }[limit.scope]
         cost = endpoint.cost if endpoint and limit.resource_units else 1
         out.append(Claim(key, limit.units, limit.seconds, cost, limit.scope))
     return out
@@ -178,8 +181,16 @@ class Telemetry:
             stats = self.endpoints[key] = EndpointStats(limit=limit)
         return stats
 
-    def request(self, key: str, endpoint: Endpoint | None, *, status: int, limiter_wait: float = 0.0,
-                retry_wait: float = 0.0, headers=None) -> None:
+    def request(
+        self,
+        key: str,
+        endpoint: Endpoint | None,
+        *,
+        status: int,
+        limiter_wait: float = 0.0,
+        retry_wait: float = 0.0,
+        headers=None,
+    ) -> None:
         """Count one HTTP request (status 0: no answer) and the waits before and after it."""
         with self._lock:
             s = self._stats(key, endpoint)
@@ -197,8 +208,11 @@ class Telemetry:
     def totals(self) -> dict:
         with self._lock:
             stats = list(self.endpoints.values())
-        return {"requests": sum(s.calls for s in stats), "throttled": sum(s.throttled for s in stats),
-                "wait_seconds": round(sum(s.retry_wait + s.limiter_wait for s in stats), 3)}
+        return {
+            "requests": sum(s.calls for s in stats),
+            "throttled": sum(s.throttled for s in stats),
+            "wait_seconds": round(sum(s.retry_wait + s.limiter_wait for s in stats), 3),
+        }
 
 
 def _float(value) -> float | None:
@@ -210,11 +224,29 @@ def _float(value) -> float | None:
 
 def save(conn, run_id: int, telemetry: Telemetry) -> None:
     """Store a run's telemetry: totals on ``runs``, one ``run_requests`` row per endpoint."""
-    rows = [(run_id, key, s.limit, s.calls, s.throttled, s.errors, round(s.retry_wait, 3),
-             round(s.limiter_wait, 3), s.units, s.throttle_pct) for key, s in sorted(telemetry.endpoints.items())]
+    rows = [
+        (
+            run_id,
+            key,
+            s.limit,
+            s.calls,
+            s.throttled,
+            s.errors,
+            round(s.retry_wait, 3),
+            round(s.limiter_wait, 3),
+            s.units,
+            s.throttle_pct,
+        )
+        for key, s in sorted(telemetry.endpoints.items())
+    ]
     totals = telemetry.totals()
     with transaction(conn):
-        conn.execute("UPDATE runs SET requests = ?, throttled = ?, wait_seconds = ? WHERE id = ?",
-                     (totals["requests"], totals["throttled"], totals["wait_seconds"], run_id))
-        conn.executemany("INSERT OR REPLACE INTO run_requests (run_id, endpoint, throttle_limit, calls, throttled,"
-                         " errors, retry_wait, limiter_wait, units, throttle_pct) VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+        conn.execute(
+            "UPDATE runs SET requests = ?, throttled = ?, wait_seconds = ? WHERE id = ?",
+            (totals["requests"], totals["throttled"], totals["wait_seconds"], run_id),
+        )
+        conn.executemany(
+            "INSERT OR REPLACE INTO run_requests (run_id, endpoint, throttle_limit, calls, throttled,"
+            " errors, retry_wait, limiter_wait, units, throttle_pct) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            rows,
+        )

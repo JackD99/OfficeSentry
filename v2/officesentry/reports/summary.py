@@ -41,7 +41,7 @@ def plural(n: int | float, word: str, words: str | None = None) -> str:
 
 
 def possessive(name: str) -> str:
-    """"Alpha Ltd's", but "Northwind Traders'"."""
+    """ "Alpha Ltd's", but "Northwind Traders'"."""
     return f"{name}'" if name.endswith("s") else f"{name}'s"
 
 
@@ -69,20 +69,23 @@ def monthly(report) -> ExecSummary:
     ran = len(report.results) - len(report.unavailable)
 
     if not ran:
-        verdict = Verdict("medium", "Not checked yet",
-                          f"Nothing has been collected for {name} yet, so no security checks could run.")
+        verdict = Verdict(
+            "medium", "Not checked yet", f"Nothing has been collected for {name} yet, so no security checks could run."
+        )
     elif by_sev["critical"]:
-        verdict = Verdict("critical", "Action needed",
-                          f"{whose} Microsoft 365 has a critical security gap that should be fixed now.")
+        verdict = Verdict(
+            "critical", "Action needed", f"{whose} Microsoft 365 has a critical security gap that should be fixed now."
+        )
     elif by_sev["high"]:
-        verdict = Verdict("high", "Needs attention",
-                          f"{whose} Microsoft 365 is broadly working, with some important gaps to close.")
+        verdict = Verdict(
+            "high", "Needs attention", f"{whose} Microsoft 365 is broadly working, with some important gaps to close."
+        )
     elif failing:
-        verdict = Verdict("medium", "In good shape",
-                          f"{whose} Microsoft 365 is in good shape, with a few smaller items to tidy up.")
+        verdict = Verdict(
+            "medium", "In good shape", f"{whose} Microsoft 365 is in good shape, with a few smaller items to tidy up."
+        )
     else:
-        verdict = Verdict("ok", "In good shape",
-                          f"{whose} Microsoft 365 passed every security check we could run.")
+        verdict = Verdict("ok", "In good shape", f"{whose} Microsoft 365 passed every security check we could run.")
 
     paragraphs = []
     if failing:
@@ -96,8 +99,10 @@ def monthly(report) -> ExecSummary:
         passing = report.passing
         if passing:
             named = _join([f"“{r.title}”" for r in passing[:3]])
-            paragraphs.append(f"On the positive side, {plural(len(passing), 'check')} passed"
-                              f"{', including ' + named if len(passing) > 1 else ': ' + named}.")
+            paragraphs.append(
+                f"On the positive side, {plural(len(passing), 'check')} passed"
+                f"{', including ' + named if len(passing) > 1 else ': ' + named}."
+            )
     elif ran:
         paragraphs.append(f"We ran {plural(ran, 'security check')} and {'it' if ran == 1 else 'all of them'} passed.")
 
@@ -117,20 +122,28 @@ def monthly(report) -> ExecSummary:
     if progress:
         paragraphs.append(f"Since {since}, {_join(progress)}.")
     elif not report.changes:
-        paragraphs.append("This is the first report with this data, so there's nothing to compare yet. "
-                          "From next month it shows what changed.")
+        paragraphs.append(
+            "This is the first report with this data, so there's nothing to compare yet. "
+            "From next month it shows what changed."
+        )
 
     waste = report.licences.monthly_waste if report.licences.lines else None
     if waste:
         paragraphs.append(
             f"About {money(waste, report.currency)} a month ({money(waste * 12, report.currency)} a year) "
-            "goes on licences that are unused or assigned to disabled or inactive accounts.")
+            "goes on licences that are unused or assigned to disabled or inactive accounts."
+        )
     if report.unavailable:
-        paragraphs.append(f"{plural(len(report.unavailable), 'check', 'checks')} couldn't run because the data or "
-                          "a licence they need is missing. They're listed at the end.")
+        paragraphs.append(
+            f"{plural(len(report.unavailable), 'check', 'checks')} couldn't run because the data or "
+            "a licence they need is missing. They're listed at the end."
+        )
 
-    actions = [Action(r.action, r.summary, r.severity or "info", f"check-{r.key}")
-               for r in failing if r.severity in ("critical", "high")][:3]
+    actions = [
+        Action(r.action, r.summary, r.severity or "info", f"check-{r.key}")
+        for r in failing
+        if r.severity in ("critical", "high")
+    ][:3]
     return ExecSummary(verdict, paragraphs, actions)
 
 
@@ -141,23 +154,36 @@ def evidence(pack) -> ExecSummary:
     in_place, partly, missing, unassessed = counts.values()
     name = pack.tenant["name"]
     if missing:
-        verdict = Verdict("critical" if missing > 2 else "high", "Gaps to close",
-                          f"{name} has {plural(missing, 'control')} insurers ask about that "
-                          f"{'is' if missing == 1 else 'are'} not in place.")
+        verdict = Verdict(
+            "critical" if missing > 2 else "high",
+            "Gaps to close",
+            f"{name} has {plural(missing, 'control')} insurers ask about that "
+            f"{'is' if missing == 1 else 'are'} not in place.",
+        )
     elif partly:
-        verdict = Verdict("medium", "Mostly in place",
-                          f"{name} has the controls insurers ask about, with some gaps to tidy up.")
+        verdict = Verdict(
+            "medium", "Mostly in place", f"{name} has the controls insurers ask about, with some gaps to tidy up."
+        )
     else:
         verdict = Verdict("ok", "In place", f"{name} has every control we could check in place.")
 
-    parts = [f"{n} {'is' if n == 1 else 'are'} {label}" for n, label in (
-        (in_place, "in place"), (partly, "partly in place"), (missing, "not in place")) if n]
+    parts = [
+        f"{n} {'is' if n == 1 else 'are'} {label}"
+        for n, label in ((in_place, "in place"), (partly, "partly in place"), (missing, "not in place"))
+        if n
+    ]
     paragraphs = [f"Of the {total} controls cyber insurers usually ask about, {_join(parts)}."]
     if unassessed:
-        paragraphs.append(f"{plural(unassessed, 'control')} can't be seen in Microsoft 365 data "
-                          "(such as backups and staff training) and need evidence from elsewhere.")
-    paragraphs.append("Every answer comes from settings and accounts read directly from Microsoft 365, "
-                      "not from a self-assessment.")
-    actions = [Action(c.control.question, c.gaps[0].strip() if c.gaps else "", "high", f"control-{c.control.key}")
-               for c in pack.controls if c.status == "Not in place"][:3]
+        paragraphs.append(
+            f"{plural(unassessed, 'control')} can't be seen in Microsoft 365 data "
+            "(such as backups and staff training) and need evidence from elsewhere."
+        )
+    paragraphs.append(
+        "Every answer comes from settings and accounts read directly from Microsoft 365, not from a self-assessment."
+    )
+    actions = [
+        Action(c.control.question, c.gaps[0].strip() if c.gaps else "", "high", f"control-{c.control.key}")
+        for c in pack.controls
+        if c.status == "Not in place"
+    ][:3]
     return ExecSummary(verdict, paragraphs, actions)

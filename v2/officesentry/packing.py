@@ -34,8 +34,10 @@ def _progress(conn) -> int:
 
 def pack_run(conn, run_id: int) -> int:
     """Pack a run's unpacked rows, one kind per transaction. Returns how many objects were packed."""
-    kinds = [r["kind"] for r in conn.execute(
-        "SELECT DISTINCT kind FROM objects WHERE run_id = ? AND typeof(data) = 'text'", (run_id,))]
+    kinds = [
+        r["kind"]
+        for r in conn.execute("SELECT DISTINCT kind FROM objects WHERE run_id = ? AND typeof(data) = 'text'", (run_id,))
+    ]
     packed = 0
     for kind in kinds:
         with transaction(conn, immediate=True):
@@ -46,16 +48,22 @@ def pack_run(conn, run_id: int) -> int:
     return packed
 
 
-def pack_some(conn, seconds: float | None = SECONDS_PER_TICK,
-              clock: Callable[[], float] = time.monotonic) -> tuple[int, bool]:
+def pack_some(
+    conn, seconds: float | None = SECONDS_PER_TICK, clock: Callable[[], float] = time.monotonic
+) -> tuple[int, bool]:
     """Pack old rows, oldest run first, for about ``seconds`` (None: until done).
     Returns (objects packed, whether every run is now packed)."""
     stop = None if seconds is None else clock() + seconds
     done_to, packed = _progress(conn), 0
     try:
         while True:
-            runs = [r[0] for r in conn.execute("SELECT DISTINCT run_id FROM objects WHERE run_id > ?"
-                                               " ORDER BY run_id LIMIT ?", (done_to, RUNS_PER_QUERY))]
+            runs = [
+                r[0]
+                for r in conn.execute(
+                    "SELECT DISTINCT run_id FROM objects WHERE run_id > ? ORDER BY run_id LIMIT ?",
+                    (done_to, RUNS_PER_QUERY),
+                )
+            ]
             if not runs:
                 return packed, True
             for run_id in runs:
@@ -97,9 +105,11 @@ def compact(conn, report: Callable[[str], None] = print) -> None:
     needed = 2 * pages * conn.execute("PRAGMA page_size").fetchone()[0]
     free = shutil.disk_usage(db_file.parent).free
     if free < needed:
-        raise RuntimeError(f"The data is compressed, but shrinking the file needs about {needed // 2**20:,} MB "
-                           f"free next to the database and there's {free // 2**20:,} MB. Free some space and run "
-                           "compact again.")
+        raise RuntimeError(
+            f"The data is compressed, but shrinking the file needs about {needed // 2**20:,} MB "
+            f"free next to the database and there's {free // 2**20:,} MB. Free some space and run "
+            "compact again."
+        )
     before = db_file.stat().st_size
     conn.execute("PRAGMA temp_store_directory = " + _quote(str(db_file.parent)))
     try:

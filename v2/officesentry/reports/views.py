@@ -44,7 +44,7 @@ _SLUG = re.compile(r"^[a-z0-9-]{1,80}$")
 _DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 _SIZE = re.compile(r"^([\d.,]+)\s*(bytes|KB|MB|GB|TB)$")
 _PERCENT = re.compile(r"^-?[\d.,]+%$")
-_SIZES = {"bytes": 1, "KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3, "TB": 1024 ** 4}
+_SIZES = {"bytes": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 
 Key = tuple[str, str]  # (table slug, column slug)
 
@@ -86,6 +86,7 @@ class View:
         """From request args (a MultiDict), a list of (name, value) pairs or a query string."""
         if isinstance(args, str):
             from urllib.parse import parse_qsl
+
             args = parse_qsl(args, keep_blank_values=True)
         pairs = list(args.items(multi=True)) if hasattr(args, "items") and hasattr(args, "getlist") else list(args)
         view = cls()
@@ -126,8 +127,7 @@ class View:
     # Each edit returns a new view, so the page can build a link for every option.
 
     def _copy(self) -> View:
-        return View({k: list(v) for k, v in self.filters.items()}, dict(self.ages), list(self.hidden),
-                     dict(self.sorts))
+        return View({k: list(v) for k, v in self.filters.items()}, dict(self.ages), list(self.hidden), dict(self.sorts))
 
     def toggle_value(self, key: Key, value: str) -> View:
         v = self._copy()
@@ -312,8 +312,10 @@ def describe(report: DataReport, view: View) -> list[str]:
         if hidden:
             parts.append(f"{hidden} column{'s' if hidden > 1 else ''} hidden")
         if parts:
-            parts.insert(0, f"{len(_matching_rows(section, table, view, report.generated_at.date()))} "
-                            f"of {len(section.rows)} rows")
+            parts.insert(
+                0,
+                f"{len(_matching_rows(section, table, view, report.generated_at.date()))} of {len(section.rows)} rows",
+            )
             out.append(f"{section.title}: {', '.join(parts)}.")
     return out
 
@@ -329,14 +331,25 @@ def apply(report: DataReport, view: View) -> DataReport:
         rows = _matching_rows(section, table, view, today)
         cols = _visible(section, table, view)
         flags = section.flags or [None] * len(section.rows)
-        out.sections.append(Section(
-            section.title, [section.columns[i] for i in cols],
-            rows=[[section.rows[r][i] for i in cols] for r in rows], flags=[flags[r] for r in rows],
-            intro=section.intro, empty="No rows match the filters." if section.rows else section.empty,
-            compare=section.compare, flag_name=section.flag_name, group=section.group,
-            group_ids=section.group_ids, filter_columns=section.filter_columns,
-            keys=[section.keys[r] for r in rows] if section.keys else [], review=section.review,
-            chart=section.chart, figure=chart(section, table, rows)))
+        out.sections.append(
+            Section(
+                section.title,
+                [section.columns[i] for i in cols],
+                rows=[[section.rows[r][i] for i in cols] for r in rows],
+                flags=[flags[r] for r in rows],
+                intro=section.intro,
+                empty="No rows match the filters." if section.rows else section.empty,
+                compare=section.compare,
+                flag_name=section.flag_name,
+                group=section.group,
+                group_ids=section.group_ids,
+                filter_columns=section.filter_columns,
+                keys=[section.keys[r] for r in rows] if section.keys else [],
+                review=section.review,
+                chart=section.chart,
+                figure=chart(section, table, rows),
+            )
+        )
     out.filtered = describe(report, view)
     return out
 
@@ -375,6 +388,7 @@ def _amount(cell) -> tuple[float, str] | None:
 def _shown(value: float, kind: str, like=None) -> str:
     if kind == "size":
         from .sharepoint import size
+
         return size(value)
     if kind == "money" and like is not None:
         return str(type(like)(value, like.currency))
@@ -423,9 +437,10 @@ def chart(section: Section, table: str, rows: list[int], view: View | None = Non
         kind = "count"
     order = list(sums)
     if spec.ranked:
-        order.sort(key=lambda k: (-(shown_totals.get(k, 0.0) if total_at is not None else sum(sums[k])),
-                                  str(k).lower()))
-    shown, rest = order[:spec.top], order[spec.top:]
+        order.sort(
+            key=lambda k: (-(shown_totals.get(k, 0.0) if total_at is not None else sum(sums[k])), str(k).lower())
+        )
+    shown, rest = order[: spec.top], order[spec.top :]
     wanted = view.filters.get((table, column), []) if view is not None else []
     series = [(c, tone) for c, tone in zip([section.columns[i] for i in measures], spec.tones, strict=False)]
 
@@ -440,8 +455,9 @@ def chart(section: Section, table: str, rows: list[int], view: View | None = Non
             return head + plural_rows(int(totals[0]))
         if len(measures) == 1 and total_at is None:
             return head + _shown(totals[0], kind, like)
-        return head + ", ".join(f"{_shown(v, kind, like)} {c.lower()}" for v, (c, _) in zip(totals, series,
-                                                                                            strict=False))
+        return head + ", ".join(
+            f"{_shown(v, kind, like)} {c.lower()}" for v, (c, _) in zip(totals, series, strict=False)
+        )
 
     if total_at is not None and measures:  # what the series leave of the stated total, as a grey "Other" part
         left = {k: max(shown_totals.get(k, 0.0) - sum(sums[k]), 0.0) for k in sums}
@@ -454,19 +470,31 @@ def chart(section: Section, table: str, rows: list[int], view: View | None = Non
     for key in shown:
         label = FLAGS.get(key, key) if column == FLAG else (key or "Blank")
         href = link(path, view.toggle_value((table, column), key), anchor(table)) if view is not None else ""
-        items.append(charts.Bar(label, sums[key], _shown(value([key], sums[key]), kind, like), href, key in wanted,
-                                detail(label, [key], sums[key])))
+        items.append(
+            charts.Bar(
+                label,
+                sums[key],
+                _shown(value([key], sums[key]), kind, like),
+                href,
+                key in wanted,
+                detail(label, [key], sums[key]),
+            )
+        )
     if rest and spec.other:
         totals = [sum(sums[k][n] for k in rest) for n in range(len(sums[rest[0]]))]
         label = f"Other ({len(rest)})"
-        items.append(charts.Bar(label, totals, _shown(value(rest, totals), kind, like),
-                                detail=detail(label, rest, totals)))
+        items.append(
+            charts.Bar(label, totals, _shown(value(rest, totals), kind, like), detail=detail(label, rest, totals))
+        )
     title = spec.title or f"By {name.lower() if name != name.upper() else name}"
     if not spec.title and title.lower() in section.title.lower():  # "Sign-ins by country" says it already
         title = ""
-    return charts.bars(items, label=f"{section.title}: {title}" if title else section.title,
-                       series=series if len(series) > 1 else None,
-                       title=title)
+    return charts.bars(
+        items,
+        label=f"{section.title}: {title}" if title else section.title,
+        series=series if len(series) > 1 else None,
+        title=title,
+    )
 
 
 def plural_rows(n: int) -> str:
@@ -507,6 +535,7 @@ class Chip:
 @dataclass
 class Group:
     """Rows that share a value of the section's ``group`` column, under one collapsible heading."""
+
     label: str
     anchor: str
     rows: list[tuple[list, str | None, object]]  # (cells of the shown columns, flag, row key)
@@ -576,22 +605,31 @@ def anchor(table: str) -> str:
     return f"t-{table}"
 
 
-def _options(cells: list, key: Key, view: View, path: str, table: str, kind: str, today: date,
-             always: bool = False) -> list[Option]:
+def _options(
+    cells: list, key: Key, view: View, path: str, table: str, kind: str, today: date, always: bool = False
+) -> list[Option]:
     if kind == "date":
         counts = {p: sum(1 for c in cells if _age_matches(c, p, today)) for p in AGES}
         active = view.ages.get(key)
-        return [Option(label, counts[p], active == p, link(path, view.toggle_age(key, p), anchor(table)))
-                for p, label in AGES.items() if counts[p] or active == p]
+        return [
+            Option(label, counts[p], active == p, link(path, view.toggle_age(key, p), anchor(table)))
+            for p, label in AGES.items()
+            if counts[p] or active == p
+        ]
     counts: Counter = Counter(v for c in cells for v in values_of(c))
     wanted = view.filters.get(key, [])
-    if not wanted and not (2 <= len(counts) <= MAX_VALUES and len(counts) < len(cells)) \
-            and not (always and len(counts) >= 2):
+    if (
+        not wanted
+        and not (2 <= len(counts) <= MAX_VALUES and len(counts) < len(cells))
+        and not (always and len(counts) >= 2)
+    ):
         return []
     values = sorted(counts, key=lambda v: (v == "", sort_key(v) is None, str(sort_key(v) or "")))
     values += [v for v in wanted if v not in counts]
-    return [Option(v or "Blank", counts.get(v, 0), v in wanted, link(path, view.toggle_value(key, v), anchor(table)))
-            for v in values]
+    return [
+        Option(v or "Blank", counts.get(v, 0), v in wanted, link(path, view.toggle_value(key, v), anchor(table)))
+        for v in values
+    ]
 
 
 def table_view(report: DataReport, index: int, view: View, path: str) -> TableView:
@@ -628,10 +666,14 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
             reviewing = sorted(wanted) == sorted(review)
             base = view.without(key)
             target = base if reviewing else View({**base.filters, key: review}, base.ages, base.hidden, base.sorts)
-            flag.options.append(Option("To review", sum(counts[f] for f in review), reviewing,
-                                       link(path, target, anchor(table))))
-        flag.options += [Option(label, counts[f], f in wanted, link(path, view.toggle_value(key, f), anchor(table)))
-                         for f, label in FLAGS.items() if (counts[f] and len(counts) > 1) or f in wanted]
+            flag.options.append(
+                Option("To review", sum(counts[f] for f in review), reviewing, link(path, target, anchor(table)))
+            )
+        flag.options += [
+            Option(label, counts[f], f in wanted, link(path, view.toggle_value(key, f), anchor(table)))
+            for f, label in FLAGS.items()
+            if (counts[f] and len(counts) > 1) or f in wanted
+        ]
     names = {c.slug: c.name for c in columns} | {FLAG: section.flag_name}
     chips = []
     for (t, c), values in view.filters.items():
@@ -646,11 +688,17 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
     visible = [i for i in range(len(section.columns)) if i in shown]
     keys = [section.keys[r] for r in rows] if len(section.keys) == len(section.rows) else []
     tv = TableView(
-        section, table, columns, flag,
+        section,
+        table,
+        columns,
+        flag,
         rows=[([section.rows[r][i] for i in visible], flags[r]) for r in rows],
-        chips=chips, clear_href=link(path, view.without_filters(table), anchor(table)),
-        show_all_href=link(path, view.showing_all(table), anchor(table)), keys=keys,
-        chart=chart(section, table, rows, view, path))
+        chips=chips,
+        clear_href=link(path, view.without_filters(table), anchor(table)),
+        show_all_href=link(path, view.showing_all(table), anchor(table)),
+        keys=keys,
+        chart=chart(section, table, rows, view, path),
+    )
     if section.group in section.columns and table not in view.sorts:
         at = section.columns.index(section.group)
         tv.group_column = columns[at]

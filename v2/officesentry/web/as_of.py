@@ -35,6 +35,7 @@ def _label(day: date) -> str:
 @dataclass
 class Day:
     """A past day to show (``on`` None: today, the latest data)."""
+
     on: date | None
     earliest: date | None
     today: date
@@ -62,14 +63,19 @@ def day(conn, tenant_id: int, raw, today: date | None = None) -> Day:
     if on is None or on >= today or first is None:
         return Day(None, first, today)
     if on < first:
-        return Day(first, first, today, f"Office Sentry's data for this tenant starts on {_label(first)}, "
-                                        f"so this is how it was then.")
+        return Day(
+            first,
+            first,
+            today,
+            f"Office Sentry's data for this tenant starts on {_label(first)}, so this is how it was then.",
+        )
     return Day(on, first, today)
 
 
 @dataclass
 class Period:
     """The two days a change report compares: ``since`` (the start of ``start``) and the end of ``end``."""
+
     start: date
     end: date | None  # None: up to the latest data
     earliest: date | None

@@ -16,7 +16,7 @@ from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_email import _configure, fake_smtp, sends  # noqa: F401  (fake_smtp: autouse, nothing is sent)
 
-GB = 1024 ** 3
+GB = 1024**3
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 
@@ -38,17 +38,49 @@ def _exchange(used_gb: float = 48):
 
 
 APPS = [
-    {"id": "app1", "appId": "a1", "displayName": "Payroll sync", "createdDateTime": "2024-01-01T00:00:00Z",
-     "passwordCredentials": [{"displayName": "prod", "endDateTime": _in(10)}], "keyCredentials": []},
-    {"id": "app2", "appId": "a2", "displayName": "Backup agent", "createdDateTime": "2024-01-01T00:00:00Z",
-     "passwordCredentials": [], "keyCredentials": [{"displayName": "cert", "endDateTime": _in(45)}]},
-    {"id": "app3", "appId": "a3", "displayName": "Old connector", "createdDateTime": "2023-01-01T00:00:00Z",
-     "passwordCredentials": [{"displayName": "s1", "endDateTime": _in(-5)}], "keyCredentials": []},
-    {"id": "app4", "appId": "a4", "displayName": "Rotated app", "createdDateTime": "2024-01-01T00:00:00Z",
-     "passwordCredentials": [{"displayName": "old", "endDateTime": _in(20)},
-                             {"displayName": "new", "endDateTime": _in(700)}], "keyCredentials": []},
-    {"id": "app5", "appId": "a5", "displayName": "Long gone", "createdDateTime": "2020-01-01T00:00:00Z",
-     "passwordCredentials": [{"displayName": "s1", "endDateTime": "2021-01-01T00:00:00Z"}], "keyCredentials": []},
+    {
+        "id": "app1",
+        "appId": "a1",
+        "displayName": "Payroll sync",
+        "createdDateTime": "2024-01-01T00:00:00Z",
+        "passwordCredentials": [{"displayName": "prod", "endDateTime": _in(10)}],
+        "keyCredentials": [],
+    },
+    {
+        "id": "app2",
+        "appId": "a2",
+        "displayName": "Backup agent",
+        "createdDateTime": "2024-01-01T00:00:00Z",
+        "passwordCredentials": [],
+        "keyCredentials": [{"displayName": "cert", "endDateTime": _in(45)}],
+    },
+    {
+        "id": "app3",
+        "appId": "a3",
+        "displayName": "Old connector",
+        "createdDateTime": "2023-01-01T00:00:00Z",
+        "passwordCredentials": [{"displayName": "s1", "endDateTime": _in(-5)}],
+        "keyCredentials": [],
+    },
+    {
+        "id": "app4",
+        "appId": "a4",
+        "displayName": "Rotated app",
+        "createdDateTime": "2024-01-01T00:00:00Z",
+        "passwordCredentials": [
+            {"displayName": "old", "endDateTime": _in(20)},
+            {"displayName": "new", "endDateTime": _in(700)},
+        ],
+        "keyCredentials": [],
+    },
+    {
+        "id": "app5",
+        "appId": "a5",
+        "displayName": "Long gone",
+        "createdDateTime": "2020-01-01T00:00:00Z",
+        "passwordCredentials": [{"displayName": "s1", "endDateTime": "2021-01-01T00:00:00Z"}],
+        "keyCredentials": [],
+    },
 ]
 
 
@@ -106,8 +138,9 @@ def _older_sizes(db, tenant_id: int, days_ago: int, sizes: dict[str, int]) -> No
     """A mailbox size collection from ``days_ago`` days back, for the growth forecast."""
     run = store.enqueue_run(db, tenant_id, "mailbox_usage")
     finished = (datetime.now(UTC) - timedelta(days=days_ago)).strftime(ISO)
-    db.execute("UPDATE runs SET status = 'succeeded', started_at = ?, finished_at = ? WHERE id = ?",
-               (finished, finished, run))
+    db.execute(
+        "UPDATE runs SET status = 'succeeded', started_at = ?, finished_at = ? WHERE id = ?", (finished, finished, run)
+    )
     store.add_objects(db, run, "mailbox_size", [(k, {"totalBytes": v}) for k, v in sizes.items()])
 
 
@@ -128,18 +161,28 @@ def test_dmarc_monitor_only(db, tenant):
     assert (dmarc.window, dmarc.due) == ("No date", None)
     assert "Monitor-only since" in dmarc.detail and "p=quarantine" in dmarc.detail
     # Accepting the DMARC finding as it is takes the domain off the list.
-    db.execute("UPDATE findings SET accepted_at = ?, accepted_by = 'jack' WHERE tenant_id = ?"
-               " AND rule_key = 'dmarc_policy' AND object_id = 'x.com:DMARC'", (utcnow(), tenant["id"]))
+    db.execute(
+        "UPDATE findings SET accepted_at = ?, accepted_by = 'jack' WHERE tenant_id = ?"
+        " AND rule_key = 'dmarc_policy' AND object_id = 'x.com:DMARC'",
+        (utcnow(), tenant["id"]),
+    )
     assert "x.com DMARC is p=none" not in _items(db, [tenant])
 
 
 def test_accepted_risks_due_for_review(db, tenant):
-    f = db.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
-                   " AND rule_key != 'dmarc_policy' ORDER BY id LIMIT 2", (tenant["id"],)).fetchall()
-    db.execute("UPDATE findings SET accepted_at = ?, accepted_by = 'jack', accepted_until = ? WHERE id = ?",
-               (utcnow(), _in(20), f[0]["id"]))
-    db.execute("UPDATE findings SET accepted_at = ?, accepted_by = 'jack', accepted_until = ? WHERE id = ?",
-               (utcnow(), _in(200), f[1]["id"]))  # too far off
+    f = db.execute(
+        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL"
+        " AND rule_key != 'dmarc_policy' ORDER BY id LIMIT 2",
+        (tenant["id"],),
+    ).fetchall()
+    db.execute(
+        "UPDATE findings SET accepted_at = ?, accepted_by = 'jack', accepted_until = ? WHERE id = ?",
+        (utcnow(), _in(20), f[0]["id"]),
+    )
+    db.execute(
+        "UPDATE findings SET accepted_at = ?, accepted_by = 'jack', accepted_until = ? WHERE id = ?",
+        (utcnow(), _in(200), f[1]["id"]),
+    )  # too far off
     risks = [i for i in _items(db, [tenant]).values() if i.type == "Accepted risk"]
     assert len(risks) == 1
     risk = risks[0]
@@ -171,18 +214,33 @@ def test_soonest_first_and_paused_tenants_left_out(db, tenant):
 def test_odd_data_and_a_failing_part(db, tenant, monkeypatch):
     run = store.latest_run(db, tenant["id"], "app_consents")["id"]
     db.execute("DELETE FROM objects WHERE run_id = ? AND kind = 'application'", (run,))
-    store.add_objects(db, run, "application", [
-        ("x1", {"displayName": None, "credentials": [{"type": "secret", "endDateTime": "not-a-date"},
-                                                     {"type": "secret", "endDateTime": None}, "junk"]}),
-        ("x2", {"displayName": "No creds", "credentials": None}),
-        ("x3", {"credentials": "0001-01-01T00:00:00Z"}),
-    ])
+    store.add_objects(
+        db,
+        run,
+        "application",
+        [
+            (
+                "x1",
+                {
+                    "displayName": None,
+                    "credentials": [
+                        {"type": "secret", "endDateTime": "not-a-date"},
+                        {"type": "secret", "endDateTime": None},
+                        "junk",
+                    ],
+                },
+            ),
+            ("x2", {"displayName": "No creds", "credentials": None}),
+            ("x3", {"credentials": "0001-01-01T00:00:00Z"}),
+        ],
+    )
     up = upcoming.collect(db, [tenant])
     assert not up.without and not any(i.type == "App secret" for i in up.items)
     assert any(i.type == "Trial" for i in up.items)
 
     def boom(*a):
         raise ValueError("bad data")
+
     monkeypatch.setattr(upcoming, "_mailboxes", boom)
     up = upcoming.collect(db, [tenant])
     assert [part for _, part in up.without] == ["Mailbox quotas"]  # left out for this tenant, the rest still there
@@ -214,8 +272,9 @@ def test_page_leads_with_the_answer_and_links_rows(client, db, tenant, connectio
     assert client.get("/upcoming.pdf").status_code == 200
 
 
-def test_analyst_sees_only_granted_tenants_and_not_our_certificates(client, db, two_tenants, monkeypatch,
-                                                                   connection_id):
+def test_analyst_sees_only_granted_tenants_and_not_our_certificates(
+    client, db, two_tenants, monkeypatch, connection_id
+):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     seed_tenant(db, bravo)
@@ -249,9 +308,17 @@ def test_weekly_email_to_the_team(client, db, tenant, app, cfg, vault):
     team = delivery.add_contact(db, None, "Me", "me@msp.com")
     outsider = delivery.add_contact(db, tenant["id"], "Client", "it@client.com")
     assert client.get("/emails/coming-up/new").status_code == 200
-    resp = client.post("/emails/coming-up/new", data={
-        "frequency": "weekly", "day_of_week": "0", "day_of_month": "1", "hour": "8", "include_xlsx": "1",
-        "contacts": [str(team), str(outsider)]})
+    resp = client.post(
+        "/emails/coming-up/new",
+        data={
+            "frequency": "weekly",
+            "day_of_week": "0",
+            "day_of_month": "1",
+            "hour": "8",
+            "include_xlsx": "1",
+            "contacts": [str(team), str(outsider)],
+        },
+    )
     assert resp.status_code == 302
     s = db.execute("SELECT * FROM email_schedules WHERE kind = 'digest'").fetchone()
     assert json.loads(s["reports"]) == ["upcoming"] and delivery.is_upcoming(s)
@@ -262,7 +329,7 @@ def test_weekly_email_to_the_team(client, db, tenant, app, cfg, vault):
     assert "Copilot trial ends" in client.get(f"/schedules/{s['id']}/preview/body").get_data(as_text=True)
 
     client.post(f"/schedules/{s['id']}/send")
-    (_, _, msg, to_addrs), = sends()
+    ((_, _, msg, to_addrs),) = sends()
     assert to_addrs == ["me@msp.com"]
     assert msg["Subject"].startswith("Coming up: ") and "need attention now" in msg["Subject"]
     html = msg.get_body(("html",)).get_content()
@@ -276,8 +343,10 @@ def test_weekly_email_to_the_team(client, db, tenant, app, cfg, vault):
     assert row["kind"] == "digest" and row["status"] == "sent"
 
     # Editing keeps it a Coming up email.
-    client.post(f"/schedules/{s['id']}/edit", data={
-        "frequency": "weekly", "day_of_week": "2", "day_of_month": "1", "hour": "9", "contacts": [str(team)]})
+    client.post(
+        f"/schedules/{s['id']}/edit",
+        data={"frequency": "weekly", "day_of_week": "2", "day_of_month": "1", "hour": "9", "contacts": [str(team)]},
+    )
     assert delivery.is_upcoming(db.execute("SELECT * FROM email_schedules WHERE id = ?", (s["id"],)).fetchone())
 
 
@@ -288,11 +357,12 @@ def test_weekly_email_goes_out_on_its_slot(db, tenant, app, cfg, vault):
     sid = db.execute(
         "INSERT INTO email_schedules (kind, reports, include_xlsx, frequency, day_of_week, hour, timezone,"
         " last_period, created_at) VALUES ('digest', '[\"upcoming\"]', 0, 'weekly', 0, 8, 'UTC', '2026-W40', ?)",
-        (utcnow(),)).lastrowid
+        (utcnow(),),
+    ).lastrowid
     delivery.set_recipients(db, "schedule", sid, [team])
     monday = datetime(2026, 10, 5, 8, 30, tzinfo=UTC)
     assert delivery.tick(app, db, vault, cfg, monday) == 1
-    (_, _, msg, _), = sends()
+    ((_, _, msg, _),) = sends()
     assert msg["Subject"].startswith("Coming up")
     assert not [p for p in msg.iter_attachments() if (p.get_filename() or "").endswith(".xlsx")]
     assert db.execute("SELECT last_period FROM email_schedules WHERE id = ?", (sid,)).fetchone()[0] == "2026-W41"
@@ -302,8 +372,10 @@ def test_subject_leads_with_the_answer():
     counts = dict.fromkeys(upcoming.WINDOWS, 0)
     assert delivery.upcoming_subject(counts) == "Coming up: nothing due in the next 90 days"
     assert delivery.upcoming_subject({**counts, "61 to 90 days": 2}) == "Coming up: 2 items in the next 90 days"
-    assert delivery.upcoming_subject({**counts, "Now": 1, "Next 30 days": 4}) == \
-        "Coming up: 1 needs attention now, 4 due within 30 days"
+    assert (
+        delivery.upcoming_subject({**counts, "Now": 1, "Next 30 days": 4})
+        == "Coming up: 1 needs attention now, 4 due within 30 days"
+    )
 
 
 def test_analyst_cannot_set_up_the_email(client, db, two_tenants):

@@ -21,10 +21,14 @@ def find_user(snap: TenantSnapshot, user_id: str) -> dict | None:
 
 def _findings(snap: TenantSnapshot, person: Person) -> list[dict]:
     titles = {r.key: r.title for r in RULES}
-    rows = snap.conn.execute("SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL",
-                             (snap.tenant["id"],)).fetchall()
-    out = [dict(r, title=titles.get(r["rule_key"], r["rule_key"])) for r in rows
-           if r["object_id"] == person.id or person.named(r["subject"])]
+    rows = snap.conn.execute(
+        "SELECT * FROM findings WHERE tenant_id = ? AND resolved_at IS NULL", (snap.tenant["id"],)
+    ).fetchall()
+    out = [
+        dict(r, title=titles.get(r["rule_key"], r["rule_key"]))
+        for r in rows
+        if r["object_id"] == person.id or person.named(r["subject"])
+    ]
     out.sort(key=lambda f: (SEVERITY_RANK.get(f["severity"], 4), f["title"]))
     return out
 
@@ -37,7 +41,8 @@ def _account_facts(p: Person) -> list[tuple[str, object]]:
     kind = "Guest" if p.guest else "Member"
     if p.guest and u.get("externalUserState"):
         kind += {"PendingAcceptance": ", invitation not accepted", "Accepted": ", invitation accepted"}.get(
-            u["externalUserState"], "")
+            u["externalUserState"], ""
+        )
     facts.append(("Account type", kind))
     facts.append(("Sign-in", "Allowed" if p.enabled else "Blocked"))
     facts.append(("Source", "Synced from on-premises AD" if u.get("onPremisesSyncEnabled") else "Cloud-only"))
@@ -45,8 +50,12 @@ def _account_facts(p: Person) -> list[tuple[str, object]]:
         facts.append(("Created", _when(u["createdDateTime"], p.now)))
     if u.get("lastPasswordChangeDateTime"):
         facts.append(("Password last changed", _when(u["lastPasswordChangeDateTime"], p.now)))
-    facts.append(("Password expires", "Never (set to never expire)" if u.get("passwordNeverExpires")
-                  else "Follows the organisation's policy"))
+    facts.append(
+        (
+            "Password expires",
+            "Never (set to never expire)" if u.get("passwordNeverExpires") else "Follows the organisation's policy",
+        )
+    )
     return facts
 
 
@@ -57,12 +66,13 @@ def _account_attention(p: Person) -> None:
     stale = is_stale(u, p.now, INACTIVE_DAYS)
     last = last_sign_in(u)
     if stale and last:
-        p.flag("medium" if u.get("licensed") else "low",
-               f"No sign-in for {(p.now - last).days} days. If they've left, block sign-in and reclaim the "
-               "licences.", "activity")
+        p.flag(
+            "medium" if u.get("licensed") else "low",
+            f"No sign-in for {(p.now - last).days} days. If they've left, block sign-in and reclaim the licences.",
+            "activity",
+        )
     elif stale:
-        p.flag("low", f"Has never signed in (created {_day(u.get('createdDateTime')) or 'a while ago'}).",
-               "activity")
+        p.flag("low", f"Has never signed in (created {_day(u.get('createdDateTime')) or 'a while ago'}).", "activity")
     if p.guest and u.get("externalUserState") == "PendingAcceptance":
         created = devices.parse_ts(u.get("createdDateTime"))
         if created and (p.now - created).days > 30:
@@ -92,23 +102,31 @@ def build(conn, tenant, user_id: str, now: datetime | None = None, leaver: bool 
     profile.history, profile.history_since = history(snap, user_id, skus)
 
     parts = {x.key: x for x in profile.parts}
-    profile.badges = [("Guest" if p.guest else "Member", None),
-                      ("Sign-in allowed", "ok") if p.enabled else ("Sign-in blocked", "bad"),
-                      ("Synced from AD" if user.get("onPremisesSyncEnabled") else "Cloud-only", None)]
+    profile.badges = [
+        ("Guest" if p.guest else "Member", None),
+        ("Sign-in allowed", "ok") if p.enabled else ("Sign-in blocked", "bad"),
+        ("Synced from AD" if user.get("onPremisesSyncEnabled") else "Cloud-only", None),
+    ]
     if p.admin:
         profile.badges.append(("Admin", "warn"))
     last = last_sign_in(user)
-    sign_in_foot = (f"Last sign-in {_when(last, now).split(' (')[-1].rstrip(')')}" if last else "Never signed in") \
-        if user.get("signInActivityAvailable") else f"Sign-in dates need {P1}"
+    sign_in_foot = (
+        (f"Last sign-in {_when(last, now).split(' (')[-1].rstrip(')')}" if last else "Never signed in")
+        if user.get("signInActivityAvailable")
+        else f"Sign-in dates need {P1}"
+    )
     stale = p.enabled and is_stale(user, now, INACTIVE_DAYS)
     worst = profile.attention[0].severity if profile.attention else None
     profile.tiles = [
-        Highlight("Needs attention", len(profile.attention), "Nothing to do" if not profile.attention else
-                  f"Worst: {worst}", "bad" if worst in ("critical", "high") else ("warn" if worst else "ok")),
+        Highlight(
+            "Needs attention",
+            len(profile.attention),
+            "Nothing to do" if not profile.attention else f"Worst: {worst}",
+            "bad" if worst in ("critical", "high") else ("warn" if worst else "ok"),
+        ),
         Highlight("Sign-in", "Allowed" if p.enabled else "Blocked", sign_in_foot, "warn" if stale else None),
     ]
-    for key, label in (("mfa", "MFA"), ("roles", "Admin roles"), ("licences", "Licences"),
-                       ("devices", "Devices")):
+    for key, label in (("mfa", "MFA"), ("roles", "Admin roles"), ("licences", "Licences"), ("devices", "Devices")):
         x = parts.get(key)
         if x is None:
             continue
@@ -122,10 +140,28 @@ def build(conn, tenant, user_id: str, now: datetime | None = None, leaver: bool 
             n = len(x.tables[0].rows) if x.tables else 0
             value, foot = str(n), x.summary
         profile.tiles.append(Highlight(label, value, foot, x.tone))
-    sources = ("users", "mfa_registration", "conditional_access", "admin_roles", "groups", "mailboxes",
-               "inbox_rules", "mailbox_usage", "devices", "sharepoint_usage", "shared_files", "app_consents",
-               "legacy_signins", "sign_ins", "admin_activity")
+    sources = (
+        "users",
+        "mfa_registration",
+        "conditional_access",
+        "admin_roles",
+        "groups",
+        "mailboxes",
+        "inbox_rules",
+        "mailbox_usage",
+        "devices",
+        "sharepoint_usage",
+        "shared_files",
+        "app_consents",
+        "legacy_signins",
+        "sign_ins",
+        "admin_activity",
+    )
     from ...collectors import REGISTRY
-    profile.sources = [(REGISTRY[c].title, (snap.runs.get(c) or {"finished_at": None})["finished_at"])
-                       for c in sources if c in REGISTRY]
+
+    profile.sources = [
+        (REGISTRY[c].title, (snap.runs.get(c) or {"finished_at": None})["finished_at"])
+        for c in sources
+        if c in REGISTRY
+    ]
     return profile

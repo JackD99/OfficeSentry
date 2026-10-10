@@ -59,12 +59,13 @@ def _group_kind(g: dict) -> str:
 def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("deleted_items", "deleted_status") or [None])[0]
     if status is None:
-        report.unavailable = ("Deleted users and groups haven't been collected yet. Refresh Deleted users and "
-                              "groups.")
+        report.unavailable = "Deleted users and groups haven't been collected yet. Refresh Deleted users and groups."
         return
     if not status.get("users") and not status.get("groups"):
-        report.unavailable = ("Microsoft didn't return the recycle bin on the last collection. The collection log "
-                              "on the tenant page has the reason.")
+        report.unavailable = (
+            "Microsoft didn't return the recycle bin on the last collection. The collection log "
+            "on the tenant page has the reason."
+        )
         return
 
     skus = snap.objects("tenant_profile", "subscribed_sku")
@@ -91,32 +92,73 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     report.tiles = []
     if status.get("users"):
         guests = sum(1 for r in users.rows if r[2] == "Guest")
-        report.tiles.append(Tile(USERS, len(users.rows), f"{plural(guests, 'guest')} among them",
-                                 rows=Rows(USERS), trend=metric_trend(snap, "deleted.users", now)))
+        report.tiles.append(
+            Tile(
+                USERS,
+                len(users.rows),
+                f"{plural(guests, 'guest')} among them",
+                rows=Rows(USERS),
+                trend=metric_trend(snap, "deleted.users", now),
+            )
+        )
     if status.get("groups"):
-        report.tiles.append(Tile("Deleted groups and teams", len(groups.rows), f"{plural(teams, 'team')} among them",
-                                 rows=Rows(GROUPS), trend=metric_trend(snap, "deleted.groups", now)))
+        report.tiles.append(
+            Tile(
+                "Deleted groups and teams",
+                len(groups.rows),
+                f"{plural(teams, 'team')} among them",
+                rows=Rows(GROUPS),
+                trend=metric_trend(snap, "deleted.groups", now),
+            )
+        )
     # Link to a table that's on the page: the one with accounts ending soon, else whichever was read.
-    target = (USERS if soon_users else GROUPS if soon_groups
-              else USERS if status.get("users") else GROUPS if status.get("groups") else None)
-    report.tiles.append(Tile(
-        f"Permanently deleted within {EXPIRING_DAYS} days", soon,
-        f"{plural(soon_users, 'user')}, {plural(soon_groups, 'group')}",
-        ("warn" if users.flagged or groups.flagged else None) if soon else "ok",
-        Rows(target, {"Ends within": SOON}) if target else None))
-    report.footnote = (f"Microsoft keeps deleted users and Microsoft 365 groups for {RETENTION_DAYS} days, then "
-                       "deletes them for good. Restore them in the Microsoft Entra admin center (Users > Deleted "
-                       "users, Groups > Deleted groups) or the Microsoft 365 admin center; Office Sentry only reads "
-                       "the recycle bin and never restores or deletes anything.")
+    target = (
+        USERS
+        if soon_users
+        else GROUPS
+        if soon_groups
+        else USERS
+        if status.get("users")
+        else GROUPS
+        if status.get("groups")
+        else None
+    )
+    report.tiles.append(
+        Tile(
+            f"Permanently deleted within {EXPIRING_DAYS} days",
+            soon,
+            f"{plural(soon_users, 'user')}, {plural(soon_groups, 'group')}",
+            ("warn" if users.flagged or groups.flagged else None) if soon else "ok",
+            Rows(target, {"Ends within": SOON}) if target else None,
+        )
+    )
+    report.footnote = (
+        f"Microsoft keeps deleted users and Microsoft 365 groups for {RETENTION_DAYS} days, then "
+        "deletes them for good. Restore them in the Microsoft Entra admin center (Users > Deleted "
+        "users, Groups > Deleted groups) or the Microsoft 365 admin center; Office Sentry only reads "
+        "the recycle bin and never restores or deletes anything."
+    )
 
 
 def _users(rows: list[dict], names: dict, now: datetime) -> Section:
-    section = Section(USERS, ["Name", "Sign-in name", "Type", "Department", "Licences it held", "Deleted on",
-                              "Deleted for good on", "Days left", "Ends within"],
-                      intro=f"Accounts deleted in the last {RETENTION_DAYS} days that can still be restored with "
-                            "their mailbox, OneDrive, group memberships and licences. Licensed members with "
-                            f"{EXPIRING_DAYS} days or less left are flagged.",
-                      empty="No deleted users: the recycle bin is empty.")
+    section = Section(
+        USERS,
+        [
+            "Name",
+            "Sign-in name",
+            "Type",
+            "Department",
+            "Licences it held",
+            "Deleted on",
+            "Deleted for good on",
+            "Days left",
+            "Ends within",
+        ],
+        intro=f"Accounts deleted in the last {RETENTION_DAYS} days that can still be restored with "
+        "their mailbox, OneDrive, group memberships and licences. Licensed members with "
+        f"{EXPIRING_DAYS} days or less left are flagged.",
+        empty="No deleted users: the recycle bin is empty.",
+    )
     out = []
     for u in rows:
         deleted, purge, left, within = _window(u.get("deletedDateTime"), now)
@@ -126,22 +168,28 @@ def _users(rows: list[dict], names: dict, now: datetime) -> Section:
         if within == SOON:
             flag = "medium" if kind == "Member" and licences else "low"
         name = u.get("displayName") or u.get("userPrincipalName") or u.get("_id")
-        out.append(((left if isinstance(left, int) else RETENTION_DAYS + 1, str(name).lower()),
-                    [name, u.get("userPrincipalName"), kind, u.get("department"), licences, deleted, purge, left,
-                     within], flag))
+        out.append(
+            (
+                (left if isinstance(left, int) else RETENTION_DAYS + 1, str(name).lower()),
+                [name, u.get("userPrincipalName"), kind, u.get("department"), licences, deleted, purge, left, within],
+                flag,
+            )
+        )
     for _, row, flag in sorted(out, key=lambda r: r[0]):
         section.add(row, flag)
     return section
 
 
 def _groups(rows: list[dict], now: datetime) -> Section:
-    section = Section(GROUPS, ["Name", "Kind", "Email", "Deleted on", "Deleted for good on", "Days left",
-                               "Ends within"],
-                      intro=f"Microsoft 365 groups and teams deleted in the last {RETENTION_DAYS} days, which can "
-                            "still be restored with their mailbox, files, chats and members. Teams with "
-                            f"{EXPIRING_DAYS} days or less left are flagged. Only Microsoft 365 groups go to the "
-                            "recycle bin: deleted security groups and distribution lists are gone straight away.",
-                      empty="No deleted teams or groups.")
+    section = Section(
+        GROUPS,
+        ["Name", "Kind", "Email", "Deleted on", "Deleted for good on", "Days left", "Ends within"],
+        intro=f"Microsoft 365 groups and teams deleted in the last {RETENTION_DAYS} days, which can "
+        "still be restored with their mailbox, files, chats and members. Teams with "
+        f"{EXPIRING_DAYS} days or less left are flagged. Only Microsoft 365 groups go to the "
+        "recycle bin: deleted security groups and distribution lists are gone straight away.",
+        empty="No deleted teams or groups.",
+    )
     out = []
     for g in rows:
         deleted, purge, left, within = _window(g.get("deletedDateTime"), now)
@@ -150,8 +198,13 @@ def _groups(rows: list[dict], now: datetime) -> Section:
         if within == SOON:
             flag = "medium" if kind == "Team" else "low"
         name = g.get("displayName") or g.get("mail") or g.get("_id")
-        out.append(((left if isinstance(left, int) else RETENTION_DAYS + 1, str(name).lower()),
-                    [name, kind, g.get("mail"), deleted, purge, left, within], flag))
+        out.append(
+            (
+                (left if isinstance(left, int) else RETENTION_DAYS + 1, str(name).lower()),
+                [name, kind, g.get("mail"), deleted, purge, left, within],
+                flag,
+            )
+        )
     for _, row, flag in sorted(out, key=lambda r: r[0]):
         section.add(row, flag)
     return section

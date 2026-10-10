@@ -41,21 +41,54 @@ CONTACT_MAX = 200
 
 # Column headings people use, matched without case, spaces, dashes or underscores.
 COLUMNS: dict[str, tuple[str, ...]] = {
-    "name": ("name", "client", "client name", "company", "company name", "customer", "customer name",
-             "display name", "tenant name", "organisation", "organization"),
-    "tenant": ("tenant", "tenant id", "tenantid", "tenant domain", "tenant id or domain", "domain",
-               "primary domain", "default domain", "directory id", "directory tenant id", "tenant ref"),
+    "name": (
+        "name",
+        "client",
+        "client name",
+        "company",
+        "company name",
+        "customer",
+        "customer name",
+        "display name",
+        "tenant name",
+        "organisation",
+        "organization",
+    ),
+    "tenant": (
+        "tenant",
+        "tenant id",
+        "tenantid",
+        "tenant domain",
+        "tenant id or domain",
+        "domain",
+        "primary domain",
+        "default domain",
+        "directory id",
+        "directory tenant id",
+        "tenant ref",
+    ),
     "group": ("group", "groups", "tenant group", "tenant groups"),
     "contact": ("contact", "client contact"),
     "contact_name": ("contact name", "client contact name"),
     "contact_email": ("contact email", "client contact email", "email", "email address", "e mail"),
     "cloud": ("cloud", "microsoft cloud"),
 }
-CLOUD_WORDS = {"": "commercial", "commercial": "commercial", "gcc": "commercial", "worldwide": "commercial",
-               "gcc high": "gcc_high", "gcchigh": "gcc_high", "dod": "dod", "china": "china", "21vianet": "china"}
-TEMPLATE = ("name,tenant,group,contact\r\n"
-            "Contoso Ltd,contoso.onmicrosoft.com,Tier 1,Jane Smith <jane@contoso.com>\r\n"
-            "Fabrikam Inc,00000000-0000-0000-0000-000000000000,,it@fabrikam.com\r\n")
+CLOUD_WORDS = {
+    "": "commercial",
+    "commercial": "commercial",
+    "gcc": "commercial",
+    "worldwide": "commercial",
+    "gcc high": "gcc_high",
+    "gcchigh": "gcc_high",
+    "dod": "dod",
+    "china": "china",
+    "21vianet": "china",
+}
+TEMPLATE = (
+    "name,tenant,group,contact\r\n"
+    "Contoso Ltd,contoso.onmicrosoft.com,Tier 1,Jane Smith <jane@contoso.com>\r\n"
+    "Fabrikam Inc,00000000-0000-0000-0000-000000000000,,it@fabrikam.com\r\n"
+)
 
 # How often a tenant still waiting for consent is checked by signing in (``due``).
 CHECK_SOON = timedelta(minutes=2)  # just after the client came back from the consent page...
@@ -122,7 +155,7 @@ def decode(data: bytes) -> str:
 
 
 def split_contact(text: str) -> tuple[str, str]:
-    """"Jane Smith <jane@contoso.com>", "jane@contoso.com" or "Jane Smith" -> (name, email)."""
+    """ "Jane Smith <jane@contoso.com>", "jane@contoso.com" or "Jane Smith" -> (name, email)."""
     text = " ".join(text.split())
     m = re.fullmatch(r"(.*?)\s*<([^<>]+)>", text)
     if m:
@@ -153,8 +186,10 @@ def parse(conn, text: str) -> Parsed:
         return Parsed(error="The file is empty.")
     header = [HEADINGS.get(_heading(h)) for h in cells[0]]
     if "name" not in header or "tenant" not in header:
-        return Parsed(error="The first row needs column names, including name and tenant (the tenant ID or a "
-                            "domain). Download the template to see the layout.")
+        return Parsed(
+            error="The first row needs column names, including name and tenant (the tenant ID or a "
+            "domain). Download the template to see the layout."
+        )
     body = cells[1:]
     if not body:
         return Parsed(error="The file has column names but no tenants under them.")
@@ -202,7 +237,7 @@ def parse(conn, text: str) -> Parsed:
             row.problems.append(f"“{row.contact_email[:80]}” isn't an email address.")
 
         for raw in re.split(r"[;|]", values.get("group", "")):
-            group = " ".join(raw.split())[:tenant_groups.NAME_MAX]
+            group = " ".join(raw.split())[: tenant_groups.NAME_MAX]
             if not group:
                 continue
             known = groups.get(group.lower()) or new_groups.get(group.lower())
@@ -238,16 +273,27 @@ def create(conn, parsed: Parsed, user: str) -> list[int]:
             if conn.execute("SELECT 1 FROM tenants WHERE tenant_ref = ?", (row.tenant_ref,)).fetchone():
                 continue  # added since the preview
             connection = connection_for(connections, row.cloud)
-            tenant_id = store.create_tenant(conn, row.name, row.tenant_ref, connection["id"] if connection else None,
-                                            row.cloud)
+            tenant_id = store.create_tenant(
+                conn, row.name, row.tenant_ref, connection["id"] if connection else None, row.cloud
+            )
             tenant_groups.set_tenant_groups(conn, tenant_id, {group_ids[g.lower()] for g in row.groups})
-            conn.execute("INSERT INTO onboarding (tenant_id, contact_name, contact_email, imported_at, imported_by)"
-                         " VALUES (?, ?, ?, ?, ?)", (tenant_id, row.contact_name, row.contact_email, now, user))
+            conn.execute(
+                "INSERT INTO onboarding (tenant_id, contact_name, contact_email, imported_at, imported_by)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (tenant_id, row.contact_name, row.contact_email, now, user),
+            )
             if row.contact_email:
-                conn.execute("INSERT OR IGNORE INTO contacts (tenant_id, name, email, created_at) VALUES (?, ?, ?, ?)",
-                             (tenant_id, row.contact_name, row.contact_email, now))
-            audit(conn, user, "tenant_created", tenant_id,
-                  row.tenant_ref + ("" if row.cloud == clouds.DEFAULT else f" ({row.cloud})") + " (CSV import)")
+                conn.execute(
+                    "INSERT OR IGNORE INTO contacts (tenant_id, name, email, created_at) VALUES (?, ?, ?, ?)",
+                    (tenant_id, row.contact_name, row.contact_email, now),
+                )
+            audit(
+                conn,
+                user,
+                "tenant_created",
+                tenant_id,
+                row.tenant_ref + ("" if row.cloud == clouds.DEFAULT else f" ({row.cloud})") + " (CSV import)",
+            )
             ids.append(tenant_id)
         audit(conn, user, "tenants_imported", detail=f"{len(ids)} added, {len(parsed.skipped)} already there")
     return ids
@@ -286,8 +332,10 @@ def rows_for(conn, tenant_ids) -> dict:
     ids = list(tenant_ids)
     if not ids:
         return {}
-    return {r["tenant_id"]: r for r in conn.execute(
-        f"SELECT * FROM onboarding WHERE tenant_id IN ({','.join('?' * len(ids))})", ids)}
+    return {
+        r["tenant_id"]: r
+        for r in conn.execute(f"SELECT * FROM onboarding WHERE tenant_id IN ({','.join('?' * len(ids))})", ids)
+    }
 
 
 def app_name(connection, result: dict | None) -> str:
@@ -303,8 +351,10 @@ def state(tenant, row, result: dict | None) -> State:
             return _state("consented", "Consent confirmed. Global Reader is checked with the first collection.")
         if r.get("global_reader"):
             return _state("connected", "Consent and Global Reader are in place.")
-        return _state("global_reader", "Consent confirmed. Next: the client gives the app the Global Reader role, "
-                                       "for mailbox reports.")
+        return _state(
+            "global_reader",
+            "Consent confirmed. Next: the client gives the app the Global Reader role, for mailbox reports.",
+        )
     approved = row["approved_at"] if row else None
     if approved:
         if row["check_error"] and (row["checked_at"] or "") >= approved:
@@ -335,11 +385,21 @@ def tracker(conn, tenants) -> list[Entry]:
         result = tenant_health.connection_result(conn, t["id"])
         problem = None
         if connection is None or not connection["client_id"] or clouds.of(connection).key != clouds.of(t).key:
-            problem = ("No app connection is ready for this tenant's Microsoft cloud. Choose one under Manage."
-                       if connection is None or clouds.of(connection).key != clouds.of(t).key else
-                       f"The app connection {connection['name']} has no application (client) ID yet.")
-        entries.append(Entry(t, rows.get(t["id"]), state(t, rows.get(t["id"]), result), connection,
-                             app_name(connection, result), problem))
+            problem = (
+                "No app connection is ready for this tenant's Microsoft cloud. Choose one under Manage."
+                if connection is None or clouds.of(connection).key != clouds.of(t).key
+                else f"The app connection {connection['name']} has no application (client) ID yet."
+            )
+        entries.append(
+            Entry(
+                t,
+                rows.get(t["id"]),
+                state(t, rows.get(t["id"]), result),
+                connection,
+                app_name(connection, result),
+                problem,
+            )
+        )
     return entries
 
 
@@ -351,21 +411,28 @@ def mark_sent(conn, tenant_ids, user: str, sent: bool = True) -> int:
     now = utcnow()
     with transaction(conn, immediate=True):
         if sent:
-            conn.executemany("INSERT INTO onboarding (tenant_id, sent_at, sent_by) VALUES (?, ?, ?)"
-                             " ON CONFLICT (tenant_id) DO UPDATE SET sent_at = excluded.sent_at,"
-                             " sent_by = excluded.sent_by", [(t, now, user) for t in ids])
+            conn.executemany(
+                "INSERT INTO onboarding (tenant_id, sent_at, sent_by) VALUES (?, ?, ?)"
+                " ON CONFLICT (tenant_id) DO UPDATE SET sent_at = excluded.sent_at,"
+                " sent_by = excluded.sent_by",
+                [(t, now, user) for t in ids],
+            )
         else:
-            conn.executemany("UPDATE onboarding SET sent_at = NULL, sent_by = NULL WHERE tenant_id = ?",
-                             [(t,) for t in ids])
+            conn.executemany(
+                "UPDATE onboarding SET sent_at = NULL, sent_by = NULL WHERE tenant_id = ?", [(t,) for t in ids]
+            )
         for t in ids:
             audit(conn, user, "consent_link_sent" if sent else "consent_link_unsent", t)
     return len(ids)
 
 
 def save_contact(conn, tenant_id: int, name: str, email: str) -> None:
-    conn.execute("INSERT INTO onboarding (tenant_id, contact_name, contact_email) VALUES (?, ?, ?)"
-                 " ON CONFLICT (tenant_id) DO UPDATE SET contact_name = excluded.contact_name,"
-                 " contact_email = excluded.contact_email", (tenant_id, name[:CONTACT_MAX], email[:CONTACT_MAX]))
+    conn.execute(
+        "INSERT INTO onboarding (tenant_id, contact_name, contact_email) VALUES (?, ?, ?)"
+        " ON CONFLICT (tenant_id) DO UPDATE SET contact_name = excluded.contact_name,"
+        " contact_email = excluded.contact_email",
+        (tenant_id, name[:CONTACT_MAX], email[:CONTACT_MAX]),
+    )
 
 
 def client_approved(conn, tenant) -> None:
@@ -376,9 +443,11 @@ def client_approved(conn, tenant) -> None:
         if tenant["enabled"] and not tenant["archived_at"]:
             store.enqueue_run(conn, tenant["id"], "connection", requested_by="Client consent")
         return
-    conn.execute("INSERT INTO onboarding (tenant_id, approved_at) VALUES (?, ?)"
-                 " ON CONFLICT (tenant_id) DO UPDATE SET approved_at = excluded.approved_at",
-                 (tenant["id"], utcnow()))
+    conn.execute(
+        "INSERT INTO onboarding (tenant_id, approved_at) VALUES (?, ?)"
+        " ON CONFLICT (tenant_id) DO UPDATE SET approved_at = excluded.approved_at",
+        (tenant["id"], utcnow()),
+    )
     queue_check(conn, tenant["id"], priority=tasks.PRIORITY_WAITING)
 
 
@@ -386,8 +455,9 @@ def client_approved(conn, tenant) -> None:
 
 
 def queue_check(conn, tenant_id: int, priority: int = tasks.PRIORITY_BACKGROUND, user: str | None = None) -> int:
-    return tasks.enqueue(conn, "consent_check", key=f"consent_check:{tenant_id}", tenant_id=tenant_id,
-                         priority=priority, user=user)
+    return tasks.enqueue(
+        conn, "consent_check", key=f"consent_check:{tenant_id}", tenant_id=tenant_id, priority=priority, user=user
+    )
 
 
 @dataclass
@@ -399,9 +469,12 @@ class Outcome:
 
 
 def _note_check(conn, tenant_id: int, error: str | None) -> None:
-    conn.execute("INSERT INTO onboarding (tenant_id, checked_at, check_error) VALUES (?, ?, ?)"
-                 " ON CONFLICT (tenant_id) DO UPDATE SET checked_at = excluded.checked_at,"
-                 " check_error = excluded.check_error", (tenant_id, utcnow(), error))
+    conn.execute(
+        "INSERT INTO onboarding (tenant_id, checked_at, check_error) VALUES (?, ?, ?)"
+        " ON CONFLICT (tenant_id) DO UPDATE SET checked_at = excluded.checked_at,"
+        " check_error = excluded.check_error",
+        (tenant_id, utcnow(), error),
+    )
 
 
 def confirm(conn, vault, tenant, actor: str = "Onboarding", session=None) -> Outcome:
@@ -413,8 +486,13 @@ def confirm(conn, vault, tenant, actor: str = "Onboarding", session=None) -> Out
         message = "No app connection is ready for this tenant."
         _note_check(conn, tenant["id"], message)
         return Outcome(False, message)
-    result = connection_check.check(tenant["tenant_ref"], connection["client_id"],
-                                    vault.decrypt(connection["key_enc"]), connection["thumbprint"], cloud.key)
+    result = connection_check.check(
+        tenant["tenant_ref"],
+        connection["client_id"],
+        vault.decrypt(connection["key_enc"]),
+        connection["thumbprint"],
+        cloud.key,
+    )
     if not result.ok:
         message = f"{result.title} {result.fix}".strip()[:500]
         _note_check(conn, tenant["id"], message)
@@ -426,18 +504,26 @@ def confirm(conn, vault, tenant, actor: str = "Onboarding", session=None) -> Out
         current = store.get_tenant(conn, tenant["id"])
         if current is None:
             return Outcome(False, "The tenant was deleted.")
-        if swap and (current["tenant_ref"] != tenant["tenant_ref"] or conn.execute(
-                "SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (swap, tenant["id"])).fetchone()):
+        if swap and (
+            current["tenant_ref"] != tenant["tenant_ref"]
+            or conn.execute("SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (swap, tenant["id"])).fetchone()
+        ):
             swap = None
         if swap:
             conn.execute("UPDATE tenants SET tenant_ref = ? WHERE id = ?", (swap, tenant["id"]))
         newly = not current["consented_at"]
-        conn.execute("UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?",
-                     (utcnow(), tenant["id"]))
+        conn.execute(
+            "UPDATE tenants SET consented_at = COALESCE(consented_at, ?) WHERE id = ?", (utcnow(), tenant["id"])
+        )
         _note_check(conn, tenant["id"], None)
         if newly:
-            audit(conn, actor, "consent_confirmed", tenant["id"],
-                  (result.organisation or "signed in") + (f"; tenant ID {swap}" if swap else ""))
+            audit(
+                conn,
+                actor,
+                "consent_confirmed",
+                tenant["id"],
+                (result.organisation or "signed in") + (f"; tenant ID {swap}" if swap else ""),
+            )
     queued = 0
     if newly and current["enabled"] and not current["archived_at"]:
         queued = lifecycle.queue_first_collection(conn, tenant["id"], requested_by=actor)
@@ -459,8 +545,9 @@ def due(conn, now: datetime) -> list[int]:
     """Tenants still waiting for consent whose next sign-in check is due (``CHECK_*``), active ones only."""
     out = []
     for r in conn.execute(
-            "SELECT o.* FROM onboarding o JOIN tenants t ON t.id = o.tenant_id WHERE t.consented_at IS NULL"
-            " AND t.enabled = 1 AND t.archived_at IS NULL AND (o.approved_at IS NOT NULL OR o.sent_at IS NOT NULL)"):
+        "SELECT o.* FROM onboarding o JOIN tenants t ON t.id = o.tenant_id WHERE t.consented_at IS NULL"
+        " AND t.enabled = 1 AND t.archived_at IS NULL AND (o.approved_at IS NOT NULL OR o.sent_at IS NOT NULL)"
+    ):
         approved, sent, checked = parse_ts(r["approved_at"]), parse_ts(r["sent_at"]), parse_ts(r["checked_at"])
         if approved and now - approved <= APPROVED_FOR:
             every = CHECK_SOON if now - approved <= SOON_FOR else CHECK_APPROVED

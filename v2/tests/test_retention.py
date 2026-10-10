@@ -32,7 +32,8 @@ def finding(db, tenant, key, first_seen, resolved_at=None, accepted_at=None):
     return db.execute(
         "INSERT INTO findings (tenant_id, rule_key, object_id, severity, subject, detail, first_seen, last_seen,"
         " resolved_at, accepted_at) VALUES (?, ?, 'o', 'high', 'someone@alpha', '', ?, ?, ?, ?)",
-        (tenant, key, first_seen, first_seen, resolved_at, accepted_at)).lastrowid
+        (tenant, key, first_seen, first_seen, resolved_at, accepted_at),
+    ).lastrowid
 
 
 def issued(db, tenant, kind, days_ago, filename="r.pdf"):
@@ -40,7 +41,8 @@ def issued(db, tenant, kind, days_ago, filename="r.pdf"):
         "INSERT INTO issued_reports (tenant_id, kind, title, period, issued_at, trigger, filename, content_type,"
         " sha256, size, data) VALUES (?, ?, 'Review', '2025-01', ?, 'schedule', ?, 'application/pdf', '',"
         " 1, x'00')",
-        (tenant, kind, iso(days_ago), filename)).lastrowid
+        (tenant, kind, iso(days_ago), filename),
+    ).lastrowid
 
 
 # -- Settings ---------------------------------------------------------------------------------
@@ -72,9 +74,19 @@ def test_default_prune_changes_nothing_new(db, cfg, two_tenants):
     assert db.execute("SELECT 1 FROM issued_reports WHERE id = ?", (report,)).fetchone()
 
 
-FORM = {"keep_daily": "14", "keep_monthly": "6", "signin_days": "60", "findings_days": "180",
-        "run_log_days": "30", "audit_days": "400", "issued_days": "730", "history_signin_days": "180",
-        "history_daily_months": "25", "history_audit_years": "7", "state_months": "25"}
+FORM = {
+    "keep_daily": "14",
+    "keep_monthly": "6",
+    "signin_days": "60",
+    "findings_days": "180",
+    "run_log_days": "30",
+    "audit_days": "400",
+    "issued_days": "730",
+    "history_signin_days": "180",
+    "history_daily_months": "25",
+    "history_audit_years": "7",
+    "state_months": "25",
+}
 
 
 @pytest.mark.parametrize("role", ["analyst", "client"])
@@ -95,7 +107,13 @@ def test_admin_saves_retention_and_it_is_audited(client, db, cfg):
     assert client.post("/admin/retention", data=form).status_code == 302
     p = retention.load(db, cfg)
     assert (p.keep_daily, p.keep_monthly, p.signin_days, p.findings_days, p.run_log_days, p.audit_days) == (
-        14, 6, 60, 180, 30, 400)
+        14,
+        6,
+        60,
+        180,
+        30,
+        400,
+    )
     assert p.issued_days is None
     detail = db.execute("SELECT detail FROM audit_log WHERE action = 'retention_updated'").fetchone()[0]
     assert "Daily snapshots: 30 days → 14 days" in detail
@@ -104,9 +122,18 @@ def test_admin_saves_retention_and_it_is_audited(client, db, cfg):
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'retention_updated'").fetchone()[0] == 1
 
 
-@pytest.mark.parametrize("field,value", [("audit_days", "364"), ("issued_days", "30"), ("signin_days", "7"),
-                                         ("keep_daily", "0"), ("run_log_days", "soon"),
-                                         ("history_signin_days", "29"), ("history_audit_years", "0")])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("audit_days", "364"),
+        ("issued_days", "30"),
+        ("signin_days", "7"),
+        ("keep_daily", "0"),
+        ("run_log_days", "soon"),
+        ("history_signin_days", "29"),
+        ("history_audit_years", "0"),
+    ],
+)
 def test_out_of_range_settings_are_refused(client, db, cfg, field, value):
     make_user(db, "admin")
     login(client, "admin")

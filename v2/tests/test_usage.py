@@ -12,8 +12,13 @@ from tests import usagedata as ud
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
-PRICES = {"SPB": 18.10, "O365_BUSINESS_PREMIUM": 10.30, "O365_BUSINESS_ESSENTIALS": 4.90,
-          "EXCHANGESTANDARD": 3.30, "ENTERPRISEPACK": 20.00}
+PRICES = {
+    "SPB": 18.10,
+    "O365_BUSINESS_PREMIUM": 10.30,
+    "O365_BUSINESS_ESSENTIALS": 4.90,
+    "EXCHANGESTANDARD": 3.30,
+    "ENTERPRISEPACK": 20.00,
+}
 HASH = "FCE5081112C8B5FD27675CC9AAC4AB09"
 
 
@@ -30,8 +35,10 @@ def _section(report, title):
 
 
 def _price(db):
-    db.executemany("INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, '2026-10-01')",
-                   list(PRICES.items()))
+    db.executemany(
+        "INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, '2026-10-01')",
+        list(PRICES.items()),
+    )
 
 
 # -- Collector -------------------------------------------------------------------------------
@@ -52,8 +59,14 @@ def test_collector_merges_reports_per_person(db, two_tenants):
     assert people["dan@x.com"]["active"]["exchange"] is False  # 120 days ago
     assert people["dan@x.com"]["lastActive"]["exchange"] == ud.days_ago(120)
     erin = people["erin@x.com"]
-    assert erin["activations"][0] == {"product": "MICROSOFT 365 APPS FOR ENTERPRISE", "windows": 1, "mac": 1,
-                                      "mobile": 1, "shared": False, "lastActivated": ud.days_ago(200)}
+    assert erin["activations"][0] == {
+        "product": "MICROSOFT 365 APPS FOR ENTERPRISE",
+        "windows": 1,
+        "mac": 1,
+        "mobile": 1,
+        "shared": False,
+        "lastActivated": ud.days_ago(200),
+    }
     assert usage.desktop_use(erin) and not usage.desktop_use(carol)
     status = usage.status(snap)
     assert status["available"] and not status["concealed"] and all(status["read"].values())
@@ -77,8 +90,12 @@ def test_concealed_names_still_line_up(db, two_tenants):
     # Licences come from the report's product names when people can't be matched to accounts.
     _price(db)
     moves = _section(_report(db, alpha, "licence-rightsizing"), "Could move to a cheaper licence")
-    assert moves.rows[0][:4] == ["Hidden name (FCE508)", "Microsoft 365 Business Standard", "Email",
-                                 "Exchange Online (Plan 1)"]
+    assert moves.rows[0][:4] == [
+        "Hidden name (FCE508)",
+        "Microsoft 365 Business Standard",
+        "Email",
+        "Exchange Online (Plan 1)",
+    ]
 
 
 def test_missing_permission_and_optional_reports(db, two_tenants):
@@ -98,8 +115,12 @@ def test_missing_permission_and_optional_reports(db, two_tenants):
 
 
 def _row(active=(), platforms=None, apps=None, copilot=None):
-    return {"active": {k: k in active for k, _ in usage.SERVICES}, "platforms": platforms, "apps": apps or {},
-            "copilotActive": copilot}
+    return {
+        "active": {k: k in active for k, _ in usage.SERVICES},
+        "platforms": platforms,
+        "apps": apps or {},
+        "copilotActive": copilot,
+    }
 
 
 def test_rules():
@@ -109,17 +130,21 @@ def test_rules():
     receiving = dict(_row(), email={"received": 36}, licensed={"exchange": True})
     [s] = usage.rightsize(receiving, ["O365_BUSINESS_PREMIUM"])
     assert s.action == "Convert to a shared mailbox" and "received 36" in s.why
-    mail = _row({"exchange", "office"}, {"windows": False, "mac": False, "mobile": False, "web": True},
-                {"outlook": ["web"]})
+    mail = _row(
+        {"exchange", "office"}, {"windows": False, "mac": False, "mobile": False, "web": True}, {"outlook": ["web"]}
+    )
     [s] = usage.rightsize(mail, ["SPB"])
     assert (s.target, s.action) == ("EXCHANGESTANDARD", "Exchange Online (Plan 1)") and "Intune" in s.caution
-    [s] = usage.rightsize(mail, ["O365_BUSINESS_PREMIUM"], {"totalBytes": 48 * 1024 ** 3})
+    [s] = usage.rightsize(mail, ["O365_BUSINESS_PREMIUM"], {"totalBytes": 48 * 1024**3})
     assert s.target == "EXCHANGEENTERPRISE" and not s.caution  # too big for Plan 1
-    web = _row({"exchange", "teams", "office"}, {"windows": False, "mac": False, "mobile": False, "web": True},
-               {"word": ["web"]})
-    assert [s.target for s in usage.rightsize(web, ["O365_BUSINESS_PREMIUM", "ENTERPRISEPACK", "SPB",
-                                                    "SMB_BUSINESS"])] == ["O365_BUSINESS_ESSENTIALS", "STANDARDPACK",
-                                                                          None, ""]
+    web = _row(
+        {"exchange", "teams", "office"},
+        {"windows": False, "mac": False, "mobile": False, "web": True},
+        {"word": ["web"]},
+    )
+    assert [
+        s.target for s in usage.rightsize(web, ["O365_BUSINESS_PREMIUM", "ENTERPRISEPACK", "SPB", "SMB_BUSINESS"])
+    ] == ["O365_BUSINESS_ESSENTIALS", "STANDARDPACK", None, ""]
     desktop = _row({"exchange", "office"}, {"windows": True, "mac": False, "mobile": False, "web": False})
     assert usage.rightsize(desktop, ["SPB"]) == []
     unknown = _row({"exchange", "teams"}, None)  # apps report not read: no desktop suggestion
@@ -130,7 +155,7 @@ def test_rules():
     desktop["copilotActive"] = False
     copilot = usage.rightsize(desktop, ["SPB", "Microsoft_365_Copilot"])
     assert [(s.current, s.target) for s in copilot] == [("Microsoft_365_Copilot", "")]
-    p2 = usage.rightsize(desktop, ["EXCHANGEENTERPRISE"], {"totalBytes": 2 * 1024 ** 3, "archive": False})
+    p2 = usage.rightsize(desktop, ["EXCHANGEENTERPRISE"], {"totalBytes": 2 * 1024**3, "archive": False})
     assert [(s.current, s.target) for s in p2] == [("EXCHANGEENTERPRISE", "EXCHANGESTANDARD")]
     assert usage.rightsize(desktop, ["EXCHANGEENTERPRISE"], {"totalBytes": 1, "archive": True}) == []
     assert usage.Suggestion("SPB", "EXCHANGESTANDARD", "").saving(PRICES) == 14.80
@@ -157,13 +182,19 @@ def test_usage_report(db, two_tenants):
     assert last["dan@x.com"][1] != "Never" and last["dan@x.com"][2] == "Never"
     assert last["carol@x.com"][6] == "Mobile, Web" and last["erin@x.com"][6] == "Windows, Mac"
     assert last["carol@x.com"][7] == "Microsoft 365 Business Standard"
-    flags = dict(zip([r[0] for r in _section(report, "Last active in each service").rows],
-                     _section(report, "Last active in each service").flags, strict=True))
+    flags = dict(
+        zip(
+            [r[0] for r in _section(report, "Last active in each service").rows],
+            _section(report, "Last active in each service").flags,
+            strict=True,
+        )
+    )
     assert flags["dan@x.com"] == "low" and flags["carol@x.com"] is None
     apps = {r[0]: r for r in _section(report, "Office apps by platform").rows}
     assert apps["Excel"] == ["Excel", 1, 1, 1, 0, 0] and apps["Outlook"][1] == 3
-    assert _section(report, "Office installs").rows == [["erin@x.com", "Microsoft 365 Apps for enterprise", 1, 1, 1,
-                                                         "No", report.sections[3].rows[0][6]]]
+    assert _section(report, "Office installs").rows == [
+        ["erin@x.com", "Microsoft 365 Apps for enterprise", 1, 1, 1, "No", report.sections[3].rows[0][6]]
+    ]
     assert not _section(report, "Activity counts").compare
 
 
@@ -176,8 +207,7 @@ def test_rightsizing_report(db, two_tenants):
     rows = {r[0]: r for r in moves.rows}
     assert "bob@x.com" not in rows  # disabled: in Licence waste
     assert rows["dan@x.com"][1:5] == ["Microsoft 365 Business Standard", "Nothing", "Remove the licence", 10.30]
-    assert rows["ann@x.com"][1:5] == ["Microsoft 365 Business Premium", "Email",
-                                      "Exchange Online (Plan 1)", 14.80]
+    assert rows["ann@x.com"][1:5] == ["Microsoft 365 Business Premium", "Email", "Exchange Online (Plan 1)", 14.80]
     assert "Intune" in rows["ann@x.com"][5]
     assert rows["carol@x.com"][3:5] == ["Microsoft 365 Business Basic", 5.40]
     assert "erin@x.com" not in rows
@@ -196,10 +226,18 @@ def test_rightsizing_report(db, two_tenants):
 def test_rightsizing_skips_new_and_inactive_accounts_and_notes_missing_prices(db, two_tenants):
     alpha, _ = two_tenants
     from tests.test_collectors import USERS
+
     users = USERS + [
-        {"id": "u8", "displayName": "Dan", "userPrincipalName": "dan@x.com", "userType": "Member",
-         "accountEnabled": True, "assignedLicenses": [{"skuId": "sku-bp"}],
-         "createdDateTime": ud.days_ago(5) + "T00:00:00Z", "signInActivity": {}},
+        {
+            "id": "u8",
+            "displayName": "Dan",
+            "userPrincipalName": "dan@x.com",
+            "userType": "Member",
+            "accountEnabled": True,
+            "assignedLicenses": [{"skuId": "sku-bp"}],
+            "createdDateTime": ud.days_ago(5) + "T00:00:00Z",
+            "signInActivity": {},
+        },
     ]
     seed_tenant(db, alpha, users=users)
     report = _report(db, alpha, "licence-rightsizing")
@@ -214,8 +252,9 @@ def test_rollup_and_pages(client, db, two_tenants):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     _price(db)
-    rollup = rollups.build(db, [store.get_tenant(db, t) for t in (alpha, bravo)], "licence-rightsizing",
-                           datetime.now(UTC))
+    rollup = rollups.build(
+        db, [store.get_tenant(db, t) for t in (alpha, bravo)], "licence-rightsizing", datetime.now(UTC)
+    )
     row = next(r for r in rollup.rows if r.tenant["id"] == alpha)
     assert row.values["c:Saving / month"] == 30.50
     assert next(r for r in rollup.rows if r.tenant["id"] == bravo).note

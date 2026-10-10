@@ -29,8 +29,10 @@ def _iso(dt: datetime) -> str:
 
 
 def _expires_in(db, conn_id: int, days: float, now: datetime | None = None) -> None:
-    db.execute("UPDATE app_connections SET not_after = ? WHERE id = ?",
-               (_iso((now or datetime.now(UTC)) + timedelta(days=days)), conn_id))
+    db.execute(
+        "UPDATE app_connections SET not_after = ? WHERE id = ?",
+        (_iso((now or datetime.now(UTC)) + timedelta(days=days)), conn_id),
+    )
 
 
 def _b64(value: str) -> bytes:
@@ -40,24 +42,46 @@ def _b64(value: str) -> bytes:
 def mock_sign_in(rsps, signed_in: list):
     """Microsoft's sign-in at the HTTP level, as MSAL calls it. Records the thumbprint each sign-in used,
     from the client assertion's x5t header, so a test can tell which certificate signed in."""
+
     def discovery(request):
         tenant = request.url.split("/")[3]
         base = f"{LOGIN}/{tenant}"
-        return 200, {}, json.dumps({"token_endpoint": f"{base}/oauth2/v2.0/token",
-                                    "authorization_endpoint": f"{base}/oauth2/v2.0/authorize",
-                                    "issuer": f"{LOGIN}/{tenant}/v2.0"})
+        return (
+            200,
+            {},
+            json.dumps(
+                {
+                    "token_endpoint": f"{base}/oauth2/v2.0/token",
+                    "authorization_endpoint": f"{base}/oauth2/v2.0/authorize",
+                    "issuer": f"{LOGIN}/{tenant}/v2.0",
+                }
+            ),
+        )
 
     def token(request):
         assertion = dict(p.split("=", 1) for p in request.body.split("&"))["client_assertion"]
         header = json.loads(_b64(assertion.split(".")[0]))
         signed_in.append(_b64(header["x5t"]).hex().upper())
         return 200, {}, json.dumps({"access_token": "tok", "expires_in": 3600, "token_type": "Bearer"})
-    rsps.add_callback(responses.GET, re.compile(re.escape(LOGIN) + r"/[^/]+/v2\.0/\.well-known/openid-configuration"),
-                      callback=discovery)
-    rsps.get(re.compile(re.escape(LOGIN) + r"/common/discovery/instance"), json={
-        "tenant_discovery_endpoint": f"{LOGIN}/common/v2.0/.well-known/openid-configuration",
-        "metadata": [{"preferred_network": "login.microsoftonline.com", "preferred_cache": "login.windows.net",
-                      "aliases": ["login.microsoftonline.com", "login.windows.net"]}]})
+
+    rsps.add_callback(
+        responses.GET,
+        re.compile(re.escape(LOGIN) + r"/[^/]+/v2\.0/\.well-known/openid-configuration"),
+        callback=discovery,
+    )
+    rsps.get(
+        re.compile(re.escape(LOGIN) + r"/common/discovery/instance"),
+        json={
+            "tenant_discovery_endpoint": f"{LOGIN}/common/v2.0/.well-known/openid-configuration",
+            "metadata": [
+                {
+                    "preferred_network": "login.microsoftonline.com",
+                    "preferred_cache": "login.windows.net",
+                    "aliases": ["login.microsoftonline.com", "login.windows.net"],
+                }
+            ],
+        },
+    )
     rsps.add_callback(responses.POST, re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"), callback=token)
 
 
@@ -66,8 +90,17 @@ def mock_sign_in(rsps, signed_in: list):
 
 def test_levels_at_60_30_and_7_days_then_expired():
     assert level(None) is None
-    assert [level(d) for d in (400, 60, 59, 30, 29, 7, 6, 0, -1)] == \
-        [None, None, "60", "60", "30", "30", "7", "7", "expired"]
+    assert [level(d) for d in (400, 60, 59, 30, 29, 7, 6, 0, -1)] == [
+        None,
+        None,
+        "60",
+        "60",
+        "30",
+        "30",
+        "7",
+        "7",
+        "expired",
+    ]
     assert days_left(_iso(NOW + timedelta(days=10, hours=3)), NOW) == 10
     assert days_left(_iso(NOW - timedelta(hours=1)), NOW) == -1
     assert days_left("not-a-date", NOW) is None
@@ -79,8 +112,12 @@ def test_expiring_lists_certificates_in_use_soonest_first(db, vault, connection_
     unused_cert = generate_certificate("x")
     unused = store.create_connection(db, vault, "Not set up", unused_cert)
     _expires_in(db, unused, 5)  # no client ID, so nothing signs in with it
-    for key, value in {"mail_transport": "graph", "graph_auth": "certificate", "graph_thumbprint": "AB",
-                       "graph_cert_not_after": _iso(datetime.now(UTC) + timedelta(days=3))}.items():
+    for key, value in {
+        "mail_transport": "graph",
+        "graph_auth": "certificate",
+        "graph_thumbprint": "AB",
+        "graph_cert_not_after": _iso(datetime.now(UTC) + timedelta(days=3)),
+    }.items():
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     found = cert_lifecycle.expiring(db)
     assert [(e.kind, e.level) for e in found] == [("mail", "7"), ("connection", "30")]
@@ -135,7 +172,8 @@ def test_rollover_end_to_end(client, db, vault, cfg, connection_id, two_tenants)
 
     # Switching before a test is refused: the new certificate may not be on the app registration yet.
     page = client.post(f"/admin/connections/{connection_id}/replace/switch", follow_redirects=True).get_data(
-        as_text=True)
+        as_text=True
+    )
     assert "Test the new certificate first" in page
     assert store.get_connection(db, connection_id)["thumbprint"] == old["thumbprint"]
 
@@ -143,8 +181,11 @@ def test_rollover_end_to_end(client, db, vault, cfg, connection_id, two_tenants)
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         mock_sign_in(rsps, signed_in)
         rsps.get(f"{GRAPH_ROOT}/v1.0/organization", json={"value": [{"displayName": "Alpha Ltd"}]})
-        page = client.post(f"/admin/connections/{connection_id}/replace/test",
-                           data={"tenant_ref": "alpha.onmicrosoft.com"}, follow_redirects=True).get_data(as_text=True)
+        page = client.post(
+            f"/admin/connections/{connection_id}/replace/test",
+            data={"tenant_ref": "alpha.onmicrosoft.com"},
+            follow_redirects=True,
+        ).get_data(as_text=True)
     assert "The new certificate works" in page
     assert signed_in == [new]  # the test signed in with the replacement, not the current certificate
 
@@ -167,10 +208,15 @@ def test_rollover_end_to_end(client, db, vault, cfg, connection_id, two_tenants)
     assert "remove the old certificate from Entra" in page and old["thumbprint"] in page
     client.post(f"/admin/connections/{connection_id}/old-removed")
     assert store.get_connection(db, connection_id)["old_thumbprint"] is None
-    actions = [r["action"] for r in db.execute("SELECT action FROM audit_log WHERE action LIKE 'certificate_%'"
-                                               " ORDER BY id")]
-    assert actions == ["certificate_rollover_started", "certificate_rollover_tested", "certificate_switched",
-                       "certificate_old_removed"]
+    actions = [
+        r["action"] for r in db.execute("SELECT action FROM audit_log WHERE action LIKE 'certificate_%' ORDER BY id")
+    ]
+    assert actions == [
+        "certificate_rollover_started",
+        "certificate_rollover_tested",
+        "certificate_switched",
+        "certificate_old_removed",
+    ]
 
 
 def test_failed_test_keeps_switch_locked_and_cancel_discards(client, db, vault, connection_id, two_tenants):
@@ -180,11 +226,20 @@ def test_failed_test_keeps_switch_locked_and_cancel_discards(client, db, vault, 
     signed_in = []
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
         mock_sign_in(rsps, signed_in)
-        rsps.replace(responses.POST, re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"), status=401,
-                     json={"error": "invalid_client", "error_description": "AADSTS700027: Client assertion failed"
-                           " signature validation."})
-        page = client.post(f"/admin/connections/{connection_id}/replace/test",
-                           data={"tenant_ref": "alpha.onmicrosoft.com"}, follow_redirects=True).get_data(as_text=True)
+        rsps.replace(
+            responses.POST,
+            re.compile(re.escape(LOGIN) + r"/[^/]+/oauth2/v2\.0/token"),
+            status=401,
+            json={
+                "error": "invalid_client",
+                "error_description": "AADSTS700027: Client assertion failed signature validation.",
+            },
+        )
+        page = client.post(
+            f"/admin/connections/{connection_id}/replace/test",
+            data={"tenant_ref": "alpha.onmicrosoft.com"},
+            follow_redirects=True,
+        ).get_data(as_text=True)
     assert "didn&#39;t work yet" in page and "certificate" in page
     assert store.get_connection(db, connection_id)["next_checked_at"] is None
     # A second replacement can't start while one is waiting.
@@ -217,22 +272,31 @@ def test_rotate_keys_covers_the_replacement_key(db, vault, connection_id):
 @pytest.fixture
 def public_dns(monkeypatch):
     monkeypatch.delenv(alerts.ALLOW_PRIVATE_ENV, raising=False)
-    monkeypatch.setattr(socket, "getaddrinfo",
-                        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))])
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))],
+    )
 
 
 def _mail_and_hook(db, vault):
-    for key, value in {"mail_transport": "graph", "graph_auth": "secret", "graph_tenant": "msp.onmicrosoft.com",
-                       "graph_client_id": "11111111-2222-3333-4444-555555555555",
-                       "graph_secret_enc": vault.encrypt("shh"), "graph_sender": "reports@msp.com"}.items():
+    for key, value in {
+        "mail_transport": "graph",
+        "graph_auth": "secret",
+        "graph_tenant": "msp.onmicrosoft.com",
+        "graph_client_id": "11111111-2222-3333-4444-555555555555",
+        "graph_secret_enc": vault.encrypt("shh"),
+        "graph_sender": "reports@msp.com",
+    }.items():
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     delivery.add_contact(db, None, "Ops", "ops@msp.com")
     delivery.add_contact(db, 1, "Client IT", "it@alpha.com")  # a client never gets these
     alerts.save_settings(db, {"alerts.enabled": "1", "alerts.format": "generic", "alerts.url_enc": vault.encrypt(HOOK)})
 
 
-def test_one_warning_per_threshold_by_email_and_webhook(cfg, db, vault, connection_id, two_tenants, public_dns,
-                                                        monkeypatch):
+def test_one_warning_per_threshold_by_email_and_webhook(
+    cfg, db, vault, connection_id, two_tenants, public_dns, monkeypatch
+):
     app = create_app(cfg)
     _mail_and_hook(db, vault)
     monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
@@ -271,9 +335,14 @@ def test_worker_runs_the_expiry_job(cfg, db, vault, connection_id, two_tenants, 
 # -- The mail app ------------------------------------------------------------------------------------------
 
 
-GRAPH_FORM = {"mail_transport": "graph", "graph_tenant": "msp.onmicrosoft.com", "graph_auth": "certificate",
-              "graph_client_id": "11111111-2222-3333-4444-555555555555", "graph_sender": "reports@msp.com",
-              "graph_cloud": "commercial"}
+GRAPH_FORM = {
+    "mail_transport": "graph",
+    "graph_tenant": "msp.onmicrosoft.com",
+    "graph_auth": "certificate",
+    "graph_client_id": "11111111-2222-3333-4444-555555555555",
+    "graph_sender": "reports@msp.com",
+    "graph_cloud": "commercial",
+}
 
 
 def test_mail_app_signs_in_with_a_certificate(client, db, vault, monkeypatch):
@@ -299,9 +368,15 @@ def test_mail_app_signs_in_with_a_certificate(client, db, vault, monkeypatch):
 
 def test_mail_sends_through_its_own_cloud(db, vault, monkeypatch):
     monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
-    for key, value in {"mail_transport": "graph", "graph_tenant": "msp.onmicrosoft.us", "graph_cloud": "gcc_high",
-                       "graph_client_id": "11111111-2222-3333-4444-555555555555", "graph_auth": "secret",
-                       "graph_secret_enc": vault.encrypt("shh"), "graph_sender": "reports@msp.us"}.items():
+    for key, value in {
+        "mail_transport": "graph",
+        "graph_tenant": "msp.onmicrosoft.us",
+        "graph_cloud": "gcc_high",
+        "graph_client_id": "11111111-2222-3333-4444-555555555555",
+        "graph_auth": "secret",
+        "graph_secret_enc": vault.encrypt("shh"),
+        "graph_sender": "reports@msp.us",
+    }.items():
         db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
     with responses.RequestsMock() as rsps:
         rsps.post("https://graph.microsoft.us/v1.0/users/reports@msp.us/sendMail", status=202)
@@ -327,11 +402,14 @@ def test_limiting_to_one_mailbox_is_a_confirmed_step(client, db, vault):
     assert mailer.scoped(s) and s["graph_scoped_by"] == "admin"
     page = client.get("/admin/email").get_data(as_text=True)
     assert "Limit the mail app to" not in page
-    assert "New-ApplicationAccessPolicy -AppId 11111111-2222-3333-4444-555555555555 -PolicyScopeGroupId " \
-           "reports@msp.com" in page
+    assert (
+        "New-ApplicationAccessPolicy -AppId 11111111-2222-3333-4444-555555555555 -PolicyScopeGroupId "
+        "reports@msp.com" in page
+    )
     # Saving again keeps it; a different mailbox needs confirming again.
     client.post("/admin/email", data=GRAPH_FORM | {"graph_scoped": "1"})
     assert mailer.mail_settings(db)["graph_scoped_at"] == s["graph_scoped_at"]
-    page = client.post("/admin/email", data=GRAPH_FORM | {"graph_scoped": "1", "graph_sender": "other@msp.com"},
-                       follow_redirects=True).get_data(as_text=True)
+    page = client.post(
+        "/admin/email", data=GRAPH_FORM | {"graph_scoped": "1", "graph_sender": "other@msp.com"}, follow_redirects=True
+    ).get_data(as_text=True)
     assert not mailer.scoped(mailer.mail_settings(db)) and "tick that step again" in page

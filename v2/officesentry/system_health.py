@@ -81,9 +81,13 @@ class Health:
         return next((c for c in self.checks if c.key == key), None)
 
     def as_json(self) -> dict:
-        return {"ok": self.ok, "status": self.status, "version": __version__,
-                "checked_at": self.checked_at.strftime(ISO),
-                "checks": {c.key: {"status": c.status, "summary": c.summary, **c.data} for c in self.checks}}
+        return {
+            "ok": self.ok,
+            "status": self.status,
+            "version": __version__,
+            "checked_at": self.checked_at.strftime(ISO),
+            "checks": {c.key: {"status": c.status, "summary": c.summary, **c.data} for c in self.checks},
+        }
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -108,31 +112,53 @@ def check_schema(conn, cfg, now) -> Check:
     if have == want:
         return Check("schema", "Database version", OK, f"Up to date (version {have})", data=data)
     if have < want:
-        return Check("schema", "Database version", FAIL, f"Version {have}, this release needs {want}",
-                     "Restart the portal: it upgrades the database when it starts.", data)
-    return Check("schema", "Database version", FAIL, f"Version {have} is newer than this release knows ({want})",
-                 "The database was upgraded by a newer Office Sentry. Go back to that release, or restore the "
-                 "pre-upgrade copy (DEPLOY.md, \"Rolling back an update\").", data)
+        return Check(
+            "schema",
+            "Database version",
+            FAIL,
+            f"Version {have}, this release needs {want}",
+            "Restart the portal: it upgrades the database when it starts.",
+            data,
+        )
+    return Check(
+        "schema",
+        "Database version",
+        FAIL,
+        f"Version {have} is newer than this release knows ({want})",
+        "The database was upgraded by a newer Office Sentry. Go back to that release, or restore the "
+        'pre-upgrade copy (DEPLOY.md, "Rolling back an update").',
+        data,
+    )
 
 
-WORKER_FIX = ("On the server, run docker compose up -d (or start the worker service). If it stops again, "
-              "docker compose logs worker shows why.")
+WORKER_FIX = (
+    "On the server, run docker compose up -d (or start the worker service). If it stops again, "
+    "docker compose logs worker shows why."
+)
 
 
 def check_worker(conn, cfg, now) -> Check:
     seen = worker.last_seen(conn)
     data = {"last_seen": _iso(seen), "age_seconds": int((now - seen).total_seconds()) if seen else None}
     if worker.is_alive(conn, now):
-        return Check("worker", "Background worker", OK, f"Checked in {duration((now - seen).total_seconds())} ago",
-                     data=data)
+        return Check(
+            "worker", "Background worker", OK, f"Checked in {duration((now - seen).total_seconds())} ago", data=data
+        )
     summary = f"Stopped, last checked in {duration((now - seen).total_seconds())} ago" if seen else "Not running"
-    return Check("worker", "Background worker", FAIL, summary,
-                 "Nothing is collected and no scheduled email goes out until it runs. " + WORKER_FIX, data)
+    return Check(
+        "worker",
+        "Background worker",
+        FAIL,
+        summary,
+        "Nothing is collected and no scheduled email goes out until it runs. " + WORKER_FIX,
+        data,
+    )
 
 
 @dataclass
 class Slot:
     """One scheduled collection slot: how many tenants it covered and how many failed."""
+
     at: str
     tenants: int
     failed: int
@@ -168,14 +194,17 @@ def last_slot(conn, newer_than: datetime) -> Slot | None:
     single collector that keeps failing for one tenant doesn't). Reads only the runs
     created since the slot, walking the newest rows by id, so it stays fast on years of history.
     """
-    row = conn.execute("SELECT scheduled_for FROM runs WHERE scheduled_for IS NOT NULL ORDER BY id DESC LIMIT 1"
-                       ).fetchone()
+    row = conn.execute(
+        "SELECT scheduled_for FROM runs WHERE scheduled_for IS NOT NULL ORDER BY id DESC LIMIT 1"
+    ).fetchone()
     if row is None or row["scheduled_for"] <= newer_than.strftime(ISO):
         return None
     at = row["scheduled_for"]
     floor = conn.execute("SELECT id FROM runs WHERE created_at < ? ORDER BY id DESC LIMIT 1", (at,)).fetchone()
-    rows = conn.execute("SELECT tenant_id, status, error FROM runs WHERE id > ? AND scheduled_for = ?",
-                        (floor["id"] if floor else 0, at)).fetchall()
+    rows = conn.execute(
+        "SELECT tenant_id, status, error FROM runs WHERE id > ? AND scheduled_for = ?",
+        (floor["id"] if floor else 0, at),
+    ).fetchall()
     per: dict[int, list] = {}
     for r in rows:
         per.setdefault(r["tenant_id"], []).append(r)
@@ -194,54 +223,92 @@ def last_slot(conn, newer_than: datetime) -> Slot | None:
 
 def tenants_due(conn) -> int:
     """Tenants the schedule collects (as ``worker.schedule_tick`` selects them)."""
-    return conn.execute("SELECT COUNT(*) FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
-                        " AND connection_id IS NOT NULL AND consented_at IS NOT NULL").fetchone()[0]
+    return conn.execute(
+        "SELECT COUNT(*) FROM tenants WHERE enabled = 1 AND archived_at IS NULL"
+        " AND connection_id IS NOT NULL AND consented_at IS NOT NULL"
+    ).fetchone()[0]
 
 
-COLLECTION_FIX = ("When every tenant fails at once it's usually the app certificate (App connection), the app "
-                  "registration in Entra, or the server's internet access. Open a failed run from a tenant's "
-                  "Overview to see Microsoft's answer.")
+COLLECTION_FIX = (
+    "When every tenant fails at once it's usually the app certificate (App connection), the app "
+    "registration in Entra, or the server's internet access. Open a failed run from a tenant's "
+    "Overview to see Microsoft's answer."
+)
 
 
 def check_collection(conn, cfg, now) -> Check:
     due = tenants_due(conn)
-    row = conn.execute("SELECT finished_at FROM runs WHERE status IN ('succeeded', 'partial')"
-                       " ORDER BY id DESC LIMIT 1").fetchone()
+    row = conn.execute(
+        "SELECT finished_at FROM runs WHERE status IN ('succeeded', 'partial') ORDER BY id DESC LIMIT 1"
+    ).fetchone()
     last = parse_ts(row["finished_at"]) if row else None
     interval = collection_interval(cfg, now)
     slot = last_slot(conn, now - interval)
-    data = {"last_success": _iso(last), "age_hours": _hours(now - last) if last else None, "tenants": due,
-            "last_slot": ({"at": slot.at, "tenants": slot.tenants, "failed": slot.failed,
-                           "complete": slot.complete} if slot else None)}
+    data = {
+        "last_success": _iso(last),
+        "age_hours": _hours(now - last) if last else None,
+        "tenants": due,
+        "last_slot": (
+            {"at": slot.at, "tenants": slot.tenants, "failed": slot.failed, "complete": slot.complete} if slot else None
+        ),
+    }
     if not due:
         return Check("collection", "Collection", OK, "No client tenants to collect yet", data=data)
     if slot and slot.mass_failure:
-        return Check("collection", "Collection", WARN,
-                     f"The last scheduled collection failed for {slot.failed} of {plural(slot.tenants, 'tenant')}",
-                     COLLECTION_FIX + (f" Most common error: {slot.top_error}" if slot.top_error else ""), data)
+        return Check(
+            "collection",
+            "Collection",
+            WARN,
+            f"The last scheduled collection failed for {slot.failed} of {plural(slot.tenants, 'tenant')}",
+            COLLECTION_FIX + (f" Most common error: {slot.top_error}" if slot.top_error else ""),
+            data,
+        )
     if last is None:
-        return Check("collection", "Collection", WARN, "Nothing has been collected yet",
-                     "Collection starts when a tenant has consented and the worker is running.", data)
+        return Check(
+            "collection",
+            "Collection",
+            WARN,
+            "Nothing has been collected yet",
+            "Collection starts when a tenant has consented and the worker is running.",
+            data,
+        )
     if now - last > interval:
-        return Check("collection", "Collection", WARN,
-                     f"Nothing collected for {duration((now - last).total_seconds())}", COLLECTION_FIX, data)
+        return Check(
+            "collection",
+            "Collection",
+            WARN,
+            f"Nothing collected for {duration((now - last).total_seconds())}",
+            COLLECTION_FIX,
+            data,
+        )
     summary = f"Last data collected {duration((now - last).total_seconds())} ago"
     if slot and slot.complete and slot.failed:
         summary += f"; {slot.failed} of {plural(slot.tenants, 'tenant')} failed in the last scheduled run"
     return Check("collection", "Collection", OK, summary, data=data)
 
 
-BACKUP_SETUP = ("Back up every night: DEPLOY.md, \"Backups\", has the one line to add to the server's crontab. "
-                "Keep the copies off the data volume.")
+BACKUP_SETUP = (
+    'Back up every night: DEPLOY.md, "Backups", has the one line to add to the server\'s crontab. '
+    "Keep the copies off the data volume."
+)
 # How old each backup job's last success may get: nightly copies, and the weekly restore drill.
 # (what it's called, how old its last success may get, how to see the whole error)
 BACKUP_JOBS = {
-    "local": ("backup", timedelta(hours=26),
-              "Run the backup by hand to see the whole message: docker compose exec web python -m officesentry backup"),
-    "offsite": ("off-site backup", timedelta(hours=26),
-                "Run Deploy with the backup action to see the whole message (DEPLOY.md, \"Off-site backups\")."),
-    "restore_check": ("restore check", timedelta(days=8),
-                      "Run Deploy with the restore-drill action (DEPLOY.md, \"Restore drill\")."),
+    "local": (
+        "backup",
+        timedelta(hours=26),
+        "Run the backup by hand to see the whole message: docker compose exec web python -m officesentry backup",
+    ),
+    "offsite": (
+        "off-site backup",
+        timedelta(hours=26),
+        'Run Deploy with the backup action to see the whole message (DEPLOY.md, "Off-site backups").',
+    ),
+    "restore_check": (
+        "restore check",
+        timedelta(days=8),
+        'Run Deploy with the restore-drill action (DEPLOY.md, "Restore drill").',
+    ),
 }
 
 
@@ -251,27 +318,41 @@ def check_backup(conn, cfg, now) -> Check:
         # Backups made before the status file existed, into the default folder.
         made = datetime.fromtimestamp(newest.stat().st_mtime, UTC).strftime(ISO)
         jobs["local"] = {"ok": True, "last_attempt": made, "last_success": made, "detail": "", "error": ""}
-    data = {"configured": bool(jobs), "jobs": {
-        name: {"ok": j.get("ok"), "last_attempt": j.get("last_attempt"), "last_success": j.get("last_success"),
-               "age_hours": _hours(now - t) if (t := parse_ts(j.get("last_success"))) else None}
-        for name, j in jobs.items()}}
+    data = {
+        "configured": bool(jobs),
+        "jobs": {
+            name: {
+                "ok": j.get("ok"),
+                "last_attempt": j.get("last_attempt"),
+                "last_success": j.get("last_success"),
+                "age_hours": _hours(now - t) if (t := parse_ts(j.get("last_success"))) else None,
+            }
+            for name, j in jobs.items()
+        },
+    }
     if not jobs:
         return Check("backup", "Backups", WARN, "No backup has been made yet", BACKUP_SETUP, data)
     worst: tuple[int, str, str] | None = None
     newest = None
     for name, j in sorted(jobs.items()):
-        label, stale, rerun = BACKUP_JOBS.get(name, (f"{name} backup", timedelta(hours=26), "Run it by hand to see "
-                                                     "the whole message."))
+        label, stale, rerun = BACKUP_JOBS.get(
+            name, (f"{name} backup", timedelta(hours=26), "Run it by hand to see the whole message.")
+        )
         done = parse_ts(j.get("last_success"))
         if done and name != "restore_check" and (newest is None or done > newest):
             newest = done
         if j.get("ok") is False:
-            problem = (2, f"The last {label} failed",
-                       (j.get("error") or "No details were recorded").rstrip(".") + ". " + rerun)
+            problem = (
+                2,
+                f"The last {label} failed",
+                (j.get("error") or "No details were recorded").rstrip(".") + ". " + rerun,
+            )
         elif done is None or now - done > stale:
-            problem = (1, f"No {label} for {duration((now - done).total_seconds())}" if done
-                       else f"No {label} has worked yet",
-                       "Check that it still runs (crontab -l on the server). " + BACKUP_SETUP)
+            problem = (
+                1,
+                f"No {label} for {duration((now - done).total_seconds())}" if done else f"No {label} has worked yet",
+                "Check that it still runs (crontab -l on the server). " + BACKUP_SETUP,
+            )
         else:
             continue
         if worst is None or problem[0] > worst[0]:
@@ -299,8 +380,10 @@ def size_text(n: int) -> str:
     return f"{n // 1024:,} KB"
 
 
-DISK_FIX = ("Free some space: old backups in the data folder, old Docker images (docker image prune), or shorter "
-            "periods under Data retention. Or give the server a bigger disk.")
+DISK_FIX = (
+    "Free some space: old backups in the data folder, old Docker images (docker image prune), or shorter "
+    "periods under Data retention. Or give the server a bigger disk."
+)
 
 
 def check_disk(conn, cfg, now) -> Check:
@@ -308,8 +391,9 @@ def check_disk(conn, cfg, now) -> Check:
     data = {"used_percent": used, "free_bytes": free, "total_bytes": total}
     summary = f"{used:.0f}% used, {size_text(free)} free"
     if used >= DISK_FAIL:
-        return Check("disk", "Disk space", FAIL, summary + ". Collections and backups fail when it fills.",
-                     DISK_FIX, data)
+        return Check(
+            "disk", "Disk space", FAIL, summary + ". Collections and backups fail when it fills.", DISK_FIX, data
+        )
     if used >= DISK_WARN:
         return Check("disk", "Disk space", WARN, summary, DISK_FIX, data)
     return Check("disk", "Disk space", OK, summary, data=data)
@@ -317,21 +401,41 @@ def check_disk(conn, cfg, now) -> Check:
 
 def check_certificates(conn, cfg, now) -> Check:
     found = cert_lifecycle.expiring(conn, now)
-    data = {"expiring": [{"kind": e.kind, "name": e.name, "days_left": e.days, "not_after": e.not_after}
-                         for e in found]}
+    data = {
+        "expiring": [{"kind": e.kind, "name": e.name, "days_left": e.days, "not_after": e.not_after} for e in found]
+    }
     if not found:
         return Check("certificates", "Certificates", OK, "None expires in the next 60 days", data=data)
     soonest = found[0]
     more = f" (and {plural(len(found) - 1, 'other')})" if len(found) > 1 else ""
-    return Check("certificates", "Certificates", WARN, soonest.headline.rstrip(".") + more,
-                 cert_lifecycle.fix_steps(soonest), data)
+    return Check(
+        "certificates",
+        "Certificates",
+        WARN,
+        soonest.headline.rstrip(".") + more,
+        cert_lifecycle.fix_steps(soonest),
+        data,
+    )
 
 
-CHECKS = (("database", check_database), ("schema", check_schema), ("worker", check_worker),
-          ("collection", check_collection), ("backup", check_backup), ("disk", check_disk),
-          ("certificates", check_certificates))
-LABELS = {"database": "Database", "schema": "Database version", "worker": "Background worker",
-          "collection": "Collection", "backup": "Backups", "disk": "Disk space", "certificates": "Certificates"}
+CHECKS = (
+    ("database", check_database),
+    ("schema", check_schema),
+    ("worker", check_worker),
+    ("collection", check_collection),
+    ("backup", check_backup),
+    ("disk", check_disk),
+    ("certificates", check_certificates),
+)
+LABELS = {
+    "database": "Database",
+    "schema": "Database version",
+    "worker": "Background worker",
+    "collection": "Collection",
+    "backup": "Backups",
+    "disk": "Disk space",
+    "certificates": "Certificates",
+}
 # A check that can't even run counts as failed when the portal can't work without it.
 CRITICAL = {"database", "schema", "worker", "disk"}
 
@@ -346,8 +450,11 @@ def assess(conn, cfg, now: datetime | None = None, only: tuple[str, ...] | None 
             checks.append(fn(conn, cfg, now))
         except Exception as exc:  # report it rather than break the endpoint an uptime monitor reads
             log.warning("Health check %s couldn't run", key, exc_info=True)
-            checks.append(Check(key, LABELS[key], FAIL if key in CRITICAL else WARN,
-                                f"Couldn't be checked ({type(exc).__name__})"))
+            checks.append(
+                Check(
+                    key, LABELS[key], FAIL if key in CRITICAL else WARN, f"Couldn't be checked ({type(exc).__name__})"
+                )
+            )
     return Health(checks, now)
 
 
@@ -364,9 +471,10 @@ def _digest(token: str) -> str:
 
 def new_token(conn) -> str:
     token = "osh_" + secrets.token_urlsafe(32)
-    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)"
-                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                 (TOKEN_KEY, _digest(token)))
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (TOKEN_KEY, _digest(token)),
+    )
     return token
 
 

@@ -25,8 +25,11 @@ FORM = {"frequency": "monthly", "day_of_week": "0", "day_of_month": "1", "hour":
 @pytest.fixture(autouse=True)
 def public_dns(monkeypatch):
     monkeypatch.delenv(alerts.ALLOW_PRIVATE_ENV, raising=False)
-    monkeypatch.setattr(socket, "getaddrinfo",
-                        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))])
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("52.1.2.3", port))],
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -38,8 +41,11 @@ def _smtp(monkeypatch):
 
 
 def _view(db, user_id, key="mailboxes", name="Forwarding outside", query=FORWARDING) -> int:
-    return db.execute("INSERT INTO saved_views (user_id, report_key, name, query, created_at)"
-                      " VALUES (?, ?, ?, ?, '2026-10-01T00:00:00Z')", (user_id, key, name, query)).lastrowid
+    return db.execute(
+        "INSERT INTO saved_views (user_id, report_key, name, query, created_at)"
+        " VALUES (?, ?, ?, ?, '2026-10-01T00:00:00Z')",
+        (user_id, key, name, query),
+    ).lastrowid
 
 
 def _attachments(msg) -> dict[str, bytes]:
@@ -51,8 +57,15 @@ def _csv(data: bytes) -> list[list[str]]:
 
 
 def _hook(db, vault, on_reports=True, fmt="teams"):
-    alerts.save_settings(db, {"alerts.enabled": "1", "alerts.format": fmt, "alerts.url_enc": vault.encrypt(HOOK),
-                              "alerts.on_reports": "1" if on_reports else "0"})
+    alerts.save_settings(
+        db,
+        {
+            "alerts.enabled": "1",
+            "alerts.format": fmt,
+            "alerts.url_enc": vault.encrypt(HOOK),
+            "alerts.on_reports": "1" if on_reports else "0",
+        },
+    )
 
 
 def _schedule_from_form(client, tenant_id, **data):
@@ -73,46 +86,62 @@ def test_a_tenant_schedule_sends_a_saved_view_with_its_filters(client, db, two_t
     page = client.get(f"/tenants/{alpha}/schedules/new").get_data(as_text=True)
     assert "Forwarding outside" in page and f'value="s{view_id}"' in page
 
-    resp = _schedule_from_form(client, alpha, views=[f"s{view_id}"], **{f"view_format_s{view_id}": "csv"},
-                               contacts=[str(contact)])
+    resp = _schedule_from_form(
+        client, alpha, views=[f"s{view_id}"], **{f"view_format_s{view_id}": "csv"}, contacts=[str(contact)]
+    )
     assert resp.status_code == 302
     sid = db.execute("SELECT id FROM email_schedules").fetchone()[0]
     (saved,) = delivery.schedule_views(db, sid)
     assert (saved.report_key, saved.name, saved.query, saved.format, saved.saved_view_id) == (
-        "mailboxes", "Forwarding outside", FORWARDING, "csv", view_id)
+        "mailboxes",
+        "Forwarding outside",
+        FORWARDING,
+        "csv",
+        view_id,
+    )
     listing = client.get(f"/tenants/{alpha}/schedules").get_data(as_text=True)
     assert f"{delivery.view_report_title('mailboxes')}: Forwarding outside" in listing
 
     client.post(f"/schedules/{sid}/send")
-    (_, _, msg, _), = sends()
+    ((_, _, msg, _),) = sends()
     files = _attachments(msg)
     name = "mailboxes-forwarding-outside-alpha-ltd-forwarding.csv"
     assert list(files) == [name]  # only the view: no review was ticked
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()
-    expected = data_reports.section_table(views.apply(data_reports.build(db, tenant, "mailboxes"),
-                                                      views.View.parse(FORWARDING)).sections[0])
+    expected = data_reports.section_table(
+        views.apply(data_reports.build(db, tenant, "mailboxes"), views.View.parse(FORWARDING)).sections[0]
+    )
     rows = _csv(files[name])
     assert rows[0] == expected.columns and rows[1:] and len(rows) - 1 == len(expected.rows)
     assert all(r[expected.columns.index("Outside the organisation")] == "Yes" for r in rows[1:])
     assert "Forwarding outside" in msg.get_body(("html",)).get_content()
     # The client's report history keeps the file under the view's name.
     issued = db.execute("SELECT kind, title, filename FROM issued_reports").fetchall()
-    assert [tuple(r) for r in issued] == [("view:mailboxes", delivery.view_report_title("mailboxes")
-                                           + ": Forwarding outside", name)]
+    assert [tuple(r) for r in issued] == [
+        ("view:mailboxes", delivery.view_report_title("mailboxes") + ": Forwarding outside", name)
+    ]
 
 
 def test_pdf_and_xlsx_views_and_the_findings_page(app, db, two_tenants, vault, cfg):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     _smtp_ready(db)
-    sid = db.execute("INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, created_at)"
-                     " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, '2026-01-01T00:00:00Z')", (alpha,)).lastrowid
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, created_at)"
+        " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, '2026-01-01T00:00:00Z')",
+        (alpha,),
+    ).lastrowid
     delivery.set_recipients(db, "schedule", sid, [delivery.add_contact(db, alpha, "", "it@alpha.com")])
-    delivery.set_schedule_views(db, sid, [
-        delivery.ScheduledView("mailboxes", "Forwarding outside", FORWARDING, "pdf"),
-        delivery.ScheduledView("findings", "Critical", "f=open-findings/flag:critical", "xlsx")])
+    delivery.set_schedule_views(
+        db,
+        sid,
+        [
+            delivery.ScheduledView("mailboxes", "Forwarding outside", FORWARDING, "pdf"),
+            delivery.ScheduledView("findings", "Critical", "f=open-findings/flag:critical", "xlsx"),
+        ],
+    )
     assert delivery.send_schedule(app, db, vault, db.execute("SELECT * FROM email_schedules").fetchone()) is None
-    (_, _, msg, _), = sends()
+    ((_, _, msg, _),) = sends()
     names = list(_attachments(msg))
     pdf = "mailboxes-forwarding-outside-alpha-ltd." + ("pdf" if pdf_available() else "xlsx")
     assert names[-2:] == [pdf, "findings-critical-alpha-ltd.xlsx"]
@@ -126,12 +155,12 @@ def test_only_your_own_views_can_be_picked(client, db, two_tenants):
     theirs = _view(db, other)
     login(client, "admin")
     assert f'value="s{theirs}"' not in client.get(f"/tenants/{alpha}/schedules/new").get_data(as_text=True)
-    resp = _schedule_from_form(client, alpha, views=[f"s{theirs}", "k1", "sx"],
-                               new_email="it@alpha.com")
+    resp = _schedule_from_form(client, alpha, views=[f"s{theirs}", "k1", "sx"], new_email="it@alpha.com")
     assert "Choose at least one report or saved view" in resp.get_data(as_text=True)
     assert db.execute("SELECT COUNT(*) FROM email_schedule_views").fetchone()[0] == 0
-    bad = _schedule_from_form(client, alpha, reports="review", views=["s1"], view_format_s1="docx",
-                              new_email="it@alpha.com")
+    bad = _schedule_from_form(
+        client, alpha, reports="review", views=["s1"], view_format_s1="docx", new_email="it@alpha.com"
+    )
     assert bad.status_code == 400
 
 
@@ -143,8 +172,10 @@ def test_saving_the_view_again_updates_the_schedule_and_deleting_it_keeps_a_copy
     contact = delivery.add_contact(db, alpha, "IT", "it@alpha.com")
     _schedule_from_form(client, alpha, views=[f"s{view_id}"], contacts=[str(contact)])
     sid = db.execute("SELECT id FROM email_schedules").fetchone()[0]
-    client.post("/reports/mailboxes/views", data={"tenant_id": alpha, "name": "Forwarding outside",
-                                                  "query": "sort=forwarding/mailbox:asc"})
+    client.post(
+        "/reports/mailboxes/views",
+        data={"tenant_id": alpha, "name": "Forwarding outside", "query": "sort=forwarding/mailbox:asc"},
+    )
     assert delivery.schedule_views(db, sid)[0].query == views.View.parse("sort=forwarding/mailbox:asc").query()
 
     client.post(f"/views/{view_id}/delete")
@@ -153,8 +184,10 @@ def test_saving_the_view_again_updates_the_schedule_and_deleting_it_keeps_a_copy
     page = client.get(f"/schedules/{sid}/edit").get_data(as_text=True)
     assert "its saved view was deleted" in page and f'value="k{kept.id}" checked' in page
     # Saving the form keeps the copy, in the format chosen now.
-    client.post(f"/schedules/{sid}/edit", data=FORM | {"views": [f"k{kept.id}"], f"view_format_k{kept.id}": "xlsx",
-                                                       "contacts": [str(contact)]})
+    client.post(
+        f"/schedules/{sid}/edit",
+        data=FORM | {"views": [f"k{kept.id}"], f"view_format_k{kept.id}": "xlsx", "contacts": [str(contact)]},
+    )
     (again,) = delivery.schedule_views(db, sid)
     assert (again.name, again.format) == ("Forwarding outside", "xlsx")
 
@@ -191,9 +224,16 @@ def test_views_email_stacks_a_groups_tenants_for_the_team_only(client, db, two_t
     form = client.get("/emails/views/new").get_data(as_text=True)
     assert f'value="s{view_id}"' in form and f'value="s{findings_view}"' not in form  # no all-tenant findings
 
-    resp = client.post("/emails/views/new", data=FORM | {
-        "group_id": str(group), "views": [f"s{view_id}"], f"view_format_s{view_id}": "csv",
-        "contacts": [str(team), str(client_contact)]})
+    resp = client.post(
+        "/emails/views/new",
+        data=FORM
+        | {
+            "group_id": str(group),
+            "views": [f"s{view_id}"],
+            f"view_format_s{view_id}": "csv",
+            "contacts": [str(team), str(client_contact)],
+        },
+    )
     assert resp.status_code == 302
     s = db.execute("SELECT * FROM email_schedules").fetchone()
     assert s["kind"] == "digest" and json.loads(s["reports"]) == ["views"] and s["group_id"] == group
@@ -202,7 +242,7 @@ def test_views_email_stacks_a_groups_tenants_for_the_team_only(client, db, two_t
     assert "Forwarding outside · Tier 1" in overview
 
     client.post(f"/schedules/{s['id']}/send")
-    (_, _, msg, to_addrs), = sends()
+    ((_, _, msg, to_addrs),) = sends()
     assert to_addrs == ["me@msp.com"] and "Tier 1" in msg["Subject"] and "Forwarding outside" in msg["Subject"]
     files = _attachments(msg)
     rows = _csv(files["mailboxes-forwarding-outside-tier-1-forwarding.csv"])
@@ -235,8 +275,11 @@ def test_report_ready_posts_a_link_never_the_files(client, db, two_tenants, vaul
     make_user(db, "admin")
     login(client, "admin")
     responses.post(HOOK, status=202)
-    sid = db.execute("INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, created_at)"
-                     " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, '2026-01-01T00:00:00Z')", (alpha,)).lastrowid
+    sid = db.execute(
+        "INSERT INTO email_schedules (kind, tenant_id, reports, frequency, hour, created_at)"
+        " VALUES ('report', ?, '[\"review\"]', 'monthly', 8, '2026-01-01T00:00:00Z')",
+        (alpha,),
+    ).lastrowid
     delivery.set_recipients(db, "schedule", sid, [delivery.add_contact(db, alpha, "IT", "it@alpha.com")])
 
     _hook(db, vault, on_reports=False)
@@ -250,8 +293,13 @@ def test_report_ready_posts_a_link_never_the_files(client, db, two_tenants, vaul
     card = json.loads(body)["attachments"][0]["content"]
     title = card["body"][0]["text"]
     assert title.startswith("The ") and title.endswith(" report for Alpha Ltd is ready")
-    assert card["actions"] == [{"type": "Action.OpenUrl", "title": "Open the report history",
-                                "url": f"http://localhost:8000/tenants/{alpha}/report-history"}]
+    assert card["actions"] == [
+        {
+            "type": "Action.OpenUrl",
+            "title": "Open the report history",
+            "url": f"http://localhost:8000/tenants/{alpha}/report-history",
+        }
+    ]
     assert card["body"][1]["text"] == "Emailed to the client: Monthly Security & Licensing Review."
     assert "security-review-alpha-ltd" not in body  # named, never attached
     assert "it@alpha.com" not in body and "base64" not in body and len(body) < 4000
@@ -300,11 +348,15 @@ def test_settings_page_turns_it_on_and_sends_a_sample(client, db, vault):
     make_user(db, "admin")
     login(client, "admin")
     responses.post(HOOK, status=202)
-    client.post("/admin/alerts", data={"enabled": "1", "format": "teams", "min_severity": "high",
-                                       "url": HOOK, "on_reports": "1"})
+    client.post(
+        "/admin/alerts",
+        data={"enabled": "1", "format": "teams", "min_severity": "high", "url": HOOK, "on_reports": "1"},
+    )
     assert alerts.settings(db)["alerts.on_reports"] == "1"
-    assert "reports=1" in db.execute("SELECT detail FROM audit_log WHERE action = 'alert_settings_updated'"
-                                     ).fetchone()["detail"]
+    assert (
+        "reports=1"
+        in db.execute("SELECT detail FROM audit_log WHERE action = 'alert_settings_updated'").fetchone()["detail"]
+    )
     client.post("/admin/alerts/test", data={"sample": "report"})
     card = json.loads(responses.calls[0].request.body)["attachments"][0]["content"]
     assert "report for Contoso (example) is ready" in card["body"][0]["text"]

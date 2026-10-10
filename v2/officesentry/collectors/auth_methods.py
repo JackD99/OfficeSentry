@@ -12,18 +12,33 @@ from .base import Collector, RunContext, register
 
 GROUP_LIMIT = 50
 # Settings worth keeping per method; everything else (key restrictions, lifetimes) stays out.
-METHOD_SETTINGS = ("isSelfServiceRegistrationAllowed", "isAttestationEnforced", "isOfficePhoneAllowed",
-                   "allowExternalIdToUseEmailOtp", "isSoftwareOathEnabled", "isUsableOnce")
-FEATURES = ("displayAppInformationRequiredState", "displayLocationInformationRequiredState",
-            "numberMatchingRequiredState")
+METHOD_SETTINGS = (
+    "isSelfServiceRegistrationAllowed",
+    "isAttestationEnforced",
+    "isOfficePhoneAllowed",
+    "allowExternalIdToUseEmailOtp",
+    "isSoftwareOathEnabled",
+    "isUsableOnce",
+)
+FEATURES = (
+    "displayAppInformationRequiredState",
+    "displayLocationInformationRequiredState",
+    "numberMatchingRequiredState",
+)
 ALL_USERS = "all_users"
 
 
 def _targets(value) -> list[dict]:
-    return [{"id": t.get("id"), "targetType": t.get("targetType"),
-             "isRegistrationRequired": t.get("isRegistrationRequired"),
-             "targetedAuthenticationMethod": t.get("targetedAuthenticationMethod")}
-            for t in value or [] if isinstance(t, dict)]
+    return [
+        {
+            "id": t.get("id"),
+            "targetType": t.get("targetType"),
+            "isRegistrationRequired": t.get("isRegistrationRequired"),
+            "targetedAuthenticationMethod": t.get("targetedAuthenticationMethod"),
+        }
+        for t in value or []
+        if isinstance(t, dict)
+    ]
 
 
 def _feature_states(config: dict) -> dict:
@@ -33,8 +48,7 @@ def _feature_states(config: dict) -> dict:
 
 def summarise(policy: dict) -> tuple[dict, list[tuple[str, dict]]]:
     """The policy's tenant-wide settings, and one row per sign-in method."""
-    campaign = ((policy.get("registrationEnforcement") or {}).get("authenticationMethodsRegistrationCampaign")
-                or {})
+    campaign = (policy.get("registrationEnforcement") or {}).get("authenticationMethodsRegistrationCampaign") or {}
     system = policy.get("systemCredentialPreferences") or {}
     report = policy.get("reportSuspiciousActivitySettings") or {}
     settings = {
@@ -47,25 +61,34 @@ def summarise(policy: dict) -> tuple[dict, list[tuple[str, dict]]]:
             "enforceRegistrationAfterAllowedSnoozes": campaign.get("enforceRegistrationAfterAllowedSnoozes"),
             "includeTargets": _targets(campaign.get("includeTargets")),
             "excludeTargets": _targets(campaign.get("excludeTargets")),
-        } if campaign else None,
+        }
+        if campaign
+        else None,
         "systemCredentialPreferences": {
             "state": system.get("state"),
             "includeTargets": _targets(system.get("includeTargets")),
             "excludeTargets": _targets(system.get("excludeTargets")),
-        } if system else None,
+        }
+        if system
+        else None,
         "reportSuspiciousActivity": {"state": report.get("state")} if report else None,
     }
     methods = []
     for c in policy.get("authenticationMethodConfigurations") or []:
         if not isinstance(c, dict) or not c.get("id"):
             continue
-        methods.append((c["id"], {
-            "state": c.get("state"),
-            "includeTargets": _targets(c.get("includeTargets")),
-            "excludeTargets": _targets(c.get("excludeTargets")),
-            "settings": {k: c[k] for k in METHOD_SETTINGS if k in c},
-            "features": _feature_states(c),
-        }))
+        methods.append(
+            (
+                c["id"],
+                {
+                    "state": c.get("state"),
+                    "includeTargets": _targets(c.get("includeTargets")),
+                    "excludeTargets": _targets(c.get("excludeTargets")),
+                    "settings": {k: c[k] for k in METHOD_SETTINGS if k in c},
+                    "features": _feature_states(c),
+                },
+            )
+        )
     return settings, methods
 
 
@@ -86,8 +109,9 @@ def target_groups(settings: dict, methods: list[tuple[str, dict]]) -> list[str]:
 class AuthMethodsPolicy(Collector):
     key = "auth_methods_policy"
     title = "Sign-in methods policy"
-    description = ("Which sign-in methods the tenant allows and for whom, the registration campaign and "
-                   "system-preferred MFA.")
+    description = (
+        "Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA."
+    )
     permissions = ("Policy.Read.All", "Directory.Read.All")
 
     def collect(self, ctx: RunContext) -> None:

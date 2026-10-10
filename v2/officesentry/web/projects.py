@@ -28,8 +28,15 @@ def _filters():
 def index():
     project, declined = _filters()
     data = projects.pipeline(g.db, visible_tenants(g.db, g.user))
-    return render_template("projects.html", data=data, items=data.items(project, declined), project=project,
-                           declined=declined, catalog=projects.CATALOG, statuses=projects.STATUSES)
+    return render_template(
+        "projects.html",
+        data=data,
+        items=data.items(project, declined),
+        project=project,
+        declined=declined,
+        catalog=projects.CATALOG,
+        statuses=projects.STATUSES,
+    )
 
 
 @bp.get("/projects.csv", defaults={"ext": "csv"})
@@ -40,10 +47,19 @@ def download(ext: str):
     data = projects.pipeline(g.db, visible_tenants(g.db, g.user))
     table = projects.to_table(data.items(project, declined))
     audit(g.db, g.user["username"], "projects_downloaded", None, f"projects.{ext}")
-    body = tables.to_csv(table) if ext == "csv" else tables.to_xlsx([table], cover=_cover(
-        "Recommended projects", "All tenants",
-        "Projects each client's Microsoft 365 data shows they need, and where each one stands.",
-        facts=[("Tenants with a recommendation", data.tenants_with, ""), ("Projects", len(table.rows), "")]))
+    body = (
+        tables.to_csv(table)
+        if ext == "csv"
+        else tables.to_xlsx(
+            [table],
+            cover=_cover(
+                "Recommended projects",
+                "All tenants",
+                "Projects each client's Microsoft 365 data shows they need, and where each one stands.",
+                facts=[("Tenants with a recommendation", data.tenants_with, ""), ("Projects", len(table.rows), "")],
+            ),
+        )
+    )
     return _download(body, "recommended-projects", ext)
 
 
@@ -53,9 +69,16 @@ def tenant(tenant_id: int):
     t = tenant_or_404(tenant_id)
     snap = TenantSnapshot(g.db, t)
     found = projects.assess(g.db, t, snap=snap)
-    return render_template("tenant_projects.html", tenant=t, recs=found.projects, quick=found.quick_fixes,
-                           quick_hours=projects.effort_label(found.quick_hours), tenant_has_data=bool(snap.runs),
-                           statuses=projects.STATUSES, min_hours=projects.MIN_HOURS)
+    return render_template(
+        "tenant_projects.html",
+        tenant=t,
+        recs=found.projects,
+        quick=found.quick_fixes,
+        quick_hours=projects.effort_label(found.quick_hours),
+        tenant_has_data=bool(snap.runs),
+        statuses=projects.STATUSES,
+        min_hours=projects.MIN_HOURS,
+    )
 
 
 @bp.get("/tenants/<int:tenant_id>/projects.pdf")
@@ -65,8 +88,13 @@ def pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
     recs = [r for r in projects.recommend(g.db, t) if r.status != "declined"]
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "projects.pdf")
-    return pdf_response("reports/projects.html", f"recommended-projects-{tables.slug(t['name'])}", tenant=t,
-                        recs=recs, today=datetime.now(UTC))
+    return pdf_response(
+        "reports/projects.html",
+        f"recommended-projects-{tables.slug(t['name'])}",
+        tenant=t,
+        recs=recs,
+        today=datetime.now(UTC),
+    )
 
 
 @bp.post("/tenants/<int:tenant_id>/projects/<key>")

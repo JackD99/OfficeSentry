@@ -26,8 +26,12 @@ PLATFORMS = "Devices by platform"
 
 SEVERITY = ("high", "medium", "low")
 APPS = {"EAS": "Mail app (ActiveSync)", "Outlook": "Outlook app", "REST": "Outlook app"}
-ACCESS = {"Allowed": "Allowed", "Blocked": "Blocked", "Quarantined": "Waiting for approval",
-          "DeviceDiscovery": "Being checked"}
+ACCESS = {
+    "Allowed": "Allowed",
+    "Blocked": "Blocked",
+    "Quarantined": "Waiting for approval",
+    "DeviceDiscovery": "Being checked",
+}
 
 
 def _text(value) -> str:
@@ -35,18 +39,21 @@ def _text(value) -> str:
 
 
 def platform(os_name) -> str:
-    """"iOS", "Android", "Windows" or "Other", from a device's DeviceOS ("iOS 17.5.1 21F90")."""
+    """ "iOS", "Android", "Windows" or "Other", from a device's DeviceOS ("iOS 17.5.1 21F90")."""
     text = _text(os_name).lower()
-    for name, words in (("iOS", ("ios", "iphone", "ipad")), ("Android", ("android",)),
-                        ("Windows", ("windows",)), ("macOS", ("mac",))):
+    for name, words in (
+        ("iOS", ("ios", "iphone", "ipad")),
+        ("Android", ("android",)),
+        ("Windows", ("windows",)),
+        ("macOS", ("mac",)),
+    ):
         if text.startswith(words):
             return name
     return "Other"
 
 
 def _device(d: dict) -> str:
-    return (_text(d.get("FriendlyName")) or _text(d.get("DeviceModel")) or _text(d.get("DeviceType"))
-            or "Unknown device")
+    return _text(d.get("FriendlyName")) or _text(d.get("DeviceModel")) or _text(d.get("DeviceType")) or "Unknown device"
 
 
 def _day(value) -> str:
@@ -81,12 +88,27 @@ def devices_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None
         return
     users = {u["_id"]: u for u in snap.objects("users", "user") or []}
 
-    every = Section(EVERY, ["Mailbox", "Device", "Platform", "Operating system", "App", "Access",
-                            "First synced", "Last synced", "Account"],
-                    empty="No phone or tablet syncs mail with this tenant.")
-    attention = Section(ATTENTION, ["Mailbox", "Device", "Why", "Last synced"],
-                        empty="Nothing needs attention: no leaver's device still connected, none waiting for "
-                              "approval and none left unused for 90 days.")
+    every = Section(
+        EVERY,
+        [
+            "Mailbox",
+            "Device",
+            "Platform",
+            "Operating system",
+            "App",
+            "Access",
+            "First synced",
+            "Last synced",
+            "Account",
+        ],
+        empty="No phone or tablet syncs mail with this tenant.",
+    )
+    attention = Section(
+        ATTENTION,
+        ["Mailbox", "Device", "Why", "Last synced"],
+        empty="Nothing needs attention: no leaver's device still connected, none waiting for "
+        "approval and none left unused for 90 days.",
+    )
     by_platform: dict[str, list[int]] = {}
     needs: list[tuple[int, list, str]] = []
     active = blocked_users = stale = waiting = 0
@@ -121,39 +143,72 @@ def devices_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None
         counts[1 if d.get("ClientType") in ("Outlook", "REST") else 2] += 1
         counts[3] += days is not None and days < ACTIVE_DAYS
         flag = next((sev for sev in SEVERITY if any(s == sev for s, _ in reasons)), None)
-        every.add([mailbox, name, plat, _text(d.get("DeviceOS")),
-                   APPS.get(_text(d.get("ClientType")), _text(d.get("ClientType")) or "Unknown"),
-                   ACCESS.get(access, access or "Unknown"), _day(d.get("FirstSyncTime")), last_day,
-                   _account(user)], flag)
+        every.add(
+            [
+                mailbox,
+                name,
+                plat,
+                _text(d.get("DeviceOS")),
+                APPS.get(_text(d.get("ClientType")), _text(d.get("ClientType")) or "Unknown"),
+                ACCESS.get(access, access or "Unknown"),
+                _day(d.get("FirstSyncTime")),
+                last_day,
+                _account(user),
+            ],
+            flag,
+        )
         if reasons:
             needs.append((SEVERITY.index(flag), [mailbox, name, [why for _, why in reasons], last_day], flag))
 
     for _, row, flag in sorted(needs, key=lambda n: n[0]):
         attention.add(row, flag)
-    platforms = Section(PLATFORMS, ["Platform", "Devices", "Outlook app", "Mail app (ActiveSync)",
-                                    f"Synced in the last {ACTIVE_DAYS} days"], empty="No devices.")
+    platforms = Section(
+        PLATFORMS,
+        ["Platform", "Devices", "Outlook app", "Mail app (ActiveSync)", f"Synced in the last {ACTIVE_DAYS} days"],
+        empty="No devices.",
+    )
     for plat, counts in sorted(by_platform.items(), key=lambda kv: -kv[1][0]):
         platforms.add([plat, *counts])
 
     n = len(found)
     mailboxes = len({_text(d.get("mailboxId")) for d in found})
-    every.intro = (f"{plural(n, 'device')} on {plural(mailboxes, 'mailbox')}; {active} synced in the last "
-                   f"{ACTIVE_DAYS} days. A device keeps its partnership until it's removed, so old phones stay "
-                   "listed long after they're replaced.")
-    attention.intro = (f"{plural(len(attention.rows), 'device')} {verb(len(attention.rows), 'needs', 'need')} a "
-                       "look. To remove a device someone no longer uses, or a leaver's, open the Exchange admin "
-                       "centre, Recipients > Mailboxes > the mailbox > Mobile devices, and remove it (or block it "
-                       "there first). Waiting devices are allowed or blocked in the same place.")
-    platforms.intro = ("The Outlook app supports modern sign-in and app protection policies; the built-in mail "
-                       "app over ActiveSync is harder to control.")
+    every.intro = (
+        f"{plural(n, 'device')} on {plural(mailboxes, 'mailbox')}; {active} synced in the last "
+        f"{ACTIVE_DAYS} days. A device keeps its partnership until it's removed, so old phones stay "
+        "listed long after they're replaced."
+    )
+    attention.intro = (
+        f"{plural(len(attention.rows), 'device')} {verb(len(attention.rows), 'needs', 'need')} a "
+        "look. To remove a device someone no longer uses, or a leaver's, open the Exchange admin "
+        "centre, Recipients > Mailboxes > the mailbox > Mobile devices, and remove it (or block it "
+        "there first). Waiting devices are allowed or blocked in the same place."
+    )
+    platforms.intro = (
+        "The Outlook app supports modern sign-in and app protection policies; the built-in mail "
+        "app over ActiveSync is harder to control."
+    )
     out.tiles = [
         Tile("Mobile devices", n, f"{active} synced in the last {ACTIVE_DAYS} days", rows=Rows(EVERY)),
-        Tile("Leavers' devices", blocked_users, "Sign-in blocked, device still connected",
-             "bad" if blocked_users else "ok", Rows(EVERY, {"Account": "Sign-in blocked"})),
-        Tile("Waiting for approval", waiting, "Quarantined by ActiveSync access rules",
-             "warn" if waiting else "ok", Rows(EVERY, {"Access": ACCESS["Quarantined"]})),
-        Tile(f"Not synced in {STALE_DAYS} days", stale, "Old partnerships to remove",
-             "warn" if stale else "ok", Rows(EVERY, age=("Last synced", "gt90"))),
+        Tile(
+            "Leavers' devices",
+            blocked_users,
+            "Sign-in blocked, device still connected",
+            "bad" if blocked_users else "ok",
+            Rows(EVERY, {"Account": "Sign-in blocked"}),
+        ),
+        Tile(
+            "Waiting for approval",
+            waiting,
+            "Quarantined by ActiveSync access rules",
+            "warn" if waiting else "ok",
+            Rows(EVERY, {"Access": ACCESS["Quarantined"]}),
+        ),
+        Tile(
+            f"Not synced in {STALE_DAYS} days",
+            stale,
+            "Old partnerships to remove",
+            "warn" if stale else "ok",
+            Rows(EVERY, age=("Last synced", "gt90")),
+        ),
     ]
     out.sections = [attention, every, platforms]
-
