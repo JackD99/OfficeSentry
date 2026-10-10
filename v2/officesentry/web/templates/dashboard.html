@@ -2,9 +2,9 @@
 {% from "_macros.html" import icon, sev_counts, sev_legend %}
 {% from "_groups.html" import group_picker, in_group with context %}
 {% block title %}Tenants · Office Sentry{% endblock %}
-{% macro kpi(row, key, unit='') -%}
+{% macro kpi(row, key, unit='', spark=false) -%}
 {% set k = row.kpis[key] %}
-{% if k.value is none %}<span class="faint">–</span>{% else %}{{ k.value|money(currency) if unit == 'money' else '%g'|format(k.value) ~ unit }}{% if k.delta %} <span class="delta {{ k.trend }} tiny">{{ '%+g'|format(k.delta) }}</span>{% endif %}{% endif %}
+{% if k.value is none %}<span class="faint">–</span>{% else %}<span class="kpi-cell"><span>{{ k.value|money(currency) if unit == 'money' else '%g'|format(k.value) ~ unit }}{% if k.delta %} <span class="delta {{ k.trend }} tiny">{{ '%+g'|format(k.delta) }}</span>{% endif %}</span>{% if spark and k.spark_label %}{{ sparkline(k.spark, label=row.tenant.name ~ ': ' ~ k.spark_label, width=64, height=16)|safe }}{% endif %}</span>{% endif %}
 {%- endmacro %}
 {% block content %}
 <div class="page-head">
@@ -37,10 +37,10 @@
   <div class="tile{{ ' tone-warn' if summary.urgent }}"><div class="label">Need urgent attention</div><div class="value">{{ summary.urgent }}</div>
     <div class="foot">with critical or high findings</div></div>
   <div class="tile{{ ' tone-bad' if summary.severe }}"><div class="label">Critical and high findings</div>
-    <div class="value">{{ summary.severe }}</div>
+    <div class="value{{ ' has-spark' if summary.severe_trend }}"><span>{{ summary.severe }}</span>{% if summary.severe_trend %}{{ sparkline(summary.severe_trend.values, label=summary.severe_trend.label)|safe }}{% endif %}</div>
     <div class="foot">across {{ group_scope.group.name if group_scope and group_scope.group else 'all tenants' }}</div></div>
   <div class="tile"><div class="label">Average Secure Score</div>
-    <div class="value">{{ '%.0f%%'|format(summary.avg_score) if summary.avg_score is not none else '–' }}</div>
+    <div class="value{{ ' has-spark' if summary.score_trend }}"><span>{{ '%.0f%%'|format(summary.avg_score) if summary.avg_score is not none else '–' }}</span>{% if summary.score_trend %}{{ sparkline(summary.score_trend.values, label=summary.score_trend.label)|safe }}{% endif %}</div>
     <div class="foot">{% if summary.scored %}across {{ summary.scored|plural('tenant') }} with a score{% else %}no scores collected yet{% endif %}</div></div>
 </div>
 
@@ -60,8 +60,8 @@
     <tr data-name="{{ t.name|lower }} {{ t.tenant_ref|lower }}">
       <td><a class="strong" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
       <td data-label="Open findings">{% if t.consented_at %}{{ sev_counts(row.counts) }}{% else %}<span class="faint">–</span>{% endif %}</td>
-      <td class="num" data-label="Secure Score">{{ kpi(row, 'secure_score.pct', '%') }}</td>
-      <td class="num" data-label="Users with MFA">{{ kpi(row, 'mfa.registered_pct', '%') }}</td>
+      <td class="num" data-label="Secure Score">{{ kpi(row, 'secure_score.pct', '%', spark=true) }}</td>
+      <td class="num" data-label="Users with MFA">{{ kpi(row, 'mfa.registered_pct', '%', spark=true) }}</td>
       <td class="num" data-label="Licence waste / mo">{{ kpi(row, 'waste', 'money') }}</td>
       <td data-label="Data"><span class="pill {{ row.health[0] }}" {% if row.health[2] %}title="{{ row.health[2] }}"{% endif %}>{{ row.health[1] }}</span></td>
       <td data-label="Monthly review">{% if t.consented_at %}<span class="row-actions">
@@ -74,7 +74,7 @@
   </table>
   </div>
 </div>
-<p class="footnote">The small figure after a value (such as +2) is its change over the last 4 weeks: green is better, red is worse. Licence waste counts licences that are unassigned or held by disabled or inactive users, priced under <em>Licence prices</em>.</p>
+<p class="footnote">The line beside a figure is its last 90 days. The small figure after a value (such as +2) is its change over the last 4 weeks: green is better, red is worse. Licence waste counts licences that are unassigned or held by disabled or inactive users, priced under <em>Licence prices</em>.</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}

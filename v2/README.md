@@ -75,6 +75,8 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   filtered by the values in it (or by age, for dates), sorted, and have columns
   hidden; headers stay visible while scrolling, and the view can be saved by
   name and reused on any tenant. Downloads contain the rows and columns shown.
+  The busiest tables have a bar chart that follows the filters (click a bar for
+  its rows), and headline figures carry a line of their last 90 days.
   Every headline number opens the rows behind it, here and on All tenants:
   - *Mail forwarding*: every forward (admin-set or inbox rule), and the
     outbound spam policies and remote domains that allow or block it.
@@ -86,6 +88,20 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     be signed in to, their last sign-in, who has access, and their size.
   - *Mailbox size*: each mailbox's size against its send quota
     (`Get-MailboxStatistics`), with mailboxes over 90% flagged.
+  - *Mailbox size trend*: each mailbox's growth over one and three months
+    from Office Sentry's own kept snapshots, the date each will fill at that
+    rate, and the tenant's total month by month.
+  - *Automatic replies*: mailboxes sending an out-of-office reply (Graph,
+    `MailboxSettings.Read`), who outside hears it, and replies on for over 30
+    days on an active account, dated from the kept snapshots.
+  - *Mobile devices*: phones and tablets syncing mail (`Get-MobileDevice` and
+    `Get-MobileDeviceStatistics`), with which app and when each last synced;
+    leavers' devices still connected, ones waiting for approval and ones
+    unused for 90 days come first.
+  - *Distribution lists*: members, owners and who outside can mail each list,
+    with empty, ownerless and unused lists flagged. How much mail each gets is
+    counted from the message trace (`Get-MessageTraceV2`, read 10 days at a
+    time from where the last run stopped) and kept per day for 90 days.
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.
@@ -123,6 +139,14 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   - *Apps and consents*: third-party apps with what they were granted
     (application permissions, tenant-wide and per-user consent), and app
     registration secrets or certificates expiring.
+  - *Unused apps*: every app from outside Microsoft with when it last signed
+    in (signing people in, on its own, or called as an API), from Entra ID's
+    app sign-in activity (needs Entra ID P1). Apps unused for 90 days that
+    still hold application permissions or consent are flagged.
+  - *All users*: every account with its department, job title, manager,
+    licences, source (cloud or synced) and last sign-in; each manager with
+    their direct reports; member counts by department. Accounts reporting to
+    a manager whose sign-in is blocked are flagged.
   - *Conditional Access coverage*: every policy in plain words, and for each
     account which enforced policy requires MFA, whether legacy sign-in is
     blocked, and which policies exclude it (group membership expanded).
@@ -157,6 +181,9 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
     enabled owner or a single one, every team and group with its owners,
     members and guests, every guest in a team or group, and counts of security
     groups and distribution lists.
+  - *Empty, nested and dynamic groups*: groups with no members, security
+    groups and distribution lists that contain other groups (and how many
+    levels deep), and dynamic groups with their rule, flagging paused ones.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS. SPF checks also catch multiple records,
     +all/?all, the ptr mechanism and includes that publish no SPF record;

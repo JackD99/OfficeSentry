@@ -71,6 +71,10 @@ USES: tuple[Use, ...] = (
         "Check the client's bill against the tenant: products, quantities, prices, trials and suspended "
         "subscriptions, and licence assignment errors.",
         ("subscriptions", "licences")),
+    Use("cleanup", "Directory clean-up",
+        "What nobody uses any more: stale accounts, apps unused for months that still hold permissions, empty and "
+        "nested groups, managers who have left, and what's in the recycle bin.",
+        ("inactive", "unused-apps", "group-structure", "all-users", "apps", "deleted-items", "devices")),
 )
 
 

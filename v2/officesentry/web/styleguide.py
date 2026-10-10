@@ -17,7 +17,7 @@ from flask import Blueprint, render_template, request, url_for
 
 from ..reports import summary, views
 from ..reports.branding import contrast
-from ..reports.data_reports import DataReport, Highlight, Link, Section, Tile
+from ..reports.data_reports import Chart, DataReport, Highlight, Link, Section, Tile, Trend
 from .access import roles_required
 from .printing import pdf_response
 
@@ -113,7 +113,8 @@ def _report() -> DataReport:
               ["Carla Ruiz", "Clinical", "Passkey", "Never", 1],
               ["Dev Patel", "IT", "Not registered", day, 3]],
         flags=["high", None, None, "critical"], flag_name="Risk", filter_columns=("Department", "MFA"),
-        intro="Everyone with a mailbox or a licence. Flagged rows need a look.")
+        intro="Everyone with a mailbox or a licence. Flagged rows need a look.",
+        chart=Chart("MFA", ("Licences",), title="Licences by MFA method"))
     files = Section(
         "Shared files", ["Site", "File", "Shared with"],
         rows=[["Finance", Link("Budget 2027.xlsx", "https://contoso.example/budget"), "Anyone with the link"],
@@ -124,7 +125,9 @@ def _report() -> DataReport:
         key="styleguide", title="Example report", description="Made-up rows for the style guide.",
         tenant={"id": 0, "name": _tenant().name, "tenant_ref": _tenant().tenant_ref}, generated_at=now,
         sections=[people, files], sources=[("Users", now.strftime("%Y-%m-%dT%H:%M:%SZ")), ("Sharing", None)],
-        tiles=[Tile("Accounts", 4, "1 without a licence"), Tile("Without MFA", 2, "of 4", tone="bad"),
+        tiles=[Tile("Accounts", 4, "1 without a licence",
+                    trend=Trend([3, 3, 3, 4, 4, 4, 4], "3", "4", "12 Jul 2026")),
+               Tile("Without MFA", 2, "of 4", tone="bad", trend=Trend([4, 4, 3, 3, 3, 2, 2], "4", "2", "12 Jul 2026")),
                Tile("Shared files", 3, tone="warn"), Tile("Passkeys", "25%", tone="ok")],
         highlights=[Highlight("Admins without MFA", 1, tone="bad"), Highlight("Guests", 0, tone="ok")],
         notes=["Sign-in times need an Entra ID P1 licence; two people have none."])
@@ -162,7 +165,7 @@ def report_components_pdf():
 
 
 def _report_context() -> dict:
-    return {"report": _report(), "actions": _actions(), "verdicts": [
+    return {"report": views.figures(_report()), "actions": _actions(), "verdicts": [
         summary.Verdict(tone="critical", label="Needs action", headline="Two people can sign in with a password"
                         " alone, one of them an admin."),
         summary.Verdict(tone="high", label="Attention", headline="Files are shared outside the company."),

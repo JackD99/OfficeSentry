@@ -30,6 +30,8 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
 ### New Microsoft permissions
 
 None. The sign-in and directory audit logs were already read; they're now read incrementally and kept.
+The new Exchange reports use more read-only `Get-` cmdlets under the Global Reader role clients already
+assign, and automatic replies use `MailboxSettings.Read`, already granted, so no client approves again.
 
 ### Database upgrade
 
@@ -81,6 +83,13 @@ fill in as the worker gets to each tenant; until then the pages build them as be
   Questions Microsoft 365 can't answer (backups, firewalls, plans) show a text to complete, with the
   missing parts in brackets; an answer written once fills every form that asks it. Downloads: a PDF answer
   sheet, XLSX, CSV and plain text per form.
+- Charts on the busiest report tables (sign-ins by country and by app, licences, MFA methods, admin roles,
+  security gaps, device compliance, mailbox and site storage): each bar opens the rows behind it, and the
+  chart follows the table's filters, on the page and in the PDF.
+- Small trend lines beside headline figures (the last 90 days) on the dashboard, the detail reports and
+  the monthly review's key figures.
+- The SharePoint storage report has a chart of storage over time with where it's heading at the last 30
+  days' rate, up to the date it reaches the tenant's storage limit.
 - The Admin activity report covers the last 12 months of kept history, each person's page shows their
   sign-ins by month and admin changes from it, and What changed lists admin changes with their own dates.
 - Scheduled emails can send saved views: a report with your filters, columns and sort, as a PDF, XLSX or
@@ -97,6 +106,21 @@ fill in as the worker gets to each tenant; until then the pages build them as be
   from an executive summary, a full review, a licensing review or a blank page. A design works for every
   tenant (a block with nothing to show for a client is left out), opens from the tenant's Reports tab as a
   page and a PDF, and a report plan or email schedule can send it like the monthly review.
+- Four Exchange reports (Reports → Email): **Mobile devices** (phones and tablets syncing mail, with which
+  app, when each last synced, leavers' devices still connected and ones waiting for approval),
+  **Automatic replies** (who is sending an out-of-office reply, who outside hears it, and replies on so
+  long they look forgotten), **Distribution lists** (members, owners, outside senders, and empty,
+  ownerless or unused lists, from a count of the message trace kept per day) and **Mailbox size trend**
+  (each mailbox's growth over one and three months from Office Sentry's own snapshots, and when it will
+  fill up). If the message trace isn't available to the app, lists show without activity and say why.
+- Unused apps report: every app from outside Microsoft with when it last signed in (from Entra ID's app
+  sign-in activity, which needs Entra ID P1), flagging apps unused for 90 days that still hold permissions.
+- All users report: every account with its department, job title, manager, licences and last sign-in, each
+  manager with their direct reports, member counts by department, and accounts reporting to a manager whose
+  sign-in is blocked.
+- Empty, nested and dynamic groups report: groups with no members, groups inside other groups (and how many
+  levels deep), and dynamic groups with their rules, flagging paused ones.
+- A "Directory clean-up" job on the Reports page that groups these with Inactive accounts and the recycle bin.
 
 ### Changed
 

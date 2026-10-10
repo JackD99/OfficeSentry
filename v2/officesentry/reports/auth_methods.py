@@ -35,7 +35,7 @@ from ..devices import parse_ts
 from ..licences import last_sign_in
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .data_reports import DataReport, Highlight, Rows, Section
+from .data_reports import Chart, DataReport, Highlight, Rows, Section
 from .identity_reports import P1, Registration, _label, _roles
 from .registry import report
 
@@ -132,6 +132,7 @@ def _people(users: list[dict], reg: Registration, role_names: dict[str, list[str
     spread = Section("Strongest method", ["Strength", "People", "Admins", "Share of members", "What it means"],
                      intro="Each enabled member counted once, by the strongest method they have.",
                      empty="No enabled members.")
+    spread.chart = Chart("Strength", ("People",), ranked=False)
     for tier in (*TIERS, NO_SECOND_FACTOR, UNKNOWN):
         n, admins = counts[tier]
         if tier == UNKNOWN and not n:
@@ -143,6 +144,7 @@ def _people(users: list[dict], reg: Registration, role_names: dict[str, list[str
     registered = Section("Methods registered", ["Method", "Strength", "People", "Admins"],
                          intro="How many enabled members have each method. People usually have more than one.",
                          empty="Nobody has registered a sign-in method yet, or registration hasn't been read.")
+    registered.chart = Chart("Method", ("People",))
     order = {t: i for i, t in enumerate((*TIERS, RESET_ONLY))}
     for name, (tier, n, admins) in sorted(methods.items(), key=lambda m: (order.get(m[1][0], 9), -m[1][1], m[0])):
         registered.add([name, tier, n, admins], "low" if tier == PHONE else None)

@@ -76,6 +76,9 @@ def test_pdf_chart_colours_match_the_tokens():
     assert charts.STATUS_FILL["ok"] == light["ok-fill"] and charts.STATUS_FILL["none"] == light["none-fill"]
     assert charts.TRACK == light["chart-track"]
     assert f'stroke="{light["chart-grid"]}"' in charts.GRID and f'stroke="{light["chart-series"]}"' in charts.SERIES
+    # Bar chart series, in their fixed order, and the failure and remainder parts.
+    assert [charts.TONE_FILL[t] for t in ("1", "2", "3")] == [light["chart-series"], light["chart-2"], light["chart-3"]]
+    assert charts.TONE_FILL["bad"] == light["sev-critical-fill"] and charts.TONE_FILL["muted"] == light["sev-low-fill"]
 
 
 def test_app_and_report_css_define_no_colour_tokens_of_their_own():
