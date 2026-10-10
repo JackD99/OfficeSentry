@@ -31,6 +31,20 @@ Which files become pages is the `SECTIONS` list at the top of `build.py`:
 `assets/site.css` the styles (the same colours as the app, light and dark). Screenshots come from
 `docs/screenshots/` (made by `v2/scripts/screenshots.py`), so the page shows the app as it is.
 
+## How the screenshots and example reports stay current
+
+Every time the Deploy workflow updates the website, it first runs `v2/scripts/screenshots.py` on that
+code: it fills a throwaway portal with the fictional demo data, then retakes every screenshot and example
+report before building the site. So the site always shows what's on `main`, new pages included, with
+nothing to commit. If that step fails, the deploy carries on with the copies in the repository.
+
+The copies in `docs/screenshots/` and `examples/` are what GitHub shows in the README. Refresh them in a
+pull request that changes how pages look (`python scripts/screenshots.py` in `v2/`).
+
+To show a new page on the site, add a `Shot` to `SHOTS` in `v2/scripts/screenshots.py`, run it once so the
+image exists, and use it in `templates/home.html` with `shot('name', 'alt text')`. If the page needs data
+the demo doesn't have, add it to `v2/scripts/demo_data.py`, which the public demo uses too.
+
 ## Trying it on your computer
 
 ```bash
