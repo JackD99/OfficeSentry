@@ -286,6 +286,11 @@ def sparkline(values: list[float], *, label: str, width: int = 72, height: int =
     if len(values) < 3:
         return ""
     lo, hi = min(values), max(values)
+    # A small wobble shouldn't fill the height: the range is at least a fifth of the largest value.
+    floor = 0.2 * max(abs(lo), abs(hi))
+    if hi - lo < floor:
+        mid = (hi + lo) / 2
+        lo, hi = mid - floor / 2, mid + floor / 2
     span = (hi - lo) or 1
     pad = 3
 

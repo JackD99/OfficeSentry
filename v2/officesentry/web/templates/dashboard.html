@@ -4,7 +4,7 @@
 {% block title %}Tenants · Office Sentry{% endblock %}
 {% macro kpi(row, key, unit='', spark=false) -%}
 {% set k = row.kpis[key] %}
-{% if k.value is none %}<span class="faint">–</span>{% else %}<span class="kpi-cell">{% if spark and k.spark_label %}{{ sparkline(k.spark, label=row.tenant.name ~ ': ' ~ k.spark_label, width=56, height=18)|safe }}{% endif %}<span>{{ k.value|money(currency) if unit == 'money' else '%g'|format(k.value) ~ unit }}{% if k.delta %} <span class="delta {{ k.trend }} tiny">{{ '%+g'|format(k.delta) }}</span>{% endif %}</span></span>{% endif %}
+{% if k.value is none %}<span class="faint">–</span>{% else %}<span class="kpi-cell"><span>{{ k.value|money(currency) if unit == 'money' else '%g'|format(k.value) ~ unit }}{% if k.delta %} <span class="delta {{ k.trend }} tiny">{{ '%+g'|format(k.delta) }}</span>{% endif %}</span>{% if spark and k.spark_label %}{{ sparkline(k.spark, label=row.tenant.name ~ ': ' ~ k.spark_label, width=64, height=16)|safe }}{% endif %}</span>{% endif %}
 {%- endmacro %}
 {% block content %}
 <div class="page-head">
