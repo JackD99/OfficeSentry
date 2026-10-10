@@ -13,11 +13,13 @@
 </div>
 {%- endmacro %}
 
-{# A KPI tile. value: preformatted string or none; delta_text: preformatted change; trend: better|worse|flat #}
-{% macro kpi(label, value, delta_text='', trend='flat', note='', meter_value=none) -%}
+{# A KPI tile. value: preformatted string or none; delta_text: preformatted change; trend: better|worse|flat;
+   spark: values for a sparkline beside the value (three or more), spark_label: what it shows, in words #}
+{% macro kpi(label, value, delta_text='', trend='flat', note='', meter_value=none, spark=none, spark_label='') -%}
+{% set line = sparkline(spark, label=spark_label) if spark and value is not none else '' %}
 <div class="kpi">
   <div class="label">{{ label }}</div>
-  {% if value is none %}<div class="value none">Not available</div>{% else %}<div class="value">{{ value }}</div>{% endif %}
+  {% if value is none %}<div class="value none">Not available</div>{% else %}<div class="value{{ ' has-spark' if line }}"><span>{{ value }}</span>{{ line|safe }}</div>{% endif %}
   {% if meter_value is not none %}{{ meter(meter_value, color=brand.accent)|safe }}{% endif %}
   {% if delta_text %}<div class="delta {{ trend }}">{{ delta_text|safe }}</div>{% endif %}
   {% if note %}<div class="note">{{ note }}</div>{% endif %}
@@ -57,11 +59,12 @@
 
 {% macro meta(label, value) -%}<div><dt>{{ label }}</dt><dd>{{ value|string|breakable }}</dd></div>{%- endmacro %}
 
-{# A headline figure for document-style reports (detail, rollup, changes). tone: ok | warn | bad #}
-{% macro figure(label, value, foot='', tone=none) -%}
+{# A headline figure for document-style reports (detail, rollup, changes). tone: ok | warn | bad;
+   trend: a data_reports.Trend for a sparkline beside the value. #}
+{% macro figure(label, value, foot='', tone=none, trend=none) -%}
 <div class="kpi{% if tone %} tone-{{ tone }}{% endif %}">
   <div class="label">{{ label }}</div>
-  <div class="value{% if value is string and value|length > 9 %} wordy{% endif %}">{{ value }}</div>
+  <div class="value{% if value is string and value|length > 9 %} wordy{% endif %}{{ ' has-spark' if trend }}"><span>{{ value }}</span>{% if trend %}{{ sparkline(trend.values, label=trend.label)|safe }}{% endif %}</div>
   {% if foot %}<div class="note">{{ foot }}</div>{% endif %}
 </div>
 {%- endmacro %}

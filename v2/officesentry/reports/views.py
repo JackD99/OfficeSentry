@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from urllib.parse import urlencode
 
+from . import charts
 from .data_reports import FLAG_ORDER, DataReport, Many, Rows, Section
 
 PARAMS = ("f", "age", "hide", "sort")
@@ -318,9 +319,9 @@ def describe(report: DataReport, view: View) -> list[str]:
 
 
 def apply(report: DataReport, view: View) -> DataReport:
-    """A copy of the report with the view applied to its tables, for downloads."""
+    """A copy of the report with the view applied to its tables (and their charts drawn), for downloads."""
     if not view or not report.sections:
-        return report
+        return figures(report)
     out = copy.copy(report)
     today = report.generated_at.date()
     out.sections = []
@@ -334,9 +335,142 @@ def apply(report: DataReport, view: View) -> DataReport:
             intro=section.intro, empty="No rows match the filters." if section.rows else section.empty,
             compare=section.compare, flag_name=section.flag_name, group=section.group,
             group_ids=section.group_ids, filter_columns=section.filter_columns,
-            keys=[section.keys[r] for r in rows] if section.keys else [], review=section.review))
+            keys=[section.keys[r] for r in rows] if section.keys else [], review=section.review,
+            chart=section.chart, figure=chart(section, table, rows)))
     out.filtered = describe(report, view)
     return out
+
+
+def figures(report: DataReport) -> DataReport:
+    """The report with each table's chart drawn for a download (no view: every row)."""
+    for table, section in zip(table_slugs(report), report.sections, strict=True):
+        if section.chart and not section.figure:
+            section.figure = chart(section, table, list(range(len(section.rows))))
+    return report
+
+
+# -- Charts that follow the table ------------------------------------------------------------
+
+
+def _amount(cell) -> tuple[float, str] | None:
+    """A number cell as ``(value, kind)``: kind is "count", "size", "money" or "number"; None if it isn't one."""
+    if hasattr(cell, "currency"):  # identity_reports.Money
+        return float(cell), "money"
+    if isinstance(cell, int) and not isinstance(cell, bool):
+        return float(cell), "count"
+    if _is_number(cell):
+        return float(cell), "number"
+    text = str(cell).strip()
+    m = _SIZE.match(text)
+    if m:
+        try:
+            return float(m[1].replace(",", "")) * _SIZES[m[2]], "size"
+        except ValueError:
+            return None
+    if re.fullmatch(r"\d{1,3}(,\d{3})*|\d+", text):
+        return float(text.replace(",", "")), "count"
+    return None
+
+
+def _shown(value: float, kind: str, like=None) -> str:
+    if kind == "size":
+        from .sharepoint import size
+        return size(value)
+    if kind == "money" and like is not None:
+        return str(type(like)(value, like.currency))
+    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.1f}"
+
+
+def chart(section: Section, table: str, rows: list[int], view: View | None = None, path: str = "") -> str:
+    """The section's chart (``Section.chart``) of the given rows, which are the ones the view leaves.
+
+    With a ``view`` (the page), each bar links to the table filtered to its value, or back to every row
+    when it's the filter already; without one (a PDF) the bars are plain.
+    """
+    spec = section.chart
+    if spec is None or not rows:
+        return ""
+    slugs = column_slugs(section)
+    flags = section.flags or [None] * len(section.rows)
+    if spec.by == FLAG:
+        column, name = FLAG, section.flag_name
+    elif spec.by in section.columns:
+        at = section.columns.index(spec.by)
+        column, name = slugs[at], spec.by
+    else:
+        return ""
+    measures = [section.columns.index(c) for c in spec.series if c in section.columns]
+    total_at = section.columns.index(spec.total) if spec.total in section.columns else None
+    sums: dict[str, list[float]] = {}
+    shown_totals: dict[str, float] = {}
+    kind, like = "count", None
+    for r in rows:
+        keys = [flags[r] or "none"] if column == FLAG else values_of(section.rows[r][at])
+        amounts = []
+        for i in measures:
+            got = _amount(section.rows[r][i])
+            amounts.append(got[0] if got else 0.0)
+            if got and got[1] != "count":
+                kind, like = got[1], section.rows[r][i] if got[1] == "money" else like
+        stated = _amount(section.rows[r][total_at]) if total_at is not None else None
+        for key in dict.fromkeys(keys):
+            totals = sums.setdefault(key, [0.0] * max(len(measures), 1))
+            for n, amount in enumerate(amounts or [1.0]):
+                totals[n] += amount
+            if stated:
+                shown_totals[key] = shown_totals.get(key, 0.0) + stated[0]
+    if not measures:
+        kind = "count"
+    order = list(sums)
+    if spec.ranked:
+        order.sort(key=lambda k: (-(shown_totals.get(k, 0.0) if total_at is not None else sum(sums[k])),
+                                  str(k).lower()))
+    shown, rest = order[:spec.top], order[spec.top:]
+    wanted = view.filters.get((table, column), []) if view is not None else []
+    series = [(c, tone) for c, tone in zip([section.columns[i] for i in measures], spec.tones, strict=False)]
+
+    def value(keys: list[str], totals: list[float]) -> float:
+        return sum(shown_totals.get(k, 0.0) for k in keys) if total_at is not None else sum(totals)
+
+    def detail(label: str, keys: list[str], totals: list[float]) -> str:
+        head = f"{label}: "
+        if total_at is not None:
+            head += f"{_shown(value(keys, totals), kind, like)} {spec.total.lower()}: "
+        if not measures:
+            return head + plural_rows(int(totals[0]))
+        if len(measures) == 1 and total_at is None:
+            return head + _shown(totals[0], kind, like)
+        return head + ", ".join(f"{_shown(v, kind, like)} {c.lower()}" for v, (c, _) in zip(totals, series,
+                                                                                            strict=False))
+
+    if total_at is not None and measures:  # what the series leave of the stated total, as a grey "Other" part
+        left = {k: max(shown_totals.get(k, 0.0) - sum(sums[k]), 0.0) for k in sums}
+        if any(v > 0.005 * max(shown_totals.values(), default=0) for v in left.values()):
+            for k in sums:
+                sums[k] = [*sums[k], left[k]]
+            series.append((spec.rest, "muted"))
+
+    items = []
+    for key in shown:
+        label = FLAGS.get(key, key) if column == FLAG else (key or "Blank")
+        href = link(path, view.toggle_value((table, column), key), anchor(table)) if view is not None else ""
+        items.append(charts.Bar(label, sums[key], _shown(value([key], sums[key]), kind, like), href, key in wanted,
+                                detail(label, [key], sums[key])))
+    if rest and spec.other:
+        totals = [sum(sums[k][n] for k in rest) for n in range(len(sums[rest[0]]))]
+        label = f"Other ({len(rest)})"
+        items.append(charts.Bar(label, totals, _shown(value(rest, totals), kind, like),
+                                detail=detail(label, rest, totals)))
+    title = spec.title or f"By {name.lower() if name != name.upper() else name}"
+    if not spec.title and title.lower() in section.title.lower():  # "Sign-ins by country" says it already
+        title = ""
+    return charts.bars(items, label=f"{section.title}: {title}" if title else section.title,
+                       series=series if len(series) > 1 else None,
+                       title=title)
+
+
+def plural_rows(n: int) -> str:
+    return f"{n:,} row" if n == 1 else f"{n:,} rows"
 
 
 # -- What the page draws ----------------------------------------------------------------
@@ -403,6 +537,7 @@ class TableView:
     # the group column is then left out of the rows, since the heading says it.
     groups: list[Group] = field(default_factory=list)
     group_column: Column | None = None
+    chart: str = ""  # the section's chart of the rows shown, each bar opening its rows
 
     @property
     def visible(self) -> list[Column]:
@@ -513,7 +648,8 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
         section, table, columns, flag,
         rows=[([section.rows[r][i] for i in visible], flags[r]) for r in rows],
         chips=chips, clear_href=link(path, view.without_filters(table), anchor(table)),
-        show_all_href=link(path, view.showing_all(table), anchor(table)), keys=keys)
+        show_all_href=link(path, view.showing_all(table), anchor(table)), keys=keys,
+        chart=chart(section, table, rows, view, path))
     if section.group in section.columns and table not in view.sorts:
         at = section.columns.index(section.group)
         tv.group_column = columns[at]

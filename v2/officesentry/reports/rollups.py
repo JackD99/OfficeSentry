@@ -371,7 +371,7 @@ def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, la
             out = sections.get(s.title)
             if out is None:
                 out = sections[s.title] = Section(s.title, [TENANT, *s.columns], intro=s.intro, empty=s.empty,
-                                                  compare=s.compare)
+                                                  compare=s.compare, chart=s.chart)
             cell = UserLink(t["name"], f"{href(t)}#{views.anchor(slug)}") if href else t["name"]
             totals[s.title] += len(s.rows)
             room = max(MAX_ROWS - len(out.rows), 0)
@@ -392,7 +392,7 @@ def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, la
 
 def one_table(rows: AllRows, title: str, view: views.View | None = None) -> DataReport:
     """The combined report narrowed to one table, with a table view applied, for downloads."""
-    report = views.apply(rows.report, view) if view else rows.report
+    report = views.apply(rows.report, view or views.View())
     out = copy.copy(report)
     out.sections = [s for s in report.sections if s.title == title]
     out.title = f"{report.title}: {title}" if title != report.title else report.title

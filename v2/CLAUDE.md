@@ -182,6 +182,14 @@ needing goes in those lists.
 - Report builders in `reports/` return plain data; templates and
   `reports/export.py` only format it. Charts are server-side SVG
   (`reports/charts.py`) so the PDF matches the page.
+- A table's chart is declared on its `Section`: `chart=Chart("<column>",
+  ("<series column>", ...), total=..., title=...)` (`data_reports.Chart`).
+  `views.chart` draws it from the rows the view leaves, each bar linking to
+  the table filtered to its value; downloads get it as `Section.figure`
+  (`views.apply`/`figures`). Series colours come in a fixed order (tokens
+  `--chart-series`, `--chart-2`, `--chart-3`, `charts.TONE_FILL`), three at
+  most, with a legend. A `Tile` or `Highlight` takes
+  `trend=metric_trend(snap, "<metric key>", now)` for a 90-day sparkline.
 - Per-person Microsoft 365 usage lives in `usage.py`: `usage.person(snap, upn)`
   returns one account's last activity and use per service (keys in
   `usage.SERVICES`), Office apps by platform, installs and activity counts, for

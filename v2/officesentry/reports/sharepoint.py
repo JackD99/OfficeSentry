@@ -6,14 +6,16 @@ Builders read the snapshots written by ``collectors/sharepoint.py`` and fill a
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime, timedelta
 
 from .. import store
 from ..devices import parse_day
 from ..snapshot import TenantSnapshot
+from ..storage import tenant_storage
 from ..text import plural
 from .charts import line_chart
-from .data_reports import DataReport, Link, Rows, Section, Tile, _date
+from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date, metric_trend
 from .registry import report
 
 INACTIVE_DAYS = 90
@@ -109,14 +111,37 @@ def storage_points(snap: TenantSnapshot, area: str) -> list[tuple[date, float]]:
     return sorted(points.items())
 
 
-def storage_chart(points: list[tuple[date, float]], label: str) -> str:
+def storage_chart(points: list[tuple[date, float]], label: str, now: datetime | None = None,
+                  quota: float | None = None) -> str:
+    """Storage over time. With ``now``, the line carries on dashed at the last ``GROWTH_DAYS`` days' rate (to
+    when it reaches ``quota``, at most a year ahead, or three months without a quota), and the quota is a line."""
     if len(points) < 2:
         return ""
-    top = max(v for _, v in points)
+    ahead = forecast(points, now, quota) if now else []
+    top = max([v for _, v in points] + [v for _, v in ahead] + ([quota] if quota else []))
     unit, div = next(((u, d) for u, d in ((" TB", 1024 ** 4), (" GB", 1024 ** 3), (" MB", 1024 ** 2))
                       if top >= d), (" MB", 1024 ** 2))
-    scaled = [(d, round(v / div, 2 if top / div < 10 else 1)) for d, v in points]
-    return line_chart(scaled, label=label, unit=unit, y_max=nice_max(top / div))
+    digits = 2 if top / div < 10 else 1
+    scaled = [(d, round(v / div, digits)) for d, v in points]
+    return line_chart(scaled, label=label, unit=unit, y_max=nice_max(top / div),
+                      forecast=[(d, round(v / div, digits)) for d, v in ahead],
+                      limit=(round(quota / div, digits), "Storage limit") if quota else None)
+
+
+def forecast(points: list[tuple[date, float]], now: datetime, quota: float | None = None) -> list[tuple[date, float]]:
+    """Where storage is heading at the last ``GROWTH_DAYS`` days' rate: the point it reaches ``quota`` within a
+    year, else a year ahead (three months without a quota). None when it isn't growing or the history is short."""
+    growth = _growth(points, now)
+    if not growth or growth <= 0:
+        return []
+    last_day, last = points[-1]
+    per_day = growth / GROWTH_DAYS
+    days = 365 if quota else 91
+    if quota and last < quota:
+        days = min(days, max(math.ceil((quota - last) / per_day), 1))
+    elif quota:
+        return []
+    return [(last_day + timedelta(days=days), last + per_day * days)]
 
 
 def nice_max(value: float) -> float:
@@ -188,12 +213,16 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         Tile("Sites", len(user_sites), f"plus {plural(len(rows) - len(user_sites), 'system site')}",
              rows=Rows("All sites", {"Type": sorted({site_type(r) for r in user_sites})})),
         Tile("Storage used", size(total), (f"{_signed_size(growth)} in {GROWTH_DAYS} days"
-                                           if growth is not None else ""), rows=Rows("All sites")),
-        Tile("Anyone links", anyone, "No sign-in needed to open", "bad" if anyone else "ok", SHARED_SITES),
-        Tile("Guest links", guest, "Shared with named people outside", rows=SHARED_SITES),
+                                           if growth is not None else ""), rows=Rows("All sites"),
+             trend=metric_trend(snap, "sharepoint.storage_bytes", now, size)),
+        Tile("Anyone links", anyone, "No sign-in needed to open", "bad" if anyone else "ok", SHARED_SITES,
+             metric_trend(snap, "sharepoint.links.anyone", now)),
+        Tile("Guest links", guest, "Shared with named people outside", rows=SHARED_SITES,
+             trend=metric_trend(snap, "sharepoint.links.guest", now)),
         Tile("Inactive sites", len(stale), f"No activity in {INACTIVE_DAYS} days", "warn" if stale else None),
     ]
-    report.chart = storage_chart(points, "SharePoint storage over time")
+    _, quota = tenant_storage(snap)
+    report.chart = storage_chart(points, "SharePoint storage over time", now, quota.total if quota else None)
     report.chart_title = "SharePoint storage over time"
 
     shared = Section("Sites shared outside the organisation",
@@ -222,6 +251,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                                               f" Growth appears once Office Sentry has {GROWTH_DAYS} days of "
                                               "history."),
                     empty="No sites.")
+    every.chart = Chart("Site", ("Storage",), title="Largest sites")
     for r in sorted(rows, key=lambda r: -r["storageUsed"]):
         prev = (before or {}).get(r["_id"]) if not r.get("concealed") else None
         every.add([site_cell(r), site_type(r), r.get("ownerPrincipalName") or r.get("owner"), size(r["storageUsed"]),
@@ -273,9 +303,10 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     points = storage_points(snap, "onedrive")
     growth = _growth(points, now)
     report.tiles = [
-        Tile("OneDrives", len(rows), rows=Rows("All OneDrives")),
+        Tile("OneDrives", len(rows), rows=Rows("All OneDrives"), trend=metric_trend(snap, "onedrive.accounts", now)),
         Tile("Storage used", size(sum(r["storageUsed"] for r in rows)),
-             f"{_signed_size(growth)} in {GROWTH_DAYS} days" if growth is not None else "", rows=Rows("All OneDrives")),
+             f"{_signed_size(growth)} in {GROWTH_DAYS} days" if growth is not None else "", rows=Rows("All OneDrives"),
+             trend=metric_trend(snap, "onedrive.storage_bytes", now, size)),
         Tile("Belong to people who've left", len(left) if not hidden else "?", "Disabled or deleted accounts",
              "warn" if left else None, Rows("OneDrives of people who've left")),
         Tile("Files shared outside", len({s["_id"] for s in personal if s.get("exposure") in ("anyone", "external")})
@@ -283,7 +314,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
              "Anyone links or people outside" if shared is not None else "Needs the Shared files scan",
              rows=Rows("Sharing by person")),
     ]
-    report.chart = storage_chart(points, "OneDrive storage over time")
+    report.chart = storage_chart(points, "OneDrive storage over time", now)
     report.chart_title = "OneDrive storage over time"
 
     sections = []
@@ -382,12 +413,14 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     org = [i for i in items if i.get("orgLinks")]
     forever = [i for i in anyone if i.get("neverExpires")]
     report.tiles = [
-        Tile("Shared with anyone", len(anyone), "Open without signing in", "bad" if anyone else "ok"),
+        Tile("Shared with anyone", len(anyone), "Open without signing in", "bad" if anyone else "ok",
+             trend=metric_trend(snap, "sharing.anyone_items", now)),
         Tile("Shared with people outside", len(outside), f"{len({p for i in outside for p in i['externalPeople']})} "
                                                          "outside address(es)",
-             rows=Rows("Shared with people outside the organisation")),
+             rows=Rows("Shared with people outside the organisation"),
+             trend=metric_trend(snap, "sharing.external_items", now)),
         Tile("Shared organisation-wide", len(org), "Anyone in the organisation, and Copilot",
-             rows=Rows("Shared with the whole organisation")),
+             rows=Rows("Shared with the whole organisation"), trend=metric_trend(snap, "sharing.org_items", now)),
         Tile("Anyone links with no expiry", len(forever), "These should expire", "warn" if forever else None,
              Rows("Shared with anyone", {"Expires": "Never"})),
     ]

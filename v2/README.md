@@ -75,6 +75,8 @@ Running it on a server is in [DEPLOY.md](DEPLOY.md).
   filtered by the values in it (or by age, for dates), sorted, and have columns
   hidden; headers stay visible while scrolling, and the view can be saved by
   name and reused on any tenant. Downloads contain the rows and columns shown.
+  The busiest tables have a bar chart that follows the filters (click a bar for
+  its rows), and headline figures carry a line of their last 90 days.
   Every headline number opens the rows behind it, here and on All tenants:
   - *Mail forwarding*: every forward (admin-set or inbox rule), and the
     outbound spam policies and remote domains that allow or block it.
