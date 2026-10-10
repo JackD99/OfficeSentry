@@ -187,7 +187,9 @@ needing goes in those lists.
   use them). Rows are per tenant: only ever read them for `scoped_tenants()`.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
-  `Last ...`, `... (UTC)` or containing "change" are ignored as time-driven.
+  `Last ...`, `... (UTC)` or containing "change", and the day counts in
+  `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
+  time-driven; "No check-in for N days" in a cell is compared without its number.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and
