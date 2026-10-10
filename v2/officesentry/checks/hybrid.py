@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .. import (
-    hybrid,
-)
+from .. import hybrid
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Finding, _all_are, _unavailable, rule

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .. import (
-    adminactivity,
-)
+from .. import adminactivity
 from ..snapshot import TenantSnapshot
 from ..text import day, plural
 from .base import Finding, _unavailable, rule

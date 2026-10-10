@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .. import (
-    devices,
-)
+from .. import devices
 from ..snapshot import TenantSnapshot
 from ..text import day, plural
 from .apps import _authorization_policy

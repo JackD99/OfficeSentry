@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .. import (
-    devices,
-)
+from .. import devices
 from ..snapshot import TenantSnapshot
 from ..text import day, every, plural
 from .base import SEVERITY_RANK, Finding, _unavailable, rule

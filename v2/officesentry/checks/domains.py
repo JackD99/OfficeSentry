@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .. import (
-    dnscheck,
-)
+from .. import dnscheck
 from ..snapshot import TenantSnapshot
 from ..text import every, plural, verb
 from .base import Finding, _subjects, _unavailable, rule

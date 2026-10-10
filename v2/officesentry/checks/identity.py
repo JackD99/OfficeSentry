@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .. import (
-    coverage,
-)
+from .. import coverage
 from ..licences import is_stale, last_sign_in, licence_summary, load_prices
 from ..snapshot import TenantSnapshot
 from ..text import day, every, plural, verb
