@@ -28,11 +28,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
 from . import cert_lifecycle, dnscheck, mailer, store
+from .checks import RULES
 from .devices import parse_ts
 from .licences import is_free, sku_name
 from .reports.data_reports import DataReport, Rows, Section, Tile, UserLink
 from .reports.subscriptions import WHAT_HAPPENS
-from .rules import RULES
 from .snapshot import TenantSnapshot
 from .text import day, plural
 

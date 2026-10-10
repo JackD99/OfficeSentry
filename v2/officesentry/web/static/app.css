@@ -433,6 +433,34 @@ ul.ticks li { margin: 3px 0; }
 .gap-list li { margin: var(--space-0-5) 0; }
 .gap-list li.sub { list-style: circle; margin-left: var(--space-3-5); color: var(--muted); }
 .tile .label .dot { margin-right: var(--space-1); vertical-align: 1px; }
+.dot.accent { background: var(--accent); }
+/* Questionnaire answers: the text to paste in a box with its Copy button, then the evidence and what to check. */
+.evidence-sets { flex-wrap: wrap; }
+.copy-bar { display: flex; gap: var(--space-4); align-items: center; justify-content: space-between; padding: var(--space-3-5) var(--space-5); margin-bottom: var(--space-3); }
+.copy-bar button { flex: none; }
+.copy-bar button .icon, .paste .copy .icon { width: 15px; height: 15px; }
+.set-source { margin: 0 0 var(--space-3); }
+.set-source .icon { width: 14px; height: 14px; vertical-align: -2px; margin-right: var(--space-1); }
+.show-filter { margin: 0 0 var(--space-3); }
+.answer-row.qa > .answer { min-width: 104px; }
+.answer-main .ref { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; margin-right: var(--space-0-5); }
+.answer-main .autofail { margin-left: var(--space-1); vertical-align: 1px; }
+.paste { display: flex; gap: var(--space-2); align-items: flex-start; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-2-5) var(--space-2-5) var(--space-2-5) var(--space-3-5); margin: var(--space-1) 0; }
+.paste-text { flex: 1; min-width: 0; margin: 0; line-height: 1.55; white-space: pre-line; }
+.paste .copy { flex: none; }
+.paste .copy.copied, .copy-bar button.copied { color: var(--ok); }
+mark.blank { background: var(--warn-soft); color: var(--text); border-radius: 3px; padding: 0 2px; }
+.qa.needs-input .paste { border-style: dashed; }
+.answer-main .still { display: flex; gap: var(--space-1-5); align-items: baseline; color: var(--text-2); }
+.answer-main .still .icon { width: 14px; height: 14px; flex: none; color: var(--warn); align-self: center; }
+.answer-main .based-on a { white-space: nowrap; }
+.answer-edit textarea { width: 100%; }
+.qa .answer-edit form { max-width: 720px; }
+@media (max-width: 640px) {
+  .copy-bar { flex-direction: column; align-items: stretch; }
+  .paste { flex-direction: column; }
+  .paste .copy { align-self: flex-end; }
+}
 @media (max-width: 640px) { details.control > summary { flex-direction: column; gap: var(--space-1-5); } .control-body { padding-left: var(--space-5); } }
 
 /* -- Emailed reports ----------------------------------------------------------- */

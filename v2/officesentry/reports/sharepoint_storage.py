@@ -14,6 +14,7 @@ from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import nouns
 from .data_reports import DataReport, Link, Rows, Section, Tile, _date
+from .registry import report
 from .sharepoint import GROWTH_DAYS, _growth, size, storage_points
 
 SHOW_FOLDERS = 50
@@ -84,6 +85,16 @@ def _months_left(free: int, growth: float | None) -> str:
     return f"Full in about {months:.0f} months at {size(growth)} a month"
 
 
+@report(
+    "sharepoint-storage",
+    "SharePoint storage",
+    "What fills the tenant's SharePoint storage and what to clean up: "
+    "sites, folders, large and old files, version history and recycle bins.",
+    ("sharepoint_storage", "tenant_profile", "sharepoint_usage"),
+    group="files",
+    order=20,
+    keywords="quota versions recycle bin large old files cleanup",
+)
 def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("sharepoint_storage", "storage_status") or [None])[0]
     if status is None:
@@ -239,10 +250,3 @@ def storage(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
                        "it updates a few times a day, so they can differ slightly from the admin centre."
                        + (" The tenant's storage is estimated from its licences; the SharePoint admin centre shows "
                           "the exact figure." if quota else ""))
-
-
-REPORTS = {
-    "sharepoint-storage": ("SharePoint storage", "What fills the tenant's SharePoint storage and what to clean up: "
-                           "sites, folders, large and old files, version history and recycle bins.",
-                           ("sharepoint_storage", "tenant_profile", "sharepoint_usage"), storage),
-}
