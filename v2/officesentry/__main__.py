@@ -488,6 +488,7 @@ def cmd_live_test(args, cfg):
             Path(args.record) if args.record else None,
             args.connection,
             args.dns_over_https,
+            Path(args.canary) if args.canary else None,
         )
     )
 
@@ -612,6 +613,12 @@ def main(argv=None):
         "--connection", type=int, help="app connection to link the tenant to (default: the only one, if there's one)"
     )
     live.add_argument("--record", help="save the responses, scrubbed of names, emails and IDs, as a test fixture")
+    live.add_argument(
+        "--canary",
+        metavar="REPORT",
+        help="compare the responses' shape with tests/fixtures/live_tenant.json and write a report "
+        "(Markdown) here; exits 1 if Microsoft changed something",
+    )
     live.add_argument(
         "--dns-over-https",
         action="store_true",
