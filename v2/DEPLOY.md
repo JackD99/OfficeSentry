@@ -125,8 +125,16 @@ to give to an outside service; it never names a tenant.
 
 To let the monitor see *why* it failed, make a monitoring token on
 *Settings → System status* ("Create monitoring token"). The page shows the
-link with the token once; copy it into the monitor's URL. With the token the
-address returns every check as JSON:
+token once; set the monitor to send it as a header,
+`Authorization: Bearer <token>` (in Uptime Kuma, under **Headers**). The token
+only works as that header, never in the address, since addresses end up in
+proxy and monitor logs. To try it:
+
+```
+curl -H "Authorization: Bearer <token>" https://<your domain>/health/ready
+```
+
+With the token the address returns every check as JSON:
 
 ```json
 {"ok": true, "status": "warn", "version": "2.0.0", "checked_at": "2026-10-09T17:40:00Z",
@@ -136,10 +144,8 @@ address returns every check as JSON:
 
 `status` is `ok`, `warn` (needs attention; still 200) or `fail` (503). In
 Uptime Kuma, the **HTTP(s) - Json Query** type with the query `status` and
-expected value `ok` alerts on warnings too. A monitor that can send headers
-can send `Authorization: Bearer <token>` instead of putting the token in the
-address (addresses end up in logs). Replace or remove the token on the same
-page.
+expected value `ok` alerts on warnings too. A monitor that can't send headers
+still gets the 200 or 503. Replace or remove the token on the same page.
 
 **Healthchecks.io** works the other way round: something on the server pings
 it, and it alerts when the pings stop. Add a check with a 5-minute period,

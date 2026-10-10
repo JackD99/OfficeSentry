@@ -26,6 +26,10 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   directory audit events). The `backup` command copies it into an `events` folder next to the database
   copies, and `restore` puts back any file that's missing. If you back up the data volume some other way,
   include `/data/events` ([v2/DEPLOY.md, "Backups"](v2/DEPLOY.md#backups)).
+- **Uptime monitors that put the monitoring token in the address** (`/health/ready?token=...`): the token
+  now only works as a header, since addresses end up in proxy logs. Set the monitor to send
+  `Authorization: Bearer <token>` and take the token out of its URL; until then it sees only whether Office
+  Sentry is ready (200 or 503), not the checks ([v2/DEPLOY.md, "Is it working?"](v2/DEPLOY.md#is-it-working)).
 
 ### New Microsoft permissions
 
