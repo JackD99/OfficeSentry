@@ -34,7 +34,7 @@
 {% else %}
 <div class="card empty">
   <h3>No projects to recommend</h3>
-  <p>{% if not tenant_has_data %}No data has been collected yet.{% elif quick %}Nothing in this tenant's latest data adds up to a project; the quick fixes below cover what's left.{% else %}Nothing in this tenant's latest data calls for one.{% endif %} Findings accepted as a risk don't count.</p>
+  <p>{% if not tenant_has_data %}No data has been collected yet.{% elif quick %}Nothing in this client's latest data adds up to a project; the quick fixes below cover what's left.{% else %}Nothing in this client's latest data calls for one.{% endif %} Findings accepted as a risk don't count.</p>
 </div>
 {% endfor %}
 

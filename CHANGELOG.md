@@ -40,6 +40,16 @@ No.
   the answers for the IASME portal with one-tap copy. Downloads: PDF, Word, plain text, XLSX and CSV. The
   insurance and supplier questionnaires and the insurer controls stay where they were.
 
+### Changed
+
+- **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
+  say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
+  the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
+  Settings, Client tenants is **Client settings** and Tenant groups is **Client groups**. The account
+  manager's home page (was "Clients") is now **Accounts**. Columns headed "Tenant" are now "Client";
+  saved views and bookmarked links that filter or sort on that column keep working. The group digest is
+  now the "Client digest", and its spreadsheet is named `client-digest-...`.
+
 ### Fixed
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
