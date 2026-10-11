@@ -1,10 +1,10 @@
-name: release
-# Publishes a release of v2. Jack starts it: Actions -> release -> Run workflow on main with the version
+name: Release
+# Publishes a release of v2. Jack starts it: Actions -> Release -> Run workflow on main with the version
 # (2.1.0, or 2.1.0-rc.1 for a release candidate), or by pushing a tag such as v2.1.0. In order:
 #   1. the version must match officesentry.__version__ and have a CHANGELOG.md section
-#      (scripts/release_notes.py), and the commit must have passed the full v2 run on main (lint, every
+#      (scripts/release_notes.py), and the commit must have passed the full CI run on main (lint, every
 #      Python, Windows, Docker, audit), which this workflow reuses rather than repeats;
-#   2. the amd64 image (and, once the repository is public, the arm64 one) is built with an SBOM and build
+#   2. the amd64 and arm64 images are built with an SBOM and build
 #      provenance and pushed to GHCR by digest only, so nothing can pull it by name yet, then started once to
 #      check it reports its version;
 #   3. it is scanned for known vulnerabilities that have a fix (high or critical stops the release);
@@ -13,10 +13,8 @@ name: release
 #   5. the GitHub release is created, with the tag (when it doesn't exist yet), the changelog section and the
 #      files needed to install it (a candidate is a pre-release), and images older than the last three
 #      releases are removed from GHCR.
-# About 5 billed minutes a run (2.0.0-rc.1 took 5): GitHub Free gives a private repository 2,000 a month.
-# arm64 images and signed attestations wait for the repository to go public, when GitHub's Arm runners are
-# free and attestations work; under emulation arm64 costs too many minutes. Both check
-# github.event.repository.private, so they switch on by themselves the day the repository is public.
+# The arm64 image and the signed attestations need a public repository (free Arm runners, and attestations
+# work there); both check github.event.repository.private, so a private fork skips them by itself.
 # CONTRIBUTING.md, "Releases", has the steps for a person.
 on:
   push:
@@ -78,7 +76,7 @@ jobs:
         run: |
           passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/v2.yml/runs?head_sha=$GITHUB_SHA&event=push&branch=main&status=success" --jq .total_count)
           if [ "$passed" -lt 1 ]; then
-            echo "::error::Commit $GITHUB_SHA has no passing v2 run on main. Release a commit that is on main once its v2 run has finished green."
+            echo "::error::Commit $GITHUB_SHA has no passing CI run on main. Release a commit that is on main once its CI run has finished green."
             exit 1
           fi
 
