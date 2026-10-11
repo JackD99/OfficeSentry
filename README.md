@@ -471,4 +471,4 @@ its source code under the same licence.
 ## The old v1 portal
 
 The original v1 portal (MSP operations, 365Inspect, PowerShell scripts, AD agent, GDAP management, Graph Explorer)
-has been removed. Its last state is on the `v1-final` branch.
+has been removed, and Office Sentry is now the read-only reporting tool described above.

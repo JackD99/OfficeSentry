@@ -5,6 +5,11 @@ name: CI
 # private fork on GitHub Free, where minutes are limited, pull requests run Python 3.12 only and the Windows
 # job waits for main and the weekly run: the jobs below check github.event.repository.private.)
 #
+# Each Python's tests run in four parts on separate machines at the same time (pytest --shard,
+# tests/conftest.py), and Windows' in three, so a run takes minutes rather than a quarter of an hour. The
+# coverage job then adds up the parts' coverage for the 90% floor and checks that every test ran in exactly
+# one part (scripts/check_shards.py).
+#
 # Pull requests and pushes to main that only touch Markdown, docs/, examples/ or website/ skip the jobs
 # (website.yml builds the site), but "CI passed" always runs and reports, so it can be the one required check
 # on main: it fails when any job failed or was cancelled, and passes when they passed or were skipped for a
@@ -106,7 +111,7 @@ jobs:
         run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=style
 
   test:
-    name: test (Python ${{ matrix.python }})
+    name: test (Python ${{ matrix.python }}, part ${{ matrix.part }} of 4)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
@@ -117,9 +122,15 @@ jobs:
         # Pull requests in the private repo: 3.12 only (the Docker image's Python). Everything else, and every
         # pull request once the repo is public: 3.11, 3.12 and 3.13.
         python: ${{ fromJSON(github.event_name == 'pull_request' && github.event.repository.private && '["3.12"]' || '["3.11", "3.12", "3.13"]') }}
+        # Change PARTS below with this list; the coverage job fails if a part is missing.
+        part: [1, 2, 3, 4]
         include:
           - python: '3.12'  # the Docker image's Python
             coverage: true
+    env:
+      PARTS: 4
+      PART: ${{ matrix.part }}
+      NAME: tests-${{ matrix.python }}-${{ matrix.part }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
@@ -140,14 +151,61 @@ jobs:
           pip install --no-deps --no-build-isolation -e .
           pip check
       - if: ${{ !matrix.coverage }}
-        run: pytest -n auto
-      - name: pytest with coverage (fails under 90%)
+        run: |
+          mkdir -p "$RUNNER_TEMP/part"
+          pytest -n auto --shard "$PART/$PARTS" --shard-list "$RUNNER_TEMP/part/$NAME.json"
+      # Branch coverage on Python 3.12 needs coverage's classic tracer (sys.monitoring only measures branches
+      # from 3.14), which makes these parts the slowest. The coverage job adds the four up.
+      - name: pytest with coverage (the coverage job checks the 90% floor)
         if: ${{ matrix.coverage }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/part"
+          pytest -n auto --shard "$PART/$PARTS" --shard-list "$RUNNER_TEMP/part/$NAME.json" --cov=officesentry --cov-report=
+          mv .coverage "$RUNNER_TEMP/part/$NAME.coverage"
+      - name: Keep this part's test list (and coverage) for the coverage job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ runner.temp }}/part/
+          if-no-files-found: error
+          retention-days: 3
+          overwrite: true  # re-running every job uploads each part again
+
+  # The four parts of each Python's run, added up: every test collected ran in exactly one part, and the
+  # Python 3.12 parts' coverage together meets the floor.
+  coverage:
+    name: Coverage and every test ran
+    needs: [changes, test]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read  # the parts' files, from this run
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install coverage from the dev lock
+        run: |
+          awk '/^coverage==/ {p = 1} p {print} p && !/\\$/ {exit}' requirements-dev.txt > "$RUNNER_TEMP/coverage.txt"
+          pip install --require-hashes --no-deps -r "$RUNNER_TEMP/coverage.txt"
+      - name: Fetch every part's files
         env:
-          COVERAGE_CORE: sysmon
-        run: pytest -n auto --cov=officesentry --cov-report=term:skip-covered --cov-fail-under=90
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'tests-*' --dir "$RUNNER_TEMP/parts"
+      - name: Every test ran in exactly one part
+        run: |
+          set -o pipefail
+          python scripts/check_shards.py "$RUNNER_TEMP/parts" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Coverage of the parts together (fails under 90%)
+        id: combine
+        run: |
+          find "$RUNNER_TEMP/parts" -name '*.coverage' -print0 | xargs -0 coverage combine
+          coverage report --skip-covered --fail-under=90
       - name: Coverage summary
-        if: ${{ matrix.coverage && !cancelled() }}
+        if: ${{ !cancelled() && steps.combine.outcome != 'skipped' }}
         run: |
           {
             echo "### Coverage: $(coverage report --format=total)% (the floor is 90%)"
@@ -165,7 +223,7 @@ jobs:
     # emails). Not required until it has a run of passes.
     # On the weekly and manual runs, and on pull requests once the repo is public: while it's private, Windows
     # minutes count double against GitHub Free's allowance.
-    name: test (Windows, no Pango)
+    name: test (Windows, no Pango, part ${{ matrix.part }} of 3)
     needs: changes
     if: >-
       github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
@@ -173,6 +231,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 25
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
@@ -182,7 +244,7 @@ jobs:
           cache-dependency-path: v2/pyproject.toml
       - run: pip install -e ".[dev]"
       - run: >-
-          pytest -n auto tests/test_foundation.py tests/test_access.py tests/test_login_security.py
+          pytest -n auto --shard ${{ matrix.part }}/3 tests/test_foundation.py tests/test_access.py tests/test_login_security.py
           tests/test_scheduling.py tests/test_backups.py tests/test_serve.py tests/test_recording.py
           tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
           tests/test_user_profile.py tests/test_pages.py tests/test_isolation_walk.py
@@ -289,7 +351,7 @@ jobs:
   ci:
     name: CI passed
     if: always()
-    needs: [changes, lint, test, docker, audit, dco]
+    needs: [changes, lint, test, coverage, docker, audit, dco]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:

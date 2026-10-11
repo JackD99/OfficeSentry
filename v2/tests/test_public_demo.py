@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from officesentry import tenant_groups
 from officesentry.config import load_config
 from officesentry.db import connect
 from officesentry.web import create_app, public_demo
@@ -138,6 +139,32 @@ def test_every_page_opens_for_the_demo_user(demo_app):
         resp = client.get(rule.rule)
         # /health/ready answers 503 by design here: the demo has no worker.
         assert resp.status_code < 500 or rule.endpoint == "health_ready", rule.endpoint
+
+
+def test_visitors_can_pick_a_group(demo_app, db, two_tenants):
+    """Picking a group only changes what the page shows, so it works on the demo too, without a sessions row."""
+    alpha, _ = two_tenants
+    gold = tenant_groups.create(db, {"name": "Gold", "category": "Tier", "description": ""}, "test")
+    tenant_groups.set_members(db, gold, [alpha])
+    client = demo_app.test_client()
+    resp = client.get(f"/?group={gold}")
+    assert resp.status_code == 302 and resp.headers["Location"] == "/"
+    page = client.get("/").get_data(as_text=True)
+    assert "Alpha Ltd" in page and "Bravo Inc" not in page and 'class="group-picker on"' in page
+
+    # The choice follows to the other group-aware pages, as it does for someone signed in, and is this
+    # browser's alone.
+    assert "Bravo Inc" not in client.get("/changes").get_data(as_text=True)
+    assert "Bravo Inc" not in client.get("/across/review").get_data(as_text=True)
+    assert "Bravo Inc" in demo_app.test_client().get("/").get_data(as_text=True)
+    assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
+
+    # ?group=all, or a group that isn't offered, shows every client again.
+    client.get("/?group=all")
+    assert "Bravo Inc" in client.get("/").get_data(as_text=True)
+    client.get(f"/?group={gold}")
+    client.get("/?group=999")
+    assert "Bravo Inc" in client.get("/").get_data(as_text=True)
 
 
 def test_real_portals_are_unaffected(app, client, db, two_tenants):

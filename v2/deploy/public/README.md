@@ -24,7 +24,9 @@ Office Sentry yourself; it's how the project shows itself.
   again, and the demo is new: whatever visitors did is gone and the dates are current again.
 - **Read-only, and never an admin.** With `OFFICESENTRY_PUBLIC_DEMO=1` and a database made by
   `--public`, every visitor is the `demo` analyst without signing in, and anything other than reading is
-  refused with a plain message (`officesentry/web/public_demo.py`). Both switches are needed, so the setting
+  refused with a plain message (`officesentry/web/public_demo.py`). Visitors get no server-side session, so the
+  client group a visitor picks is kept in their own browser's cookie. Both
+  switches are needed, so the setting
   alone does nothing to a real portal, and an admin account called `demo` signs nobody in.
 - **Limits.** The demo gets at most one CPU and 1 GB of memory, so a busy demo can't starve the portal or
   its worker. It can't collect (its tenants aren't real) and sends no email.
@@ -64,16 +66,15 @@ The steps for the project's server, in order. Each takes a minute or two.
 
 ## Keeping them up to date
 
-The website and the demo follow `main` by themselves; the portal only changes when you say so.
+Nothing changes on the server by itself: merges to `main` don't deploy, so they use no Actions minutes
+here.
 
-| What changes on `main` | Website | Demo | Portal |
+| Deploy action | Website | Demo | Portal |
 |---|---|---|---|
-| Docs only (Markdown, `docs/`, `examples/`, `website/`) | straight away | stays | stays |
-| Code, once its tests pass | updated | rebuilt from that commit | only with `AUTO_DEPLOY` set to `true` |
+| **deploy** (a branch, or a release tag such as `v2.2.0`) | updated | rebuilt from that code | updated |
+| **website-and-demo** | updated | rebuilt from that code | stays |
 
-To update the portal, run the Deploy workflow with action **deploy** (it updates the website and the demo
-from the same commit too). With the `AUTO_DEPLOY` variable set to `true`, every merge whose tests pass
-updates the portal as well. Action **website-and-demo** does the automatic update by hand.
+With the `AUTO_DEPLOY` variable set to `true`, every merge whose tests pass runs **deploy** on `main`.
 
 The demo builds from its own copy of the code (`/opt/officesentry/demo-src`), so it can run newer code than
 the portal; the Caddy setup and this compose file come from the portal's copy, so a change to them reaches

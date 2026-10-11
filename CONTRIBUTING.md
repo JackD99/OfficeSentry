@@ -91,7 +91,10 @@ a Docker image build, a dependency audit (`pip-audit`) and a subset on
 Windows. Changes that only touch Markdown, `docs/`, `examples/` or
 `website/` skip the tests, and the **CI passed** check sums it all up. The
 Python 3.12 run measures coverage and fails under 90%;
-`pytest -n auto --cov=officesentry` shows it locally.
+`pytest -n auto --cov=officesentry` shows it locally. To finish in minutes,
+each Python's tests run in four parts on separate machines at once
+(`pytest --shard 2/4` runs the second part; every test is in exactly one),
+and a final check fails unless the parts together ran every test.
 
 - Keep changes small and finished end to end; update `v2/CLAUDE.md` and
   `v2/README.md` in the same pull request when behaviour changes.

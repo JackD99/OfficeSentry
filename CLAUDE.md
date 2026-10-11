@@ -36,5 +36,4 @@ CODE_OF_CONDUCT.md  Contributor Covenant 2.1
 ## History
 
 The v1 portal (Flask MSP console, 365Inspect, PowerShell scripts, AD agent)
-was removed. Its last state is the `v1-final` branch; look there if you
-need to see how v1 did something, but don't bring its code back wholesale.
+was removed, and isn't kept in this repository. Don't bring it back.
