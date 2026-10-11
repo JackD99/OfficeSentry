@@ -101,8 +101,8 @@ class Link:
         return self.href if self.href.lower().startswith("https://") else None
 
 
-class UserLink(str):
-    """An account's name that opens its page in Office Sentry.
+class PageLink(str):
+    """A name that opens a page in Office Sentry: an account's, a mailbox's, a group's or a site's.
 
     A ``str``, so comparisons, sorting and exports treat it as the name. Pages link ``page_href``
     (a path in the portal); ``safe_href`` is None so PDFs and spreadsheets show the name alone.
@@ -115,13 +115,66 @@ class UserLink(str):
         obj.page_href = href
         return obj
 
+    def __getnewargs__(self):  # so copies and pickles keep the link
+        return (str(self), self.page_href)
+
     @property
     def text(self) -> str:
         return str(self)
 
 
+class UserLink(PageLink):
+    """An account's name that opens its page."""
+
+
 def user_path(tenant_id: int, user_id: str) -> str:
     return f"/tenants/{tenant_id}/users/{quote(str(user_id), safe='')}"
+
+
+# How other things with a page of their own are named in reports: each function returns {lower-cased name
+# or address: page path} for one tenant's latest snapshot. Page modules add theirs on import
+# (``mailbox_page.py``, ...), and ``build()`` links every cell that is exactly one of those names.
+@dataclass(frozen=True)
+class PageIndex:
+    """How one kind of page's objects are named in reports: ``build(snap)`` gives lower-cased name -> page path.
+    ``where(table title, column)`` says which cells may be a name (None: any cell); a bare display name like
+    "Sales" is only linked in a column about groups, while an address is unmistakable anywhere."""
+
+    build: Callable[[TenantSnapshot], dict[str, str]]
+    where: Callable[[str, str], bool] | None = None
+
+
+PAGE_INDEXES: list[PageIndex] = []  # one per kind of page (mailbox_page, group_page, ...)
+
+
+def page_index(snap: TenantSnapshot) -> list[tuple[dict[str, str], Callable[[str, str], bool] | None]]:
+    """Every kind of page's names and where they may be linked, for ``link_pages``."""
+    out = []
+    for index in PAGE_INDEXES:
+        try:
+            found = index.build(snap)
+        except Exception:  # one kind of page's odd data mustn't take every report down
+            logging.getLogger(__name__).exception("Page index %s failed", index.build.__module__)
+            continue
+        if found:
+            out.append((found, index.where))
+    return out
+
+
+def link_pages(sections: list[Section], indexes: list[tuple[dict[str, str], Callable | None]]) -> None:
+    """Turn every plain-text cell that is exactly a name in an index into a link to that page. Cells already
+    linked (people, files) are left alone, and a name is only linked where its index says it may be."""
+    if not indexes:
+        return
+    for section in sections:
+        lookups: list[dict[str, str]] = []
+        for column in section.columns:
+            allowed = [names for names, where in indexes if where is None or where(section.title, column)]
+            lookups.append({k: v for names in reversed(allowed) for k, v in names.items()})
+        for row in section.rows:
+            for i, v in enumerate(row):
+                if i < len(lookups) and type(v) is str and (href := lookups[i].get(v.lower())):
+                    row[i] = PageLink(v, href)
 
 
 def people_index(snap: TenantSnapshot) -> dict[str, str]:
@@ -1415,6 +1468,7 @@ def build(
         report.unavailable = f"This report couldn't be built: {type(exc).__name__}"
     if as_of is None:  # comparisons of older data don't need links
         link_people(report.sections, report.tenant["id"], people_index(snap))
+        link_pages(report.sections, page_index(snap))
     elif snap.as_of:
         _no_longer_held(conn, snap, collectors, report)
     return report

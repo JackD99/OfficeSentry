@@ -97,6 +97,11 @@ SECTIONS = [
                 blurb="The common setup and collection errors, and how to fix them.",
             ),
             Doc(
+                "v2/docs/getting-help.md",
+                "getting-help",
+                blurb="Where to look first, the support package to attach to a bug report, and what it leaves out.",
+            ),
+            Doc(
                 "v2/docs/securing-the-portal.md",
                 "securing",
                 blurb="What the portal does by itself, what you have to do, and reverse proxy setups.",
@@ -148,6 +153,12 @@ SECTIONS = [
                 "contributing",
                 "Contributing",
                 blurb="Setting up for development, and how changes are built and checked.",
+            ),
+            Doc(
+                "SUPPORT.md",
+                "support",
+                "Getting help",
+                blurb="Where to go for what, the support package, and what never goes in an issue.",
             ),
         ],
     ),

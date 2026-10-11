@@ -99,7 +99,7 @@
       <p class="muted m0">{{ p.unavailable }}</p>
       {% else %}
         {% if p.facts %}
-        <dl class="kv">{% for label, value in p.facts %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+        <dl class="kv">{% for label, value in p.facts %}<dt>{{ label }}</dt><dd>{{ cell(value) }}</dd>{% endfor %}</dl>
         {% endif %}
         {% for t in p.tables %}
         {% if p.facts or p.tables|length > 1 %}<h3 class="part-sub">{{ t.title }} <span class="count-badge">{{ t.rows|length }}</span></h3>{% endif %}

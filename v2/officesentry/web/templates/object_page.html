@@ -1,0 +1,151 @@
+{#- One page per mailbox, group or site (reports/object_page.py): the same shape as a person's page.
+    page is an ObjectPage; tab is the tenant header key of the list the page belongs to. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads with context %}
+{% block title %}{{ page.name }} · {{ tenant.name }}{% endblock %}
+{% set PILL = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad'} %}
+{% macro cell(v) -%}
+{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v|readable }}{% endif %}
+{%- endmacro %}
+{% block content %}
+{{ tenant_header(tenant, tab) }}
+
+<div class="person-head object-head">
+  <div class="avatar" aria-hidden="true">{{ page.initial }}</div>
+  <div class="person-id">
+    <div class="crumbs"><a href="{{ page.list_path }}">{{ page.list_title }}</a><span>/</span></div>
+    <h2>{{ page.name }}</h2>
+    {% if page.subtitle %}<div class="muted">{{ page.subtitle }}</div>{% endif %}
+    <div class="badges">{% for text, tone in page.badges %}<span class="pill {{ PILL.get(tone, '') }}">{{ text }}</span>{% endfor %}</div>
+  </div>
+  <div class="person-actions">
+    {{ downloads([('PDF', page.path ~ '.pdf', 'This page as a PDF'), ('XLSX', page.path ~ '.xlsx', 'Every table, one sheet each')]) }}
+    {% if page.external %}<a class="small external-link" href="{{ page.external[1] }}" target="_blank" rel="noopener noreferrer">{{ page.external[0] }} {{ icon('external') }}</a>{% endif %}
+  </div>
+</div>
+
+<div class="tiles">
+  {% for h in page.tiles %}
+  <div class="tile">
+    <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
+    {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid-main">
+  <div>
+    <section class="card" id="attention">
+      <div class="card-head"><h2>Needs attention</h2>{% if page.attention %}<span class="count-badge">{{ page.attention|length }}</span>{% endif %}</div>
+      {% if page.attention %}
+      <ul class="list">
+        {% for a in page.attention %}
+        <li>
+          <span class="sevtext {{ a.severity }} sevcol">{{ a.severity }}</span>
+          <div class="grow">{{ a.text }}</div>
+          {% if a.part %}<a class="small nowrap" href="#part-{{ a.part }}">Details</a>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty compact">{{ icon('check', 'big ok') }}<h3>Nothing needs attention</h3><p>{{ page.nothing }}</p></div>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside aria-label="{{ page.about_title }} summary">
+    <section class="card">
+      <div class="card-head"><h2>{{ page.about_title }}</h2></div>
+      <dl class="kv stacked">{% for label, value in page.about %}<dt>{{ label }}</dt><dd>{{ cell(value) }}</dd>{% endfor %}</dl>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Open findings</h2>
+        {% if page.findings %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
+      {% if page.findings %}
+      <ul class="list compact">
+        {% for f in page.findings %}
+        <li><span class="sevtext {{ f.severity }} sevcol">{{ f.severity }}</span>
+          <div class="grow"><div class="title">{{ f.title }}</div><div class="desc">{{ f.detail }} · since {{ f.first_seen|day }}</div></div></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted small m0">No open findings name this {{ page.kind }}.</p>
+      {% endif %}
+    </section>
+
+    {% if page.reports %}
+    <section class="card">
+      <div class="card-head"><h2>In the reports</h2></div>
+      <ul class="link-list">
+        {% for title, href in page.reports %}<li><a href="{{ href }}">{{ title }}</a></li>{% endfor %}
+      </ul>
+      <p class="footnote">The reports these facts come from, opened at this {{ page.kind }} where they list it.</p>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+
+<nav class="jump hide-sm" aria-label="Sections">
+  {% for p in page.parts %}<a href="#part-{{ p.key }}">{{ p.title }}</a>{% endfor %}
+  <a href="#history">History</a>
+</nav>
+
+{#- As on a person's page: below the summary every part takes the page's width and folds to its heading
+    (open on laptops, folded on phones by app.js). -#}
+<div class="parts">
+    {% for p in page.parts %}
+    <details class="card part" id="part-{{ p.key }}" open>
+      <summary class="card-head">
+        <h2>{{ p.title }}</h2>
+        {% if p.unavailable %}<span class="pill">Not checked</span>{% elif p.summary %}<span class="pill {{ PILL.get(p.tone, '') }}">{{ p.summary }}</span>{% endif %}
+      </summary>
+      {% if p.unavailable %}
+      <p class="muted m0">{{ p.unavailable }}</p>
+      {% else %}
+        {% if p.facts %}
+        <dl class="kv">{% for label, value in p.facts %}<dt>{{ label }}</dt><dd>{{ cell(value) }}</dd>{% endfor %}</dl>
+        {% endif %}
+        {% if p.chart %}<div class="chart-wrap part-chart">{{ p.chart|safe }}</div>{% endif %}
+        {% for t in p.tables %}
+        {% if p.facts or p.tables|length > 1 %}<h3 class="part-sub">{{ t.title }} <span class="count-badge">{{ t.rows|length }}</span></h3>{% endif %}
+        {% if t.intro %}<p class="muted small part-intro">{{ t.intro }}</p>{% endif %}
+        <div class="scroll-x">
+        <table class="stack-sm part-table">
+          <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+          <tbody>
+          {% for row in t.rows %}{% set flag = t.flags[loop.index0] %}
+          <tr{% if flag %} class="flag-{{ flag }}"{% endif %}>
+            {% for v in row %}<td class="wrap{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ t.columns[loop.index0] }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% endfor %}
+        {% if not p.facts and not p.tables and not p.chart %}<p class="muted m0">{{ p.empty }}</p>{% endif %}
+      {% endif %}
+      {% if p.note and not p.unavailable %}<p class="footnote">{{ p.note }}</p>{% endif %}
+    </details>
+    {% endfor %}
+
+    <section class="card" id="history">
+      <div class="card-head"><h2>History</h2></div>
+      {% if page.history %}
+      <ul class="timeline">
+        {% for e in page.history %}
+        <li class="{{ 'tone-' ~ e.tone if e.tone }}"><span class="when">{{ e.day|day }}</span>
+          <span class="what"><span class="area">{{ e.area }}</span> {{ e.text }}</span></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted small m0">No changes spotted{% if page.history_since %} since {{ page.history_since|day }}{% endif %}.</p>
+      {% endif %}
+      <p class="footnote">Found by comparing collections{% if page.history_since %} since {{ page.history_since|day }}{% endif %}. The date is when Office Sentry first saw the change.</p>
+    </section>
+</div>
+
+<p class="footnote">Data from
+{% for title, finished in page.sources %}{{ title }} ({% if finished %}{{ ts(finished) }}{% else %}not collected yet{% endif %}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+{% endblock %}

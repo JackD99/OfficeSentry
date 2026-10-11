@@ -3,10 +3,13 @@
 What changed in each Office Sentry release, written for the people who run it. Read the
 **Action required**, **New Microsoft permissions** and **Database upgrade** parts before updating.
 
-How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
-[CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (Added, Changed, Fixed,
+Security, with the newest release first and a compare link per version) plus those three sections, and
+versions follow [semantic versioning](https://semver.org). How to update: [v2/DEPLOY.md,
+"Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
+"Releases"](CONTRIBUTING.md#releases).
 
-## 2.2.0 (unreleased)
+## [2.2.0] - Unreleased
 
 ### Action required
 
@@ -22,6 +25,12 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
 - **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
+### Added
+
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
+
 ### New Microsoft permissions
 
 None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
@@ -34,6 +43,15 @@ Microsoft account links on users and how each session was started.
 
 ### Added
 
+- **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
+  failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
+  addresses and client names taken out (clients appear as numbers unless you tick *Include client
+  identifiers*). `python -m officesentry support-package` makes the same zip from the shell when the portal
+  won't start, over a broken database or a configuration that won't load.
+  [Getting help](v2/docs/getting-help.md) says what's in it.
+- The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
+  every line says which request, user, client, run or task it belongs to. A page that fails shows a
+  reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
   Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
   roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
@@ -46,6 +64,18 @@ Microsoft account links on users and how each session was started.
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
   and the members of each unit by name. A new Administrative units collector reads them with the permissions
   the app already has, and each person's page shows the units they are in and administer.
+- One page per mailbox: Users > Mailboxes lists every mailbox with its size, forwarding, who else can
+  open it and its inbox rules, and each opens a page with what needs attention first, then size and growth
+  over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
+  settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
+  Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
+- One page per group: Users > Groups and teams lists every team, Microsoft 365 group, security group and
+  distribution list with its owners, members, guests and membership type, and each opens a page with what
+  needs attention first, then its owners, members and the groups inside it, what membership gives
+  (Conditional Access policies, admin roles, licences), its mail settings and traffic, the team's site with
+  its headline sharing figures, how it's set up, admin changes, open findings and what changed. Group names
+  and addresses in reports, the person page and search results open the page, and it downloads as PDF and
+  XLSX.
 
 ### Changed
 
@@ -171,6 +201,12 @@ Microsoft account links on users and how each session was started.
   night, with the run partial and the permission named, instead of the Users collection failing.
 - An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
   cmdlet, instead of failing the whole collection.
+- A session or proxy setting that can't work (`OFFICESENTRY_SESSION_HOURS=0`, which signed everyone out
+  on their next request) stops the portal at start with a plain message, like the other settings.
+- A form sent after the session had ended comes back, after signing in, to the page the form was on
+  rather than to an address that only takes forms ("Method not allowed").
+- The daily rebuild of the What changed and check matrix rows is no longer lost for a client whose
+  rows were being refreshed at that moment.
 
 ### Security
 
@@ -210,7 +246,7 @@ Microsoft account links on users and how each session was started.
 - A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
   itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
-## 2.1.0 (2026-10-10)
+## [2.1.0] - 2026-10-10
 
 The first release from the public repository. The headlines: home pages for technicians and account
 managers, onboarding many clients at once, answers for insurance and supplier questionnaires and Cyber
@@ -411,7 +447,7 @@ copied collection reads back exactly as its snapshot.
 - The public demo no longer stores an authenticator secret on its shared visitor when the two-step setup
   page is opened.
 
-## 2.0.0 (2026-10-09)
+## [2.0.0] - 2026-10-09
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1
 portal. Everything below is new compared with v1.
@@ -466,3 +502,7 @@ first, then upgrades it on start. New installs start with an empty database.
 - Certificate-based, app-only sign-in to client tenants; secrets are encrypted at rest and never shown or
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
+
+[2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0
