@@ -49,6 +49,9 @@ from . import (
     upcoming,
 )
 from . import (
+    roles as role_pages,
+)
+from . import (
     sso as sso_web,
 )
 
@@ -309,6 +312,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(tenants.bp)
     app.register_blueprint(home.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(role_pages.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(projects.bp)
     app.register_blueprint(email.bp)

@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% from "_macros.html" import icon %}
 {% block title %}Users · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Users</h1><div class="sub">People who can sign in to Office Sentry.</div></div></div>
+<div class="page-head"><div><h1>Users</h1><div class="sub">People who can sign in to Office Sentry.</div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('roles.index') }}">{{ icon('users') }} Roles</a></div></div>
 <div class="grid-main">
 <section class="card flush">
   <table class="stack-sm">
@@ -44,7 +46,7 @@
     <fieldset class="choices">
       <legend>Role</legend>
       {% for r in roles %}
-      <label class="choice"><input type="radio" name="role" value="{{ r.id }}" {% if r.key == 'client_viewer' %}checked{% endif %}>
+      <label class="choice"><input type="radio" name="role" value="{{ r.id }}" {% if r.key == 'client_viewer' %}checked{% endif %}{% if r.id not in givable %} disabled{% endif %}>
         <span><span class="strong">{{ r.name }}</span><span class="hint">{{ r.description }}</span></span></label>
       {% endfor %}
     </fieldset>
