@@ -200,3 +200,91 @@ def test_preview_lists_what_the_role_opens(client, db, two_tenants):
     assert "Menu" not in page.split('id="preview"')[1] and "On a client" in page
     page = client.get(f"/admin/roles/{roles.by_key(db, 'team_leader').id}").data.decode()
     assert 'data-needs="users.manage"' in page and 'data-needs="clients.compare reports.tenant"' in page
+
+
+def test_a_user_manager_who_is_not_an_administrator_cannot_raise_anyones_access(client, db, two_tenants):
+    """Users and roles added for someone on Second line: they manage people within what they hold and the
+    clients they see, and can't use that to reach more themselves."""
+    alpha, bravo = two_tenants
+    boss = make_user(db, "admin")
+    lead = role_user(db, "lead", "second_line", tenants=[alpha])
+    roles.set_overrides(db, "admin", store_user(db, lead), [roles.Override("users.manage", None, True)])
+    fl = role_user(db, "fl", "first_line", tenants=[alpha])
+    wide = role_user(db, "wide", "first_line", tenants=[alpha, bravo])
+    login(client, "lead")
+    admin_role, team_leader = roles.by_key(db, "administrator"), roles.by_key(db, "team_leader")
+    first_line, second_line = roles.by_key(db, "first_line"), roles.by_key(db, "second_line")
+
+    # Not themselves: no Administrator role, nor anything else on their own account.
+    client.post(f"/admin/users/{lead}", data={"role": str(admin_role.id), "tenants": [str(alpha), str(bravo)]})
+    client.post(f"/admin/users/{lead}/access", data={"g_settings.manage": "allow"})
+    me = store_user(db, lead)
+    assert me["role_id"] == second_line.id and me["role"] == "analyst"
+    assert {o.capability for o in roles.overrides(db, lead)} == {"users.manage"}
+    assert "Ask an Administrator to change your own role or access." in client.get(f"/admin/users/{lead}").data.decode()
+
+    # Not an Administrator's account, or anyone who sees or does more: no edits, password resets or deletes.
+    for uid in (boss, wide):
+        page = client.get(f"/admin/users/{uid}").data.decode()
+        assert "only an administrator can change" in page.lower() and "Save changes" not in page
+        assert "Delete " not in page and "Reset two-step" not in page
+        client.post(f"/admin/users/{uid}", data={"role": str(first_line.id), "password": "x" * 16})
+        client.post(f"/admin/users/{uid}/delete")
+        client.post(f"/admin/users/{uid}/reset-two-step", data={"admin_password": "irrelevant"})
+        assert (
+            store_user(db, uid) is not None
+            and store_user(db, uid)["password_hash"] == store_user(db, fl)["password_hash"]
+        )
+    assert store_user(db, boss)["role"] == "admin" and store_user(db, wide)["role_id"] == first_line.id
+
+    # Someone within reach: only roles that hold no more than theirs, only their own clients.
+    page = client.get(f"/admin/users/{fl}").data.decode()
+    assert "Alpha Ltd" in page and "Bravo Inc" not in page and 'name="all_tenants"' not in page
+    assert f'value="{team_leader.id}" data-kind="staff" data-scope="all"  disabled' in page
+    client.post(f"/admin/users/{fl}", data={"role": str(team_leader.id), "tenants": [str(alpha)]})
+    assert store_user(db, fl)["role_id"] == first_line.id
+    client.post(
+        f"/admin/users/{fl}",
+        data={"role": str(second_line.id), "tenants": [str(alpha), str(bravo)], "all_tenants": "1"},
+    )
+    moved = store_user(db, fl)
+    assert moved["role_id"] == second_line.id and not moved["all_tenants"]
+    assert {r[0] for r in db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (fl,))} == {alpha}
+    # New accounts the same way.
+    client.post("/admin/users", data={"username": "new1", "password": "a-long-password-1", "role": str(admin_role.id)})
+    assert db.execute("SELECT 1 FROM users WHERE username = 'new1'").fetchone() is None
+
+    # Overrides: taking away is fine, adding only what they hold, only on their own clients.
+    client.post(f"/admin/users/{fl}/access", data={"g_settings.manage": "allow", "g_export": "deny"})
+    assert {(o.capability, o.allow) for o in roles.overrides(db, fl)} == {("export", False)}
+    client.post(
+        f"/admin/users/{fl}/access",
+        data={"g_export": "deny", "add_tenant": str(alpha), "add_capability": "settings.manage", "add_allow": "allow"},
+    )
+    assert {(o.capability, o.allow) for o in roles.overrides(db, fl)} == {("export", False)}
+    resp = client.post(
+        f"/admin/users/{fl}/access",
+        data={"g_export": "deny", "add_tenant": str(bravo), "add_capability": "export", "add_allow": "deny"},
+    )
+    assert resp.status_code == 400
+
+    # Roles: nothing they don't hold goes in, the scope stays, and wider roles can't be copied or reset.
+    page = client.get(f"/admin/roles/{first_line.id}").data.decode()
+    assert 'value="settings.manage" data-cap="settings.manage" disabled' in page
+    client.post(
+        f"/admin/roles/{first_line.id}",
+        data={
+            "name": "First line",
+            "scope": "all",
+            "capabilities": [*first_line.capabilities, "collect", "settings.manage"],
+        },
+    )
+    edited = roles.get(db, first_line.id)
+    assert edited.capabilities == first_line.capabilities | {"collect"} and edited.scope == "granted"
+    client.post("/admin/roles", data={"name": "Leads", "copy": str(team_leader.id)})
+    assert db.execute("SELECT 1 FROM roles WHERE name = 'Leads'").fetchone() is None
+    client.post(f"/admin/roles/{team_leader.id}", data={"name": "Team leader", "capabilities": ["export"]})
+    shrunk = roles.get(db, team_leader.id)
+    assert shrunk.scope == "all" and "settings.manage" not in shrunk.capabilities
+    client.post(f"/admin/roles/{team_leader.id}/reset")
+    assert roles.get(db, team_leader.id).changed_from_template

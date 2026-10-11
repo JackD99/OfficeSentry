@@ -52,6 +52,9 @@ role could do. As ever, a copy of the database is made first.
   client tabs the role opens. Changing a role signs out everyone holding it, so they pick it up at their next
   sign-in, and every change is in the activity log. On a person's page, **Customise** sets single
   capabilities for them: everywhere (as the role, allowed, or taken away) or on one client.
+- Users and roles can be handed to someone who isn't an Administrator: they give out only what they hold
+  themselves, only on the clients they see (other clients' names don't show), can't change their own role
+  or access, and can't change an Administrator or anyone who can do or see more than they can.
 
 ### Changed
 

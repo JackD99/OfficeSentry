@@ -16,13 +16,14 @@
   <div>
     <section class="card">
       <h2>Capabilities</h2>
+      {% if role.editable and grantable|length < capabilities|length and capabilities|rejectattr('key', 'in', grantable)|list %}<p class="muted small">Greyed-out capabilities are ones you don't hold yourself, so they stay as they are.</p>{% endif %}
       {% for key, title, help in groups %}{% set caps = capabilities|selectattr('group', 'equalto', key)|list %}{% if caps %}
       <fieldset>
         <legend>{{ title }}</legend>
         <p class="muted small m0">{{ help }}</p>
         <div class="check-grid">
         {% for c in caps %}
-        <label class="check" title="{{ c.help }}"><input type="checkbox" name="capabilities" value="{{ c.key }}" data-cap="{{ c.key }}"{% if c.key in role.capabilities %} checked{% endif %}{% if not role.editable %} disabled{% endif %}>
+        <label class="check" title="{{ c.help }}"><input type="checkbox" name="capabilities" value="{{ c.key }}" data-cap="{{ c.key }}"{% if c.key in role.capabilities %} checked{% endif %}{% if not role.editable or c.key not in grantable %} disabled{% endif %}>
           <span>{{ c.title }}{% if template and (c.key in template.capabilities) != (c.key in role.capabilities) %} <span class="faint small">({{ 'on' if c.key in template.capabilities else 'off' }} by default)</span>{% endif %}<span class="sub faint small">{{ c.help }}</span></span></label>
         {% endfor %}
         </div>
@@ -41,8 +42,9 @@
       <fieldset class="choices">
         <legend>Clients</legend>
         {% for value, label in scopes %}
-        <label class="choice"><input type="radio" name="scope" value="{{ value }}"{% if role.scope == value %} checked{% endif %}> <span>{{ label }}</span></label>
+        <label class="choice"><input type="radio" name="scope" value="{{ value }}"{% if role.scope == value %} checked{% endif %}{% if scope_fixed %} disabled{% endif %}> <span>{{ label }}</span></label>
         {% endfor %}
+        {% if scope_fixed %}<p class="footnote m0">Only someone who sees every client can change this.</p>{% endif %}
       </fieldset>
       {% elif role.kind == 'client' %}
       <p class="muted small">A client's people only ever see the clients granted on their page, and only report capabilities.</p>

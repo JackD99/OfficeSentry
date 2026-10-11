@@ -40,7 +40,7 @@
     <fieldset class="choices">
       <legend>Role</legend>
       {% for r in roles %}
-      <label class="choice"><input type="radio" name="role" value="{{ r.id }}" {% if r.key == 'client_viewer' %}checked{% endif %}>
+      <label class="choice"><input type="radio" name="role" value="{{ r.id }}" {% if r.key == 'client_viewer' %}checked{% endif %}{% if r.id not in givable %} disabled{% endif %}>
         <span><span class="strong">{{ r.name }}</span><span class="hint">{{ r.description }}</span></span></label>
       {% endfor %}
     </fieldset>

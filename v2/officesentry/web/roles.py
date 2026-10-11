@@ -12,7 +12,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 
 from .. import permissions, roles
 from ..db import transaction
-from .access import needs
+from .access import current, needs
 
 bp = Blueprint("roles", __name__, url_prefix="/admin/roles")
 
@@ -40,6 +40,25 @@ TABS = (
     ("Emails", ("emails.view",)),
     ("Settings (data collection)", ("collect",)),
 )
+
+
+def _grantable() -> frozenset[str]:
+    """The capabilities the signed-in person may put into a role: all of them for an Administrator,
+    otherwise only the ones they hold everywhere themselves (the user page follows the same rule)."""
+    actor = current()
+    return frozenset(permissions.KEYS) if actor.is_admin else actor.capabilities
+
+
+def _beyond(capabilities, scope: str, kind: str) -> bool:
+    """Would a role like this hold more than the signed-in person?"""
+    actor = current()
+    if actor.is_admin:
+        return False
+    wider = scope == permissions.ALL_CLIENTS and kind == permissions.STAFF and not actor.sees_all
+    return wider or bool(set(capabilities) - _grantable())
+
+
+_HOLDS_MORE = "That role holds more than you do, so only an Administrator can {}."
 
 
 def _role_or_404(role_id: int) -> roles.Role:
@@ -85,6 +104,9 @@ def create():
         copy = None  # an Administrator copy would be a staff role with everything; start from Team leader instead
     if copy is not None:
         kind = copy.kind
+        if _beyond(copy.capabilities, copy.scope, copy.kind):
+            flash(_HOLDS_MORE.format("copy it"), "error")
+            return redirect(url_for("roles.index"))
     try:
         with transaction(g.db):
             role_id = roles.create(
@@ -111,16 +133,16 @@ def edit(role_id: int):
         if not role.editable:
             abort(403)
         f = request.form
+        # What the signed-in person doesn't hold themselves stays as it is (those boxes are greyed out).
+        grantable = _grantable()
+        wanted = (set(f.getlist("capabilities")) & grantable) | (role.capabilities - grantable)
+        scope = f.get("scope", permissions.GRANTED)
+        if _beyond((), permissions.ALL_CLIENTS, role.kind):
+            scope = role.scope  # only someone who sees every client changes a staff role's scope
         try:
             with transaction(g.db):
                 changed = roles.update(
-                    g.db,
-                    g.user["username"],
-                    role,
-                    f.get("name", ""),
-                    f.get("description", ""),
-                    f.get("scope", permissions.GRANTED),
-                    f.getlist("capabilities"),
+                    g.db, g.user["username"], role, f.get("name", ""), f.get("description", ""), scope, wanted
                 )
         except ValueError as exc:
             flash(str(exc), "error")
@@ -140,6 +162,8 @@ def edit(role_id: int):
         capabilities=_capabilities(role.kind),
         holders=_holders(role_id),
         menu=MENU if role.kind != permissions.CLIENT else (),
+        grantable=_grantable(),
+        scope_fixed=_beyond((), permissions.ALL_CLIENTS, role.kind),
         tabs=TABS,
         scopes=(
             (permissions.ALL_CLIENTS, "Every client, including ones added later"),
@@ -152,6 +176,10 @@ def edit(role_id: int):
 @needs("users.manage")
 def reset(role_id: int):
     role = _role_or_404(role_id)
+    t = role.template
+    if t is not None and _beyond(t.capabilities, t.scope, t.kind):
+        flash(_HOLDS_MORE.format("put it back to its default"), "error")
+        return redirect(url_for("roles.edit", role_id=role_id))
     with transaction(g.db):
         changed = roles.reset(g.db, g.user["username"], role)
     flash(f"{role.template.name} is back to its default." if changed else "Already the default.", "success")

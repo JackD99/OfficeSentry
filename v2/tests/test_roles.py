@@ -357,8 +357,8 @@ def test_there_is_always_an_administrator(client, db, two_tenants):
     login(client, "admin")
     _edit(client, admin, role=tl)  # never your own Administrator role
     assert store_user(db, admin)["role"] == "admin"
-    # Someone else who manages users (a Team leader given users.manage) can't demote, disable or delete the
-    # only Administrator either; once there's a second one, they can.
+    # Someone else who manages users (a Team leader given users.manage) can't demote, disable or delete an
+    # Administrator at all; another Administrator can, once there's a second one.
     hr = role_user(db, "hr", "team_leader")
     roles.set_overrides(db, "admin", store_user(db, hr), [roles.Override("users.manage", None, True)])
     client.post("/logout")
@@ -368,8 +368,12 @@ def test_there_is_always_an_administrator(client, db, two_tenants):
     assert store_user(db, admin)["role"] == "admin" and store_user(db, admin)["disabled"] == 0
     assert client.post(f"/admin/users/{admin}/delete").status_code == 302
     assert store_user(db, admin) is not None
-    assert "only Administrator" in client.get(f"/admin/users/{admin}").data.decode()
+    assert "Only an Administrator can change" in client.get(f"/admin/users/{admin}").data.decode()
     role_user(db, "second", "administrator")
+    _edit(client, admin, role=tl)
+    assert store_user(db, admin)["role"] == "admin"
+    client.post("/logout")
+    login(client, "second")
     _edit(client, admin, role=tl)
     assert store_user(db, admin)["role"] == "analyst"
 

@@ -190,6 +190,15 @@ def visible_tenants(conn, user, archived: bool = False):
     return _needed_here(a, rows)
 
 
+def tenant_ids(conn, user) -> set[int] | None:
+    """The ids of the tenants this person's scope covers, whatever the current view needs (``None``: every
+    client). For comparing two people's reach; pages list tenants with ``visible_tenants``."""
+    a = access_of(user, conn)
+    if a.sees_all:
+        return None
+    return {r[0] for r in conn.execute(_GRANTED, _params(user, a))}
+
+
 def can_see_tenant(conn, user, tenant_id: int) -> bool:
     if user is None:
         return False

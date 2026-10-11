@@ -38,7 +38,11 @@ overview and DEPLOY.md for running it on a server.
   overrides in `user_access`; `roles.py` reads and writes both (every change
   audited: `role_created`, `role_updated`, `role_deleted`,
   `user_access_changed`) and `web/roles.py` and `admin.user_access` are their
-  pages. A new capability is a `Capability` in `permissions.CAPABILITIES`,
+  pages. Someone with `users.manage` who isn't an Administrator only hands out
+  what they hold everywhere, only on clients they see, can't change their own
+  role or access, and can't change an account that holds more than they do
+  (`admin._out_of_reach`, `_givable`; `web/roles._grantable`), so nobody
+  raises their own access. A new capability is a `Capability` in `permissions.CAPABILITIES`,
   added to the built-in roles that should hold it (`TEMPLATES`; the
   migration seeded those rows, so a later change to a template needs a
   migration of its own if existing installs should pick it up).
