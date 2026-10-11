@@ -188,7 +188,7 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
     if ref is None or not ref.compare:
         return None
     columns = ref.columns
-    keep = [i for i, c in enumerate(columns) if not _volatile(c)]
+    keep = [i for i, c in enumerate(columns) if not _volatile(c) and c not in ref.drifts]
 
     def stable(row):
         return tuple(_same(row[i]) for i in keep if i < len(row))

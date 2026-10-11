@@ -11,7 +11,7 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from . import alerts, mailer, store
+from . import alerts, mailer, store, totp
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -104,7 +104,7 @@ ENCRYPTED_COLUMNS = (
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.
-ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS)
+ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *totp.ENCRYPTED_KEYS)
 
 
 def unregistered_encrypted(conn) -> list[str]:
@@ -222,11 +222,16 @@ def cmd_backup(args, cfg):
     """Write a consistent copy of the database, safe while the portal is running."""
     from pathlib import Path
 
-    from .backups import backup, record_status
+    from .backups import BackupIncomplete, backup, record_status
 
     # The outcome goes in backup-status.json for the health check and the "backup failed" alert.
     try:
         dest, old = backup(cfg.db_path, Path(args.dir) if args.dir else cfg.data_dir / "backups", args.keep)
+    except BackupIncomplete as exc:
+        # The database copy is sound, but the backup as a whole isn't: the alert should say exactly that.
+        error = f"The database was copied to {exc.dest.name}, but {exc}."
+        record_status(cfg.data_dir, "local", False, error)
+        sys.exit(error)
     except OSError as exc:
         record_status(cfg.data_dir, "local", False, f"No backup made: {exc.strerror or exc}.")
         sys.exit(f"No backup made: {exc.strerror or exc}.")
@@ -263,7 +268,12 @@ def cmd_restore(args, cfg):
         result = restore(cfg.db_path, Path(args.file), worker_running=running, force=args.force)
     except RestoreError as exc:
         sys.exit(f"Not restored: {exc}")
-    if result["saved"]:
+    if result.get("damaged"):
+        print(
+            f"The database it replaced was damaged, so it couldn't be copied: it was moved aside whole as "
+            f"{result['saved']}."
+        )
+    elif result["saved"]:
         print(f"The database it replaced is saved as {result['saved']}.")
     print(f"Restored {args.file} (database version {result['version']}).")
     if result.get("events"):
@@ -472,6 +482,9 @@ def cmd_delete_tenant(args, cfg):
         f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
         + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "")
         + "."
+    )
+    print(
+        "The worker erases its last copies from the files on disk in the background; System status says if that fails."
     )
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
