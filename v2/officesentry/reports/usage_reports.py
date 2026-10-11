@@ -20,10 +20,10 @@ from .identity_reports import Money, _day, _parse
 from .monthly_review import setting
 from .registry import report
 
-NOT_COLLECTED = 'Microsoft 365 usage hasn\'t been collected yet. Refresh "Microsoft 365 usage" on the tenant page.'
+NOT_COLLECTED = 'Microsoft 365 usage hasn\'t been collected yet. Refresh "Microsoft 365 usage" on the client page.'
 NO_PERMISSION = (
     "Office Sentry can't read this tenant's usage reports yet. It needs the Reports.Read.All "
-    "permission: open the tenant page, send the consent link to the client's Global Admin again "
+    "permission: open the client page, send the consent link to the client's Global Admin again "
     "and ask them to accept."
 )
 MISSING = {

@@ -207,7 +207,7 @@ def _policy(snap: TenantSnapshot, report: DataReport) -> Section | None:
     if settings is None:
         report.notes.append(
             "The sign-in methods policy hasn't been collected yet, so which methods the tenant "
-            'allows isn\'t shown. Refresh "Sign-in methods policy" on the tenant page.'
+            'allows isn\'t shown. Refresh "Sign-in methods policy" on the client page.'
         )
         return None
     groups = {
@@ -371,7 +371,7 @@ def _expiry(snap: TenantSnapshot, report: DataReport) -> Section | None:
     if domains is None:
         report.notes.append(
             "Domains haven't been collected yet, so the password expiry policy isn't shown. "
-            "Refresh Directory sync on the tenant page."
+            "Refresh Directory sync on the client page."
         )
         return None
     section = Section(
@@ -505,7 +505,7 @@ def _passwords(users: list[dict], reg: Registration, now: datetime) -> tuple[Sec
 def auth_methods(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     users = snap.objects("users", "user")
     if users is None:
-        report.unavailable = "User data hasn't been collected yet. Refresh Users on the tenant page."
+        report.unavailable = "User data hasn't been collected yet. Refresh Users on the client page."
         return
     reg = Registration(snap)
     role_names, privileged, roles_known = _admins(snap, reg)

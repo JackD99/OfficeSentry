@@ -192,7 +192,7 @@ def parse(conn, text: str) -> Parsed:
         )
     body = cells[1:]
     if not body:
-        return Parsed(error="The file has column names but no tenants under them.")
+        return Parsed(error="The file has column names but no clients under them.")
     if len(body) > MAX_ROWS:
         return Parsed(error=f"That's {len(body):,} rows; import up to {MAX_ROWS:,} at a time.")
 
@@ -218,7 +218,7 @@ def parse(conn, text: str) -> Parsed:
         elif not (GUID_RE.match(ref) or DOMAIN_RE.match(ref)):
             row.problems.append(f"“{ref[:80]}” isn't a tenant ID or a domain like contoso.onmicrosoft.com.")
         elif ref in seen:
-            row.problems.append(f"The same tenant as line {seen[ref]}.")
+            row.problems.append(f"The same client as line {seen[ref]}.")
         elif ref in existing:
             row.skip = f"Already in Office Sentry as {existing[ref]}."
         if ref:
@@ -386,7 +386,7 @@ def tracker(conn, tenants) -> list[Entry]:
         problem = None
         if connection is None or not connection["client_id"] or clouds.of(connection).key != clouds.of(t).key:
             problem = (
-                "No app connection is ready for this tenant's Microsoft cloud. Choose one under Manage."
+                "No app connection is ready for this client's Microsoft cloud. Choose one under Manage."
                 if connection is None or clouds.of(connection).key != clouds.of(t).key
                 else f"The app connection {connection['name']} has no application (client) ID yet."
             )
@@ -483,7 +483,7 @@ def confirm(conn, vault, tenant, actor: str = "Onboarding", session=None) -> Out
     connection = store.get_connection(conn, tenant["connection_id"]) if tenant["connection_id"] else None
     cloud = clouds.of(tenant)
     if connection is None or not connection["client_id"] or clouds.of(connection).key != cloud.key:
-        message = "No app connection is ready for this tenant."
+        message = "No app connection is ready for this client."
         _note_check(conn, tenant["id"], message)
         return Outcome(False, message)
     result = connection_check.check(
@@ -503,7 +503,7 @@ def confirm(conn, vault, tenant, actor: str = "Onboarding", session=None) -> Out
     with transaction(conn, immediate=True):
         current = store.get_tenant(conn, tenant["id"])
         if current is None:
-            return Outcome(False, "The tenant was deleted.")
+            return Outcome(False, "The client was deleted.")
         if swap and (
             current["tenant_ref"] != tenant["tenant_ref"]
             or conn.execute("SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (swap, tenant["id"])).fetchone()

@@ -194,7 +194,7 @@ data forever; ask them what they use.
   and the **activity log** (who in the MSP did what, including report
   downloads, with the address it came from) are kept until your MSP removes
   them; failed sign-ins in the activity log are removed after 90 days.
-- **When your MSP stops working with you** and deletes your tenant in Office
+- **When your MSP stops working with you** and deletes your organisation in Office
   Sentry, everything collected from it is deleted and overwritten, including
   the activity history; activity log entries keep who did what and when,
   without your people's names or addresses. The MSP's backups keep a copy
@@ -202,15 +202,15 @@ data forever; ask them what they use.
 
 ### Who at your MSP can see it
 
-Office Sentry hides every tenant from every user unless they are allowed to
-see it. Anyone looking for a tenant they aren't allowed to see gets "not
+Office Sentry hides every client from every user unless they are allowed to
+see it. Anyone looking for a client they aren't allowed to see gets "not
 found".
 
 | Office Sentry user | Can see |
 |---|---|
-| Admin | Every tenant, plus Office Sentry's own settings. |
-| Analyst | Only the tenants an admin has given them, or every tenant if an admin allows that. |
-| Client | Only the tenants an admin has given them, and only the reports and findings (not the collection logs). Your MSP may give you a client account. |
+| Admin | Every client, plus Office Sentry's own settings. |
+| Analyst | Only the clients an admin has given them, or every client if an admin allows that. |
+| Client | Only the clients an admin has given them, and only the reports and findings (not the collection logs). Your MSP may give you a client account. |
 
 Signed-in sessions end after 2 hours without use and 8 hours in total. New
 installs require a code from an authenticator app for everyone who signs in,
@@ -235,4 +235,4 @@ To see what you approved without removing it, open the same enterprise app
 and choose *Permissions*.
 
 Removing access stops new collections. It doesn't delete what Office Sentry
-has already collected; ask your MSP to delete your tenant's data.
+has already collected; ask your MSP to delete your organisation's data.

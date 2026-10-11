@@ -17,7 +17,7 @@
 
 {% block body %}
 <p class="lede">{{ report.description }}</p>
-{% if day is defined and day.on %}<div class="callout"><strong>As it was on {{ day.label }}.</strong> {{ day.note or 'This is the data Office Sentry held for this tenant at the end of that day.' }}</div>{% endif %}
+{% if day is defined and day.on %}<div class="callout"><strong>As it was on {{ day.label }}.</strong> {{ day.note or 'This is the data Office Sentry held at the end of that day.' }}</div>{% endif %}
 {% if report.unavailable %}
 <div class="callout"><strong>Not available.</strong> {{ report.unavailable }}</div>
 {% else %}
