@@ -744,7 +744,7 @@ def test_the_wizard_refuses_a_sign_in_to_another_tenant(client, db, world):
     assert client.post("/admin/sign-in/clients/setup/check", headers=JSON).get_json()["status"] == "failed"
     assert "different tenant" in page(client, "/admin/sign-in")
     assert not sso.multi_tenant(sso.settings(db))
-    assert not [c for c in responses.calls if "graph.microsoft.com" in c.request.url]
+    assert not [c for c in responses.calls if urlsplit(c.request.url).hostname == "graph.microsoft.com"]
 
 
 def test_client_sign_in_is_turned_on_after_the_app_and_off_again(client, db, world):
