@@ -203,7 +203,7 @@ def test_the_web_page_offers_both_pdfs_and_the_contents_split_summary_from_appen
     assert order == sorted(order)
 
 
-def test_summary_only_review_is_a_report_option(db, two_tenants, app):
+def test_summary_only_review_is_a_report_option(db, two_tenants, app, monkeypatch):
     from officesentry import delivery
 
     alpha, _ = two_tenants
@@ -211,6 +211,7 @@ def test_summary_only_review_is_a_report_option(db, two_tenants, app):
     tenant = store.get_tenant(db, alpha)
     option = delivery.catalog_map()["review-summary"]
     assert option.title == "Monthly review: summary only"
+    monkeypatch.setattr(delivery.export, "pdf_available", lambda: True)  # Windows CI has no Pango
     assert delivery.attachment_plan(tenant, ["review", "review-summary"], True) == [
         ("review", "security-review-alpha-ltd.pdf"),
         ("review", "security-review-alpha-ltd.xlsx"),
