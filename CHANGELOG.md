@@ -56,6 +56,14 @@ role could do. As ever, a copy of the database is made first.
   themselves, only on the clients they see (other clients' names don't show), can't change their own role
   or access, and can't change an Administrator or anyone who can do or see more than they can.
 
+### Added
+
+- **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
+  and whether the rule is paused), restricted management units, how many users, groups and devices are in
+  each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
+  and the members of each unit by name. A new Administrative units collector reads them with the permissions
+  the app already has, and each person's page shows the units they are in and administer.
+
 ### Changed
 
 - **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
@@ -156,6 +164,10 @@ role could do. As ever, a copy of the database is made first.
   the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
   rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy
   job's runner before it can close it.
+- A long write to the database (a restore, a backup, a large delete) no longer makes every page fail:
+  pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
+  still finds the database locked after five seconds is answered with "Office Sentry is busy right
+  now, try again in a moment" instead of an error page.
 
 ### Security
 
@@ -177,6 +189,12 @@ role could do. As ever, a copy of the database is made first.
   quick, and the worker erases the last copies in the background, rebuilding the file only when there's
   room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
   it's tried again every hour.
+- Every response now carries `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`
+  and `X-Permitted-Cross-Domain-Policies: none`, and the bundled Caddy drops the `Server` header.
+- The portal's access log (Docker and `serve`) records the path only, not the query string or the referer,
+  which carried search terms, filter values and the one-time setup link.
+- The containers get a process limit, and the bundled Caddy runs with every capability but binding its
+  ports dropped, like the portal and worker.
 
 ## 2.1.0 (2026-10-10)
 

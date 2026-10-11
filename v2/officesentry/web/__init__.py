@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
+import sqlite3
 from datetime import timedelta
 
 from flask import Flask, g, render_template, request
@@ -12,7 +14,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .. import __version__, system_alerts, system_health, worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
-from ..db import connect, migrate
+from ..db import connect, is_locked, migrate
 from . import (
     access,
     across,
@@ -47,6 +49,12 @@ from . import (
 )
 
 csrf = CSRFProtect()
+log = logging.getLogger(__name__)
+
+# How long a page's write waits for the write lock before the portal says it's busy (the 503 below). The
+# worker waits its usual 30 seconds; a person at a browser shouldn't, and a lock held longer than this is a
+# restore, a backup or an erase's VACUUM, which no wait of a few seconds outlasts.
+WEB_BUSY_TIMEOUT_MS = 5_000
 
 
 def create_app(cfg: Config | None = None) -> Flask:
@@ -90,7 +98,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     def _open_db():
         # The worker can't report that it has stopped, so the portal watches it (system_alerts.py).
         system_alerts.start_watchdog(app, cfg)
-        g.db = connect(cfg.db_path)
+        g.db = connect(cfg.db_path, busy_timeout_ms=WEB_BUSY_TIMEOUT_MS)
         g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
 
@@ -118,6 +126,11 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["X-Frame-Options"] = "SAMEORIGIN" if override else "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # A page the portal opens can't keep a handle on it, and no other site can embed its pages, downloads,
+        # brand logo or files (emails carry the logo as image data, not a link).
+        resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        resp.headers["X-Permitted-Cross-Domain-Policies"] = "none"
         if cfg.secure_cookies:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         # Static files and the public brand colours and logo may be cached; nothing else is.
@@ -164,6 +177,22 @@ def create_app(cfg: Config | None = None) -> Flask:
             "public_demo": bool(g.get("public_demo")),
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
         }
+
+    @app.errorhandler(sqlite3.OperationalError)
+    def _busy(exc):
+        # A write that waited WEB_BUSY_TIMEOUT_MS for the lock and still found it held (a restore, a backup,
+        # an erase's VACUUM): a page that says so and asks for another go, not a 500. Other errors stay errors.
+        if not is_locked(exc):
+            raise exc
+        log.warning("The database was locked for %s %s; asked the person to try again", request.method, request.path)
+        page = render_template(
+            "error.html",
+            code=503,
+            message="Office Sentry is busy right now.",
+            detail="Something else is writing to its database, such as a restore, a backup or a large delete. "
+            "Wait a moment, then try again.",
+        )
+        return page, 503, {"Retry-After": "10"}
 
     @app.errorhandler(403)
     def _forbidden(_e):

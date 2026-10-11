@@ -427,7 +427,12 @@ it records a finished run tries again for a few minutes (`_while_locked`) rather
 failed as "worker stopped" once its lease runs out. `db.transaction` (and
 `store.atomic`) begin with `BEGIN IMMEDIATE`, so a write that reads first waits
 for other writers instead of failing at once; pass `immediate=False` only for
-a read. Don't add Celery or Redis.
+a read. The portal's connections wait `web.WEB_BUSY_TIMEOUT_MS` (5 seconds) for
+the lock rather than the worker's 30, and a write that still finds it held gets
+the "busy right now" page (503 with `Retry-After`), never a 500. Bookkeeping a
+page can do without once (noting a session was seen, storing a dashboard row it
+just built) goes through `db.try_write`, which waits a quarter of a second and
+skips. Don't add Celery or Redis.
 
 Office Sentry's own health is `system_health.assess()` (database, schema
 version, worker heartbeat, last collection and whether most tenants failed
