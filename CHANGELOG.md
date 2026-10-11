@@ -115,7 +115,7 @@ client's approval.
   checks, accepted risks, checks that couldn't run) follows as an appendix the summary links into.
   A **Summary PDF** button, and a "Monthly review: summary only" option in report plans and email
   schedules, give the two summary pages on their own.
-- **Quarterly review.** A new starting point in the report designer (Month-end → Custom reports): three
+- **Quarterly review.** A new starting point in the report designer (Month-end → Report designs): three
   months of Secure Score and findings, what was fixed in the quarter, the projects on the table and
   where each stands, licence spend a month and a year with the waste, and what's coming up in the next
   90 days. Its five blocks (Three-month trend, Fixed this quarter, Projects, Licence spend, Coming up)
@@ -177,9 +177,9 @@ client's approval.
   activity and open findings, and each opens a page with what needs attention first, then its storage over the
   retained months with the libraries and largest files that fill it, its sharing settings and the files shared
   from it, the team or Microsoft 365 group behind it (or its owner), its activity, open findings and what
-  changed, with links to the site access and file permission reports for the detail. Site addresses in
+  changed, with a link to the Site access report for who can reach it. Site addresses in
   reports, the group page and search results open the page, and it downloads as PDF and XLSX.
-- Five checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
+- Four checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
   blocked. **Guests:** no guest from another organisation owns a team or group. **Storage:** no mailbox and
   no OneDrive is at or over 90% of its quota (high once it's full). Each goes in the project an MSP would sell
   it under (account clean-up, sharing and guests, storage), with an effort estimate.

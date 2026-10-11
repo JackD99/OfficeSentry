@@ -2,8 +2,9 @@
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
 Office Sentry reads each client's Microsoft 365 every night, keeps the history, and turns it into the reports an MSP
-actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, about 30 detail reports, a view across all
-clients, and what changed since last month. It never changes anything in a client's tenant.
+actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, 45 detail reports, a page for
+every person, mailbox, group and site, a view across all clients, and what changed since last month. It never changes
+anything in a client's tenant.
 
 [![CI](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
 [![Release](https://img.shields.io/github/v/release/JackD99/OfficeSentry?label=release)](https://github.com/JackD99/OfficeSentry/releases/latest)
@@ -33,9 +34,13 @@ review it and send it, or let it email itself.
 
 ### Client reports and PDFs
 
-The **Monthly Security & Licensing Review** opens with a verdict and a plain-English summary, then key figures with
-their 4-week change, what to fix first, what changed, Secure Score, licence waste in money and the checks that
-passed. It is a web page, a branded PDF and a spreadsheet, and reads well on a phone.
+The **Monthly Security & Licensing Review** leads with the answer on two summary pages. *At a glance* has what was
+checked, what changed, the key figures with their 4-week change and the findings by severity. *This month* has the
+findings found and fixed each month, what was done and what to do next. The detail follows as an appendix: what
+changed, the Secure Score trend, each failing check with the accounts affected, licence waste in money and the checks
+that passed. It is a web page, a branded PDF and a spreadsheet, and reads well on a phone. The **Summary PDF** is the
+two summary pages on their own ([open it](examples/monthly-review-summary.pdf)), and report plans and email schedules
+can send just that.
 
 <table>
   <tr>
@@ -50,14 +55,18 @@ passed. It is a web page, a branded PDF and a spreadsheet, and reads well on a p
   </tr>
 </table>
 
+![This month: findings found and fixed each month, what was done and what to do next](docs/screenshots/review-attention.png)
+
 **Report designs** let an account manager build their own client report without code: drag in blocks (a
 verdict, key figures, failing checks, what changed, licences, a table from any detail report, your own text),
 set each one up, see it on a real client as you go, and send it with a report plan. Start from an executive
-summary, a full review or a licensing review.
+summary, a full review, a licensing review or a **Quarterly review**: three months of Secure Score and findings,
+what was fixed, the projects on the table and where each stands, licence spend and what's coming up in the next
+90 days ([example PDF](examples/quarterly-review.pdf)).
 
 ### SharePoint storage: why it's full and what to clean up
 
-When a client's SharePoint fills up, the storage report shows how full the tenant is (its quota worked out from
+When a client's SharePoint fills up, the storage report shows how full it is (its quota worked out from
 its licences) and when it will be full at the current rate, where the space goes (current files, older versions,
 recycle bins, Preservation Hold libraries), every site and library by size, and the largest folders and files,
 files with the most version history, large files nobody has touched for two years and the biggest recycle bin
@@ -77,9 +86,19 @@ See the full 19-page [example PDF](examples/sharepoint-storage.pdf) for a client
   </tr>
 </table>
 
+### Who can reach each site and team
+
+**Site access** shows who owns, administers and can reach each SharePoint site: sites with no enabled owner or
+only one, each site's owners, administrators, members and guests, what the default library grants and to whom,
+every guest with the sites they can reach, and who administers many sites. **Teams channels, guests and apps** does
+the same for Teams: each team's private and shared channels with their members, the guests and people from other
+organisations in them, the apps added to each team (custom uploads flagged) and teams nobody has used in 90 days.
+
+![Site access: sites with no owner or one, guests, and sites open to everyone in the organisation](docs/screenshots/site-access.png)
+
 ### Detail reports you can filter, save and export
 
-About 30 detail reports across identity, email, files, devices and licences. Every table can be filtered by its
+45 detail reports across identity, email, files and Teams, devices and licences. Every table can be filtered by its
 values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
 
@@ -102,20 +121,22 @@ the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline f
   </tr>
 </table>
 
-The full list (mailboxes, inbox rules, shared mailboxes, mailbox size, legacy sign-ins, passwords and sign-in
-methods, admins and roles, apps and consents, guests and sharing, groups and Teams with their private and shared
-channels, mail flow per domain, email domains with SPF, DKIM, DMARC and MTA-STS, hybrid identity, admin activity,
-tenant settings, Microsoft 365 usage, Secure Score and more) is in the [technical reference](v2/README.md#reports).
-The **Reports** page finds any of them by name or by the job you're doing ("Offboarding check", "Insurance
-renewal", "Storage cleanup").
+The full list (mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
+devices, distribution lists, mail flow per domain, legacy sign-ins, passwords and sign-in methods, admins and roles,
+administrative units, apps and consents, guests and sharing, groups and Teams, Teams channels with their guests and
+apps, empty, nested and expiring groups, who can reach each SharePoint site, email domains with SPF, DKIM, DMARC and
+MTA-STS, hybrid identity, admin activity, licence changes month by month, tenant settings, Microsoft 365 usage,
+Secure Score and more) is in the [technical reference](v2/README.md#reports). The **Reports** page finds any of them
+by name or by the job you're doing ("Offboarding check", "Insurance renewal", "Storage cleanup").
 
 ![The Reports page: every report, searchable, grouped by job](docs/screenshots/reports-library.png)
 
 ### One page per person
 
-Everything about one account on one page: sign-in, MFA and methods, admin roles, licences and what they're used
-for, mailbox forwarding and delegates, devices, sharing, and a "Needs attention" list, with how the account has
-changed over time. Useful for offboarding checks and "was this account compromised?" questions.
+Everything about one account on one page: sign-in, MFA and methods, admin roles, licences and what they're used for,
+mailbox forwarding and delegates, devices, sharing, the administrative units it's in, and a "Needs attention" list,
+with how the account has changed over time. Useful for offboarding checks and "was this account compromised?"
+questions.
 
 ![An account page: needs attention, MFA, admin roles, licences and devices](docs/screenshots/person.png)
 
@@ -198,7 +219,7 @@ Business Premium features a *Security licence upgrade*, and so on. A project is 
 smaller, like registering MFA for one admin, is a quick fix the team just does, listed on the client's page. Every
 client's recommendations sit in one list, worst first, with what was found, how big the job is, a rough estimate
 and where it stands (suggested, proposed, agreed or declined, with a note). Each client's page downloads a branded
-proposal PDF to send them. A project drops off by itself once the tenant is fixed.
+proposal PDF to send them. A project drops off by itself once its findings are fixed.
 
 <table>
   <tr>
@@ -218,13 +239,25 @@ collection internals, run logs or other clients.
 
 ![What a client sees when they sign in](docs/screenshots/client-view.png)
 
+### Your team, each with the access they need
+
+Everyone at your MSP has a role made of capabilities, and sees only the clients they're given. Seven roles are built
+in: Administrator, Team leader, Second line, First line (looks things up, changes nothing), Account manager
+(licences, renewals, month-end reports and projects), Auditor (every report, read-only) and Client viewer. **Settings
+→ Users → Roles** changes what a built-in role holds or adds your own, and **Customise** on a person's page gives or
+takes away single capabilities, everywhere or on one client. Staff can sign in with their Microsoft work account,
+under your own Conditional Access and MFA, with their role assigned in Entra ([Staff
+sign-in](v2/docs/staff-sign-in.md)).
+
 ### Managing clients
 
 Adding a client shows a setup checklist that ticks itself off: admin consent, Global Reader, the first collection
 and every permission granted. **Client settings** lists every client's connection health, worst first, and each
-client's **Manage** tab says in plain words what's wrong and where to click to fix it. Clients can be paused or
-archived, and **Offboard** walks through a final export and the client's side, then deletes the client and
-everything stored for it, with no SQL.
+client's **Manage** tab says in plain words what's wrong and where to click to fix it. When a release asks for new
+permissions, **Update the app** adds them to your app registration with one sign-in, and the Onboarding tracker
+lists the clients still to approve them, each with a **What's new** page: the email to send, the approval link and a
+PDF saying what each permission reads. Clients can be paused or archived, and **Offboard** walks through a final
+export and the client's side, then deletes the client and everything stored for it, with no SQL.
 
 <table>
   <tr>
@@ -247,10 +280,10 @@ everything stored for it, with no SQL.
 
 ## Example reports
 
-[`examples/`](examples/) has real exports from the demo data: the monthly review (PDF and XLSX), the insurance
-evidence pack, SharePoint storage, MFA coverage, mailbox permissions, mail forwarding, licence right-sizing, sign-in
-activity, sign-in methods, subscriptions, Conditional Access, an account page, What changed, All clients and a
-recommended projects proposal. All of it is fictional.
+[`examples/`](examples/) has real exports from the demo data: the monthly review (PDF and XLSX) and its summary PDF,
+a quarterly review, Cyber Essentials evidence, the insurance evidence pack, SharePoint storage, MFA coverage, mailbox
+permissions, mail forwarding, licence right-sizing, sign-in activity, sign-in methods, subscriptions, Conditional
+Access, an account page, What changed, All clients and a recommended projects proposal. All of it is fictional.
 
 ## Security model
 
@@ -301,8 +334,8 @@ and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md).
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
 
 1. Run `docker compose logs web` and open the link on the line starting **No admin account yet** to create the
-   first admin (with two-step sign-in). Your home page then shows a **Get started** checklist of the next
-   three steps, which ticks itself off as you go.
+   first admin (with two-step sign-in). Your home page then shows a **Get started** checklist (the app connection,
+   your first client, its consent and its first collection), which ticks itself off as you go.
 2. Open **Settings → App connection** and press **Sign in to Microsoft**. The page shows a code and Microsoft's
    link: enter the code there and sign in as an admin of **your own** (MSP) tenant who can create app
    registrations. Office Sentry then creates its multi-tenant, read-only app with a certificate and saves it, with
