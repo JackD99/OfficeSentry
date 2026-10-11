@@ -109,6 +109,8 @@ Microsoft account links on users and how each session was started.
 
 ### Fixed
 
+- An Admin activity collection could be marked partial, with a warning that Microsoft timed out, when a
+  second ticked over between two readings of the clock during the run; nothing was actually missing.
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
   invisible to the admin checks and the Admins report. The group's members are now read each night and
   checked like any other admin; the Admins report says which group a role comes through.
