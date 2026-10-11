@@ -155,6 +155,8 @@ Yes: a table for the search index. It is applied on start, as usual.
   pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
   still finds the database locked after five seconds is answered with "Office Sentry is busy right
   now, try again in a moment" instead of an error page.
+- On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
+  dates on it are written the same way on every platform.
 
 ### Security
 
@@ -176,6 +178,12 @@ Yes: a table for the search index. It is applied on start, as usual.
   quick, and the worker erases the last copies in the background, rebuilding the file only when there's
   room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
   it's tried again every hour.
+- Every response now carries `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`
+  and `X-Permitted-Cross-Domain-Policies: none`, and the bundled Caddy drops the `Server` header.
+- The portal's access log (Docker and `serve`) records the path only, not the query string or the referer,
+  which carried search terms, filter values and the one-time setup link.
+- The containers get a process limit, and the bundled Caddy runs with every capability but binding its
+  ports dropped, like the portal and worker.
 
 ## 2.1.0 (2026-10-10)
 
