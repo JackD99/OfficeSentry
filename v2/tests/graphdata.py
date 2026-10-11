@@ -8,10 +8,13 @@ GA = "role-ga"
 EXCH = "role-exch"
 READER = "role-reader"
 
+GROUPS_ADMIN = "role-groups"
+
 ROLE_DEFINITIONS = [
     {"id": GA, "displayName": "Global Administrator", "isBuiltIn": True, "templateId": GA},
     {"id": EXCH, "displayName": "Exchange Administrator", "isBuiltIn": True, "templateId": EXCH},
     {"id": READER, "displayName": "Directory Readers", "isBuiltIn": True, "templateId": READER},
+    {"id": GROUPS_ADMIN, "displayName": "Groups Administrator", "isBuiltIn": True, "templateId": GROUPS_ADMIN},
 ]
 
 
@@ -62,7 +65,70 @@ ROLE_ASSIGNMENTS = [
         "directoryScopeId": "/",
         "principal": {"@odata.type": "#microsoft.graph.servicePrincipal", "id": "sp1", "displayName": "Some app"},
     },
+    # Roles scoped to an administrative unit: Ann looks after the Sales unit's groups; Bob, whose sign-in is
+    # blocked, still holds the same role over the Branch offices unit.
+    {
+        "id": "a6",
+        "roleDefinitionId": GROUPS_ADMIN,
+        "principalId": "u1",
+        "directoryScopeId": "/administrativeUnits/au-sales",
+        "principal": _user_principal("u1", "Ann", "ann@x.com"),
+    },
+    {
+        "id": "a7",
+        "roleDefinitionId": GROUPS_ADMIN,
+        "principalId": "u2",
+        "directoryScopeId": "/administrativeUnits/au-branches",
+        "principal": _user_principal("u2", "Bob", "bob@x.com", enabled=False),
+    },
 ]
+
+# Administrative units: Sales (assigned: Ann, the guest and the Sales team), Branch offices (a restricted management
+# unit, dynamic on department, whose rule is paused), and Service desk (empty, with nobody scoped to it).
+ADMIN_UNITS = [
+    {
+        "id": "au-sales",
+        "displayName": "Sales",
+        "description": "Sales staff and their groups, looked after by the sales admin",
+        "membershipType": "Assigned",
+        "membershipRule": None,
+        "membershipRuleProcessingState": None,
+        "visibility": None,
+        "isMemberManagementRestricted": False,
+    },
+    {
+        "id": "au-branches",
+        "displayName": "Branch offices",
+        "description": None,
+        "membershipType": "Dynamic",
+        "membershipRule": '(user.department -eq "Branch")',
+        "membershipRuleProcessingState": "Paused",
+        "visibility": "HiddenMembership",
+        "isMemberManagementRestricted": True,
+    },
+    {
+        "id": "au-desk",
+        "displayName": "Service desk",
+        "description": None,
+        "membershipType": "Assigned",
+        "membershipRule": None,
+        "membershipRuleProcessingState": None,
+        "visibility": None,
+        "isMemberManagementRestricted": False,
+    },
+]
+ADMIN_UNIT_MEMBERS = {
+    "au-sales": [
+        {"@odata.type": "#microsoft.graph.user", "id": "u1"},
+        {"@odata.type": "#microsoft.graph.user", "id": "u3"},
+        {"@odata.type": "#microsoft.graph.group", "id": "g1"},
+    ],
+    "au-branches": [
+        {"@odata.type": "#microsoft.graph.user", "id": "u2"},
+        {"@odata.type": "#microsoft.graph.device", "id": "dev1"},
+    ],
+    "au-desk": [],
+}
 
 ROLE_ELIGIBILITY = [
     {
