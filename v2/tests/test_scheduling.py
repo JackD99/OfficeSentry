@@ -2,12 +2,16 @@
 
 import gzip
 import os
+import sqlite3
+import threading
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
 from officesentry import delivery, schedule, store, worker
 from officesentry.__main__ import main
+from officesentry.collectors.base import Collector
 from officesentry.config import load_config
 from officesentry.db import connect
 
@@ -301,6 +305,106 @@ def test_a_stuck_main_loop_stops_the_heartbeat(db):
     assert "run 7" in live.problem()
     live.end_run()
     assert live.problem() is None
+
+
+def test_a_finished_run_is_recorded_once_the_lock_clears(cfg, db, two_tenants, monkeypatch, caplog):
+    """A collector thread that finds the database locked as it records its run keeps trying, rather than leave
+    the run to be failed as "worker stopped" when its lease runs out."""
+    monkeypatch.setattr(worker, "FINISH_WAIT", 0.01)
+    db.execute("PRAGMA busy_timeout = 20")
+    other = connect(cfg.db_path)
+    rollbacks = []
+    rollback = worker._rollback
+
+    def release_on_the_second_try(conn):
+        rollbacks.append(conn)
+        if len(rollbacks) == 2:
+            other.rollback()
+        rollback(conn)
+
+    monkeypatch.setattr(worker, "_rollback", release_on_the_second_try)
+
+    class Quiet(Collector):
+        key = "quiet"
+        title = "Quiet"
+
+        def collect(self, ctx):
+            ctx.metric("quiet", 1)
+            other.execute("BEGIN IMMEDIATE")  # another writer takes the lock as the run finishes
+
+    monkeypatch.setitem(worker.REGISTRY, "quiet", Quiet)
+    store.enqueue_run(db, two_tenants[0], "quiet")
+    assert worker.execute_run(db, store.claim_next_run(db), lambda *a: SimpleNamespace()) == "succeeded"
+    run = store.latest_run(db, two_tenants[0], "quiet")
+    assert run["status"] == "succeeded" and run["finished_at"]
+    assert len(rollbacks) == 2 and "The database is busy" in caplog.text
+    other.close()
+
+
+def test_a_lock_that_never_clears_still_fails_the_finish(cfg, db, monkeypatch):
+    monkeypatch.setattr(worker, "FINISH_WAIT", 0.01)
+    monkeypatch.setattr(worker, "FINISH_TRIES", 3)
+    db.execute("PRAGMA busy_timeout = 20")
+    other = connect(cfg.db_path)
+    other.execute("BEGIN IMMEDIATE")
+    tries = []
+
+    def step():
+        tries.append(1)
+        with store.atomic(db):
+            db.execute("UPDATE settings SET value = value WHERE key = 'none'")
+
+    with pytest.raises(sqlite3.OperationalError):
+        worker._while_locked(db, step)
+    assert len(tries) == 3
+    other.rollback()
+    worker._while_locked(db, step)  # free again: first time
+    assert len(tries) == 4
+
+    def broken():
+        raise sqlite3.OperationalError("no such table: nothing")
+
+    with pytest.raises(sqlite3.OperationalError):  # only a lock is tried again
+        worker._while_locked(db, broken)
+    other.close()
+
+
+def test_the_daily_pass_runs_beside_the_main_loop(cfg, db, monkeypatch, caplog):
+    """The daily pass (retention, every dashboard row) can take longer than the main loop is allowed to be
+    away, so it runs in its own thread, counted as progress for up to four hours."""
+    now = [0.0]
+    live = worker.Liveness(clock=lambda: now[0])
+    hold = threading.Event()
+    seen = []
+
+    def slow_daily(conn, cfg):
+        seen.append((threading.current_thread().name, conn is not db))
+        hold.wait(10)
+
+    monkeypatch.setattr(worker, "_daily", slow_daily)
+    thread = worker._daily_thread(cfg, live)
+    for _ in range(50):
+        if seen:
+            break
+        hold.wait(0.05)
+    assert seen == [("daily", True)]  # its own thread, its own connection
+    assert live.held("daily") == [0] and live.problem() is None
+    now[0] += worker.LOOP_STALE.total_seconds() * 3
+    live.tick()
+    assert live.problem() is None  # longer than the loop may be away, fine for the daily pass
+    now[0] += worker.DAILY_STALE.total_seconds()
+    live.tick()
+    assert "daily 0 has been going" in live.problem()
+    hold.set()
+    thread.join(5)
+    assert not thread.is_alive() and live.problem() is None
+
+    def broken(conn, cfg):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(worker, "_daily", broken)
+    worker._daily_thread(cfg, live).join(5)
+    assert "The daily pass failed" in caplog.text and live.problem() is None
 
 
 def test_healthcheck_command(cfg, db, monkeypatch):
