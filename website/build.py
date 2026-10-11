@@ -410,9 +410,9 @@ def examples() -> list[dict]:
 _WORDS = {
     "monthly security licensing review": "Monthly Security & Licensing Review",
     "mfa": "MFA",
-    "all tenants monthly review": "Monthly review for all clients",
+    "all clients monthly review": "Monthly review for all clients",
     "sharepoint": "SharePoint",
-    "what changed all tenants": "What changed across all clients",
+    "what changed all clients": "What changed across all clients",
     "conditional access": "Conditional Access",
     "sign in": "sign-in",
     "right sizing": "right-sizing",

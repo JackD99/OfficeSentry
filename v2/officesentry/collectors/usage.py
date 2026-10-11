@@ -19,6 +19,7 @@ from ..graph import GraphError, PermissionMissing
 from ..usage import ACTIVE_DAYS, APPS, COLLECTOR, COPILOT, PLATFORMS, SERVICES, concealed, part_for_product
 from ..usage import licensed as is_licensed
 from .base import Collector, RunContext, register
+from .connection import awaiting
 
 PERIOD = f"D{ACTIVE_DAYS}"
 JSON = {"$format": "application/json"}  # v1.0 only returns CSV; beta returns JSON
@@ -29,6 +30,8 @@ EMAIL = f"/reports/getEmailActivityUserDetail(period='{PERIOD}')"
 TEAMS = f"/reports/getTeamsUserActivityUserDetail(period='{PERIOD}')"
 # Copilot's report doesn't accept D30; D90 still gives each person's last activity date.
 COPILOT_USAGE = "/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period='D90')"
+
+REPORT_SETTINGS = "ReportSettings.Read.All"  # added in 2.2: says outright whether names are concealed
 
 # Office365ActiveUserDetail field prefix per service key.
 FIELDS = {"exchange": "exchange", "teams": "teams", "onedrive": "oneDrive", "sharepoint": "sharePoint"}
@@ -184,7 +187,7 @@ class Usage(Collector):
         f"Who used email, Teams, OneDrive, SharePoint and the Office apps in the last {ACTIVE_DAYS} "
         "days, from Microsoft's usage reports."
     )
-    permissions = ("Reports.Read.All",)
+    permissions = ("Reports.Read.All", REPORT_SETTINGS)
 
     def collect(self, ctx: RunContext) -> None:
         try:
@@ -225,7 +228,8 @@ class Usage(Collector):
                 else:
                     ctx.log(f"Copilot usage report unavailable: {exc.message}")
 
-        hidden = any(r["concealed"] for r in rows.values())
+        setting = self._conceal_setting(ctx)
+        hidden = setting is True or any(r["concealed"] for r in rows.values())
         report_date = max((r["reportDate"] for r in rows.values() if r["reportDate"]), default=None)
         ctx.objects(
             "usage_status",
@@ -235,6 +239,8 @@ class Usage(Collector):
                     {
                         "available": True,
                         "concealed": hidden,
+                        # The tenant's "Display concealed user, group, and site names" setting (None: not read).
+                        "concealSetting": setting,
                         "reportDate": report_date,
                         "days": ACTIVE_DAYS,
                         "read": read,
@@ -259,3 +265,15 @@ class Usage(Collector):
                     for r in rows.values()
                 ),
             )
+
+    @staticmethod
+    def _conceal_setting(ctx: RunContext) -> bool | None:
+        """Whether the tenant conceals names in usage reports, from its report settings. None while the client
+        hasn't approved the permission or the settings can't be read: the codes in the reports still tell."""
+        if awaiting(ctx, REPORT_SETTINGS):
+            return None
+        try:
+            return bool(ctx.graph.get("/admin/reportSettings").get("displayConcealedNames"))
+        except GraphError as exc:
+            ctx.log(f"The usage report settings weren't readable: {exc.message}")
+            return None
