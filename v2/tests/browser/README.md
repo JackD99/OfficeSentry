@@ -12,7 +12,10 @@ width, in light and dark, and:
   laptop width, failing on "serious" and "critical" WCAG 2.1 A and AA problems.
 
 The pages come from the fictional demo site in `scripts/screenshots.py` with the clock stopped at
-5 October 2026, so dates and "3 days ago" read the same on every run.
+5 October 2026, so dates and "3 days ago" read the same on every run. The demo data has to come out the
+same on every run too: its choices come from a seeded `random.Random` or a checksum such as `zlib.crc32`,
+never `hash()`, which Python seeds differently in every process (a site's owners once changed from run to
+run that way, and What changed's counts with them).
 
 ## Running them
 
