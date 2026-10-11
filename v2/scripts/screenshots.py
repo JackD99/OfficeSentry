@@ -263,6 +263,7 @@ SHOTS = [
     Shot("admin-units", "/tenants/{t}/data/admin-units", height=1000),
     Shot("licence-changes", "/tenants/{t}/data/licence-changes", height=1100),
     Shot("teams", "/tenants/{t}/data/teams", height=1000),
+    Shot("mail-flow", "/tenants/{t}/data/mail-flow", height=1000),
     Shot("report-designs", "/reporting/designs", height=900),
     Shot("design-editor", "/reporting/designs/1", height=1000),  # the demo's Quarterly review
     Shot("all-tenants", "/across/review", height=760),
