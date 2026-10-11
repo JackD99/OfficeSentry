@@ -11,25 +11,25 @@
 <div class="page-head">
   <div>
     <h1>Reports</h1>
-    <div class="sub">{{ total }} reports{% if staff %}, for one tenant or across all {{ tenants|length }}{% endif %}. Search, or pick the job you're doing.</div>
+    <div class="sub">{{ total }} reports{% if staff %}, for one client or across all {{ tenants|length }}{% endif %}. Search, or pick the job you're doing.</div>
   </div>
 </div>
 
 {% if not tenants %}
 <div class="card empty">
-  <h3>No tenants yet</h3>
-  <p>{% if can('clients.manage') %}<a href="{{ url_for('tenants.new_tenant') }}">Add a tenant</a> and its reports appear here once data has been collected.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
+  <h3>No clients yet</h3>
+  <p>{% if can('clients.manage') %}<a href="{{ url_for('tenants.new_tenant') }}">Add a client</a> and its reports appear here once data has been collected.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
 </div>
 {% else %}
 <div class="library-bar">
   <label class="library-search">{{ icon('search') }}<span class="sr-only">Find a report</span>
-    <input type="search" data-report-search="library" placeholder="Find a report, tenant or setting…" autofocus autocomplete="off"></label>
+    <input type="search" data-report-search="library" placeholder="Find a report, client or setting…" autofocus autocomplete="off"></label>
   {% if staff or tenants|length > 1 %}
   <form method="get" action="{{ url_for('reports.overview') }}" class="picker-form" data-autosubmit>
     {% if use %}<input type="hidden" name="use" value="{{ use.key }}">{% endif %}
     <label for="library-tenant" class="inline-label">Show for</label>
     <select id="library-tenant" name="tenant">
-      {% if staff %}<option value=""{% if not tenant %} selected{% endif %}>All tenants</option>{% endif %}
+      {% if staff %}<option value=""{% if not tenant %} selected{% endif %}>All clients</option>{% endif %}
       {% for t in tenants %}<option value="{{ t.id }}"{% if tenant and t.id == tenant.id %} selected{% endif %}>{{ t.name }}</option>{% endfor %}
     </select>
     <noscript><button class="btn sm">Show</button></noscript>
@@ -62,7 +62,7 @@
           <span class="title">{{ e.title }}{{ icon('arrow', 'go') }}</span>
           <span class="desc">{{ e.description }}</span>
         </a>
-        {% if e.across %}<a class="lib-across" href="{{ e.across }}" title="Compare {{ e.title }} across every tenant">{{ icon('grid') }} All tenants</a>{% endif %}
+        {% if e.across %}<a class="lib-across" href="{{ e.across }}" title="Compare {{ e.title }} across every client">{{ icon('grid') }} All clients</a>{% endif %}
       </article>
       {% endfor %}
     </div>
@@ -70,10 +70,10 @@
   {% endfor %}
   {% if staff %}
   <section class="report-group lib-area" data-search-only hidden>
-    <h2>Tenants</h2>
+    <h2>Clients</h2>
     <div class="lib-grid">
       {% for t in tenants %}
-      <article class="lib-card" data-name="{{ (t.name ~ ' ' ~ t.tenant_ref ~ ' tenant')|lower }}"><a class="lib-main" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">
+      <article class="lib-card" data-name="{{ (t.name ~ ' ' ~ t.tenant_ref ~ ' tenant client')|lower }}"><a class="lib-main" href="{{ url_for('tenants.tenant', tenant_id=t.id) }}">
         <span class="title">{{ t.name }}{{ icon('arrow', 'go') }}</span><span class="desc mono">{{ t.tenant_ref }}</span></a></article>
       {% endfor %}
     </div>
@@ -91,7 +91,7 @@
   </section>
   {% endif %}
 </div>
-<p class="footnote">{% if tenant %}Reports open for <strong>{{ tenant.name }}</strong>.{% if staff %} Use “All tenants” on a report to compare every tenant.{% endif %}{% else %}Each report opens across all your tenants, one row per tenant. Pick a tenant above to open its own reports.{% endif %}</p>
+<p class="footnote">{% if tenant %}Reports open for <strong>{{ tenant.name }}</strong>.{% if staff %} Use “All clients” on a report to compare every client.{% endif %}{% else %}Each report opens across all your clients, one row per client. Pick a client above to open its own reports.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}

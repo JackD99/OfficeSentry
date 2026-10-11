@@ -295,7 +295,7 @@ EXAMPLES = {
     ),
     "sharepoint-storage.pdf": (
         "/tenants/{t}/data/sharepoint-storage.pdf",
-        "A tenant nearly out of SharePoint space: where it went, when it fills up, what to clean up.",
+        "A client nearly out of SharePoint space: where it went, when it fills up, what to clean up.",
     ),
     "mfa-coverage.pdf": ("/tenants/{t}/data/mfa.pdf", "Who has MFA registered and who is enforced to use it."),
     "mailbox-permissions.pdf": (
@@ -327,14 +327,14 @@ EXAMPLES = {
         "Every subscription, what is assigned and what is paid for but unused.",
     ),
     "account-page.pdf": ("/tenants/{t}/users/u1.pdf", "Everything about one person's account on one page."),
-    "what-changed-all-tenants.pdf": ("/changes.pdf", "Month-over-month changes across every client."),
-    "all-tenants-monthly-review.pdf": (
+    "what-changed-all-clients.pdf": ("/changes.pdf", "Month-over-month changes across every client."),
+    "all-clients-monthly-review.pdf": (
         "/across/review.pdf",
         "One row per client: the monthly review's key figures side by side.",
     ),
     "recommended-projects.pdf": (
         "/tenants/{t}/projects.pdf",
-        "The projects a client's tenant calls for, as a proposal to send them.",
+        "The projects a client's Microsoft 365 calls for, as a proposal to send them.",
     ),
     "monthly-security-licensing-review.xlsx": (
         "/tenants/{t}/report.xlsx",

@@ -43,7 +43,7 @@ class Scope:
     @property
     def label(self) -> str:
         """Where a download or heading says which tenants it covers."""
-        return self.group.name if self.group else "All tenants"
+        return self.group.name if self.group else "All clients"
 
 
 def _save_choice(group_id: int | None) -> None:
@@ -153,7 +153,7 @@ def create():
     with transaction(g.db):
         group_id = tenant_groups.create(g.db, values, g.user["username"])
         audit(g.db, g.user["username"], "tenant_group_created", detail=values["name"])
-    flash(f"Created “{values['name']}”. Now tick the tenants that belong in it.", "success")
+    flash(f"Created “{values['name']}”. Now tick the clients that belong in it.", "success")
     return redirect(url_for("groups.edit", group_id=group_id))
 
 
@@ -181,7 +181,7 @@ def edit(group_id: int):
                 "tenant_group_updated",
                 detail=f"{values['name']}: {plural(len(chosen), 'tenant')} (+{added} -{removed})",
             )
-        flash(f"Saved. “{values['name']}” has {plural(len(chosen), 'tenant')}.", "success")
+        flash(f"Saved. “{values['name']}” has {plural(len(chosen), 'client')}.", "success")
         return redirect(url_for("groups.index"))
     analysts = g.db.execute(
         "SELECT u.username FROM users u JOIN user_tenant_groups ug ON ug.user_id = u.id"
@@ -210,8 +210,8 @@ def delete(group_id: int):
         audit(g.db, g.user["username"], "tenant_group_deleted", detail=group["name"])
     note = ""
     if usage["digests"]:
-        note += f" {plural(usage['digests'], 'digest')} now cover{'s' if usage['digests'] == 1 else ''} every tenant."
+        note += f" {plural(usage['digests'], 'digest')} now cover{'s' if usage['digests'] == 1 else ''} every client."
     if usage["analysts"]:
-        note += f" {plural(usage['analysts'], 'analyst')} lost the tenants it gave them."
-    flash(f"Deleted “{group['name']}”. Its tenants are still here.{note}", "success")
+        note += f" {plural(usage['analysts'], 'analyst')} lost the clients it gave them."
+    flash(f"Deleted “{group['name']}”. Its clients are still here.{note}", "success")
     return redirect(url_for("groups.index"))

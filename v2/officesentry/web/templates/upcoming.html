@@ -9,7 +9,7 @@
 <div class="page-head">
   <div>
     <h1>Coming up</h1>
-    <div class="sub">What falls due in the next 90 days across {{ up.tenants|plural('tenant') }}, soonest first.</div>
+    <div class="sub">What falls due in the next 90 days across {{ up.tenants|plural('client') }}, soonest first.</div>
   </div>
   {% if up.items %}
   <div class="actions">
@@ -21,8 +21,8 @@
 </div>
 
 {% if not up.tenants %}
-<div class="card empty"><h3>No tenants to show</h3>
-  <p>{% if can('clients.manage') %}Add a client tenant and its renewals, expiring credentials and full mailboxes show here after the first collection.{% else %}You haven't been given access to any active tenants yet. Ask an admin to grant access.{% endif %}</p></div>
+<div class="card empty"><h3>No clients to show</h3>
+  <p>{% if can('clients.manage') %}Add a client and its renewals, expiring credentials and full mailboxes show here after the first collection.{% else %}You haven't been given access to any active clients yet. Ask an admin to grant access.{% endif %}</p></div>
 {% else %}
 {% set first = up.soonest %}
 {% set now_n = counts[w.NOW] %}
@@ -67,7 +67,7 @@
 {{ report_table(tv, url_for('upcoming.download', ext='csv') ~ q) }}
 {% endif %}
 {% endfor %}
-<p class="footnote">Built from each tenant's latest collection; paused tenants are left out. Renewal dates come from Microsoft, which doesn't say whether a paid subscription renews automatically. Mailboxes are forecast from their growth since a collection two to eight weeks earlier. {% if can('settings.manage') %}Office Sentry's own certificates are listed too. {% endif %}{% if can('settings.manage') %}<a href="{{ url_for('email.overview') }}#coming-up">Email this to your team every week</a>.{% endif %}</p>
+<p class="footnote">Built from each client's latest collection; paused clients are left out. Renewal dates come from Microsoft, which doesn't say whether a paid subscription renews automatically. Mailboxes are forecast from their growth since a collection two to eight weeks earlier. {% if can('settings.manage') %}Office Sentry's own certificates are listed too. {% endif %}{% if can('settings.manage') %}<a href="{{ url_for('email.overview') }}#coming-up">Email this to your team every week</a>.{% endif %}</p>
 {% endif %}
 {% endblock %}
 {% block scripts %}

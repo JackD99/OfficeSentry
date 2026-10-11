@@ -341,7 +341,7 @@ def test_edit_tenant(client, db, two_tenants, connection_id):
     page = client.post(
         f"/tenants/{alpha}/edit", data=form | {"tenant_ref": "bravo.onmicrosoft.com"}, follow_redirects=True
     ).get_data(as_text=True)
-    assert "Another tenant already uses" in page
+    assert "Another client already uses" in page
 
     # Once data has come in, only a domain -> GUID change is allowed.
     seed_tenant(db, bravo)
@@ -494,7 +494,7 @@ def test_offboarding_erases_client_people_from_the_log_and_the_database_file(app
     # Who did what, and when, is kept; only the detail naming the client's people goes.
     accepted = next(r for r in log if r["action"] == "finding_accepted" and r["tenant_id"] == alpha)
     assert accepted["username"] == "admin" and accepted["ts"] == "2026-01-01T00:00:00Z"
-    assert "removed when the tenant was deleted" in accepted["detail"]
+    assert "removed when the client was deleted" in accepted["detail"]
     # The deleted client account's own activity no longer names them or their address.
     assert not any(r["username"] == "it@alpha-client.example" for r in log)
     assert any(

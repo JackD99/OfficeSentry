@@ -1,7 +1,7 @@
 # Office Sentry
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
-Office Sentry reads each client tenant every night, keeps the history, and turns it into the reports an MSP
+Office Sentry reads each client's Microsoft 365 every night, keeps the history, and turns it into the reports an MSP
 actually sends: a monthly review, a cyber-insurance evidence pack, about 30 detail reports, a view across all
 clients, and what changed since last month. It never changes anything in a client's tenant.
 
@@ -77,7 +77,7 @@ See the full 19-page [example PDF](examples/sharepoint-storage.pdf) for a client
 ### Detail reports you can filter, save and export
 
 About 30 detail reports across identity, email, files, devices and licences. Every table can be filtered by its
-values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any tenant, and
+values (or by age, for dates), sorted and have columns hidden; the view can be saved and reused on any client, and
 the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline figure opens the rows behind it.
 
 <table>
@@ -117,19 +117,19 @@ changed over time. Useful for offboarding checks and "was this account compromis
 
 ### Across all clients, and what changed
 
-The **Tenants** page puts every client side by side, worst first. **All tenants** compares any report across every
+The **Clients** page puts every client side by side, worst first. **All clients** compares any report across every
 client (one row each, every figure clickable), and **What changed** lists month-over-month changes: new and fixed
 findings, admin, account, Conditional Access, forwarding, app, device and group changes, and a row-by-row comparison
 of every detail report.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="All tenants rollup"></td>
-    <td width="50%"><img src="docs/screenshots/what-changed.png" alt="What changed across all tenants"></td>
+    <td width="50%"><img src="docs/screenshots/all-tenants.png" alt="All clients rollup"></td>
+    <td width="50%"><img src="docs/screenshots/what-changed.png" alt="What changed across all clients"></td>
   </tr>
   <tr>
-    <td>All tenants: the monthly review's figures for every client (<a href="examples/all-tenants-monthly-review.pdf">PDF</a>)</td>
-    <td>What changed in the last 30 days, most important first (<a href="examples/what-changed-all-tenants.pdf">PDF</a>)</td>
+    <td>All clients: the monthly review's figures for every client (<a href="examples/all-clients-monthly-review.pdf">PDF</a>)</td>
+    <td>What changed in the last 30 days, most important first (<a href="examples/what-changed-all-clients.pdf">PDF</a>)</td>
   </tr>
 </table>
 
@@ -137,14 +137,14 @@ of every detail report.
 
 Send any mix of reports weekly, monthly or quarterly at a time in the client's timezone: the client's people get
 the email, your team a hidden copy. Saved views go too, with your filters, columns and sort, for one client or
-across every tenant. Stale data is collected again first. There's a cross-tenant digest for your team, alert
+across every client. Stale data is collected again first. There's a cross-client digest for your team, alert
 emails when a scan finds something new and critical, and Teams, Slack or webhook alerts, including "the October
 report for Contoso is ready" with a link into the portal. Every send is
 logged, failures retry automatically, and you can preview at desktop and phone width.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/emailed-reports.png" alt="A tenant's emailed reports"></td>
+    <td width="50%"><img src="docs/screenshots/emailed-reports.png" alt="A client's emailed reports"></td>
     <td width="50%"><img src="docs/screenshots/email-schedule-form.png" alt="Scheduling an email"></td>
   </tr>
   <tr>
@@ -201,18 +201,18 @@ collection internals, run logs or other clients.
 
 ![What a client sees when they sign in](docs/screenshots/client-view.png)
 
-### Managing client tenants
+### Managing clients
 
 Adding a client shows a setup checklist that ticks itself off: admin consent, Global Reader, the first collection
-and every permission granted. **Client tenants** lists every client's connection health, worst first, and each
-tenant's **Manage** tab says in plain words what's wrong and where to click to fix it. Clients can be paused or
-archived, and **Offboard** walks through a final export and the client's side, then deletes the tenant and
+and every permission granted. **Client settings** lists every client's connection health, worst first, and each
+client's **Manage** tab says in plain words what's wrong and where to click to fix it. Clients can be paused or
+archived, and **Offboard** walks through a final export and the client's side, then deletes the client and
 everything stored for it, with no SQL.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/client-tenants.png" alt="Client tenants: connection health for every client"></td>
-    <td width="50%"><img src="docs/screenshots/manage-tenant.png" alt="A tenant's Manage page"></td>
+    <td width="50%"><img src="docs/screenshots/client-tenants.png" alt="Client settings: connection health for every client"></td>
+    <td width="50%"><img src="docs/screenshots/manage-tenant.png" alt="A client's Manage page"></td>
   </tr>
   <tr>
     <td>Connection health for every client</td>
@@ -232,7 +232,7 @@ everything stored for it, with no SQL.
 
 [`examples/`](examples/) has real exports from the demo data: the monthly review (PDF and XLSX), the insurance
 evidence pack, SharePoint storage, MFA coverage, mailbox permissions, mail forwarding, licence right-sizing, sign-in
-activity, sign-in methods, subscriptions, Conditional Access, an account page, What changed, All tenants and a
+activity, sign-in methods, subscriptions, Conditional Access, an account page, What changed, All clients and a
 recommended projects proposal. All of it is fictional.
 
 ## Security model
@@ -244,7 +244,7 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   isn't on a fixed allow-list of `Get-` cmdlets. It never creates or changes anything in a client's tenant.
 - **Certificate sign-in, no credential files.** The app signs in with a certificate whose private key is encrypted
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
-- **Tenant isolation and roles.** Deny by default: people see only the tenants they're granted, every tenant
+- **Tenant isolation and roles.** Deny by default: people see only the clients they're granted, every client
   page goes through one access check, and anything else returns 404. What they may do there is a role made of
   capabilities (built-in: Administrator, Team leader, Second line, First line, Account manager, Auditor and
   Client viewer), narrowed or widened per person and per client by an admin. Clients see only their own reports.
@@ -287,7 +287,7 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
    registrations. Office Sentry then creates its multi-tenant, read-only app with a certificate and saves it, with
    nothing to type on the server. (`docker compose run --rm worker python -m officesentry create-app` does the
    same from the command line.)
-3. Add your first tenant on the same page and follow its checklist: a Global Administrator of the client's
+3. Add your first client on the same page and follow its checklist: a Global Administrator of the client's
    tenant grants consent, you assign Global Reader, and the first collection runs.
 
 Stuck? [Troubleshooting](v2/docs/troubleshooting.md) covers the common errors, such as `AADSTS50011` on the
@@ -319,7 +319,7 @@ ruff format . && ruff check . && pytest
 OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:8000
 ```
 
-`python scripts/demo_data.py --data-dir /tmp/officesentry-demo` builds demo tenants to click around in.
+`python scripts/demo_data.py --data-dir /tmp/officesentry-demo` builds demo clients to click around in.
 The screenshots and example reports here are made by `python scripts/screenshots.py` from the same demo data;
 re-run it when the UI or reports change. [DEVELOPING.md](DEVELOPING.md) is a short tour of the code and tests, and
 [CONTRIBUTING.md](CONTRIBUTING.md) has the conventions.

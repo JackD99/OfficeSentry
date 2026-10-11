@@ -27,7 +27,7 @@
     <legend>Client groups <span class="faint small">(staff roles only)</span></legend>
     <p class="muted small m0">Every client in a ticked group, including clients added to it later. Client accounts are never given clients through a group.</p>
     <div class="check-grid">
-    {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}" {% if gr.id in granted_groups %}checked{% endif %}> {{ gr.name }} <span class="faint small">{{ gr.tenants|plural('tenant') }}</span></label>{% endfor %}
+    {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}" {% if gr.id in granted_groups %}checked{% endif %}> {{ gr.name }} <span class="faint small">{{ gr.tenants|plural('client') }}</span></label>{% endfor %}
     </div>
   </fieldset>
   {% endif %}

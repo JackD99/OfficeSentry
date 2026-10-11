@@ -79,7 +79,7 @@
     <div class="card-head"><h2>Since {{ report.period_start|datefmt('%-d %B') }}</h2>
       <a class="small" href="{{ url_for('across.tenant_changes', tenant_id=tenant.id) }}">Everything that changed</a></div>
     {% if report.first_report and not report.new_count and not report.resolved %}
-    <p class="muted small">Collection for this tenant started in this period, so its first findings are the starting point rather than new. New and fixed findings are tracked from here on.</p>
+    <p class="muted small">Collection for this client started in this period, so its first findings are the starting point rather than new. New and fixed findings are tracked from here on.</p>
     {% else %}
     <div class="mini-stats">
       <div><span class="value">{{ report.new_count }}</span><span class="label">new findings</span></div>

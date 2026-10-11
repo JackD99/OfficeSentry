@@ -5,7 +5,7 @@
 {% from "_across.html" import across_head with context %}
 {% from "_report_table.html" import report_table with context %}
 {% set report = data.report %}
-{% block title %}{{ report.title }} · Every row · All tenants · Office Sentry{% endblock %}
+{% block title %}{{ report.title }} · Every row · All clients · Office Sentry{% endblock %}
 {% macro saved_views() -%}
 {% set current = saved|selectattr('query', 'equalto', view_query)|first if view_query else none %}
 <details class="menu" id="views-menu">
@@ -18,7 +18,7 @@
       <form method="post" action="{{ url_for('views.delete', view_id=v.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="link faint" title="Delete this view" aria-label="Delete {{ v.name }}">×</button></form>
     </div>
     {% else %}
-    <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here. It opens on this page and on each tenant's own report.</p>
+    <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here. It opens on this page and on each client's own report.</p>
     {% endfor %}
     {% if current and can('settings.manage') %}
     <a class="menu-link small" href="{{ url_for('email.new_views', view=current.id) }}">{{ icon('send') }} Email this view to your team</a>
@@ -39,7 +39,7 @@
 <div class="toolbar report-title">
   <div>
     <h2 class="section-title">{{ report.title }}</h2>
-    <p class="muted small m0">Every row from every tenant, with the tenant first. Filter, sort and hide columns as on a tenant's own report; downloads keep the view.</p>
+    <p class="muted small m0">Every row from every client, with the client first. Filter, sort and hide columns as on a client's own report; downloads keep the view.</p>
   </div>
   {% if tv %}
   <div class="toolbar-actions">
@@ -62,10 +62,10 @@
 {% endif %}
 {% if truncated %}
 <div class="callout warn">{{ icon('alert') }}<div><strong>Only the first {{ '{:,}'.format(max_rows) }} of {{ '{:,}'.format(truncated) }} rows are here.</strong>
-  Filters, sorting and downloads cover these rows. Open each tenant's own report for the rest.</div></div>
+  Filters, sorting and downloads cover these rows. Open each client's own report for the rest.</div></div>
 {% endif %}
 {% if data.without %}
-<div class="callout">{{ icon('alert') }}<div><strong>{{ data.without|length|plural('tenant') }} without data for this report</strong>
+<div class="callout">{{ icon('alert') }}<div><strong>{{ data.without|length|plural('client') }} without data for this report</strong>
   {% for t, reason in data.without %}<p class="m0"><a href="{{ url_for('reports.data_report', tenant_id=t.id, key=key) }}">{{ t.name }}</a>: {{ reason }}</p>{% endfor %}</div></div>
 {% endif %}
 {% if not tv.total %}
@@ -77,7 +77,7 @@
 {{ report_table(tv) }}
 {% endif %}
 {% endif %}
-<p class="footnote">Built from each tenant's latest collection with the same report as the tenant's own page. Select a tenant's name to open its report.</p>
+<p class="footnote">Built from each client's latest collection with the same report as the client's own page. Select a client's name to open its report.</p>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>

@@ -5,17 +5,17 @@
 {% block title %}Projects · Office Sentry{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Recommended projects</h1>
-  <div class="sub">Work each client's Microsoft 365 data shows they need, from the latest collection: half a day or more each. Smaller jobs are quick fixes on each client's page. A project drops off once the tenant is fixed.</div></div></div>
+  <div class="sub">Work each client's Microsoft 365 data shows they need, from the latest collection: half a day or more each. Smaller jobs are quick fixes on each client's page. A project drops off once the client is fixed.</div></div></div>
 
 {% if not data.rows %}
 <div class="card empty">
-  <h3>No tenants to show</h3>
-  <p>{% if can('clients.manage') %}Add a tenant to see it here.{% else %}You haven't been given access to any tenants yet. Ask an admin to grant access.{% endif %}</p>
+  <h3>No clients to show</h3>
+  <p>{% if can('clients.manage') %}Add a client to see it here.{% else %}You haven't been given access to any clients yet. Ask an admin to grant access.{% endif %}</p>
 </div>
 {% else %}
 <div class="tiles">
   <div class="tile"><div class="label">Clients with a recommendation</div><div class="value">{{ data.tenants_with }}</div>
-    <div class="foot">of {{ data.rows|length }} tenants</div></div>
+    <div class="foot">of {{ data.rows|length }} clients</div></div>
   <div class="tile"><div class="label">Suggested</div><div class="value">{{ data.count(project, 'suggested') }}</div>
     <div class="foot">not yet put to the client</div></div>
   <div class="tile"><div class="label">Proposed</div><div class="value">{{ data.count(project, 'proposed') }}</div>
@@ -61,7 +61,7 @@
     </tbody>
   </table>
   </div>
-  {% else %}<div class="empty compact"><p>{% if declined %}Nothing declined.{% else %}No projects to recommend{% if project %} of this kind{% endif %}. Every tenant passes the checks behind them, or their findings are accepted risks.{% endif %}</p></div>{% endif %}
+  {% else %}<div class="empty compact"><p>{% if declined %}Nothing declined.{% else %}No projects to recommend{% if project %} of this kind{% endif %}. Every client passes the checks behind them, or their findings are accepted risks.{% endif %}</p></div>{% endif %}
   {% set no_data = data.rows|selectattr('note')|list %}
   {% if no_data %}<p class="footnote pad">Not included: {% for row in no_data %}{{ row.tenant.name }} ({{ row.note|lower|replace('.', '') }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
 </div>
