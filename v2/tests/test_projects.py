@@ -8,6 +8,8 @@ from officesentry import findings, projects, store
 from officesentry.lifecycle import delete_tenant
 from officesentry.rules import RULES, Finding
 from officesentry.snapshot import TenantSnapshot
+from tests import graphdata as gd
+from tests import hybriddata as hd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
@@ -33,6 +35,13 @@ def test_catalog_maps_each_check_to_one_project():
         assert p.checks or p.signals, p.key
         assert p.pitch and p.covers, p.key
         assert all(isinstance(e, projects.Effort) for e in p.checks.values()), p.key
+        # What it covers names only its own reasons, and whatever calls for it, the proposal has a scope.
+        own = set(p.checks) | {f"signal:{s.__name__.lstrip('_')}" for s in p.signals}
+        named = {k for c in p.covers for k in c.when}
+        assert named <= own, (p.key, named - own)
+        assert any(not c.when for c in p.covers) or set(p.checks) <= named, (p.key, set(p.checks) - named)
+    # Repairs are quick fixes, never sold as a project.
+    assert not {"directory_sync_running", "password_hash_sync"} & {k for p in projects.CATALOG for k in p.checks}
     assert not set(projects.MERGED) & set(projects.PROJECTS) and set(projects.MERGED.values()) <= set(projects.PROJECTS)
 
 
@@ -99,6 +108,45 @@ def test_one_small_fix_is_never_a_project(db, seeded, monkeypatch):
     found = only("admin_mfa", "legacy_auth_blocked", "admin_phishing_resistant", "users_mfa_registered")
     assert [r.project.key for r in found.projects] == ["identity"]
     assert "admin_mfa" in [q.key for q in found.quick_fixes]
+
+
+def test_proposal_covers_only_what_was_found(db, seeded):
+    """A proposal doesn't offer work the client doesn't need: nothing risky, no mailbox auditing to turn on."""
+    recs = _recs(db, seeded)
+    identity, email = recs["identity"].covers, recs["email_security"].covers
+    assert identity[0].startswith("Conditional Access policies") and "Report-only rollout first" in identity[-1]
+    assert "Risky sign-in and risky user handling" not in identity
+    assert "SMTP AUTH turned off, once scanners and apps send mail another way" in email
+    assert "Mailbox auditing on" not in email and "Sign-in blocked for shared mailboxes" not in email
+
+
+def test_stopped_sync_is_a_repair_and_small_clients_can_go_cloud_only(db, two_tenants, monkeypatch):
+    """Jack's example: nobody sells "Directory sync health". Sync that has stopped is a quick fix; the project
+    is moving a small business's accounts off its office server."""
+    monkeypatch.setattr(gd, "ORGANIZATION", {**hd.ORGANIZATION, "onPremisesLastSyncDateTime": hd.hours_ago(19)})
+    monkeypatch.setattr(hd, "DOMAINS", hd.HYBRID_DOMAINS)
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=hd.USERS)
+    found = projects.assess(db, store.get_tenant(db, alpha))
+    quick = {q.key: q for q in found.quick_fixes}
+    assert quick["directory_sync_running"].headline == "Not syncing: last sync 19 hours ago"
+    assert quick["directory_sync_running"].project == ""
+    cloud = {r.project.key: r for r in found.projects}["cloud_only"]
+    assert (cloud.project.title, cloud.severity, cloud.effort) == (
+        "Move to cloud-only accounts",
+        "low",
+        "About 6 hours",
+    )
+    assert [r.headline for r in cloud.reasons] == [
+        "3 accounts synced from an office server",
+        "1 computer joined to the office domain",
+    ]
+    assert "Computers moved from the office domain to Entra ID, keeping files and settings" in cloud.covers
+    # A bigger organisation's AD usually does more than sync accounts: no project, and still the quick fix.
+    monkeypatch.setattr(projects, "CLOUD_ONLY_MAX_USERS", 2)
+    found = projects.assess(db, store.get_tenant(db, alpha))
+    assert "cloud_only" not in {r.project.key for r in found.projects}
+    assert "directory_sync_running" in {q.key for q in found.quick_fixes}
 
 
 def test_no_data_means_no_recommendations(db, two_tenants):
@@ -186,6 +234,7 @@ def test_pages(client, db, seeded, two_tenants):
     assert "Identity and Conditional Access" in client.get("/projects?project=identity").get_data(as_text=True)
     page = client.get(f"/tenants/{seeded}/projects").get_data(as_text=True)
     assert "Legacy authentication is allowed" in page and "About 6 hours" in page
+    assert "Goal: Legacy authentication is blocked" in page  # the check's goal, not a second finding
     assert f"/tenants/{seeded}/findings#check-legacy_auth_blocked" in page
     quick = page[page.index('id="quick-fixes"') :]
     assert "Every admin has MFA registered" in quick and "Have each listed admin register a strong method" in quick

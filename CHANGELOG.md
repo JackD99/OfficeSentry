@@ -9,6 +9,29 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.3.0] - Unreleased
+
+### Changed
+
+- **Recommended projects read like something you'd quote.** Directory sync that has stopped is now a quick fix,
+  a repair rather than something to sell, and the old *Directory sync health* project is replaced by **Move to
+  cloud-only accounts**: for a business of 50 users or fewer still syncing accounts from an office server, moving
+  the accounts and domain-joined computers to the cloud so the server can go. *App and consent governance* is now
+  *Third-party app review*, *Sharing, guests and Teams governance* is *File sharing and guest access*,
+  *SharePoint storage and archiving* is *Storage and archiving* and *Licence and account clean-up* is *Licence
+  savings and leaver clean-up*; statuses and notes you set on those are kept. A status set on *Directory sync
+  health* doesn't carry over to the new project, since it was about the repair.
+- **A proposal lists only the work the client needs.** "What the project covers", on the client's page and in the
+  proposal PDF, now lists the parts their findings call for, so it no longer offers risky sign-in handling to a
+  client with no risky sign-ins.
+- **Site owners, guests with full control of a site and outside people who can edit shared files** are part of
+  the File sharing and guest access project instead of separate quick fixes.
+- The line under each finding on a client's Projects page now reads "Goal: every site has at least two owners",
+  so it no longer looks like it contradicts "3 sites with no owner" above it. A failing directory sync check says
+  "Not syncing: last sync 19 hours ago".
+- A project picked in the month-end review lands on the client's report as "Project: Email security" rather than
+  "Email security project".
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site
@@ -718,6 +741,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

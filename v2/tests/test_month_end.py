@@ -207,13 +207,13 @@ def test_review_suggests_projects_then_quick_fixes(client, db, two_tenants):
     review = client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
     assert (
         review.index("Projects to propose")
-        < review.index("Identity and Conditional Access project")
+        < review.index("Project: Identity and Conditional Access")
         < review.index("Quick fixes")
         < review.index("Have each listed admin register a strong method")
     )
     client.post(f"/tenants/{alpha}/report-actions", data={"rule_key": "project:identity", "period": PERIOD})
     action = month_end.actions(db, alpha)[0]
-    assert action["title"] == "Identity and Conditional Access project"
+    assert action["title"] == "Project: Identity and Conditional Access"
     assert action["detail"] == projects.PROJECTS["identity"].pitch and action["rule_key"] == "project:identity"
     review = client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
     assert 'value="project:identity"' not in review and 'value="project:email_security"' in review

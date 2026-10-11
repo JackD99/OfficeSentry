@@ -566,7 +566,7 @@ def suggestions(conn, tenant) -> list[dict]:
         {
             "rule_key": f"project:{rec.project.key}",
             "kind": "project",
-            "title": f"{rec.project.title} project",
+            "title": f"Project: {rec.project.title}",
             "detail": rec.project.pitch,
             "severity": rec.severity,
             "effort": rec.effort,
