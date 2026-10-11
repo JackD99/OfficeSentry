@@ -25,6 +25,7 @@ from . import (  # noqa: F401
     sign_in_reports,
     site_access,
     site_page,
+    site_permissions,
     subscriptions,
     teams,
     unused_apps,

@@ -49,7 +49,7 @@ TOP_FILES = 10
 SHARED_ROWS = 200
 SOURCES = ("sharepoint_usage", "sharepoint_storage", "shared_files", "groups")
 # Reports about who can open a site and its files, linked when this install has them.
-PERMISSION_REPORTS = ("site-access", "file-permissions")
+PERMISSION_REPORTS = ("site-access", "site-permissions", "file-permissions")
 STATES = {"exceeded": "high", "critical": "high", "nearing": "medium"}
 
 

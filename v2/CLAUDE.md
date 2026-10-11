@@ -117,6 +117,16 @@ so the later ones each night reuse the first one's site list and OneDrives,
 and people without a OneDrive aren't asked about for a week. A field a
 collector starts needing goes in those lists.
 
+Site permissions (SharePoint groups, permission levels, lists and subsites
+with their own permissions) come from SharePoint's REST API, not Graph:
+`sharepoint_api.beside(ctx.graph, host)` gives a `SharePointClient` that
+signs in with the same certificate for `https://<tenant>.sharepoint.com`
+(`GraphClient.resource_tokens`), refuses any other host, shares the run's
+limiter and telemetry, and is GET only. Its paths are catalogued in
+`endpoints.SHAREPOINT`. It needs Sites.Read.All on Office 365 SharePoint
+Online; until a client approves it, SharePoint answers 401 and the collector
+stores the reason `consent` so the report says it's waiting, without a warning.
+
 ## Adding a check or report
 
 - Checks live in the `checks/` package: `checks/base.py` is the framework
