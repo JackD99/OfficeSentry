@@ -120,6 +120,10 @@ client's approval.
   PDF for the client. The App connection page updates your app registration with one sign-in (**Update the
   app**), and the new `update-app` command does the same. A client that hasn't approved yet stays *Healthy*:
   the missing permissions are a step to do, not a problem.
+- **Teams channels, guests and apps** report (under *Files and Teams*): each team's private and shared channels
+  with their members and owners, the guests and people from other organisations in them, the apps added to
+  each team (custom uploads flagged), and teams nobody has used in 90 days. Usage reports also read your
+  tenant's "conceal names" setting, so they say outright when Microsoft hides names.
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
