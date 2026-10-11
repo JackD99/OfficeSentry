@@ -63,7 +63,6 @@ connections, one on setup sign-ins and a table for each client's approval.
   where more than 5% of mail fails flagged. It also lists Microsoft's top spam and phishing recipients for the
   last 30 days. Only counts are kept from the message trace, never subjects or addresses; it needs no new
   permission (Global Reader, as for distribution lists).
-
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;

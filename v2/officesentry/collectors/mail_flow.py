@@ -166,15 +166,6 @@ class MailFlow(Collector):
                 )
             ],
         )
-        totals = dict.fromkeys(STATUSES.values(), 0)
-        for entry in counts.values():
-            for day in entry["days"].values():
-                for bucket in day.values():
-                    for status, n in bucket.items():
-                        totals[status] = totals.get(status, 0) + _int(n)
-        ctx.metric("mail.flow_messages", sum(totals.values()))
-        ctx.metric("mail.flow_quarantined", totals["quarantined"])
-        ctx.metric("mail.flow_failed", totals["failed"])
 
     @staticmethod
     def _trace(ctx: RunContext, start: datetime, end: datetime, queries: int) -> tuple[list[dict] | None, int]:
@@ -224,5 +215,3 @@ class MailFlow(Collector):
                     )
         ctx.objects("top_recipient", rows)
         ctx.objects("top_recipient_status", [("status", {"read": read, "days": TOP_DAYS, "from": _iso(start)})])
-        if read.get("phish"):
-            ctx.metric("mail.phish_recipients", sum(r["kind"] == "phish" for _, r in rows))
