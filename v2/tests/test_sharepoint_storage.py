@@ -40,7 +40,9 @@ def test_collector_totals(db, two_tenants):
     seed_tenant(db, alpha)
     snap = _snap(db, alpha)
     assert store.latest_run(db, alpha, "sharepoint_storage")["status"] == "succeeded"
-    (site,) = snap.objects("sharepoint_storage", "site_storage")  # OneDrive sites aren't SharePoint storage
+    sites = {s["_id"]: s for s in snap.objects("sharepoint_storage", "site_storage")}
+    assert set(sites) == {"site-fin", "site-old"}  # OneDrive sites aren't SharePoint storage
+    site = sites["site-fin"]
     assert site["used"] == 5 * GB and site["recycleBin"] == 1 * GB and site["limit"] is None
     # Current files and versions leave out the Preservation Hold Library, which is counted on its own.
     assert site["current"] == 2 * GB + 100 * MB + 500 * MB
@@ -114,7 +116,7 @@ def test_site_limit_and_nearly_full_tenant(db, two_tenants):
     seed_tenant(db, alpha, sharepoint_kw={"site_quota": quota})
     report = _report(db, alpha)
     sites = _section(report, "Sites by storage")
-    assert sites.flags == ["high"] and _column(sites, "Site limit") == ["1.17 TB (92% used)"]
+    assert sites.flags[0] == "high" and _column(sites, "Site limit")[0] == "1.17 TB (92% used)"
     assert {t.label: t for t in report.tiles}["Storage used"].tone == "bad"  # 1,100 GB of 1,124 GB
     result = {r.key: r for r in evaluate(_snap(db, alpha))}["sharepoint_storage_space"]
     assert result.status == "fail" and result.findings[0].severity == "high"

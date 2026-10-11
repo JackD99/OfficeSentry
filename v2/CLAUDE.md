@@ -110,12 +110,12 @@ Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 An answer longer than `exchange.MAX_PAGES` pages is cut there, and the run is
 partial with a warning naming the cmdlet (`RunContext.note_exchange_cuts`).
 
-The two SharePoint collectors list sites and OneDrives through
-`collectors/sharepoint_lookup.Lookups`, both asking for the same fields
-(`SITE_FIELDS`, `DRIVE_FIELDS`: everything either needs), so the second one
-each night reuses the first one's site list and OneDrives, and people without
-a OneDrive aren't asked about for a week. A field either collector starts
-needing goes in those lists.
+The SharePoint collectors (shared files, storage, site access) list sites
+and OneDrives through `collectors/sharepoint_lookup.Lookups`, all asking for
+the same fields (`SITE_FIELDS`, `DRIVE_FIELDS`: everything any of them needs),
+so the later ones each night reuse the first one's site list and OneDrives,
+and people without a OneDrive aren't asked about for a week. A field a
+collector starts needing goes in those lists.
 
 ## Adding a check or report
 
@@ -428,8 +428,17 @@ turning each step's `target` into a link.
   which gives it the row of settings links at the top of the page.
 - Every page loads `static/app.js` (PDF links show "Preparing your PDF…" until
   the file arrives) and `static/tables.js` (sorting, row search, in-place
-  views, and stacked tables capped at 20 rows with "Show all" on phones). A
+  views, and long tables capped with "Show all N rows": several on a page
+  keep 10 rows on a laptop and 5 on a phone, one alone keeps every row on a
+  laptop and 20 on a phone; a table with `data-cap` set is left alone). A
   page that also loads `tables.js` itself still gets one copy.
+- A list cell (`Many`) of more than three items shows two and "and N more"
+  (`_report_table.html`); a cell of 32 characters or fewer gets class
+  `short` and sits beside its label in a stacked table on a phone.
+- The person page and `object_page.html` open with a summary (`.grid-main`:
+  Needs attention and Open findings, the facts card beside them), then each
+  part as `<details class="card part" open>` at full width; `app.js` folds
+  them on phones and opens the one a `#part-...` link points at.
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from

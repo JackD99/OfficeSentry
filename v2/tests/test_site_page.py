@@ -79,6 +79,7 @@ def test_site_page_brings_storage_and_sharing_together(db, two_tenants):
         reports["SharePoint storage"] == f"/tenants/{alpha}/data/sharepoint-storage?f=sites-by-storage%2Fsite%3AFinance"
     )
     assert "Shared files" in reports
+    assert reports["Site access"].startswith(f"/tenants/{alpha}/data/site-access")
     assert site_page.build(db, _tenant(db, alpha), "nope", NOW) is None
 
 
@@ -140,7 +141,7 @@ def test_sites_page_lists_every_site(db, two_tenants):
     assert "gone" not in {r.url.rsplit("/", 1)[-1] for r in rows}  # deleted sites have no page
     assert {t.label: t.value for t in tiles} == {
         "Sites": 3,
-        "Storage used": "11.0 GB",
+        "Storage used": "10.0 GB",  # Old Projects has its storage read too: 0 bytes, not the usage report's 1 GB
         "With anyone links": 2,
         "Inactive": 1,
         "Near their limit": 0,
