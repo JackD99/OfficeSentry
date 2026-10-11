@@ -10,6 +10,7 @@ Regenerate them from `v2/` with `python scripts/screenshots.py` after report cha
 | File | What it is |
 |---|---|
 | [monthly-security-licensing-review.pdf](monthly-security-licensing-review.pdf) | The Monthly Security & Licensing Review for one client, as sent to them. |
+| [cyber-essentials-evidence.pdf](cyber-essentials-evidence.pdf) | One client judged against Cyber Essentials: each control's verdict, the fixes and the answers for the form. |
 | [insurance-evidence-pack.pdf](insurance-evidence-pack.pdf) | The controls cyber-insurance questionnaires ask about, answered from the data. |
 | [sharepoint-storage.pdf](sharepoint-storage.pdf) | A tenant nearly out of SharePoint space: where it went, when it fills up, what to clean up. |
 | [mfa-coverage.pdf](mfa-coverage.pdf) | Who has MFA registered and who is enforced to use it. |

@@ -2,7 +2,7 @@
 
 **Branded Microsoft 365 security and licensing reports for every client, without gathering anything by hand.**
 Office Sentry reads each client tenant every night, keeps the history, and turns it into the reports an MSP
-actually sends: a monthly review, a cyber-insurance evidence pack, about 30 detail reports, a view across all
+actually sends: a monthly review, evidence for Cyber Essentials and insurance forms, about 30 detail reports, a view across all
 clients, and what changed since last month. It never changes anything in a client's tenant.
 
 [![v2](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
@@ -153,23 +153,26 @@ logged, failures retry automatically, and you can preview at desktop and phone w
   </tr>
 </table>
 
-### Insurance evidence
+### Evidence and certifications
 
-The **insurance evidence pack** answers the controls cyber-insurance questionnaires ask about (MFA, admin accounts,
-legacy sign-in, email authentication, forwarding, logging, leavers, apps, sharing, devices) with *In place*,
-*Partly* or *Not in place*, from the data, with the gaps listed. **Questionnaires** turn the same data into
-answers for cyber insurance proposal forms, supplier security questionnaires and Cyber Essentials, in each
-form's wording and ready to paste, with a text to complete where Microsoft 365 can't answer (backups,
-firewalls, plans).
+The **Evidence page** starts with the scheme the client is going for. **Cyber Essentials** and **Cyber
+Essentials Plus** are judged from the data as an assessor would, control by control: *Pass*, *Fail* (any gap
+fails; the auto-fail questions are marked), *Partly*, or *Your evidence* where Microsoft 365 can't show it
+(firewalls, patching, anti-malware), with the figures, the fix and a text to paste. The page leads with what to
+fix before applying, compares with last month or last year, says what the CE Plus assessor will test, and
+carries the answers for the IASME portal with one-tap copy; downloads come as PDF, Word, text, XLSX and CSV.
+The **insurance evidence pack** answers the controls cyber-insurance questionnaires ask about, and
+**questionnaires** turn the same data into answers for cyber insurance proposal forms and supplier security
+questionnaires in each form's wording, with a text to complete where Microsoft 365 can't answer.
 
 <table>
   <tr>
-    <td width="60%"><img src="docs/screenshots/evidence.png" alt="Insurance evidence"></td>
-    <td width="40%"><img src="docs/screenshots/pdf-evidence.png" alt="Insurance evidence PDF"></td>
+    <td width="60%"><img src="docs/screenshots/cyber-essentials.png" alt="Cyber Essentials evidence"></td>
+    <td width="40%"><img src="docs/screenshots/pdf-evidence.png" alt="Cyber Essentials evidence PDF"></td>
   </tr>
   <tr>
-    <td>Each control with the evidence and the gaps</td>
-    <td>The pack as a PDF (<a href="examples/insurance-evidence-pack.pdf">open it</a>)</td>
+    <td>Cyber Essentials: what to fix, each control's verdict and the text to paste</td>
+    <td>The pack as a PDF (<a href="examples/cyber-essentials-evidence.pdf">open it</a>; the <a href="examples/insurance-evidence-pack.pdf">insurance pack</a>)</td>
   </tr>
 </table>
 

@@ -89,7 +89,7 @@ def test_report_picker_links_every_report(client, db, seeded):
     make_user(db, "admin")
     login(client, "admin")
     for url, current in (
-        (f"/tenants/{alpha}/evidence", "Questionnaires and evidence"),
+        (f"/tenants/{alpha}/evidence", "Evidence and certifications"),
         (f"/tenants/{alpha}/data/inbox-rules", "Inbox rules"),
     ):
         page = client.get(url).get_data(as_text=True)

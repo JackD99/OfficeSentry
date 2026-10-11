@@ -6,7 +6,7 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
-## 2.1.1 (unreleased)
+## 2.2.0 (unreleased)
 
 ### Action required
 
@@ -19,6 +19,17 @@ None.
 ### Database upgrade
 
 No.
+
+### Added
+
+- Evidence by certification: a client's Evidence page now starts with the scheme they are going for.
+  Cyber Essentials and Cyber Essentials Plus (IASME question set version 16, April 2026, on Requirements for
+  IT Infrastructure v3.3) are judged from the Microsoft 365 data as an assessor would, control by control:
+  Pass, Fail (any gap fails, auto-fail questions marked), Partly, or Your evidence where Microsoft 365 can't
+  show it, with the figures, the fix and a text to paste. The page leads with what to fix before applying,
+  compares with last month, three months or a year ago, lists what the CE Plus assessor tests, and carries
+  the answers for the IASME portal with one-tap copy. Downloads: PDF, Word, plain text, XLSX and CSV. The
+  insurance and supplier questionnaires and the insurer controls stay where they were.
 
 ### Fixed
 

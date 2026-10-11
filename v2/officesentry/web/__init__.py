@@ -24,6 +24,7 @@ from . import (
     data_retention,
     designs,
     email,
+    evidence,
     filters,
     groups,
     history,
@@ -212,4 +213,5 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(system.bp)
     app.register_blueprint(styleguide.bp)
     app.register_blueprint(designs.bp)
+    app.register_blueprint(evidence.bp)
     return app

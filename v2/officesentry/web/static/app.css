@@ -1314,3 +1314,46 @@ button.layout-head { padding: 8px 10px; }
 input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
 .sent-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
 .send-steps details.by-hand { margin-top: var(--space-3); }
+
+/* Evidence packs by scheme: the cards on the Evidence page, then a scheme's verdict, fixes and controls. */
+.scheme-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); padding: 0 var(--space-5) var(--space-5); }
+.scheme-card { display: flex; flex-direction: column; gap: var(--space-1-5); padding: var(--space-3-5) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.scheme-card:hover { border-color: var(--accent); text-decoration: none; box-shadow: var(--shadow); }
+.scheme-card .scheme-title { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--fs-base); }
+.scheme-card .scheme-title .icon { color: var(--decor); flex: none; }
+.scheme-card:hover .scheme-title .icon { color: var(--accent); }
+.scheme-card .scheme-counts .dot { margin-right: 2px; }
+.scheme-card .scheme-body { margin-top: auto; padding-top: var(--space-1); }
+.verdict-callout { margin-bottom: var(--space-4); }
+.verdict-callout .headline { font-size: var(--fs-lg); font-weight: 600; margin: var(--space-1) 0 var(--space-0-5); color: var(--text); }
+.verdict-callout.ok { background: var(--ok-soft); }
+.tiles a.tile { color: inherit; text-decoration: none; }
+.tiles a.tile:hover { border-color: var(--accent); }
+.fix-list { margin: 0; padding-left: var(--space-5); }
+.fix-list li { margin-bottom: var(--space-3); }
+.fix-list .fix-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-weight: 600; }
+.fix-list .gap-summary { margin-top: var(--space-1); }
+.card.theme .intro, .card.audit .intro, .card.form-answers .intro { padding: 0 var(--space-5); }
+.control-row .requirement { margin-bottom: var(--space-1-5); }
+.control-row .figures { display: flex; flex-wrap: wrap; gap: var(--space-1-5) var(--space-4); margin: var(--space-1-5) 0; }
+.control-row .figures div { display: flex; gap: var(--space-1-5); align-items: baseline; }
+.control-row .figures dt { color: var(--muted); font-size: var(--fs-sm); }
+.control-row .figures dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.control-row .ticks li.but { color: var(--text-2); }
+.control-row .fix { margin: var(--space-1-5) 0; }
+.answer-row .ref, .fix-list .ref, .changes-table .ref { color: var(--muted); font-weight: 500; margin-right: 2px; }
+.since .card-head .seg { margin: 0; }
+.changes-table a { color: inherit; }
+.ok-text { color: var(--ok); }
+.bad-text { color: var(--bad); }
+.audit-verdicts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1-5); }
+.audit-verdicts a { display: inline-flex; align-items: center; gap: var(--space-1); color: inherit; }
+.form-answers .copy-bar { margin: 0 var(--space-5) var(--space-3); }
+.form-answers .show-filter { margin: 0 var(--space-5) var(--space-3); }
+.form-answers .part-title { margin: var(--space-2) var(--space-5) 0; padding-top: var(--space-2); border-top: 1px solid var(--border); font-size: var(--fs-base); }
+.form-answers .empty { padding: var(--space-4) var(--space-5); }
+.evidence-sets .icon.back { width: 14px; height: 14px; transform: rotate(180deg); vertical-align: -2px; margin-right: 2px; }
+@media (max-width: 720px) {
+  .scheme-cards { grid-template-columns: 1fr; padding: 0 var(--space-4) var(--space-4); }
+  .since .card-head { flex-direction: column; align-items: stretch; }
+}

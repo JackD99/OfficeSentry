@@ -60,6 +60,7 @@ OTHER_ARGS = {
     "view_id",
     "resolved",
     "group_id",
+    "scheme",
     "design_id",
 }
 # Who is signed in for the walk. Each sees only tenant A.
@@ -148,6 +149,7 @@ def _url(rule, ids: dict) -> str:
         "ext": "csv",
         "table": "x",
         "user_id": USERS[0]["id"],
+        "scheme": "cyber-essentials",
     }
 
     def value(m):

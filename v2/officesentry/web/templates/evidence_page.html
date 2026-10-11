@@ -4,7 +4,7 @@
 {% set TONE = {'In place': 'ok', 'Partly in place': 'warn', 'Not in place': 'bad', 'Not assessed': ''} %}
 {% set ANSWER_TONE = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad', 'input': 'accent'} %}
 {% block content %}
-{{ tenant_header(pack.tenant, 'evidence', title='Questionnaires and evidence') }}
+{{ tenant_header(pack.tenant, 'evidence', title='Evidence and certifications') }}
 <div class="report-layout">
 {{ report_picker(pack.tenant, 'evidence') }}
 <div class="report-main" id="report" tabindex="-1">

@@ -439,6 +439,14 @@ GAPS = (
         "14 days of release, and this is checked [weekly] by [IT provider].",
     ),
     gap(
+        "software_supported",
+        "Is every application supported by its vendor and licensed, with unsupported software removed?",
+        f"{M365} Office Sentry doesn't see which application versions are installed.",
+        "All software in use is supported by its vendor and licensed: [browser and version], [anti-malware "
+        "product and version], [email application and version] and [office applications and version]. Software "
+        "that is no longer supported has been removed[, or runs on a separate sub-set outside the scope].",
+    ),
+    gap(
         "app_updates",
         "Are critical and high-risk updates for applications installed within 14 days of release?",
         f"{M365} Office Sentry doesn't see which application versions are installed.",

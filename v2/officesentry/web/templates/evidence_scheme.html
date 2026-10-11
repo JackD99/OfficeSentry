@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, tenant_header, downloads, report_picker with context %}
+{% from "_evidence.html" import answer_row, answer_form, verdict_pill with context %}
+{% block title %}{{ scheme.title }} · {{ tenant.name }}{% endblock %}
+{% set HEAD_TONE = {'ok': 'ok', 'medium': 'warn', 'high': 'bad', 'critical': 'bad'} %}
+{% set n = r.counts %}
+{% set here = {'tenant_id': tenant.id, 'scheme': scheme.key} %}
+{% set here_since = dict(here, since=since) if since else here %}
+{% block content %}
+{{ tenant_header(tenant, 'evidence', title=scheme.title) }}
+<div class="report-layout">
+{{ report_picker(tenant, 'evidence') }}
+<div class="report-main" id="report" tabindex="-1">
+
+<nav class="seg evidence-sets" aria-label="Scheme">
+  <a href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">{{ icon('arrow', 'back') }} All packs</a>
+  {% for title, found in groups %}{% for s in found %}<a href="{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme=s.key) }}"{% if s.key == scheme.key %} aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}{% endfor %}
+</nav>
+
+<div class="toolbar">
+  <p class="muted small m0 intro-line">{{ scheme.intro }}</p>
+  {{ downloads([('PDF', url_for('evidence.scheme_pdf', **here), 'Evidence pack with the verdicts, fixes and answers'),
+                ('Word', url_for('evidence.scheme_docx', **here), 'To paste from or send on'),
+                ('Text', url_for('evidence.scheme_text', **here), 'Plain text to paste from'),
+                ('XLSX', url_for('evidence.scheme_xlsx', **here), ''),
+                ('CSV', url_for('evidence.scheme_csv', **here), '')]) }}
+</div>
+
+<div class="callout verdict-callout {{ HEAD_TONE[r.headline.tone] }}" role="status">
+  <div class="grow">
+    <span class="pill {{ HEAD_TONE[r.headline.tone] }}">{{ r.headline.label }}</span>
+    <p class="m0 headline">{{ r.headline.headline }}</p>
+    <p class="small muted m0">Judged from Microsoft 365 data collected {{ ts(r.oldest_data, 'never') }}{% if n[V.MANUAL] %}; {{ n[V.MANUAL]|plural('control') }} {{ 'needs' if n[V.MANUAL] == 1 else 'need' }} evidence Microsoft 365 can't show{% endif %}.</p>
+  </div>
+</div>
+
+<div class="tiles">
+  <a class="tile" href="#controls"><div class="label"><span class="dot ok"></span> Pass</div><div class="value">{{ n[V.PASS] }}</div><div class="foot">of {{ r.judged|plural('control') }} judged</div></a>
+  <a class="tile" href="#fix"><div class="label"><span class="dot bad"></span> To fix</div><div class="value">{{ n[V.FAIL] }}</div><div class="foot">{% if n[V.PARTLY] %}plus {{ n[V.PARTLY] }} to review{% else %}{{ 'fail the scheme' if scheme.strict else 'not in place' }}{% endif %}</div></a>
+  <a class="tile" href="#controls"><div class="label"><span class="dot accent"></span> Your evidence</div><div class="value">{{ n[V.MANUAL] }}</div><div class="foot">outside Microsoft 365</div></a>
+  <a class="tile" href="#since"><div class="label">Since {{ since_options[since][0] if since else 'last time' }}</div><div class="value small-value">{% if r.since and r.since.available %}{{ r.since.changes|length|plural('change') }}{% elif r.since %}No data{% else %}Compare{% endif %}</div><div class="foot">{% if r.since and r.since.available and r.since.changes %}{{ r.since.improved|length }} better, {{ r.since.worsened|length }} worse{% else %}what changed since the last submission{% endif %}</div></a>
+</div>
+
+<section class="card since" id="since">
+  <div class="card-head"><h2>What changed</h2>
+    <nav class="seg show-filter" aria-label="Compare with">
+      {% for key, (label, days) in since_options.items() %}<a href="{{ url_for('evidence.scheme_page', since=key, **here) }}"{% if since == key %} aria-current="page"{% endif %}>{{ label|capitalize }}</a>{% endfor %}
+    </nav>
+  </div>
+  {% if not r.since %}
+  <p class="muted small m0">Pick a point in time to see which controls passed then and not now, or the other way round: useful before a renewal{% if scheme.renewal %}, which comes round every {{ scheme.renewal }}{% endif %}.</p>
+  {% elif not r.since.available %}
+  <p class="muted small m0">{{ r.since.note }}</p>
+  {% elif not r.since.changes %}
+  <p class="m0">No control's verdict has changed since {{ since_options[since][0] if since else r.since.since|day }} (data from {{ r.since.data_from|day }}).</p>
+  {% else %}
+  <table class="stack-sm changes-table">
+    <thead><tr><th>Control</th><th>Then ({{ r.since.data_from|day }})</th><th>Now</th></tr></thead>
+    <tbody>
+    {% for ch in r.since.changes %}
+    <tr><td><a href="#control-{{ ch.control.key }}"><span class="ref">{{ ch.control.ref }}</span> {{ ch.control.title }}</a></td><td data-label="Then">{{ verdict_pill(ch.before) }}</td><td data-label="Now">{{ verdict_pill(ch.after) }} {% if ch.better %}<span class="small ok-text">better</span>{% else %}<span class="small bad-text">worse</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% if r.to_fix or r.to_review %}
+<section class="card fix-first" id="fix" aria-labelledby="fix-h">
+  <div class="card-head"><h2 id="fix-h">{{ 'Fix before you apply' if scheme.strict else 'Gaps to close' }}</h2><span class="muted small">{{ (r.to_fix|length + r.to_review|length)|plural('control') }}</span></div>
+  <ol class="fix-list">
+    {% for c in r.to_fix + r.to_review %}
+    <li>
+      <div class="fix-head">{{ verdict_pill(c.verdict) }} <a href="#control-{{ c.control.key }}"><span class="ref">{{ c.control.ref }}</span> {{ c.control.title }}</a>{% if c.control.autofail %} <span class="pill bad autofail" title="The assessment fails outright on this">Auto-fail</span>{% endif %}</div>
+      {% if c.gaps %}<p class="small m0 gap-summary">{{ c.gaps[0].strip() }}{% if c.gaps|length > 1 and c.gaps[1].startswith('  ') %} For example {{ c.gaps[1].strip().rstrip('.') }}.{% endif %}</p>{% endif %}
+      {% if c.fix %}<p class="small m0"><strong>Fix:</strong> {{ c.fix.rstrip('.') }}.{% if c.control.report %} <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=c.control.report) }}">See the rows &rarr;</a>{% else %} <a href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">See the findings &rarr;</a>{% endif %}</p>{% endif %}
+      {% if c.set_by %}<p class="small muted m0">Decided by {{ c.set_by }}.</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+<div id="controls"></div>
+{% for t in r.themes %}
+<section class="card flush theme" aria-labelledby="theme-{{ t.theme.key }}">
+  <div class="card-head"><h2 id="theme-{{ t.theme.key }}">{{ t.theme.title }}</h2>{{ verdict_pill(t.verdict) }}</div>
+  <p class="intro">{{ t.theme.intro }}</p>
+  {% for c in t.controls %}
+  {% set cid = 'control-' ~ c.control.key %}
+  <div class="answer-row control-row{% if c.needs_input %} needs-input{% endif %}" id="{{ cid }}">
+    {{ verdict_pill(c.verdict) }}
+    <div class="answer-main">
+      <div class="q"><span class="ref">{{ c.control.ref }}</span> {{ c.control.title }}{% if c.control.autofail %} <span class="pill bad autofail" title="The assessment fails outright on this">Auto-fail</span>{% endif %}</div>
+      <p class="small muted m0 requirement">{{ c.control.requirement }}</p>
+      {% if c.evidence %}<ul class="ticks">{% for e in c.evidence %}<li{% if e.startswith('But: ') %} class="but"{% endif %}>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      {% if c.figures %}<dl class="figures">{% for label, value in c.figures %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>{% endif %}
+      {% if c.gaps %}<div class="gap-list"><div class="strong small">Gaps</div><ul>{% for gap in c.gaps %}<li{% if gap.startswith('  ') %} class="sub"{% endif %}>{{ gap.strip() }}</li>{% endfor %}</ul></div>{% endif %}
+      {% if c.verdict == V.UNKNOWN and c.reason %}<p class="small muted m0">{{ c.reason }}</p>{% endif %}
+      {% if c.fix and c.verdict in (V.FAIL, V.PARTLY) %}<p class="small m0 fix"><strong>Fix:</strong> {{ c.fix_detail or c.fix }}{% if c.control.report %} <a href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=c.control.report) }}">{{ 'See the rows' }} &rarr;</a>{% endif %}</p>{% endif %}
+      {% if c.text %}
+      <div class="paste">
+        <p class="paste-text" id="text-{{ c.control.key }}">{% for text, blank in c.segments %}{% if blank %}<mark class="blank">{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>
+        <button type="button" class="sm ghost copy" data-copy="#text-{{ c.control.key }}" aria-label="Copy the evidence for: {{ c.control.title }}">{{ icon('copy') }} Copy</button>
+      </div>
+      {% endif %}
+      {% if c.set_by %}<p class="small muted m0">Answer set by {{ c.set_by }} on {{ c.answer.override.set_at|day }}.{% if staff %} Suggested from the data: <strong>{{ c.answer.suggested }}</strong>.{% endif %}</p>{% endif %}
+      <p class="small m0 still">{{ icon('alert') }} <span><strong>What Microsoft 365 can't show:</strong> {{ c.control.scope }}</span></p>
+      {% if staff and c.answer %}{{ answer_form(c.answer, tenant, {'scheme': scheme.key, 'show': show, 'anchor': cid}, answers, max_note) }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endfor %}
+
+{% if scheme.audit %}
+<section class="card flush audit" aria-labelledby="audit-h">
+  <div class="card-head"><h2 id="audit-h">What the assessor tests</h2></div>
+  <p class="intro">The on-site tests, what each needs, and what Microsoft 365 already shows for it.</p>
+  {% for a in scheme.audit %}
+  <div class="answer-row audit-row">
+    <div class="answer-main">
+      <div class="q">{{ a.title }}</div>
+      <p class="small m0">{{ a.what }}</p>
+      <p class="small muted m0"><strong>Microsoft 365 shows:</strong> {{ a.m365 }}</p>
+      {% if a.controls %}<p class="small m0 audit-verdicts">{% for k in a.controls %}{% set c = r.by_key[k] %}<a href="#control-{{ k }}">{{ verdict_pill(c.verdict) }} {{ c.control.ref }}</a>{% endfor %}</p>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if r.sheet %}
+{% set sheet = r.sheet %}
+{% set sn = sheet.counts %}
+{% set total = sheet.rows|length %}
+<section class="card flush answers form-answers" aria-labelledby="form-h" id="answers">
+  <div class="card-head"><h2 id="form-h">Answers for the form</h2><span class="muted small">{{ sheet.qset.title }}</span></div>
+  <p class="intro">{{ sheet.qset.intro }}</p>
+  <div class="copy-bar">
+    <div>
+      <strong>{% if sn.input %}Fill in the {{ sn.input|plural('answer') }} marked Your input{% if staff %}, then copy{% endif %}.{% else %}Every question has an answer.{% endif %}</strong>
+      <p class="small muted m0">{{ sn.data }} answered from Microsoft 365{% if sn.team %}, {{ sn.team }} by your team{% endif %}; {{ sn.attention }} answered Partly or No. Parts <mark class="blank">[in brackets]</mark> still need filling in.</p>
+    </div>
+    <button type="button" class="primary" data-copy="#copy-all" data-copied="Copied all answers">{{ icon('copy') }} Copy all answers</button>
+    <textarea id="copy-all" hidden aria-hidden="true" readonly>{{ copy_all }}</textarea>
+  </div>
+  <nav class="seg show-filter" aria-label="Show">
+    <a href="{{ url_for('evidence.scheme_page', **here_since) }}#answers"{% if not show %} aria-current="page"{% endif %}>All<span class="count">{{ total }}</span></a>
+    <a href="{{ url_for('evidence.scheme_page', show='input', **here_since) }}#answers"{% if show == 'input' %} aria-current="page"{% endif %}>Your input<span class="count">{{ sn.input }}</span></a>
+    <a href="{{ url_for('evidence.scheme_page', show='attention', **here_since) }}#answers"{% if show == 'attention' %} aria-current="page"{% endif %}>Partly or No<span class="count">{{ sn.attention }}</span></a>
+  </nav>
+  {% set seen = [] %}
+  {% for part, rows in sheet.showing(show) %}
+  <h3 class="part-title">{{ part }} <span class="muted small">{{ rows|length|plural('question') }}</span></h3>
+  {% for row in rows %}
+  {% set a = row.answer %}
+  {% set anchor_id = 'answer-' ~ a.key if a.key not in seen else '' %}{% set _ = seen.append(a.key) %}
+  {{ answer_row(row, tenant, staff, answers, max_note, {'scheme': scheme.key, 'show': show, 'anchor': anchor_id or ('answer-' ~ a.key)}, 'q-' ~ loop.index ~ '-' ~ a.key, anchor_id) }}
+  {% endfor %}
+  {% else %}
+  <div class="empty"><p class="m0">Nothing to show here: no question is {{ 'waiting for your input' if show == 'input' else 'answered Partly or No' }}.</p></div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="card about">
+  <h2>About this pack</h2>
+  {% for note in scheme.notes %}<p class="small">{{ note }}</p>{% endfor %}
+  <p class="small"><strong>Requirements:</strong> {{ scheme.version }}. {{ scheme.source }}{% if scheme.source_url %} <a href="{{ scheme.source_url }}" rel="noopener noreferrer" target="_blank">Source</a>{% endif %}</p>
+  <p class="footnote m0">Pass and Fail are judged from Microsoft 365 settings and accounts read with read-only access; accepted risks count as documented exceptions. Oldest data used: {{ ts(r.oldest_data, 'not collected yet') }}.</p>
+</section>
+</div>
+</div>
+{% endblock %}

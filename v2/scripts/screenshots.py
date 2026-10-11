@@ -258,6 +258,7 @@ SHOTS = [
     Shot("tenant-groups", "/admin/groups", height=640),
     Shot("system-status", "/admin/status", height=900),
     Shot("evidence", "/tenants/{t}/evidence", height=1000),
+    Shot("cyber-essentials", "/tenants/{t}/evidence/cyber-essentials", height=1150),
     Shot("emailed-reports", "/tenants/{t}/schedules", height=900),
     Shot("email-schedule-form", "/tenants/{t}/schedules/new", height=1000),
     Shot("projects", "/projects", height=950),
@@ -274,7 +275,7 @@ SHOTS = [
 # PDFs whose first page becomes a picture: name -> path.
 PDF_SHOTS = {
     "pdf-review": "/tenants/{t}/report.pdf",
-    "pdf-evidence": "/tenants/{t}/evidence.pdf",
+    "pdf-evidence": "/tenants/{t}/evidence/cyber-essentials.pdf",
     "pdf-sharepoint-storage": "/tenants/{t}/data/sharepoint-storage.pdf",
 }
 
@@ -283,6 +284,10 @@ EXAMPLES = {
     "monthly-security-licensing-review.pdf": (
         "/tenants/{t}/report.pdf",
         "The Monthly Security & Licensing Review for one client, as sent to them.",
+    ),
+    "cyber-essentials-evidence.pdf": (
+        "/tenants/{t}/evidence/cyber-essentials.pdf",
+        "One client judged against Cyber Essentials: each control's verdict, the fixes and the answers for the form.",
     ),
     "insurance-evidence-pack.pdf": (
         "/tenants/{t}/evidence.pdf",
