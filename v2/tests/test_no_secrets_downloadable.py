@@ -222,7 +222,7 @@ def test_the_crawl_sees_the_planted_settings(client, db, vault, planted):
     assert b"ABCD-EFGH" in client.get("/admin/connections").data
     assert b"reports@msp.example" in client.get("/admin/email").data
     assert b"12345678-1234-1234-1234-123456789012" in client.get("/admin/sign-in").data
-    assert b"hooks.example.net" in client.get("/admin/alerts").data
+    assert alerts.masked_url(vault, alerts.settings(db)).encode() in client.get("/admin/alerts").data
     for url in (
         f"/admin/connections/{ids['connection_id']}/certificate.cer?which=next",
         "/admin/email/mail-certificate.cer",
