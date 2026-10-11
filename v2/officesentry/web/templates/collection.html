@@ -32,12 +32,15 @@
   </section>
 </div>
 
-<section class="card flush">
-  <div class="card-head toolbar"><h2>Data sources</h2><span class="meta">Collected automatically every night</span></div>
+{#- Sources that need a look (failed, partial, running or never collected) come first and stay open;
+    the ones that collected fine fold under one line, so the page leads with what needs doing. -#}
+{% set fine = [] %}{% set others = [] %}
+{% for key in collectors %}{% set r = latest.get(key) %}{% set _ = (fine if r and r.status == 'succeeded' else others).append(key) %}{% endfor %}
+{% macro source_rows(keys) %}
   <table class="stack-sm">
     <thead><tr><th>Source</th><th>Status</th><th>Last collected</th><th></th></tr></thead>
     <tbody>
-    {% for key, c in collectors.items() %}{% set r = latest.get(key) %}
+    {% for key in keys %}{% set c = collectors[key] %}{% set r = latest.get(key) %}
     <tr>
       <td><span class="strong">{{ c.title }}</span><span class="sub">{{ c.description }}</span>
         {% if r and r.error %}<span class="sub {{ 'warn-text' if r.status == 'partial' else 'bad-text' }}">{{ r.error|run_error }}</span>{% endif %}</td>
@@ -48,6 +51,17 @@
     {% endfor %}
     </tbody>
   </table>
+{% endmacro %}
+<section class="card flush">
+  <div class="card-head toolbar"><h2>Data sources</h2>
+    <span class="meta">{% if not others %}All {{ fine|length }} collected fine{% else %}{{ fine|length }} of {{ collectors|length }} collected fine · {{ others|length }} to look at{% endif %} · collected automatically every night</span></div>
+  {% if others %}{{ source_rows(others) }}{% endif %}
+  {% if fine %}
+  <details class="sources-fine">
+    <summary>{{ 'Show all ' ~ (fine|length) ~ ' sources' if not others else 'Show the ' ~ (fine|length) ~ ' that collected fine' }}</summary>
+    {{ source_rows(fine) }}
+  </details>
+  {% endif %}
 </section>
 
 <section class="card flush">
