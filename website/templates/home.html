@@ -13,7 +13,7 @@
     <div class="hero-copy">
       <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
-      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, evidence for Cyber Essentials and insurance forms, 47 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
+      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, client reports you design yourself, evidence for Cyber Essentials and insurance forms, 47 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
       <div class="actions">
         <a class="btn primary lg" href="{{ demo_url }}">Try the live demo</a>
         {% if contact and not source_public %}<a class="btn lg" href="{{ contact }}">Ask for early access</a>
@@ -78,6 +78,21 @@
 
     <article class="feature flip">
       <div class="feature-copy">
+        <h3>Design your own client reports, no code needed</h3>
+        <p>Pick the blocks you want, put them in order and watch the report fill in with a real client's data as you go. One design works for every client, carries your branding, and a report plan or a client's email schedule can send it as a PDF.</p>
+        <ul class="ticks">
+          <li>{{ check() }}Blocks for everything a report needs: a verdict, key figures, failing checks, what changed, licence spend, a table from any detail report and your own text</li>
+          <li>{{ check() }}Drag blocks in, set each one up and put two side by side</li>
+          <li>{{ check() }}Preview it on any client and download the PDF in one click</li>
+          <li>{{ check() }}<span>Start from an executive summary, a full review, a licensing review or the Quarterly review (<a href="/examples/quarterly-review.pdf">example PDF</a>)</span></li>
+        </ul>
+        <a class="more" href="{{ demo_url }}/reporting/designs/1">See the designer in the demo</a>
+      </div>
+      <div class="feature-media">{{ window('design-editor', 'The report designer: blocks to add, the layout, and a live preview on a real client') }}</div>
+    </article>
+
+    <article class="feature">
+      <div class="feature-copy">
         <h3>47 detail reports you can filter, save and export</h3>
         <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, mail flow per domain, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, licence changes month by month, licence right-sizing and more.</p>
         <ul class="ticks">
@@ -91,7 +106,7 @@
       <div class="feature-media">{{ window('mfa', 'MFA coverage: who has set up MFA, who is required to, and where the two differ') }}</div>
     </article>
 
-    <article class="feature">
+    <article class="feature flip">
       <div class="feature-copy">
         <h3>Every client at once, and what changed</h3>
         <p><strong>All clients</strong> compares any report across every client, one row each. <strong>What changed</strong> lists the month's changes, most important first: new and fixed findings, admins, accounts, Conditional Access, forwarding, apps and devices.</p>
@@ -104,7 +119,7 @@
       <div class="feature-media">{{ window('all-tenants', "All clients: the monthly review's figures for every client") }}</div>
     </article>
 
-    <article class="feature flip">
+    <article class="feature">
       <div class="feature-copy">
         <h3>SharePoint storage: why it's full and what to clean up</h3>
         <p>See how full a client's SharePoint is and when it will run out at the current rate, where the space goes, and the biggest folders, files, version histories and recycle bin items, each with what to do about it.</p>
@@ -113,7 +128,7 @@
       <div class="feature-media">{{ window('sharepoint-storage', 'SharePoint storage: 88% used, full in about 3 months, and where the space goes') }}</div>
     </article>
 
-    <article class="feature">
+    <article class="feature flip">
       <div class="feature-copy">
         <h3>Cyber Essentials, ISO 27001 and insurance evidence, answered from the data</h3>
         <p>Cyber Essentials and CE Plus are judged from the data control by control, with what to fix before applying and the answers for the IASME portal ready to paste. The insurance evidence pack answers the controls cyber-insurance questionnaires ask about, such as MFA, admin accounts, legacy sign-in, email authentication, forwarding, leavers and devices, with the gaps listed, and so does the supplier security questionnaire. IASME Cyber Assurance, ISO 27001 Annex A, UK GDPR, the CIS Microsoft 365 benchmark, NIST CSF 2.0, SOC 2 and the Essential Eight are judged the same way, with the governance answers left for you to complete.</p>
@@ -122,7 +137,7 @@
       <div class="feature-media">{{ window('evidence', "The Evidence page: each pack's verdict, from Cyber Essentials to the supplier questionnaire") }}</div>
     </article>
 
-    <article class="feature flip">
+    <article class="feature">
       <div class="feature-copy">
         <h3>Who can open what in SharePoint and OneDrive</h3>
         <p>Three reports answer it, from the site down to the file, with guests and people outside first.</p>
@@ -203,9 +218,9 @@
         <p>What each subscription costs and when it renews, who was given or lost a licence and who made the change, and licences bought and assigned month by month.</p>
       </article>
       <article class="card">
-        {{ shot('design-editor', 'The report designer with the Quarterly review and a preview on a real client') }}
-        <h3>Quarterly reviews and your own designs</h3>
-        <p>Build a client report from blocks without code, or start from the Quarterly review: three months of score and findings, what was fixed, projects, licence spend and what's coming up. <a href="/examples/quarterly-review.pdf">Open the example</a>.</p>
+        {{ shot('conditional-access', 'Conditional Access coverage: each policy in plain words, and who it really covers') }}
+        <h3>Conditional Access in plain words</h3>
+        <p>Every policy in plain words, and for each account which policy requires MFA, whether legacy sign-in is blocked and which policies exclude it, with groups expanded.</p>
       </article>
       <article class="card">
         {{ shot('roles', 'Roles: what each kind of person can see and do') }}
