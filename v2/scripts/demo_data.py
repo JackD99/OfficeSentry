@@ -986,6 +986,197 @@ def _library(t: dict, now: datetime, slug: str, size: int, rng: random.Random) -
     return out
 
 
+OUTSIDE_GUESTS = [
+    "accounts@hollis-partners.example",
+    "j.okafor@brightpath-consulting.example",
+    "lab@dentlab-uk.example",
+    "d.mason@mason-legal.example",
+]
+EVERYONE_BUT_GUESTS = "c:0-.f|rolemanager|spo-grid-all-users/3f1a9c2e-0000-4000-8000-000000000001"
+
+
+def site_people(t: dict, users: list[dict], rng: random.Random) -> tuple[dict, dict]:
+    """The people behind each SharePoint site, for the Site access report: a Microsoft 365 group per
+    group-connected site (owners, members, guests), each site's hidden user list and what its default
+    library grants. Realistic situations: a site whose only owner has left, sites with one owner, guests on
+    the client-facing sites, and an intranet open to everyone in the organisation.
+
+    Returns the group fixtures to add (``GROUPS``, ``OWNERS``, ``MEMBERS``) and the SharePoint fixtures
+    (``USER_INFO``, ``ROOT_PERMISSIONS``)."""
+    domain = f"{t['base']}.{t['tld']}"
+    staff = [u for u in users if u["userType"] == "Member" and u.get("accountEnabled") and u.get("assignedLicenses")]
+    ann = next(u for u in users if u["displayName"] == t["people"]["ann"])
+    bob = next(u for u in users if u["displayName"] == t["people"]["bob"])  # disabled: a leaver
+    heads = [u for u in staff if str(u.get("jobTitle", "")).startswith("Head of")] or staff
+
+    def person(u, admin=False):
+        upn = u["userPrincipalName"]
+        return {
+            "id": str(zlib.crc32(f"{upn}".encode())),
+            "contentType": {"name": "Person"},
+            "fields": {
+                "Title": u["displayName"],
+                "EMail": upn,
+                "Name": f"i:0#.f|membership|{upn}",
+                "UserName": upn,
+                "IsSiteAdmin": admin,
+                "Deleted": False,
+            },
+        }
+
+    def guest_row(address):
+        login = f"i:0#.f|membership|{address.replace('@', '_')}#ext#@{t['base']}.onmicrosoft.com"
+        name = address.split("@")[0].replace(".", " ").title()
+        return {
+            "id": str(zlib.crc32(address.encode())),
+            "contentType": {"name": "Person"},
+            "fields": {
+                "Title": name,
+                "EMail": address,
+                "Name": login,
+                "UserName": address,
+                "IsSiteAdmin": False,
+                "Deleted": False,
+            },
+        }
+
+    def claim(login, title):
+        return {
+            "id": str(zlib.crc32(login.encode())),
+            "contentType": {"name": "Person"},
+            "fields": {
+                "Title": title,
+                "EMail": "",
+                "Name": login,
+                "UserName": "",
+                "IsSiteAdmin": False,
+                "Deleted": False,
+            },
+        }
+
+    def sp_group(name):
+        return {
+            "id": str(zlib.crc32(name.encode())),
+            "contentType": {"name": "SharePointGroup"},
+            "fields": {
+                "Title": name,
+                "EMail": "",
+                "Name": name,
+                "UserName": "",
+                "IsSiteAdmin": False,
+                "Deleted": False,
+            },
+        }
+
+    def member(u):
+        return {
+            "@odata.type": "#microsoft.graph.user",
+            "id": u["id"],
+            "displayName": u["displayName"],
+            "userPrincipalName": u["userPrincipalName"],
+            "mail": u.get("mail") or u["userPrincipalName"],
+            "accountEnabled": u.get("accountEnabled", True),
+            "userType": "Member",
+        }
+
+    def guest(address):
+        return {
+            "@odata.type": "#microsoft.graph.user",
+            "id": "gx-" + re.sub(r"[^a-z0-9]", "", address.split("@")[0]),
+            "userType": "Guest",
+            "accountEnabled": True,
+            "userPrincipalName": address.replace("@", "_") + f"#EXT#@{t['base']}.onmicrosoft.com",
+            "mail": address,
+        }
+
+    def grant(name, role, **identity):
+        who = identity or {"siteGroup": {"displayName": name, "id": str(zlib.crc32(name.encode()) % 100)}}
+        return {"id": f"{zlib.crc32((name + role).encode())}", "roles": [role], "grantedToV2": who}
+
+    groups, owners, members, user_info, perms = [], {}, {}, {}, {}
+    for slug, title, _, _, template in DENTAL_SITES if t.get("sites") == "dental" else OFFICE_SITES:
+        sid = "site-fin" if slug == "finance" else f"site-{slug}"
+        rows = [claim("SHAREPOINT\\system", "System Account")] + [
+            sp_group(f"{title} {k}") for k in ("Owners", "Members", "Visitors")
+        ]
+        grants = [
+            grant(f"{title} Owners", "owner"),
+            grant(f"{title} Members", "write"),
+            grant(f"{title} Visitors", "read"),
+        ]
+        if template == "Group":
+            gid = f"g-{slug}"
+            site_owners = {
+                "marketing": [bob],  # the only owner has left: an ownerless site
+                "practice": [heads[0]],
+                "operations": [heads[1 % len(heads)]],
+            }.get(slug, [ann, heads[hash(slug) % len(heads)]])
+            site_members = rng.sample(staff, min(len(staff), rng.randint(6, 14)))
+            site_guests = {
+                "clients": OUTSIDE_GUESTS[:2],
+                "finance": OUTSIDE_GUESTS[:1],
+                "patient-records": [OUTSIDE_GUESTS[2]],
+            }.get(slug, [])
+            groups.append(
+                {
+                    "id": gid,
+                    "displayName": title,
+                    "description": None,
+                    "groupTypes": ["Unified"],
+                    "mailEnabled": True,
+                    "securityEnabled": False,
+                    "visibility": "Private",
+                    "resourceProvisioningOptions": ["Team"] if slug not in ("finance", "marketing") else [],
+                    "createdDateTime": "2024-03-04T09:00:00Z",
+                    "mail": f"{slug}@{domain}",
+                    "membershipRule": None,
+                    "onPremisesSyncEnabled": None,
+                    "expirationDateTime": None,
+                }
+            )
+            owners[gid] = [member(u) for u in site_owners]
+            everyone_in = {u["id"]: u for u in site_owners + site_members}
+            members[gid] = [member(u) for u in everyone_in.values()] + [guest(g) for g in site_guests]
+            rows += [
+                claim(f"c:0o.c|federateddirectoryclaimprovider|{gid}", title),
+                claim(f"c:0o.c|federateddirectoryclaimprovider|{gid}_o", title),
+            ]
+            rows += [person(u, admin=True) for u in site_owners]
+            rows += [person(u) for u in site_members[:6]]
+            rows += [guest_row(g) for g in site_guests]
+            if slug == "clients":  # a solicitor given access to one folder, outside the group
+                rows.append(guest_row(OUTSIDE_GUESTS[3]))
+                grants.append(
+                    grant(
+                        OUTSIDE_GUESTS[3],
+                        "read",
+                        siteUser={
+                            "displayName": "D Mason",
+                            "email": OUTSIDE_GUESTS[3],
+                            "loginName": "i:0#.f|membership|"
+                            + OUTSIDE_GUESTS[3].replace("@", "_")
+                            + f"#ext#@{t['base']}.onmicrosoft.com",
+                        },
+                    )
+                )
+        else:
+            admins = {"imaging": [ann, heads[2 % len(heads)]], "old-projects": [bob]}.get(slug, [ann])
+            rows += [person(u, admin=True) for u in admins]
+            rows += [person(u) for u in rng.sample(staff, min(len(staff), 4))]
+            if slug == "intranet":
+                rows.append(claim(EVERYONE_BUT_GUESTS, "Everyone except external users"))
+                grants.append(
+                    grant(
+                        "Everyone except external users",
+                        "read",
+                        siteUser={"displayName": "Everyone except external users", "loginName": EVERYONE_BUT_GUESTS},
+                    )
+                )
+        user_info[sid] = rows
+        perms[sid] = grants
+    return {"GROUPS": groups, "OWNERS": owners, "MEMBERS": members}, {"USER_INFO": user_info, "ROOT_PERMISSIONS": perms}
+
+
 def sharepoint(
     t: dict, users: list[dict], tenant_skus: list[dict], now: datetime, first: bool, rng: random.Random
 ) -> dict:
@@ -1137,6 +1328,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
         rng = random.Random(t["name"] + "extras")  # noqa: S311
         entra, managed = devices(everyone, rng)
         rules = inbox_rules(everyone)
+        group_extras, access_extras = site_people(t, everyone, random.Random(t["name"] + "sites"))  # noqa: S311
         extras = {
             graphdata: {
                 "EXCHANGE": {
@@ -1146,7 +1338,12 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
                 }
             },
             devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed},
-            sharepoint_data: sharepoint(t, everyone, tenant_skus, now, first, rng),
+            groupdata: {
+                "GROUPS": groupdata.GROUPS + group_extras["GROUPS"],
+                "OWNERS": {**groupdata.OWNERS, **group_extras["OWNERS"]},
+                "MEMBERS": {**groupdata.MEMBERS, **group_extras["MEMBERS"]},
+            },
+            sharepoint_data: {**sharepoint(t, everyone, tenant_skus, now, first, rng), **access_extras},
         }
         with Swapped(extras):
             seed_tenant(

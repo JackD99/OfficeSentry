@@ -18,6 +18,7 @@ from . import (  # noqa: F401
     sharepoint,
     sharepoint_storage,
     sign_in_reports,
+    site_access,
     subscriptions,
     unused_apps,
     usage_reports,

@@ -85,12 +85,12 @@ overview and DEPLOY.md for running it on a server.
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
 
-The two SharePoint collectors list sites and OneDrives through
-`collectors/sharepoint_lookup.Lookups`, both asking for the same fields
-(`SITE_FIELDS`, `DRIVE_FIELDS`: everything either needs), so the second one
-each night reuses the first one's site list and OneDrives, and people without
-a OneDrive aren't asked about for a week. A field either collector starts
-needing goes in those lists.
+The SharePoint collectors (shared files, storage, site access) list sites
+and OneDrives through `collectors/sharepoint_lookup.Lookups`, all asking for
+the same fields (`SITE_FIELDS`, `DRIVE_FIELDS`: everything any of them needs),
+so the later ones each night reuse the first one's site list and OneDrives,
+and people without a OneDrive aren't asked about for a week. A field a
+collector starts needing goes in those lists.
 
 ## Adding a check or report
 

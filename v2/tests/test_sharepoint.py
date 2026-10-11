@@ -144,7 +144,8 @@ def _calls(db, alpha, collector: str = "shared_files") -> list[str]:
 def _age_sharepoint_runs(db, alpha, days: float) -> None:
     when = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute(
-        "UPDATE runs SET finished_at = ? WHERE tenant_id = ? AND collector IN ('shared_files', 'sharepoint_storage')",
+        "UPDATE runs SET finished_at = ? WHERE tenant_id = ?"
+        " AND collector IN ('shared_files', 'sharepoint_storage', 'site_access')",
         (when, alpha),
     )
     unpack(db)
@@ -161,7 +162,7 @@ def test_shared_files_skips_onedrives_the_site_listing_gave(db, two_tenants):
     assert paths.count("/users/u1/drive") == 0
     assert paths.count("/users/u2/drive") == 1  # not in the listing, so still asked for (404: never opened)
     assert paths.count("/sites/site-ann/drives") == 1 and paths.count("/sites/getAllSites") == 1
-    assert len(paths) == 1 + 2 + 1 + 2 + 5  # sites, their drives, Bob's OneDrive, two deltas, five shared items
+    assert len(paths) == 1 + 3 + 1 + 2 + 5  # sites, their drives, Bob's OneDrive, two deltas, five shared items
     snap = _snap(db, alpha)
     assert {i["_id"]: i for i in snap.objects("shared_files", "shared_item")} == before
     assert snap.objects("shared_files", "scan_status")[0]["drives"] == 2

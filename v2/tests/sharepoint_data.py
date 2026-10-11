@@ -114,11 +114,13 @@ SITES = [
         "webUrl": "https://x-my.sharepoint.com/personal/ann_x_com",
         "isPersonalSite": True,
     },
+    {"id": "site-old", "displayName": "Old projects", "webUrl": OLD},  # no group, one disabled administrator
 ]
 DRIVES = {
     "site-fin": [
         {"id": "drv-fin", "name": "Documents", "webUrl": FINANCE + "/Shared Documents", "driveType": "documentLibrary"}
     ],
+    "site-old": [],
     "site-ann": [
         {
             "id": "drv-ann",
@@ -192,9 +194,89 @@ PERMISSIONS = {
 }
 
 
+# -- Site access --------------------------------------------------------------------
+
+
+def _uil(title, login, *, email=None, admin=False, group=False, deleted=False):
+    """One row of a site's hidden User Information List, as Graph returns list items."""
+    return {
+        "id": str(zlib.crc32(login.encode())),
+        "contentType": {"name": "SharePointGroup" if group else "Person"},
+        "fields": {
+            "Title": title,
+            "EMail": email or "",
+            "Name": login,
+            "UserName": email or "",
+            "IsSiteAdmin": admin,
+            "Deleted": deleted,
+        },
+    }
+
+
+EVERYONE_BUT_GUESTS = "c:0-.f|rolemanager|spo-grid-all-users/1b7b2a3c-0000-0000-0000-000000000001"
+USER_INFO = {
+    # Finance is a group-connected site (g1 Sales in the group fixtures): its owners come from the group.
+    "site-fin": [
+        _uil("System Account", "SHAREPOINT\\system"),
+        _uil("Sales Owners", "Sales Owners", group=True),
+        _uil("Sales Members", "Sales Members", group=True),
+        _uil("Sales Visitors", "Sales Visitors", group=True),
+        _uil("Sales", "c:0o.c|federateddirectoryclaimprovider|g1"),
+        _uil("Sales", "c:0o.c|federateddirectoryclaimprovider|g1_o"),
+        _uil("Ann", "i:0#.f|membership|ann@x.com", email="ann@x.com", admin=True),
+        _uil("Eve", "i:0#.f|membership|eve@x.com", email="eve@x.com"),
+        _uil("Pat Supplier", "i:0#.f|membership|pat_supplier.com#ext#@x.onmicrosoft.com", email="pat@supplier.com"),
+        _uil("Old Guest", "i:0#.f|membership|old_gone.com#ext#@x.onmicrosoft.com", email="old@gone.com", deleted=True),
+        _uil("Office Sentry", "i:0i.t|00000003-0000-0ff1-ce00-000000000000|app@sharepoint"),
+    ],
+    # Old projects has no group: its only administrator is Bob, whose account is disabled.
+    "site-old": [
+        _uil("Old Projects Owners", "Old Projects Owners", group=True),
+        _uil("Old Projects Members", "Old Projects Members", group=True),
+        _uil("Bob", "i:0#.f|membership|bob@x.com", email="bob@x.com", admin=True),
+        _uil("Everyone except external users", EVERYONE_BUT_GUESTS),
+    ],
+}
+ROOT_PERMISSIONS = {
+    "site-fin": [
+        {"id": "r1", "roles": ["owner"], "grantedToV2": {"siteGroup": {"displayName": "Sales Owners", "id": "3"}}},
+        {"id": "r2", "roles": ["write"], "grantedToV2": {"siteGroup": {"displayName": "Sales Members", "id": "5"}}},
+        {"id": "r3", "roles": ["read"], "grantedToV2": {"siteGroup": {"displayName": "Sales Visitors", "id": "4"}}},
+        {
+            "id": "r4",
+            "roles": ["read"],
+            "grantedToV2": {
+                "siteUser": {
+                    "displayName": "Pat Supplier",
+                    "email": "pat@supplier.com",
+                    "loginName": "i:0#.f|membership|pat_supplier.com#ext#@x.onmicrosoft.com",
+                }
+            },
+        },
+    ],
+    "site-old": [
+        {
+            "id": "r5",
+            "roles": ["owner"],
+            "grantedToV2": {"siteGroup": {"displayName": "Old Projects Owners", "id": "3"}},
+        },
+        {
+            "id": "r6",
+            "roles": ["read"],
+            "grantedToV2": {
+                "siteUser": {"displayName": "Everyone except external users", "loginName": EVERYONE_BUT_GUESTS}
+            },
+        },
+    ],
+}
+
+
 # -- Storage ------------------------------------------------------------------------
 
-SITE_QUOTA = {"site-fin": {"used": 5 * GB, "deleted": 1 * GB, "total": 27487790694400, "state": "normal"}}
+SITE_QUOTA = {
+    "site-fin": {"used": 5 * GB, "deleted": 1 * GB, "total": 27487790694400, "state": "normal"},
+    "site-old": {"used": 0, "deleted": 0, "total": 27487790694400, "state": "normal"},
+}
 LISTS = {
     "site-fin": [
         {
@@ -220,6 +302,7 @@ LISTS = {
             "list": {"template": "events", "hidden": False},
         },
     ],
+    "site-old": [],
 }
 
 
@@ -346,10 +429,24 @@ def mock_sharepoint(rsps, *, sites=None, files=True, site_quota=None):
         callback=by_id(LISTS, 3),
         content_type="application/json",
     )
+    user_lists = {sid: v for sid, v in USER_INFO.items()}
+
+    def list_items(request):  # a library's items by list id, or a site's User Information List
+        parts = request.path_url.split("?")[0].split("/")
+        if parts[5] == "User%20Information%20List":
+            return by_id(user_lists, 3)(request)
+        return by_id(LIST_ITEMS, 5)(request)
+
     rsps.add_callback(
         responses.GET,
         re.compile(re.escape(V1) + r"/sites/[^/]+/lists/[^/]+/items"),
-        callback=by_id(LIST_ITEMS, 5),
+        callback=list_items,
+        content_type="application/json",
+    )
+    rsps.add_callback(
+        responses.GET,
+        re.compile(re.escape(V1) + r"/sites/[^/]+/drive/root/permissions"),
+        callback=by_id(ROOT_PERMISSIONS, 3),
         content_type="application/json",
     )
     rsps.add_callback(

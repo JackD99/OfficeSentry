@@ -272,6 +272,7 @@ GRAPH: tuple[Endpoint, ...] = (
     ),
     Endpoint("/sites/{site}/drive", V1, "Sites.Read.All", ("sharepoint",), cost=SP_ONE),
     Endpoint("/sites/{site}/drives", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
+    Endpoint("/sites/{site}/drive/root/permissions", V1, "Sites.Read.All", ("sharepoint",), cost=SP_PERMISSIONS),
     Endpoint("/sites/{site}/lists", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
     Endpoint("/sites/{site}/lists/{list}/items", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
     Endpoint(

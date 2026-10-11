@@ -6,7 +6,7 @@ What changed in each Office Sentry release, written for the people who run it. R
 How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
 [CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
 
-## 2.1.1 (unreleased)
+## 2.2.0 (unreleased)
 
 ### Action required
 
@@ -19,6 +19,16 @@ None.
 ### Database upgrade
 
 No.
+
+### Added
+
+- **Site access** report (Files and Teams): who owns, administers and can reach each SharePoint site.
+  Sites with no enabled owner or only one, each site's owners, administrators, members and guests, what
+  the default library grants and to whom, every guest with the sites they can reach, and who administers
+  many sites. A new check, "Every site has at least two owners", flags ownerless and single-owner sites.
+  Read with the existing `Sites.Read.All` permission from each site's user list and default library;
+  members of SharePoint groups on sites with no Microsoft 365 group wait for the SharePoint permission in
+  the next consent batch, and the report says so.
 
 ### Fixed
 
