@@ -2,9 +2,13 @@
 states. Also BitLocker recovery keys (Devices report and check) and PIM for groups (Admins report), the
 other permissions of the 2.2 batch that nothing read until now."""
 
+import json
 from datetime import UTC, datetime
+from io import BytesIO
 
-from officesentry import store
+from openpyxl import load_workbook
+
+from officesentry import endpoints, store, support
 from officesentry.reports import data_reports
 from officesentry.rules import evaluate
 from officesentry.snapshot import TenantSnapshot
@@ -296,6 +300,49 @@ def test_recovery_keys_are_read_without_the_key(db, two_tenants):
     assert [e for e in _asked(db, run["id"]) if "bitlocker" in e] == [
         "v1.0 /informationProtection/bitlocker/recoveryKeys"
     ]
+
+
+# A recovery key's shape: eight groups of six digits.
+RECOVERY_KEY = "314159-265358-979323-846264-338327-950288-419716-939937"
+
+
+def test_a_recovery_key_never_reaches_storage_or_output(client, cfg, db, two_tenants):
+    """Keys are never downloadable. The list Office Sentry reads (BitLockerKey.ReadBasic.All) carries no key, and
+    even if Microsoft sent one, nothing would keep it: not the stored data, the report or its downloads, the
+    support package, or the log."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, recovery_keys=[{**k, "key": RECOVERY_KEY} for k in dd.RECOVERY_KEYS])
+    assert _run(db, alpha, "devices")["status"] == "succeeded"
+
+    # Microsoft returns a key only from one key's own record (``/recoveryKeys/{id}?$select=key``). That path
+    # isn't catalogued, so a call to it fails test_ratelimit, and the list is the only BitLocker call.
+    bitlocker = [e.path for e in endpoints.GRAPH if "bitlocker" in e.path]
+    assert bitlocker == ["/informationProtection/bitlocker/recoveryKeys"]
+
+    # Stored: every object of every run, unpacked, and every text column of every table.
+    runs = [r["id"] for r in db.execute("SELECT id FROM runs WHERE tenant_id = ?", (alpha,))]
+    for run_id in runs:
+        for (kind,) in db.execute("SELECT DISTINCT kind FROM objects WHERE run_id = ?", (run_id,)).fetchall():
+            assert RECOVERY_KEY not in json.dumps(store.run_objects(db, run_id, kind)), kind
+    for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+        for row in db.execute(f"SELECT * FROM {table}"):  # noqa: S608 (table names from sqlite_master)
+            assert not any(isinstance(v, str) and RECOVERY_KEY in v for v in tuple(row)), table
+
+    # Shown: the report, its page and downloads, and the support package.
+    report = _report(db, alpha, "devices")
+    assert RECOVERY_KEY not in json.dumps([s.rows for s in report.sections] + report.notes, default=str)
+    make_user(db, "admin")
+    login(client, "admin")
+    for ext in ("", ".csv", ".xlsx"):
+        resp = client.get(f"/tenants/{alpha}/data/devices{ext}")
+        assert resp.status_code == 200
+        body = resp.data
+        if ext == ".xlsx":
+            book = load_workbook(BytesIO(body))
+            body = "\n".join(str(c) for ws in book for row in ws.iter_rows(values_only=True) for c in row).encode()
+        assert RECOVERY_KEY.encode() not in body, ext
+    package = support.build(db, cfg)
+    assert not any(RECOVERY_KEY.encode() in data for data in package.files.values())
 
 
 def test_devices_report_shows_which_computers_have_a_saved_key(db, two_tenants, monkeypatch):
