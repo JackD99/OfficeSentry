@@ -20,17 +20,27 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   `X-OfficeSentry-Key-Id` says which secret signed it. Change your receiver to check the new signature when you
   upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
+- **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
 ### New Microsoft permissions
 
-None.
+None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
+permissions.
 
 ### Database upgrade
 
-Yes: a table for the search index. It is applied on start, as usual.
+Yes, applied on start as usual: migration 37 adds a table for the search index, and migration 38 adds
+Microsoft account links on users and how each session was started.
 
 ### Added
 
+- **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
+  roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
+  work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
+  sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
+  turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
+  server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -162,6 +172,10 @@ Yes: a table for the search index. It is applied on start, as usual.
   now, try again in a moment" instead of an error page.
 - On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
   dates on it are written the same way on every platform.
+- A tenant whose consent is missing the AuditLog.Read.All permission still gets its users collected each
+  night, with the run partial and the permission named, instead of the Users collection failing.
+- An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
+  cmdlet, instead of failing the whole collection.
 
 ### Security
 
@@ -189,6 +203,17 @@ Yes: a table for the search index. It is applied on start, as usual.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
+  page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
+  so a client account probing for other clients' data is visible under *Settings → Activity log*.
+- Form-token, wrong-method, oversized-upload and server-error responses use the portal's own error page with
+  plain wording, instead of the web server's.
+- Passwords on lists of commonly used passwords (`password1234`, `qwerty123456` and 20,000 more of 12
+  characters or longer), or containing the person's username or "officesentry", are refused wherever a
+  password is chosen: first-run setup, the account page, the forced change after an admin's reset, and the
+  admin's user forms. Existing passwords aren't checked until they're changed.
+- A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
+  itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
 ## 2.1.0 (2026-10-10)
 

@@ -229,9 +229,9 @@ details.help > summary { font-size: var(--fs-base); }
 .footnote { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--space-2); }
 
 /* -- Settings: one sidebar entry, and this row on top of every settings page ------------------------ */
-.settings-nav { display: flex; flex-wrap: wrap; gap: var(--space-0-5); margin: -8px 0 20px; padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
-@media (max-width: 640px) { .settings-nav { flex-wrap: nowrap; gap: var(--space-1); overflow-x: auto; scrollbar-width: none; } }
-.settings-nav a { padding: 5px 10px; border-radius: var(--radius-pill); color: var(--muted); font-weight: 500; font-size: var(--fs-sm); white-space: nowrap; }
+.settings-nav { display: flex; gap: var(--space-1); margin: -8px 0 20px; padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+@media (min-width: 900px) { .settings-nav { flex-wrap: wrap; row-gap: var(--space-1-5); } }
+.settings-nav a { padding: 5px 11px; border-radius: var(--radius-pill); color: var(--muted); font-weight: 500; font-size: var(--fs-sm); white-space: nowrap; }
 .settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
 .settings-nav a.active { background: var(--text); color: var(--surface); }
 
@@ -1339,3 +1339,15 @@ button.layout-head { padding: 8px 10px; }
 input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
 .sent-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
 .send-steps details.by-hand { margin-top: var(--space-3); }
+
+/* Sign in with Microsoft (login.html): the Microsoft button leads; the password form follows an "or" line, or
+ * folds away when passwords are off for staff. */
+.auth-card .btn.microsoft, body.branded .auth-card .btn.microsoft { margin-top: 0; gap: var(--space-2-5); font-weight: 600; background: var(--text); border-color: var(--text); color: var(--surface); }
+.auth-card .btn.microsoft:hover, body.branded .auth-card .btn.microsoft:hover { opacity: .9; }
+.auth-card .btn.microsoft .ms-logo { flex: none; }
+.card .kv + .steps { margin-top: var(--space-4); }
+.auth-card .or-line { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-3); color: var(--muted); font-size: var(--fs-sm); }
+.auth-card .or-line::before, .auth-card .or-line::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.auth-card button.secondary { width: 100%; padding: 9px; }
+.auth-card .password-fallback { margin-top: var(--space-4); }
+.auth-card .password-fallback form { margin-top: var(--space-3); }
