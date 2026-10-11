@@ -46,7 +46,8 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     hidden copy. Optional note at the top of the email.
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email (and page) for your team: renewals and trials, expiring app secrets and
-    certificates, mailboxes filling up, DMARC still at p=none and accepted risks due in the next 90 days.
+    certificates, teams and groups about to expire, mailboxes filling up, DMARC still at p=none and accepted
+    risks due in the next 90 days.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.
@@ -191,7 +192,9 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     groups and distribution lists.
   - *Empty, nested and dynamic groups*: groups with no members, security
     groups and distribution lists that contain other groups (and how many
-    levels deep), and dynamic groups with their rule, flagging paused ones.
+    levels deep), dynamic groups with their rule, flagging paused ones, teams
+    and groups about to expire (and whether an owner can renew them),
+    role-assignable groups, and blocked accounts still in groups.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS. SPF checks also catch multiple records,
     +all/?all, the ptr mechanism and includes that publish no SPF record;

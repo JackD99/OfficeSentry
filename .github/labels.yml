@@ -1,0 +1,61 @@
+# The repository's issue and pull request labels. Edit here, not on GitHub: the Labels workflow
+# (.github/workflows/labels.yml) creates or updates every label below on each push to main that changes this file,
+# so names, colours and descriptions stay the same after a rebuild of the repository. Labels that exist on
+# GitHub but not here are left alone and listed in the run's summary.
+#
+# Colours are hex without the #. Keep the set small: a label should decide something (which form it came
+# from, who it's for, what's blocking it), not describe the issue again.
+
+# What kind of thing it is (the issue forms set these)
+- name: bug
+  color: d73a4a
+  description: Something doesn't work as it should
+- name: enhancement
+  color: a2eeef
+  description: A new feature or an improvement
+- name: report
+  color: 0e8a16
+  description: A new report, or a change to one
+- name: check
+  color: 1d76db
+  description: A new security or configuration check, or a change to one
+- name: documentation
+  color: 0075ca
+  description: Docs, README, website or in-app wording
+- name: security
+  color: b60205
+  description: Security fix or hardening (vulnerabilities are reported privately, not here)
+- name: performance
+  color: fbca04
+  description: Speed, memory or database size
+
+# Where it stands
+- name: needs info
+  color: d4c5f9
+  description: Waiting for the reporter (a support package, a version, steps to reproduce)
+- name: confirmed
+  color: c2e0c6
+  description: Reproduced by a maintainer
+- name: good first issue
+  color: 7057ff
+  description: Small and self-contained, a good way to start contributing
+- name: help wanted
+  color: 008672
+  description: A maintainer would welcome a pull request for this
+- name: duplicate
+  color: cfd3d7
+  description: Already reported in another issue
+- name: wontfix
+  color: ffffff
+  description: Out of scope (ROADMAP.md, "Not planned") or not worth its cost
+
+# Set by automation
+- name: dependencies
+  color: 0366d6
+  description: Dependency updates from Dependabot
+- name: nightly
+  color: d93f0b
+  description: Opened by the Nightly checks workflow when a scheduled check fails
+- name: canary
+  color: d93f0b
+  description: Opened by the Live canary workflow when Microsoft changes what it sends

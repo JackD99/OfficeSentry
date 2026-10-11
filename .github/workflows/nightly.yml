@@ -1,4 +1,4 @@
-name: nightly
+name: Nightly checks
 # The slow checks that don't fit on every pull request (v2/tests/nightly/README.md):
 #   1. every release's database upgrades to this code, and every page then opens;
 #   2. the example PDFs look as they did (each page compared with v2/tests/nightly/pdf_baselines);
@@ -6,9 +6,8 @@ name: nightly
 # A failure on main opens an issue labelled "nightly" (or updates the open one), which notifies Jack and closes
 # by itself when a run passes again. The run's page shows the timings either way.
 #
-# Minutes: one job of about 5. GitHub Free gives a private repository 2,000 a month, so the schedule runs it
-# on Mondays only until the repository variable SCHEDULED_CHECKS_NIGHTLY is "true" (set it when the repo goes
-# public and standard runners are free); then every night. Run it by hand any time: Actions > nightly > Run
+# Minutes: one job of about 5. The schedule runs it on Mondays until the repository variable
+# SCHEDULED_CHECKS_NIGHTLY is "true"; then every night. Run it by hand any time: Actions > Nightly checks > Run
 # workflow. Pull requests that change the suite or how PDFs are drawn run it too, so baselines are refreshed
 # in the same pull request: Run workflow on the branch with "Save new PDF baselines" ticked commits them.
 on:
@@ -143,7 +142,7 @@ jobs:
         run: exit 1
 
   update:
-    # Actions > nightly > Run workflow on a branch, with "Save new PDF baselines": draws the PDFs and commits
+    # Actions > Nightly checks > Run workflow on a branch, with "Save new PDF baselines": draws the PDFs and commits
     # their pages to that branch. Look at the new images in the pull request before merging.
     if: ${{ inputs.update }}
     runs-on: ubuntu-24.04
