@@ -189,10 +189,10 @@ is built by this repository's [release workflow](.github/workflows/release.yml) 
 high or critical stops the release). Each one carries an SBOM and a build provenance saying which workflow,
 commit and tag made it, and the provenance is signed through GitHub's artifact attestations (Sigstore). To
 check an image before running it, with the [GitHub CLI](https://cli.github.com) and the version you're
-installing:
+installing in place of `<version>`:
 
 ```bash
-gh attestation verify oci://ghcr.io/jackd99/officesentry:2.3.0 --repo JackD99/OfficeSentry
+gh attestation verify oci://ghcr.io/jackd99/officesentry:<version> --repo JackD99/OfficeSentry
 ```
 
 It passes only for an image this repository's workflow built; anything else, or a copy changed since, fails.
