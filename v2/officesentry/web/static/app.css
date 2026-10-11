@@ -1332,6 +1332,14 @@ input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
 .sent-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
 .send-steps details.by-hand { margin-top: var(--space-3); }
 
+/* -- Page review 2: nothing wider than a phone --------------------------------------------------- */
+/* One column means one column: a long address in a list no longer widens the card past the screen. */
+@media (max-width: 960px) {
+  .grid-2, .grid-3, .grid-main { grid-template-columns: minmax(0, 1fr); }
+}
+.list .grow { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .form-actions { flex-wrap: wrap; } }
+
 /* -- Page review 2: month-end review --------------------------------------------------------------- */
 /* One line per failing check, "Add a note" at its end; the form opens under it. */
 .review-check { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); align-items: baseline; padding-top: var(--space-2-5); padding-bottom: var(--space-2-5); }
