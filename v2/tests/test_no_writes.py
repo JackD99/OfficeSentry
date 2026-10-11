@@ -34,6 +34,8 @@ ALLOWED = {
     "entra.py": "creating Office Sentry's app in the MSP's own tenant (create-app or the setup wizard), adding a "
     "release's new permissions to that app (update-app or the update wizard), and the device sign-in that allows it",
     "alerts.py": "posts alerts to the MSP's own Teams, Slack or webhook URL, never to Microsoft",
+    "sso.py": "staff sign-in with Microsoft: the OpenID Connect token request, and creating the sign-in app in the "
+    "MSP's own tenant from the setup wizard",
     "recording.py": "live-test's recording session passes on whatever method the caller used (GET)",
 }
 

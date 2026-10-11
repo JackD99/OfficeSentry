@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, tenant_header with context %}
+{% block title %}Mailboxes · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'mailboxes') }}
+
+{% if not collected %}
+<div class="card empty"><h3>No mailboxes yet</h3><p>Mailboxes show here once Mailboxes has been collected for this client.</p></div>
+{% elif not rows %}
+<div class="card empty"><h3>No mailboxes</h3><p>This client has no Exchange Online mailboxes, or none were returned on the last collection.</p></div>
+{% else %}
+<div class="tiles">
+  {% for h in tiles %}
+  <div class="tile">
+    <div class="label">{% if h.tone %}<span class="dot {{ 'bad' if h.tone == 'bad' else ('ok' if h.tone == 'ok' else 'warn') }}"></span>{% endif %}{{ h.label }}</div>
+    <div class="value{% if h.value is string and h.value|length > 9 %} wordy{% endif %}">{{ h.value }}</div>
+    {% if h.foot %}<div class="foot">{{ h.foot }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<section class="card flush">
+  <div class="card-head toolbar">
+    <h2>Every mailbox <span class="count-badge">{{ rows|length }}</span></h2>
+    <div class="toolbar-actions">
+      <input class="search sm" type="search" data-filter="mailboxes" placeholder="Find a mailbox…" aria-label="Find a mailbox">
+    </div>
+  </div>
+  <p class="intro">Open any mailbox to see its size and growth, forwarding and inbox rules, who else can get into it, the phones syncing it and its history on one page. Mailboxes with open findings come first.</p>
+  <div class="scroll-x">
+  <table class="stack-sm sortable" id="mailboxes">
+    <thead><tr>
+      <th aria-sort="none"><button type="button" class="sort">Mailbox</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Type</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Account</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Size</button></th>
+      <th aria-sort="none"><button type="button" class="sort">Forwarding</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Others with access</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Inbox rules</button></th>
+      <th aria-sort="none" class="num"><button type="button" class="sort">Open findings</button></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr data-name="{{ (r.name ~ ' ' ~ r.address ~ ' ' ~ r.type)|lower }}">
+      <td class="wrap"><a class="strong" href="{{ url_for('mailboxes.mailbox', tenant_id=tenant.id, mailbox_id=r.id) }}">{{ r.name }}</a>{% if r.address and r.address != r.name %}<span class="sub">{{ r.address }}</span>{% endif %}</td>
+      <td data-label="Type">{{ r.type }}</td>
+      <td data-label="Account">{% if r.account == 'Sign-in blocked' %}<span class="pill bad">Sign-in blocked</span>{% elif r.account == 'No account' %}<span class="muted">No account</span>{% else %}{{ r.account }}{% endif %}</td>
+      <td data-label="Size" class="num" data-sort="{{ r.size_sort }}">{{ r.size }}{% if r.share is not none %}<span class="sub">{{ r.share }}% of quota</span>{% endif %}</td>
+      <td data-label="Forwarding">{% if r.forwarding == 'Outside' %}<span class="pill bad">Outside</span>{% elif r.forwarding %}{{ r.forwarding }}{% else %}<span class="faint">None</span>{% endif %}</td>
+      <td data-label="Others with access" class="num">{% if r.access %}{{ r.access }}{% else %}<span class="faint">0</span>{% endif %}</td>
+      <td data-label="Inbox rules" class="num">{% if r.flagged_rules %}<span class="pill warn">{{ r.rules }}</span>{% elif r.rules %}{{ r.rules }}{% else %}<span class="faint">0</span>{% endif %}</td>
+      <td data-label="Open findings" class="num">{% if r.findings %}<span class="pill warn">{{ r.findings }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='tables.js') }}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}

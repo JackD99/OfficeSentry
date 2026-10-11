@@ -11,7 +11,7 @@ from flask import Blueprint, Response, abort, current_app, g, render_template
 from .. import retention
 from ..db import audit, connect
 from ..reports import activity_history, tables
-from .access import roles_required, tenant_or_404
+from .access import needs, tenant_or_404
 
 bp = Blueprint("history", __name__)
 
@@ -19,7 +19,7 @@ MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 @bp.get("/tenants/<int:tenant_id>/activity")
-@roles_required("admin", "analyst")
+@needs("reports.activity")
 def activity(tenant_id: int):
     t = tenant_or_404(tenant_id)
     policy = retention.load(g.db, current_app.extensions["officesentry.config"])
@@ -30,7 +30,7 @@ def activity(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/activity/sign-ins-<period>.csv")
-@roles_required("admin", "analyst")
+@needs("reports.activity", "export")
 def signins_csv(tenant_id: int, period: str):
     t = tenant_or_404(tenant_id)
     if not MONTH.match(period):

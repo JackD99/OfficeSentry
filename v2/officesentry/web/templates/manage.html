@@ -4,7 +4,7 @@
 {% from "_groups.html" import group_chips with context %}
 {% block title %}Manage · {{ tenant.name }}{% endblock %}
 {% block content %}
-{% set admin = current_user.role == 'admin' %}
+{% set admin = can('clients.manage') %}
 {% set r = health.result or {} %}
 {% call tenant_header(tenant, 'manage') %}
 {% if can_check %}{{ check_button(tenant, 'manage', 'Check connection now', '') }}{% endif %}

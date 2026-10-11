@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from . import adminactivity, store
 from .devices import clean as clean_device
 from .devices import parse_ts
+from .licences import is_free, sku_name
 
 
 @dataclass
@@ -94,6 +95,47 @@ def user_changes(conn, tenant_id: int, before: str, until: str | None = None) ->
         elif not old[uid].get("accountEnabled") and u.get("accountEnabled"):
             out.append(Change("Accounts", "changed", _who(u), "Re-enabled"))
     out += [Change("Accounts", "removed", _who(u), "Deleted") for uid, u in old.items() if uid not in new]
+    return out
+
+
+def licence_changes(conn, tenant_id: int, before: str, until: str | None = None) -> list[Change]:
+    """Paid licences each account was given or lost (the Licence changes report has every one, with dates)."""
+    from .state_history import objects_of
+
+    pair = _pair(conn, tenant_id, "users", "user", before, until)
+    if pair is None:
+        return []
+    run = _end_run(conn, tenant_id, "tenant_profile", until)
+    skus = {
+        s["skuId"]: s
+        for s in (objects_of(conn, run["id"], "subscribed_sku") if run else [])
+        if isinstance(s.get("skuId"), str)
+    }
+
+    def held(u: dict | None) -> set[str]:
+        ids = (u or {}).get("skuIds")
+        if not isinstance(ids, list):
+            return set()
+        return {s for s in ids if isinstance(s, str) and not (s in skus and is_free(skus[s]))}
+
+    def names(ids: set[str]) -> str:
+        return ", ".join(
+            sorted(
+                sku_name(skus[s].get("skuPartNumber")) if s in skus else "a licence the tenant no longer has"
+                for s in ids
+            )
+        )
+
+    old, new = pair
+    out = []
+    for uid in sorted(old.keys() | new.keys()):
+        gained, lost = held(new.get(uid)) - held(old.get(uid)), held(old.get(uid)) - held(new.get(uid))
+        parts = [f"Given {names(gained)}"] if gained else []
+        if lost:
+            parts.append(f"{'lost' if gained else 'Lost'} {names(lost)}")
+        if parts:
+            kind = "changed" if gained and lost else ("added" if gained else "removed")
+            out.append(Change("Licences", kind, _who(new.get(uid) or old[uid]), "; ".join(parts)))
     return out
 
 
@@ -282,6 +324,7 @@ def all_changes(conn, tenant_id: int, before: str, until: str | None = None) -> 
         admin_changes,
         ca_changes,
         user_changes,
+        licence_changes,
         forwarding_changes,
         app_changes,
         device_changes,

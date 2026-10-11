@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, flash, g, redirect, render_template, u
 
 from .. import alerts, delivery, mailer, system_alerts, system_health
 from ..db import audit, transaction
-from .access import roles_required
+from .access import needs
 
 bp = Blueprint("system", __name__, url_prefix="/admin")
 
@@ -48,13 +48,13 @@ def _page(new_token: str | None = None, status: int = 200):
 
 
 @bp.get("/status")
-@roles_required("admin")
+@needs("system.manage")
 def status():
     return _page()
 
 
 @bp.post("/status/token")
-@roles_required("admin")
+@needs("system.manage")
 def create_token():
     with transaction(g.db):
         replaced = system_health.has_token(g.db)
@@ -65,7 +65,7 @@ def create_token():
 
 
 @bp.post("/status/token/remove")
-@roles_required("admin")
+@needs("system.manage")
 def remove_token():
     with transaction(g.db):
         system_health.remove_token(g.db)

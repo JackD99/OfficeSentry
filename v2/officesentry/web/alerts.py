@@ -6,7 +6,7 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 
 from .. import alerts
 from ..db import audit, transaction
-from .access import roles_required
+from .access import needs
 
 bp = Blueprint("alerts", __name__, url_prefix="/admin")
 
@@ -16,7 +16,7 @@ def _vault():
 
 
 @bp.get("/alerts")
-@roles_required("admin")
+@needs("settings.manage")
 def settings():
     s = alerts.settings(g.db)
     recent = g.db.execute(
@@ -36,7 +36,7 @@ def settings():
 
 
 @bp.post("/alerts")
-@roles_required("admin")
+@needs("settings.manage")
 def save():
     vault = _vault()
     current = alerts.settings(g.db)
@@ -96,7 +96,7 @@ def save():
 
 
 @bp.post("/alerts/test")
-@roles_required("admin")
+@needs("settings.manage")
 def send_test():
     s = alerts.settings(g.db)
     base_url = current_app.extensions["officesentry.config"].base_url

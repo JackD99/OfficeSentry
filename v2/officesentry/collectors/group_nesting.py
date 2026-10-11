@@ -19,6 +19,7 @@ GROUP_FIELDS = (
 GROUP_LIMIT = 2000  # security groups and distribution lists whose members are read (one call each, mostly)
 MEMBER_PAGES = 20  # 999 members a page
 CHILDREN_KEPT = 200  # groups inside a group, by ID
+USERS_KEPT = 5000  # people in a group, by ID, so the report can name blocked accounts still in it
 
 
 def _summary(group: dict) -> dict:
@@ -79,15 +80,18 @@ class GroupNesting(Collector):
         result = ctx.graph.get_all(
             f"/groups/{gid}/members", params={"$select": "id", "$top": "999"}, max_pages=MEMBER_PAGES
         )
-        groups = [
-            m["id"]
-            for m in result.items
-            if (m.get("@odata.type") or "").endswith(".group") and isinstance(m.get("id"), str)
-        ]
+        by_type: dict[str, list[str]] = {"group": [], "user": []}
+        for m in result.items:
+            kind = (m.get("@odata.type") or "").rsplit(".", 1)[-1]
+            if kind in by_type and isinstance(m.get("id"), str):
+                by_type[kind].append(m["id"])
+        groups, users = by_type["group"], by_type["user"]
         return {
             "examined": True,
             "memberCount": len(result.items),
             "membersComplete": not result.truncated,
             "groupIds": groups[:CHILDREN_KEPT],
             "groupCount": len(groups),
+            "userIds": users[:USERS_KEPT],
+            "userIdsComplete": len(users) <= USERS_KEPT,
         }
