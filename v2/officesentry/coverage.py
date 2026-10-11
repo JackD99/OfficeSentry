@@ -70,6 +70,35 @@ def grants(policy: dict) -> set[str]:
     return controls
 
 
+def requires_mfa(policy: dict) -> bool:
+    """Whether every sign-in the policy grants has passed MFA: MFA alone, or with others under "Require all".
+
+    "Require one of" MFA or a compliant device (Microsoft's default operator is OR) lets a compliant
+    device in without MFA, so it isn't MFA.
+    """
+    controls = grants(policy)
+    operator = ((policy.get("grantControls") or {}).get("operator") or "OR").upper()
+    return "mfa" in controls and (operator == "AND" or controls == {"mfa"})
+
+
+def mfa_alternatives(policy: dict) -> list[str]:
+    """The controls that can stand in for MFA in a "require one of" policy (empty when MFA is required)."""
+    if requires_mfa(policy) or "mfa" not in grants(policy):
+        return []
+    return [CONTROL_NAMES.get(c, c) for c in sorted(grants(policy) - {"mfa"})]
+
+
+CONTROL_NAMES = {
+    "mfa": "MFA",
+    "block": "Block",
+    "compliantDevice": "Compliant device",
+    "domainJoinedDevice": "Hybrid joined",
+    "approvedApplication": "Approved app",
+    "compliantApplication": "App protection",
+    "passwordChange": "Password change",
+}
+
+
 # Excluding these from an all-apps policy leaves every sign-in to Microsoft 365 covered: device enrolment, as
 # Microsoft's Windows Autopilot guidance does.
 BENIGN_EXCLUDED_APPS = {"d4ebce55-015a-49b5-a083-c84d1797ae8c"}  # Microsoft Intune Enrollment
@@ -101,7 +130,8 @@ def apps_left_out(policies: list[dict], control: str, names: dict[str, str] | No
     out = []
     for p in policies:
         users = ((p.get("conditions") or {}).get("users") or {}).get("includeUsers") or []
-        if p.get("state") != "enabled" or "All" not in users or not all_apps(p) or control not in grants(p):
+        has = requires_mfa(p) if control == "mfa" else control in grants(p)
+        if p.get("state") != "enabled" or "All" not in users or not all_apps(p) or not has:
             continue
         left = excluded_apps(p)
         if left and narrowing_conditions(p) == ["excluded apps"]:
@@ -146,11 +176,23 @@ def needs_p2(policy: dict) -> list[str]:
     return [label for key, label in P2_CONDITIONS.items() if cond.get(key)]
 
 
+def mfa_optional(policies: list[dict]) -> str:
+    """Enabled all-users, all-apps policies that offer MFA as one choice among others, as a sentence."""
+    out = []
+    for p in policies:
+        users = ((p.get("conditions") or {}).get("users") or {}).get("includeUsers") or []
+        if p.get("state") == "enabled" and "All" in users and all_apps(p) and (alt := mfa_alternatives(p)):
+            out.append(f'"{policy_name(p)}" accepts MFA or {" or ".join(a.lower() for a in alt)}')
+    if not out:
+        return ""
+    return "; ".join(out) + ", so those sign-ins can skip MFA. Set the grant to require all of the selected controls."
+
+
 def requires_mfa_everywhere(policy: dict) -> bool:
     client_apps = set((policy.get("conditions") or {}).get("clientAppTypes") or ["all"])
     return (
         all_apps(policy)
-        and "mfa" in grants(policy)
+        and requires_mfa(policy)
         and not narrowing_conditions(policy)
         and bool(client_apps & {"all", "browser", "mobileAppsAndDesktopClients"})
     )
@@ -243,17 +285,8 @@ def describe(policy: dict, d: Directory, capabilities: dict | None = None) -> Po
     controls = sorted(grants(policy))
     strength = (grant.get("authenticationStrength") or {}).get("displayName")
     mfa_text = strength if strength and strength != "Multifactor authentication" else "MFA"
-    grant_text = (" and " if grant.get("operator") == "AND" else " or ").join(
-        {
-            "mfa": mfa_text,
-            "block": "Block",
-            "compliantDevice": "Compliant device",
-            "domainJoinedDevice": "Hybrid joined",
-            "approvedApplication": "Approved app",
-            "compliantApplication": "App protection",
-            "passwordChange": "Password change",
-        }.get(c, c)
-        for c in controls
+    grant_text = (" and " if (grant.get("operator") or "").upper() == "AND" else " or ").join(
+        mfa_text if c == "mfa" else CONTROL_NAMES.get(c, c) for c in controls
     ) or ("Session controls" if policy.get("sessionControls") else "None")
     warning = ""
     p2 = needs_p2(policy)

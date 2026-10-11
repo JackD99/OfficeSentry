@@ -42,6 +42,8 @@ MFA_METHOD_TYPES = {
 
 PER_USER_MFA_LIMIT = 2000
 CA_GROUP_LIMIT = 200
+ROLE_GROUP_LIMIT = 100
+ROLE_GROUP_MEMBER_FIELDS = "id,displayName,userPrincipalName,accountEnabled,userType,appId"
 
 
 def _principal_summary(principal: dict | None, principal_id: str) -> dict:
@@ -123,15 +125,65 @@ class AdminRoles(Collector):
         except (LicenseRequired, PermissionMissing):
             ctx.log("PIM eligibility not available (needs Entra ID P2); active assignments only")
 
+        rows += _through_groups(ctx, rows)
         ctx.objects("role_assignment", rows)
         data = [r for _, r in rows]
-        priv_active = [r for r in data if r["privileged"] and r["assignment"] == "active"]
+        # Groups aren't people: their members are counted through their own rows.
+        priv_active = [
+            r for r in data if r["privileged"] and r["assignment"] == "active" and r["principalType"] != "group"
+        ]
         ctx.metric("admins.privileged_active_assignments", len(priv_active))
         ctx.metric("admins.privileged_principals", len({r["principalId"] for r in priv_active}))
         ctx.metric(
             "admins.global_admins",
-            len({r["principalId"] for r in priv_active if r["roleName"] == "Global Administrator"}),
+            len(
+                {
+                    r["principalId"]
+                    for r in priv_active
+                    if r["roleName"] == "Global Administrator"
+                    and r["principalType"] == "user"
+                    and r["accountEnabled"] is not False
+                }
+            ),
         )
+
+
+def _through_groups(ctx: RunContext, rows: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
+    """A row per member of every group that holds a role, active or eligible, marked with the group.
+
+    A role-assignable group passes its roles to its members, so without these an admin who holds
+    Global Administrator through a group is invisible to every admin check. Such groups can't
+    contain other groups, so their direct members are everyone who holds the role.
+    """
+    groups = {r["principalId"]: r for _, r in rows if r["principalType"] == "group" and r["principalId"]}
+    if len(groups) > ROLE_GROUP_LIMIT:
+        ctx.warn(f"Read the members of the first {ROLE_GROUP_LIMIT} of {len(groups)} groups that hold roles")
+    members: dict[str, list[dict]] = {}
+    for gid in list(groups)[:ROLE_GROUP_LIMIT]:
+        try:
+            members[gid] = ctx.paged(
+                ctx.graph.get_all(f"/groups/{gid}/members", params={"$select": ROLE_GROUP_MEMBER_FIELDS, "$top": "999"})
+            )
+        except GraphError as exc:
+            name = groups[gid].get("displayName") or gid
+            ctx.warn(f"Couldn't read the members of {name}, which holds an admin role: {exc.message}")
+    out = []
+    for row_id, r in rows:
+        for m in members.get(r["principalId"], []) if r["principalType"] == "group" else []:
+            if not m.get("id"):
+                continue
+            out.append(
+                (
+                    f"{row_id}:member:{m['id']}",
+                    {
+                        **r,
+                        **_principal_summary(m, m["id"]),
+                        "viaGroupId": r["principalId"],
+                        "viaGroup": r.get("displayName") or r["principalId"],
+                    },
+                )
+            )
+    return out
 
 
 @register
@@ -219,7 +271,7 @@ class MfaRegistration(Collector):
 
     def collect(self, ctx: RunContext) -> None:
         rows = None
-        if ctx.capabilities.get("entra_p1", True):
+        if ctx.capabilities.get("entra_p1") is not False:
             try:
                 details = ctx.paged(ctx.graph.get_all("/reports/authenticationMethods/userRegistrationDetails"))
                 rows = [

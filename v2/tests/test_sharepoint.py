@@ -8,6 +8,7 @@ import responses
 from openpyxl import load_workbook
 
 from officesentry import store
+from officesentry.collectors import sharepoint
 from officesentry.collectors.sharepoint import concealed, describe_permissions
 from officesentry.graph import GraphClient
 from officesentry.reports import data_reports
@@ -91,14 +92,26 @@ def test_shared_files_collector(db, two_tenants):
 
 def test_shared_files_without_permission(db, two_tenants):
     alpha, _ = two_tenants
-    seed_tenant(db, alpha, sharepoint_kw={"files": False})
+    seed_tenant(db, alpha, sharepoint_kw={"files": False}, our_app={"missing": ("Sites.Read.All",)})
     run = store.latest_run(db, alpha, "shared_files")
-    assert run["status"] == "partial" and "Sites.Read.All" in run["error"]
+    assert run["status"] == "partial" and "needs the Sites.Read.All permission" in run["error"]
     report = _report(db, alpha, "shared-files")
-    assert "consent link" in report.unavailable
+    assert "send the consent link to the client's Global Admin again" in report.unavailable
     # The check falls back to Microsoft's per-site counts instead of passing.
     result = _results(db, alpha)["anyone_links"]
     assert result.status == "fail" and result.findings[0].subject == sd.FINANCE
+
+
+def test_sharepoint_refusing_a_granted_app_is_not_called_missing_consent(db, two_tenants):
+    """A 403 from SharePoint while Sites.Read.All is granted is SharePoint's own restriction: a consent
+    link won't fix it, so neither the run nor the reports send the admin to re-consent."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, sharepoint_kw={"files": False})
+    run = store.latest_run(db, alpha, "shared_files")
+    assert run["status"] == "partial" and "isn't a consent problem" in run["error"]
+    assert _snap(db, alpha).objects("shared_files", "scan_status")[0]["reason"] == "denied"
+    report = _report(db, alpha, "shared-files")
+    assert "won't help" in report.unavailable and "Admin again" not in report.unavailable
 
 
 def test_describe_permissions_treats_guest_logins_as_external():
@@ -139,6 +152,71 @@ def _calls(db, alpha, collector: str = "shared_files") -> list[str]:
         store.enqueue_run(db, alpha, collector)
         assert execute_run(db, store.claim_next_run(db), factory) in ("succeeded", "partial")
         return [urlsplit(c.request.url).path.removeprefix("/v1.0") for c in rsps.calls]
+
+
+def _scan(db, alpha):
+    """One more shared-files run: its Graph paths, its scan status and its items by name."""
+    paths = _calls(db, alpha)
+    snap = _snap(db, alpha)
+    status = snap.objects("shared_files", "scan_status")[0]
+    return paths, status, {i["name"]: i for i in snap.objects("shared_files", "shared_item")}
+
+
+def test_shared_files_scan_stops_at_its_page_budget_and_carries_on_next_time(db, two_tenants, monkeypatch):
+    """A night's share of pages: the libraries left over keep their last results and go first next time."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)  # a full scan: four shared items in two libraries
+    monkeypatch.setattr(sharepoint, "MAX_PAGES", 1)  # one library's delta a night
+    paths, status, items = _scan(db, alpha)
+    assert [p for p in paths if p.endswith("/root/delta")] == ["/drives/drv-ann/root/delta"]  # in id order
+    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"}  # the other library's kept
+    assert status["scanned_drives"] == 1 and status["carried"] == 3 and status["next_drive"] == "drv-fin"
+    run = store.latest_run(db, alpha, "shared_files")
+    assert run["status"] == "partial" and run["truncated"]
+    assert "1 library of 2 before reaching the limit of 1 page a night" in run["error"]
+    assert "scanned first next time" in run["error"]
+
+    paths, status, items = _scan(db, alpha)  # the next night starts with the library left over
+    assert [p for p in paths if p.endswith("/root/delta")] == ["/drives/drv-fin/root/delta"]
+    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"}
+    assert status["scanned_drives"] == 1 and status["carried"] == 1 and status["next_drive"] == "drv-ann"
+    paths, _, _ = _scan(db, alpha)
+    assert [p for p in paths if p.endswith("/root/delta")] == ["/drives/drv-ann/root/delta"]
+
+
+def test_shared_files_scan_stops_at_its_time_budget(db, two_tenants, monkeypatch):
+    """A library the clock runs out in is scanned again, whole, the next night; nothing of it is half stored."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    now = [0.0]
+    monkeypatch.setattr(sharepoint, "clock", lambda: now[0])
+    describe = sharepoint.describe_permissions
+    calls = []
+
+    def slow_describe(perms, domains):  # the clock jumps past the budget during the second library's first item
+        calls.append(perms)
+        if len(calls) == 2:
+            now[0] += sharepoint.TIME_BUDGET.total_seconds()
+        return describe(perms, domains)
+
+    monkeypatch.setattr(sharepoint, "describe_permissions", slow_describe)
+    paths, status, items = _scan(db, alpha)
+    assert [p for p in paths if "/permissions" in p] == [
+        "/drives/drv-ann/items/it-holiday/permissions",
+        "/drives/drv-fin/items/it-clients/permissions",
+    ]
+    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"}
+    assert status["scanned_drives"] == 1 and status["carried"] == 3 and status["next_drive"] == "drv-fin"
+    assert "the 2-hour limit" in store.latest_run(db, alpha, "shared_files")["error"]
+
+    # Carried rows are the last scan's, so a library that fell out of reach keeps its rows across nights.
+    now[0] = 0.0
+    monkeypatch.setattr(sharepoint, "describe_permissions", describe)
+    monkeypatch.setattr(sharepoint, "MAX_PAGES", 1)
+    _, status, items = _scan(db, alpha)  # drv-fin fresh, drv-ann carried from the first scan
+    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"} and status["carried"] == 1
+    _, status, items = _scan(db, alpha)  # drv-ann fresh, drv-fin carried from the one before
+    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"} and status["carried"] == 3
 
 
 def _age_sharepoint_runs(db, alpha, days: float) -> None:
@@ -269,7 +347,7 @@ def test_shared_files_report(db, two_tenants):
     first = anyone.rows[0]
     assert str(first[0]) == "Clients (folder)" and first[0].safe_href == "https://x/Clients"
     assert first[2] == "Edit" and first[3] == "Never" and first[5] == "2026-09-01"
-    assert anyone.flags == ["high", "low"]
+    assert anyone.flags == ["high", "medium"]  # view-only with an expiry: medium, as the check rates it
     assert anyone.rows[1][1] == "OneDrive of ann@x.com" and anyone.rows[1][3] == "2099-01-01"
     assert _section(report, "Shared with people outside the organisation").rows[0][2] == "partner@other.com"
     assert _section(report, "Shared with the whole organisation").rows[0][1] == "Finance / Documents"

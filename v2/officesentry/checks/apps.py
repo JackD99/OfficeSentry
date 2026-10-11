@@ -6,7 +6,7 @@ from datetime import datetime
 
 from .. import devices
 from ..snapshot import TenantSnapshot
-from ..text import day, every, plural
+from ..text import day, every, nouns, plural
 from .base import SEVERITY_RANK, Finding, _unavailable, rule
 
 HIGH_RISK_PERMISSIONS = {
@@ -86,6 +86,10 @@ def app_risks(snap: TenantSnapshot) -> list[dict] | None:
             severity = "low"
         else:
             severity = None
+        # A disabled app can't get tokens, so what it holds can't be used until someone turns it back on.
+        disabled = sp.get("accountEnabled") is False
+        if disabled and severity:
+            severity = "low"
         out.append(
             {
                 "id": sp["_id"],
@@ -97,6 +101,7 @@ def app_risks(snap: TenantSnapshot) -> list[dict] | None:
                 "user_scopes": sorted(user_scopes),
                 "users": len(users),
                 "severity": severity,
+                "disabled": disabled,
                 "risky": risky_app + [s for s in risky_tenant + risky_user if s not in risky_app],
             }
         )
@@ -126,7 +131,8 @@ def risky_app_permissions(snap: TenantSnapshot, now: datetime):
             how = "consented for all users"
         else:
             how = f"consented by {plural(a['users'], 'user')}"
-        findings.append(Finding(a["severity"], a["name"], f"{', '.join(a['risky'])} ({how}; {who})", a["id"]))
+        state = " (disabled)" if a["disabled"] else ""
+        findings.append(Finding(a["severity"], a["name"], f"{', '.join(a['risky'])} ({how}; {who}){state}", a["id"]))
     return (
         ("fail", f"{plural(len(findings), 'app')} with access to mail, files or the directory", findings)
         if findings
@@ -139,12 +145,37 @@ def _authorization_policy(snap: TenantSnapshot):
     return rows[0] if rows else None
 
 
+# Microsoft's built-in user consent policies: verified publishers, permissions classified as low impact.
+LIMITED_CONSENT_POLICIES = ("microsoft-user-default-low", "microsoft-user-default-recommended")
+LEGACY_CONSENT_POLICY = "microsoft-user-default-legacy"
+SELF_CONSENT = "ManagePermissionGrantsForSelf."
+
+
+def _self_consent_policies(policy: dict) -> list[str]:
+    """The permission grant policies users may consent under for themselves, by ID."""
+    return [
+        p[len(SELF_CONSENT) :]
+        for p in policy.get("permissionGrantPolicies") or []
+        if isinstance(p, str) and p.startswith(SELF_CONSENT)
+    ]
+
+
 def user_consent_level(policy: dict) -> str:
-    """'any' (legacy: any app), 'limited' (verified publishers, low-risk permissions) or 'off'."""
-    assigned = [p for p in policy.get("permissionGrantPolicies") or [] if "ManagePermissionGrantsForSelf" in p]
-    if any(p.endswith("microsoft-user-default-legacy") for p in assigned):
+    """'any' (legacy: any app), 'limited' (users can consent to some apps) or 'off'.
+
+    'limited' includes custom consent policies, which ``custom_consent_policies`` names.
+    """
+    assigned = _self_consent_policies(policy)
+    if LEGACY_CONSENT_POLICY in assigned:
         return "any"
     return "limited" if assigned else "off"
+
+
+def custom_consent_policies(policy: dict) -> list[str]:
+    """User consent policies other than Microsoft's built-in ones: Office Sentry can't tell what they allow."""
+    return [
+        p for p in _self_consent_policies(policy) if p not in LIMITED_CONSENT_POLICIES and p != LEGACY_CONSENT_POLICY
+    ]
 
 
 @rule(
@@ -165,9 +196,36 @@ def user_consent(snap: TenantSnapshot, now: datetime):
             "Users can consent to any app",
             [Finding("medium", "Tenant", "Any user can grant any app access to their mail and files")],
         )
+    if custom := custom_consent_policies(policy):
+        names = nouns(len(custom), "custom consent policy", "custom consent policies")
+        what = "it allows" if len(custom) == 1 else "they allow"
+        return (
+            "fail",
+            "Custom consent policy: users consent to apps under rules set for this tenant",
+            [
+                Finding(
+                    "low", "Tenant", f"Users can consent to apps under {names} {', '.join(custom)}; review what {what}"
+                )
+            ],
+        )
     if level == "limited":
         return ("pass", "Users can consent only to verified publishers' low-risk permissions", [])
     return ("pass", "User consent is turned off", [])
+
+
+# Entra Connect's provisioning apps (ConnectSyncProvisioning_<server>) renew their own 90-day certificate
+# 27 to 30 days before it expires, so one inside the usual 30 days is only a problem once that's overdue.
+SELF_RENEWING_PREFIXES = ("ConnectSyncProvisioning_",)
+SELF_RENEWING_DAYS = 7
+CREDENTIAL_DAYS = 30
+
+
+def _warn_days(app: dict) -> int:
+    """How many days before its last credential expires an app registration is flagged."""
+    name = app.get("displayName")
+    if isinstance(name, str) and name.startswith(SELF_RENEWING_PREFIXES):
+        return SELF_RENEWING_DAYS
+    return CREDENTIAL_DAYS
 
 
 @rule(
@@ -181,14 +239,17 @@ def app_credentials(snap: TenantSnapshot, now: datetime):
     apps = snap.objects("app_consents", "application")
     if apps is None:
         return _unavailable("App data hasn't been collected yet")
-    soon = now.timestamp() + 30 * 86400
     findings = []
+    renewing = 0  # Entra Connect certificates inside 30 days that it will renew itself
     for a in apps:
         ends = [c["endDateTime"] for c in a.get("credentials") or [] if devices.parse_ts(c.get("endDateTime"))]
         if not ends:
             continue
         latest = max(ends)
         latest_ts = devices.parse_ts(latest).timestamp()
+        days = _warn_days(a)
+        soon = now.timestamp() + days * 86400
+        renewing += days < CREDENTIAL_DAYS and soon <= latest_ts < now.timestamp() + CREDENTIAL_DAYS * 86400
         if latest_ts < now.timestamp():
             findings.append(
                 Finding(
@@ -201,11 +262,18 @@ def app_credentials(snap: TenantSnapshot, now: datetime):
         elif latest_ts < soon:
             findings.append(
                 Finding(
-                    "medium", a.get("displayName") or a["_id"], f"Last valid credential expires {day(latest)}", a["_id"]
+                    "medium",
+                    a.get("displayName") or a["_id"],
+                    f"Last valid credential expires {day(latest)}"
+                    + ("; Entra Connect should have renewed it by now" if days < CREDENTIAL_DAYS else ""),
+                    a["_id"],
                 )
             )
+    if findings:
+        return ("fail", f"{plural(len(findings), 'app registration')} with expiring or expired credentials", findings)
     return (
-        ("fail", f"{plural(len(findings), 'app registration')} with expiring or expired credentials", findings)
-        if findings
-        else ("pass", "No app registration credentials expire in the next 30 days", [])
+        "pass",
+        "No app registration credentials expire in the next 30 days"
+        + (" other than Entra Connect certificates, which it renews itself" if renewing else ""),
+        [],
     )

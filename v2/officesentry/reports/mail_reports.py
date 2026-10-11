@@ -347,6 +347,7 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
     section = Section(
         "Shared and resource mailboxes",
         ["Mailbox", "Type", "Sign-in allowed", "Last sign-in", "Licensed", "Full access", "Send as", "Size"],
+        drifts=("Size",),
         empty="No shared, room or equipment mailboxes.",
     )
     for m in sorted(
@@ -441,6 +442,7 @@ def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
             "Archive",
             "Litigation hold",
         ],
+        drifts=("Size", "Used", "Items", "Recoverable items"),
         intro=(
             f"{_size(total)} across {_plural(len(sizes), 'mailbox')}. "
             + (
