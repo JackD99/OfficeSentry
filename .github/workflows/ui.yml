@@ -28,6 +28,10 @@ on:
         description: 'Save new baselines and commit them to this branch'
         type: boolean
         default: false
+      pull_request:
+        description: 'Compare the branch merged with main, as a pull request run does (its number)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -52,6 +56,8 @@ jobs:
       options: --ipc=host
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || '' }}
       - name: Install from the lock files
         run: pip install --root-user-action=ignore --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
       - name: Screenshots and accessibility

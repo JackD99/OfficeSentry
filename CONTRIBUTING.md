@@ -100,7 +100,8 @@ Python 3.12 run measures coverage and fails under 90%;
   baselines, and axe-core); `v2/tests/browser/README.md` says how to run them.
 - When a screenshot or an example PDF changes because you meant it to, add
   the label `refresh-baselines` to the pull request: a workflow retakes the
-  screenshots in the pinned browser and redraws the PDF pages, commits what
+  screenshots in the pinned browser and redraws the PDF pages (from your
+  branch merged with main, as the checks compare them), commits what
   changed to the branch, takes the label off and starts the checks again.
   It only works for branches of this repository, never main or a fork. Look
   at the new images in the pull request before merging.

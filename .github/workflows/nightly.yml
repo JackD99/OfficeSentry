@@ -22,6 +22,10 @@ on:
         description: 'Save new PDF baselines and commit them to this branch'
         type: boolean
         default: false
+      pull_request:
+        description: 'Compare the branch merged with main, as a pull request run does (its number)'
+        type: string
+        default: ''
   pull_request:
     paths:
       - '.github/workflows/nightly.yml'
@@ -60,6 +64,8 @@ jobs:
       PYTEST: python -m pytest --nightly -p no:cacheprovider -rf
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || '' }}
       - name: Fetch the release tags (just their commits)
         run: git fetch --no-tags --depth=1 origin '+refs/tags/v2*:refs/tags/v2*'
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
