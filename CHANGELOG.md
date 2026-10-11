@@ -11,6 +11,10 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.2.1] - Unreleased
 
+### Database upgrade
+
+Yes, applied on start as usual: migration 41 adds a count of wrong passwords to each signed-in browser.
+
 ### Security
 
 - Someone who manages users without being an Administrator, and has a capability taken away on one client,
@@ -24,6 +28,11 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - Webhook signing secrets must be at least 16 characters, since a short one can be worked out from a single
   signed request. A shorter secret already saved keeps working until it is changed; a long random one
   (`openssl rand -hex 32`) is best.
+- Wrong passwords where a signed-in browser is asked for the password again (to change it, turn two-step
+  sign-in off, or reset someone else's) no longer lock the account: the fifth signs that browser out. Someone
+  holding a stolen session could otherwise keep its owner from signing in to end it.
+- Recovery codes made before 2.2.0, still stored as a plain SHA-256, are put under the recovery code key when
+  the portal starts, so a copy of the database can't be used to work them out. They keep working.
 - New tests attack sign-in, sessions and forms on every route: a form sent without this browser's own token
   is refused, opening a page never changes stored data, sign-in answers the same whatever was wrong, and a
   copied cookie stops working whenever its session ends.

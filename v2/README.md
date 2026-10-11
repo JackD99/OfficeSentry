@@ -564,7 +564,9 @@ These areas have no real recording and are tested with simulated data only:
   minutes), and a spread-out attack on one account slows new addresses only,
   so nobody can lock a person out from elsewhere. Five wrong two-step codes
   (which need the password) lock that step for 15 minutes. Admins can clear
-  both from the user page. Details in [DEPLOY.md](DEPLOY.md#sign-in-protection).
+  both from the user page. Five wrong passwords where a signed-in browser is
+  asked for it again sign that browser out, without locking the account.
+  Details in [DEPLOY.md](DEPLOY.md#sign-in-protection).
 - **Sessions are stored on the server.** Signing out ends the session, so a
   copied cookie stops working. People can see where they're signed in and
   sign out other browsers on their **Account** page. Sessions end after 2 hours

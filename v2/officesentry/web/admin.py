@@ -55,7 +55,7 @@ def _user_or_404(user_id: int):
 def _admin_password_ok() -> bool:
     """The admin's own password, asked again before resetting someone's password, two-step sign-in or
     sessions, as the account page asks before the same changes: a stolen admin session isn't enough.
-    Wrong answers count towards the admin's own lock (``auth.confirm_password``)."""
+    Too many wrong answers sign the admin's browser out (``auth.confirm_password``)."""
     return confirm_password("admin_password", "Your password isn't right, so nothing was changed.")
 
 

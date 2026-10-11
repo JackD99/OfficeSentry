@@ -121,9 +121,10 @@ def _signed_in(client) -> bool:
 
 
 def _same_answer(page: str, username: str) -> str:
-    """A sign-in page with the name typed and the script nonce (new on every page) taken out, so two answers
-    can be compared."""
-    return re.sub(r'nonce="[^"]*"', 'nonce=""', page.replace(f'value="{username}"', 'value=""'))
+    """A sign-in page with the name typed, the script nonce (new on every page) and the form's token (signed
+    with the time, so new every second) taken out, so two answers can be compared."""
+    page = re.sub(r'nonce="[^"]*"', 'nonce=""', page.replace(f'value="{username}"', 'value=""'))
+    return re.sub(r'name="csrf_token" value="[^"]*"', 'name="csrf_token" value=""', page)
 
 
 def _custom_role(db, name: str, capabilities, scope=permissions.GRANTED, kind=permissions.STAFF) -> roles.Role:
@@ -530,6 +531,54 @@ def test_codes_from_another_account_or_long_ago_are_refused(app, db, two_step, v
     assert not _signed_in(client)
     client.post("/login/code", data={"code": next_code(secret)})
     assert _signed_in(client)
+
+
+def test_a_stolen_session_guessing_the_password_is_signed_out_and_cannot_lock_the_owner_out(app, db):
+    """Every form that asks for the password again counts wrong answers on that browser's own session: five,
+    on any mix of forms, sign that browser out. They never lock the account, so someone holding a stolen
+    session can't keep its owner from signing in, or their other browsers from working, while they hold it."""
+    make_user(db, "admin")
+    ana = make_user(db, "ana", role="analyst")
+    thief, owner = app.test_client(), app.test_client()
+    login(thief, "admin")
+    login(owner, "admin")
+    new = "a much longer new password"
+    assert thief.get("/two-step/setup").status_code == 200  # an authenticator waiting to be added
+    guesses = [
+        ("/account/password", {"current": "guess 1", "password": new, "confirm": new}),
+        ("/account/two-step/turn-off", {"password": "guess 2"}),
+        (f"/admin/users/{ana}/sign-out", {"admin_password": "guess 3"}),
+        ("/account/password", {"current": "guess 4", "password": new, "confirm": new}),
+    ]
+    for path, data in guesses:
+        assert thief.post(path, data=data).status_code in (200, 302), path
+        assert _signed_in(thief), path
+    resp = thief.post("/two-step/setup", data={"password": "guess 5", "code": "000000"})
+    assert resp.status_code == 302 and resp.headers["Location"].endswith("/login")
+    assert not _signed_in(thief)
+    assert db.execute("SELECT locked_until FROM users WHERE username = 'admin'").fetchone()[0] is None
+    assert _signed_in(owner)
+    fresh = app.test_client()
+    login(fresh, "admin")
+    assert _signed_in(fresh)
+    # The owner's right password works first time on their own browser, whatever the thief typed.
+    owner.post("/account/password", data={"current": PASSWORD, "password": new, "confirm": new})
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'password_changed'").fetchone()[0] == 1
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'password_confirm_failed'").fetchone()[0] == 5
+
+
+def test_recovery_codes_from_before_keyed_hashes_leave_no_bare_hash_behind(cfg, db, vault):
+    """A bare SHA-256 of a ten-character code can be found by trying every code, so a copy of the database
+    would give old codes away. The portal re-keys them when it starts; the bare hash itself is no code."""
+    uid = make_user(db, "admin")
+    bare = [hashlib.sha256(c.encode()).hexdigest() for c in ("abcdefghjk", "mnpqrstuvw")]
+    db.executemany("INSERT INTO user_recovery_codes (user_id, code_hash) VALUES (?, ?)", [(uid, h) for h in bare])
+    create_app(cfg)
+    stored = [r[0] for r in db.execute("SELECT code_hash FROM user_recovery_codes ORDER BY id")]
+    assert all(h.startswith("hmac") for h in stored) and not set(stored) & set(bare)
+    key = totp.recovery_key(db, vault)
+    assert totp.recovery_code_hashes("abcde-fghjk", key)[1] == stored[0]
+    assert not {*totp.recovery_code_hashes(bare[0], key)} & set(stored)
 
 
 # -- Sign in with Microsoft ------------------------------------------------------------------------------------
