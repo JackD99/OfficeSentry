@@ -246,11 +246,26 @@ details.help > summary { font-size: var(--fs-base); }
   .approve-bar { display: flex; position: sticky; bottom: 0; z-index: 5; gap: var(--space-3); align-items: center; justify-content: space-between; margin: 0 -16px -48px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -8px 12px -10px rgba(16, 24, 40, .25); }
 }
 
-/* -- Long tables on phones (tables.js): the first 20 rows, then "Show all" ------------------------- */
-.show-all { display: none; }
+/* -- Long tables (tables.js): the first rows, then "Show all" -------------------------------------- */
+table.capped:not(.searching) tr.over-cap { display: none; }
+.show-all { display: flex; justify-content: center; width: 100%; margin: 0; padding: var(--space-2-5); border: 0; border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius); background: transparent; color: var(--accent); font-weight: 500; box-shadow: none; }
+.show-all:hover { background: var(--surface-2); }
 @media (max-width: 640px) {
-  table.capped:not(.searching) tr.over-cap { display: none; }
-  .show-all { display: flex; width: calc(100% - 32px); margin: var(--space-2) var(--space-4) var(--space-4); }
+  .show-all { width: calc(100% - 32px); margin: var(--space-2) var(--space-4) var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+}
+/* A list cell with more than three items shows two and "and N more", which opens the rest in place. */
+details.more { display: inline; }
+details.more > summary { display: inline; margin-left: var(--space-1); color: var(--accent); cursor: pointer; white-space: nowrap; list-style: none; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "· "; color: var(--muted); }
+details.more[open] > summary { display: none; }
+details.more[open]::before { content: ", "; }
+/* Phones: a short value sits on its label's line; only long text drops under its label. */
+@media (max-width: 640px) {
+  table.stack-sm td.wrap.short:not(:first-child) { display: flex; text-align: right; }
+  table.stack-sm td.wrap.short:not(:first-child)::before { display: inline; }
+  table.stack-sm td.flagcol + td.wrap.short { display: block; text-align: left; }
 }
 
 /* -- Changes tab: one collapsible list per area --------------------------------------------------- */
@@ -1316,3 +1331,29 @@ button.layout-head { padding: 8px 10px; }
 input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
 .sent-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-3); }
 .send-steps details.by-hand { margin-top: var(--space-3); }
+
+/* -- Page review 2: month-end review --------------------------------------------------------------- */
+/* One line per failing check, "Add a note" at its end; the form opens under it. */
+.review-check { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); align-items: baseline; padding-top: var(--space-2-5); padding-bottom: var(--space-2-5); }
+.review-check > .note-list, .review-check > details[open] { grid-column: 1 / -1; }
+.review-check > details > summary { white-space: nowrap; margin: 0; }
+.review-check > details[open] > summary { margin-bottom: var(--space-2); }
+
+/* -- Page review 2: data collection ---------------------------------------------------------------- */
+details.sources-fine > summary { margin: 0; padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border); }
+details.sources-fine > summary:hover { background: var(--surface-2); }
+details.sources-fine[open] > summary { border-bottom: 1px solid var(--border); }
+
+/* -- Page review 2: account page ------------------------------------------------------------------- */
+/* The summary (needs attention beside the account and its findings) sits on top; every part below it
+   takes the page's width, its facts in two pairs a row on a laptop. */
+@media (min-width: 1100px) {
+  .parts .card.part .kv { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); column-gap: var(--space-8); }
+}
+.parts .timeline li { grid-template-columns: 120px 1fr; }
+details.part > summary.card-head { color: var(--text); font-weight: inherit; }
+details.part > summary.card-head h2 { display: flex; align-items: center; gap: var(--space-2); }
+details.part > summary.card-head h2::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; margin-right: var(--space-0-5); }
+details.part[open] > summary.card-head h2::before { transform: rotate(45deg); }
+details.part:not([open]) > summary.card-head { margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { details.part > summary.card-head h2::before { transition: none; } }

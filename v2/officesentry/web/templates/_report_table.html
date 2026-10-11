@@ -7,6 +7,7 @@
 {% macro cell(v) -%}
 {%- if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>
 {%- elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>
+{%- elif v.parts is defined and v.parts|length > 3 %}{{ v.parts[:2]|join(', ') }}<details class="more"><summary>and {{ v.parts|length - 2 }} more</summary>{{ v.parts[2:]|join(', ') }}</details>
 {%- else %}{{ v }}{% endif -%}
 {%- endmacro %}
 
@@ -116,7 +117,7 @@
     {% macro row(cells, flag, key) -%}
     <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ cells|join(' ')|lower }}{{ (' ' ~ flag) if flag }}">
       {% if tv.flag %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}
-      {% for v in cells %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }}{{ ' num' if c.kind == 'num' }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
+      {% for v in cells %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
       {% if acts %}<td class="row-action" data-label="{{ action }}">{{ act(key) }}</td>{% endif %}
     </tr>
     {%- endmacro %}

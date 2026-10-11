@@ -43,12 +43,14 @@ def usage_part(p: Person) -> Part | None:
         result.facts.append(("Office apps used on", ", ".join(on) or "None"))
     if row.get("email"):
         e = row["email"]
-        result.facts.append(("Email", f"{e.get('sent') or 0:,} sent, {e.get('received') or 0:,} received"))
+        result.facts.append(
+            (f"Email in {days} days", f"{e.get('sent') or 0:,} sent, {e.get('received') or 0:,} received")
+        )
     if row.get("teamsCounts"):
         t = row["teamsCounts"]
         result.facts.append(
             (
-                "Teams",
+                f"Teams in {days} days",
                 f"{_plural(t.get('messages') or 0, 'message')}, "
                 f"{_plural(t.get('meetings') or 0, 'meeting')}, "
                 f"{_plural(t.get('calls') or 0, 'call')}",

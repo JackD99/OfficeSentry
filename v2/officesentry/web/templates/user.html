@@ -53,47 +53,6 @@
       <div class="empty compact">{{ icon('check', 'big ok') }}<h3>Nothing needs attention</h3><p>Nothing stands out for this account in the data collected.</p></div>
       {% endif %}
     </section>
-
-    <nav class="jump" aria-label="Sections">
-      {% for p in profile.parts %}<a href="#part-{{ p.key }}">{{ p.title }}</a>{% endfor %}
-      <a href="#history">History</a>
-    </nav>
-
-    {% for p in profile.parts %}
-    <section class="card part" id="part-{{ p.key }}">
-      <div class="card-head">
-        <h2>{{ p.title }}</h2>
-        {% if p.unavailable %}<span class="pill">Not checked</span>{% elif p.summary %}<span class="pill {{ PILL.get(p.tone, '') }}">{{ p.summary }}</span>{% endif %}
-      </div>
-      {% if p.key == 'reclaim' %}
-      <div class="part-downloads">{{ downloads([('PDF', url_for('people.leaver_pdf', tenant_id=tenant.id, user_id=profile.user_id), 'This checklist on one page, with a line for the client to sign')]) }}</div>
-      {% endif %}
-      {% if p.unavailable %}
-      <p class="muted m0">{{ p.unavailable }}</p>
-      {% else %}
-        {% if p.facts %}
-        <dl class="kv">{% for label, value in p.facts %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
-        {% endif %}
-        {% for t in p.tables %}
-        {% if p.facts or p.tables|length > 1 %}<h3 class="part-sub">{{ t.title }} <span class="count-badge">{{ t.rows|length }}</span></h3>{% endif %}
-        <div class="scroll-x">
-        <table class="stack-sm part-table">
-          <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-          <tbody>
-          {% for row in t.rows %}{% set flag = t.flags[loop.index0] %}
-          <tr{% if flag %} class="flag-{{ flag }}"{% endif %}>
-            {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ t.columns[loop.index0] }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        </div>
-        {% endfor %}
-        {% if not p.facts and not p.tables %}<p class="muted m0">{{ p.empty }}</p>{% endif %}
-      {% endif %}
-      {% if p.note and not p.unavailable %}<p class="footnote">{{ p.note }}</p>{% endif %}
-    </section>
-    {% endfor %}
   </div>
 
   <aside aria-label="Account summary">
@@ -116,6 +75,52 @@
       <p class="muted small m0">No open findings name this account.</p>
       {% endif %}
     </section>
+  </aside>
+</div>
+
+<nav class="jump hide-sm" aria-label="Sections">
+  {% for p in profile.parts %}<a href="#part-{{ p.key }}">{{ p.title }}</a>{% endfor %}
+  <a href="#history">History</a>
+</nav>
+
+{#- Below the summary every part takes the page's width, so no table is squeezed into a narrow column.
+    Each part folds to its heading and summary: open on laptops, folded on phones (app.js). -#}
+<div class="parts">
+    {% for p in profile.parts %}
+    <details class="card part" id="part-{{ p.key }}" open>
+      <summary class="card-head">
+        <h2>{{ p.title }}</h2>
+        {% if p.unavailable %}<span class="pill">Not checked</span>{% elif p.summary %}<span class="pill {{ PILL.get(p.tone, '') }}">{{ p.summary }}</span>{% endif %}
+      </summary>
+      {% if p.key == 'reclaim' %}
+      <div class="part-downloads">{{ downloads([('PDF', url_for('people.leaver_pdf', tenant_id=tenant.id, user_id=profile.user_id), 'This checklist on one page, with a line for the client to sign')]) }}</div>
+      {% endif %}
+      {% if p.unavailable %}
+      <p class="muted m0">{{ p.unavailable }}</p>
+      {% else %}
+        {% if p.facts %}
+        <dl class="kv">{% for label, value in p.facts %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+        {% endif %}
+        {% for t in p.tables %}
+        {% if p.facts or p.tables|length > 1 %}<h3 class="part-sub">{{ t.title }} <span class="count-badge">{{ t.rows|length }}</span></h3>{% endif %}
+        <div class="scroll-x">
+        <table class="stack-sm part-table">
+          <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+          <tbody>
+          {% for row in t.rows %}{% set flag = t.flags[loop.index0] %}
+          <tr{% if flag %} class="flag-{{ flag }}"{% endif %}>
+            {% for v in row %}<td class="wrap{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ t.columns[loop.index0] }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        {% endfor %}
+        {% if not p.facts and not p.tables %}<p class="muted m0">{{ p.empty }}</p>{% endif %}
+      {% endif %}
+      {% if p.note and not p.unavailable %}<p class="footnote">{{ p.note }}</p>{% endif %}
+    </details>
+    {% endfor %}
 
     <section class="card" id="history">
       <div class="card-head"><h2>History</h2></div>
@@ -131,7 +136,6 @@
       {% endif %}
       <p class="footnote">Found by comparing collections{% if profile.history_since %} since {{ profile.history_since|day }}{% endif %}. The date is when Office Sentry first saw the change.</p>
     </section>
-  </aside>
 </div>
 
 <p class="footnote">Data from
