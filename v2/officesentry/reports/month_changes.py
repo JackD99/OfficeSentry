@@ -27,8 +27,10 @@ from datetime import UTC, datetime, timedelta
 
 from ..changes import Change, all_changes
 from ..checks import RULES
+from ..collectors import REGISTRY
 from ..findings import resolved_since
 from ..snapshot import TenantSnapshot
+from ..text import verb
 from . import data_reports
 from .precomputed import Rows
 from .tables import Table
@@ -249,6 +251,17 @@ def compare_report(
         return result
     if [r["id"] if r else None for r in old_runs] == [r["id"] if r else None for r in new_runs]:
         return result  # nothing collected since: nothing can have changed
+    gone = [
+        REGISTRY[c].title
+        for c, r in zip(collectors, old_runs, strict=True)
+        if r and data_reports.detail_removed(conn, c, r)
+    ]
+    if gone:  # an empty sign-in log then would show every sign-in now as new
+        result.note = (
+            f"{' and '.join(gone)} from the start of the period {verb(len(gone), 'is', 'are')} no longer held: "
+            f"the retention policy keeps {'it' if len(gone) == 1 else 'them'} for less time than the daily history."
+        )
+        return result
     old = data_reports.build(conn, tenant, key, as_of=since, snap=old_snap)
     new = data_reports.build(conn, tenant, key, now=now, snap=new_snap)
     if old.unavailable or new.unavailable:

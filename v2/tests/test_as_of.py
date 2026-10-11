@@ -210,6 +210,15 @@ def test_every_report_builds_on_a_past_day(db, then_and_now):
             assert report.unavailable == data_reports.build(db, tenant, key).unavailable, key
 
 
+def test_legacy_sign_ins_retention_removed_are_said_to_be_gone_not_compared(db, then_and_now):
+    # Kept for less time than the daily history: the day says so, and What changed doesn't list today's as new.
+    tenant = store.get_tenant(db, then_and_now)
+    then = data_reports.build(db, tenant, "legacy-auth", as_of=as_of.end_of(TODAY - timedelta(days=30)))
+    assert "Legacy sign-ins from that day is no longer held" in then.notice
+    legacy = next(r for r in month_changes.build(db, tenant, 30).reports if r.key == "legacy-auth")
+    assert legacy.count == 0 and "Legacy sign-ins from the start of the period is no longer held" in legacy.note
+
+
 def test_end_of_a_day_is_its_last_second():
     assert as_of.end_of(date(2026, 3, 1)) == datetime(2026, 3, 1, 23, 59, 59, tzinfo=UTC)
     assert state_history.READABLE.count("EXISTS") == 2
