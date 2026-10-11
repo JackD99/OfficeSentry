@@ -16,7 +16,7 @@ from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
 from ..text import plural
-from .access import can, is_staff, login_required, needs, tenant_or_404, visible_tenants
+from .access import can, is_staff, login_required, manages_groups, needs, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
 from .reports import report_groups
 
@@ -174,9 +174,10 @@ def new_tenant():
                 if conn_id is None:
                     flash(clouds.app_needed(clouds.get(cloud)), "warning")
             tenant_id = store.create_tenant(g.db, name, ref, conn_id, cloud)
-            tenant_groups.set_tenant_groups(
-                g.db, tenant_id, {int(x) for x in request.form.getlist("groups") if x.isdigit()}
-            )
+            if manages_groups():
+                tenant_groups.set_tenant_groups(
+                    g.db, tenant_id, {int(x) for x in request.form.getlist("groups") if x.isdigit()}
+                )
             audit(
                 g.db,
                 g.user["username"],
@@ -185,7 +186,8 @@ def new_tenant():
                 ref + ("" if cloud == clouds.DEFAULT else f" ({cloud})"),
             )
             return redirect(url_for("tenants.tenant", tenant_id=tenant_id))
-    return render_template("tenant_new.html", connections=connections, groups=tenant_groups.all_groups(g.db))
+    groups = tenant_groups.all_groups(g.db) if manages_groups() else []
+    return render_template("tenant_new.html", connections=connections, groups=groups)
 
 
 CONSENT_LINK_LIFETIME = timedelta(hours=1)

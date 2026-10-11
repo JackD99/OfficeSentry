@@ -67,6 +67,12 @@ The defaults are the secure ones. Nothing below needs switching on.
   giving them a bigger role; taking away always wins. Grant a client group to
   someone who looks after several clients rather than all of them. Remove
   accounts the day someone leaves: disabling one ends their sessions at once.
+- **Limited roles stay limited.** A custom role that sees only some clients
+  can still manage clients, users or the activity log, but only within those
+  clients: its holders don't see other clients' names, accounts or activity,
+  and can't change client groups or a role held by someone who sees or does
+  more. *Settings* and *System status* cover every client, so they only work
+  for someone who sees every client.
 
 ## Behind a reverse proxy
 

@@ -17,6 +17,16 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
 
+### Security
+
+- **Roles limited to some clients stay within them.** A custom role that sees only some clients, or a
+  person given a capability for themselves, could reach other clients through what runs Office Sentry:
+  client groups, editing a role held by someone with more access, the client import preview, the activity
+  log, the user list and team-wide settings. Now client groups can only be changed by someone who manages
+  clients and sees every one; a role held by anyone who sees or does more than you can only be changed by an
+  Administrator; the import preview, activity log and user list leave out other clients; and *Settings* and
+  *System status* only work for someone who sees every client. The built-in roles were never affected.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site

@@ -29,9 +29,12 @@ overview and DEPLOY.md for running it on a server.
   `tests/test_roles.py` opens every route as every built-in role and expects
   403 exactly where the role lacks what the view declared, and
   `tests/test_isolation_walk.py` opens every route that takes a tenant (or
-  one of its objects) with another tenant's IDs and expects a refusal. A new
+  one of its objects) with another tenant's IDs and expects a refusal, then
+  opens every GET route with the granted tenant's IDs (every download read
+  inside, PDFs as their page) and posts every form with the other tenant's
+  IDs, and expects nothing of the other tenant. A new
   URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
-  for it in the `world` fixture) or `OTHER_ARGS`. Templates use
+  for it in `_objects`) or `OTHER_ARGS`. Templates use
   `can('<capability>', tenant.id)` to show or hide; never `current_user.role`
   except to tell a client account from staff. Roles live in `roles` (built-in
   ones by `key`, editable except Administrator, custom ones too) and a person's
@@ -40,9 +43,15 @@ overview and DEPLOY.md for running it on a server.
   `user_access_changed`) and `web/roles.py` and `admin.user_access` are their
   pages. Someone with `users.manage` who isn't an Administrator only hands out
   what they hold everywhere, only on clients they see, can't change their own
-  role or access, and can't change an account that holds more than they do
-  (`admin._out_of_reach`, `_givable`; `web/roles._grantable`), so nobody
-  raises their own access. A new capability is a `Capability` in `permissions.CAPABILITIES`,
+  role or access, and can't change an account that holds more than they do,
+  nor a role such an account holds (`access.out_of_reach`, `admin._givable`;
+  `web/roles._grantable`, `_held_by_more`), so nobody raises their own access.
+  A role limited to some clients only uses run capabilities within them: client
+  groups need `access.manages_groups()` (clients.manage and every client), the
+  user list, import preview and activity log leave other clients out, and
+  `permissions.EVERY_CLIENT` (settings, system status) never takes effect
+  without every client (`roles.access_for`); `test_limited_roles.py` covers
+  each. A new capability is a `Capability` in `permissions.CAPABILITIES`,
   added to the built-in roles that should hold it (`TEMPLATES`; the
   migration seeded those rows, so a later change to a template needs a
   migration of its own if existing installs should pick it up).
@@ -809,7 +818,9 @@ only ever narrow lists of tenants someone already sees (`tenant_groups.only`
 over `visible_tenants()`). The one grant is an admin ticking a group for an
 analyst (`user_tenant_groups`): `access._GRANTED` adds its tenants, now and
 later, and ignores it for every other role. Never read group grants anywhere
-else.
+else. Since filling a group hands its tenants to whoever it's granted to,
+creating, changing, filling and deleting groups (the admin page, a tenant's
+groups, a new tenant's and the CSV import's) needs `access.manages_groups()`.
 
 Staff pages that list tenants are `@group_aware` (under `@needs`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
