@@ -27,6 +27,7 @@ from . import (
     data_retention,
     designs,
     email,
+    evidence,
     filters,
     group_pages,
     groups,
@@ -340,5 +341,6 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(support.bp)
     app.register_blueprint(styleguide.bp)
     app.register_blueprint(designs.bp)
+    app.register_blueprint(evidence.bp)
     app.register_blueprint(sso_web.bp)
     return app

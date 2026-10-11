@@ -70,7 +70,7 @@ def test_pages(client, db, two_tenants):
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     assert client.get(f"/tenants/{bravo}/evidence").status_code == 404
-    page = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
     assert "Is multi-factor authentication (MFA) enforced for all users accessing email" in page
     controls = client.get(f"/tenants/{alpha}/evidence?set=controls").get_data(as_text=True)
     assert "Is multi-factor authentication required" in controls
