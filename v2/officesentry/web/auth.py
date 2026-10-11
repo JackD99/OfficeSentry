@@ -25,7 +25,7 @@ from ..db import audit, audit_counted, transaction, utcnow
 from ..text import plural
 from . import sessions
 from .access import login_required, safe_next
-from .home import home_url
+from .home import home_url, open_to
 
 bp = Blueprint("auth", __name__)
 
@@ -523,7 +523,7 @@ def account():
         sessions=sessions.list_for(g.user["id"]),
         codes_left=codes_left,
         two_step_required=_cfg().mfa_required(g.user["role"], g.db),
-        homes=home.HOMES,
+        homes={k: v for k, v in home.HOMES.items() if k in open_to(g.user)},
         home_choice=home.home_of(g.user),
         has_password=sso.has_password(g.user),
         microsoft=sso.enabled(sso.settings(g.db)) and g.user["role"] != "client",

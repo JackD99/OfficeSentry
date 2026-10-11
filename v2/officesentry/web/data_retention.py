@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, flash, g, redirect, render_template, r
 
 from .. import retention
 from ..db import audit, transaction
-from .access import roles_required
+from .access import needs
 
 bp = Blueprint("retention", __name__, url_prefix="/admin")
 
@@ -16,7 +16,7 @@ def _cfg():
 
 
 @bp.get("/retention")
-@roles_required("admin")
+@needs("settings.manage")
 def settings():
     cfg = _cfg()
     policy = retention.load(g.db, cfg)
@@ -33,7 +33,7 @@ def settings():
 
 
 @bp.post("/retention")
-@roles_required("admin")
+@needs("settings.manage")
 def save():
     policy, problem = retention.validate(request.form)
     if problem:

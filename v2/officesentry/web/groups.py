@@ -21,12 +21,9 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 from .. import tenant_groups
 from ..db import audit, transaction
 from ..text import plural
-from .access import roles_required, visible_tenants
+from .access import is_staff, needs, visible_tenants
 
 bp = Blueprint("groups", __name__)
-
-STAFF = ("admin", "analyst")
-
 
 # -- The picker ---------------------------------------------------------------------------------
 
@@ -75,11 +72,11 @@ def scoped_tenants() -> list:
 
 def group_aware(view):
     """For staff pages that list tenants: ``?group=`` picks a group (kept on the session) and redirects to
-    the same URL without it. Put it under ``@login_required`` or ``@roles_required``."""
+    the same URL without it. Put it under ``@needs``."""
 
     @wraps(view)
     def wrapper(*args, **kwargs):
-        if g.user["role"] not in STAFF:
+        if not is_staff():
             return view(*args, **kwargs)  # clients have no groups (the dashboard is their home page)
         if request.method == "GET" and "group" in request.args:
             raw = request.args.get("group", "")
@@ -121,7 +118,7 @@ def _categories() -> list[str]:
 
 
 @bp.get("/admin/groups")
-@roles_required("admin")
+@needs("clients.manage")
 def index():
     groups = tenant_groups.all_groups(g.db)
     tenants = [t for t in _all_tenants() if not t["archived_at"]]
@@ -144,7 +141,7 @@ def _by_category(groups) -> list[tuple[str, list]]:
 
 
 @bp.post("/admin/groups")
-@roles_required("admin")
+@needs("clients.manage")
 def create():
     f = request.form
     values, problem = tenant_groups.clean(f.get("name", ""), f.get("category", ""), f.get("description", ""))
@@ -161,7 +158,7 @@ def create():
 
 
 @bp.route("/admin/groups/<int:group_id>", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("clients.manage")
 def edit(group_id: int):
     group = _group_or_404(group_id)
     tenants = _all_tenants()
@@ -204,7 +201,7 @@ def edit(group_id: int):
 
 
 @bp.post("/admin/groups/<int:group_id>/delete")
-@roles_required("admin")
+@needs("clients.manage")
 def delete(group_id: int):
     group = _group_or_404(group_id)
     usage = tenant_groups.usage(g.db, group_id)

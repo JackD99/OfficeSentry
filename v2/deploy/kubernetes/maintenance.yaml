@@ -1,0 +1,45 @@
+# Not part of the kustomization: a pod for restoring a backup (v2/docs/deploy/kubernetes.md, "Restoring a
+# backup"), started only while the deployment is scaled to 0, and deleted afterwards. Same image, volume, keys and
+# fences as the portal; it runs nothing until you run a command in it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: officesentry-maintenance
+  namespace: officesentry
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: shell
+      # The release you run (the newTag in kustomization.yaml).
+      image: ghcr.io/jackd99/officesentry:2.1.0
+      command: ["sleep", "infinity"]
+      envFrom:
+        - secretRef:
+            name: officesentry-keys
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: officesentry-data
+    - name: tmp
+      emptyDir:
+        sizeLimit: 1Gi

@@ -10,6 +10,7 @@ from flask import Blueprint, Response, abort, flash, g, redirect, render_templat
 from .. import findings, store, usage
 from ..db import audit, transaction, utcnow
 from ..licences import sku_name
+from ..permissions import SUMMARY_CAPABILITY, area_capability
 from ..reports import (
     branding,
     data_reports,
@@ -21,9 +22,10 @@ from ..reports import (
     tables,
     views,
 )
-from ..reports.monthly_review import build, setting
+from ..reports.monthly_review import SUMMARY_STEM, build, setting
+from ..reports.registry import DECLARED
 from . import as_of
-from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .access import can, is_staff, login_required, needs, require, tenant_or_404, visible_tenants
 from .printing import pdf_response
 from .reporting import report_extras
 from .saved_views import page_url
@@ -31,7 +33,6 @@ from .saved_views import page_url
 bp = Blueprint("reports", __name__)
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-STAFF = ("admin", "analyst")  # may override the evidence pack's suggested answers
 CURRENCIES = ("GBP", "USD", "EUR", "AUD", "CAD", "NZD")
 
 
@@ -48,6 +49,20 @@ SETTINGS_PAGES = (  # what the library's search finds besides reports and tenant
     ("branding.settings", "Branding", "logo colours msp name report footer support contact favicon"),
     ("admin.users", "Users", "people access roles accounts sign-in"),
 )
+
+
+def report_capability(key: str) -> str:
+    """The capability a detail report needs, from its menu group."""
+    return area_capability(DECLARED[key].group if key in DECLARED else None)
+
+
+def entry_capability(entry: library.Entry) -> str:
+    return SUMMARY_CAPABILITY.get(entry.kind) or report_capability(entry.key)
+
+
+def report_groups(tenant_id: int | None = None) -> list:
+    """The detail report menu, with only the areas this person may open (on this tenant)."""
+    return [gr for gr in data_reports.grouped() if can(area_capability(gr.key), tenant_id)]
 
 
 def _library_href(entry: library.Entry, tenant_id: int | None) -> str:
@@ -69,7 +84,7 @@ def _library_href(entry: library.Entry, tenant_id: int | None) -> str:
 @login_required
 def overview():
     """The report library: every report, searchable, for one tenant or across all of them."""
-    staff = g.user["role"] in ("admin", "analyst")
+    staff = is_staff() and can("clients.compare")
     tenants = visible_tenants(g.db, g.user)
     choice = request.args.get("tenant", "")
     tenant = next((t for t in tenants if str(t["id"]) == choice), None)
@@ -80,6 +95,7 @@ def overview():
     for area in areas:
         if use:
             area.entries = [e for e in area.entries if use.key in e.uses]
+        area.entries = [e for e in area.entries if can(entry_capability(e), tenant["id"] if tenant else None)]
         for e in area.entries:
             e.href = _library_href(e, tenant["id"] if tenant else None) if tenants else ""
             e.across = _library_href(e, None) if staff and tenant else ""
@@ -87,7 +103,7 @@ def overview():
         "SELECT * FROM saved_views WHERE user_id = ? ORDER BY report_key, name COLLATE NOCASE", (g.user["id"],)
     ).fetchall()
     titles = {k: v[0] for k, v in data_reports.REPORTS.items()} | findings_report.TITLES
-    settings = [(url_for(ep), title, words) for ep, title, words in SETTINGS_PAGES] if g.user["role"] == "admin" else []
+    settings = [(url_for(ep), title, words) for ep, title, words in SETTINGS_PAGES] if can("settings.manage") else []
     return render_template(
         "library.html",
         areas=[a for a in areas if a.entries],
@@ -105,7 +121,7 @@ def overview():
 
 
 @bp.get("/tenants/<int:tenant_id>/report")
-@login_required
+@needs("reports.security")
 def tenant_report(tenant_id: int):
     t = tenant_or_404(tenant_id)
     report = build(g.db, t)
@@ -119,17 +135,20 @@ def tenant_report(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/report.pdf")
-@login_required
+@needs("reports.security", "export")
 def tenant_report_pdf(tenant_id: int):
+    """The monthly review PDF; ``?appendix=0`` is the two summary pages only."""
     t = tenant_or_404(tenant_id)
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf")
+    appendix = request.args.get("appendix") != "0"
+    audit(g.db, g.user["username"], "report_downloaded", t["id"], "pdf" if appendix else "pdf summary")
+    name = _filename(t, "pdf")[:-4] if appendix else _filename(t, "pdf")[:-4].replace("security-review", SUMMARY_STEM)
     return pdf_response(
-        "reports/monthly_review.html", _filename(t, "pdf")[:-4], report=build(g.db, t), **report_extras(t, page=False)
+        "reports/monthly_review.html", name, report=build(g.db, t), appendix=appendix, **report_extras(t, page=False)
     )
 
 
 @bp.get("/tenants/<int:tenant_id>/report.xlsx")
-@login_required
+@needs("reports.security", "export")
 def tenant_report_xlsx(tenant_id: int):
     t = tenant_or_404(tenant_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "xlsx")
@@ -153,7 +172,7 @@ def _show() -> str | None:
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence")
-@login_required
+@needs("reports.security")
 def evidence_pack(tenant_id: int):
     """The client's Evidence page: every scheme with its verdict (``web/evidence.py`` has each scheme's page).
     ``set=`` (the old question-set and controls pages) goes to the scheme that carries that form."""
@@ -173,7 +192,7 @@ def evidence_pack(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/evidence/answers/<key>")
-@roles_required(*STAFF)
+@needs("findings.manage")
 def evidence_answer(tenant_id: int, key: str):
     """The technical lead's answer to one questionnaire topic, in place of the suggested one (or back to it).
 
@@ -207,7 +226,7 @@ def evidence_answer(tenant_id: int, key: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.<ext>")
-@login_required
+@needs("reports.security", "export")
 def evidence_download(tenant_id: int, ext: str):
     """The old download links: a question set's file is its scheme's file now, the controls pack the insurance one."""
     t = tenant_or_404(tenant_id)
@@ -218,7 +237,7 @@ def evidence_download(tenant_id: int, ext: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/data")
-@login_required
+@needs()
 def data_index(tenant_id: int):
     """The Reports tab, and the report picker on phones: ``?key=`` or the first report."""
     t = tenant_or_404(tenant_id)
@@ -229,18 +248,22 @@ def data_index(tenant_id: int):
         return redirect(url_for("reports.evidence_pack", tenant_id=t["id"]))
     if key == "designs":
         return redirect(url_for("designs.tenant_designs", tenant_id=t["id"]))
-    if key not in data_reports.REPORTS:
-        key = data_reports.grouped()[0].reports[0][0]
+    groups = report_groups(t["id"])
+    if key not in data_reports.REPORTS or not can(report_capability(key), t["id"]):
+        if not groups:
+            abort(403)
+        key = groups[0].reports[0][0]
     return redirect(url_for("reports.data_report", tenant_id=t["id"], key=key))
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>")
-@login_required
+@needs()
 def data_report(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if key not in data_reports.REPORTS:
         abort(404)
-    groups = data_reports.grouped()
+    require(report_capability(key), tenant_id=t["id"])
+    groups = report_groups(t["id"])
     active = next(gr for gr in groups if any(k == key for k, _, _ in gr.reports))
     day = as_of.day(g.db, t["id"], request.args.get("on"))
     report = data_reports.build(g.db, t, key, as_of=day.as_of)
@@ -273,11 +296,12 @@ def _viewed(report):
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.pdf")
-@login_required
+@needs("export")
 def data_report_pdf(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if key not in data_reports.REPORTS:
         abort(404)
+    require(report_capability(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.pdf")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     day = as_of.day(g.db, t["id"], request.args.get("on"))
@@ -288,11 +312,12 @@ def data_report_pdf(tenant_id: int, key: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.xlsx")
-@login_required
+@needs("export")
 def data_report_xlsx(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if key not in data_reports.REPORTS:
         abort(404)
+    require(report_capability(key), tenant_id=t["id"])
     audit(g.db, g.user["username"], "report_downloaded", t["id"], f"{key}.xlsx")
     slug = re.sub(r"[^a-z0-9]+", "-", t["name"].lower()).strip("-") or "tenant"
     day = as_of.day(g.db, t["id"], request.args.get("on"))
@@ -319,7 +344,7 @@ def _known_skus() -> list[tuple[str, str]]:
 
 
 @bp.route("/admin/prices", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def prices():
     if request.method == "POST":
         currency = request.form.get("currency", "GBP")
@@ -392,7 +417,7 @@ def _findings_page(t, resolved: bool):
 
 
 @bp.get("/tenants/<int:tenant_id>/findings")
-@login_required
+@needs("reports.security")
 def tenant_findings(tenant_id: int):
     """Open findings, then accepted risks, on the shared report table."""
     t = tenant_or_404(tenant_id)
@@ -403,14 +428,14 @@ def tenant_findings(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/findings/resolved")
-@login_required
+@needs("reports.security")
 def resolved_findings(tenant_id: int):
     return _findings_page(tenant_or_404(tenant_id), resolved=True)
 
 
 @bp.get("/tenants/<int:tenant_id>/findings.<ext>", defaults={"resolved": False})
 @bp.get("/tenants/<int:tenant_id>/findings/resolved.<ext>", defaults={"resolved": True})
-@login_required
+@needs("reports.security", "export")
 def findings_download(tenant_id: int, ext: str, resolved: bool):
     """The page's tables with its view applied: a PDF, a workbook with a sheet per table, or one table as CSV."""
     t = tenant_or_404(tenant_id)
@@ -453,7 +478,7 @@ def _finding_or_404(finding_id: int):
 
 
 @bp.post("/findings/<int:finding_id>/accept")
-@roles_required("admin", "analyst")
+@needs("findings.manage")
 def accept_finding(finding_id: int):
     row = _finding_or_404(finding_id)
     note = request.form.get("note", "").strip()[:500]
@@ -472,7 +497,7 @@ def accept_finding(finding_id: int):
 
 
 @bp.post("/findings/<int:finding_id>/unaccept")
-@roles_required("admin", "analyst")
+@needs("findings.manage")
 def unaccept_finding(finding_id: int):
     row = _finding_or_404(finding_id)
     findings.unaccept(g.db, row["id"])

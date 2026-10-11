@@ -113,6 +113,23 @@ def test_login_does_not_open_redirect(client, db, target):
     assert resp.headers["Location"] == "/"
 
 
+def test_a_form_posted_after_the_session_ended_comes_back_to_its_page(client, db):
+    """The form's address only answers POST, so coming back to it after signing in was a 405. The page the
+    form was on is where to come back to, when the browser says which (and it's this site); else home."""
+    make_user(db, "admin")
+    resp = client.post("/account/two-step/turn-off", headers={"Referer": "http://localhost/account?tab=security"})
+    assert resp.status_code == 302 and resp.headers["Location"] == "/login?next=/account?tab%3Dsecurity"
+    assert client.post("/account/two-step/turn-off").headers["Location"] == "/login"
+    assert (
+        client.post("/account/two-step/turn-off", headers={"Referer": "https://evil.example/account"}).headers[
+            "Location"
+        ]
+        == "/login"
+    )
+    resp = client.post("/login?next=/account", data={"username": "admin", "password": PASSWORD})
+    assert resp.headers["Location"] == "/account" and client.get("/account").status_code == 200
+
+
 def test_lockout_after_repeated_failures(client, db):
     make_user(db, "admin")
     for _ in range(5):
