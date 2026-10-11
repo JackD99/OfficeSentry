@@ -59,8 +59,15 @@ first.
   always wins; a client account only ever holds report capabilities). The menu, a client's tabs and the
   report picker show only what the person may open, every page and download checks on the server, and the
   cross-client pages leave out a client where a capability was taken away. There is always at least one
-  Administrator: the last one can't be demoted, disabled or deleted. Editing roles and adding custom ones
-  come in the next release.
+  Administrator: the last one can't be demoted, disabled or deleted.
+- **Roles** (*Settings → Users → Roles*): change what a built-in role holds (not Administrator), put it back
+  to its default, or add custom roles from scratch or as a copy of another, with a preview of the menu and
+  client tabs the role opens. Changing a role signs out everyone holding it, so they pick it up at their next
+  sign-in, and every change is in the activity log. On a person's page, **Customise** sets single
+  capabilities for them: everywhere (as the role, allowed, or taken away) or on one client.
+- Users and roles can be handed to someone who isn't an Administrator: they give out only what they hold
+  themselves, only on the clients they see (other clients' names don't show), can't change their own role
+  or access, and can't change an Administrator or anyone who can do or see more than they can.
 - **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
   failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
   addresses and client names taken out (clients appear as numbers unless you tick *Include client
