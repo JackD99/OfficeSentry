@@ -450,13 +450,15 @@ def queues_empty(conn) -> bool:
 
 def month_end_done(conn) -> bool:
     """Every approval and every automatic plan email has been dealt with (sent, or failed and waiting to retry),
-    and nothing else is queued."""
+    and nothing else is queued. A client with nobody to email is never sent anything, so isn't waited for."""
+    from officesentry import delivery
+
     waiting = conn.execute(
-        "SELECT COUNT(*) FROM email_schedules s JOIN report_plans p ON p.id = s.plan_id"
+        "SELECT s.id FROM email_schedules s JOIN report_plans p ON p.id = s.plan_id"
         " WHERE p.mode = 'auto' AND s.enabled = 1 AND s.last_status IS NULL"
         " AND s.tenant_id IN (SELECT id FROM tenants WHERE enabled = 1)"
-    ).fetchone()[0]
-    return waiting == 0 and queues_empty(conn)
+    ).fetchall()
+    return not any(delivery.recipients(conn, "schedule", s["id"]) for s in waiting) and queues_empty(conn)
 
 
 def rss_mb() -> float:
