@@ -16,6 +16,8 @@ Which files become pages is the `SECTIONS` list at the top of `build.py`:
 | Get started | the root README's "Quick start" section, `v2/DEPLOY.md`, `v2/docs/onboarding-a-client.md`, `v2/docs/staff-sign-in.md`, `v2/docs/troubleshooting.md`, `v2/docs/getting-help.md`, `v2/docs/securing-the-portal.md` |
 | Deploy | `v2/docs/deploy/README.md` (the list of platforms) and each guide in `v2/docs/deploy/` |
 | Reference | `v2/README.md`, `v2/docs/checks.md`, `v2/docs/what-office-sentry-reads.md`, `examples/README.md` |
+| How-to | `website/pages/how-to/`: one page per job people search for (an MFA report, mail forwarding, unused licences, Cyber Essentials evidence, SharePoint storage, keeping sign-in logs), the manual way first, then Office Sentry's report |
+| Compare | `website/pages/compare/`: Office Sentry next to the other ways of reporting on Microsoft 365, and next to AdminDroid and CIPP. Each says when it was checked; keep them factual and fair, and correct them when a product changes |
 | Project | `SECURITY.md`, `CHANGELOG.md`, `ROADMAP.md`, `DEVELOPING.md`, `CONTRIBUTING.md`, `SUPPORT.md` |
 | Guides | any other file in `v2/docs/`, added by itself |
 

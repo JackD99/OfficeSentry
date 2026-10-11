@@ -186,6 +186,70 @@ SECTIONS = [
         ],
     ),
     (
+        "How-to",
+        [
+            Doc(
+                "website/pages/how-to/mfa-report.md",
+                "how-to/mfa-report",
+                blurb="Report who has set up MFA and who is actually made to use it, for one tenant with PowerShell "
+                "or for every client at once.",
+            ),
+            Doc(
+                "website/pages/how-to/mail-forwarding.md",
+                "how-to/mail-forwarding",
+                blurb="Find every mailbox forwarding mail outside, from mailbox settings and inbox rules, and whether "
+                "the tenant allows it.",
+            ),
+            Doc(
+                "website/pages/how-to/unused-licences.md",
+                "how-to/unused-licences",
+                blurb="Licences on blocked and inactive accounts, paid licences nobody is assigned, people on a bigger "
+                "plan than they use, and the saving.",
+            ),
+            Doc(
+                "website/pages/how-to/cyber-essentials.md",
+                "how-to/cyber-essentials",
+                blurb="Which Cyber Essentials controls Microsoft 365 can evidence, how to gather it, and what's left "
+                "for you to answer.",
+            ),
+            Doc(
+                "website/pages/how-to/sharepoint-storage.md",
+                "how-to/sharepoint-storage",
+                blurb="How the SharePoint storage quota works, where the space goes (versions, recycle bins, a few "
+                "big sites) and how to get it back.",
+            ),
+            Doc(
+                "website/pages/how-to/sign-in-logs.md",
+                "how-to/sign-in-logs",
+                blurb="Entra ID keeps sign-in and audit logs for 30 days. Ways to keep them longer, from PowerShell "
+                "exports to Log Analytics.",
+            ),
+        ],
+    ),
+    (
+        "Compare",
+        [
+            Doc(
+                "website/pages/compare/reporting-tools.md",
+                "compare",
+                blurb="Microsoft's admin centres, PowerShell, CIPP, AdminDroid and Office Sentry compared for MSP "
+                "reporting.",
+            ),
+            Doc(
+                "website/pages/compare/admindroid.md",
+                "compare/admindroid",
+                blurb="An AdminDroid alternative for MSPs? Office Sentry and AdminDroid compared on cost, reports, "
+                "audit trail and views across clients.",
+            ),
+            Doc(
+                "website/pages/compare/cipp.md",
+                "compare/cipp",
+                blurb="CIPP manages your clients' Microsoft 365; Office Sentry reports on it and keeps the history. "
+                "How they differ, and why to use both.",
+            ),
+        ],
+    ),
+    (
         "Project",
         [
             Doc(
