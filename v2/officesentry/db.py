@@ -278,14 +278,18 @@ AUDIT_NOISE = (
     "login_code_failed",
     "two_step_setup_failed",
     "consent_link_refused",
+    "csrf_failed",
 )
 AUDIT_NOISE_DAYS = 90
 COUNTED_WINDOW_MINUTES = 60
 
 
-def audit_counted(conn: sqlite3.Connection, action: str, ip: str, username: str | None = None) -> None:
-    """Record repeated, anonymous events (failed sign-ins with unknown names, throttled attempts) as one row per
-    address, name and hour with a count, so they can't flood the log or store what strangers typed."""
+def audit_counted(
+    conn: sqlite3.Connection, action: str, ip: str, username: str | None = None, detail: str = ""
+) -> None:
+    """Record repeated events (failed sign-ins with unknown names, throttled attempts, refused pages) as one
+    row per address, name and hour with a count, so they can't flood the log or store what strangers typed.
+    ``detail`` says what the latest one was (a route, say); the row keeps the count and the latest detail."""
     since = (datetime.now(UTC) - timedelta(minutes=COUNTED_WINDOW_MINUTES)).strftime("%Y-%m-%dT%H:%M:%SZ")
     row = conn.execute(
         "SELECT id, detail FROM audit_log WHERE action = ? AND ip = ? AND username IS ? AND ts >= ?"
@@ -294,12 +298,17 @@ def audit_counted(conn: sqlite3.Connection, action: str, ip: str, username: str 
     ).fetchone()
     if row is None:
         conn.execute(
-            "INSERT INTO audit_log (ts, username, action, detail, ip) VALUES (?, ?, ?, '1 attempt', ?)",
-            (utcnow(), username, action, ip),
+            "INSERT INTO audit_log (ts, username, action, detail, ip) VALUES (?, ?, ?, ?, ?)",
+            (utcnow(), username, action, _counted_detail(1, detail), ip),
         )
         return
     count = int((row["detail"] or "1").split(" ", 1)[0] or 1) + 1
-    conn.execute("UPDATE audit_log SET detail = ? WHERE id = ?", (f"{count} attempts", row["id"]))
+    conn.execute("UPDATE audit_log SET detail = ? WHERE id = ?", (_counted_detail(count, detail), row["id"]))
+
+
+def _counted_detail(count: int, detail: str) -> str:
+    text = f"{count} attempt{'' if count == 1 else 's'}"
+    return f"{text}, last {detail[:200]}" if detail else text
 
 
 def prune_audit(conn: sqlite3.Connection, now: datetime | None = None) -> int:

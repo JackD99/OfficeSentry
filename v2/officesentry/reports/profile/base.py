@@ -38,6 +38,7 @@ class Part:
     empty: str = ""  # shown when there are no facts or table rows
     unavailable: str = ""  # why this couldn't be checked; replaces everything else
     note: str = ""  # what's partial or left out, in small print
+    chart: str = ""  # a server-side SVG drawn above the tables (``reports/charts.py``)
 
 
 @dataclass
