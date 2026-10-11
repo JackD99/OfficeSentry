@@ -33,6 +33,7 @@ from zoneinfo import ZoneInfo
 from . import delivery, issued, projects, store, tasks
 from .db import audit, transaction, utcnow
 from .reports import monthly_review, summary
+from .reports.precomputed import Rows, stored_rows
 from .text import plural
 
 log = logging.getLogger(__name__)
@@ -397,7 +398,53 @@ def _last_report_at(conn, tenant_id: int, period: str) -> str:
     return row[0] or period_start(shift_period(period, -1))
 
 
-def flags_for(conn, tenant, report, period: str, now: datetime) -> tuple[int, list[str]]:
+@dataclass
+class ReviewFacts:
+    """What the queue needs from a tenant's monthly review, without building it on every view."""
+
+    verdict: summary.Verdict
+    oldest: str | None  # the oldest collector's data, or None when nothing has been collected
+    not_run: int  # checks that couldn't run
+
+
+def review_facts(conn, tenants, now: datetime | None = None, rebuild: bool = False) -> dict[int, ReviewFacts]:
+    """Each tenant's facts by tenant id. Without ``now`` (the pages), from ``precomputed`` while that's current,
+    else built from the monthly review and stored (always, with ``rebuild``)."""
+    stored = stored_rows(conn, "review", tenants, now, rebuild)
+    now = now or datetime.now(UTC)
+    return {t["id"]: _review_facts(conn, t, now, stored) for t in tenants}
+
+
+def _review_facts(conn, tenant, now: datetime, stored: Rows | None) -> ReviewFacts:
+    fingerprint = stored.fingerprint(tenant) if stored else ""
+    if stored and (data := stored.get(tenant, fingerprint)) is not None:
+        return ReviewFacts(summary.Verdict(*data["verdict"]), data["oldest"], data["not_run"])
+    facts = facts_of(monthly_review.build(conn, tenant, now))
+    if stored:
+        verdict = facts.verdict
+        stored.save(
+            tenant,
+            fingerprint,
+            {
+                "verdict": [verdict.tone, verdict.label, verdict.headline],
+                "oldest": facts.oldest,
+                "not_run": facts.not_run,
+            },
+        )
+    return facts
+
+
+def facts_of(report) -> ReviewFacts:
+    """The queue's facts from a monthly review already built (the review screen)."""
+    finished = [f.finished_at for f in report.freshness if f.finished_at]
+    return ReviewFacts(
+        summary.monthly(report).verdict,
+        min(finished) if finished else None,
+        sum(1 for r in report.unavailable if r.summary.startswith("This check couldn't run")),
+    )
+
+
+def flags_for(conn, tenant, facts: ReviewFacts, period: str, now: datetime) -> tuple[int, list[str]]:
     """New critical/high findings since the last report, and what needs a reviewer's eyes."""
     since = _last_report_at(conn, tenant["id"], period)
     counts = conn.execute(
@@ -409,41 +456,43 @@ def flags_for(conn, tenant, report, period: str, now: datetime) -> tuple[int, li
     flags = []
     if counts["critical"]:
         flags.append(f"{plural(counts['critical'], 'new critical finding')}")
-    finished = [f.finished_at for f in report.freshness if f.finished_at]
     cutoff = (now - STALE_DATA).strftime(ISO)
-    if not finished:
+    if facts.oldest is None:
         flags.append("No data collected yet")
-    elif min(finished) < cutoff:
+    elif facts.oldest < cutoff:
         flags.append("Data older than 24 hours")
-    not_run = sum(1 for r in report.unavailable if r.summary.startswith("This check couldn't run"))
-    if not_run:
-        flags.append(f"{plural(not_run, 'check')} couldn't run")
+    if facts.not_run:
+        flags.append(f"{plural(facts.not_run, 'check')} couldn't run")
     plan, _ = plan_for(conn, tenant["id"])
     if plan is not None and plan["delivery"] == "email" and not emailed(plan, conn, tenant["id"]):
         flags.append("Nobody to email")
     return counts["severe"] or 0, flags
 
 
-def queue(conn, tenants, period: str, now: datetime | None = None) -> list[QueueRow]:
-    """One row per visible tenant on a plan, for ``period``."""
+def queue(conn, tenants, period: str, now: datetime | None = None, *, cached: bool | None = None) -> list[QueueRow]:
+    """One row per visible tenant on a plan, for ``period``.
+
+    ``cached`` (by default, when ``now`` isn't given: the pages, which show the present) reads each tenant's
+    review facts from the stored rows while those are current.
+    """
+    cached = now is None if cached is None else cached
     now = now or datetime.now(UTC)
     rows = []
     jobs = approval_tasks(conn, period)
-    for t in tenants:
+    planned = [t for t in tenants if not t["archived_at"] and plan_for(conn, t["id"])[0] is not None]
+    facts = review_facts(conn, planned, None if cached else now)
+    for t in planned:
         plan, _ = plan_for(conn, t["id"])
-        if plan is None or t["archived_at"]:
-            continue
         r = review(conn, t["id"], period)
         state = state_of(conn, t["id"], period, r)
-        report = monthly_review.build(conn, t, now)
-        severe, flags = flags_for(conn, t, report, period, now)
+        severe, flags = flags_for(conn, t, facts[t["id"]], period, now)
         rows.append(
             QueueRow(
                 dict(t),
                 dict(plan),
                 state,
                 r["reviewer"] if r else None,
-                summary.monthly(report).verdict,
+                facts[t["id"]].verdict,
                 severe,
                 flags,
                 sent_at=r["sent_at"] if r else None,

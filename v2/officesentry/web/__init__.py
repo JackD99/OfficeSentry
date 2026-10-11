@@ -127,6 +127,11 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["X-Frame-Options"] = "SAMEORIGIN" if override else "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # A page the portal opens can't keep a handle on it, and no other site can embed its pages, downloads,
+        # brand logo or files (emails carry the logo as image data, not a link).
+        resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        resp.headers["X-Permitted-Cross-Domain-Policies"] = "none"
         if cfg.secure_cookies:
             resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         # Static files and the public brand colours and logo may be cached; nothing else is.

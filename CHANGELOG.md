@@ -29,7 +29,8 @@ permissions.
 
 ### Database upgrade
 
-Yes (migration 37: Microsoft account links on users, how each session was started).
+Yes, applied on start as usual: migration 37 adds a table for the search index, and migration 38 adds
+Microsoft account links on users and how each session was started.
 
 ### Added
 
@@ -40,9 +41,6 @@ Yes (migration 37: Microsoft account links on users, how each session was starte
   sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
   turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
   server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
-
-### Added
-
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -51,6 +49,20 @@ Yes (migration 37: Microsoft account links on users, how each session was starte
 
 ### Changed
 
+- Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
+  rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
+  page now read rows the worker keeps up to date after each collection, as What changed and the check
+  matrix already did; a row is rebuilt the moment anything behind it changes, so nothing shown is older
+  than the live page would be. At 200 clients the Accounts page went from 6 seconds to half a second, the
+  month-end queue from 3.4 seconds to under a tenth, the insurance evidence rollup from 4 seconds to under
+  a tenth, and a report's All clients rollup from about a second to under a tenth.
+- The sidebar search reads an index the worker keeps, instead of scanning every client's data on each
+  search. A client whose index is behind its latest collection is still scanned, so nothing is missed.
+- PDFs of an All clients rollup, What changed and a client's change report keep the first 2,000 rows and
+  say so, as table reports already did, so a very large client can't run a download into the server's
+  timeout. The spreadsheet downloads still have every row.
+- `DEPLOY.md` gives measured page, download and worker times at 200 clients ("How fast"), and
+  `scripts/timings.py` measures them.
 - **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
   say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
   the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
@@ -153,6 +165,8 @@ Yes (migration 37: Microsoft account links on users, how each session was starte
   pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
   still finds the database locked after five seconds is answered with "Office Sentry is busy right
   now, try again in a moment" instead of an error page.
+- On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
+  dates on it are written the same way on every platform.
 
 ### Security
 
@@ -174,6 +188,12 @@ Yes (migration 37: Microsoft account links on users, how each session was starte
   quick, and the worker erases the last copies in the background, rebuilding the file only when there's
   room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
   it's tried again every hour.
+- Every response now carries `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`
+  and `X-Permitted-Cross-Domain-Policies: none`, and the bundled Caddy drops the `Server` header.
+- The portal's access log (Docker and `serve`) records the path only, not the query string or the referer,
+  which carried search terms, filter values and the one-time setup link.
+- The containers get a process limit, and the bundled Caddy runs with every capability but binding its
+  ports dropped, like the portal and worker.
 
 ## 2.1.0 (2026-10-10)
 
