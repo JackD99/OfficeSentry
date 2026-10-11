@@ -32,6 +32,7 @@ DANZELL = {
     "A5.8",
     "A5.9",
     "A6.1",
+    "A6.2",
     "A6.4",
     "A6.5",
     "A7.1",
@@ -190,7 +191,7 @@ def test_pages_for_staff_and_clients(client, db, two_tenants):
         assert client.get(f"/tenants/{bravo}/evidence?set={key}").status_code == 404
     ce = client.get(f"/tenants/{alpha}/evidence?set=cyber-essentials").get_data(as_text=True)
     assert "A7.17" in ce and "Auto-fail" in ce and "Danzell" in ce
-    only_input = client.get(f"/tenants/{alpha}/evidence?show=input").get_data(as_text=True)
+    only_input = client.get(f"/tenants/{alpha}/evidence?set=insurance&show=input").get_data(as_text=True)
     assert "Write this answer for Alpha Ltd" in only_input and "Change this answer" not in only_input
     # An unknown set shows the insurance one.
     assert "Is endpoint detection and response" in client.get(f"/tenants/{alpha}/evidence?set=nope").get_data(
@@ -204,7 +205,9 @@ def test_pages_for_staff_and_clients(client, db, two_tenants):
     assert resp.headers["Location"].endswith(f"/tenants/{alpha}/evidence?set=supplier#answer-backups")
     page = client.get(f"/tenants/{alpha}/evidence?set=cyber-essentials").get_data(as_text=True)
     assert "Backed up nightly by Acme Backup." not in page  # Cyber Essentials doesn't ask about backups
-    assert "Backed up nightly by Acme Backup." in client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+    assert "Backed up nightly by Acme Backup." in client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(
+        as_text=True
+    )
 
     client.post("/logout")
     login(client, "client")

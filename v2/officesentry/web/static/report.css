@@ -480,6 +480,8 @@ body.pdf .block-note { display: none; }
 .pack-list { margin: var(--space-2) 0 var(--space-3); padding-left: var(--space-5); }
 .pack-link { margin: var(--space-1-5) 0 0; font-family: var(--mono); font-size: var(--fs-xs); word-break: break-all; }
 
+/* Evidence packs by scheme (reports/scheme_pack.html). */
+.control .paste-text { margin: var(--space-2) 0 0; padding: 8px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: .92em; }
 /* -- Monthly review: two summary pages, then the appendix ----------------------------------------------- */
 .sub-head { font-size: var(--fs-lg); margin: var(--space-6) 0 var(--space-2-5); }
 .exec .summary-text + .sub-head { margin-top: var(--space-5); }

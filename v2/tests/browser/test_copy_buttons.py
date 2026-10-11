@@ -12,13 +12,14 @@ SAYS_COPIED_FOR = 2000  # milliseconds, as in app.js
 
 @pytest.fixture
 def evidence(browser, site):
-    """The demo admin on the first client's evidence page, which has copy buttons, with the clipboard allowed."""
+    """The demo admin on the first client's Cyber Essentials page, whose form answers have copy buttons, with the
+    clipboard allowed."""
     server, ids, passwords = site
     context = browser.new_context(viewport={"width": 1366, "height": 768}, reduced_motion="reduce")
     context.grant_permissions(["clipboard-read", "clipboard-write"], origin=server.url)
     screenshots.sign_in(context, server.url, screenshots.ADMIN, passwords[screenshots.ADMIN])
     page = context.new_page()
-    page.goto(f"{server.url}/tenants/{ids[0]}/evidence")
+    page.goto(f"{server.url}/tenants/{ids[0]}/evidence/cyber-essentials")
     yield page
     context.close()
 

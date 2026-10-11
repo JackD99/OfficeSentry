@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, tenant_header, report_picker with context %}
+{% from "_evidence.html" import verdict_pill with context %}
+{% block title %}Evidence · {{ tenant.name }}{% endblock %}
+{% block content %}
+{{ tenant_header(tenant, 'evidence', title='Evidence and certifications') }}
+<div class="report-layout">
+{{ report_picker(tenant, 'evidence') }}
+<div class="report-main" id="report" tabindex="-1">
+<p class="muted small intro-line">Pick what {{ tenant.name }} is going for. Each pack judges the scheme's controls from Microsoft 365 data, says what to fix, and gives the answers to paste into the form.</p>
+
+{% for title, results in groups %}
+<section class="card flush scheme-group" aria-labelledby="group-{{ loop.index }}">
+  <div class="card-head"><h2 id="group-{{ loop.index }}">{{ title }}</h2></div>
+  <div class="scheme-cards">
+    {% for r in results %}
+    {% set n = r.counts %}
+    <a class="scheme-card tone-{{ r.headline.tone }}" href="{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme=r.scheme.key) }}">
+      <div class="scheme-title"><strong>{{ r.scheme.title }}</strong> {{ icon('arrow') }}</div>
+      <div class="scheme-verdict"><span class="pill {{ {'ok': 'ok', 'medium': 'warn', 'high': 'bad', 'critical': 'bad'}[r.headline.tone] }}">{{ r.headline.label }}</span></div>
+      <p class="small m0">{{ r.headline.headline }}</p>
+      <p class="small muted m0 scheme-counts">
+        {%- for v in (V.PASS, V.FAIL, V.PARTLY, V.MANUAL, V.UNKNOWN) if n[v] %}<span class="dot {{ {'Pass': 'ok', 'Fail': 'bad', 'Partly': 'warn', 'Your evidence': 'accent', 'Not collected': ''}[v] }}"></span> {{ n[v] }} {{ v|lower }}{{ ' · ' if not loop.last }}{% endfor -%}
+      </p>
+      <p class="small muted m0 scheme-body">{{ r.scheme.body }}</p>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+{% if sets %}
+<section class="card flush scheme-group" aria-labelledby="group-sets">
+  <div class="card-head"><h2 id="group-sets">Questionnaires</h2></div>
+  <div class="scheme-cards">
+    {% for s in sets %}
+    <a class="scheme-card" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id, set=s.key) }}">
+      <div class="scheme-title"><strong>{{ s.title }}</strong> {{ icon('arrow') }}</div>
+      <p class="small muted m0">{{ s.intro }}</p>
+    </a>
+    {% endfor %}
+    <a class="scheme-card" href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id, set='controls') }}">
+      <div class="scheme-title"><strong>Insurer controls</strong> {{ icon('arrow') }}</div>
+      <p class="small muted m0">The controls cyber insurers ask about, with what Microsoft 365 shows for each.</p>
+    </a>
+  </div>
+</section>
+{% endif %}
+<p class="footnote">Verdicts come from Microsoft 365 settings and accounts read with read-only access. Oldest data used: {{ ts(oldest_data, 'not collected yet') }}.</p>
+</div>
+</div>
+{% endblock %}

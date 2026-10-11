@@ -1652,6 +1652,49 @@ def groups(db, ids: list[int]) -> None:
         tenant_groups.set_members(db, gid, members)
 
 
+SHOWCASE = "Fabrikam Dental Group"  # the client most screenshots show; its engineer has written some answers
+EVIDENCE_ANSWERS = {  # what the showcase client's engineer has written for the questions Microsoft 365 can't answer
+    "firewall_boundary": (
+        "Yes",
+        "A WatchGuard Firebox T45 firewall protects the internet connection at the Manchester practice, and the "
+        "Leeds practice uses the same model. Home and remote workers are protected by the Microsoft Defender "
+        "Firewall on their company laptops, enforced by Intune.",
+    ),
+    "software_firewall": (
+        "Yes",
+        "Microsoft Defender Firewall is turned on for every Windows laptop and desktop and enforced by an Intune "
+        "endpoint security policy; the two Macs use the built-in macOS firewall.",
+    ),
+    "backups": (
+        "Yes",
+        "Microsoft 365 mail, OneDrive, SharePoint and Teams data is backed up daily by Datto SaaS Protection to "
+        "storage separate from Microsoft 365, kept for 12 months, with credentials separate from the Microsoft 365 "
+        "administrator accounts. The last restore test was on 2 September 2026.",
+    ),
+    "anti_malware": (
+        "Yes",
+        "All laptops and desktops run Microsoft Defender Antivirus with Defender for Endpoint, which updates "
+        "automatically, scans files on access and blocks malicious websites through SmartScreen. Phones and tablets "
+        "only install apps from the Apple App Store and Google Play, enforced by Intune.",
+    ),
+    "patching_14_days": (
+        "Yes",
+        "Windows updates install through Intune update rings with a 3-day deferral, and Harbour IT checks every "
+        "Monday that no device is more than 14 days behind. Router and firewall firmware is updated within 14 days "
+        "of a security release by Harbour IT.",
+    ),
+}
+
+
+def evidence_answers(db, tenant_id: int) -> None:
+    """The showcase client's engineer has answered some of the questions Microsoft 365 can't show, so the
+    evidence packs show saved answers next to the suggested ones."""
+    from officesentry.reports import evidence_answers as answers
+
+    for key, (answer, text) in EVIDENCE_ANSWERS.items():
+        answers.set_override(db, tenant_id, key, answer, text, "Not known", "demo")
+
+
 def populate(
     db,
     vault,
@@ -1679,6 +1722,8 @@ def populate(
         list_history(db, tid, now)
         ids.append(tid)
     groups(db, ids)
+    showcase = next((i for i, t in zip(ids, TENANTS, strict=False) if t["name"] == SHOWCASE), ids[0])
+    evidence_answers(db, showcase)
     for part, price in PRICES.items():
         db.execute(
             "INSERT OR REPLACE INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)",
