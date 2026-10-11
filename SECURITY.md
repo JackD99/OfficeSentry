@@ -157,6 +157,9 @@ place, but nobody can sign in with the old one.
   in front (1 for the bundled Caddy) so sign-in limits and the activity log
   see real client addresses.
 - Only use `OFFICESENTRY_INSECURE_COOKIES=1` for local development over HTTP.
+  [Securing the portal](v2/docs/securing-the-portal.md) has the full list of
+  what the portal does by itself, what the person running it has to do, and
+  proxy configurations for Caddy, nginx, Traefik and a CDN.
 - Back up the database, ideally encrypted and off the server (restic to
   S3-compatible storage, `v2/DEPLOY.md`, "Off-site backups"), and run the
   restore drill. Keep a copy of `secrets.json` apart from the backups, in a
