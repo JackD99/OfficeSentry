@@ -143,7 +143,7 @@ def test_a_report_shows_the_tenant_as_it_was_on_a_chosen_day(admin, then_and_now
     page = admin.get(f"{url}?on={day(30)}").get_data(as_text=True)
     assert "gwen@then.example" in page and "gwen@now.example" not in page
     assert "As it was on" in page and "Back to today" in page
-    assert f"/tenants/{then_and_now}/changes?from={day(30)}" in page
+    assert f"/tenants/{then_and_now}/changes?from={day(29)}" in page  # from the end of the day shown
     # The downloads and every table link keep the day.
     assert f"guests.pdf?on={day(30)}" in page and f"guests.xlsx?on={day(30)}" in page
     assert f"on={day(30)}&amp;section=1" in page or f"section=1&amp;on={day(30)}" in page
@@ -152,6 +152,28 @@ def test_a_report_shows_the_tenant_as_it_was_on_a_chosen_day(admin, then_and_now
     assert "gwen@then.example" in csv and "gwen@now.example" not in csv
     xlsx = admin.get(f"{url}.xlsx?on={day(30)}")
     assert xlsx.status_code == 200 and f"-{day(30)}.xlsx" in xlsx.headers["Content-Disposition"]
+
+
+def test_what_changed_since_a_past_day_starts_after_what_that_day_shows(admin, db, then_and_now):
+    # The second collection two days ago: that day already shows it, so nothing has changed since.
+    when = (NOW - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    new = [
+        r[0] for r in db.execute("SELECT id FROM runs WHERE tenant_id = ? AND finished_at > ?", (then_and_now, day(3)))
+    ]
+    marks = ",".join("?" * len(new))
+    db.execute(
+        f"UPDATE runs SET created_at = ?, started_at = ?, finished_at = ? WHERE id IN ({marks})",
+        (when,) * 3 + tuple(new),
+    )
+    db.execute(f"UPDATE state_runs SET finished_at = ? WHERE run_id IN ({marks})", (when, *new))
+    page = admin.get(f"/tenants/{then_and_now}/data/guests?on={day(2)}").get_data(as_text=True)
+    assert "gwen@now.example" in page
+    assert f'href="/tenants/{then_and_now}/changes?from={day(1)}"' in page
+    period = as_of.period(db, then_and_now, day(1), None)
+    since = month_changes.build(db, store.get_tenant(db, then_and_now), since=period.since)
+    assert not [c for c in since.key_changes if c.area == "Accounts"]
+    assert not next(r for r in since.reports if r.key == "guests").count
+    assert as_of.day(db, then_and_now, day(1)).changes_from == TODAY  # never after today
 
 
 def test_a_past_day_keeps_the_filters_and_saved_views(admin, db, then_and_now):
