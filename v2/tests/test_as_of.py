@@ -48,6 +48,19 @@ def then_and_now(db, two_tenants):
     return alpha
 
 
+def _collected_again(db, tenant_id: int, days_ago: int) -> None:
+    """Move today's collection back ``days_ago`` days."""
+    when = (NOW - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    new = [
+        r[0] for r in db.execute("SELECT id FROM runs WHERE tenant_id = ? AND finished_at > ?", (tenant_id, day(30)))
+    ]
+    marks = ",".join("?" * len(new))
+    db.execute(
+        f"UPDATE runs SET created_at = ?, started_at = ?, finished_at = ? WHERE id IN ({marks})", (when,) * 3 + (*new,)
+    )
+    db.execute(f"UPDATE state_runs SET finished_at = ? WHERE run_id IN ({marks})", (when, *new))
+
+
 @pytest.fixture
 def admin(client, db):
     make_user(db, "admin")
@@ -156,16 +169,7 @@ def test_a_report_shows_the_tenant_as_it_was_on_a_chosen_day(admin, then_and_now
 
 def test_what_changed_since_a_past_day_starts_after_what_that_day_shows(admin, db, then_and_now):
     # The second collection two days ago: that day already shows it, so nothing has changed since.
-    when = (NOW - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    new = [
-        r[0] for r in db.execute("SELECT id FROM runs WHERE tenant_id = ? AND finished_at > ?", (then_and_now, day(3)))
-    ]
-    marks = ",".join("?" * len(new))
-    db.execute(
-        f"UPDATE runs SET created_at = ?, started_at = ?, finished_at = ? WHERE id IN ({marks})",
-        (when,) * 3 + tuple(new),
-    )
-    db.execute(f"UPDATE state_runs SET finished_at = ? WHERE run_id IN ({marks})", (when, *new))
+    _collected_again(db, then_and_now, 2)
     page = admin.get(f"/tenants/{then_and_now}/data/guests?on={day(2)}").get_data(as_text=True)
     assert "gwen@now.example" in page
     assert f'href="/tenants/{then_and_now}/changes?from={day(1)}"' in page
@@ -205,6 +209,16 @@ def test_the_changes_page_compares_any_two_days(admin, then_and_now):
     csv = admin.get(f"{url}.csv?from={day(60)}").get_data(as_text=True)
     assert "gwen@now.example" in csv
     assert "Last 30 days" in admin.get(f"{url}?from=nonsense").get_data(as_text=True)
+
+
+def test_the_reports_a_period_ending_before_today_changed_open_at_its_end(admin, db, then_and_now):
+    _collected_again(db, then_and_now, 2)
+    url = f"/tenants/{then_and_now}/changes"
+    ended = admin.get(f"{url}?from={day(60)}&to={day(1)}").get_data(as_text=True)
+    assert "gwen@now.example" in ended
+    assert f'href="/tenants/{then_and_now}/data/guests?on={day(1)}"' in ended
+    latest = admin.get(f"{url}?from={day(60)}").get_data(as_text=True)
+    assert f'href="/tenants/{then_and_now}/data/guests"' in latest  # up to today: today's data
 
 
 def test_a_past_day_is_only_shown_for_the_tenants_a_user_can_see(client, db, two_tenants, then_and_now):

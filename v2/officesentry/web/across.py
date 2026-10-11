@@ -405,6 +405,8 @@ def _tenant_changes(t) -> dict:
         "unchanged": unchanged,
         "titles": RULE_TITLES,
         "areas": _change_areas(report),
+        # A period that ends before today opens each report as it was at the end.
+        "report_query": {"on": period.end.isoformat()} if period and period.end else {},
     }
 
 
