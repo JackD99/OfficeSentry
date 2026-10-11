@@ -109,12 +109,29 @@ off (the default) and `trustedIPs` only to proxies you run, and give the
 router a `websecure` entry point with a certificate resolver. No middleware is
 needed for the headers.
 
-**Cloudflare or another CDN in front of your proxy** counts as a second hop:
-set `OFFICESENTRY_TRUSTED_PROXIES=2` and make your proxy accept connections
-from the CDN's addresses only, otherwise anyone who finds the origin can
-bypass the CDN and name their own address. The portal sets its own security
-headers and `Cache-Control: no-store`, so leave the CDN's caching and header
-rewriting off for this host.
+**Cloudflare or another CDN in front of your proxy.** Each of these proxies
+replaces the address the CDN passes on with the CDN's own, so every visitor
+would look like the CDN until the proxy is told to trust the CDN's published
+address ranges:
+
+- **Caddy:** a `trusted_proxies static <ranges>` line in the Caddyfile's global
+  `servers` block, and `OFFICESENTRY_TRUSTED_PROXIES=2` (the CDN, then Caddy).
+  [Cloudflare](deploy/cloudflare.md#proxied) has the whole Caddyfile.
+- **nginx:** the real IP module, so `$remote_addr` above becomes the visitor's
+  address: `set_real_ip_from <range>;` once per range, `real_ip_header
+  X-Forwarded-For;` and `real_ip_recursive on;`. `OFFICESENTRY_TRUSTED_PROXIES`
+  stays 1.
+- **Traefik:** the ranges in the entry point's `forwardedHeaders.trustedIPs`,
+  and `OFFICESENTRY_TRUSTED_PROXIES=2`.
+
+Then make the firewall accept 443 from the CDN's addresses only, or anyone
+who finds the server's address can skip the CDN. The portal sets its own
+security headers and `Cache-Control: no-store`, so leave the CDN's caching
+and header rewriting off for this host; on Cloudflare, also Email Obfuscation
+and Rocket Loader ([What Cloudflare must leave
+alone](deploy/cloudflare.md#what-cloudflare-must-leave-alone)). A Cloudflare
+Tunnel connects to the portal directly and needs none of this: 1 is right
+there ([Cloudflare Tunnel](deploy/cloudflare.md#cloudflare-tunnel)).
 
 **Checking it worked.** Sign in, then look at *Settings → Activity log*: the
 sign-in's address should be yours, not `127.0.0.1` or the proxy's. The portal

@@ -207,6 +207,7 @@ def run(app, conn, vault, cfg, task) -> str:
             raise TaskFailed(f"Unknown task {task['kind']!r}")
         result = fn(ctx)
     except TaskFailed as exc:
+        log.warning("Task %s (%s) failed: %s", task["id"], task["kind"], exc)
         _rollback(conn)
         finish(conn, task["id"], "failed", error=str(exc))
         return "failed"

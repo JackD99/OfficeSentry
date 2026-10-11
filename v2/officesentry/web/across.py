@@ -26,9 +26,10 @@ from ..reports import (
 )
 from ..reports.monthly_review import build as build_review
 from . import as_of
-from .access import login_required, roles_required, tenant_or_404
+from .access import can, need_also, needs, require, tenant_or_404
 from .groups import group_aware, scope, scoped_tenants
 from .printing import pdf_response
+from .reports import report_capability, report_groups
 from .saved_views import MAX_VIEWS
 from .saved_views import store as store_view
 
@@ -62,27 +63,42 @@ def _days() -> int:
 
 
 @bp.get("/across")
-@roles_required("admin", "analyst")
+@needs("clients.compare")
 def index():
     key = request.args.get("key", "")
     if request.args.get("mode") == "rows" and key in data_reports.REPORTS:
         return redirect(url_for("across.rows_index", key=key))
-    return redirect(url_for("across.rollup", key=key if key in dict(rollups.available()) else "review"))
+    available = _available()
+    if key not in dict(available):
+        if not available:
+            abort(403)
+        key = available[0][0]
+    return redirect(url_for("across.rollup", key=key))
+
+
+def _available() -> list[tuple[str, str]]:
+    """The rollups this person may open: the summaries need the security capability, a report its area's."""
+    return [(k, title) for k, title in rollups.available() if can(_rollup_capability(k))]
+
+
+def _rollup_capability(key: str) -> str:
+    return "reports.security" if key in ("review", "evidence") else report_capability(key)
 
 
 def _rollup_or_404(key: str):
     if key not in dict(rollups.available()):
         abort(404)
+    need_also(_rollup_capability(key))  # so the tenants listed leave out per-client denies
     return rollups.build(g.db, scoped_tenants(), key)
 
 
 def _picker() -> dict:
     """What the All tenants pages share: the summary tabs and the detail report picker."""
-    return {"main": rollups.available()[:2], "groups": data_reports.grouped()}
+    return {"main": _available()[:2] if can("reports.security") else [], "groups": report_groups()}
 
 
 @bp.get("/across/<key>")
-@roles_required("admin", "analyst")
+@needs("clients.compare")
 @group_aware
 def rollup(key: str):
     data = _rollup_or_404(key)
@@ -95,6 +111,7 @@ def rollup(key: str):
 def _all_rows(key: str) -> rollups.AllRows:
     if key not in data_reports.REPORTS:
         abort(404)
+    need_also(report_capability(key))
     return rollups.all_rows(
         g.db,
         scoped_tenants(),
@@ -112,7 +129,7 @@ def _table_or_404(data: rollups.AllRows, table: str) -> int:
 
 
 @bp.get("/across/<key>/rows")
-@roles_required("admin", "analyst")
+@needs("clients.compare")
 @group_aware
 def rows_index(key: str):
     """Every row: ``?table=`` (a table slug) or the first table with rows. Keeps the table view."""
@@ -132,7 +149,7 @@ def rows_index(key: str):
 
 
 @bp.get("/across/<key>/rows/<table>")
-@roles_required("admin", "analyst")
+@needs("clients.compare")
 @group_aware
 def rows(key: str, table: str):
     data = _all_rows(key)
@@ -165,7 +182,7 @@ def _rows_report(key: str, table: str):
 
 @bp.get("/across/<key>/rows/<table>.csv", defaults={"ext": "csv"})
 @bp.get("/across/<key>/rows/<table>.xlsx", defaults={"ext": "xlsx"})
-@roles_required("admin", "analyst")
+@needs("clients.compare", "export")
 @group_aware
 def rows_download(key: str, table: str, ext: str):
     report = _rows_report(key, table)
@@ -177,7 +194,7 @@ def rows_download(key: str, table: str, ext: str):
 
 
 @bp.get("/across/<key>/rows/<table>.pdf")
-@roles_required("admin", "analyst")
+@needs("clients.compare", "export")
 @group_aware
 def rows_pdf(key: str, table: str):
     report = _rows_report(key, table)
@@ -186,7 +203,7 @@ def rows_pdf(key: str, table: str):
 
 
 @bp.post("/across/<key>/rows/<table>/views")
-@roles_required("admin", "analyst")
+@needs("clients.compare")
 def save_rows_view(key: str, table: str):
     """Save a view from the every-row page. Views are per report, so it also opens on each tenant's page."""
     if key not in data_reports.REPORTS:
@@ -214,7 +231,7 @@ def _check_matrix():
 
 
 @bp.get("/across/checks")
-@roles_required("admin", "analyst")
+@needs("clients.compare", "reports.security")
 @group_aware
 def checks():
     matrix = _check_matrix()
@@ -233,7 +250,7 @@ def checks():
 
 @bp.get("/across/checks.csv", defaults={"ext": "csv"})
 @bp.get("/across/checks.xlsx", defaults={"ext": "xlsx"})
-@roles_required("admin", "analyst")
+@needs("clients.compare", "reports.security", "export")
 @group_aware
 def checks_download(ext: str):
     matrix = _check_matrix()
@@ -257,7 +274,7 @@ def checks_download(ext: str):
 
 @bp.get("/across/<key>.csv", defaults={"ext": "csv"})
 @bp.get("/across/<key>.xlsx", defaults={"ext": "xlsx"})
-@roles_required("admin", "analyst")
+@needs("clients.compare", "export")
 @group_aware
 def rollup_download(key: str, ext: str):
     data = _rollup_or_404(key)
@@ -284,7 +301,7 @@ def rollup_download(key: str, ext: str):
 
 
 @bp.get("/across/<key>.pdf")
-@roles_required("admin", "analyst")
+@needs("clients.compare", "export")
 @group_aware
 def rollup_pdf(key: str):
     data = _rollup_or_404(key)
@@ -314,7 +331,7 @@ def _across_changes(days: int):
 
 
 @bp.get("/changes")
-@roles_required("admin", "analyst")
+@needs("clients.compare", "reports.changes")
 @group_aware
 def changes():
     days = _days()
@@ -323,7 +340,7 @@ def changes():
 
 
 @bp.get("/changes.pdf")
-@roles_required("admin", "analyst")
+@needs("clients.compare", "reports.changes", "export")
 @group_aware
 def changes_pdf():
     days = _days()
@@ -341,7 +358,7 @@ def changes_pdf():
 
 @bp.get("/changes.csv", defaults={"ext": "csv"})
 @bp.get("/changes.xlsx", defaults={"ext": "xlsx"})
-@roles_required("admin", "analyst")
+@needs("clients.compare", "reports.changes", "export")
 @group_aware
 def changes_download(ext: str):
     days = _days()
@@ -403,14 +420,14 @@ def _change_areas(report) -> list[tuple[str, list]]:
 
 
 @bp.get("/tenants/<int:tenant_id>/changes")
-@login_required
+@needs("reports.changes")
 def tenant_changes(tenant_id: int):
     t = tenant_or_404(tenant_id)
     return render_template("tenant_changes.html", tenant=t, periods=month_changes.PERIODS, **_tenant_changes(t))
 
 
 @bp.get("/tenants/<int:tenant_id>/changes.pdf")
-@login_required
+@needs("reports.changes", "export")
 def tenant_changes_pdf(tenant_id: int):
     t = tenant_or_404(tenant_id)
     page = _tenant_changes(t)
@@ -420,7 +437,7 @@ def tenant_changes_pdf(tenant_id: int):
 
 @bp.get("/tenants/<int:tenant_id>/changes.csv", defaults={"ext": "csv"})
 @bp.get("/tenants/<int:tenant_id>/changes.xlsx", defaults={"ext": "xlsx"})
-@login_required
+@needs("reports.changes", "export")
 def tenant_changes_download(tenant_id: int, ext: str):
     t = tenant_or_404(tenant_id)
     page = _tenant_changes(t)
@@ -449,11 +466,12 @@ def tenant_changes_download(tenant_id: int, ext: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/data/<key>.csv")
-@login_required
+@needs("export")
 def data_report_csv(tenant_id: int, key: str):
     t = tenant_or_404(tenant_id)
     if key not in data_reports.REPORTS:
         abort(404)
+    require(report_capability(key), tenant_id=t["id"])
     day = as_of.day(g.db, t["id"], request.args.get("on"))
     report = views.apply(data_reports.build(g.db, t, key, as_of=day.as_of), views.View.parse(request.args))
     report_tables = data_reports.to_tables(report)
@@ -466,7 +484,7 @@ def data_report_csv(tenant_id: int, key: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/report.csv")
-@login_required
+@needs("reports.security", "export")
 def review_csv(tenant_id: int):
     """The monthly review's findings, one row per affected account or object."""
     t = tenant_or_404(tenant_id)
@@ -485,7 +503,7 @@ def review_csv(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence.csv")
-@login_required
+@needs("reports.security", "export")
 def evidence_csv(tenant_id: int):
     """With ``set=``, that question set's answers; without, every topic's answer and the controls."""
     t = tenant_or_404(tenant_id)

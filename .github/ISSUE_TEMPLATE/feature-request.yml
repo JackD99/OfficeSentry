@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest an improvement that isn't a new report or check (the portal, emails, exports, setup, integrations).
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Issues are public. Don't paste client data.** Replace tenant names and IDs, domains, user names and
+        email addresses (UPNs) and IP addresses with made-up ones such as `contoso.example` first.
+
+        For a new report use **Report request**, and for a new security check **Check request**. Not sure
+        whether something is possible, or how to do it? Ask in
+        [Discussions](https://github.com/JackD99/OfficeSentry/discussions/categories/q-a) instead.
+
+        Office Sentry is read-only: it reports on a tenant and never changes it. Requests to fix or change
+        things in a tenant, manage GDAP or run scripts against clients are out of scope
+        ([ROADMAP.md](https://github.com/JackD99/OfficeSentry/blob/main/ROADMAP.md), "Not planned").
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The job, and what gets in the way today. For example "Send each client's review from our own domain".
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Office Sentry to do?
+      description: What you'd see, where, and what it would save you. A rough sketch is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: How you get by today
+      description: A script, another tool, a manual step, or nothing.
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is it for?
+      options:
+        - MSP technicians
+        - MSP account managers or owners
+        - Clients signing in to their own view
+        - Whoever installs and runs Office Sentry
+        - Several of these
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Before you post
+      options:
+        - label: Nothing above identifies a client, a tenant or a person.
+          required: true

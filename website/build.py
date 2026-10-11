@@ -79,7 +79,7 @@ SECTIONS = [
                 "v2/DEPLOY.md",
                 "install",
                 "Running it on your own server",
-                blurb="HTTPS, a Hetzner server from your phone, backups, updates and Windows.",
+                blurb="Docker on a Linux server: HTTPS, backups, off-site copies, updates and Windows.",
             ),
             Doc(
                 "v2/docs/onboarding-a-client.md",
@@ -97,9 +97,68 @@ SECTIONS = [
                 blurb="The common setup and collection errors, and how to fix them.",
             ),
             Doc(
+                "v2/docs/getting-help.md",
+                "getting-help",
+                blurb="Where to look first, the support package to attach to a bug report, and what it leaves out.",
+            ),
+            Doc(
                 "v2/docs/securing-the-portal.md",
                 "securing",
                 blurb="What the portal does by itself, what you have to do, and reverse proxy setups.",
+            ),
+        ],
+    ),
+    (
+        "Deploy",
+        [
+            Doc(
+                "v2/docs/deploy/README.md",
+                "deploy",
+                "Choosing a platform",
+                blurb="Which guide to follow, what every platform needs, and keys from a secret store.",
+            ),
+            Doc(
+                "v2/docs/deploy/portainer.md",
+                "deploy/portainer",
+                blurb="One stack with HTTPS, behind your own proxy, backups and updates.",
+            ),
+            Doc(
+                "v2/docs/deploy/container-managers.md",
+                "deploy/container-managers",
+                blurb="The same stack in Dockge, Komodo, Coolify and Dokploy.",
+            ),
+            Doc(
+                "v2/docs/deploy/nas.md",
+                "deploy/nas",
+                "Unraid, Synology, TrueNAS",
+                blurb="On a NAS, with its own folders, scheduled backups and reverse proxy.",
+            ),
+            Doc(
+                "v2/docs/deploy/kubernetes.md",
+                "deploy/kubernetes",
+                blurb="Manifests for AKS, EKS, GKE, k3s and others: one pod, a disk, backups and restores.",
+            ),
+            Doc(
+                "v2/docs/deploy/azure.md",
+                "deploy/azure",
+                "Azure",
+                blurb="A small Linux VM set up with one paste, its firewall, backups and updates.",
+            ),
+            Doc(
+                "v2/docs/deploy/aws.md",
+                "deploy/aws",
+                "AWS",
+                blurb="A Lightsail or EC2 server set up with one paste, its firewall, snapshots and updates.",
+            ),
+            Doc(
+                "v2/docs/deploy/other-clouds.md",
+                "deploy/other-clouds",
+                blurb="DigitalOcean, Google Cloud, Linode, Vultr, Oracle Cloud and any VPS that takes cloud-init.",
+            ),
+            Doc(
+                "v2/docs/deploy/cloudflare.md",
+                "deploy/cloudflare",
+                blurb="DNS only, a Cloudflare Tunnel with Access, or proxied, and what Cloudflare must leave alone.",
             ),
         ],
     ),
@@ -148,6 +207,12 @@ SECTIONS = [
                 "contributing",
                 "Contributing",
                 blurb="Setting up for development, and how changes are built and checked.",
+            ),
+            Doc(
+                "SUPPORT.md",
+                "support",
+                "Getting help",
+                blurb="Where to go for what, the support package, and what never goes in an issue.",
             ),
         ],
     ),

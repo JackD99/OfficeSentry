@@ -1,0 +1,35 @@
+name: Labels
+# Keeps the repository's issue and pull request labels the same as .github/labels.yml (names, colours and
+# descriptions), so they're defined in the repository rather than clicked together on GitHub. Runs when that
+# file changes on main, and from Run workflow. Labels the file doesn't list are never deleted; the run's summary
+# names them. Pull requests that change the file get a dry run, which says what the merge would change.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/labels.yml', '.github/scripts/sync_labels.py', '.github/workflows/labels.yml']
+  pull_request:
+    paths: ['.github/labels.yml', '.github/scripts/sync_labels.py', '.github/workflows/labels.yml']
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: labels
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync labels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write  # labels are managed through the issues API
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+      - name: Sync (dry run on pull requests)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
+        run: python3 .github/scripts/sync_labels.py $DRY_RUN

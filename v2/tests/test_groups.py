@@ -93,7 +93,7 @@ def test_collects_groups_owners_members_and_settings(db, two_tenants, factory):
     assert (phoenix["isTeam"], phoenix["visibility"], phoenix["kind"]) == (True, "Public", "microsoft365")
     assert (phoenix["ownerCount"], phoenix["enabledOwnerCount"], phoenix["memberCount"]) == (1, 0, 3)
     assert phoenix["guests"] == ["lee_partner.org#EXT#@x.onmicrosoft.com", "pat@supplier.com"]
-    assert phoenix["owners"] == [{"name": "Bob", "upn": "bob@x.com", "type": "user", "enabled": False}]
+    assert phoenix["owners"] == [{"name": "Bob", "upn": "bob@x.com", "type": "user", "enabled": False, "guest": False}]
     assert groups["g5"]["owners"][0]["type"] == "servicePrincipal" and groups["g5"]["enabledOwnerCount"] == 0
     assert (groups["s1"]["kind"], groups["s1"]["dynamic"], groups["s1"]["examined"]) == ("security", True, False)
     assert "assignedLicenses" in urls[0] and groups["s1"]["licenceSkuIds"] == ["sku-bp"]  # group-based licensing

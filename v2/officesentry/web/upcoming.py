@@ -12,7 +12,7 @@ from .. import upcoming
 from ..db import audit
 from ..reports import branding, data_reports, tables, views
 from ..reports.data_reports import Rows
-from .access import roles_required, visible_tenants
+from .access import can, needs, visible_tenants
 from .printing import pdf_response
 
 bp = Blueprint("upcoming", __name__)
@@ -21,11 +21,11 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def _collect() -> upcoming.Upcoming:
-    return upcoming.collect(g.db, visible_tenants(g.db, g.user), ours=g.user["role"] == "admin")
+    return upcoming.collect(g.db, visible_tenants(g.db, g.user), ours=can("settings.manage"))
 
 
 @bp.get("/upcoming")
-@roles_required("admin", "analyst")
+@needs("clients.compare", "reports.tenant")
 def index():
     up = _collect()
     report = upcoming.report(up)
@@ -48,7 +48,7 @@ def index():
 @bp.get("/upcoming.pdf", defaults={"ext": "pdf"})
 @bp.get("/upcoming.xlsx", defaults={"ext": "xlsx"})
 @bp.get("/upcoming.csv", defaults={"ext": "csv"})
-@roles_required("admin", "analyst")
+@needs("clients.compare", "reports.tenant", "export")
 def download(ext: str):
     report = views.apply(upcoming.report(_collect()), views.View.parse(request.args))
     audit(g.db, g.user["username"], "report_downloaded", None, f"{upcoming.KEY}.{ext}")

@@ -10,7 +10,7 @@ How it works:
 * The admin turns it on under Settings → Staff sign-in. The setup wizard signs them in to Microsoft with a
   device code (``app_setup.py``, as for the read-only app) and creates the sign-in app
   (``create_sign_in_app``): single tenant, a certificate Office Sentry made (the private key stays
-  encrypted here), two app roles (``APP_ROLES``: Admin and Analyst), "assignment required" on its service
+  encrypted here), an app role for each built-in role (``APP_ROLE_DEFINITIONS``), "assignment required" on its service
   principal, the admin who ran the wizard assigned Admin, and admin consent for the sign-in scopes so staff
   never see a consent prompt. The manual path makes the same app by hand (``docs/staff-sign-in.md``).
 * "Sign in with Microsoft" sends the browser to the tenant's authorize endpoint (``authorize_url``) with a
@@ -18,9 +18,10 @@ How it works:
   token endpoint (``exchange_code``) with a client assertion signed by the certificate, and the ID token is
   verified (``verify_id_token``): signature against the tenant's published keys, audience, issuer, tenant,
   lifetime and nonce.
-* The person's Office Sentry role is the app role Entra put in the token (``role_for``). It's read on every
-  sign-in, so a change in Entra applies at the next sign-in. Which clients an analyst sees is still granted
-  in Office Sentry (``web/access.py``): tenant isolation doesn't change.
+* The person's Office Sentry role (``roles.py``) is the app role Entra put in the token (``role_for``): one
+  per built-in role, Analyst for Second line, and a value an admin gives a custom role (``sso_role_values``).
+  It's read on every sign-in, so a change in Entra applies at the next sign-in. Which clients someone sees is
+  still granted in Office Sentry (``web/access.py``): tenant isolation doesn't change.
 * Accounts are matched by Entra object ID (``users.entra_oid``), or linked on first sign-in when the
   username is the person's sign-in name, or linked by the person from their Account page. New staff get an
   account at their first sign-in. Client accounts keep passwords.
@@ -47,6 +48,7 @@ import jwt
 import requests
 
 from . import clouds
+from . import permissions as p
 from .certs import GeneratedCert, generate_certificate, key_credential
 from .db import utcnow
 
@@ -70,29 +72,46 @@ KEYS_TTL = timedelta(hours=24)
 KEYS_RETRY = timedelta(minutes=1)
 NO_PASSWORD = "!"  # noqa: S105 (password_hash of an account that only signs in with Microsoft; never matches)
 
-# The sign-in app's roles -> Office Sentry role. Assigned to people or groups in Entra. Which clients an
-# analyst sees is still granted in Office Sentry (users.all_tenants, user_tenants, groups), never from Entra.
-APP_ROLES: dict[str, str] = {"Admin": "admin", "Analyst": "analyst"}
+# The sign-in app's roles (assigned to people or groups in Entra) -> the built-in Office Sentry role
+# (``permissions.TEMPLATES`` key), the first a token carries winning, in this order. Second line's value is
+# Analyst, what staff were called before roles. A custom role is reached through a value an admin gives it
+# (``sso_role_values``). Which clients someone sees is still granted in Office Sentry
+# (users.all_tenants, user_tenants, groups), never from Entra.
+APP_ROLES: dict[str, str] = {
+    "Admin": "administrator",
+    "TeamLeader": "team_leader",
+    "Analyst": "second_line",
+    "FirstLine": "first_line",
+    "AccountManager": "account_manager",
+    "Auditor": "auditor",
+}
 # The app roles as the app registration declares them (ids are fixed so a hand-made app can copy them).
-APP_ROLE_DEFINITIONS = [
-    {
-        "id": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e01",
-        "value": "Admin",
-        "displayName": "Admin",
-        "description": "Everything in Office Sentry, including settings, clients and users.",
+_ROLE_IDS = {
+    "Admin": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e01",
+    "Analyst": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e02",
+    "TeamLeader": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e03",
+    "FirstLine": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e04",
+    "AccountManager": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e05",
+    "Auditor": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e06",
+}
+
+
+def _definition(value: str) -> dict:
+    t = p.TEMPLATE_BY_KEY[APP_ROLES[value]]
+    return {
+        "id": _ROLE_IDS[value],
+        "value": value,
+        "displayName": t.name,
+        "description": t.description,
         "allowedMemberTypes": ["User"],
         "isEnabled": True,
-    },
-    {
-        "id": "8f1b3f0e-6f8a-4a4e-9c3e-1d4a2b6c7e02",
-        "value": "Analyst",
-        "displayName": "Analyst",
-        "description": "Works with the clients an Office Sentry admin grants.",
-        "allowedMemberTypes": ["User"],
-        "isEnabled": True,
-    },
-]
-DEFAULT_ROLES = {"": "Can't sign in", "analyst": "Analyst with no clients until an admin grants some"}
+    }
+
+
+APP_ROLE_DEFINITIONS = [_definition(value) for value in APP_ROLES]
+# An app role value a custom role can be given: what Entra accepts, without spaces.
+VALUE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,59}$")
+DEFAULT_ROLES = {"": "Can't sign in", "analyst": "Second line, with no clients until an admin grants some"}
 
 KEYS = (
     "sso_enabled",  # '1' when staff may sign in with Microsoft
@@ -113,6 +132,7 @@ KEYS = (
     "sso_cert_warned",
     "sso_passwords",  # 'on' (default) or 'off': may staff still sign in with a password?
     "sso_default_role",  # '' (refuse) or 'analyst': people whose token carries no app role
+    "sso_role_values",  # JSON {app role value: custom role id}: custom roles reached from Entra
     "sso_notes",  # setup steps the wizard couldn't do, for the page to say
     "sso_set_up_at",
     "sso_set_up_by",
@@ -289,7 +309,7 @@ def client_assertion(s: dict, key_pem: str, now: datetime | None = None) -> str:
 PROBLEMS = {
     "access_denied": "Sign-in was cancelled on Microsoft's page.",
     "50105": "Your Microsoft account isn't assigned to Office Sentry yet. Ask an Office Sentry admin to assign you "
-    "an Admin or Analyst role in the Entra admin centre (Enterprise applications → Office Sentry sign-in → "
+    "a role in the Entra admin centre (Enterprise applications → Office Sentry sign-in → "
     "Users and groups).",
     "50011": "The reply address Office Sentry sent doesn't match the sign-in app in Entra. An admin needs to add it "
     "to the app registration (Authentication → Web → Redirect URIs): see Settings → Staff sign-in.",
@@ -483,15 +503,60 @@ def verify_id_token(
     )
 
 
-def role_for(identity: Identity, s: dict) -> str | None:
-    """The Office Sentry role from the token's app roles, Admin winning; the install's default for people with
-    none; None when they may not sign in."""
-    for value, mapped in APP_ROLES.items():
+@dataclass(frozen=True)
+class EntraRole:
+    """What a token's app roles make someone: the app role ``value``, then a built-in role's ``key`` or a
+    custom role's ``role_id``."""
+
+    value: str
+    key: str | None = None
+    role_id: int | None = None
+
+
+def custom_values(s: dict) -> dict[str, int]:
+    """App role value -> custom role id, as an admin set them under Settings → Staff sign-in."""
+    try:
+        raw = json.loads(s.get("sso_role_values") or "{}")
+    except ValueError:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(v): r for v, r in raw.items() if isinstance(r, int) and not isinstance(r, bool)}
+
+
+def forget_role(conn, role_id: int) -> None:
+    """A custom role was deleted: no app role value gives it any more."""
+    values = {v: r for v, r in custom_values(settings(conn)).items() if r != role_id}
+    save(conn, {"sso_role_values": json.dumps(values, sort_keys=True) if values else ""})
+
+
+def role_for(identity: Identity, s: dict) -> EntraRole | None:
+    """The Office Sentry role from the token's app roles: the built-in roles in ``APP_ROLES`` order (Admin
+    first), then custom roles in the order they were made; the install's default for people with none; None
+    when they may not sign in."""
+    for value, key in APP_ROLES.items():
         if value in identity.roles:
-            return mapped
+            return EntraRole(value, key=key)
+    for value, role_id in sorted(custom_values(s).items(), key=lambda item: item[1]):
+        if value in identity.roles:
+            return EntraRole(value, role_id=role_id)
     if s.get("sso_default_role") == "analyst":
-        return "analyst"
+        return EntraRole("", key="second_line")
     return None
+
+
+def _role_row(conn, grant: EntraRole):
+    """The roles row the grant names. Raises ``Refused`` when a custom role was deleted or is a client role."""
+    if grant.key is not None:
+        row = conn.execute("SELECT id, kind FROM roles WHERE key = ?", (grant.key,)).fetchone()
+    else:
+        row = conn.execute("SELECT id, kind FROM roles WHERE id = ?", (grant.role_id,)).fetchone()
+    if row is None or row["kind"] not in (p.ADMIN, p.STAFF):
+        raise Refused(
+            f"Your role in Entra ({grant.value}) doesn't match a role in Office Sentry any more. Ask an Office "
+            "Sentry admin to sort it out."
+        )
+    return row
 
 
 # -- Accounts -------------------------------------------------------------------------------------------
@@ -503,7 +568,7 @@ class Refused(Exception):
 
 NO_ROLE = (
     "Your Microsoft account isn't assigned an Office Sentry role yet. Ask an Office Sentry admin to assign "
-    "you Admin or Analyst in the Entra admin centre, then sign in again."
+    "you one in the Entra admin centre, then sign in again."
 )
 
 
@@ -511,7 +576,7 @@ def account_for(conn, identity: Identity, s: dict, now: str | None = None):
     """The user row for this Microsoft identity: linked by object ID, linked now by matching username, or
     created. The role follows the token every time; client grants stay as the admin set them. Raises ``Refused``."""
     now = now or utcnow()
-    role = role_for(identity, s)
+    grant = role_for(identity, s)
     user = conn.execute("SELECT * FROM users WHERE entra_oid = ?", (identity.oid,)).fetchone()
     if user is None and identity.upn and "@" in identity.upn:
         # Only the sign-in name (the UPN): Microsoft's "email" claim is neither verified nor unique.
@@ -520,8 +585,10 @@ def account_for(conn, identity: Identity, s: dict, now: str | None = None):
         ).fetchone()
     if user is not None and user["disabled"]:
         raise Refused("Your Office Sentry account is disabled. Ask an admin if you need it back.")
-    if role is None:
+    if grant is None:
         raise Refused(NO_ROLE)
+    row = _role_row(conn, grant)
+    role, role_id = ("admin" if row["kind"] == p.ADMIN else "analyst"), row["id"]
     if user is None:
         username = identity.username
         if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
@@ -531,17 +598,17 @@ def account_for(conn, identity: Identity, s: dict, now: str | None = None):
                 "admin to sort it out."
             )
         cur = conn.execute(
-            "INSERT INTO users (username, password_hash, role, all_tenants, created_at, entra_oid, entra_upn,"
-            " entra_linked_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?)",
-            (username, NO_PASSWORD, role, now, identity.oid, identity.upn, now),
+            "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at, entra_oid,"
+            " entra_upn, entra_linked_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
+            (username, NO_PASSWORD, role, role_id, now, identity.oid, identity.upn, now),
         )
         return conn.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone(), "created"
     outcome = "linked" if not user["entra_oid"] else "signed_in"
-    changed = user["role"] != role
+    changed = user["role"] != role or user["role_id"] != role_id
     conn.execute(
         "UPDATE users SET entra_oid = ?, entra_upn = ?, entra_linked_at = COALESCE(entra_linked_at, ?),"
-        " role = ?, session_version = session_version + ? WHERE id = ?",
-        (identity.oid, identity.upn, now, role, int(changed), user["id"]),
+        " role = ?, role_id = ?, session_version = session_version + ? WHERE id = ?",
+        (identity.oid, identity.upn, now, role, role_id, int(changed), user["id"]),
     )
     return conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone(), (
         "role_changed" if changed and outcome == "signed_in" else outcome
