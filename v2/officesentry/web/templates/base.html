@@ -144,7 +144,7 @@
 {% endif %}
 <script nonce="{{ csp_nonce }}">
   /* Tab bars scroll sideways on phones: show the open tab. */
-  document.querySelectorAll('.tabs a.active, .report-groups-bar a.active').forEach(function (a) {
+  document.querySelectorAll('.tabs a.active, .report-groups-bar a.active, nav[aria-label="Settings"] a.active').forEach(function (a) {
     var bar = a.parentNode;
     if (bar.scrollWidth > bar.clientWidth) bar.scrollLeft = a.offsetLeft - (bar.clientWidth - a.offsetWidth) / 2;
   });

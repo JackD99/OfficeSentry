@@ -265,6 +265,11 @@ client's approval.
   moved. Those columns are compared like day counts; a mailbox or site that crosses into a table (nearly
   full, say) still shows.
 
+- Wide report tables take the width their columns need and scroll sideways, with the flag and name
+  staying in view and a shaded edge where there is more, instead of squeezing their text column into a
+  few words a line. The settings links wrap on laptops instead of running off the page, the rows of
+  choices on Onboarding, Month-end and Questionnaires and evidence look like the rest, and counts on
+  those rows and the warning lines of a run log are readable.
 - A report email retried after midnight, sent again with Retry the next week, or approved late now names
   the month, week or quarter it was for, and carries that month's commentary, instead of the day it went out.
 - A tenant nothing has been collected for yet is no longer emailed an empty report: the send fails with the

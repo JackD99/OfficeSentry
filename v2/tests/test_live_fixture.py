@@ -61,6 +61,10 @@ STAND_INS: dict[str, dict] = {
             {"id": "1", "roles": ["owner"], "grantedToV2": {"siteGroup": {"displayName": "Site Owners", "id": "3"}}}
         ]
     },
+    # The recording's Secure Score page carries a next link that the collector didn't follow when it was
+    # made (it read one page); now it does, and the page behind the link is answered empty until the next
+    # recording has it.
+    "/v1.0/security/secureScores" + replay.PAGED: {"value": []},
     # Administrative units (the test tenant has none).
     "/v1.0/directory/administrativeUnits": {"value": []},
     "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
@@ -118,8 +122,13 @@ def live(db):
 
 def test_stand_ins_are_only_for_requests_not_recorded():
     """Once the fixture is re-recorded with these requests, delete them from STAND_INS and NEW_FIELDS."""
-    recorded = {replay.request_key(e["url"])[0] for e in FIXTURE["entries"] if e["api"] == "graph"}
-    recorded |= {e["cmdlet"]["CmdletName"] for e in FIXTURE["entries"] if e["api"] == "exchange"}
+    recorded = set()
+    for e in FIXTURE["entries"]:
+        if e["api"] == "graph":
+            path, query = replay.request_key(e["url"])
+            recorded.add(path + replay.PAGED if any(k == "$skiptoken" for k, _ in query) else path)
+        elif e["api"] == "exchange":
+            recorded.add(e["cmdlet"]["CmdletName"])
     assert not set(STAND_INS) & recorded
     assert not any(re.fullmatch(path.replace("{id}", "[^/]+"), r) for path in STAND_INS for r in recorded)
 
