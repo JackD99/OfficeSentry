@@ -15,6 +15,7 @@ from ..devices import parse_day
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
 from ..text import plural
+from ..usage import owner_label
 from .charts import line_chart
 from .data_reports import Chart, DataReport, Link, Rows, Section, Tile, _date, metric_trend
 from .registry import report
@@ -304,7 +305,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             [
                 site_cell(r),
                 site_type(r),
-                r.get("ownerPrincipalName") or r.get("owner"),
+                owner_label(r),
                 _date(r.get("lastActivityDate")) or "None recorded",
                 size(r["storageUsed"]),
                 r["files"],
@@ -336,7 +337,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             [
                 site_cell(r),
                 site_type(r),
-                r.get("ownerPrincipalName") or r.get("owner"),
+                owner_label(r),
                 size(r["storageUsed"]),
                 _signed_size(r["storageUsed"] - prev["storageUsed"]) if prev else "",
                 r["files"],
@@ -383,9 +384,6 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         if u is None:
             return "Deleted" if users else "Unknown"
         return "Enabled" if u.get("accountEnabled") else "Disabled"
-
-    def person(r):
-        return r.get("ownerPrincipalName") or ("Name hidden by Microsoft" if r.get("concealed") else r.get("owner"))
 
     shared = _shared_items(snap)
     personal = [s for s in shared or [] if s.get("personal")]
@@ -434,7 +432,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     for r in sorted(left, key=lambda r: -r["storageUsed"]):
         gone.add(
             [
-                person(r),
+                owner_label(r),
                 account(r),
                 size(r["storageUsed"]),
                 r["files"],
@@ -479,7 +477,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         quota = "" if pct is None else ("Under 1%" if 0 < pct < 1 else f"{pct:.0f}%")
         every.add(
             [
-                person(r),
+                owner_label(r),
                 account(r),
                 size(r["storageUsed"]),
                 quota,

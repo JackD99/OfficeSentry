@@ -71,6 +71,25 @@ def test_concealed_names_are_detected(db, two_tenants):
     assert str(row[0]) == "Name hidden by Microsoft (group or team site)"
 
 
+def test_hidden_owners_show_as_the_usage_reports_show_people(db, two_tenants, monkeypatch):
+    """A hidden owner is a short code, as in every usage report, never Microsoft's whole 32-character code."""
+    alpha, _ = two_tenants
+    drive = dict(
+        sd._drive("ann@x.com", 1000 * 1024**3),
+        siteUrl=None,
+        ownerPrincipalName="E6F3956464556EB0F7E310CCFAEBE1D1",  # the collector keeps it in lower case
+        ownerDisplayName="8815384BBDE8447FBF5C03DF8E19EBA2",
+    )
+    monkeypatch.setattr(sd, "ONEDRIVE_USAGE", [drive])
+    seed_tenant(db, alpha, sharepoint_kw={"sites": [dict(sd.CONCEALED_SITE, lastActivityDate=sd.days_ago(400))]})
+    sites = _report(db, alpha, "sharepoint")
+    assert [r[2] for r in _section(sites, "All sites").rows] == ["Hidden name (82D288)"]
+    assert [r[2] for r in _section(sites, "Inactive sites").rows] == ["Hidden name (82D288)"]
+    drives = _report(db, alpha, "onedrive")
+    assert [r[0] for r in _section(drives, "All OneDrives").rows] == ["Hidden name (E6F395)"]
+    assert [f.subject for f in _results(db, alpha)["onedrive_quota"].findings] == ["Hidden name (E6F395)"]
+
+
 SHARED = {"Clients", "Budget.xlsx", "Policy.docx", "Internal.docx", "holiday.jpg"}
 
 
