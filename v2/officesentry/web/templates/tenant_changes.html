@@ -101,7 +101,7 @@
   <section class="change-report">
   <div class="toolbar">
     <h3>{{ r.title }} <span class="count-badge">{{ r.count }}</span></h3>
-    <a class="small" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=r.key) }}">Open report {{ icon('arrow') }}</a>
+    <a class="small" href="{{ url_for('reports.data_report', tenant_id=tenant.id, key=r.key, **report_query) }}">Open report {{ icon('arrow') }}</a>
   </div>
   {% for s in r.sections %}
   <div class="scroll-x">

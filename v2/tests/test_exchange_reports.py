@@ -14,7 +14,7 @@ import pytest
 import responses
 from openpyxl import load_workbook
 
-from officesentry import store
+from officesentry import state_history, store
 from officesentry.collectors import distribution_lists as dl_collector
 from officesentry.collectors.auto_replies import plain_text
 from officesentry.collectors.mobile_devices import owner_name
@@ -309,6 +309,20 @@ def test_a_reply_left_on_for_weeks_is_flagged(db, tenant):
     assert s["Mailboxes with an automatic reply"].flags == [None]
 
 
+def test_a_reply_keeps_its_first_day_once_retention_removes_that_snapshot(db, tenant):
+    first = db.execute(
+        "SELECT id FROM runs WHERE tenant_id = ? AND collector = 'auto_replies'", (tenant["id"],)
+    ).fetchone()["id"]
+    _backdate(db, first, 40)
+    _collect(db, tenant["id"], "auto_replies")
+    db.execute("DELETE FROM objects WHERE run_id = ?", (first,))  # as the retention policy does
+    then = (datetime.now(UTC) - timedelta(days=40)).date().isoformat()
+    _, s = _report(db, tenant, "auto-replies")
+    assert s["Mailboxes with an automatic reply"].rows[0][6] == then  # read from the daily history
+    past = build(db, tenant, "auto-replies", as_of=datetime.now(UTC) - timedelta(days=20))
+    assert past.sections[0].rows[0][6] == then
+
+
 def test_scheduled_reply_to_contacts(db, two_tenants):
     alpha, _ = two_tenants
     soon = (datetime.now(UTC) + timedelta(days=5)).strftime("%Y-%m-%dT08:00:00.0000000")
@@ -530,6 +544,22 @@ def test_mailbox_trend(db, two_tenants):
     assert report.chart.startswith("<svg") and report.chart_title == "Mailbox storage over time"
     months = s["Total size by month"]
     assert months.rows[0][1] == "46.0 GB" and len(months.rows) >= 2
+
+
+def test_mailbox_trend_reads_the_daily_history_once_snapshots_are_pruned(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=USERS, exchange=_sizes(37, 1))
+    old = db.execute("SELECT id FROM runs WHERE collector = 'mailbox_usage'").fetchone()["id"]
+    _backdate(db, old, 95)
+    month = _collect(db, alpha, "mailbox_usage", exchange=_sizes(40, 1))[0]
+    _backdate(db, month, 30)
+    _collect(db, alpha, "mailbox_usage", exchange=_sizes(45, 1))
+    assert state_history.recorded(db, old) and state_history.recorded(db, month)
+    db.execute("DELETE FROM objects WHERE run_id IN (?, ?)", (old, month))  # as the retention policy does
+    report, s = _report(db, store.get_tenant(db, alpha), "mailbox-trend")
+    assert not report.notice
+    ann = next(r for r in s["Growth by mailbox"].rows if r[0] == "ann@x.com")
+    assert ann[3:7] == ["40.0 GB", "+5.0 GB", "37.0 GB", "+5.0 GB"]
 
 
 def test_trend_as_of_ignores_later_collections(db, two_tenants):

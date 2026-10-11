@@ -239,6 +239,48 @@ def test_day_counts_that_only_move_with_the_clock_are_not_changes():
     assert len(month_changes.compare_sections(devices_then, devices_now).changes) == 1
 
 
+def test_reasons_and_buckets_that_only_move_with_the_clock_are_not_changes():
+    phones_then, phones_now = (Section("Devices that need attention", ["Mailbox", "Device", "Why"]) for _ in range(2))
+    phones_then.add(["ann@x", "iPhone", ["Not synced for 201 days: the partnership can be removed"]])
+    phones_now.add(["ann@x", "iPhone", ["Not synced for 231 days: the partnership can be removed"]])
+    assert month_changes.compare_sections(phones_then, phones_now).changes == []
+    lists_then, lists_now = (Section("Lists that need attention", ["List", "Why"]) for _ in range(2))
+    lists_then.add(["Sales", ["No mail in 40 days (last 1 Aug 2026)"]])
+    lists_now.add(["Sales", ["No mail in 70 days (last 1 Aug 2026)"]])
+    assert month_changes.compare_sections(lists_then, lists_now).changes == []
+
+    # The same last sign-in, a month later: only the clock moved the bucket.
+    columns = ["Account", "Inactive for", "Last sign-in", "Days"]
+    then, now = Section("Inactive members", columns), Section("Inactive members", columns)
+    then.add(["ann@x", "90 days to 6 months", "2026-04-20", 170])
+    now.add(["ann@x", "6 to 12 months", "2026-04-20", 200])
+    then.add(["bob@x", "Never signed in (created 100 days ago)", "Never", 100])
+    now.add(["bob@x", "Never signed in (created 130 days ago)", "Never", 130])
+    assert month_changes.compare_sections(then, now).changes == []
+    apps_then, apps_now = (Section("Enterprise apps", ["App", "Last sign-in", "Activity"]) for _ in range(2))
+    apps_then.add(["Zoom", "2026-09-20", "Last 30 days"])
+    apps_now.add(["Zoom", "2026-09-20", "30 to 90 days ago"])
+    apps_then.add(["Dropbox", "2026-01-05", "Over 90 days ago"])
+    apps_now.add(["Dropbox", "2026-10-10", "Last 30 days"])  # used again: that is a change
+    diff = month_changes.compare_sections(apps_then, apps_now)
+    assert [(c.subject, c.detail) for c in diff.changes] == [("Dropbox", "Activity: Over 90 days ago → Last 30 days")]
+
+
+def test_a_shared_name_only_compares_the_rows_that_share_it_whole():
+    # Two groups called Marketing: Clients is still matched on its name, so its member count is a change.
+    old, new = Section("Groups", ["Group", "Teams", "Members"]), Section("Groups", ["Group", "Teams", "Members"])
+    for row in (["Clients", "Yes", 11], ["Marketing", "No", 5], ["Marketing", "No", 7]):
+        old.add(row)
+    for row in (["Clients", "Yes", 10], ["Marketing", "No", 5], ["Marketing", "No", 8]):
+        new.add(row)
+    diff = month_changes.compare_sections(old, new)
+    assert [(c.kind, c.subject, c.detail) for c in diff.changes] == [
+        ("changed", "Clients", "Members: 11 → 10"),
+        ("added", "Marketing", "Teams: No; Members: 8"),
+        ("removed", "Marketing", "Teams: No; Members: 7"),
+    ]
+
+
 def test_compare_sections_without_a_unique_key_reports_added_and_removed():
     old, new = Section("Access", ["Mailbox", "Who"]), Section("Access", ["Mailbox", "Who"])
     for row in (["box", "ann"], ["box", "bob"]):
@@ -288,6 +330,35 @@ def test_change_report_compares_every_report_with_the_start_of_the_period(client
     assert {"Key figures", "Key changes", "Changes by report"} <= set(wb.sheetnames)
     assert client.get("/changes.xlsx?days=90").status_code == 200
     assert client.get(f"/tenants/{bravo}/changes?days=999").status_code == 200  # bad periods fall back
+
+
+def test_a_report_missing_one_of_its_data_sources_at_the_start_is_not_compared(db, two_tenants):
+    # MFA registration failed before the period began: every account's registration would look new.
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    _backdate(db, alpha, 40)
+    db.execute("UPDATE runs SET status = 'failed' WHERE tenant_id = ? AND collector = 'mfa_registration'", (alpha,))
+    seed_tenant(db, alpha)
+    report = month_changes.build(db, store.get_tenant(db, alpha), 30)
+    mfa = next(r for r in report.reports if r.key == "mfa")
+    assert mfa.count == 0 and mfa.note.startswith("MFA registration hadn't been collected by the start of the period")
+    assert not next(r for r in report.reports if r.key == "guests").note  # it had all its data then
+
+
+def test_a_permission_approved_or_still_awaited_is_not_compared_as_change(db, two_tenants):
+    # Teams channels and site permissions waiting for the client's approval on one of the two days.
+    waiting = {"teams_kw": {"status": 403}, "sharepoint_kw": {"rest": "consent"}}
+    alpha, bravo = two_tenants
+    for tenant_id, then, now in ((alpha, waiting, {}), (bravo, {}, waiting)):
+        seed_tenant(db, tenant_id, **then)
+        _backdate(db, tenant_id, 10)
+        seed_tenant(db, tenant_id, **now)
+    approved = {r.key: r for r in month_changes.build(db, store.get_tenant(db, alpha), 7).reports}
+    assert approved["teams"].count == 0 and approved["teams"].note.startswith("The client approved the permission")
+    assert (approved["site-permissions"].count, approved["site-permissions"].note) == (0, month_changes.NO_START)
+    awaited = {r.key: r for r in month_changes.build(db, store.get_tenant(db, bravo), 7).reports}
+    assert awaited["teams"].count == 0 and awaited["teams"].note.startswith("Parts of it are waiting for the client")
+    assert awaited["site-permissions"].note.startswith("Waiting for the client to approve the SharePoint permission")
 
 
 def test_old_snapshots_skip_runs_whose_objects_were_pruned(db, two_tenants):

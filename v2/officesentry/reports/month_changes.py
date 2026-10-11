@@ -22,13 +22,16 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from ..changes import Change, all_changes
 from ..checks import RULES
+from ..collectors import REGISTRY
 from ..findings import resolved_since
 from ..snapshot import TenantSnapshot
+from ..text import verb
 from . import data_reports
 from .precomputed import Rows
 from .tables import Table
@@ -37,6 +40,7 @@ PERIODS = (7, 30, 90)  # days the report can look back
 DEFAULT_DAYS = 30
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+NO_START = "No data from the start of the period to compare with."
 
 # Tracked numbers shown as "then → now". (metric key, label, unit, which direction is good)
 FIGURES = (
@@ -128,6 +132,7 @@ class TenantChanges:
     reports: list[ReportChanges]
     baseline: str | None  # when the oldest data used as the starting point was collected
     notes: list[str] = field(default_factory=list)
+    chosen_end: bool = False  # ``until`` is the end of a day asked for, not the latest data
     # The whole report, when a PDF keeps only the first rows of each list (printing.cap_changes), so its
     # figures still count every change and finding.
     uncut: TenantChanges | None = None
@@ -151,8 +156,12 @@ def _text(value) -> str:
 
 # Columns that count days from now: an account inactive for 170 days then is 200 days now, with nothing changed.
 DAY_COUNT_COLUMNS = frozenset({"Days", "Days waiting", "Days left", "Ends within"})
-# Day counts inside text cells (the Devices report's problems), compared without the number.
-DAY_COUNT_TEXT = re.compile(r"(No check-in for )\d+( days?)")
+# Day counts inside text cells (the problems with devices, mobile devices and distribution lists), compared
+# without the number.
+DAY_COUNT_TEXT = re.compile(r"((?:No check-in|Not synced) for |No mail in )\d+( days?)")
+# Buckets worked out from a date and the clock ("6 to 12 months", "30 to 90 days ago"), by the date's column:
+# they count as changed only when that date did, not when time alone moved them on.
+CLOCK_BUCKETS = {"Inactive for": "Last sign-in", "Activity": "Last sign-in"}
 
 
 def _volatile(column: str) -> bool:
@@ -170,74 +179,101 @@ def _same(value) -> str:
     return DAY_COUNT_TEXT.sub(r"\1N\2", str(value))
 
 
-def _keyed(section: data_reports.Section, width: int):
-    out = {}
-    for row in section.rows:
-        key = tuple(str(v) for v in row[:width])
-        if key in out:
-            return None
-        out[key] = row
-    return out
+def _key(row: list, width: int) -> tuple:
+    return tuple(str(v) for v in row[:width])
+
+
+def _key_width(old_rows: list, new_rows: list) -> tuple[int, set]:
+    """How many leading columns match rows then and now (the first, or the first two when that leaves fewer
+    rows sharing a key), and the keys more than one row has on either side."""
+    best = None
+    for width in (1, 2):
+        counts = [Counter(_key(r, width) for r in rows) for rows in (old_rows, new_rows)]
+        shared = {k for c in counts for k, n in c.items() if n > 1}
+        loose = sum(c[k] for c in counts for k in shared)
+        if best is None or loose < best[2]:
+            best = (width, shared, loose)
+    return best[0], best[1]
 
 
 def compare_sections(old: data_reports.Section | None, new: data_reports.Section | None) -> SectionChanges | None:
     """Row-level differences between one table then and now.
 
     Rows are matched on their first column, or the first two when the first
-    isn't unique. Tables without a unique key fall back to whole rows, which
-    only produces added and removed rows.
+    isn't unique. Rows whose key isn't unique then or now fall back to whole
+    rows, which only produces added and removed rows; the rest of the table is
+    still matched on its key.
     """
     ref = new or old
     if ref is None or not ref.compare:
         return None
     columns = ref.columns
     keep = [i for i, c in enumerate(columns) if not _volatile(c) and c not in ref.drifts]
+    dated = {i: columns.index(CLOCK_BUCKETS[c]) for i, c in enumerate(columns) if CLOCK_BUCKETS.get(c) in columns}
+
+    def cell(row, i):
+        return row[i] if i < len(row) else ""
 
     def stable(row):
-        return tuple(_same(row[i]) for i in keep if i < len(row))
+        # A whole row can't show whether a bucket's date moved, so buckets are left out.
+        return tuple(_same(row[i]) for i in keep if i < len(row) and i not in dated)
 
     old_rows, new_rows = (old.rows if old else []), (new.rows if new else [])
     out = SectionChanges(ref.title, columns)
-    for width in (1, 2):
-        before = _keyed(old or data_reports.Section("", columns), width)
-        after = _keyed(new or data_reports.Section("", columns), width)
-        if before is not None and after is not None:
-            break
-    else:
-        before = after = None
-    if before is None:
-        # No unique key: compare whole rows (ignoring volatile columns), as multisets.
-        remaining = [stable(r) for r in old_rows]
-        for row in new_rows:
-            s = stable(row)
-            if s in remaining:
-                remaining.remove(s)
-            else:
-                out.changes.append(RowChange("added", row))
-        leftover = [stable(r) for r in new_rows]
-        for row in old_rows:
-            s = stable(row)
-            if s in leftover:
-                leftover.remove(s)
-            else:
-                out.changes.append(RowChange("removed", row))
-    else:
-        for key, row in after.items():
-            if key not in before:
-                out.changes.append(RowChange("added", row))
-                continue
-            was = before[key]
-            diffs = [
-                (columns[i], was[i] if i < len(was) else "", row[i] if i < len(row) else "")
-                for i in keep
-                if _same(was[i] if i < len(was) else "") != _same(row[i] if i < len(row) else "")
-            ]
-            if diffs:
-                out.changes.append(RowChange("changed", row, diffs))
-        out.changes += [RowChange("removed", row) for key, row in before.items() if key not in after]
+    width, shared = _key_width(old_rows, new_rows)
+    before = {k: r for r in old_rows if (k := _key(r, width)) not in shared}
+    after = {k: r for r in new_rows if (k := _key(r, width)) not in shared}
+    for key, row in after.items():
+        if key not in before:
+            out.changes.append(RowChange("added", row))
+            continue
+        was = before[key]
+        diffs = [
+            (columns[i], cell(was, i), cell(row, i))
+            for i in keep
+            if _same(cell(was, i)) != _same(cell(row, i))
+            and (i not in dated or str(cell(was, dated[i])) != str(cell(row, dated[i])))
+        ]
+        if diffs:
+            out.changes.append(RowChange("changed", row, diffs))
+    # Rows whose key another row shares: compared whole (ignoring volatile columns), as multisets.
+    old_loose = [r for r in old_rows if _key(r, width) in shared]
+    new_loose = [r for r in new_rows if _key(r, width) in shared]
+    remaining = [stable(r) for r in old_loose]
+    for row in new_loose:
+        s = stable(row)
+        if s in remaining:
+            remaining.remove(s)
+        else:
+            out.changes.append(RowChange("added", row))
+    leftover = [stable(r) for r in new_loose]
+    for row in old_loose:
+        s = stable(row)
+        if s in leftover:
+            leftover.remove(s)
+        else:
+            out.changes.append(RowChange("removed", row))
+    out.changes += [RowChange("removed", row) for key, row in before.items() if key not in after]
     for change in out.changes:
         change.columns = columns
     return out
+
+
+def _parts_note(then: dict[str, str], now: dict[str, str]) -> str:
+    """Why a report that read different parts then and now isn't compared."""
+    if "waiting" in now.values():
+        return (
+            "Parts of it are waiting for the client to approve a new permission, so they can't be compared with "
+            "the start of the period."
+        )
+    if "failed" in now.values():
+        return "Parts of it couldn't be read at the end of the period, so they can't be compared."
+    if "waiting" in then.values():
+        return (
+            "The client approved the permission it needs during the period, so there's nothing from the start of "
+            "the period to compare with."
+        )
+    return "Parts of it couldn't be read at the start of the period, so there's nothing to compare them with."
 
 
 def compare_report(
@@ -248,14 +284,39 @@ def compare_report(
     old_runs = [old_snap.runs.get(c) for c in collectors]
     new_runs = [new_snap.runs.get(c) for c in collectors]
     if not any(old_runs):
-        result.note = "No data from the start of the period to compare with."
+        result.note = NO_START
         return result
     if [r["id"] if r else None for r in old_runs] == [r["id"] if r else None for r in new_runs]:
         return result  # nothing collected since: nothing can have changed
+    missing = [
+        REGISTRY[c].title for c, then, latest in zip(collectors, old_runs, new_runs, strict=True) if latest and not then
+    ]
+    if missing:  # compared with nothing, everything it adds to the report would look new
+        result.note = (
+            f"{' and '.join(missing)} hadn't been collected by the start of the period, so there's nothing to "
+            "compare with."
+        )
+        return result
+    gone = [
+        REGISTRY[c].title
+        for c, r in zip(collectors, old_runs, strict=True)
+        if r and data_reports.detail_removed(conn, c, r)
+    ]
+    if gone:  # an empty sign-in log then would show every sign-in now as new
+        result.note = (
+            f"{' and '.join(gone)} from the start of the period {verb(len(gone), 'is', 'are')} no longer held: "
+            f"the retention policy keeps {'it' if len(gone) == 1 else 'them'} for less time than the daily history."
+        )
+        return result
     old = data_reports.build(conn, tenant, key, as_of=since, snap=old_snap)
     new = data_reports.build(conn, tenant, key, now=now, snap=new_snap)
     if old.unavailable or new.unavailable:
-        result.note = new.unavailable or old.unavailable or ""
+        # Why it can't be built now still holds; why it couldn't be then (waiting for a permission the client
+        # has since approved, say) doesn't.
+        result.note = new.unavailable or NO_START
+        return result
+    if old.parts != new.parts:  # a part read on one day only would show all it holds as added or removed
+        result.note = _parts_note(old.parts, new.parts)
         return result
     old_by_title = {s.title: s for s in old.sections}
     new_by_title = {s.title: s for s in new.sections}
@@ -370,6 +431,7 @@ def build(
         reports,
         baseline,
         notes,
+        until is not None,
     )
 
 
@@ -381,7 +443,12 @@ def to_tables(tc: TenantChanges) -> list[Table]:
     tables = [
         Table(
             "Key figures",
-            ["Measure", f"On {tc.since.day} {tc.since:%b %Y}", "Now", "Change"],
+            [
+                "Measure",
+                f"On {tc.since.day} {tc.since:%b %Y}",
+                f"On {tc.until.day} {tc.until:%b %Y}" if tc.chosen_end else "Now",
+                "Change",
+            ],
             [[f.label, f.before, f.after, f.delta] for f in tc.figures],
         ),
         Table(
