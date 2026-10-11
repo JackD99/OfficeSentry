@@ -264,13 +264,18 @@ table.capped:not(.searching) tr.over-cap { display: none; }
 @media (max-width: 640px) {
   .show-all { width: calc(100% - 32px); margin: var(--space-2) var(--space-4) var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 }
-/* A list cell with more than three items shows two and "and N more", which opens the rest in place. */
-details.more { display: inline; }
-details.more > summary { display: inline; margin-left: var(--space-1); color: var(--accent); cursor: pointer; white-space: nowrap; list-style: none; }
+/* A long list in a cell shows its short form ("breakglass@contoso.com + 11 admin roles", or the first two and
+   "+ 9 more") and opens in place to every item, one a line. */
+details.more > summary { display: inline; color: var(--text); font-weight: inherit; }
+details.more > summary > span { text-decoration: underline dotted var(--border-strong); text-underline-offset: 3px; }
 details.more > summary::-webkit-details-marker { display: none; }
-details.more > summary::before { content: "· "; color: var(--muted); }
-details.more[open] > summary { display: none; }
-details.more[open]::before { content: ", "; }
+details.more > summary::after { content: "\00a0\25BE"; color: var(--muted); }  /* glued to the last word, so it never wraps alone */
+details.more[open] > summary { margin: 0; }
+details.more[open] > summary::after { content: "\00a0\25B4"; }
+details.more > summary:hover { color: var(--accent); }
+details.more > summary:hover > span { text-decoration-color: currentColor; }
+details.more > summary:hover::after { color: currentColor; }
+.more-list { list-style: none; margin: var(--space-1-5) 0 var(--space-0-5); padding: 0 0 0 var(--space-2-5); border-left: 2px solid var(--border); display: grid; gap: var(--space-0-5); font-size: var(--fs-sm); color: var(--text-2); }
 /* Phones: a short value sits on its label's line; only long text drops under its label. */
 @media (max-width: 640px) {
   table.stack-sm td.wrap.short:not(:first-child) { display: flex; text-align: right; }
@@ -914,16 +919,37 @@ details.menu[open] > summary { margin: 0; background: var(--sunken); }
     radial-gradient(farthest-side at 0 50%, var(--scroll-shade), transparent) 0 0, radial-gradient(farthest-side at 100% 50%, var(--scroll-shade), transparent) 100% 0;
   background-repeat: no-repeat; background-size: 48px 100%, 48px 100%, 16px 100%, 16px 100%; background-attachment: local, local, scroll, scroll; }
 @media (min-width: 641px) {
-  /* A wide table takes the width its columns need and scrolls sideways, instead of squeezing its text column. */
-  .table-scroll table { width: max-content; min-width: 100%; }
-  .table-scroll td.wrap { max-width: 28em; min-width: 8em; }
-  /* The first column (the flag and the name) stays in view while the rest scrolls. */
+  /* A table fits its card, wrapping its longer text, until a column would be squeezed below a readable width
+     (the min-widths below, by how long the column's values are: views._width); then it scrolls sideways inside
+     the card. Short values (dates, states, counts) stay on one line. */
+  .table-scroll table { width: 100%; }
+  .table-scroll td.w-s { white-space: nowrap; }
+  /* A heading longer than its column's values may take two lines rather than widen the table. */
+  .table-scroll thead th { white-space: normal; text-wrap: balance; }
+  .table-scroll td.w-m { min-width: 8em; max-width: 20em; }
+  .table-scroll td.w-l { min-width: 14em; max-width: 30em; }
+  .table-scroll td.wrap:first-child, .table-scroll .flagcol + td.wrap { min-width: 14em; max-width: 24em; }
+  /* Just too wide (tables.js): the columns give up a little more before the table scrolls. */
+  .table-scroll.snug td.w-m { min-width: 6em; }
+  .table-scroll.snug td.w-l { min-width: 10em; }
+  .table-scroll.snug td.wrap:first-child, .table-scroll.snug .flagcol + td.wrap { min-width: 10em; }
+  .table-scroll.snug :is(td, th):not(:first-child):not(:last-child) { padding-left: var(--space-2); padding-right: var(--space-2); }
+  /* Too wide to fit (tables.js): it keeps to the screen's height, so its sideways scrollbar is never far away.
+     Far too wide, its columns take the room they need, up to the widths above, rather than being squeezed for
+     nothing. */
+  .table-scroll.natural table { width: max-content; min-width: 100%; }
+  .table-scroll.wide { max-height: max(420px, calc(100vh - 140px - var(--pin-h, 0px))); overflow: auto; overscroll-behavior: contain; }
+  /* The first column (the flag and the name) stays in view while the rest scrolls, with an edge that shows
+     once the table has scrolled (tables.js sets .scrolled), so nothing seems to vanish under it. */
   .table-scroll th.flagcol, .table-scroll td.flagcol { width: 5.5rem; min-width: 5.5rem; box-sizing: border-box; }
   .table-scroll td:first-child, .table-scroll :is(thead, tfoot) th:first-child, .table-scroll .flagcol + td, .table-scroll thead .flagcol + th { position: sticky; left: 0; z-index: 1; background: var(--surface); }
   .table-scroll .flagcol + td, .table-scroll thead .flagcol + th { left: 5.5rem; }
   .table-scroll thead th:first-child, .table-scroll thead .flagcol + th { z-index: 3; }
   .table-scroll :is(thead, tfoot) th:first-child, .table-scroll thead .flagcol + th { background: var(--surface-2); }
   .table-scroll tbody tr:hover td:first-child, .table-scroll tbody tr:hover .flagcol + td { background: var(--surface-2); }
+  .table-scroll.scrolled :is(td, th):first-child:not(.flagcol)::after, .table-scroll.scrolled .flagcol + :is(td, th)::after {
+    content: ""; position: absolute; top: 0; bottom: -1px; right: -1px; width: 10px; transform: translateX(100%); pointer-events: none;
+    border-left: 1px solid var(--border-strong); background: linear-gradient(to right, var(--scroll-shade), transparent); }
 }
 .table-scroll.tall { max-height: max(420px, calc(100vh - 140px - var(--pin-h, 0px))); overflow: auto; overscroll-behavior: contain; }
 .table-scroll thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }

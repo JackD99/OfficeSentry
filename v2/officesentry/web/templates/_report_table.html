@@ -4,11 +4,18 @@
 {% from "_macros.html" import icon, csrf %}
 {% set SEV_RANK = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4} %}
 
+{% macro item(v, p) -%}
+{%- if v.hrefs.get(p) %}<a href="{{ v.hrefs[p] }}">{{ p|wrappable }}</a>{% else %}{{ p|wrappable }}{% endif -%}
+{%- endmacro %}
+
+{#- A long list (Many) shows its short form and opens in place to every item, one a line. Long words (addresses,
+    paths) may wrap after an "@" or a slash (wrappable), so they don't hold their column wide. -#}
 {% macro cell(v) -%}
-{%- if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>
-{%- elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>
-{%- elif v.parts is defined and v.parts|length > 3 %}{{ v.parts[:2]|join(', ') }}<details class="more"><summary>and {{ v.parts|length - 2 }} more</summary>{{ v.parts[2:]|join(', ') }}</details>
-{%- else %}{{ v|readable }}{% endif -%}
+{%- if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text|wrappable }}</a>
+{%- elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text|wrappable }}</a>
+{%- elif v.parts is defined and v.short %}<details class="more"><summary title="Show all {{ v.parts|length }}"><span>{{ v.short|wrappable }}</span></summary><ul class="more-list">{% for p in v.parts %}<li>{{ item(v, p) }}</li>{% endfor %}</ul></details>
+{%- elif v.parts is defined %}{% for p in v.parts %}{{ item(v, p) }}{{ ', ' if not loop.last }}{% endfor %}
+{%- else %}{{ v|readable|wrappable }}{% endif -%}
 {%- endmacro %}
 
 {% macro filter_menu(tv) -%}
@@ -115,13 +122,13 @@
   <table class="stack-sm{{ ' grouped' if tv.groups }}" id="tbl-{{ tv.slug }}">
     <thead><tr>
       {% if flagcol %}<th class="flagcol" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(tv.flag.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ tv.flag.sort_href }}" data-view title="Sort by {{ tv.flag.name|lower }}">{{ tv.flag.name }}</a>{% else %}{{ tv.flag.name }}{% endif %}{% if tv.flag.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}
-      {% for c in tv.shown %}{% if loop.index0 not in notes %}<th class="{{ 'num' if c.kind == 'num' }}" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(c.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ c.sort_href }}" data-view>{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{% if c.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}{% endfor %}
+      {% for c in tv.shown %}{% if loop.index0 not in notes %}<th class="{{ 'num' if c.kind == 'num' }}" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(c.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ c.sort_href }}" data-view>{{ c.heading }}</a>{% else %}{{ c.heading }}{% endif %}{% if c.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}{% endfor %}
       {% if acts %}<th>{{ action }}</th>{% endif %}
     </tr></thead>
     {% macro row(cells, flag, key) -%}
     <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ cells|join(' ')|lower }}{{ (' ' ~ flag) if flag }}">
       {% if flagcol %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}
-      {% for v in cells %}{% if loop.index0 not in notes %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}{% if loop.first and flag and not flagcol %} <span class="flag-pill {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}{% endfor %}
+      {% for v in cells %}{% if loop.index0 not in notes %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }} w-{{ c.width }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}{% if loop.first and flag and not flagcol %} <span class="flag-pill {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}{% endfor %}
       {% if acts %}<td class="row-action" data-label="{{ action }}">{{ act(key) }}</td>{% endif %}
     </tr>
     {%- set said = [] %}{% for i in notes if (cells[i]|string) not in ('', 'Nothing', 'None', '-', '–', '—') %}{% set _ = said.append(i) %}{% endfor %}

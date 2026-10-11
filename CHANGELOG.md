@@ -9,7 +9,16 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.2.1] - Unreleased
+## [2.3.0] - Unreleased
+
+### Changed
+
+- **Report tables fit the page.** A long list in a cell shows a short form you can open in place to see
+  every item, one a line: who a Conditional Access policy covers reads "breakglass@contoso.com + 11 admin
+  roles" rather than a paragraph of role names, and other lists show their first two and "+ N more".
+  Downloads keep every item. Columns get room by how long their values are, long email addresses wrap after
+  the "@", and headings no longer break at a hyphen. A table that still doesn't fit scrolls inside its card,
+  with its scrollbar in view and its first column pinned, instead of pushing the page sideways.
 
 ### Fixed
 
@@ -726,7 +735,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.2.1]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

@@ -553,6 +553,24 @@ class Column:
     sort_href: str = ""
     options: list[Option] = field(default_factory=list)  # values, or date presets
     filtered: bool = False
+    width: str = "m"  # s | m | l, from its longest value (``_width``): how wide the page lets it be
+
+    @property
+    def heading(self) -> str:
+        """The name for a heading that may wrap: never at a hyphen ("Sign-in" stays whole)."""
+        return self.name.replace("-", "\N{NON-BREAKING HYPHEN}")
+
+
+SHORT_TEXT = 16  # a column whose values are all this short never wraps
+LONG_TEXT = 48  # one with a value longer than this gets room to wrap at a readable width
+
+
+def _width(cells: list, kind: str) -> str:
+    """How much room a column needs: "s" short values on one line, "l" long text, "m" in between."""
+    if kind in ("num", "date"):
+        return "s"
+    longest = max((len(c.short or c) if isinstance(c, Many) else len(str(c)) for c in cells), default=0)
+    return "s" if longest <= SHORT_TEXT else "l" if longest > LONG_TEXT else "m"
 
 
 @dataclass
@@ -683,6 +701,7 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
         cells = [r[i] for r in section.rows]
         kind = _kind(cells)
         col = Column(name, s, i, kind, hidden=i not in shown, filtered=key in view.filters or key in view.ages)
+        col.width = _width(cells, kind)
         col.toggle_href = link(path, view.toggle_hidden(key), anchor(table))
         col.sort = ("desc" if sort[1] else "asc") if sort and sort[0] == s else None
         # First click: text A to Z, numbers largest first; then flip.
