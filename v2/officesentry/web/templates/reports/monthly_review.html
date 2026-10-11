@@ -9,6 +9,14 @@
     notes. Staff-only notes are only in it for staff on the page, never for clients or PDFs. -#}
 {%- set me = month_end if month_end is defined and month_end else none -%}
 {%- set tl_actions = me.actions if me else [] -%}
+{#- appendix false (the "summary only" report): the two summary pages without the detail after them. -#}
+{%- set with_appendix = appendix if appendix is defined and appendix is not none else true -%}
+{%- set open_actions = tl_actions|rejectattr('status', 'equalto', 'done')|list -%}
+{%- set done_actions = tl_actions|selectattr('status', 'equalto', 'done')|list -%}
+{%- set auto_actions = summary.next_steps(report, anchors=with_appendix) -%}
+{%- set urgent = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list -%}
+{%- set other = report.failing|rejectattr('severity', 'in', ['critical', 'high'])|list -%}
+{%- set paid = report.licences.lines|rejectattr('free')|list -%}
 {%- macro tl_notes(key) -%}
 {%- set ns = me.notes.get(key, []) if me else [] -%}
 {%- if ns %}<ul class="tl-notes">{% for n in ns %}<li class="{{ n.visibility }}">{% if n.visibility == 'staff' %}<span class="who">Staff only:</span> {% endif %}{% if n.subject %}<span class="who">{{ n.subject|subject_label }}:</span> {% endif %}{{ n.body }}</li>{% endfor %}</ul>{% endif %}
@@ -21,6 +29,7 @@
   <span class="spacer"></span>
   {% if review_href is defined and review_href %}<a class="button" href="{{ review_href }}" title="Commentary, recommendations and notes for this month">Review and annotate</a>{% endif %}
   <a class="button primary" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>PDF</a>
+  <a class="button" href="{{ url_for('reports.tenant_report_pdf', tenant_id=report.tenant.id, appendix=0) }}" title="The two summary pages without the appendix">Summary<span class="wide"> PDF</span></a>
   <a class="button" href="{{ url_for('reports.tenant_report_xlsx', tenant_id=report.tenant.id) }}"><span class="wide">Download </span>XLSX</a>
   <a class="button" href="{{ url_for('across.review_csv', tenant_id=report.tenant.id) }}" title="Every finding, one row per affected account"><span class="wide">Findings </span>CSV</a>
 {% endblock %}
@@ -35,26 +44,27 @@
 <div class="tl-commentary"><div class="tl-label">From {{ brand.display_name }}</div>{% for p in me.commentary.split('\n\n') if p.strip() %}<p>{{ p.strip() }}</p>{% endfor %}</div>
 {%- endif %}{% endblock %}
 {% block contents %}
-  {%- set urgent_n = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list|length -%}
-  <li><a href="#summary">Summary and key figures</a></li>
-  {% if tl_actions or es.actions %}<li><a href="#next">What we recommend next</a></li>{% endif %}
+  <li class="toc-group">Summary</li>
+  <li><a href="#summary">At a glance</a></li>
+  <li><a href="#month">This month, and what we recommend next</a></li>
+  {% if with_appendix %}
+  <li class="toc-group">Appendix: the detail</li>
   <li><a href="#changes">What changed since {{ since }}</a></li>
-  {% if urgent_n %}<li><a href="#fix-first">Fix first</a></li>{% endif %}
-  {% if report.failing|length > urgent_n %}<li><a href="#also">{{ 'Also worth fixing' if urgent_n else 'What needs attention' }}</a></li>{% endif %}
-  {% if report.licences.lines|rejectattr('free')|list %}<li><a href="#licences">Licences</a></li>{% endif %}
+  {% if urgent %}<li><a href="#fix-first">Fix first</a></li>{% endif %}
+  {% if other %}<li><a href="#also">{{ 'Also worth fixing' if urgent else 'What needs attention' }}</a></li>{% endif %}
+  {% if open_actions|length > 3 %}<li><a href="#all-recommendations">Every recommendation</a></li>{% endif %}
+  {% if paid %}<li><a href="#licences">Licences</a></li>{% endif %}
   {% if report.passing %}<li><a href="#passing">In good shape</a></li>{% endif %}
   {% if report.accepted %}<li><a href="#accepted">Accepted risks</a></li>{% endif %}
   {% if report.unavailable %}<li><a href="#not-checked">Not checked</a></li>{% endif %}
+  {% endif %}
 {% endblock %}
 
 {% block body %}
-<section id="summary">
-  <h2>Summary</h2>
+<section id="summary" class="exec">
+  <h2>At a glance</h2>
   <div class="summary-text">{% for p in es.paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
-</section>
-
-<section class="keep">
-  <h2>Key figures</h2>
+  <h3 class="sub-head">Key figures</h3>
   <div class="kpis">
     {% for k in report.kpis %}
       {%- if k.value is none -%}{% set value = none %}
@@ -77,25 +87,57 @@
   {% endif %}
 </section>
 
-{% if tl_actions %}
-<section id="next">
-  <h2>What we recommend next</h2>
+<section class="page-break exec" id="month">
+  <h2>This month</h2>
+  {% set chart = report.months_chart %}
+  {% if chart %}
+  {%- set shown = report.months|selectattr('found', 'ne', none)|list -%}
+  <div class="chart-card keep month-chart">
+    <div class="chart-head"><span class="chart-title">Findings found and fixed each month</span>
+      <span class="legend"><span class="k-found">Found</span><span class="k-fixed">Fixed</span></span></div>
+    {{ chart|safe }}
+    <p class="chart-foot">{{ shown|sum(attribute='found') }} found and {{ shown|sum(attribute='fixed') }} fixed since {{ shown[0].month.strftime('%B %Y') }}. Found counts new findings and ones that came back.</p>
+  </div>
+  {% endif %}
+
+  <h3 class="sub-head">What we did</h3>
+  {% if report.fixed or done_actions %}
+  <ul class="did">
+    {% for a in done_actions %}<li><span class="chg chg-resolved">Done</span> <strong>{{ a.title }}</strong></li>{% endfor %}
+    {% for g in report.fixed[:6] %}<li>{{ ui.change_tag('fixed') }} <strong>{{ g.title }}</strong> <span class="muted">· {{ g.subjects|length|plural('item') }}{% if g.subjects|length <= 3 %}: {{ g.subjects|map('subject_label')|join(', ') }}{% endif %}</span></li>{% endfor %}
+    {% if report.fixed|length > 6 %}<li class="muted">…and {{ (report.fixed[6:]|sum(attribute='subjects', start=[]))|length|plural('more fix', 'more fixes') }}{% if with_appendix %}, listed in the appendix{% endif %}.</li>{% endif %}
+  </ul>
+  {% elif report.first_report %}
+  <p class="muted">This is the first report for your organisation, so fixes are tracked from here on.</p>
+  {% else %}
+  <p class="muted">Nothing was fixed since {{ since }}.</p>
+  {% endif %}
+
+  {% if open_actions or auto_actions %}
+  <h3 class="sub-head" id="next">What we recommend next</h3>
+  {% if open_actions %}
   <ol class="actions">
-    {% for a in tl_actions %}<li class="{{ 'done' if a.status == 'done' }}">
+    {% for a in open_actions[:3] %}<li>
       <div class="act-title">{{ a.title }}</div>
       {% if a.detail %}<p class="act-why">{{ a.detail }}</p>{% endif %}
-      <div class="act-meta"><span class="act-status st-{{ a.status }}">{{ a.status_label }}</span>{% if a.target_label and a.status != 'done' %}<span>Target: {{ a.target_label }}</span>{% endif %}</div>
+      <div class="act-meta"><span class="act-status st-{{ a.status }}">{{ a.status_label }}</span>{% if a.target_label %}<span>Target: {{ a.target_label }}</span>{% endif %}</div>
     </li>{% endfor %}
   </ol>
+  {% if open_actions|length > 3 and with_appendix %}<p class="muted small">{{ (open_actions|length - 3)|plural('more recommendation') }} in the appendix.</p>{% endif %}
+  {% else %}
+  {{ ui.actions(auto_actions) }}
+  {% endif %}
+  {% endif %}
 </section>
-{% elif es.actions %}
-<section id="next">
-  <h2>What we recommend next</h2>
-  {{ ui.actions(es.actions) }}
-</section>
-{% endif %}
 
-<section class="page-break" id="changes">
+{% if with_appendix %}
+<div class="appendix-start page-break" id="appendix">
+  <div class="eyebrow">Appendix</div>
+  <h2>The detail</h2>
+  <p class="section-intro">Everything behind the summary: what changed, each finding with the accounts or settings it affects, and licences line by line. The XLSX export has every row.</p>
+</div>
+
+<section id="changes">
   <h2>What changed since {{ since }}</h2>
   {% if report.first_report and not report.changes and not report.resolved and not report.new_count %}
   <p class="muted">This is the first report for your organisation, so the findings below are the starting point. Changes are tracked from here on.</p>
@@ -131,8 +173,6 @@
 </section>
 {% endif %}
 
-{% set urgent = report.failing|selectattr('severity', 'in', ['critical', 'high'])|list %}
-{% set other = report.failing|rejectattr('severity', 'in', ['critical', 'high'])|list %}
 {% if urgent %}
 <section id="fix-first">
   <h2>Fix first <span class="count">{{ urgent|length }}</span></h2>
@@ -161,7 +201,7 @@
   <p class="section-intro">Lower-risk items. Each one lists the accounts or settings affected; the XLSX export has the full detail.</p>
   <div class="tidy">
   {% for r in other %}
-  <div class="tidy-item">
+  <div class="tidy-item" id="check-{{ r.key }}">
     <div class="check-head">{{ ui.sev(r.severity) }}<h3>{{ r.summary|trim('.') }}</h3><span class="category">{{ r.category }}</span></div>
     {% set named = r.findings|rejectattr('subject', 'in', whole_org)|list %}
     {% if named %}<p class="tidy-found"><span class="muted">Affects {% for f in named[:4] %}{{ f.subject|breakable }}{% if f.new %}<span class="new">New</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}{% if named|length > 4 %} and {{ named|length - 4 }} more{% endif %}.</span></p>
@@ -174,7 +214,19 @@
 </section>
 {% endif %}
 
-{% set paid = report.licences.lines|rejectattr('free')|list %}
+{% if open_actions|length > 3 %}
+<section id="all-recommendations">
+  <h2>Every recommendation</h2>
+  <ol class="actions">
+    {% for a in open_actions %}<li>
+      <div class="act-title">{{ a.title }}</div>
+      {% if a.detail %}<p class="act-why">{{ a.detail }}</p>{% endif %}
+      <div class="act-meta"><span class="act-status st-{{ a.status }}">{{ a.status_label }}</span>{% if a.target_label %}<span>Target: {{ a.target_label }}</span>{% endif %}</div>
+    </li>{% endfor %}
+  </ol>
+</section>
+{% endif %}
+
 {% if paid %}
 <section id="licences">
   <h2>Licences</h2>
@@ -237,12 +289,15 @@
 </section>
 {% endif %}
 
+{% endif %}
+
 <footer class="about keep">
   <h2>About this report</h2>
   {%- set stale = report.freshness|selectattr('stale')|list %}
   <p>Prepared by {{ brand.display_name }}{% if brand.contact %} ({{ brand.contact }}){% endif %}. Everything here was read from Microsoft 365 with read-only access; nothing was changed. Changes are compared with the closest data from at least 4 weeks earlier.
   {%- set fresh = [] %}{% for f in report.freshness if not f.stale %}{% set _ = fresh.append((f.title, f.finished_at)) %}{% endfor %}
   {{ ui.collected(fresh) }}</p>
+  {% if not with_appendix %}<p>This is the summary of the monthly review. Ask {{ brand.display_name }} for the full report, with every check, change and licence in detail.</p>{% endif %}
   {% if stale %}<p><span class="stale">Out of date:</span> {% for f in stale %}{{ f.title }} ({{ ('last collected ' ~ f.finished_at|day) if f.finished_at else 'not collected yet' }}){{ ', ' if not loop.last else '.' }}{% endfor %} Figures that rely on these may not reflect the latest settings.</p>{% endif %}
 </footer>
 {% endblock %}

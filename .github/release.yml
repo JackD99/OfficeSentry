@@ -1,0 +1,20 @@
+# How GitHub groups pull requests when someone presses "Generate release notes" on a release. The release
+# workflow writes its notes from CHANGELOG.md instead (v2/scripts/release_notes.py), so this only shapes the
+# generated list a person may add under them, and keeps Dependabot's updates out of it.
+changelog:
+  exclude:
+    labels: [dependencies]
+    authors: ["dependabot", "dependabot[bot]"]
+  categories:
+    - title: Security
+      labels: [security]
+    - title: New reports and checks
+      labels: [report, check]
+    - title: Added and changed
+      labels: [enhancement]
+    - title: Fixed
+      labels: [bug]
+    - title: Documentation
+      labels: [documentation]
+    - title: Other changes
+      labels: ["*"]

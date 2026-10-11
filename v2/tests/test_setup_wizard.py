@@ -21,6 +21,8 @@ from officesentry.entra import (
     GRAPH_APP_ID,
     GRAPH_CLI_CLIENT_ID,
     GRAPH_PERMISSIONS,
+    SHAREPOINT_APP_ID,
+    SHAREPOINT_PERMISSIONS,
 )
 from tests.conftest import PASSWORD, login, make_user
 
@@ -76,7 +78,8 @@ def _roles(wanted, extra):
     return [{"id": f"role-{name}", "value": name, "allowedMemberTypes": ["Application"]} for name in [*wanted, *extra]]
 
 
-# Microsoft Graph's and Exchange Online's service principals in the MSP's tenant, offering more than we ask for.
+# Microsoft Graph's, Exchange Online's and SharePoint Online's service principals in the MSP's tenant, offering
+# more than we ask for.
 RESOURCES = {
     GRAPH_APP_ID: {
         "id": "sp-graph",
@@ -87,6 +90,15 @@ RESOURCES = {
         "id": "sp-exo",
         "appId": EXCHANGE_APP_ID,
         "appRoles": _roles(EXCHANGE_PERMISSIONS, ["full_access_as_app"]),
+    },
+    SHAREPOINT_APP_ID: {
+        "id": "sp-spo",
+        "appId": SHAREPOINT_APP_ID,
+        # SharePoint's own role IDs: its Sites.Read.All isn't Graph's permission of the same name.
+        "appRoles": [
+            {"id": f"spo-role-{name}", "value": name, "allowedMemberTypes": ["Application"]}
+            for name in [*SHAREPOINT_PERMISSIONS, "Sites.FullControl.All"]
+        ],
     },
 }
 
@@ -173,11 +185,16 @@ def test_fresh_install_reaches_first_tenant_consent_link_without_the_command_lin
         access["resourceAppId"]: sorted(roles[access["resourceAppId"]][r["id"]] for r in access["resourceAccess"])
         for access in body["requiredResourceAccess"]
     }
-    assert asked == {GRAPH_APP_ID: sorted(GRAPH_PERMISSIONS), EXCHANGE_APP_ID: sorted(EXCHANGE_PERMISSIONS)}
+    assert asked == {
+        GRAPH_APP_ID: sorted(GRAPH_PERMISSIONS),
+        EXCHANGE_APP_ID: sorted(EXCHANGE_PERMISSIONS),
+        SHAREPOINT_APP_ID: sorted(SHAREPOINT_PERMISSIONS),
+    }
+    assert {r["id"] for a in body["requiredResourceAccess"] for r in a["resourceAccess"]} >= {"spo-role-Sites.Read.All"}
     assert created.calls[0].request.headers["Authorization"] == f"Bearer {TOKEN}"
     # Microsoft was only ever asked to read, apart from creating this one app.
     graph_calls = [c.request for c in responses.calls if c.request.url.startswith(GRAPH)]
-    assert [r.method for r in graph_calls] == ["GET", "GET", "POST"]
+    assert [r.method for r in graph_calls] == ["GET", "GET", "GET", "POST"]
 
     assert [(c["client_id"], c["cloud"]) for c in store.list_connections(db)] == [(APP_ID.lower(), "commercial")]
     row = db.execute("SELECT * FROM setup_sign_ins").fetchone()

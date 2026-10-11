@@ -11,7 +11,7 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from . import alerts, mailer, sso, store, totp
+from . import alerts, logs, mailer, sso, store, totp
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -33,6 +33,7 @@ def cmd_serve(args, cfg):
 def cmd_worker(args, cfg):
     from .worker import run_worker
 
+    logs.setup(cfg.data_dir, "worker")
     run_worker(cfg, once=args.once)
 
 
@@ -109,6 +110,34 @@ def cmd_create_app(args, cfg):
     audit(conn, "cli", "connection_created", detail=f"{args.name} {app['appId']}")
     print(f"Created app {app['appId']} and app connection #{conn_id}.")
     print("Next: add clients in the portal and send each client's admin its consent link.")
+
+
+def cmd_update_app(args, cfg):
+    """Add the permissions a release asks for to an existing app (device sign-in). The App connection page's
+    "Update the app" does the same."""
+    from . import clouds
+    from .app_setup import update_app
+    from .entra import SignInError, device_code_token
+
+    conn = connect(cfg.db_path)
+    migrate(conn)
+    ready = [c for c in store.list_connections(conn) if c["client_id"]]
+    picked = [c for c in ready if args.connection is None or c["id"] == args.connection]
+    if not picked:
+        sys.exit("No app connection with a client ID" + (f" numbered {args.connection}." if args.connection else "."))
+    if len(picked) > 1:
+        listed = ", ".join(f"#{c['id']} {c['name']} ({clouds.of(c).label})" for c in picked)
+        sys.exit(f"There are several app connections ({listed}). Choose one with --connection.")
+    connection = picked[0]
+    cloud = clouds.of(connection)
+    print(f"Sign in as an admin of YOUR (the MSP's) {cloud.label} tenant who can change app registrations.")
+    token = device_code_token(args.tenant, print, cloud.key)
+    try:
+        added = update_app(conn, token, connection, "cli", "update-app command")
+    except SignInError as exc:
+        sys.exit(str(exc))
+    print(f"{connection['name']}: added {added} permission{'s' if added != 1 else ''}; it now asks for every one.")
+    print("Next: send each client the approval link from Onboarding in the portal.")
 
 
 # Every encrypted value at rest, as (table, key column, encrypted column)...
@@ -506,6 +535,38 @@ def cmd_delete_tenant(args, cfg):
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
 
+def cmd_support_package(args, cfg, config_error: str | None = None):
+    """Write the support package (support.py): a zip of versions, settings, health, failures and logs with
+    secrets and client data taken out, to attach to a bug report. Works when the portal won't start: a
+    database that won't open or a configuration that won't load leaves a note in the zip, not an error."""
+    from pathlib import Path
+
+    from . import support
+
+    conn = None
+    if cfg is not None:
+        try:
+            conn = connect(cfg.db_path)
+            conn.execute("SELECT 1 FROM sqlite_master").fetchone()
+        except Exception as exc:  # noqa: BLE001 (a broken database is exactly when this command is needed)
+            print(f"The database couldn't be opened ({type(exc).__name__}); the package says so.", file=sys.stderr)
+            conn = None
+    pkg = support.build(conn, cfg, include_identifiers=args.include_identifiers, config_error=config_error)
+    if conn is not None:
+        conn.close()
+    out = None if args.out == "-" else Path(args.out or pkg.filename)
+    written = support.write(pkg, out)
+    say = sys.stderr if out is None else sys.stdout
+    print(f"Wrote {written or 'the package to standard output'} ({plural(len(pkg.files), 'file')}).", file=say)
+    if pkg.include_identifiers:
+        print("It includes client names, tenant IDs and domains: share it through a private channel only.", file=say)
+    else:
+        print("Clients appear as numbers; secrets, addresses and names were taken out.", file=say)
+    for part in pkg.problems:
+        print(f"  {part.name}: {part.note}", file=say)
+    print("Attach it to a bug report: https://github.com/JackD99/OfficeSentry/issues/new?template=bug.yml", file=say)
+
+
 def cmd_live_test(args, cfg):
     """Collect from a real test tenant with a client secret (development only)."""
     from pathlib import Path
@@ -565,6 +626,11 @@ def main(argv=None):
         help="the Microsoft cloud to register the app in (each national cloud needs its own app)",
     )
     app.set_defaults(func=cmd_create_app)
+
+    update = sub.add_parser("update-app", help="add a release's new read-only permissions to the app (device sign-in)")
+    update.add_argument("--connection", type=int, help="the app connection's number (needed when there are several)")
+    update.add_argument("--tenant", default="organizations", help="your tenant ID or domain")
+    update.set_defaults(func=cmd_update_app)
 
     rotate = sub.add_parser("rotate-keys", help="re-encrypt credentials with the newest key")
     rotate.add_argument(
@@ -646,6 +712,21 @@ def main(argv=None):
     delete.add_argument("--yes", action="store_true", help="don't ask for the client's name (for scripts)")
     delete.set_defaults(func=cmd_delete_tenant)
 
+    pkg = sub.add_parser(
+        "support-package",
+        help="write a zip of versions, settings, health checks, recent failures and logs, with secrets and client "
+        "data taken out, to attach to a bug report",
+    )
+    pkg.add_argument(
+        "--out", help="the file to write (default: officesentry-support-<date>.zip here; - for standard output)"
+    )
+    pkg.add_argument(
+        "--include-identifiers",
+        action="store_true",
+        help="keep client names, Microsoft tenant IDs, domains and user names (for a private channel only)",
+    )
+    pkg.set_defaults(func=cmd_support_package)
+
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")
     live.add_argument("--out", help="also write XLSX exports to this folder")
@@ -668,6 +749,16 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.command == "support-package":
+        # The one command that must work when the configuration doesn't load: the package then says why.
+        try:
+            cfg = load_config()
+        except ValueError as exc:
+            print(f"The configuration didn't load ({exc}); the package says so.", file=sys.stderr)
+            cmd_support_package(args, None, config_error=str(exc))
+            return
+        cmd_support_package(args, cfg)
+        return
     args.func(args, load_config())
 
 

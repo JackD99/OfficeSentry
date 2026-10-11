@@ -71,8 +71,11 @@ def _check_screenshot(page, name: str, viewport: str, spec, config) -> str | Non
     if config.getoption("--save-all"):
         _save(name, png)
     if config.getoption("--update"):
+        # Only a baseline the capture no longer matches is rewritten: anti-aliasing drift within the tolerance
+        # would otherwise change every file on every refresh.
         BASELINES.mkdir(exist_ok=True)
-        _save_baseline(png, baseline)
+        if not baseline.exists() or _compare(name, baseline, png):
+            _save_baseline(png, baseline)
         return None
     if not baseline.exists():
         _save(name, png)

@@ -8,7 +8,7 @@ import pytest
 import responses
 from openpyxl import load_workbook
 
-from officesentry import adminactivity, store
+from officesentry import adminactivity, events, store
 from officesentry.collectors import admin_activity as collector
 from officesentry.devices import parse_ts
 from officesentry.graph import GraphClient
@@ -83,6 +83,18 @@ def test_keeps_only_allowlisted_activities(db, two_tenants, factory):
     assert m["admin_activity.role_changes"] == 3  # the failed grant doesn't count
     assert m["admin_activity.ca_changes"] == 3
     assert m["admin_activity.app_credential_changes"] == 3
+
+
+@responses.activate
+def test_a_second_passing_mid_run_leaves_no_gap(db, two_tenants, factory, monkeypatch):
+    """The collector and the history read one clock reading: a second ticking over between two readings
+    used to leave a one-second "unread" gap at the start of the window and a partial run on a slow machine."""
+    alpha, _ = two_tenants
+    responses.get(AUDITS, json={"value": ad.DIRECTORY_AUDITS})
+    start = datetime(2026, 10, 11, 12, 0, 0, 999000, tzinfo=UTC)
+    readings = iter(range(1000))
+    monkeypatch.setattr(events, "clock", lambda: start + timedelta(milliseconds=2 * next(readings)))
+    assert _run(db, alpha, "admin_activity", factory)[1] == "succeeded"
 
 
 @responses.activate

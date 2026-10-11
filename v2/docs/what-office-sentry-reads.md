@@ -97,6 +97,15 @@ built from the checks, so they use all of the information below.
 | `MailboxSettings.Read` | Mailbox settings, including inbox rules. **Not** emails. | Inbox rules that forward or hide mail are a common sign of a hacked mailbox. | Mail forwarding; Inbox rules. |
 | `Reports.Read.All` | Microsoft 365 usage reports: for each person, when they last used email, Teams, OneDrive, SharePoint and the Office apps, on which platforms, where Office is installed, and how many emails, Teams messages, calls and meetings they had. Storage and activity per SharePoint site and OneDrive. **Not** what's in any email, chat or file. | To show who actually uses what they're licensed for, suggest cheaper licences, and report SharePoint and OneDrive storage. If your tenant hides names in usage reports, Office Sentry shows codes instead. | Microsoft 365 usage; Licence right-sizing; SharePoint sites; OneDrive. |
 | `IdentityRiskyUser.Read.All` | Accounts Entra ID Protection has flagged as risky: sign-in name, display name, risk level, risk state, why (for example a secure password reset) and when it last changed. Office Sentry keeps the accounts at risk now and those resolved in the last 90 days. Needs Entra ID P2. | To show accounts Microsoft thinks someone else may be using, so they can be checked with the person. | Risky users; the risky users check; the account page. |
+| `Channel.ReadBasic.All` *(new in 2.2)* | The names, descriptions and kinds of the channels in each team (standard, private, shared). **Not** the messages in them. | A Teams report of every team's channels, including private and shared ones. | Teams. |
+| `ChannelMember.Read.All` *(new in 2.2)* | Who is a member or owner of each private and shared channel, and whether they're a guest or from another organisation. | To show who can see private and shared channels, guests and people outside the organisation first. | Teams. |
+| `TeamsAppInstallation.ReadForTeam.All` *(new in 2.2)* | Which apps are added to each team, and their versions. | So apps nobody expected stand out. | Teams. |
+| `ReportSettings.Read.All` *(new in 2.2)* | One setting: whether your usage reports hide people's names. | So usage reports say names are hidden by your setting, instead of showing codes without explanation. | Microsoft 365 usage; Licence right-sizing. |
+| `PrivilegedEligibilitySchedule.Read.AzureADGroup` *(new in 2.2)* | Who can activate membership of a group with Privileged Identity Management (PIM for groups), and until when. | Admin rights can come through such a group; the admin checks count those people too. | Admins checks. |
+| `BitLockerKey.ReadBasic.All` *(new in 2.2)* | Whether each device has a BitLocker recovery key saved in Entra ID, and when. **Never** the key itself. | So a lost or locked computer can be recovered: devices without a saved key are listed. | Devices. |
+| `DeviceManagementConfiguration.Read.All` *(new in 2.2)* | Intune configuration and compliance policies, such as firewall, screen lock, encryption and update settings, and which devices they apply to. | To judge device controls (Cyber Essentials, for example) from Intune instead of asking someone to type them in. | Devices; Questionnaires and evidence. |
+| `DeviceManagementApps.Read.All` *(new in 2.2)* | Intune app protection policies and the apps Intune deploys, with their versions. | App protection and app version evidence. | Devices; Questionnaires and evidence. |
+| `Sites.Read.All` on **Office 365 SharePoint Online** *(new in 2.2)* | SharePoint's own permission lists: who is in each SharePoint group and who has access to each site and list. Microsoft lists it under SharePoint, separately from Microsoft Graph's permission of the same name. **Not** what's inside the files. | Graph doesn't say who is in SharePoint's own groups, so without it "who has access to this site" is incomplete. | Site access. |
 | `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes, mailbox sizes, which protocols each mailbox allows, phones and tablets syncing mail, distribution lists and how much mail they get, and organisation mail settings. Works only with the Global Reader role (below). | Mail forwarding; Mailbox permissions; Shared mailboxes; Mailbox size; Mobile devices; Distribution lists; Legacy sign-ins; email checks. |
 
 A few things Office Sentry checks come from the **public internet**, not from
@@ -107,7 +116,11 @@ the same way other mail servers fetch it. Anyone on the internet can look
 these up; no permission is involved.
 
 Adding a new permission later means a Global Administrator must approve again,
-so the list is kept stable. Within the permissions above, newer versions of
+so the list is kept stable, and new permissions arrive together in one release.
+Office Sentry 2.2 added the ones marked *new in 2.2*. Until you approve them,
+everything else keeps working, and the reports that need them say they're
+waiting for your approval. Your MSP sends you the same approval link as before,
+with a short "What's new" note saying what each one reads and adds. Within the permissions above, newer versions of
 Office Sentry may read more of what a permission allows (for example audit
 records under `AuditLog.Read.All`), and keep it for longer, without asking
 again. Your MSP's [check catalogue](checks.md) lists exactly which checks use

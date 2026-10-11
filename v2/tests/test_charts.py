@@ -276,3 +276,18 @@ def test_dashboard_shows_the_lines(client, db, two_tenants):
     page = client.get("/").get_data(as_text=True)
     assert 'class="kpi-cell"' in page and '<svg class="spark' in page
     assert "The line beside a figure is its last 90 days." in page
+
+
+def test_month_columns_draws_two_columns_a_month_with_counts_and_no_data_tracks():
+    from datetime import date
+
+    from officesentry.reports.charts import month_columns
+
+    months = [(date(2026, 8, 1), None, None), (date(2026, 9, 1), 3, 1), (date(2026, 10, 1), 0, 2)]
+    svg = month_columns(months, label="Found & fixed", series=("Found", "Fixed"))
+    assert 'aria-label="Found &amp; fixed"' in svg
+    assert svg.count('class="nodata"') == 1 and "August 2026: no data yet" in svg
+    assert svg.count('class="part tone-2"') == 1 and svg.count('class="part tone-1"') == 2  # a zero draws no column
+    assert svg.count('class="count"') == 4 and "September 2026: 3 found, 1 fixed" in svg
+    assert ">Aug 26<" in svg and ">Sep<" in svg and ">Oct<" in svg
+    assert month_columns([], label="x") == ""
