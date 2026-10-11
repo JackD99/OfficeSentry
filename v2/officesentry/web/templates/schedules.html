@@ -7,7 +7,7 @@
 
 {% if staff and not mail_ready %}
 <div class="callout warn">{{ icon('alert') }}<div>Email isn't set up yet, so nothing will be sent.
-  {% if current_user.role == 'admin' %}<a href="{{ url_for('email.settings') }}">Set up email delivery</a>{% else %}Ask an admin to set it up.{% endif %}</div></div>
+  {% if can('settings.manage') %}<a href="{{ url_for('email.settings') }}">Set up email delivery</a>{% else %}Ask an admin to set it up.{% endif %}</div></div>
 {% endif %}
 
 {% if staff %}
@@ -105,7 +105,7 @@
       <div class="form-actions"><button class="sm">{{ icon('plus') }} Add contact</button></div>
     </form>
     <p class="footnote">{% if team %}Your team ({{ team|map(attribute='name')|map('default', '')|select|join(', ') or team|length ~ ' people' }}) can be copied in on any email.{% else %}Add your own team to copy them in on client emails.{% endif %}
-      {% if current_user.role == 'admin' %}<a href="{{ url_for('email.overview') }}#team">Manage your team</a>{% endif %}</p>
+      {% if can('settings.manage') %}<a href="{{ url_for('email.overview') }}#team">Manage your team</a>{% endif %}</p>
   </section>
 </div>
 {% endif %}

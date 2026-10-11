@@ -33,7 +33,7 @@ from ..reports.views import slug
 from ..search_index import KINDS
 from ..snapshot import TenantSnapshot
 from ..text import plural
-from .access import roles_required, visible_tenants
+from .access import can, needs, visible_tenants
 
 bp = Blueprint("search", __name__)
 
@@ -43,6 +43,18 @@ SHOWN = 8  # results per tenant before "N more"
 PER_TENANT = 200  # stop scanning a tenant after this many
 TOTAL = 1000  # stop scanning altogether after this many
 _IP = re.compile(r"^[0-9a-f:.]+$")
+
+# What a search hit from each collector needs: nobody finds what they couldn't open.
+COLLECTOR_CAPABILITY = {
+    "users": "reports.people",
+    "groups": "reports.people",
+    "mailboxes": "reports.email",
+    "inbox_rules": "reports.email",
+    "sign_ins": "reports.identity",
+    "app_consents": "reports.devices",
+    "devices": "reports.devices",
+    "tenant_profile": "reports.tenant",
+}
 
 
 def looks_like_ip(q: str) -> bool:
@@ -281,8 +293,14 @@ def _matches(value, q: str, ip: bool) -> bool:
     return text.lower().startswith(q) if ip else q in text.lower()
 
 
-def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT) -> Group:
-    """Matches for ``q`` (lower case) in one tenant's latest snapshot, scanned in Python, at most ``limit``."""
+def _shown(kind, allowed) -> bool:
+    """Whether ``allowed(capability)`` lets this person see the kind's results (everything when None)."""
+    return allowed is None or allowed(COLLECTOR_CAPABILITY[kind.collector])
+
+
+def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT, allowed=None) -> Group:
+    """Matches for ``q`` (lower case) in one tenant's latest snapshot, scanned in Python, at most ``limit``, of
+    the kinds ``allowed(capability)`` lets this person see (everything when None)."""
     t = Tenant(conn, tenant)
     group = Group(tenant)
     if not t.snap.runs:
@@ -290,7 +308,7 @@ def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT) -> Group:
     ip_query = looks_like_ip(q)
     seen = set()
     for kind in KINDS:
-        if (kind.ip and not ip_query) or not t.snap.has(kind.collector):
+        if (kind.ip and not ip_query) or not t.snap.has(kind.collector) or not _shown(kind, allowed):
             continue
         for obj in t.snap.objects(kind.collector, kind.kind) or []:
             for value in kind.values(obj):
@@ -314,7 +332,7 @@ def _add(group: Group, hit: Hit, seen: set, limit: int) -> bool:
     return False
 
 
-def indexed_tenant(conn, tenant, q: str, matches: list, limit: int = PER_TENANT) -> Group:
+def indexed_tenant(conn, tenant, q: str, matches: list, limit: int = PER_TENANT, allowed=None) -> Group:
     """The same results as ``search_tenant``, from the index rows ``search_index.find`` returned for the
     tenant (kind key, run id, object id, value), loading only the objects that matched."""
     t = Tenant(conn, tenant)
@@ -325,7 +343,7 @@ def indexed_tenant(conn, tenant, q: str, matches: list, limit: int = PER_TENANT)
     order = {k.key: i for i, k in enumerate(KINDS)}
     for key, run_id, object_id, value in sorted(matches, key=lambda m: order.get(m[0], len(order))):
         kind = search_index.BY_KEY.get(key)
-        if kind is None or (kind.ip and not ip_query) or (key, object_id) in done:
+        if kind is None or (kind.ip and not ip_query) or (key, object_id) in done or not _shown(kind, allowed):
             continue
         obj = search_index.load(conn, run_id, kind, object_id)
         if obj is None:
@@ -339,17 +357,19 @@ def indexed_tenant(conn, tenant, q: str, matches: list, limit: int = PER_TENANT)
     return group
 
 
-def search(conn, tenants, q: str) -> tuple[list[Group], bool]:
+def search(conn, tenants, q: str, allowed=None) -> tuple[list[Group], bool]:
     """Every tenant's matches for ``q`` (lower case), through the index where it's current and by scanning
-    where it isn't. Returns (groups with hits, whether the search stopped before the last tenant)."""
+    where it isn't, of the kinds ``allowed(capability, tenant_id)`` lets this person see there (everything when
+    None). Returns (groups with hits, whether the search stopped before the last tenant)."""
     current = search_index.current(conn, tenants)
     found = search_index.find(conn, sorted(current), q, looks_like_ip(q)) if current else {}
     groups, total = [], 0
     for tenant in tenants:
+        here = None if allowed is None else (lambda cap, tid=tenant["id"]: allowed(cap, tid))
         if tenant["id"] in current:
-            group = indexed_tenant(conn, tenant, q, found.get(tenant["id"], []))
+            group = indexed_tenant(conn, tenant, q, found.get(tenant["id"], []), allowed=here)
         else:
-            group = search_tenant(conn, tenant, q)
+            group = search_tenant(conn, tenant, q, allowed=here)
         if group.hits:
             groups.append(group)
             total += len(group.hits)
@@ -359,7 +379,7 @@ def search(conn, tenants, q: str) -> tuple[list[Group], bool]:
 
 
 @bp.get("/search")
-@roles_required("admin", "analyst")
+@needs("clients.compare")
 def index():
     q = request.args.get("q", "").strip()[:MAX_LENGTH]
     tenants = visible_tenants(g.db, g.user)
@@ -370,7 +390,7 @@ def index():
             abort(404)
     groups, truncated, short = [], False, bool(q) and len(q) < MIN_LENGTH
     if q and not short:
-        groups, truncated = search(g.db, tenants, q.lower())
+        groups, truncated = search(g.db, tenants, q.lower(), allowed=can)
     return render_template(
         "search.html",
         q=q,

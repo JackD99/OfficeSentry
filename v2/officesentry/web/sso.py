@@ -25,7 +25,7 @@ from .. import app_setup, cert_lifecycle, clouds, entra, sso
 from ..certs import cert_der
 from ..db import audit, transaction, utcnow
 from . import sessions
-from .access import login_required, roles_required, safe_next
+from .access import login_required, needs, safe_next
 from .auth import confirm_password
 from .home import home_url
 
@@ -184,7 +184,7 @@ def disconnect():
 
 
 @bp.post("/admin/users/<int:user_id>/microsoft/disconnect")
-@roles_required("admin")
+@needs("settings.manage")
 def admin_disconnect(user_id: int):
     user = g.db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if user is None:
@@ -210,7 +210,7 @@ def _page():
 
 
 @bp.get("/admin/sign-in")
-@roles_required("admin")
+@needs("settings.manage")
 def settings_page():
     s = sso.settings(g.db)
     sign_in = app_setup.current(g.db, g.user["id"], "sign_in")
@@ -242,7 +242,7 @@ def settings_page():
 
 
 @bp.post("/admin/sign-in")
-@roles_required("admin")
+@needs("settings.manage")
 def save_settings():
     s = sso.settings(g.db)
     if not sso.is_configured(s):
@@ -284,7 +284,7 @@ def _to_setup():
 
 
 @bp.post("/admin/sign-in/setup")
-@roles_required("admin")
+@needs("settings.manage")
 def start_setup():
     cloud = request.form.get("cloud", clouds.DEFAULT)
     if not clouds.valid(cloud):
@@ -308,7 +308,7 @@ def start_setup():
 
 
 @bp.post("/admin/sign-in/setup/check")
-@roles_required("admin")
+@needs("settings.manage")
 def check_setup():
     row = app_setup.check(g.db, _vault(), g.user["id"], g.user["username"], _redirect_uri(), purpose="sign_in")
     if request.accept_mimetypes.best == "application/json":
@@ -329,7 +329,7 @@ def check_setup():
 
 
 @bp.post("/admin/sign-in/setup/cancel")
-@roles_required("admin")
+@needs("settings.manage")
 def cancel_setup():
     app_setup.cancel(g.db, g.user["id"], "sign_in")
     return _page()
@@ -339,7 +339,7 @@ def cancel_setup():
 
 
 @bp.post("/admin/sign-in/manual")
-@roles_required("admin")
+@needs("settings.manage")
 def save_manual():
     s = sso.settings(g.db)
     tenant = request.form.get("tenant", "").strip().lower()
@@ -366,7 +366,7 @@ def save_manual():
 
 
 @bp.post("/admin/sign-in/certificate")
-@roles_required("admin")
+@needs("settings.manage")
 def make_certificate():
     """The first certificate (for the hand-made path), or a replacement to switch to later."""
     s = sso.settings(g.db)
@@ -388,7 +388,7 @@ def make_certificate():
 
 
 @bp.post("/admin/sign-in/certificate/switch")
-@roles_required("admin")
+@needs("settings.manage")
 def switch_certificate():
     if sso.switch_certificate(g.db):
         audit(g.db, g.user["username"], "sign_in_certificate_switched")
@@ -399,7 +399,7 @@ def switch_certificate():
 
 
 @bp.post("/admin/sign-in/certificate/cancel")
-@roles_required("admin")
+@needs("settings.manage")
 def cancel_certificate():
     sso.save(
         g.db, {"sso_next_cert_pem": "", "sso_next_key_enc": "", "sso_next_thumbprint": "", "sso_next_not_after": ""}
@@ -409,7 +409,7 @@ def cancel_certificate():
 
 
 @bp.get("/admin/sign-in/certificate.cer")
-@roles_required("admin")
+@needs("settings.manage")
 def download_certificate():
     """The public certificate only (``?which=next`` for the replacement). The private key never leaves."""
     s = sso.settings(g.db)
@@ -425,7 +425,7 @@ def download_certificate():
 
 
 @bp.post("/admin/sign-in/remove")
-@roles_required("admin")
+@needs("settings.manage")
 def remove():
     with transaction(g.db):
         sso.forget(g.db)
