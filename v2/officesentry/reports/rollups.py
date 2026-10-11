@@ -30,7 +30,7 @@ from . import data_reports, evidence, views
 from .data_reports import DataReport, Section, UserLink
 from .identity_reports import Money
 from .monthly_review import rollup_row, setting
-from .precomputed import Rows
+from .precomputed import Rows, stored_rows
 from .tables import Table
 
 SEVERITIES = ("critical", "high", "medium", "low")
@@ -228,7 +228,11 @@ STATUS_TONES = {
 }
 
 
-def evidence_rollup(conn, tenants, now: datetime) -> Rollup:
+def evidence_rollup(conn, tenants, now: datetime | None = None, rebuild: bool = False) -> Rollup:
+    """Every tenant's controls. Without ``now`` (the page), each tenant's row comes from ``precomputed``
+    while that's current, and is built and stored when it isn't (always, with ``rebuild``)."""
+    stored = stored_rows(conn, "evidence", tenants, now, rebuild)
+    now = now or datetime.now(UTC)
     controls = [c for c in evidence.CONTROLS if not c.outside_scope]
     columns = [
         Column("in_place", "In place", hint="Controls in place"),
@@ -240,25 +244,13 @@ def evidence_rollup(conn, tenants, now: datetime) -> Rollup:
     ]
     rows = []
     for t in tenants:
-        try:
-            pack = evidence.build(conn, t, now)
-        except Exception as exc:
-            logging.getLogger(__name__).exception("Evidence rollup failed for tenant %s", t["id"])
-            rows.append(RollupRow(dict(t), note=f"Couldn't be built: {type(exc).__name__}"))
-            continue
-        row = RollupRow(dict(t))
-        by_key = {c.control.key: c for c in pack.controls}
-        for c in controls:
-            result = by_key.get(c.key)
-            if result:
-                row.values[c.key] = result.status
-                row.tones[c.key] = STATUS_TONES.get(result.status, "info")
-        counts = pack.counts
-        row.values["in_place"] = counts[evidence.IN_PLACE]
-        row.values["gaps"] = counts[evidence.PARTLY] + counts[evidence.NOT_IN_PLACE]
-        row.attention = counts[evidence.NOT_IN_PLACE] * 10 + counts[evidence.PARTLY]
-        if counts[evidence.NOT_ASSESSED] == len(pack.controls):
-            row.note = "No data collected yet."
+        data = _evidence_row(conn, t, now, stored)
+        row = RollupRow(dict(t), note=data["note"], attention=data["attention"])
+        if not row.note or data["controls"]:
+            row.values["in_place"], row.values["gaps"] = data["in_place"], data["gaps"]
+        for key, status in data["controls"].items():
+            row.values[key] = status
+            row.tones[key] = STATUS_TONES.get(status, "info")
         rows.append(row)
     return Rollup(
         "evidence",
@@ -270,6 +262,30 @@ def evidence_rollup(conn, tenants, now: datetime) -> Rollup:
         tenant_link="evidence",
         footnote="Backups and training are outside Microsoft 365 data and are left out here.",
     )
+
+
+def _evidence_row(conn, tenant, now: datetime, stored: Rows | None) -> dict:
+    """{note, in_place, gaps, attention, controls: {key: status}}, from the store or built (and stored)."""
+    fingerprint = stored.fingerprint(tenant) if stored else ""
+    if stored and (data := stored.get(tenant, fingerprint)) is not None:
+        return data
+    try:
+        pack = evidence.build(conn, tenant, now)
+    except Exception as exc:
+        logging.getLogger(__name__).exception("Evidence rollup failed for tenant %s", tenant["id"])
+        note = f"Couldn't be built: {type(exc).__name__}"
+        return {"note": note, "in_place": 0, "gaps": 0, "attention": 0, "controls": {}}
+    counts = pack.counts
+    data = {
+        "note": "No data collected yet." if counts[evidence.NOT_ASSESSED] == len(pack.controls) else "",
+        "in_place": counts[evidence.IN_PLACE],
+        "gaps": counts[evidence.PARTLY] + counts[evidence.NOT_IN_PLACE],
+        "attention": counts[evidence.NOT_IN_PLACE] * 10 + counts[evidence.PARTLY],
+        "controls": {c.control.key: c.status for c in pack.controls if not c.control.outside_scope},
+    }
+    if stored:
+        stored.save(tenant, fingerprint, data)
+    return data
 
 
 # -- Detail reports (generic) -------------------------------------------------------
@@ -298,49 +314,88 @@ def _number(value):
         return None
 
 
-def data_rollup(conn, tenants, key: str, now: datetime) -> Rollup:
-    """Columns are the report's headline figures when it has them, else a row count per table."""
+def _encode(value):
+    """A headline value as JSON: Money keeps its currency, anything not JSON becomes its text."""
+    if isinstance(value, Money):
+        return {"money": float(value), "currency": value.currency}
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
+def _decode(value):
+    if isinstance(value, dict) and "money" in value:
+        return Money(value["money"], value["currency"])
+    return value
+
+
+def _data_row(conn, tenant, key: str, now: datetime, stored: Rows | None, snap: TenantSnapshot | None = None) -> dict:
+    """One tenant's line on a detail report's rollup, from the store or built (and stored):
+    {note, flagged, flag_link, headlines: [[label, value, tone, href]], tables: [[title, rows, anchor]]}.
+    Both shapes are kept, since the rollup shows headlines when any tenant's report has them."""
+    fingerprint = stored.fingerprint(tenant) if stored else ""
+    if stored and (data := stored.get(tenant, fingerprint)) is not None:
+        return data
+    report = data_reports.build(conn, tenant, key, now, snap=snap)
+    data = {"note": report.unavailable or "", "flagged": 0, "flag_link": "", "headlines": [], "tables": []}
+    if not report.unavailable:
+        data["flagged"] = sum(s.flagged for s in report.sections)
+        data["flag_link"] = views.flagged_link(report) if data["flagged"] else ""
+        targets = views.headline_links(report)
+        for h, href in zip(
+            _headlines(report), targets["tiles"] if report.tiles else targets["highlights"], strict=True
+        ):
+            data["headlines"].append([h.label, _encode(h.value), h.tone, href])
+        for s, table in zip(report.sections, views.table_slugs(report), strict=True):
+            if not is_settings(s):
+                data["tables"].append([s.title, len(s.rows), f"#{views.anchor(table)}"])
+    if stored:
+        stored.save(tenant, fingerprint, data)
+    return data
+
+
+def data_rollup(
+    conn, tenants, key: str, now: datetime | None = None, rebuild: bool = False, snap: TenantSnapshot | None = None
+) -> Rollup:
+    """Columns are the report's headline figures when it has them, else a row count per table.
+
+    Without ``now`` (the page), each tenant's line comes from ``precomputed`` while that's current, and is
+    built and stored when it isn't (always, with ``rebuild``). ``snap`` is one tenant's snapshot, when the
+    caller has it (the worker building every report's rollup for a tenant).
+    """
+    stored = stored_rows(conn, f"rollup:{key}", tenants, now, rebuild)
+    now = now or datetime.now(UTC)
     title, description, _collectors, _builder = data_reports.REPORTS[key]
-    built = [(t, data_reports.build(conn, t, key, now)) for t in tenants]
-    use_headlines = any(_headlines(r) for _t, r in built if not r.unavailable)
+    built = [(t, _data_row(conn, t, key, now, stored, snap if len(tenants) == 1 else None)) for t in tenants]
+    use_headlines = any(d["headlines"] for _t, d in built if not d["note"])
     labels: list[str] = []
-    for _t, report in built:
-        items = (
-            [h.label for h in _headlines(report)]
-            if use_headlines
-            else [s.title for s in report.sections if not is_settings(s)]
-        )
+    for _t, data in built:
+        items = [h[0] for h in data["headlines"]] if use_headlines else [tb[0] for tb in data["tables"]]
         labels += [x for x in items if x not in labels]
     columns = [Column("_flagged", "To review", hint="Rows flagged critical, high or medium")]
     columns += [Column(f"c:{name}", name, "text" if use_headlines else "num") for name in labels]
     rows = []
-    for t, report in built:
+    for t, data in built:
         row = RollupRow(dict(t))
-        if report.unavailable:
-            row.note = report.unavailable
+        if data["note"]:
+            row.note = data["note"]
             rows.append(row)
             continue
-        row.values["_flagged"] = sum(s.flagged for s in report.sections)
-        row.attention = row.values["_flagged"]
-        if row.values["_flagged"]:
-            row.links["_flagged"] = (key, views.flagged_link(report))
+        row.values["_flagged"] = data["flagged"]
+        row.attention = data["flagged"]
+        if data["flag_link"]:
+            row.links["_flagged"] = (key, data["flag_link"])
         if use_headlines:
-            targets = views.headline_links(report)
-            for h, href in zip(
-                report.tiles or report.highlights,
-                targets["tiles"] if report.tiles else targets["highlights"],
-                strict=True,
-            ):
-                row.values[f"c:{h.label}"] = h.value
-                if h.tone:
-                    row.tones[f"c:{h.label}"] = h.tone
+            for label, value, tone, href in data["headlines"]:
+                row.values[f"c:{label}"] = _decode(value)
+                if tone:
+                    row.tones[f"c:{label}"] = tone
                 if href:
-                    row.links[f"c:{h.label}"] = (key, href)
+                    row.links[f"c:{label}"] = (key, href)
         else:
-            for s, table in zip(report.sections, views.table_slugs(report), strict=True):
-                if not is_settings(s):
-                    row.values[f"c:{s.title}"] = len(s.rows)
-                    row.links[f"c:{s.title}"] = (key, f"#{views.anchor(table)}")
+            for table_title, count, anchor in data["tables"]:
+                row.values[f"c:{table_title}"] = count
+                row.links[f"c:{table_title}"] = (key, anchor)
         rows.append(row)
     footnote = (
         "Figures are the report's headline numbers for each client."
@@ -587,10 +642,10 @@ def available() -> list[tuple[str, str]]:
 
 
 def build(conn, tenants, key: str, now: datetime | None = None) -> Rollup:
-    live = now is None  # only a rollup of the present can use the cached rows
-    now = now or datetime.now(UTC)
+    """Without ``now`` (the pages, which show the present) each tenant's row comes from the stored rows
+    (``rollup_cache`` for the monthly review, ``precomputed`` for the rest) while those are current."""
     if key == "review":
-        rollup = review_rollup(conn, tenants, now, cached=live)
+        rollup = review_rollup(conn, tenants, now or datetime.now(UTC), cached=now is None)
     elif key == "evidence":
         rollup = evidence_rollup(conn, tenants, now)
     elif key in data_reports.REPORTS:
