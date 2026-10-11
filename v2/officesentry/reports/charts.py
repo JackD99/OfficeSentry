@@ -13,6 +13,7 @@ AXIS = 'fill="#5d6676" font-size="11" font-family="sans-serif"'
 SERIES = 'fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'
 END = 'fill="#2a78d6" stroke="#ffffff" stroke-width="2"'
 VALUE = 'fill="#1d2330" font-size="12" font-weight="700" font-family="sans-serif"'
+COUNT = 'fill="#5d6676" font-size="9" font-family="sans-serif"'
 
 
 def line_chart(
@@ -256,6 +257,76 @@ def daily_bars(
         parts.append(
             f'<rect class="hit" x="{pad_l + slot * i:.1f}" y="{pad_t}" width="{slot:.1f}" height="{h}" '
             f'fill="#000" fill-opacity="0"><title>{escape(text)}</title></rect>'
+        )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def month_columns(
+    months: list[tuple[date, int | None, int | None]],
+    *,
+    label: str,
+    series: tuple[str, str] = ("New", "Fixed"),
+    width: int = 640,
+    height: int = 170,
+) -> str:
+    """Two columns per month, side by side: ``(first day of the month, first, second)``, oldest first, such as
+    findings found and fixed. ``None`` marks a month there's no data for, drawn as a faint track so it doesn't
+    read as zero. The first series is orange (tone 2), the second blue (tone 1), and each column carries its
+    count above it, so neither is read by colour alone; the caller prints the legend as text.
+    """
+    if not months:
+        return ""
+    pad_l, pad_r, pad_t, pad_b = 36, 4, 18, 22
+    w, h = width - pad_l - pad_r, height - pad_t - pad_b
+    top = _nice(max((max(a or 0, b or 0) for _, a, b in months), default=0))
+    slot = w / len(months)
+    col = min(slot * 0.32, 18)
+    gap = 2
+
+    def py(v):
+        return pad_t + h - h * v / top
+
+    parts = [
+        f'<svg class="chart month-columns" viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="{escape(label)}" xmlns="http://www.w3.org/2000/svg">'
+    ]
+    for frac in (0, 0.5, 1):
+        y = py(top * frac)
+        parts.append(f'<line class="grid" x1="{pad_l}" x2="{pad_l + w}" y1="{y:.1f}" y2="{y:.1f}" {GRID}/>')
+        parts.append(
+            f'<text class="axis" x="{pad_l - 6}" y="{y + 4:.1f}" text-anchor="end" {AXIS}>{top * frac:,.0f}</text>'
+        )
+    base = py(0)
+    fills = (("tone-2", TONE_FILL["2"]), ("tone-1", TONE_FILL["1"]))
+    for i, (month, first, second) in enumerate(months):
+        mid = pad_l + slot * i + slot / 2
+        name = f"{month:%b}" if i and month.month != 1 else f"{month:%b %y}"
+        parts.append(f'<text class="axis" x="{mid:.1f}" y="{height - 6}" text-anchor="middle" {AXIS}>{name}</text>')
+        if first is None and second is None:
+            parts.append(
+                f'<rect class="nodata" x="{mid - col - gap / 2:.1f}" y="{base - 3:.1f}" width="{2 * col + gap:.1f}" '
+                f'height="3" fill="{TRACK}"><title>{month:%B %Y}: no data yet</title></rect>'
+            )
+            continue
+        for j, value in enumerate((first, second)):
+            x = mid - col - gap / 2 if j == 0 else mid + gap / 2
+            cls, fill = fills[j]
+            value = value or 0
+            size = max(h * value / top, 1.5) if value else 0
+            if size:
+                parts.append(
+                    f'<rect class="part {cls}" x="{x:.1f}" y="{base - size:.1f}" width="{col:.1f}" '
+                    f'height="{size:.1f}" rx="1.5" fill="{fill}"/>'
+                )
+            parts.append(
+                f'<text class="count" x="{x + col / 2:.1f}" y="{base - size - 3:.1f}" text-anchor="middle" '
+                f"{COUNT}>{value}</text>"
+            )
+        parts.append(
+            f'<rect class="hit" x="{pad_l + slot * i:.1f}" y="{pad_t}" width="{slot:.1f}" height="{h}" '
+            f'fill="#000" fill-opacity="0"><title>{month:%B %Y}: {first or 0} {series[0].lower()}, '
+            f"{second or 0} {series[1].lower()}</title></rect>"
         )
     parts.append("</svg>")
     return "".join(parts)

@@ -479,7 +479,7 @@ def _role_id(permission: str) -> str:
 
 
 def _resource_roles():
-    from officesentry.entra import EXCHANGE_APP_ID, GRAPH_APP_ID, GRAPH_PERMISSIONS
+    from officesentry.entra import EXCHANGE_APP_ID, GRAPH_APP_ID, GRAPH_PERMISSIONS, SHAREPOINT_APP_ID
 
     graph = [{"id": "r-mailread", "value": "Mail.Read"}] + [{"id": _role_id(p), "value": p} for p in GRAPH_PERMISSIONS]
     return {
@@ -492,6 +492,14 @@ def _resource_roles():
                 {"id": "r-exo-full", "value": "full_access_as_app"},
             ],
         },
+        "sp-sharepoint": {
+            "id": "sp-sharepoint",
+            "appId": SHAREPOINT_APP_ID,
+            "appRoles": [
+                {"id": "r-spo-sites", "value": "Sites.Read.All"},
+                {"id": "r-spo-full", "value": "Sites.FullControl.All"},
+            ],
+        },
     }
 
 
@@ -499,7 +507,7 @@ RESOURCE_APP_ROLES = _resource_roles()
 
 
 def our_assignments(missing=()) -> list[dict]:
-    """The app's granted application permissions, less ``missing``."""
+    """The app's granted application permissions, less ``missing`` (labels, as in ``entra.PERMISSIONS``)."""
     from officesentry.entra import GRAPH_PERMISSIONS
 
     rows = [
@@ -520,6 +528,16 @@ def our_assignments(missing=()) -> list[dict]:
                 "resourceId": "sp-exchange",
                 "resourceDisplayName": "Office 365 Exchange Online",
                 "appRoleId": "r-exo",
+                "principalId": OUR_SP["id"],
+            }
+        )
+    if "SharePoint Sites.Read.All" not in missing:
+        rows.append(
+            {
+                "id": "our-spo",
+                "resourceId": "sp-sharepoint",
+                "resourceDisplayName": "Office 365 SharePoint Online",
+                "appRoleId": "r-spo-sites",
                 "principalId": OUR_SP["id"],
             }
         )

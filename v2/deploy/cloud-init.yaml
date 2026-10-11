@@ -1,7 +1,8 @@
 #cloud-config
 # Paste this into "Cloud config" when creating an Ubuntu 24.04 server in the
 # Hetzner Cloud console, after replacing the ssh-ed25519 line below with the
-# public half of your deploy key. Steps are in DEPLOY.md ("Hetzner, from a phone").
+# public half of your deploy key. It's the project's own server's; for a server of your own,
+# deploy/cloud-init-server.yaml and docs/deploy/ are the ones to use.
 #
 # It installs Docker, creates the "deploy" user that the "Deploy" GitHub
 # workflow signs in as, and turns off password and root sign-in over SSH.

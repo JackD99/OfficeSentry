@@ -1,8 +1,14 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Ask a question
+    url: https://github.com/JackD99/OfficeSentry/discussions/categories/q-a
+    about: Questions (how do I, is it possible to) and anything that isn't a bug or a request. Discussions is the place.
   - name: Report a security vulnerability
     url: https://github.com/JackD99/OfficeSentry/security/advisories/new
     about: Please report vulnerabilities privately, never in a public issue.
   - name: Troubleshooting
     url: https://github.com/JackD99/OfficeSentry/blob/main/v2/docs/troubleshooting.md
     about: Fixes for the common setup errors (AADSTS50011, Global Reader, the worker not running).
+  - name: Documentation
+    url: https://officesentry.co.uk/docs/
+    about: Quick start, running it on your own server, onboarding a client, every report and check.

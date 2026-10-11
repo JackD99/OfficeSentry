@@ -32,6 +32,7 @@ from . import (
     clouds,
     findings,
     lifecycle,
+    logs,
     ratelimit,
     retention,
     schedule,
@@ -219,10 +220,13 @@ def _run_collector(
         store.log_event(conn, run_id, "error", str(exc))
         # Sign-in failures get the plain explanation; the raw message stays in the run log.
         problem = explain(getattr(exc, "message", ""), getattr(exc, "code", ""))
-        store.finish_run(conn, run_id, "failed", f"Sign-in failed: {problem}" if problem else str(exc))
+        error = f"Sign-in failed: {problem}" if problem else str(exc)
+        log.error("Run failed: %s", error.splitlines()[0][:300] if error else type(exc).__name__)
+        store.finish_run(conn, run_id, "failed", error)
         return "failed"
     except Exception as exc:  # a collector bug must not kill the worker
         store.log_event(conn, run_id, "error", traceback.format_exc())
+        log.exception("Run failed on a bug (%s)", type(exc).__name__)
         store.finish_run(conn, run_id, "failed", f"{type(exc).__name__}: {exc}")
         return "failed"
 
@@ -536,13 +540,15 @@ def _rollback(conn) -> None:
 
 
 def _execute(conn, run, graph_factory, exchange_factory, alerting, liveness: Liveness) -> None:
-    log.info("Run %s: %s for tenant %s", run["id"], run["collector"], run["tenant_id"])
-    liveness.start_run(run["id"])
-    try:
-        status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
-        alerts.after_run(conn, alerting, run["id"], status)
-    finally:
-        liveness.end_run()
+    # Every line logged until the run ends names it (logs.py), so an error can be matched to the run.
+    with logs.context(run=run["id"], tenant=run["tenant_id"], collector=run["collector"]):
+        log.info("Run started")
+        liveness.start_run(run["id"])
+        try:
+            status = execute_run(conn, run, graph_factory, exchange_factory, alerting)
+            alerts.after_run(conn, alerting, run["id"], status)
+        finally:
+            liveness.end_run()
 
 
 def _claim(conn):
@@ -603,15 +609,16 @@ def _task_thread(app, vault, cfg: Config, number: int, stop: threading.Event, li
                 if task is None:
                     stop.wait(IDLE_WAIT)
                     continue
-                log.info("Task %s: %s", task["id"], task["kind"])
                 liveness.start_task(task["id"])
-                try:
-                    tasks.run(app, conn, vault, cfg, task)
-                except Exception:  # say, the database stayed locked: its lease runs out and it's tried again
-                    log.exception("Task %s could not be finished", task["id"])
-                    _rollback(conn)
-                finally:
-                    liveness.end_task()
+                with logs.context(task=task["id"], kind=task["kind"], tenant=task["tenant_id"]):
+                    log.info("Task started")
+                    try:
+                        tasks.run(app, conn, vault, cfg, task)
+                    except Exception:  # say, the database stayed locked: its lease runs out and it's tried again
+                        log.exception("Task %s could not be finished", task["id"])
+                        _rollback(conn)
+                    finally:
+                        liveness.end_task()
         finally:
             conn.close()
 

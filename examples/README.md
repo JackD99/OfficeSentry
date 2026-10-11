@@ -10,6 +10,8 @@ Regenerate them from `v2/` with `python scripts/screenshots.py` after report cha
 | File | What it is |
 |---|---|
 | [monthly-security-licensing-review.pdf](monthly-security-licensing-review.pdf) | The Monthly Security & Licensing Review for one client, as sent to them. |
+| [monthly-review-summary.pdf](monthly-review-summary.pdf) | The monthly review's two summary pages on their own, without the appendix. |
+| [quarterly-review.pdf](quarterly-review.pdf) | The Quarterly review design from the report designer: three months of score and findings, what was fixed, projects, licence spend and what's coming up. |
 | [insurance-evidence-pack.pdf](insurance-evidence-pack.pdf) | The controls cyber-insurance questionnaires ask about, answered from the data. |
 | [sharepoint-storage.pdf](sharepoint-storage.pdf) | A client nearly out of SharePoint space: where it went, when it fills up, what to clean up. |
 | [mfa-coverage.pdf](mfa-coverage.pdf) | Who has MFA registered and who is enforced to use it. |

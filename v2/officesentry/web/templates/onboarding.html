@@ -10,6 +10,7 @@
     <div class="sub">{% if total %}{{ counts.connected }} of {{ total|plural('client') }} fully connected.
       {% if waiting %}{{ waiting }} waiting on {{ 'its client' if waiting == 1 else 'their clients' }}.{% endif %}
       {% if counts.not_sent %}{{ counts.not_sent }} not sent yet.{% endif %}
+      {% if counts.new %}{{ counts.new }} with new permissions to approve.{% endif %}
       {% else %}Add your clients from a spreadsheet, send each one their consent link, and watch them connect.{% endif %}</div>
   </div>
   <div class="actions">
@@ -19,23 +20,31 @@
 </div>
 
 {% if total %}
+{% for c in behind %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div class="grow"><strong>Update {{ c.name }} before you send the new links.</strong>
+  Office Sentry {{ batch.release }} asks for {{ batch.permissions|length|plural('new read-only permission') }}, and your app registration doesn't ask for them yet, so a client approving now would only grant the old ones. It's one sign-in.</div>
+  <a class="btn primary sm" href="{{ url_for('admin.connections') }}#conn-{{ c.id }}">Update the app</a></div>
+{% endfor %}
 <div class="tiles">
   {% for key, label, foot, tone in [('not_sent', 'Not sent', 'consent link not sent yet', ''),
                                     ('waiting', 'Waiting on client', 'sent, or approved and being confirmed', ''),
                                     ('global_reader', 'Global Reader missing', 'consented, mailbox reports not yet', 'warn'),
-                                    ('connected', 'Connected', 'consent and Global Reader in place', 'ok')] %}
+                                    ('new', 'New permissions', 'connected, ' ~ batch.release ~ ' permissions to approve', 'warn'),
+                                    ('connected', 'Connected', 'everything approved and in place', 'ok')] %}
   {% set n = waiting if key == 'waiting' else counts[key] %}
+  {% if key != 'new' or n %}
   <a class="tile link{{ ' tone-' ~ tone if tone and n }}" href="{{ url_for('onboarding.index', show='all', state='client' if key == 'waiting' else key) }}">
     <div class="label">{{ label }}</div><div class="value">{{ n }}</div><div class="foot">{{ foot }}</div></a>
+  {% endif %}
   {% endfor %}
 </div>
 
 <div class="toolbar-row">
   <nav class="seg" aria-label="Show">
     {% for key, name in filters.items() %}<a href="{{ url_for('onboarding.index', show=key) }}"{% if show == key and not state %} aria-current="page"{% endif %}>{{ name }}<span class="count">{{ total - counts.connected if key == 'waiting' else total }}</span></a>{% endfor %}
-    {% if state %}<a href="{{ url_for('onboarding.index', show='all', state=state) }}" aria-current="page">{{ 'Waiting on client' if state == 'client' else states[state][0] }}<span class="count">{{ entries|length }}</span></a>{% endif %}
+    {% if state %}<a href="{{ url_for('onboarding.index', show='all', state=state) }}" aria-current="page">{{ 'Waiting on client' if state == 'client' else ('New permissions' if state == 'new' else states[state][0]) }}<span class="count">{{ entries|length }}</span></a>{% endif %}
   </nav>
-  {{ downloads([('Consent links (CSV)', url_for('onboarding.export'), 'Every client that hasn\'t consented yet, with its contact and consent link, for a mail merge')]) }}
+  {{ downloads([('Consent links (CSV)', url_for('onboarding.export'), 'Every client with something to approve (the app, or new permissions), with its contact and link, for a mail merge')]) }}
 </div>
 
 <section class="card flush">
@@ -51,11 +60,11 @@
       <td data-label="Client" class="who"><a class="strong" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ t.name }}</a><span class="sub mono">{{ t.tenant_ref }}</span></td>
       <td data-label="Contact" class="wrap">{% if e.row and (e.row.contact_name or e.row.contact_email) %}{{ e.row.contact_name or e.row.contact_email }}{% if e.row.contact_name and e.row.contact_email %}<span class="sub">{{ e.row.contact_email }}</span>{% endif %}{% else %}<span class="faint">—</span>{% endif %}</td>
       <td data-label="State" class="wrap"><span class="pill {{ e.state.tone }}">{{ e.state.label }}</span>
-        <span class="sub">{{ e.state.detail }}{% if e.state.key == 'sent' %} Sent {{ ts(e.row.sent_at) }}.{% endif %}</span></td>
-      <td data-label="Consent link">{% if t.consented_at %}<span class="faint">Not needed</span>
+        <span class="sub">{{ e.state.detail }}{% if e.state.key in ('sent', 'new_sent') and e.sent_at %} Sent {{ ts(e.sent_at) }}.{% endif %}</span></td>
+      <td data-label="Consent link">{% if not e.needs_link %}<span class="faint">Not needed</span>
         {% elif link %}<button type="button" class="sm" data-copy-text="{{ link }}">Copy link</button>
         {% else %}<span class="small bad-text">{{ e.problem }}</span>{% endif %}</td>
-      <td class="num"><a class="btn sm ghost" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ 'Open' if t.consented_at else 'Send link' }}</a></td>
+      <td class="num"><a class="btn sm ghost" href="{{ url_for('onboarding.send', tenant_id=t.id) }}">{{ 'Send link' if e.needs_link else 'Open' }}</a></td>
     </tr>
     {% endfor %}
     </tbody>
@@ -68,7 +77,7 @@
     <span class="muted small hint">For the clients you tick.</span>
   </div>
   {% else %}
-  <div class="empty compact"><p>{% if state %}{% if state == 'client' %}Nothing is waiting on a client.{% else %}No clients are {{ states[state][0]|lower }}.{% endif %}{% else %}Every client is connected.{% endif %}
+  <div class="empty compact"><p>{% if state %}{% if state == 'client' %}Nothing is waiting on a client.{% elif state == 'new' %}Every client has approved the new permissions.{% else %}No clients are {{ states[state][0]|lower }}.{% endif %}{% else %}Every client is connected.{% endif %}
     <a href="{{ url_for('onboarding.index', show='all') }}">Show all clients</a></p></div>
   {% endif %}
 </section>
