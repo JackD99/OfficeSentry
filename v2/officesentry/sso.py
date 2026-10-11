@@ -158,6 +158,11 @@ def enabled(s: dict) -> bool:
     return s.get("sso_enabled") == "1" and is_configured(s)
 
 
+def break_glass(s: dict) -> bool:
+    """Whether staff may still sign in with a password (the break-glass way in while Microsoft sign-in is on)."""
+    return s.get("sso_passwords", "on") != "off"
+
+
 def passwords_allowed(s: dict, role: str) -> bool:
     """May someone with this role sign in with a password? Clients always can; staff until it's turned off."""
     return role == "client" or not enabled(s) or s.get("sso_passwords", "on") != "off"
@@ -429,7 +434,7 @@ class Identity:
 
     @property
     def username(self) -> str:
-        return (self.upn or self.email or self.oid).lower()
+        return (self.upn or self.email or self.oid).lower()[:64]  # the same limit as the setup and users pages
 
 
 def verify_id_token(
@@ -508,13 +513,11 @@ def account_for(conn, identity: Identity, s: dict, now: str | None = None):
     now = now or utcnow()
     role = role_for(identity, s)
     user = conn.execute("SELECT * FROM users WHERE entra_oid = ?", (identity.oid,)).fetchone()
-    if user is None:
-        for name in dict.fromkeys(n for n in (identity.upn, identity.email) if n):
-            user = conn.execute(
-                "SELECT * FROM users WHERE username = ? AND entra_oid IS NULL AND role <> 'client'", (name,)
-            ).fetchone()
-            if user is not None:
-                break
+    if user is None and identity.upn and "@" in identity.upn:
+        # Only the sign-in name (the UPN): Microsoft's "email" claim is neither verified nor unique.
+        user = conn.execute(
+            "SELECT * FROM users WHERE username = ? AND entra_oid IS NULL AND role <> 'client'", (identity.upn,)
+        ).fetchone()
     if user is not None and user["disabled"]:
         raise Refused("Your Office Sentry account is disabled. Ask an admin if you need it back.")
     if role is None:

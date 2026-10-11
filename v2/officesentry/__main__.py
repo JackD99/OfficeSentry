@@ -11,7 +11,7 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from . import alerts, mailer, sso, store
+from . import alerts, mailer, sso, store, totp
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -76,7 +76,8 @@ def cmd_staff_sign_in(args, cfg):
             audit(conn, "cli", "staff_sign_in_changed", detail="microsoft=off passwords=on")
     s = sso.settings(conn)
     state = "on" if sso.enabled(s) else ("set up but off" if sso.is_configured(s) else "not set up")
-    print(f"Microsoft sign-in: {state}. Passwords for staff: {s.get('sso_passwords') or 'on'}.")
+    break_glass = "allowed" if sso.break_glass(s) else "off"
+    print(f"Microsoft sign-in: {state}. Staff signing in with a password: {break_glass}.")
 
 
 def cmd_setup_link(args, cfg):
@@ -120,7 +121,7 @@ ENCRYPTED_COLUMNS = (
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.
-ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *sso.ENCRYPTED_KEYS)
+ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *sso.ENCRYPTED_KEYS, *totp.ENCRYPTED_KEYS)
 
 
 def unregistered_encrypted(conn) -> list[str]:
@@ -498,6 +499,9 @@ def cmd_delete_tenant(args, cfg):
         f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
         + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "")
         + "."
+    )
+    print(
+        "The worker erases its last copies from the files on disk in the background; System status says if that fails."
     )
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 

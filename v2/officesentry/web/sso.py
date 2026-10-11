@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 
+from cryptography.fernet import InvalidToken
 from flask import (
     Blueprint,
     Response,
@@ -25,6 +26,7 @@ from ..certs import cert_der
 from ..db import audit, transaction, utcnow
 from . import sessions
 from .access import login_required, roles_required, safe_next
+from .auth import confirm_password
 from .home import home_url
 
 bp = Blueprint("sso", __name__)
@@ -59,7 +61,7 @@ def start():
     if not sso.enabled(s):
         abort(404)
     if g.user is not None:
-        return redirect(safe_next(request.args.get("next")))
+        return redirect(home_url(g.user))  # already signed in: the sign-in page would do the same
     return _begin(sso.Flow.new(next_url=request.args.get("next")), s)
 
 
@@ -88,7 +90,13 @@ def callback():
         return redirect(url_for("auth.login"))
 
     try:
-        key_pem = _vault().decrypt(s["sso_key_enc"])
+        try:
+            key_pem = _vault().decrypt(s["sso_key_enc"])
+        except InvalidToken as exc:  # the keys were rotated without re-encrypting the settings
+            raise sso.SignInError(
+                "Office Sentry can't read the key of its sign-in certificate. An admin should make a new"
+                " certificate under Settings → Staff sign-in, or run rotate-keys again."
+            ) from exc
         identity = sso.verify_id_token(s, sso.exchange_code(s, key_pem, code, _redirect_uri(), flow), flow)
     except sso.SignInError as exc:
         audit(g.db, g.user["username"] if g.user else None, "login_failed", detail=f"Microsoft: {exc}"[:300])
@@ -151,6 +159,8 @@ def connect():
     s = sso.settings(g.db)
     if not sso.enabled(s) or g.user["role"] == "client" or g.get("public_demo"):
         abort(404)
+    if not confirm_password():  # a stolen session can't attach the thief's Microsoft account
+        return redirect(url_for("auth.account") + "#microsoft")
     hint = g.user["username"] if "@" in g.user["username"] else None
     return _begin(sso.Flow.new(link_user_id=g.user["id"]), s, login_hint=hint, prompt="select_account")
 
@@ -160,6 +170,8 @@ def connect():
 def disconnect():
     if not g.user["entra_oid"]:
         return redirect(url_for("auth.account"))
+    if not confirm_password():
+        return redirect(url_for("auth.account") + "#microsoft")
     if sso.unlink(g.db, g.user["id"]):
         audit(g.db, g.user["username"], "microsoft_disconnected")
         flash("Your Microsoft account is disconnected. You sign in with your password from now on.", "success")

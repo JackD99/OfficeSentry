@@ -18,13 +18,19 @@
   {% if current_user.entra_oid %}
   <p class="muted">You can sign in with <strong>{{ current_user.entra_upn or 'your Microsoft account' }}</strong>{% if current_user.entra_linked_at %}, connected {{ ts(current_user.entra_linked_at) }}{% endif %}. Your role comes from the role assigned to you in Entra.</p>
   {% if has_password %}
-  <form method="post" action="{{ url_for('sso.disconnect') }}">{{ csrf() }}<button class="sm">Disconnect</button></form>
+  <form method="post" action="{{ url_for('sso.disconnect') }}" class="form-row">{{ csrf() }}
+    <label>Your password <input type="password" name="password" autocomplete="current-password" required>
+      <span class="hint">Asked again before your way of signing in changes.</span></label>
+    <div class="form-actions"><button class="sm">Disconnect</button></div></form>
   {% else %}
   <p class="footnote">This account has no password: Microsoft is the only way to sign in.</p>
   {% endif %}
   {% else %}
   <p class="muted">Connect the Microsoft account you use at work and sign in with it instead of a password, with your organisation's own MFA.</p>
-  <form method="post" action="{{ url_for('sso.connect') }}">{{ csrf() }}<button class="primary">Connect my Microsoft account</button></form>
+  <form method="post" action="{{ url_for('sso.connect') }}" class="form-row">{{ csrf() }}
+    <label>Your password <input type="password" name="password" autocomplete="current-password" required>
+      <span class="hint">Asked again before your way of signing in changes.</span></label>
+    <div class="form-actions"><button class="primary">Connect my Microsoft account</button></div></form>
   {% endif %}
 </section>
 {% endif %}

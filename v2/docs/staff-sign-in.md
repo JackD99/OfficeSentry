@@ -78,12 +78,14 @@ sign-in. Then grant them clients on their user page as usual (or tick *All tenan
 
 Existing accounts are linked to a Microsoft account in one of two ways:
 
-- The person presses **Connect my Microsoft account** on their **Account** page.
+- The person presses **Connect my Microsoft account** on their **Account** page (it asks for their password
+  first, as every change to how an account signs in does).
 - At their first Microsoft sign-in, if their Office Sentry username is the same as their Microsoft sign-in
-  name (such as `jo@yourmsp.com`), the two are linked automatically and their client grants are kept.
+  name (the user principal name, such as `jo@yourmsp.com`; never the mail address, which Microsoft doesn't
+  verify), the two are linked automatically and their client grants are kept.
 
 A linked account shows its role as *set in Entra* on its user page. An admin can **Disconnect** it there,
-after which the person signs in with a password again.
+after which the person signs in with a password again; the person can do the same on their Account page.
 
 ## Turning passwords off for staff
 

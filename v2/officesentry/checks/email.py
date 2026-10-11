@@ -33,9 +33,22 @@ def external_forwarding(snap: TenantSnapshot, now: datetime):
     if (mailboxes is None and rules is None) or domains is None:
         return _unavailable("Mailbox and inbox rule data hasn't been collected yet")
     findings = []
+    unresolved = 0
     for m in mailboxes or []:
         target = mailbox_forwarding(m)
-        if target and is_external(target, domains):
+        if target and "@" not in target:
+            # ForwardingAddress names a recipient that Get-Recipient couldn't look up, so where it
+            # leads (inside or outside the organisation) isn't known.
+            unresolved += 1
+            findings.append(
+                Finding(
+                    "medium",
+                    m.get("PrimarySmtpAddress") or m["_id"],
+                    f"Forwards to an address Office Sentry couldn't resolve ({target})",
+                    f"mailbox:{m['_id']}",
+                )
+            )
+        elif target and is_external(target, domains):
             keep = "keeps a copy" if m.get("DeliverToMailboxAndForward") else "doesn't keep a copy"
             findings.append(
                 Finding(
@@ -58,11 +71,13 @@ def external_forwarding(snap: TenantSnapshot, now: datetime):
                 )
             )
     scope = "" if mailboxes is not None else " (inbox rules only; Exchange data not collected)"
-    return (
-        ("fail", f"{plural(len(findings), 'external forward')}{scope}", findings)
-        if findings
-        else ("pass", f"Nothing forwards outside the organisation{scope}", [])
-    )
+    if not findings:
+        return ("pass", f"Nothing forwards outside the organisation{scope}", [])
+    external = len(findings) - unresolved
+    parts = [plural(external, "external forward")] if external else []
+    if unresolved:
+        parts.append(f"{plural(unresolved, 'forward')} to an address Office Sentry couldn't resolve")
+    return ("fail", ", ".join(parts) + scope, findings)
 
 
 @rule(
@@ -112,16 +127,41 @@ def auto_forward_policy(snap: TenantSnapshot, now: datetime):
     policies = snap.objects("mailboxes", "outbound_spam_policy")
     if policies is None:
         return _unavailable("Exchange data hasn't been collected yet")
+    allowing = [p for p in policies if p.get("AutoForwardingMode") == "On"]
+    # The default policy covers everyone no other policy names. A scoped policy that allows forwarding
+    # is what the recommendation asks for: it opens forwarding only for the mailboxes it lists.
     findings = [
-        Finding("medium", p.get("Name") or p["_id"], "Allows automatic forwarding to any outside address", p["_id"])
-        for p in policies
-        if p.get("AutoForwardingMode") == "On"
+        Finding(
+            "medium",
+            p.get("Name") or p["_id"],
+            "Default policy allows automatic forwarding to any outside address",
+            p["_id"],
+        )
+        for p in allowing
+        if _is_default_policy(p)
     ]
+    if findings:
+        return ("fail", "Automatic external forwarding is allowed for everyone", findings)
+    scoped = len(allowing)
     return (
-        ("fail", "Automatic external forwarding is allowed", findings)
-        if findings
-        else ("pass", "Outbound policies block automatic external forwarding", [])
+        "pass",
+        "The default outbound policy blocks automatic external forwarding"
+        + (
+            f"; {plural(scoped, 'scoped policy', 'scoped policies')} {verb(scoped, 'allows', 'allow')} it "
+            f"for the mailboxes {verb(scoped, 'it covers', 'they cover')}"
+            if scoped
+            else ""
+        ),
+        [],
     )
+
+
+def _is_default_policy(policy: dict) -> bool:
+    """Whether an outbound spam filter policy is the organisation-wide default. Without IsDefault, the
+    default is the one Microsoft names "Default"."""
+    if isinstance(policy.get("IsDefault"), bool):
+        return policy["IsDefault"]
+    return policy.get("Name") == "Default" or policy.get("_id") == "Default"
 
 
 @rule(

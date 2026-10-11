@@ -557,6 +557,8 @@ body.branded .auth-card button.primary:hover { opacity: .9; }
 body.branded .auth-card a { color: var(--brand-ink); }
 @media (prefers-color-scheme: dark) { body.branded .auth-card a { color: var(--brand-ink-dark); } }
 .powered-by { margin: var(--space-3) 0 0; font-size: var(--fs-2xs); color: var(--sidebar-muted); padding: 0 var(--space-2-5); }
+/* Always its own line, so a longer version (2.2.0.dev0) never moves the account links above it. */
+.powered-by .app-version { display: block; }
 .auth-card .powered-by { color: var(--muted); text-align: center; padding: 0; }
 
 /* Client home: latest report, open recommendations, who to contact */

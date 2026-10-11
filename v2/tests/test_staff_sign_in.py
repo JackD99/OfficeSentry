@@ -23,7 +23,7 @@ from responses import matchers
 
 from officesentry import sso
 from officesentry.__main__ import main
-from tests.conftest import login, make_user
+from tests.conftest import PASSWORD, login, make_user
 
 LOGIN = "https://login.microsoftonline.com"
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -359,7 +359,7 @@ def test_connect_from_the_account_page_then_sign_in_with_microsoft(client, db, v
     login(client, "jack")
     text = page(client, "/account")
     assert "Connect my Microsoft account" in text
-    resp = client.post("/account/microsoft/connect")
+    resp = client.post("/account/microsoft/connect", data={"password": PASSWORD})
     sent = {k: v[0] for k, v in parse_qs(urlsplit(resp.headers["Location"]).query).items()}
     assert sent["prompt"] == "select_account"
     resp, _ = come_back(client, sent, id_token(JACK, sent["nonce"]))
@@ -376,7 +376,7 @@ def test_connect_from_the_account_page_then_sign_in_with_microsoft(client, db, v
     assert accounts(db) == ["jack"]
 
     # Disconnecting goes back to the password (allowed: this account has one).
-    assert client.post("/account/microsoft/disconnect").status_code == 302
+    assert client.post("/account/microsoft/disconnect", data={"password": PASSWORD}).status_code == 302
     assert db.execute("SELECT entra_oid FROM users WHERE username = 'jack'").fetchone()[0] is None
     assert "disconnected" in page(client, "/account")
 
@@ -385,7 +385,7 @@ def test_connect_from_the_account_page_then_sign_in_with_microsoft(client, db, v
 def test_connecting_warns_when_entra_gives_no_role(client, db, vault, configured):
     make_user(db, "jack")
     login(client, "jack")
-    resp = client.post("/account/microsoft/connect")
+    resp = client.post("/account/microsoft/connect", data={"password": PASSWORD})
     sent = {k: v[0] for k, v in parse_qs(urlsplit(resp.headers["Location"]).query).items()}
     come_back(client, sent, id_token(JACK, sent["nonce"], roles=[]))
     text = page(client, "/account")
@@ -400,7 +400,7 @@ def test_a_microsoft_account_connects_to_one_account_only(client, db, vault, con
     db.execute("UPDATE users SET entra_oid = ? WHERE id = ?", (JACK["oid"], other))
     db.commit()
     login(client, "jack")
-    resp = client.post("/account/microsoft/connect")
+    resp = client.post("/account/microsoft/connect", data={"password": PASSWORD})
     sent = {k: v[0] for k, v in parse_qs(urlsplit(resp.headers["Location"]).query).items()}
     come_back(client, sent, id_token(JACK, sent["nonce"]))
     assert "already connected to another" in page(client, "/account")
@@ -411,7 +411,7 @@ def test_a_microsoft_account_connects_to_one_account_only(client, db, vault, con
 def test_the_connect_callback_needs_the_same_signed_in_person(client, db, vault, configured):
     make_user(db, "jack")
     login(client, "jack")
-    resp = client.post("/account/microsoft/connect")
+    resp = client.post("/account/microsoft/connect", data={"password": PASSWORD})
     sent = {k: v[0] for k, v in parse_qs(urlsplit(resp.headers["Location"]).query).items()}
     client.post("/logout")
     resp, call = come_back(client, sent, id_token(JACK, sent["nonce"]))
@@ -422,7 +422,7 @@ def test_the_connect_callback_needs_the_same_signed_in_person(client, db, vault,
 def test_clients_cannot_connect(client, db, configured):
     make_user(db, "client1", role="client")
     login(client, "client1")
-    assert client.post("/account/microsoft/connect").status_code == 404
+    assert client.post("/account/microsoft/connect", data={"password": PASSWORD}).status_code == 404
     assert "Microsoft account" not in page(client, "/account")
 
 
@@ -437,7 +437,9 @@ def test_an_account_without_a_password_cannot_be_disconnected(client, db, vault,
     assert "has no password, so can't be disconnected" in page(client, f"/admin/users/{uid}")
     assert db.execute("SELECT entra_oid FROM users WHERE id = ?", (uid,)).fetchone()[0] == JACK["oid"]
     # Set a password on their page: now it can be, and they sign in with that password.
-    client.post(f"/admin/users/{uid}", data={"role": "admin", "password": "a brand new password"})
+    client.post(
+        f"/admin/users/{uid}", data={"role": "admin", "password": "a brand new password", "admin_password": PASSWORD}
+    )
     assert client.post(f"/admin/users/{uid}/microsoft/disconnect").status_code == 302
     assert db.execute("SELECT entra_oid FROM users WHERE id = ?", (uid,)).fetchone()[0] is None
     assert admin
@@ -492,7 +494,7 @@ def test_the_server_command_turns_passwords_back_on(client, db, configured, cfg,
     assert login(client, "jack").status_code == 200
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
     main(["staff-sign-in", "--passwords", "on"])
-    assert "Passwords for staff: on" in capsys.readouterr().out
+    assert "Staff signing in with a password: allowed" in capsys.readouterr().out
     assert login(client, "jack").status_code == 302
     client.post("/logout")
     main(["staff-sign-in", "--off"])
@@ -732,3 +734,57 @@ def test_admins_only(client, db, configured):
     assert client.get("/admin/sign-in").status_code == 403
     assert client.post("/admin/sign-in/setup").status_code == 403
     assert client.get("/admin/sign-in/certificate.cer").status_code == 403
+
+
+# -- Review follow-ups: linking, password checks, a rotated key, long names ---------------------------------
+
+
+@responses.activate
+def test_the_email_claim_never_links_an_account(client, db, vault, configured):
+    make_user(db, "amy@msp.example", role="analyst")  # Amy's mail address, not her sign-in name
+    sent = start(client)
+    token = id_token(
+        AMY, sent["nonce"], roles=["Analyst"], preferred_username="amy.lee@msp.example", email="amy@msp.example"
+    )
+    resp, _ = come_back(client, sent, token)
+    assert resp.status_code == 302
+    assert db.execute("SELECT entra_oid FROM users WHERE username = 'amy@msp.example'").fetchone()[0] is None
+    assert "amy.lee@msp.example" in accounts(db)  # a new account instead
+
+
+@responses.activate
+def test_a_username_without_an_at_sign_is_never_claimed(client, db, vault, configured):
+    make_user(db, "amy", role="analyst")
+    sent = start(client)
+    come_back(client, sent, id_token(AMY, sent["nonce"], roles=["Analyst"], preferred_username="amy"))
+    assert db.execute("SELECT entra_oid FROM users WHERE username = 'amy'").fetchone()[0] is None
+    assert "already exists and isn't yours" in page(client, "/login")
+
+
+def test_connecting_and_disconnecting_ask_for_the_password(client, db, vault, configured):
+    make_user(db, "jack")
+    login(client, "jack")
+    resp = client.post("/account/microsoft/connect", data={"password": "wrong"})
+    assert resp.status_code == 302 and resp.headers["Location"].endswith("/account#microsoft")
+    assert "isn't right" in page(client, "/account")
+    db.execute("UPDATE users SET entra_oid = ? WHERE username = 'jack'", (JACK["oid"],))
+    db.commit()
+    client.post("/account/microsoft/disconnect", data={"password": "wrong"})
+    assert db.execute("SELECT entra_oid FROM users WHERE username = 'jack'").fetchone()[0] == JACK["oid"]
+    client.post("/account/microsoft/disconnect", data={"password": PASSWORD})
+    assert db.execute("SELECT entra_oid FROM users WHERE username = 'jack'").fetchone()[0] is None
+
+
+@responses.activate
+def test_a_key_that_no_longer_decrypts_gives_a_message_not_an_error(client, db, vault, configured):
+    sso.save(db, {"sso_key_enc": "gAAAAABnot-a-token-any-more"})
+    db.commit()
+    sent = start(client)
+    resp, call = come_back(client, sent, id_token(JACK, sent["nonce"]))
+    assert resp.status_code == 302 and not call.calls
+    assert "can't read the key of its sign-in certificate" in page(client, "/login")
+
+
+def test_long_sign_in_names_are_cut_to_the_username_limit():
+    identity = sso.Identity(oid="o", tid="t", upn="a" * 70 + "@msp.example", name="", email=None)
+    assert len(identity.username) == 64
