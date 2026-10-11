@@ -33,7 +33,13 @@ def test_serve_uses_gunicorn_elsewhere(env, monkeypatch):
     seen = {}
 
     def run(self):
-        seen.update(bind=self.cfg.bind, workers=self.cfg.workers, threads=self.cfg.threads, app=self.load())
+        seen.update(
+            bind=self.cfg.bind,
+            workers=self.cfg.workers,
+            threads=self.cfg.threads,
+            app=self.load(),
+            log_format=self.cfg.access_log_format,
+        )
 
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(BaseApplication, "run", run)
@@ -41,3 +47,14 @@ def test_serve_uses_gunicorn_elsewhere(env, monkeypatch):
     assert seen["bind"] == ["0.0.0.0:8124"] and seen["workers"] == 2 and seen["threads"] == 4
     # The app was built (and the database upgraded) before any worker starts.
     assert seen["app"].test_client().get("/health").json["ok"] is True
+    # The access log keeps the path, never the query string or the referer.
+    assert "%(U)s" in seen["log_format"] and "%(r)s" not in seen["log_format"] and "%(f)s" not in seen["log_format"]
+
+
+def test_docker_access_log_leaves_out_the_query_string():
+    from pathlib import Path
+
+    from officesentry.serve import ACCESS_LOG_FORMAT
+
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
+    assert '"--access-logformat", "' + ACCESS_LOG_FORMAT.replace('"', '\\"') + '"' in dockerfile
