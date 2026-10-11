@@ -1,45 +1,116 @@
 {% extends "base.html" %}
-{% from "_roles.html" import ROLE_HELP %}
 {% block title %}{{ user.username }} · Users{% endblock %}
 {% block content %}
 <div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><span>{{ user.username }}</span></div>
 <div class="page-head"><div><h1>{{ user.username }}</h1>
   <div class="sub">{{ 'Last signed in ' ~ (user.last_login_at|ago) if user.last_login_at else 'Has never signed in' }}</div></div></div>
+{% set locked_out = out_of_reach or own_access %}
+{% if locked_out %}<p class="callout narrow-lg">{{ locked_out }}</p>{% endif %}
+{% if not out_of_reach %}
+{% if not own_access %}
 <form method="post" class="card narrow-lg">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <fieldset class="choices">
-    <legend>Role</legend>
+  {% if last_admin %}<p class="callout warn small">This is the only Administrator. Make someone else an Administrator before changing their role or disabling the account.</p>{% endif %}
+  <fieldset class="choices" data-roles>
+    <legend>Role{% if user.entra_oid %} <span class="faint small">(partly set in Entra)</span>{% endif %}</legend>
+    {% if user.entra_oid %}<p class="muted small m0">{{ user.username }} signs in with Microsoft, so the app role assigned in Entra decides at each sign-in whether they're an Administrator or staff. Change that there; which staff role they hold is picked here.</p>{% endif %}
     {% for r in roles %}
-    <label class="choice"><input type="radio" name="role" value="{{ r }}" {% if r == user.role %}checked{% endif %}>
-      <span><span class="strong">{{ r|capitalize }}</span><span class="hint">{{ ROLE_HELP.get(r, '') }}</span></span></label>
+    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if (user.id == current_user.id and r.kind != 'admin') or (r.id != role.id and r.id not in givable) or (user.entra_oid and r.kind != role.kind) %} disabled{% endif %}>
+      <span><span class="strong">{{ r.name }}{% if r.kind == 'client' %} <span class="faint small">client role</span>{% endif %}</span><span class="hint">{{ r.description }}</span></span></label>
     {% endfor %}
+    <p class="footnote m0">{% if can('users.manage') %}Roles are built-in sets of capabilities. What each one opens is listed under <strong>What {{ user.username }} can do</strong> below.{% endif %}{% if not actor.is_admin and givable|length < roles|length %} Roles that hold more than yours can only be given by an Administrator.{% endif %}</p>
   </fieldset>
   <fieldset>
-    <legend>Client access</legend>
-    <label class="check"><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> All clients, including ones added later <span class="faint small">(analysts only)</span></label>
+    <legend>Clients</legend>
+    {% if actor.sees_all %}<label class="check" data-staff-only><input type="checkbox" name="all_tenants" value="1" {% if user.all_tenants %}checked{% endif %}> Every client, including ones added later <span class="faint small">(staff roles only; some roles already cover every client)</span></label>{% endif %}
     <div class="check-grid">
     {% for t in tenants %}<label class="check"><input type="checkbox" name="tenants" value="{{ t.id }}" {% if t.id in granted %}checked{% endif %}> {{ t.name }}{% if t.archived_at %} <span class="faint small">(archived)</span>{% endif %}</label>{% else %}<p class="muted">No clients yet.</p>{% endfor %}
     </div>
   </fieldset>
   {% if groups %}
-  <fieldset>
-    <legend>Client groups <span class="faint small">(analysts only)</span></legend>
+  <fieldset data-staff-only>
+    <legend>Client groups <span class="faint small">(staff roles only)</span></legend>
     <p class="muted small m0">Every client in a ticked group, including clients added to it later. Client accounts are never given clients through a group.</p>
     <div class="check-grid">
     {% for gr in groups %}<label class="check"><input type="checkbox" name="groups" value="{{ gr.id }}" {% if gr.id in granted_groups %}checked{% endif %}> {{ gr.name }} <span class="faint small">{{ gr.tenants|plural('client') }}</span></label>{% endfor %}
     </div>
   </fieldset>
   {% endif %}
-  <label>New password <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
-    <span class="hint">Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.</span></label>
+  <label>{{ 'Password' if user.password_hash == '!' else 'New password' }} <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
+    <span class="hint">{% if user.password_hash == '!' %}This account signs in with Microsoft and has no password. Set one only as a fallback; they choose their own at their first password sign-in.{% else %}Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.{% endif %}</span></label>
   <label>Your password <span class="faint">(only to set a new password)</span><input type="password" name="admin_password" autocomplete="current-password">
     <span class="hint">Your own password, asked again before you change someone's password.</span></label>
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
   <div class="form-actions"><button class="primary">Save changes</button><a class="btn ghost" href="{{ url_for('admin.users') }}">Cancel</a></div>
 </form>
+{% endif %}
+{% endif %}
+<section class="card narrow-lg">
+  <h2>What {{ user.username }} can do</h2>
+  <p class="muted small">As {{ role.name }}{% if access.sees_all %}, on every client{% else %}, on the clients granted above{% endif %}.{% if overrides %} {{ overrides|length|plural('capability', 'capabilities') }} added or taken away for this person{% if overrides|selectattr('tenant_id')|list %}, some on one client only{% endif %}.{% endif %}</p>
+  {% for key, title, help in groups_of_capabilities %}
+  {% set held = capabilities|selectattr('group', 'equalto', key)|selectattr('key', 'in', access.anywhere())|list %}
+  {% set missing = capabilities|selectattr('group', 'equalto', key)|rejectattr('key', 'in', access.anywhere())|list %}
+  {% if held or (missing and role.kind != 'client') %}
+  <h3>{{ title }}</h3>
+  <ul class="cap-list">
+    {% for c in held %}<li title="{{ c.help }}">{{ c.title }}{% set only = overrides|selectattr('capability', 'equalto', c.key)|list %}{% if only %} <span class="faint small">{{ 'everywhere' if only|map(attribute='tenant_id')|select('none')|list else 'on some clients' }}{% if not only|selectattr('allow')|list %}, taken away{% elif c.key not in role.capabilities %}, added{% endif %}</span>{% endif %}</li>{% endfor %}
+    {% for c in missing if role.kind != 'client' %}<li class="faint" title="{{ c.help }}"><s>{{ c.title }}</s></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% endfor %}
+</section>
+{% if role.kind != 'admin' and not locked_out %}
+<section class="card narrow-lg" id="access">
+  <h2>Customise for {{ user.username }}</h2>
+  <p class="muted small">Add or take away single capabilities for this person, on top of their role. Taking away always wins{% if role.kind == 'client' %}; a client's people only ever hold report capabilities{% endif %}.</p>
+  <form method="post" action="{{ url_for('admin.user_access', user_id=user.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% set everywhere = {} %}{% for o in overrides if o.tenant_id is none %}{% set _ = everywhere.update({o.capability: o.allow}) %}{% endfor %}
+    <details class="override-details"{% if everywhere %} open{% endif %}>
+      <summary><strong>Everywhere</strong> <span class="muted small">{{ everywhere|length|plural('capability', 'capabilities') }} changed</span></summary>
+      <div class="scroll-x">
+      <table class="override-table small">
+        <thead><tr><th>Capability</th><th>Role gives it</th><th>For {{ user.username }}</th></tr></thead>
+        <tbody>
+        {% for c in capabilities if c.key in allowed_capabilities %}
+        <tr><td title="{{ c.help }}">{{ c.title }}</td>
+          <td>{{ 'Yes' if c.key in role.capabilities else '–' }}</td>
+          <td><span class="radios">
+            <label><input type="radio" name="g_{{ c.key }}" value=""{% if c.key not in everywhere %} checked{% endif %}> As the role</label>
+            <label><input type="radio" name="g_{{ c.key }}" value="allow"{% if everywhere.get(c.key) is true %} checked{% elif c.key not in grantable %} disabled{% endif %}> Allowed</label>
+            <label><input type="radio" name="g_{{ c.key }}" value="deny"{% if everywhere.get(c.key) is false %} checked{% endif %}> Taken away</label>
+          </span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </details>
+    <fieldset>
+      <legend>On one client</legend>
+      {% set per_client = overrides|rejectattr('tenant_id', 'none')|selectattr('tenant_id', 'in', tenant_names)|list %}
+      {% if per_client %}
+      <ul class="plain-list small">
+        {% for o in per_client %}{% set t = tenant_names.get(o.tenant_id) %}
+        <li><label class="check m0"><input type="checkbox" name="drop" value="{{ o.capability }}|{{ o.tenant_id }}"> <span><strong>{{ capability_titles.get(o.capability, o.capability) }}</strong> {{ 'allowed' if o.allow else 'taken away' }} on {{ t or 'a deleted client' }} <span class="faint">(tick to remove)</span></span></label></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="muted small">Nothing yet.</p>{% endif %}
+      <div class="inline-fields">
+        <label>Add on <select name="add_tenant"><option value="">Choose a client…</option>{% for t in tenants if not t.archived_at %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+        <label>Capability <select name="add_capability"><option value="">Choose…</option>{% for c in capabilities if c.key in allowed_capabilities %}<option value="{{ c.key }}">{{ c.title }}</option>{% endfor %}</select></label>
+        <label>Which <select name="add_allow"><option value="allow">Allowed</option><option value="deny">Taken away</option></select></label>
+      </div>
+    </fieldset>
+    <div class="form-actions"><button class="primary">Save access</button></div>
+  </form>
+</section>
+{% endif %}
+{% if not out_of_reach %}
 <section class="card narrow-lg">
   <h2>Sign-in security</h2>
   <dl class="kv">
+    {% if user.entra_oid %}<dt>Microsoft account</dt><dd><span class="pill ok">Connected</span> <span class="mono small">{{ user.entra_upn }}</span></dd>{% endif %}
     <dt>Two-step sign-in</dt>
     <dd>{% if user.totp_enabled_at %}<span class="pill ok">On</span>{% elif two_step_required %}<span class="pill warn">Not set up</span> <span class="muted small">They'll be asked to set it up at their next sign-in.</span>{% else %}<span class="pill">Off</span>{% endif %}</dd>
     <dt>Signed in on</dt>
@@ -64,9 +135,12 @@
   {% elif unlock %}
   <div class="form-actions wrap"><button form="unlock-user">Unlock now</button></div>
   {% endif %}
+  {% if user.entra_oid %}<form method="post" action="{{ url_for('sso.admin_disconnect', user_id=user.id) }}" class="form-actions wrap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Disconnect {{ user.username }} from Microsoft? They'll sign in with a password.">Disconnect Microsoft account</button></form>{% endif %}
   <p class="footnote">Lost phone? Reset two-step sign-in. They'll set it up again with the new phone when they next sign in.</p>
 </section>
-{% if user.id != current_user.id %}
+{% endif %}
+{% if user.id != current_user.id and not out_of_reach %}
 <section class="card narrow-lg danger-zone">
   <h2>Delete user</h2>
   <p class="muted small">Removes the account for good. Disabling is usually better, as it keeps their name in the activity history.</p>
@@ -82,5 +156,16 @@
 document.querySelectorAll('[data-confirm]').forEach(function (b) {
   b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
 });
+(function () {
+  var radios = document.querySelectorAll('[data-roles] input[type=radio]');
+  var staffOnly = document.querySelectorAll('[data-staff-only]');
+  function show() {
+    var picked = document.querySelector('[data-roles] input[type=radio]:checked');
+    var staff = picked && picked.dataset.kind === 'staff';
+    staffOnly.forEach(function (el) { el.hidden = !staff; });
+  }
+  radios.forEach(function (r) { r.addEventListener('change', show); });
+  show();
+})();
 </script>
 {% endblock %}
