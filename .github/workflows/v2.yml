@@ -99,6 +99,11 @@ jobs:
           pip install --require-hashes --no-deps -r "$RUNNER_TEMP/ruff.txt"
       - run: ruff check .
       - run: ruff format --check .
+      # The server and deploy scripts (v2/deploy/, .github/scripts/): every tracked .sh file, with the
+      # shellcheck the runner image ships, at its strictest level.
+      - name: shellcheck the shell scripts
+        working-directory: .
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=style
 
   test:
     name: test (Python ${{ matrix.python }})

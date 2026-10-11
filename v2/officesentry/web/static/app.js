@@ -161,3 +161,47 @@
     });
   });
 })();
+
+/* The setup wizards (App connection, Staff sign-in). Copy the sign-in code; fill a field from a button
+ * ([data-fill]); and while Office Sentry waits for the Microsoft sign-in ([data-setup-wait]), check with it
+ * every few seconds (it asks Microsoft) and move on by itself once the app is created or something went wrong. */
+(function () {
+  document.querySelectorAll('[data-copy]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var text = document.querySelector(button.dataset.copy).textContent.trim();
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function () { button.textContent = 'Copied'; });
+      }
+    });
+  });
+  document.querySelectorAll('[data-fill]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var input = document.querySelector(button.dataset.fill);
+      input.value = button.dataset.value;
+      input.focus();
+    });
+  });
+  var box = document.querySelector('[data-setup-wait]');
+  if (!box || !window.fetch) { return; }
+  var token = document.querySelector('input[name=csrf_token]');
+  var text = box.querySelector('[data-setup-text]'), left = box.querySelector('[data-setup-left]');
+  function minutes(seconds) {
+    var m = Math.ceil(seconds / 60);
+    return m <= 1 ? 'less than a minute' : m + ' more minutes';
+  }
+  function check() {
+    fetch(box.dataset.check, {method: 'POST', credentials: 'same-origin',
+                              headers: {'Accept': 'application/json', 'X-CSRFToken': token ? token.value : ''}})
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { setTimeout(check, 10000); return; }
+        if (d.status !== 'waiting' && d.status !== 'working') { location.reload(); return; }
+        text.textContent = d.status === 'working' ? 'Signed in. Creating the app…'
+          : (d.note || 'Waiting for you to sign in. This page moves on by itself.');
+        if (left) { left.textContent = minutes(d.seconds_left); }
+        setTimeout(check, Math.max(d.wait || 5, 2) * 1000);
+      })
+      .catch(function () { setTimeout(check, 10000); });
+  }
+  setTimeout(check, Math.max(parseInt(box.dataset.setupWait, 10) || 5, 2) * 1000);
+})();

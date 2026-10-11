@@ -85,6 +85,8 @@ overview and DEPLOY.md for running it on a server.
 
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
+An answer longer than `exchange.MAX_PAGES` pages is cut there, and the run is
+partial with a warning naming the cmdlet (`RunContext.note_exchange_cuts`).
 
 The two SharePoint collectors list sites and OneDrives through
 `collectors/sharepoint_lookup.Lookups`, both asking for the same fields
@@ -310,6 +312,24 @@ something searchable, add a `Kind(key, collector, kind, values)` to
 `search_index.KINDS` and a `show` under its key in `search.SHOW`, linking the
 person's page or the detail report filtered to the row.
 
+## One page per mailbox, group or site
+
+`reports/object_page.py` is the same pattern for things that aren't people: an `ObjectPage` drawn by
+`templates/object_page.html` for every kind, a `Subject` (the snapshot, the object, `flag()`), areas as
+`@part(kind, order)` functions returning a `Part`, `findings_for()`, `sources_for()` and `object_path()`.
+Each kind is one module (`reports/mailbox_page.py`: `/tenants/<id>/mailboxes/<object id>` and the
+Mailboxes list, routes in `web/mailboxes.py`; `reports/group_page.py`: `/tenants/<id>/groups/<group id>`
+for teams, Microsoft 365 and security groups and distribution lists, joined by directory id or address,
+and the Groups and teams list, routes in `web/group_pages.py`), imported in `reports/__init__.py`, with
+its list in the Users tab's second row. A module registers how its objects are named in reports in
+`data_reports.PAGE_INDEXES` as a `PageIndex(build, where)`: `build` maps lower-cased names to page paths
+and `where(section title, column)` says which cells may link (None for any column; group names only link
+in group columns, so a department called Sales stays text). `data_reports.build()` and the person page
+turn matching plain cells into `PageLink`s after people are linked, so an address that is an account's
+still opens the person's page. Pages read stored snapshots only (`store.object_copies` for history) and
+link back to the reports the facts came from, filtered to the object (`Subject.report()`). Part order 15
+on the group page is kept free for Teams detail (channels, apps, guests per channel) once collected.
+
 ## Home pages by role
 
 `home.py` (pages in `web/home.py`, staff only, `@group_aware` over `scoped_tenants()`): **Today**
@@ -321,6 +341,10 @@ reports to approve and projects to propose). Each opens with one sentence (`Toda
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
 and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
+Until the first collection has run, admins see the **Get started** checklist (`first_run.py`,
+`_get_started.html`) on Today, Accounts and Clients instead of the empty state: the app connection, the first
+client, its consent and its first collection, each read from stored state, with `web/home.get_started`
+turning each step's `target` into a link.
 
 ## Web UI conventions
 
@@ -784,6 +808,19 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   missing files.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
+## Logs and the support package
+
+`logs.setup(data_dir, process)` (called by `create_app` and the `worker` command) logs to stderr and to
+`<data dir>/logs/<process>.log` (`LOG_FILES` × `LOG_BYTES`, several processes may share `web.log`). Wrap
+work in `logs.context(run=..., tenant=..., task=...)` so its lines carry that context; the portal sets
+`req=`, `user=` and `tenant=` per request, answers `X-Request-ID`, and the 500 page shows the id as the
+reference to quote. `support.build()` gathers the package from stored state and those files only (never
+Microsoft) and `support.Redactor` sweeps every piece of free text; a new part is a `part(...)` call in
+`build` and a line in `PARTS`, and a new kind of secret is a pattern in `support.PATTERNS` with a case in
+`tests/test_support.py`, which plants each kind of secret and name and searches every byte of the zip.
+Settings values go in the package only when listed in `PLAIN_SETTINGS` (or a prefix in
+`PLAIN_SETTING_PREFIXES`); everything else is a name and a length.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
@@ -824,6 +861,7 @@ and `python -m officesentry <command>`:
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `history [--dry-run\|--backfill\|--verify]` | the daily history: progress, an estimate of the backfill without writing, the backfill now, or a check that it reads back as the snapshots |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
+| `support-package [--out FILE\|-] [--include-identifiers]` | the zip to attach to a bug report (`support.py`): versions, settings, health, failures and logs with secrets and client names taken out; works over a broken database or configuration |
 | `live-test [--record FILE] [--canary REPORT]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture or compare the answers' shape with it (the live canary) |
 
 Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own

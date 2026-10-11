@@ -11,7 +11,8 @@ from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .. import __version__, system_alerts, system_health, worker
+from .. import __version__, logs, system_alerts, system_health, worker
+from .. import sso as staff_sign_in
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
 from ..db import audit_counted, connect, is_locked, migrate
@@ -27,9 +28,11 @@ from . import (
     designs,
     email,
     filters,
+    group_pages,
     groups,
     history,
     home,
+    mailboxes,
     onboarding,
     people,
     projects,
@@ -39,10 +42,14 @@ from . import (
     saved_views,
     search,
     styleguide,
+    support,
     system,
     tenant_admin,
     tenants,
     upcoming,
+)
+from . import (
+    sso as sso_web,
 )
 
 csrf = CSRFProtect()
@@ -56,6 +63,7 @@ WEB_BUSY_TIMEOUT_MS = 5_000
 
 def create_app(cfg: Config | None = None) -> Flask:
     cfg = cfg or load_config()
+    logs.setup(cfg.data_dir, "web")
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=cfg.secret_key,
@@ -98,6 +106,15 @@ def create_app(cfg: Config | None = None) -> Flask:
         g.db = connect(cfg.db_path, busy_timeout_ms=WEB_BUSY_TIMEOUT_MS)
         g.csp_nonce = secrets.token_urlsafe(16)
         access.load_user()
+        # Every line logged while handling this request names it (logs.py); the id goes back in the
+        # X-Request-ID header and on the error page, so a report can quote it.
+        g.request_id = logs.new_request_id()
+        user = g.get("user")
+        g.log_token = logs.push(
+            req=g.request_id,
+            user=user["username"] if user else None,
+            tenant=(request.view_args or {}).get("tenant_id"),
+        )
 
     # On the public demo site, nothing but reading (after load_user, which sets g.public_demo).
     app.before_request(public_demo.refuse_changes)
@@ -108,6 +125,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         db = g.pop("db", None)
         if db is not None:
             db.close()
+        logs.pop(g.pop("log_token", None))
 
     @app.after_request
     def _security_headers(resp):
@@ -122,6 +140,8 @@ def create_app(cfg: Config | None = None) -> Flask:
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "SAMEORIGIN" if override else "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
+        if request_id := g.get("request_id"):
+            resp.headers["X-Request-ID"] = request_id
         resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         # A page the portal opens can't keep a handle on it, and no other site can embed its pages, downloads,
         # brand logo or files (emails carry the logo as image data, not a link).
@@ -156,8 +176,11 @@ def create_app(cfg: Config | None = None) -> Flask:
         worker_down = admin and not worker.is_alive(g.db)
         # ...and when a certificate Office Sentry signs in with is within 60 days of expiring.
         # Not on the page that already says so in full.
-        here = {"admin.connections": "connection", "email.settings": "mail"}.get(request.endpoint)
+        here = {"admin.connections": "connection", "email.settings": "mail", "sso.settings_page": "sign_in"}.get(
+            request.endpoint
+        )
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
+        sign_in = staff_sign_in.settings(g.db) if g.get("db") is not None else {}
         return {
             "current_user": user,
             "csp_nonce": g.get("csp_nonce", ""),
@@ -167,6 +190,9 @@ def create_app(cfg: Config | None = None) -> Flask:
             "group_scope": g.get("group_scope"),
             "public_demo": bool(g.get("public_demo")),
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
+            # Sign in with Microsoft (sso.py): the sign-in page's button, and whether staff may still use passwords.
+            "microsoft_sign_in": staff_sign_in.enabled(sign_in),
+            "staff_passwords_off": sign_in.get("sso_passwords") == "off",
         }
 
     def _error(code: int, message: str, detail: str = ""):
@@ -244,6 +270,18 @@ def create_app(cfg: Config | None = None) -> Flask:
             "portal's log.",
         )
 
+    @app.errorhandler(500)
+    def _failed(_e):
+        # Flask has already logged the traceback with this request's id in its context.
+        return render_template(
+            "error.html",
+            code=500,
+            message="Something went wrong on our side.",
+            detail="It has been logged. Try again; if it keeps happening, quote the reference below when you ask "
+            "for help.",
+            reference=g.get("request_id"),
+        ), 500
+
     @app.get("/health")
     def health():
         # The version lets an uptime monitor (or a person after an update) confirm what is running.
@@ -273,6 +311,8 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(data_retention.bp)
     app.register_blueprint(across.bp)
     app.register_blueprint(people.bp)
+    app.register_blueprint(mailboxes.bp)
+    app.register_blueprint(group_pages.bp)
     app.register_blueprint(history.bp)
     app.register_blueprint(saved_views.bp)
     app.register_blueprint(tenant_admin.bp)
@@ -283,6 +323,8 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(groups.bp)
     app.register_blueprint(upcoming.bp)
     app.register_blueprint(system.bp)
+    app.register_blueprint(support.bp)
     app.register_blueprint(styleguide.bp)
     app.register_blueprint(designs.bp)
+    app.register_blueprint(sso_web.bp)
     return app

@@ -87,9 +87,24 @@ SECTIONS = [
                 blurb="Consent, Global Reader, the first collection, connection health and offboarding.",
             ),
             Doc(
+                "v2/docs/staff-sign-in.md",
+                "staff-sign-in",
+                blurb="Let your team sign in with their Microsoft account, with roles assigned in Entra.",
+            ),
+            Doc(
                 "v2/docs/troubleshooting.md",
                 "troubleshooting",
                 blurb="The common setup and collection errors, and how to fix them.",
+            ),
+            Doc(
+                "v2/docs/getting-help.md",
+                "getting-help",
+                blurb="Where to look first, the support package to attach to a bug report, and what it leaves out.",
+            ),
+            Doc(
+                "v2/docs/securing-the-portal.md",
+                "securing",
+                blurb="What the portal does by itself, what you have to do, and reverse proxy setups.",
             ),
         ],
     ),

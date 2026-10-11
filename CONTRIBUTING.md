@@ -81,6 +81,11 @@ ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
 
+A change to a shell script (`v2/deploy/`, `.github/scripts/`) is also checked
+with [ShellCheck](https://www.shellcheck.net) at its strictest level:
+`shellcheck --severity=style <file>` (`tests/test_deploy_hardening.py` runs it
+too when it's installed).
+
 CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request, with
 a Docker image build, a dependency audit (`pip-audit`) and a subset on
 Windows. Changes that only touch Markdown, `docs/`, `examples/` or
@@ -128,10 +133,11 @@ The same gates apply to every change, whoever wrote it:
 
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
-- CI runs `ruff check` and `ruff format --check`, the full test suite on
-  Python 3.11, 3.12 and 3.13 (with a 90% coverage floor), a Windows subset,
-  a Docker build and `pip-audit` over every lock file on every pull
-  request, and a pull request isn't merged until it's green. The pull
+- CI runs `ruff check` and `ruff format --check`, ShellCheck over the shell
+  scripts, the full test suite on Python 3.11, 3.12 and 3.13 (with a 90%
+  coverage floor), a Windows subset, a Docker build and `pip-audit` over
+  every lock file on every pull request, and a pull request isn't merged
+  until it's green. The pull
   request template's checklist covers migrations, new permissions, the
   access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
@@ -185,11 +191,13 @@ does the work. To make a release:
 3. The run checks the version matches `__version__` and the changelog, and
    that the commit passed its full CI run on `main` (so release from `main`
    once that run is green; the release reuses it rather than testing again).
-   It builds the amd64 and arm64 images with an SBOM and build provenance,
-   starts each once, scans them, signs their provenance, publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
+   It builds the amd64 and arm64 images (arm64 natively on GitHub's Arm
+   runner) with an SBOM and build provenance, starts each once, scans them,
+   signs their provenance, publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
    `2` and `latest`), creates the `v2.1.0` tag and the GitHub release with
    the notes and install files, and removes images older than the last three
    releases. Nothing is published until the checks and the scan have passed.
+   A run takes about 5 Actions minutes, which are free for a public repository.
 4. Open a pull request that moves `__version__` on to the next development
    version (`2.2.0.dev0`) and adds a `## [2.2.0] - Unreleased` section.
 

@@ -5,8 +5,8 @@ request. Each opens an issue when it fails (labelled `nightly` or `canary`), upd
 failing, and closes it when a run passes again, so a failure arrives as a notification rather than a red run
 nobody opens.
 
-While the repository is private they run on Mondays, to save Actions minutes; set the repository variable
-`SCHEDULED_CHECKS_NIGHTLY` to `true` (at go-public, when standard runners are free) and they run every night.
+They run on Mondays; set the repository variable `SCHEDULED_CHECKS_NIGHTLY` to `true` and they run every
+night (standard runners are free for a public repository).
 Either can be run by hand: **Actions**, pick the workflow, **Run workflow**.
 
 ## Nightly suite (`.github/workflows/nightly.yml`)
