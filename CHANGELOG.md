@@ -9,6 +9,21 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.3.0] - Unreleased
+
+### Security
+
+- **Release images you can check by their version tag.** Each release's multi-platform image, the one its
+  version tags point at and `docker pull` fetches, now has a signed build provenance of its own, so
+  `gh attestation verify oci://ghcr.io/jackd99/officesentry:<version> --repo JackD99/OfficeSentry` passes
+  ([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Until now only each platform's build
+  was signed. The release notes give the image's digest.
+- The image no longer includes pip, which nothing uses once it's built and whose bundled copy trailed pip's
+  own security fixes.
+- The project's own GitHub workflows: the tools CI installs for itself come from a hash-pinned lock, and the
+  jobs that publish images or deploy no longer leave their token in the checked-out code or build the website
+  on the runner that holds the server's keys.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site
@@ -718,6 +733,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

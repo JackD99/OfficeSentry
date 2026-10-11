@@ -382,7 +382,8 @@ docker compose --profile https up -d
 
 The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
 public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
-scanned by GitHub Actions from a tagged release, with a signed build provenance. Each release lists what changed,
+scanned by GitHub Actions from a tagged release, with a signed build provenance you can check
+([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Each release lists what changed,
 and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:

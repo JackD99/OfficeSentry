@@ -181,6 +181,30 @@ place, but nobody can sign in with the old one.
 - Review the Entra app's permissions and sign-in logs in your own tenant
   from time to time.
 
+## Checking a release
+
+Every image at [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
+is built by this repository's [release workflow](.github/workflows/release.yml) from a tagged commit on
+`main` that passed the full CI run, and scanned before it gets a version tag (a fixable vulnerability rated
+high or critical stops the release). Each one carries an SBOM and a build provenance saying which workflow,
+commit and tag made it, and the provenance is signed through GitHub's artifact attestations (Sigstore). To
+check an image before running it, with the [GitHub CLI](https://cli.github.com) and the version you're
+installing:
+
+```bash
+gh attestation verify oci://ghcr.io/jackd99/officesentry:2.3.0 --repo JackD99/OfficeSentry
+```
+
+It passes only for an image this repository's workflow built; anything else, or a copy changed since, fails.
+Releases up to 2.2.0 signed each platform's build but not the multi-platform image the version tags point at,
+so for those, check the digest the release notes list instead (`oci://ghcr.io/jackd99/officesentry@sha256:…`).
+
+What goes into the image is pinned too: Python packages from hash-pinned lock files that CI audits for known
+vulnerabilities on every change and every week, and the base image by digest. The image runs as an
+unprivileged user and leaves out pip, which nothing needs once it's built. The GitHub Actions the workflows
+use are pinned to full commit hashes, and the jobs that can publish or deploy don't keep their token where
+the code they build could read it.
+
 ## Known limitations
 
 - SQLite suits one server; it isn't built for several web servers sharing a database.
