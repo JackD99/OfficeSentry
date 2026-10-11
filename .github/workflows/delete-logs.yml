@@ -1,0 +1,54 @@
+name: Delete run logs
+# Run logs are public. When some showed what they shouldn't have (the server's address, the portal's name),
+# this deletes the logs of one workflow's runs up to a run number; the runs stay listed, without logs. It
+# can't be undone. Run it by hand: Actions > Delete run logs > Run workflow (v2/DEPLOY.md, "When the
+# repository goes public"); only people with write access can.
+on:
+  workflow_dispatch:
+    inputs:
+      workflow:
+        description: Workflow whose run logs to delete
+        type: choice
+        options: [deploy.yml, canary.yml, nightly.yml, release.yml, ui.yml, v2.yml, website.yml, labels.yml]
+        default: deploy.yml
+      up_to:
+        description: 'Delete the logs of its runs up to and including this run number (the # beside each run)'
+        type: number
+        required: true
+
+permissions: {}
+
+jobs:
+  delete:
+    name: Delete run logs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write  # deleting run logs
+    steps:
+      - name: Delete the logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW: ${{ inputs.workflow }}
+          UP_TO: ${{ inputs.up_to }}
+        run: |
+          case "$UP_TO" in
+            '' | *[!0-9]*) echo "::error::The run number must be a whole number."; exit 1 ;;
+          esac
+          # Finished runs only: a running one's logs can't be deleted yet.
+          ids=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/runs?status=completed&per_page=100" \
+            --jq ".workflow_runs[] | select(.run_number <= $UP_TO) | .id")
+          deleted=0
+          failed=0
+          for id in $ids; do
+            if out=$(gh api --silent -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id/logs" 2>&1); then
+              deleted=$((deleted + 1))
+            else
+              echo "Run $id: $out"
+              failed=$((failed + 1))
+            fi
+          done
+          echo "Deleted the logs of $deleted $WORKFLOW runs up to run $UP_TO." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$failed" -gt 0 ]; then
+            echo "$failed couldn't be deleted (the log says why; a run that was skipped has none)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
