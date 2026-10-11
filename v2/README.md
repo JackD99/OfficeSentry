@@ -329,7 +329,12 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   in each form's wording with text to copy and paste, and the Microsoft 365
   data and date behind each. Questions Microsoft 365 can't answer carry a
   text to complete. Staff can override any answer with a note, which fills
-  every form and scheme.
+  every form and scheme. **IASME Cyber Assurance**, **ISO/IEC 27001 Annex
+  A** (by control number) and **UK GDPR** (the ICO's security outcomes and
+  the accountability records) are packs on the same page, with the
+  governance and data protection answers to complete, as are the **CIS
+  Microsoft 365 benchmark**, **NIST CSF 2.0**, **SOC 2** and the
+  **Essential Eight**.
 - **Recommended projects** (`/projects` and `/tenants/<id>/projects`, for roles
   with *Recommended projects*): each client's failing checks and missing
   licences grouped into the projects that fix them (Identity and Conditional

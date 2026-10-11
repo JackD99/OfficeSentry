@@ -14,7 +14,8 @@
 
 <nav class="subtabs evidence-sets" aria-label="Scheme">
   <a href="{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}">{{ icon('arrow', 'back') }} All packs</a>
-  {% for title, found in groups %}{% for s in found %}<a href="{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme=s.key) }}"{% if s.key == scheme.key %} class="active" aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}{% endfor %}
+  {# the packs in this one's group; All packs lists the rest #}
+  {% for title, found in groups if scheme in found %}{% for s in found %}<a href="{{ url_for('evidence.scheme_page', tenant_id=tenant.id, scheme=s.key) }}"{% if s.key == scheme.key %} class="active" aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}{% endfor %}
 </nav>
 
 <div class="toolbar">
@@ -67,7 +68,7 @@
 
 {% if r.to_fix or r.to_review %}
 <section class="card fix-first" id="fix" aria-labelledby="fix-h">
-  <div class="card-head"><h2 id="fix-h">{{ 'Fix before you apply' if scheme.strict else 'Gaps to close' }}</h2><span class="muted small">{{ (r.to_fix|length + r.to_review|length)|plural('control') }}</span></div>
+  <div class="card-head"><h2 id="fix-h">{{ scheme.fix_heading }}</h2><span class="muted small">{{ (r.to_fix|length + r.to_review|length)|plural('control') }}</span></div>
   <ol class="fix-list">
     {% for c in r.to_fix + r.to_review %}
     <li>
@@ -115,7 +116,7 @@
 
 {% if scheme.audit %}
 <section class="card flush audit" aria-labelledby="audit-h">
-  <div class="card-head"><h2 id="audit-h">What the assessor tests</h2></div>
+  <div class="card-head"><h2 id="audit-h">What the assessor checks</h2></div>
   <p class="intro">The on-site tests, what each needs, and what Microsoft 365 already shows for it.</p>
   {% for a in scheme.audit %}
   <div class="answer-row audit-row">
@@ -123,7 +124,7 @@
       <div class="q">{{ a.title }}</div>
       <p class="small m0">{{ a.what }}</p>
       <p class="small muted m0"><strong>Microsoft 365 shows:</strong> {{ a.m365 }}</p>
-      {% if a.controls %}<p class="small m0 audit-verdicts">{% for k in a.controls %}{% set c = r.by_key[k] %}<a href="#control-{{ k }}">{{ verdict_pill(c.verdict) }} {{ c.control.ref }}</a>{% endfor %}</p>{% endif %}
+      {% if a.controls %}<p class="small m0 audit-verdicts">{% for k in a.controls %}{% set c = r.by_key[k] %}<a href="#control-{{ k }}">{{ verdict_pill(c.verdict) }} {{ c.control.ref or c.control.title }}</a>{% endfor %}</p>{% endif %}
     </div>
   </div>
   {% endfor %}
