@@ -1251,7 +1251,7 @@ def site_people(t: dict, users: list[dict], rng: random.Random) -> tuple[dict, d
                 "marketing": [bob],  # the only owner has left: an ownerless site
                 "practice": [heads[0]],
                 "operations": [heads[1 % len(heads)]],
-            }.get(slug, [ann, heads[hash(slug) % len(heads)]])
+            }.get(slug, [ann, heads[zlib.crc32(slug.encode()) % len(heads)]])  # not hash(): it varies per run
             site_members = rng.sample(staff, min(len(staff), rng.randint(6, 14)))
             site_guests = {
                 "clients": OUTSIDE_GUESTS[:2],
