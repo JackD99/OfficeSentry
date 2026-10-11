@@ -2,11 +2,21 @@
 
 from datetime import UTC, datetime
 
-from officesentry import delivery, lifecycle, month_end, store, tasks
+import responses
+
+from officesentry import delivery, lifecycle, mailer, month_end, store, tasks
 from officesentry.db import connect
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
-from tests.test_email import _smtp_ready, fake_smtp, sends  # noqa: F401 (autouse fixture)
+from tests.test_email import (  # noqa: F401 (autouse fixture)
+    GRAPH_SEND,
+    THROTTLED,
+    _graph_db,
+    _smtp_ready,
+    fake_smtp,
+    paced,
+    sends,
+)
 
 NOW = datetime.now(UTC)
 PERIOD = f"{NOW.year}-{NOW.month:02d}"  # the server timezone in tests is UTC
@@ -191,6 +201,39 @@ def test_queue_lists_planned_tenants_with_states_and_flags(client, db, two_tenan
     assert client.get("/reporting/2026-13").status_code == 404
 
 
+def test_a_data_source_never_collected_is_flagged(client, db, two_tenants):
+    """A client whose Exchange refuses the app has everything else collected each night, so its data is never
+    "older than 24 hours"; the month still mustn't look Ready when its report says mailboxes weren't collected."""
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    seed_tenant(db, bravo)
+    for tenant in (alpha, bravo):
+        delivery.add_contact(db, tenant, "IT", f"it@{tenant}.com")
+    _admin(client, db)
+    _plan(client, [alpha, bravo])
+    db.execute("UPDATE findings SET first_seen = '2020-01-01T00:00:00Z'")  # nothing new this month
+    db.execute("UPDATE runs SET status = 'failed' WHERE tenant_id = ? AND collector = 'mailboxes'", (alpha,))
+    db.execute(
+        "UPDATE runs SET status = 'failed' WHERE tenant_id = ? AND collector IN ('mail_flow', 'mobile_devices')",
+        (bravo,),
+    )
+    tenants = db.execute("SELECT * FROM tenants").fetchall()
+    for cached in (False, True, True):  # built, stored, then read from what was stored
+        rows = {r.tenant["id"]: r for r in month_end.queue(db, tenants, PERIOD, cached=cached)}
+        assert rows[alpha].flags == ["Mailboxes not collected"] and not rows[alpha].ready
+        assert rows[bravo].flags == ["2 data sources not collected"] and not rows[bravo].ready
+    assert "Mailboxes not collected" in client.get(f"/reporting/{PERIOD}").get_data(as_text=True)
+    assert "Mailboxes not collected" in client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+    db.execute("UPDATE runs SET status = 'succeeded' WHERE status = 'failed'")
+    assert all(r.ready for r in month_end.queue(db, tenants, PERIOD, cached=False))
+
+    # A client that removed the app: sign-in fails, and only a source that needed nothing from Microsoft
+    # finished, so its report would say no check could run. That's never Ready either.
+    db.execute("UPDATE runs SET status = 'failed' WHERE tenant_id = ? AND collector != 'inbox_rules'", (bravo,))
+    rows = {r.tenant["id"]: r for r in month_end.queue(db, tenants, PERIOD, cached=False)}
+    assert rows[bravo].flags == ["No checks could run"] and not rows[bravo].ready and rows[alpha].ready
+
+
 def test_review_suggests_projects_then_quick_fixes(client, db, two_tenants):
     """Projects are half a day or more; smaller fixes are offered separately, and nothing is offered twice."""
     from officesentry import projects
@@ -337,6 +380,28 @@ def test_approve_freezes_sends_and_reissue_increments_version(client, db, two_te
     actions = [a[0] for a in db.execute("SELECT action FROM audit_log WHERE action LIKE 'report_%' ORDER BY id")]
     assert "report_approved" in actions and "report_reissued" in actions and "report_sent" in actions
     assert "Version 2" in client.get(f"/reporting/{PERIOD}/{alpha}").get_data(as_text=True)
+
+
+@responses.activate
+def test_bulk_approval_waits_out_microsofts_sending_limit(client, db, two_tenants, vault, monkeypatch):
+    """Exchange Online takes 30 messages a minute from one mailbox. A month-end approving more clients than
+    that at once had the rest refused (429) and left Approved but unsent; the approval waits its turn now."""
+    fake = paced(monkeypatch)
+    monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
+    monkeypatch.setattr(delivery.export, "to_pdf", lambda html, base: b"%PDF-1.7 frozen")
+    _graph_db(db, vault)
+    for tenant, address in zip(two_tenants, ("it@alpha.com", "it@bravo.com"), strict=True):
+        seed_tenant(db, tenant)
+        delivery.add_contact(db, tenant, "IT", address)
+    responses.post(GRAPH_SEND, status=429, json=THROTTLED, headers={"Retry-After": "45"})
+    responses.post(GRAPH_SEND, status=202)
+    _admin(client, db)
+    _plan(client, two_tenants, include_xlsx="")
+    client.post(f"/reporting/{PERIOD}/approve", data={"tenants": [str(t) for t in two_tenants]})
+    assert work(client) == 2
+    assert [month_end.state_of(db, t, PERIOD) for t in two_tenants] == ["sent", "sent"]
+    assert len(responses.calls) == 3 and fake.slept == [45]
+    assert db.execute("SELECT COUNT(*) FROM email_deliveries WHERE status = 'sent'").fetchone()[0] == 2
 
 
 def test_portal_plan_publishes_without_email(client, db, two_tenants):

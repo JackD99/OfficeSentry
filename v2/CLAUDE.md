@@ -638,6 +638,16 @@ send fails with the reason and retries), and Send now and Retry refuse while
 the timer's `send_schedule` task for the period is queued or running
 (`being_sent`), so nobody sends a period twice.
 
+Exchange Online takes 30 messages a minute from one mailbox and answers 429
+past that, so every send in a process takes its turn in `mailer.PACER` (per
+sender, `PER_MINUTE`), and a Graph 429 or 503 holds that sender for its
+`Retry-After` and is sent again. Only sends inside `mailer.patient()` wait (the
+`approve` and `send_schedule` task handlers, up to `BACKGROUND_PATIENCE`); a web
+request or the main loop sends at once and gets Microsoft's refusal as before.
+Once Microsoft has refused a sender for that long (an outage), later sends try
+once and fail, rather than each holding a task thread for ten minutes. Tests
+start each with a fresh pacer (`conftest._fresh_mail_pacer`).
+
 **Coming up** (`upcoming.py`, page `/upcoming` in `web/upcoming.py`, admin and analyst) lists what falls
 due in the next 90 days across the visible, active tenants: subscription renewals and trials (lapsing ones
 need attention now), client app secrets and certificates (and expired in the last 30 days), mailboxes at
@@ -678,7 +688,9 @@ report, who has no contacts or recipients) with a fix link per gap.
 implicit Draft per month (`report_reviews` only gets a row once someone acts),
 then In review, Approved, Sent. The period is the schedule period the report
 goes out in. Flags: new critical findings since the last issued report, data
-older than 24 h, checks that couldn't run. "Ready" means not yet issued and
+older than 24 h, no check able to run (`summary.NOT_CHECKED`: sign-in failing),
+else a data source never collected while others were (`ReviewFacts.missing`),
+checks that crashed. "Ready" means not yet issued and
 nothing flagged. The review screen (`/reporting/<period>/<tenant>`) edits the
 month's commentary, the tenant's "What we recommend next" items
 (`report_actions`, kept across months, prefilled from
@@ -871,6 +883,12 @@ the worker (the `compact` command does it all and shrinks the file). So:
 - `scripts/scale_data.py` builds N tenants with two years of history for
   sizing and timing (`--plain --compact` measures before and after,
   `--history` the daily history below).
+- `scripts/month_end_dry_run.py` runs a night's collection and the month-end
+  after it for N clients against Microsoft simulated at the HTTP level (its
+  limits as 429s, random 429s and 503s, clients that only partly collect,
+  `sendMail` at 30 a minute), through the real worker and portal, and prints
+  what broke, what was slow and what was flagged (`--month-end-only` on a
+  `scale_data.py` database). Run it before the first month-end on new code.
 
 ## Daily history (state history)
 

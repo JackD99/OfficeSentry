@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from .branding import money
 
 SEVERITIES = ("critical", "high", "medium", "low")
+NOT_CHECKED = "Not checked yet"  # the verdict when no check could run (the month-end queue flags it)
 
 
 @dataclass
@@ -70,7 +71,7 @@ def monthly(report) -> ExecSummary:
 
     if not ran:
         verdict = Verdict(
-            "medium", "Not checked yet", f"Nothing has been collected for {name} yet, so no security checks could run."
+            "medium", NOT_CHECKED, f"Nothing has been collected for {name} yet, so no security checks could run."
         )
     elif by_sev["critical"]:
         verdict = Verdict(

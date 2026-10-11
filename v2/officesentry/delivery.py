@@ -1604,7 +1604,8 @@ def _send_schedule_task(ctx: tasks.TaskContext) -> dict:
     if s is None or not _due(ctx.conn, s, ctx.cfg, now):
         return {"skipped": True}
     ctx.progress("Building and sending the email")
-    error = send_schedule(ctx.app, ctx.conn, ctx.vault, s, trigger="schedule", now=now)
+    with mailer.patient():  # many come due at once on the 1st; they wait their turn rather than fail
+        error = send_schedule(ctx.app, ctx.conn, ctx.vault, s, trigger="schedule", now=now)
     if error:
         raise tasks.TaskFailed(error)  # the schedule itself retries with backoff (send_schedule)
     return {"sent": True}
