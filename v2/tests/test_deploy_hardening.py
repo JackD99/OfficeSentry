@@ -28,6 +28,16 @@ def clean_env(monkeypatch):
     return monkeypatch
 
 
+@pytest.mark.parametrize(
+    ("name", "value"), [("SESSION_HOURS", "0"), ("SESSION_IDLE_MINUTES", "0"), ("TRUSTED_PROXIES", "-1")]
+)
+def test_session_and_proxy_settings_are_checked_at_start(clean_env, tmp_path, name, value):
+    """SESSION_HOURS=0 used to start fine and sign everyone out on their next request."""
+    clean_env.setenv("OFFICESENTRY_" + name, value)
+    with pytest.raises(ValueError, match=name):
+        load_config(data_dir=tmp_path / "data")
+
+
 def test_without_a_keys_file_setting_the_keys_stay_in_the_data_folder(clean_env, tmp_path):
     cfg = load_config(data_dir=tmp_path / "data")
     assert cfg.secrets_path == tmp_path / "data" / "secrets.json"
@@ -247,6 +257,38 @@ def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_
     close = jobs["close-ssh"]["steps"][0]["run"]
     assert "select(.description != $rule)" in close and "/actions/set_rules" in close
     assert workflow.count("cancel-in-progress: false") == 1  # runs never overlap, so the rule found is this run's
+
+
+def test_the_server_address_and_portal_name_stay_out_of_public_run_logs():
+    """A step's log opens with its settings, where only secrets are hidden (deploy.yml's opening comment)."""
+    workflows = V2.parent / ".github" / "workflows"
+    deploy = (workflows / "deploy.yml").read_text(encoding="utf-8")
+    for name in ("DEPLOY_HOST", "OFFICESENTRY_DOMAIN", "OFFICESENTRY_SETTINGS", "BACKUP_REPOSITORY"):
+        reads = re.findall(r"\$\{\{ ([^}]*\bvars\." + name + r"\b[^}]*) \}\}", deploy)
+        assert reads and set(reads) == {f"secrets.{name} || vars.{name}"}, name
+    # The first-admin step's log and summary don't name the portal either.
+    setup = deploy[deploy.index("name: Set the first-admin code") : deploy.index("name: Back up, or run the restore")]
+    assert "DOMAIN" not in setup
+    canary = (workflows / "canary.yml").read_text(encoding="utf-8")
+    assert re.findall(r"\$\{\{ ([^}]*\bvars\.CANARY_TENANT_ID\b[^}]*) \}\}", canary) == [
+        "secrets.CANARY_TENANT_ID || vars.CANARY_TENANT_ID"
+    ]
+
+
+def test_the_shell_scripts_pass_shellcheck():
+    """The server and deploy scripts, at ShellCheck's strictest level; the lint job runs the same."""
+    workflow = yaml.safe_load((V2.parent / ".github" / "workflows" / "v2.yml").read_text(encoding="utf-8"))
+    steps = [step.get("run", "") for step in workflow["jobs"]["lint"]["steps"]]
+    assert any("git ls-files -z '*.sh' | xargs -0 shellcheck --severity=style" in run for run in steps)
+    scripts = sorted(str(p.relative_to(V2.parent)) for p in V2.parent.glob("**/*.sh") if ".git" not in p.parts)
+    assert {"v2/deploy/start.sh", "v2/deploy/jobs.sh", ".github/scripts/scheduled_issue.sh"} <= set(scripts)
+    shellcheck = shutil.which("shellcheck")
+    if not shellcheck:
+        pytest.skip("shellcheck isn't installed")
+    result = subprocess.run(  # noqa: S603 (the repository's own scripts)
+        [shellcheck, "--severity=style", *scripts], cwd=V2.parent, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout
 
 
 @pytest.fixture

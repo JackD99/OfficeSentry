@@ -20,13 +20,13 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash
 
-from .. import app_setup, cert_lifecycle, clouds, entra, store, tenant_groups, throttle
+from .. import app_setup, cert_lifecycle, clouds, entra, permissions, roles, store, tenant_groups, throttle
 from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..entra import EXCHANGE_PERMISSIONS, GRAPH_PERMISSIONS
 from ..text import plural
 from . import sessions
-from .access import ROLES, roles_required
+from .access import access_of, current, needs, tenant_ids, visible_tenants
 from .auth import confirm_password, password_problem
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -51,8 +51,83 @@ def _admin_password_ok() -> bool:
 # -- Users -------------------------------------------------------------------
 
 
+def _role_from_form(default=None) -> roles.Role:
+    """The role the form picked: a role id, or (from older forms and tests) one of users.role's values,
+    which means the built-in role that stands for it."""
+    raw = request.form.get("role", "")
+    if raw.isdigit():
+        role = roles.get(g.db, int(raw))
+    elif raw in permissions.UPGRADE_ROLE:
+        role = roles.by_key(g.db, permissions.UPGRADE_ROLE[raw])
+    else:
+        role = default
+    if role is None:
+        abort(400)
+    return role
+
+
+def _last_admin(user_id: int) -> bool:
+    """Is this the only enabled administrator? There must always be one."""
+    row = g.db.execute(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0 AND id <> ?", (user_id,)
+    ).fetchone()
+    return row[0] == 0
+
+
+# Someone who manages users but isn't an Administrator (a custom role, or users.manage added for them)
+# can only hand out what they hold themselves and only on the clients they see, can't change an account
+# that holds more than they do, and can't change their own role or access. So nobody raises their own
+# access, directly or by resetting the password of someone who has more, and nobody sees the names of
+# clients outside their own scope on these pages.
+
+
+def _out_of_reach(user) -> str | None:
+    """Why the signed-in person may not change this account, or None."""
+    actor = current()
+    if actor.is_admin:
+        return None
+    target = access_of(user)
+    if target.is_admin:
+        return "Only an Administrator can change an Administrator's account."
+    mine, theirs = tenant_ids(g.db, g.user), tenant_ids(g.db, user)
+    wider = mine is not None and (theirs is None or not theirs <= mine)
+    if wider or target.anywhere() - actor.capabilities:
+        return f"{user['username']} can do or see more than you can, so only an Administrator can change their account."
+    return None
+
+
+def _own_access(user) -> str | None:
+    """A non-Administrator can't change their own role or access."""
+    if user["id"] == g.user["id"] and not current().is_admin:
+        return "Ask an Administrator to change your own role or access."
+    return None
+
+
+def _givable(role: roles.Role) -> bool:
+    """May the signed-in person give someone this role? An Administrator any; anyone else only a role that
+    holds no more than they do."""
+    actor = current()
+    if actor.is_admin:
+        return True
+    if role.kind == permissions.ADMIN or role.capabilities - actor.capabilities:
+        return False
+    return role.scope != permissions.ALL_CLIENTS or role.kind != permissions.STAFF or actor.sees_all
+
+
+_NOT_GIVABLE = "You can only give a role that holds no more than you do. Ask an Administrator for this one."
+_NOT_GRANTABLE = "You can only add capabilities you hold yourself. Ask an Administrator for this one."
+
+
+def _manageable_tenants():
+    """The clients listed on the user pages: every one for whoever sees every client (archived ones too, so
+    saving keeps grants for when they're restored), otherwise only the signed-in person's own."""
+    if current().sees_all:
+        return g.db.execute("SELECT id, name, archived_at FROM tenants ORDER BY name COLLATE NOCASE").fetchall()
+    return visible_tenants(g.db, g.user, archived=True)
+
+
 @bp.get("/users")
-@roles_required("admin")
+@needs("users.manage")
 def users():
     rows = g.db.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
     cfg = current_app.extensions["officesentry.config"]
@@ -64,20 +139,32 @@ def users():
         ),
     }
     group_grants = dict(g.db.execute("SELECT user_id, COUNT(*) FROM user_tenant_groups GROUP BY user_id").fetchall())
-    return render_template("users.html", users=rows, roles=ROLES, two_step=two_step, group_grants=group_grants)
+    overrides = dict(g.db.execute("SELECT user_id, COUNT(*) FROM user_access GROUP BY user_id").fetchall())
+    all_roles = roles.all_roles(g.db)
+    return render_template(
+        "users.html",
+        users=rows,
+        role_of={u["id"]: roles.role_of(g.db, u) for u in rows},
+        roles=all_roles,
+        givable={r.id for r in all_roles if _givable(r)},
+        two_step=two_step,
+        group_grants=group_grants,
+        overrides=overrides,
+        scope_of=lambda u: roles.access_for(g.db, u).scope,
+    )
 
 
 @bp.post("/users")
-@roles_required("admin")
+@needs("users.manage")
 def create_user():
     username = request.form.get("username", "").strip()
-    role = request.form.get("role", "")
     password = request.form.get("password", "")
-    problem = password_problem(password)
+    problem = password_problem(password, username=username)
+    role = _role_from_form()
+    if not _givable(role):
+        problem = _NOT_GIVABLE
     if not username or len(username) > 64:
         problem = "Enter a username (up to 64 characters)."
-    elif role not in ROLES:
-        problem = "Pick a role."
     elif g.db.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
         problem = "That username is taken."
     if problem:
@@ -85,60 +172,92 @@ def create_user():
         return redirect(url_for("admin.users"))
     cur = g.db.execute(
         # The admin chose this password, so they replace it at first sign-in.
-        "INSERT INTO users (username, password_hash, role, created_at, must_change_password) VALUES (?, ?, ?, ?, 1)",
-        (username, generate_password_hash(password), role, utcnow()),
+        "INSERT INTO users (username, password_hash, role, role_id, created_at, must_change_password)"
+        " VALUES (?, ?, ?, ?, ?, 1)",
+        (username, generate_password_hash(password), role.column, role.id, utcnow()),
     )
-    audit(g.db, g.user["username"], "user_created", detail=f"{username} ({role})")
+    audit(g.db, g.user["username"], "user_created", detail=f"{username} ({role.name})")
     return redirect(url_for("admin.edit_user", user_id=cur.lastrowid))
 
 
+# Someone who signs in with Microsoft gets their role from Entra at each sign-in (sso.account_for).
+_SET_IN_ENTRA = (
+    "{username} signs in with Microsoft, so their role is the app role assigned to them in Entra. Change it "
+    "there; Settings → Staff sign-in says which app role gives which role."
+)
+
+
 @bp.route("/users/<int:user_id>", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("users.manage")
 def edit_user(user_id: int):
     user = _user_or_404(user_id)
-    # Archived tenants are listed too, so saving the form keeps grants for when they're restored.
-    tenants = g.db.execute("SELECT id, name, archived_at FROM tenants ORDER BY name COLLATE NOCASE").fetchall()
+    tenants = _manageable_tenants()
+    current_role = roles.role_of(g.db, user)
+    actor = current()
     if request.method == "POST":
+        if problem := _out_of_reach(user) or _own_access(user):
+            flash(problem, "error")
+            return redirect(url_for("admin.edit_user", user_id=user_id))
         if request.form.get("password") and not _admin_password_ok():
             return redirect(url_for("admin.edit_user", user_id=user_id))
-        role = request.form.get("role", user["role"])
-        if role not in ROLES:
-            abort(400)
-        if user["id"] == g.user["id"] and role != "admin":
-            flash("You can't remove your own admin role.", "error")
+        role = _role_from_form(current_role)
+        if user["entra_oid"] and role.id != current_role.id:
+            flash(_SET_IN_ENTRA.format(username=user["username"]), "error")
             return redirect(url_for("admin.edit_user", user_id=user_id))
-        all_tenants = int(role == "analyst" and request.form.get("all_tenants") == "1")
+        if role.id != current_role.id and not _givable(role):
+            flash(_NOT_GIVABLE, "error")
+            return redirect(url_for("admin.edit_user", user_id=user_id))
+        if user["id"] == g.user["id"] and role.kind != permissions.ADMIN:
+            flash("You can't remove your own Administrator role.", "error")
+            return redirect(url_for("admin.edit_user", user_id=user_id))
         disabled = int(request.form.get("disabled") == "1" and user["id"] != g.user["id"])
+        if (
+            current_role.kind == permissions.ADMIN
+            and (role.kind != permissions.ADMIN or disabled)
+            and _last_admin(user_id)
+        ):
+            flash("This is the only Administrator. Make someone else an Administrator first.", "error")
+            return redirect(url_for("admin.edit_user", user_id=user_id))
+        staff = role.kind == permissions.STAFF
+        all_tenants = int(staff and actor.sees_all and request.form.get("all_tenants") == "1")
         valid_ids = {t["id"] for t in tenants}
         grants = {int(x) for x in request.form.getlist("tenants") if x.isdigit()} & valid_ids
-        # Only analysts can be granted a whole group (access.visible_tenants ignores it for anyone else).
-        valid_groups = {gr["id"] for gr in tenant_groups.all_groups(g.db)}
-        group_grants = (
-            {int(x) for x in request.form.getlist("groups") if x.isdigit()} & valid_groups
-            if role == "analyst"
-            else set()
-        )
-        changed_access = role != user["role"] or disabled != user["disabled"] or all_tenants != user["all_tenants"]
+        # Grants on clients the signed-in person doesn't see stay as they were.
+        before = {r[0] for r in g.db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
+        grants |= before - valid_ids
+        # Only staff can be granted a whole group (access.visible_tenants ignores it for clients). A group can
+        # hold clients outside the signed-in person's scope, so only someone who sees every client grants them.
+        if actor.sees_all:
+            valid_groups = {gr["id"] for gr in tenant_groups.all_groups(g.db)}
+            group_grants = {int(x) for x in request.form.getlist("groups") if x.isdigit()} & valid_groups
+        else:
+            group_grants = set(tenant_groups.user_groups(g.db, user_id))
+        group_grants = group_grants if staff else set()
+        changed_access = disabled != user["disabled"] or all_tenants != user["all_tenants"]
         with transaction(g.db):
+            role_changed = roles.assign(g.db, user_id, role)
             g.db.execute(
-                "UPDATE users SET role = ?, all_tenants = ?, disabled = ?,"
-                " session_version = session_version + ? WHERE id = ?",
-                (role, all_tenants, disabled, int(changed_access), user_id),
+                "UPDATE users SET all_tenants = ?, disabled = ?, session_version = session_version + ? WHERE id = ?",
+                (all_tenants, disabled, int(changed_access), user_id),
             )
             g.db.execute("DELETE FROM user_tenants WHERE user_id = ?", (user_id,))
             g.db.executemany(
                 "INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", [(user_id, t) for t in sorted(grants)]
             )
             tenant_groups.set_user_groups(g.db, user_id, group_grants)
+            if role.kind != permissions.STAFF:
+                # Overrides a client role may not hold (anything but reports) go with the staff role.
+                roles.set_overrides(g.db, g.user["username"], user, roles.overrides(g.db, user_id))
             audit(
                 g.db,
                 g.user["username"],
                 "user_updated",
-                detail=f"{user['username']}: role={role} all={all_tenants} disabled={disabled} "
-                f"tenants={sorted(grants)}" + (f" groups={sorted(group_grants)}" if group_grants else ""),
+                detail=f"{user['username']}: role={role.name}{' (changed)' if role_changed else ''} all={all_tenants}"
+                f" disabled={disabled} tenants={sorted(grants)}"
+                + (f" groups={sorted(group_grants)}" if group_grants else ""),
             )
         if request.form.get("password"):
-            if problem := password_problem(request.form["password"]):
+            if problem := password_problem(request.form["password"], username=user["username"]):
                 flash(problem, "error")
             else:
                 g.db.execute(
@@ -150,19 +269,81 @@ def edit_user(user_id: int):
         flash("Saved.", "success")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     granted = {r["tenant_id"] for r in g.db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (user_id,))}
+    all_roles = roles.all_roles(g.db)
     return render_template(
         "user_edit.html",
         user=user,
+        role=current_role,
+        access=roles.access_for(g.db, user),
         tenants=tenants,
         granted=granted,
-        roles=ROLES,
-        groups=tenant_groups.all_groups(g.db),
+        roles=all_roles,
+        givable={r.id for r in all_roles if _givable(r)},
+        actor=actor,
+        out_of_reach=_out_of_reach(user),
+        own_access=_own_access(user),
+        grantable=actor.capabilities if not actor.is_admin else frozenset(permissions.KEYS),
+        capabilities=permissions.CAPABILITIES,
+        groups_of_capabilities=permissions.GROUPS,
+        overrides=roles.overrides(g.db, user_id),
+        allowed_capabilities=permissions.allowed_for(current_role.kind, permissions.KEYS),
+        capability_titles={c.key: c.title for c in permissions.CAPABILITIES},
+        tenant_names={t["id"]: t["name"] for t in tenants},
+        groups=tenant_groups.all_groups(g.db) if actor.sees_all else [],
         granted_groups=tenant_groups.user_groups(g.db, user_id),
         sessions=sessions.list_for(user_id),
         locked=_is_locked(user),
         failures=throttle.recent_failures(g.db, user["username"]),
         two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
+        last_admin=current_role.kind == permissions.ADMIN and _last_admin(user_id),
     )
+
+
+@bp.post("/users/<int:user_id>/access")
+@needs("users.manage")
+def user_access(user_id: int):
+    """Single capabilities added or taken away for this person: everywhere (one choice per capability) and
+    on one client (rows kept, dropped or added). Administrators hold everything, so there's nothing to set."""
+    user = _user_or_404(user_id)
+    if problem := _out_of_reach(user) or _own_access(user):
+        flash(problem, "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
+    role = roles.role_of(g.db, user)
+    if role.kind == permissions.ADMIN:
+        flash("An Administrator holds every capability; give them another role to narrow what they can do.", "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
+    f = request.form
+    actor = current()
+    allowed = permissions.allowed_for(role.kind, permissions.KEYS)
+    before = roles.overrides(g.db, user_id)
+    # Without the capability yourself you can take it away but not add it; what's set already stays.
+    grantable = set(permissions.KEYS) if actor.is_admin else set(actor.capabilities)
+    shown = {t["id"] for t in _manageable_tenants()}
+    items = []
+    for cap in allowed:
+        choice = f.get(f"g_{cap}", "")
+        if choice == "allow" and cap not in grantable:
+            items += [o for o in before if o.capability == cap and o.tenant_id is None]
+        elif choice in ("allow", "deny"):
+            items.append(roles.Override(cap, None, choice == "allow"))
+    dropped = set(f.getlist("drop"))
+    for o in before:
+        if o.tenant_id is not None and (o.tenant_id not in shown or f"{o.capability}|{o.tenant_id}" not in dropped):
+            items.append(o)
+    tenant = f.get("add_tenant", "")
+    cap = f.get("add_capability", "")
+    if tenant.isdigit() and cap in allowed:
+        if int(tenant) not in shown:
+            abort(400)
+        if f.get("add_allow") == "allow" and cap not in grantable:
+            flash(_NOT_GRANTABLE, "error")
+            return redirect(url_for("admin.edit_user", user_id=user_id) + "#access")
+        items = [o for o in items if not (o.capability == cap and o.tenant_id == int(tenant))]
+        items.append(roles.Override(cap, int(tenant), f.get("add_allow") == "allow"))
+    with transaction(g.db):
+        changed = roles.set_overrides(g.db, g.user["username"], user, items)
+    flash("Saved. They'll sign in again to pick it up." if changed else "Nothing changed.", "success")
+    return redirect(url_for("admin.edit_user", user_id=user_id) + "#access")
 
 
 def _is_locked(user) -> bool:
@@ -170,10 +351,13 @@ def _is_locked(user) -> bool:
 
 
 @bp.post("/users/<int:user_id>/reset-two-step")
-@roles_required("admin")
+@needs("users.manage")
 def reset_two_step(user_id: int):
     """For a lost phone: remove their authenticator and sign them out. They set it up again at next sign-in."""
     user = _user_or_404(user_id)
+    if problem := _out_of_reach(user):
+        flash(problem, "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
     if not _admin_password_ok():
         return redirect(url_for("admin.edit_user", user_id=user_id))
     with transaction(g.db):
@@ -192,9 +376,12 @@ def reset_two_step(user_id: int):
 
 
 @bp.post("/users/<int:user_id>/sign-out")
-@roles_required("admin")
+@needs("users.manage")
 def sign_out_user(user_id: int):
     user = _user_or_404(user_id)
+    if problem := _out_of_reach(user):
+        flash(problem, "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
     if not _admin_password_ok():
         return redirect(url_for("admin.edit_user", user_id=user_id))
     ended = sessions.revoke_user(user_id, except_current=user_id == g.user["id"])
@@ -204,9 +391,12 @@ def sign_out_user(user_id: int):
 
 
 @bp.post("/users/<int:user_id>/unlock")
-@roles_required("admin")
+@needs("users.manage")
 def unlock_user(user_id: int):
     user = _user_or_404(user_id)
+    if problem := _out_of_reach(user):
+        flash(problem, "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
     g.db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?", (user_id,))
     throttle.clear(g.db, user["username"])
     audit(g.db, g.user["username"], "user_unlocked", detail=user["username"])
@@ -215,11 +405,17 @@ def unlock_user(user_id: int):
 
 
 @bp.post("/users/<int:user_id>/delete")
-@roles_required("admin")
+@needs("users.manage")
 def delete_user(user_id: int):
     user = _user_or_404(user_id)
+    if problem := _out_of_reach(user):
+        flash(problem, "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
     if user["id"] == g.user["id"]:
         flash("You can't delete your own account.", "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
+    if user["role"] == "admin" and not user["disabled"] and _last_admin(user_id):
+        flash("This is the only Administrator. Make someone else an Administrator first.", "error")
         return redirect(url_for("admin.edit_user", user_id=user_id))
     g.db.execute("DELETE FROM users WHERE id = ?", (user_id,))
     audit(g.db, g.user["username"], "user_deleted", detail=user["username"])
@@ -246,7 +442,7 @@ def _address_problem() -> str | None:
 
 
 @bp.get("/connections")
-@roles_required("admin")
+@needs("settings.manage")
 def connections():
     rows = store.list_connections(g.db)
     sign_in = app_setup.current(g.db, g.user["id"])
@@ -275,7 +471,7 @@ def connections():
 
 
 @bp.post("/connections")
-@roles_required("admin")
+@needs("settings.manage")
 def create_connection():
     name = request.form.get("name", "").strip() or "Office Sentry"
     cloud = request.form.get("cloud", clouds.DEFAULT)
@@ -297,7 +493,7 @@ def _to_setup():
 
 
 @bp.post("/connections/setup")
-@roles_required("admin")
+@needs("settings.manage")
 def start_setup():
     cloud = request.form.get("cloud", clouds.DEFAULT)
     if not clouds.valid(cloud):
@@ -333,7 +529,7 @@ def start_setup():
 
 
 @bp.post("/connections/setup/check")
-@roles_required("admin")
+@needs("settings.manage")
 def check_setup():
     """One step of the wizard. The page calls this every few seconds while it waits (JSON); without
     JavaScript, the "I've signed in" button posts it and comes back to the page."""
@@ -358,7 +554,7 @@ def check_setup():
 
 
 @bp.post("/connections/setup/cancel")
-@roles_required("admin")
+@needs("settings.manage")
 def cancel_setup():
     app_setup.cancel(g.db, g.user["id"])
     return redirect(url_for("admin.connections"))
@@ -380,7 +576,7 @@ def _consent_again(conn_id: int, old: str, new: str) -> int:
 
 
 @bp.post("/connections/<int:conn_id>/client-id")
-@roles_required("admin")
+@needs("settings.manage")
 def set_client_id(conn_id: int):
     connection = store.get_connection(g.db, conn_id)
     if connection is None:
@@ -424,7 +620,7 @@ def set_client_id(conn_id: int):
 
 
 @bp.get("/connections/<int:conn_id>/certificate.cer")
-@roles_required("admin")
+@needs("settings.manage")
 def download_certificate(conn_id: int):
     """Public certificate only (the current one, or with ?which=next its replacement). The private key never
     leaves the database."""
@@ -464,7 +660,7 @@ def _rollover(conn_id: int, step) -> bool:
 
 
 @bp.post("/connections/<int:conn_id>/replace")
-@roles_required("admin")
+@needs("settings.manage")
 def start_rollover(conn_id: int):
     vault = current_app.extensions["officesentry.vault"]
     if _rollover(conn_id, lambda: cert_lifecycle.start(g.db, vault, conn_id, g.user["username"])):
@@ -477,7 +673,7 @@ def start_rollover(conn_id: int):
 
 
 @bp.post("/connections/<int:conn_id>/replace/test")
-@roles_required("admin")
+@needs("settings.manage")
 def test_rollover(conn_id: int):
     tenant_ref = request.form.get("tenant_ref", "").strip().lower()
     if not GUID_RE.match(tenant_ref) and not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", tenant_ref):
@@ -499,7 +695,7 @@ def test_rollover(conn_id: int):
 
 
 @bp.post("/connections/<int:conn_id>/replace/switch")
-@roles_required("admin")
+@needs("settings.manage")
 def switch_rollover(conn_id: int):
     if _rollover(conn_id, lambda: cert_lifecycle.switch(g.db, conn_id, g.user["username"])):
         flash(
@@ -511,7 +707,7 @@ def switch_rollover(conn_id: int):
 
 
 @bp.post("/connections/<int:conn_id>/replace/cancel")
-@roles_required("admin")
+@needs("settings.manage")
 def cancel_rollover(conn_id: int):
     if _rollover(conn_id, lambda: cert_lifecycle.cancel(g.db, conn_id, g.user["username"])):
         flash(
@@ -521,7 +717,7 @@ def cancel_rollover(conn_id: int):
 
 
 @bp.post("/connections/<int:conn_id>/old-removed")
-@roles_required("admin")
+@needs("settings.manage")
 def old_certificate_removed(conn_id: int):
     if _rollover(conn_id, lambda: cert_lifecycle.forget_old(g.db, conn_id, g.user["username"])):
         flash("Noted. The old certificate is no longer listed here.", "success")

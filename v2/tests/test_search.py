@@ -2,9 +2,9 @@
 
 import html
 
-from officesentry import lifecycle, search_index, store
+from officesentry import lifecycle, permissions, search_index, store
 from officesentry.reports import data_reports, views
-from officesentry.web.search import looks_like_ip, search, search_tenant
+from officesentry.web.search import COLLECTOR_CAPABILITY, looks_like_ip, search, search_tenant
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -95,9 +95,9 @@ def test_only_granted_tenants_are_searched(app, client, db, two_tenants):
     seed_tenant(db, bravo)
     make_user(db, "admin")
     make_user(db, "bravo-analyst", role="analyst", tenants=[bravo])
-    # Without an account in the snapshot, a mailbox opens the shared mailboxes report.
+    # Without an account in the snapshot, a mailbox opens its own page.
     info = [h for h in _hits(app, db, alpha, "info@x.com") if h.label == "Mailbox"]
-    assert [h.href for h in info] == [f"/tenants/{alpha}/data/shared-mailboxes"]
+    assert [h.href for h in info] == [f"/tenants/{alpha}/mailboxes/u7"]
 
     login(client, "admin")
     page = _page(client, "ann@x.com")
@@ -156,6 +156,18 @@ def test_empty_and_short_queries(client, db, two_tenants):
     assert "Find something in any client" in _page(client, "")
     assert "Type at least 2 characters" in _page(client, "a")
     assert "Nothing found" in _page(client, "nobody-here")  # tenants without data are skipped
+
+
+def test_every_kind_found_needs_a_capability(app, db, two_tenants):
+    # A collector added to search without a capability here would break search for everyone.
+    assert {k.collector for k in search_index.KINDS} <= set(COLLECTOR_CAPABILITY)
+    assert set(COLLECTOR_CAPABILITY.values()) <= {c.key for c in permissions.CAPABILITIES}
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=[*USERS, ZED])
+    with app.test_request_context():
+        tenant = store.get_tenant(db, alpha)
+        assert search_tenant(db, tenant, "zed.quinn").hits
+        assert not search_tenant(db, tenant, "zed.quinn", allowed=lambda cap: cap != "reports.people").hits
 
 
 def test_ip_like_queries():

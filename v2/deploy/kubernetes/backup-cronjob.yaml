@@ -1,0 +1,66 @@
+# The nightly database backup: a consistent, compressed copy in /data/backups, keeping 14. It runs on the same
+# node as the portal (the volume is ReadWriteOnce) and records how it went for Settings -> System status, which
+# alerts when a backup fails or is overdue. Copy the volume off the cluster too (volume snapshots, Velero).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: officesentry-backup
+spec:
+  schedule: "45 3 * * *"
+  # timeZone: Europe/London   # without it, the cluster's time zone (usually UTC)
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: officesentry
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: backup
+              image: ghcr.io/jackd99/officesentry
+              command: ["python", "-m", "officesentry", "backup", "--keep", "14"]
+              envFrom:
+                - configMapRef:
+                    name: officesentry-settings
+                - secretRef:
+                    name: officesentry-keys
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: officesentry-data
+            - name: tmp
+              emptyDir:
+                sizeLimit: 1Gi

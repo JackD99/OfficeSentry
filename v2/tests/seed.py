@@ -201,6 +201,7 @@ def mock_tenant(
     deleted_groups=None,
     risky_users=None,
     app_sign_ins=None,
+    audits=None,
     admin_units=None,
     **phase4,
 ):
@@ -285,7 +286,7 @@ def mock_tenant(
     paged(rsps, f"{BETA}/organization", [gd.ORGANIZATION])
     paged(rsps, f"{V1}/domains", hd.DOMAINS)
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
-    paged(rsps, f"{V1}/auditLogs/directoryAudits", ad.DIRECTORY_AUDITS)
+    paged(rsps, f"{V1}/auditLogs/directoryAudits", ad.DIRECTORY_AUDITS if audits is None else audits)
     # The whole sign-in log, legacy clients included: the legacy sign-in collector reads them from the stored
     # log once it covers 30 days (the /v1.0 query above is its fallback until then).
     paged(rsps, f"{BETA}/auditLogs/signIns", [*gd.SIGNINS, *gd.LEGACY_SIGNINS] if signins is None else signins)

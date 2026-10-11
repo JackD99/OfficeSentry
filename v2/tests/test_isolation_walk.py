@@ -33,6 +33,7 @@ from officesentry.projects import CATALOG
 from officesentry.reports import designs, evidence_answers
 from officesentry.reports.data_reports import REPORTS
 from officesentry.reports.evidence_answers import QUESTIONS
+from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import USERS
@@ -51,9 +52,10 @@ TENANT_ARGS = {
     "note_id",
 }
 # URL arguments that don't: names (report keys, table slugs, a month, a file extension, a static file),
-# a person's account inside a tenant (only ever with tenant_id), and objects that belong to Office Sentry
-# itself (portal users, app connections, report plans, sign-in sessions, someone's own saved views, tenant
-# groups, which are admin-only), and flags a route sets itself (``resolved`` on the findings downloads).
+# a person's account or a mailbox inside a tenant (only ever with tenant_id), and objects that belong to Office
+# Sentry itself (portal users and roles, app connections, report plans, sign-in sessions, someone's own saved
+# views, tenant groups, which are admin-only), and flags a route sets itself (``resolved`` on the findings
+# downloads).
 OTHER_ARGS = {
     "key",
     "table",
@@ -61,6 +63,9 @@ OTHER_ARGS = {
     "filename",
     "period",
     "user_id",
+    "mailbox_id",
+    "gid",
+    "site_id",
     "conn_id",
     "plan_id",
     "session_id",
@@ -68,6 +73,7 @@ OTHER_ARGS = {
     "resolved",
     "group_id",
     "design_id",
+    "role_id",
 }
 # Who is signed in for the walk. Each sees only tenant A.
 ROLES = ["analyst", "client", "analyst-by-group", "client-with-group"]
@@ -237,6 +243,9 @@ def _url(rule, ids: dict) -> str:
         "ext": "csv",
         "table": "x",
         "user_id": USERS[0]["id"],
+        "mailbox_id": USERS[0]["id"],  # Ann's mailbox has her account's object ID
+        "gid": "g1",  # the Sales team
+        "site_id": sd.SITE_USAGE[0]["siteId"],  # Finance
     }
 
     def value(m):

@@ -1,0 +1,132 @@
+# The portal ("web") and the worker in one pod, so they share one disk: Office Sentry's SQLite database must be
+# on storage both processes reach on the same machine.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: officesentry
+spec:
+  # Exactly one: the worker must run once, and the database can't be shared between pods.
+  replicas: 1
+  # The old pod stops before the new one starts, so the volume is never mounted twice.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: officesentry
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: officesentry
+    spec:
+      # Lets a running collection finish when the pod stops (the worker stops cleanly on SIGTERM).
+      terminationGracePeriodSeconds: 120
+      # The pause process becomes process 1 and reaps leftover child processes, as tini does in Docker.
+      shareProcessNamespace: true
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        # A new volume is made writable for the app's user.
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: ghcr.io/jackd99/officesentry
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: officesentry-settings
+            # OFFICESENTRY_SECRET_KEY and OFFICESENTRY_ENCRYPTION_KEYS, so no key is ever written to the volume.
+            - secretRef:
+                name: officesentry-keys
+          # Before a database upgrade the portal copies the whole database and only then answers, which takes
+          # minutes on a large one: up to 15 minutes before Kubernetes gives up on it.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 90
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+        - name: worker
+          image: ghcr.io/jackd99/officesentry
+          # The portal applies database upgrades first, so the worker waits until it answers.
+          command:
+            - sh
+            - -c
+            - until python -m officesentry healthcheck web >/dev/null 2>&1; do sleep 5; done;
+              exec python -m officesentry worker
+          envFrom:
+            - configMapRef:
+                name: officesentry-settings
+            - secretRef:
+                name: officesentry-keys
+          startupProbe:
+            exec:
+              command: ["python", "-m", "officesentry", "healthcheck", "worker"]
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 40
+          livenessProbe:
+            exec:
+              command: ["python", "-m", "officesentry", "healthcheck", "worker"]
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: officesentry-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

@@ -158,6 +158,23 @@ def test_release_notes_refuse_a_tag_that_doesnt_fit():
         notes.notes("v2.2.0", changelog, "2.2.0")
 
 
+def test_release_notes_read_keep_a_changelog_headings():
+    # CHANGELOG.md's headings: "## [2.1.0] - 2026-11-02", "## [2.1.1] - Unreleased", links at the foot.
+    notes = _release_notes()
+    changelog = (
+        "## [2.1.1] - Unreleased\n\n- Soon.\n\n## [2.1.0] - 2026-11-02\n\n### Fixed\n\n- Things.\n\n"
+        "[2.1.1]: https://example.test/compare/v2.1.0...HEAD\n[2.1.0]: https://example.test/compare/v2.0.0...v2.1.0\n"
+    )
+    assert notes.notes("v2.1.0", changelog, "2.1.0") == (
+        "### Fixed\n\n- Things.\n\n[2.1.1]: https://example.test/compare/v2.1.0...HEAD\n"
+        "[2.1.0]: https://example.test/compare/v2.0.0...v2.1.0\n",
+        False,
+    )
+    with pytest.raises(notes.ReleaseError, match="still calls 2.1.1 unreleased"):
+        notes.notes("v2.1.1", changelog, "2.1.1")
+    assert notes.notes("v2.1.1-rc.1", changelog, "2.1.1.dev0") == ("- Soon.\n", True)
+
+
 def test_the_changelog_has_a_section_for_the_code_version():
     notes = _release_notes()
     version = notes.code_version()
