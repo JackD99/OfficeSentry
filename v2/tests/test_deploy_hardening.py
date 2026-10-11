@@ -260,7 +260,7 @@ def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_
 
 
 def test_the_server_address_and_portal_name_stay_out_of_public_run_logs():
-    """A step's log opens with its settings, where only secrets are hidden (DEPLOY.md, step 5)."""
+    """A step's log opens with its settings, where only secrets are hidden (deploy.yml's opening comment)."""
     workflows = V2.parent / ".github" / "workflows"
     deploy = (workflows / "deploy.yml").read_text(encoding="utf-8")
     for name in ("DEPLOY_HOST", "OFFICESENTRY_DOMAIN", "OFFICESENTRY_SETTINGS", "BACKUP_REPOSITORY"):

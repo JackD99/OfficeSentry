@@ -290,7 +290,7 @@ docker compose --profile https up -d
 ```
 
 The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
-public, for amd64 (Intel and AMD) servers and, from the first release after 2.1.0, arm64 ones. It is built and
+public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
 scanned by GitHub Actions from a tagged release, with a signed build provenance. Each release lists what changed,
 and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md).
 
@@ -312,12 +312,16 @@ consent page, mailboxes failing without Global Reader and the worker not running
 **Settings → Support** makes a support package to attach to a bug report, with secrets and client names taken
 out ([Getting help](v2/docs/getting-help.md)).
 
-[v2/DEPLOY.md](v2/DEPLOY.md) covers HTTPS, the collection schedule, retention, backups and updating.
+[v2/DEPLOY.md](v2/DEPLOY.md) covers HTTPS, the collection schedule, retention, backups and updating. Running
+Portainer, a NAS, Kubernetes, Azure, AWS or another cloud? The [deploy guides](v2/docs/deploy/README.md) start
+from there.
 
 ## Documentation
 
 - [Technical reference](v2/README.md): every report and check, Exchange data, sign-in security, setup and layout
 - [Running it on your own server](v2/DEPLOY.md)
+- [Deploy guides](v2/docs/deploy/README.md): Portainer and other container managers, Unraid, Synology and
+  TrueNAS, Kubernetes, Azure, AWS, other clouds and Cloudflare
 - [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md): let your team sign in with their Entra ID account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding

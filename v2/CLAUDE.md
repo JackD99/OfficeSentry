@@ -266,6 +266,15 @@ needing goes in those lists.
   Styles are `report.css`; brand colours arrive as CSS variables (`--brand`,
   `--brand-ink`, ...), from `/brand.css` on the web and inline in PDFs, since
   the CSP blocks inline styles in the browser. Render the PDF and look at it.
+- The monthly review (`reports/monthly_review.py`, `templates/reports/monthly_review.html`)
+  leads with two summary pages (At a glance: the plain-English summary, key figures and the
+  severity bar; This month: findings found and fixed by month (`found_and_fixed`,
+  `charts.month_columns`), what was done (`fixed_groups` and the month-end actions marked
+  done) and what to do next), then the appendix with the detail, which the summary links
+  into. `appendix=False` (the PDF route's `?appendix=0`, the report option
+  `review-summary`, `monthly_review.SUMMARY_KEY`) leaves the appendix out: the summary then
+  carries no links into it (`summary.next_steps(anchors=False)`) and says the full report is
+  available from the MSP.
 - PDF routes return `web/printing.pdf_response(template, filename, ...)`: a
   WeasyPrint PDF, or without WeasyPrint (Windows without Docker) the same
   template as a print-ready page that opens the browser's print window. Table
@@ -726,7 +735,12 @@ and `/tenants/<id>/designs/<id>` (`.pdf`) is a tenant's copy. A design is a
 report key `design:<id>` in `delivery.catalog(conn)` (PDF only), so plans and
 schedules send it through `_attachments`; `designs.remove` strips the key from
 them. Adding a widget: a `Widget` in `WIDGETS` and a `w_<kind>` macro in
-`DRAW`; the editor reads the palette from `designs.palette()`.
+`DRAW`; the editor reads the palette from `designs.palette()`. `STARTERS` are
+the designs the editor offers to start from; the Quarterly review starter's
+blocks (`quarter_trend`, `quarter_fixed`, `projects`, `licence_spend`,
+`upcoming`) read `Context.quarter`, a `reports/quarterly.Quarter` built once
+per tenant from the monthly review, `findings`, `projects.assess` and
+`upcoming.collect`; text blocks also take `{quarter}` (`quarterly.quarter_label`).
 
 ## Tenant groups
 

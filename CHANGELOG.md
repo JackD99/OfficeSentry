@@ -78,12 +78,27 @@ first.
   every line says which request, user, client, run or task it belongs to. A page that fails shows a
   reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
-  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
-  roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with an app role for each
+  built-in role (Admin for Administrator, TeamLeader, Analyst for Second line, FirstLine, AccountManager and
+  Auditor) to assign people or groups to in Entra; a custom role gets an app role value of its own on the
+  same page. The role follows Entra at every sign-in. Staff then press *Sign in with Microsoft* and use their
   work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
   sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
   turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
   server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
+- **The monthly review leads with the answer.** The PDF and page now open with two summary pages: *At a
+  glance* (what was checked, what changed, key figures, the severity bar) and *This month* (findings
+  found and fixed each month as a chart, what was done, what to do next). Everything else (what changed
+  in detail, the Secure Score trend, each failing check with the accounts affected, licences, passing
+  checks, accepted risks, checks that couldn't run) follows as an appendix the summary links into.
+  A **Summary PDF** button, and a "Monthly review: summary only" option in report plans and email
+  schedules, give the two summary pages on their own.
+- **Quarterly review.** A new starting point in the report designer (Month-end → Custom reports): three
+  months of Secure Score and findings, what was fixed in the quarter, the projects on the table and
+  where each stands, licence spend a month and a year with the waste, and what's coming up in the next
+  90 days. Its five blocks (Three-month trend, Fixed this quarter, Projects, Licence spend, Coming up)
+  can go in any design, and text blocks take `{quarter}`. The demo data includes one under Custom
+  reports.
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -114,6 +129,13 @@ first.
   against bought, and how bought licences and the monthly cost moved since a month ago, for checking a
   client's bill. Built from Office Sentry's own history; no new permission. The monthly review's "since last
   month" changes and What changed now list who was given or lost a licence.
+- **Deploy guides by platform** ([v2/docs/deploy](v2/docs/deploy/README.md), and under *Deploy* on the
+  website): Portainer; Dockge, Komodo, Coolify and Dokploy; Unraid, Synology and TrueNAS; Kubernetes (AKS,
+  EKS, GKE, k3s and others); Azure and AWS virtual machines; DigitalOcean, Google Cloud, Linode, Vultr,
+  Oracle Cloud and other VPS hosts; and Cloudflare (DNS only, a Tunnel with Access, or proxied). With them
+  come a one-file stack for container managers and NAS systems (`v2/deploy/stack/compose.yaml`), Kubernetes
+  manifests (`v2/deploy/kubernetes/`) and a start-up file for a new cloud server
+  (`v2/deploy/cloud-init-server.yaml`). Each guide says which of its steps have been tested.
 - One page per SharePoint site: Users > Sites lists every site with its storage, files, sharing links, last
   activity and open findings, and each opens a page with what needs attention first, then its storage over the
   retained months with the libraries and largest files that fill it, its sharing settings and the files shared
@@ -122,6 +144,10 @@ first.
   reports, the group page and search results open the page, and it downloads as PDF and XLSX.
 
 ### Changed
+
+- [Running it on your own server](v2/DEPLOY.md) no longer has the Hetzner walkthrough, which was written for
+  the project's own server. Off-site backups, the restore drill and restoring from the off-site copy are now
+  written for any server, with `deploy/jobs.sh` run in the folder with `docker-compose.yml`.
 
 - Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
   rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
@@ -253,6 +279,11 @@ first.
   rather than to an address that only takes forms ("Method not allowed").
 - The daily rebuild of the What changed and check matrix rows is no longer lost for a client whose
   rows were being refreshed at that moment.
+- The advice for Cloudflare or another CDN in front of the proxy (`OFFICESENTRY_TRUSTED_PROXIES=2` alone)
+  left every visitor looking like the proxy, with the bundled Caddy and the nginx example alike, so they
+  all shared one address's sign-in limits. [Securing the
+  portal](v2/docs/securing-the-portal.md#behind-a-reverse-proxy) now says what Caddy, nginx and Traefik each
+  need to trust the CDN's addresses.
 
 ### Security
 
@@ -283,7 +314,7 @@ first.
 - The Deploy workflow reads the server's address and the portal's name from the secrets `DEPLOY_HOST` and
   `OFFICESENTRY_DOMAIN` (and `OFFICESENTRY_SETTINGS` and `BACKUP_REPOSITORY` when they're secrets), since a
   public repository's run logs show every variable a step reads. Variables of those names still work; add
-  each as a secret to hide it ([v2/DEPLOY.md, step 5](v2/DEPLOY.md#5-tell-github-where-to-deploy)). The
+  each as a secret to hide it. The
   live canary takes the test tenant's ID from the secret `CANARY_TENANT_ID` for the same reason.
 - The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
   page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
@@ -369,8 +400,7 @@ copied collection reads back exactly as its snapshot.
 - The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
   pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Deploy workflow: a `restore-drill` action, backup status in `status`, and a `PRODUCTION_FROM_TAGS`
-  variable that makes the portal take release tags only, as the published image pinned by digest
-  ([v2/DEPLOY.md, "Production from releases"](v2/DEPLOY.md#production-from-releases)).
+  variable that makes the portal take release tags only, as the published image pinned by digest.
 - Activity history: every sign-in and directory audit event is kept beyond the 30 days Microsoft keeps them.
   Each collection reads on from where the last one stopped, so a run that times out, hits its page limit or
   is interrupted carries on next time with nothing lost or counted twice, and a busy tenant's sign-in log is
