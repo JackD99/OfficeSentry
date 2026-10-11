@@ -8,6 +8,7 @@ from ..graph import GraphError
 from .base import Collector, RunContext, register
 
 BASELINE_DAYS = 30  # control-level changes are shown against the day closest to this far back
+MAX_PAGES = 100  # 90 daily scores at the smallest page Microsoft has sent is 18 pages
 
 
 def baseline(scores: list[dict], days: int = BASELINE_DAYS) -> dict | None:
@@ -29,9 +30,9 @@ class SecureScore(Collector):
     permissions = ("SecurityEvents.Read.All",)
 
     def collect(self, ctx: RunContext) -> None:
-        # One snapshot per day, newest first: the 90 days Microsoft keeps, however it pages them; older
-        # history lives in our own metrics.
-        scores = ctx.graph.get_all("/security/secureScores", params={"$top": "90"}, max_pages=10).items
+        # One snapshot per day, newest first: the 90 days Microsoft keeps, however it pages them (the live
+        # recording shows pages of five, whatever $top asks for); older history lives in our own metrics.
+        scores = ctx.graph.get_all("/security/secureScores", params={"$top": "90"}, max_pages=MAX_PAGES).items
         if not scores:
             ctx.warn("Microsoft returned no Secure Score for this tenant yet")
             return

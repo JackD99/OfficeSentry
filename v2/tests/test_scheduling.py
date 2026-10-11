@@ -2,9 +2,9 @@
 
 import gzip
 import os
-from contextlib import closing
 import sqlite3
 import threading
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
