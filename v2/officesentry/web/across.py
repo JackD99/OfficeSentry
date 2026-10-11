@@ -16,9 +16,7 @@ from ..db import audit
 from ..reports import (
     branding,
     data_reports,
-    evidence,
     month_changes,
-    questionnaires,
     rollups,
     tables,
     views,
@@ -500,40 +498,3 @@ def review_csv(tenant_id: int):
     )
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "findings.csv")
     return _download(tables.to_csv(table), f"security-review-findings-{tables.slug(t['name'])}", "csv")
-
-
-@bp.get("/tenants/<int:tenant_id>/evidence.csv")
-@needs("reports.security", "export")
-def evidence_csv(tenant_id: int):
-    """With ``set=``, that question set's answers; without, every topic's answer and the controls."""
-    t = tenant_or_404(tenant_id)
-    pack = evidence.build(g.db, t)
-    key = request.args.get("set")
-    if key in questionnaires.SETS:
-        table = tables.Table(
-            questionnaires.SETS[key].title, questionnaires.COLUMNS, questionnaires.rows(questionnaires.sheet(pack, key))
-        )
-        audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.csv")
-        return _download(tables.to_csv(table), f"security-evidence-{tables.slug(t['name'])}-{key}", "csv")
-    table = tables.Table(
-        "Evidence",
-        ["Section", "Question", "Answer", "Why", "Answered by", "Evidence", "Gaps"],
-        [
-            ["Questionnaire", question, answer, why, by, source, ""]
-            for question, answer, why, by, source in evidence.answer_rows(pack)
-        ]
-        + [
-            [
-                "Controls",
-                c.control.question,
-                c.status,
-                "",
-                "",
-                " ".join(c.evidence),
-                " ".join(x.strip() for x in c.gaps),
-            ]
-            for c in pack.controls
-        ],
-    )
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.csv")
-    return _download(tables.to_csv(table), f"security-evidence-{tables.slug(t['name'])}", "csv")

@@ -1,6 +1,6 @@
 """Site and OneDrive lookups shared by the two SharePoint collectors.
 
-``shared_files``, ``sharepoint_storage`` and ``site_access`` all list every site and ask for
+``shared_files``, ``sharepoint_storage``, ``site_access`` and ``site_permissions`` all list every site and ask for
 each licensed person's OneDrive. They run one after the other each night, so
 the second reuses what the first read: each stores its lookups (``lookup_sites``
 and ``lookup_onedrive`` objects, with the fields asked for) and the other
@@ -22,7 +22,7 @@ from ..text import plural
 from .base import RunContext
 from .connection import granted
 
-COLLECTORS = ("shared_files", "sharepoint_storage", "site_access")
+COLLECTORS = ("shared_files", "sharepoint_storage", "site_access", "site_permissions")
 REUSE_HOURS = 6
 NO_DRIVE_DAYS = 7
 ISO = "%Y-%m-%dT%H:%M:%SZ"

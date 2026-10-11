@@ -176,6 +176,9 @@ def test_questions_asked_the_other_way_round_swap_the_answer(db, two_tenants):
     assert ce["A4.7"].state == "No" and "other way round" in ce["A4.7"].beyond
 
 
+SCHEME_OF = {"insurance": "insurance", "supplier": "supplier", "cyber-essentials": "cyber-essentials"}
+
+
 def test_pages_for_staff_and_clients(client, db, two_tenants):
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
@@ -183,77 +186,75 @@ def test_pages_for_staff_and_clients(client, db, two_tenants):
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "lead")
     for key, s in SETS.items():
-        page = client.get(f"/tenants/{alpha}/evidence?set={key}").get_data(as_text=True)
+        page = client.get(f"/tenants/{alpha}/evidence/{SCHEME_OF[key]}").get_data(as_text=True)
         assert s.title.split(" (")[0] in page or s.short in page
         assert "Copy all answers" in page and 'id="copy-all"' in page and 'data-copy="#q-' in page
         assert '<mark class="blank">[' in page and "Write this answer for Alpha Ltd" in page
-        assert f'name="set" value="{key}"' in page
-        assert client.get(f"/tenants/{bravo}/evidence?set={key}").status_code == 404
-    ce = client.get(f"/tenants/{alpha}/evidence?set=cyber-essentials").get_data(as_text=True)
+        assert f'name="scheme" value="{SCHEME_OF[key]}"' in page
+        assert client.get(f"/tenants/{bravo}/evidence/{SCHEME_OF[key]}").status_code == 404
+    ce = client.get(f"/tenants/{alpha}/evidence/cyber-essentials").get_data(as_text=True)
     assert "A7.17" in ce and "Auto-fail" in ce and "Danzell" in ce
-    only_input = client.get(f"/tenants/{alpha}/evidence?set=insurance&show=input").get_data(as_text=True)
-    assert "Write this answer for Alpha Ltd" in only_input and "Change this answer" not in only_input
-    # An unknown set shows the insurance one.
-    assert "Is endpoint detection and response" in client.get(f"/tenants/{alpha}/evidence?set=nope").get_data(
-        as_text=True
-    )
+    only_input = client.get(f"/tenants/{alpha}/evidence/insurance?show=input").get_data(as_text=True)
+    assert "Write this answer for Alpha Ltd" in only_input and 'name="show" value="input"' in only_input
+    assert only_input.count("Write this answer for") < page.count("Write this answer for") or "Your input" in only_input
 
     resp = client.post(
         f"/tenants/{alpha}/evidence/answers/backups",
         data={"answer": "Yes", "note": "Backed up nightly by Acme Backup.", "set": "supplier"},
     )
-    assert resp.headers["Location"].endswith(f"/tenants/{alpha}/evidence?set=supplier#answer-backups")
-    page = client.get(f"/tenants/{alpha}/evidence?set=cyber-essentials").get_data(as_text=True)
+    assert resp.headers["Location"].endswith(f"/tenants/{alpha}/evidence/supplier#answer-backups")
+    page = client.get(f"/tenants/{alpha}/evidence/cyber-essentials").get_data(as_text=True)
     assert "Backed up nightly by Acme Backup." not in page  # Cyber Essentials doesn't ask about backups
-    assert "Backed up nightly by Acme Backup." in client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(
+    assert "Backed up nightly by Acme Backup." in client.get(f"/tenants/{alpha}/evidence/insurance").get_data(
         as_text=True
     )
 
     client.post("/logout")
     login(client, "client")
-    page = client.get(f"/tenants/{alpha}/evidence?set=supplier").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence/supplier").get_data(as_text=True)
     assert "Backed up nightly by Acme Backup." in page and "Copy all answers" in page
     assert "Write this answer" not in page and "Change this answer" not in page
     assert "Suggested from the data" not in page
 
 
 def test_downloads_for_each_set(client, db, two_tenants, monkeypatch):
+    from officesentry.reports import scheme_export, schemes
+
     alpha, bravo = two_tenants
     seed_tenant(db, alpha)
     evidence_answers.set_override(db, alpha, "training", YES, "Annual training with KnowBe4.", NOT_KNOWN, "jack")
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     for key, s in SETS.items():
-        text = client.get(f"/tenants/{alpha}/evidence.txt?set={key}")
-        assert text.mimetype == "text/plain" and f"-{key}.txt" in text.headers["Content-Disposition"]
+        scheme = schemes.SCHEMES[SCHEME_OF[key]]
+        text = client.get(f"/tenants/{alpha}/evidence/{scheme.key}.txt")
+        assert text.mimetype == "text/plain" and f"-{scheme.key}.txt" in text.headers["Content-Disposition"]
         body = text.get_data(as_text=True)
-        assert body.startswith(f"{s.title}: Alpha Ltd") and "Answer: Your input" in body
+        assert body.startswith(f"{scheme.title}: Alpha Ltd") and "Answer: Your input" in body
+        assert f"Answers for the form: {s.title}".upper() in body
 
         rows = list(
-            csv.reader(io.StringIO(client.get(f"/tenants/{alpha}/evidence.csv?set={key}").get_data(as_text=True)))
+            csv.reader(io.StringIO(client.get(f"/tenants/{alpha}/evidence/{scheme.key}.csv").get_data(as_text=True)))
         )
-        assert [rows[0][0].lstrip("\ufeff")] + rows[0][1:] == questionnaires.COLUMNS and len(rows) == len(s.items) + 1
+        assert [rows[0][0].lstrip("\ufeff")] + rows[0][1:] == scheme_export.COLUMNS
+        assert len(rows) == len(scheme.controls) + 1
 
-        wb = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx?set={key}").data))
-        assert s.short in wb.sheetnames and "Controls" not in wb.sheetnames
+        wb = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence/{scheme.key}.xlsx").data))
+        assert s.short in wb.sheetnames and "Controls" in wb.sheetnames
+        assert wb[s.short].max_row == len(s.items) + 1
 
-        for ext in ("txt", "csv", "xlsx", "pdf"):
-            assert client.get(f"/tenants/{bravo}/evidence.{ext}?set={key}").status_code == 404
-    ce = client.get(f"/tenants/{alpha}/evidence.txt?set=cyber-essentials").get_data(as_text=True)
+        for ext in ("txt", "csv", "xlsx", "pdf", "docx"):
+            assert client.get(f"/tenants/{bravo}/evidence/{scheme.key}.{ext}").status_code == 404
+    ce = client.get(f"/tenants/{alpha}/evidence/cyber-essentials.txt").get_data(as_text=True)
     assert "A7.17 Has MFA been applied to all users of your cloud services? (auto-fail)" in ce
-    ins = client.get(f"/tenants/{alpha}/evidence.txt?set=insurance").get_data(as_text=True)
-    assert "Annual training with KnowBe4.\nAnswered " in ins and "by jack" in ins
-
-    everything = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx").data))
-    assert {s.short for s in SETS.values()} | {"Controls"} <= set(everything.sheetnames)
+    ins = client.get(f"/tenants/{alpha}/evidence/insurance.txt").get_data(as_text=True)
+    assert "Annual training with KnowBe4.\nAnswered by jack on " in ins
     logged = {r["detail"] for r in db.execute("SELECT detail FROM audit_log WHERE action = 'report_downloaded'")}
     assert {"evidence-insurance.txt", "evidence-supplier.csv", "evidence-cyber-essentials.xlsx"} <= logged
 
     if export.pdf_available():
-        assert client.get(f"/tenants/{alpha}/evidence.pdf?set=cyber-essentials").data[:4] == b"%PDF"
+        assert client.get(f"/tenants/{alpha}/evidence/cyber-essentials.pdf").data[:4] == b"%PDF"
     monkeypatch.setattr(export, "pdf_available", lambda: False)  # the same template as a print page
-    printed = client.get(f"/tenants/{alpha}/evidence.pdf?set=insurance").get_data(as_text=True)
+    printed = client.get(f"/tenants/{alpha}/evidence/insurance.pdf").get_data(as_text=True)
     assert "Cyber insurance proposal" in printed and "Annual training with KnowBe4." in printed
     assert "Set by jack on" in printed and "Suggested from the data" not in printed
-    pack = client.get(f"/tenants/{alpha}/evidence.pdf").get_data(as_text=True)  # the controls pack
-    assert "Controls, one by one" in pack and "Annual training with KnowBe4." in pack

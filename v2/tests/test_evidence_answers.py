@@ -133,7 +133,7 @@ def test_read_only_users_cannot_override(client, db, two_tenants):
     login(client, "client")
     assert client.post(f"/tenants/{alpha}/evidence/answers/legacy_auth", data={"answer": "Yes"}).status_code == 403
     assert db.execute("SELECT COUNT(*) FROM evidence_answer_overrides").fetchone()[0] == 0
-    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence/insurance").get_data(as_text=True)
     assert "Copy all answers" in page and "Change this answer" not in page and "Write this answer" not in page
 
 
@@ -145,31 +145,32 @@ def test_overrides_reach_page_pdf_and_exports(client, db, two_tenants, monkeypat
     make_user(db, "client", role="client", tenants=[alpha])
 
     login(client, "admin")
-    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence/insurance").get_data(as_text=True)
     assert "Blocked at the firewall." in page and "Answer set by jack on" in page
     assert "Suggested from the data: <strong>No</strong>" in page  # staff still see the suggestion
     assert "Data changed since this was set" not in page
     assert f'href="/tenants/{alpha}/data/mfa#t-accounts-with-a-gap"' in page
 
-    rows = list(csv.reader(io.StringIO(client.get(f"/tenants/{alpha}/evidence.csv").get_data(as_text=True))))
-    legacy = next(r for r in rows if r[1] == "Is legacy authentication blocked?")
-    assert legacy[2] == "Yes" and legacy[3] == "Blocked at the firewall." and legacy[4].startswith("jack, ")
+    csv_text = client.get(f"/tenants/{alpha}/evidence/insurance.csv").get_data(as_text=True)
+    rows = list(csv.reader(io.StringIO(csv_text)))
+    legacy = next(r for r in rows if r[2] == "Legacy authentication blocked")
+    assert legacy[3] == "Pass" and legacy[7] == "Blocked at the firewall." and legacy[9].startswith("jack, ")
 
-    sheet = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx").data))["Cyber insurance"]
+    sheet = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence/insurance.xlsx").data))["Cyber insurance"]
     values = [[c.value for c in row] for row in sheet.iter_rows()]
     legacy = next(r for r in values if "Are legacy authentication protocols that can't use MFA blocked?" in r)
     assert "Yes" in legacy and "Blocked at the firewall." in legacy and any("jack" in str(v) for v in legacy)
 
     if export.pdf_available():
-        assert client.get(f"/tenants/{alpha}/evidence.pdf").data[:4] == b"%PDF"
+        assert client.get(f"/tenants/{alpha}/evidence/insurance.pdf").data[:4] == b"%PDF"
     monkeypatch.setattr(export, "pdf_available", lambda: False)  # the same template as a print page
-    printed = client.get(f"/tenants/{alpha}/evidence.pdf").get_data(as_text=True)
+    printed = client.get(f"/tenants/{alpha}/evidence/insurance.pdf").get_data(as_text=True)
     assert "Blocked at the firewall." in printed and "Set by jack on" in printed
     assert "Suggested from the data" not in printed  # documents never show the replaced suggestion
 
     client.post("/logout")
     login(client, "client")
-    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence/insurance").get_data(as_text=True)
     assert "Blocked at the firewall." in page and "Suggested from the data" not in page
 
 
@@ -182,7 +183,7 @@ def test_data_changed_hint(client, db, two_tenants):
     assert a.answer == YES and a.data_changed
     make_user(db, "admin")
     login(client, "admin")
-    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
+    page = client.get(f"/tenants/{alpha}/evidence/insurance").get_data(as_text=True)
     assert "Data changed since this was set" in page
 
 

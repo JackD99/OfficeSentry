@@ -16,10 +16,9 @@ from ..checks import RuleResult
 from ..checks.auth_methods import admin_phishing_resistant
 from ..snapshot import TenantSnapshot
 from ..text import WHOLE_ORGANISATION
-from . import evidence_answers, questionnaires
+from . import evidence_answers
 from .evidence_answers import Answer
 from .monthly_review import build as build_review
-from .workbook import Book, Cover
 
 IN_PLACE, PARTLY, NOT_IN_PLACE, NOT_ASSESSED = "In place", "Partly in place", "Not in place", "Not assessed"
 
@@ -215,89 +214,3 @@ def _sentence(text: str) -> str:
 
 def _as_pass(r: RuleResult) -> RuleResult:
     return RuleResult(r.key, r.title, r.category, "pass", r.summary, r.recommendation, [])
-
-
-ANSWER_COLUMNS = ["Question", "Answer", "Why", "Answered by", "Evidence"]
-
-
-def answer_rows(pack: EvidencePack) -> list[list[str]]:
-    """The questionnaire answers as exports show them: an override shows its note and who set it, never the
-    suggestion it replaced."""
-    rows = []
-    for a in pack.answers:
-        if a.override:
-            when = datetime.fromisoformat(a.override.set_at.replace("Z", "+00:00"))
-            why, by = a.override.note, f"{a.override.set_by}, {when.day} {when:%b %Y}"
-        else:
-            why, by = a.why, "Suggested from Microsoft 365 data"
-        source = (a.source.label + (" report" if a.source.report else "")) if a.source else ""
-        rows.append([a.question, a.answer, why, by, source])
-    return rows
-
-
-def to_xlsx(pack: EvidencePack, brand=None, only: str | None = None) -> bytes:
-    """Every question set as its own sheet, then the controls; or just question set ``only``."""
-    book = Book(brand.accent if brand else "")
-    sheets = [questionnaires.sheet(pack, k) for k in ([only] if only else questionnaires.SETS)]
-    for name, rows, description in questionnaires.to_xlsx_tables(sheets):
-        book.table(name, questionnaires.COLUMNS, rows, description=description)
-    if only:
-        n = sheets[0].counts
-        return book.save(
-            _cover(
-                pack,
-                brand,
-                sheets[0].qset.title,
-                [
-                    ("Answered from Microsoft 365", n["data"], ""),
-                    ("Answered by your team", n["team"], ""),
-                    ("Need attention", n["attention"], "Partly or No"),
-                    ("Your input needed", n["input"], ""),
-                ],
-            )
-        )
-    book.table(
-        "Controls",
-        ["Question", "Status", "What we found", "Gaps"],
-        [
-            [c.control.question, c.status, "\n".join(c.evidence), "\n".join(g.strip() for g in c.gaps)]
-            for c in pack.controls
-        ],
-        description="Each control insurers ask about, with the evidence",
-    )
-    return book.save(_cover(pack, brand, "Security controls evidence"))
-
-
-def _cover(pack: EvidencePack, brand, title: str, facts=None) -> Cover:
-    facts = facts or [(status, n, "") for status, n in pack.counts.items()]
-    if pack.secure_score is not None:
-        facts.append(("Microsoft Secure Score", f"{pack.secure_score:g}%", "Microsoft's own measure"))
-    notes = []
-    if pack.oldest_data:
-        oldest = datetime.fromisoformat(pack.oldest_data.replace("Z", "+00:00"))
-        notes.append(("Oldest data used", f"{oldest.day} {oldest:%b %Y, %H:%M} UTC"))
-    notes.append(
-        (
-            "How to read it",
-            "Partly in place means the control exists but has the gaps listed. Not assessed "
-            "means Microsoft 365 can't show it, so evidence has to come from elsewhere.",
-        )
-    )
-    notes.append(
-        (
-            "Your input",
-            "Questions Microsoft 365 can't answer have a text to complete: fill in the "
-            "[parts in brackets] before you paste it.",
-        )
-    )
-    return Cover(
-        title,
-        pack.tenant["name"],
-        pack.generated_at,
-        brand.display_name if brand else "",
-        pack.tenant["tenant_ref"],
-        brand.accent if brand else "",
-        "Answers to security questionnaires, from Microsoft 365 data read with read-only access.",
-        facts,
-        notes,
-    )

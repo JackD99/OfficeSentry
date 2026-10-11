@@ -236,6 +236,7 @@ SHOTS = [
     Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="#month"),
     Shot("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=1100),
     Shot("site-access", "/tenants/{t}/data/site-access", height=1100),
+    Shot("site-permissions", "/tenants/{t}/data/site-permissions", height=1100),
     Shot(
         "sharepoint-storage-files",
         "/tenants/{t}/data/sharepoint-storage",
@@ -305,8 +306,8 @@ EXAMPLES = {
         "fixed, projects, licence spend and what's coming up.",
     ),
     "insurance-evidence-pack.pdf": (
-        "/tenants/{t}/evidence.pdf",
-        "The controls cyber-insurance questionnaires ask about, answered from the data.",
+        "/tenants/{t}/evidence/insurance.pdf",
+        "The controls cyber insurers ask about, judged from the data, with the answers for the proposal form.",
     ),
     "sharepoint-storage.pdf": (
         "/tenants/{t}/data/sharepoint-storage.pdf",

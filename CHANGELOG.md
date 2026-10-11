@@ -97,8 +97,11 @@ client's approval.
   the default library grants and to whom, every guest with the sites they can reach, and who administers
   many sites. A new check, "Every site has at least two owners", flags ownerless and single-owner sites.
   Read with the existing `Sites.Read.All` permission from each site's user list and default library;
-  members of SharePoint groups on sites with no Microsoft 365 group wait for the SharePoint permission in
-  the next consent batch, and the report says so.
+  members of SharePoint groups on sites with no Microsoft 365 group are in Site permissions.
+- **Site permissions** report (Files and Teams): each team site's SharePoint groups and their members, who
+  holds which permission level, and the lists, libraries and subsites with their own permissions, with a check
+  for guests with full control. Needs the SharePoint permission (Sites.Read.All on Office 365 SharePoint
+  Online) from the next consent update; until a client approves it, the report says it's waiting.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
   Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with an app role for each
   built-in role (Admin for Administrator, TeamLeader, Analyst for Second line, FirstLine, AccountManager and
@@ -189,8 +192,12 @@ client's approval.
   Pass, Fail (any gap fails, auto-fail questions marked), Partly, or Your evidence where Microsoft 365 can't
   show it, with the figures, the fix and a text to paste. The page leads with what to fix before applying,
   compares with last month, three months or a year ago, lists what the CE Plus assessor tests, and carries
-  the answers for the IASME portal with one-tap copy. Downloads: PDF, Word, plain text, XLSX and CSV. The
-  insurance and supplier questionnaires and the insurer controls stay where they were.
+  the answers for the IASME portal with one-tap copy. Downloads: PDF, Word, plain text, XLSX and CSV.
+- The cyber insurance proposal and the supplier security questionnaire are judged the same way, as two more
+  packs on the Evidence page: each control Pass, Fail, Partly or Your evidence (a gap on a few accounts is
+  Partly, since insurers price the risk rather than refuse it), with the figures, the fix and the form's
+  answers to paste. The emailed
+  "Cyber insurance evidence pack" is now this pack; the old controls view and its links open it.
 
 ### Changed
 

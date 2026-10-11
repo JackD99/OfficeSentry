@@ -5,7 +5,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 
 from officesentry import findings, store
-from officesentry.reports import evidence
+from officesentry.reports import evidence, schemes
 from officesentry.reports.export import pdf_available
 from tests import graphdata as gd
 from tests.conftest import login, make_user
@@ -70,12 +70,13 @@ def test_pages(client, db, two_tenants):
     make_user(db, "client", role="client", tenants=[alpha])
     login(client, "client")
     assert client.get(f"/tenants/{bravo}/evidence").status_code == 404
-    page = client.get(f"/tenants/{alpha}/evidence?set=insurance").get_data(as_text=True)
+    overview = client.get(f"/tenants/{alpha}/evidence").get_data(as_text=True)
+    assert "Cyber Essentials" in overview and "Cyber insurance proposal" in overview
+    page = client.get(f"/tenants/{alpha}/evidence/insurance").get_data(as_text=True)
     assert "Is multi-factor authentication (MFA) enforced for all users accessing email" in page
-    controls = client.get(f"/tenants/{alpha}/evidence?set=controls").get_data(as_text=True)
-    assert "Is multi-factor authentication required" in controls
-    wb = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence.xlsx").data))
-    assert wb["Controls"].max_row == len(evidence.CONTROLS) + 1
+    assert "MFA for every user, on email and cloud apps" in page
+    wb = load_workbook(BytesIO(client.get(f"/tenants/{alpha}/evidence/insurance.xlsx").data))
+    assert wb["Controls"].max_row == len(schemes.SCHEMES["insurance"].controls) + 1
     if pdf_available():
-        resp = client.get(f"/tenants/{alpha}/evidence.pdf")
+        resp = client.get(f"/tenants/{alpha}/evidence/insurance.pdf")
         assert resp.data[:4] == b"%PDF"
