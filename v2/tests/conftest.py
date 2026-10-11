@@ -1,6 +1,9 @@
+import json
 import os
 import sqlite3
 import traceback
+import zlib
+from pathlib import Path
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -28,6 +31,11 @@ def pytest_addoption(parser):
     parser.addoption("--save-all", action="store_true", help="with --ui: save every capture in tests/browser/output")
     # tests/nightly: release upgrades, PDF snapshots and the 200-tenant timing run (tests/nightly/README.md).
     parser.addoption("--nightly", action="store_true", help="run the slow scheduled suite in tests/nightly")
+    # CI splits the suite across machines that run at the same time (.github/workflows/v2.yml).
+    parser.addoption("--shard", metavar="K/N", help="run only part K of N of the tests (every part, together: all)")
+    parser.addoption(
+        "--shard-list", metavar="FILE", help="with --shard: write the part's tests to FILE as JSON, for CI to check"
+    )
 
 
 def pytest_ignore_collect(collection_path, config):
@@ -36,6 +44,34 @@ def pytest_ignore_collect(collection_path, config):
     if collection_path.name == "nightly" and not config.getoption("--nightly"):
         return True
     return None
+
+
+def shard_of(nodeid: str, parts: int) -> int:
+    """Which part (1 to ``parts``) a test runs in: a hash of its id, so the parts are about the same size, a
+    test stays in its part when others are added, and each test is in exactly one."""
+    return zlib.crc32(nodeid.encode()) % parts + 1
+
+
+def pytest_collection_modifyitems(config, items):
+    shard = config.getoption("--shard")
+    if not shard:
+        return
+    try:
+        part, parts = (int(n) for n in shard.split("/"))
+    except ValueError:
+        part = parts = 0
+    if not 1 <= part <= parts:
+        raise pytest.UsageError(f"--shard takes K/N with 1 <= K <= N, such as 2/4, not {shard!r}")
+    total = len(items)
+    kept = [item for item in items if shard_of(item.nodeid, parts) == part]
+    config.hook.pytest_deselected(items=[item for item in items if shard_of(item.nodeid, parts) != part])
+    items[:] = kept
+    # .github/scripts/check_shards.py reads these from every part and fails unless together they hold each
+    # collected test exactly once. Under xdist every worker collects the same tests; the first one writes.
+    out = config.getoption("--shard-list")
+    if out and getattr(config, "workerinput", {}).get("workerid", "gw0") == "gw0":
+        tests = [item.nodeid for item in kept]
+        Path(out).write_text(json.dumps({"part": part, "parts": parts, "collected": total, "tests": tests}))
 
 
 @pytest.fixture(autouse=True)
