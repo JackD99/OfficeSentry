@@ -42,6 +42,9 @@ from . import (
     tenants,
     upcoming,
 )
+from . import (
+    roles as role_pages,
+)
 
 csrf = CSRFProtect()
 
@@ -199,6 +202,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     app.register_blueprint(tenants.bp)
     app.register_blueprint(home.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(role_pages.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(projects.bp)
     app.register_blueprint(email.bp)

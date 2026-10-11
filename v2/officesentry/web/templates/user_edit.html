@@ -53,6 +53,52 @@
   {% endif %}
   {% endfor %}
 </section>
+{% if role.kind != 'admin' %}
+<section class="card narrow-lg" id="access">
+  <h2>Customise for {{ user.username }}</h2>
+  <p class="muted small">Add or take away single capabilities for this person, on top of their role. Taking away always wins{% if role.kind == 'client' %}; a client's people only ever hold report capabilities{% endif %}.</p>
+  <form method="post" action="{{ url_for('admin.user_access', user_id=user.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% set everywhere = {} %}{% for o in overrides if o.tenant_id is none %}{% set _ = everywhere.update({o.capability: o.allow}) %}{% endfor %}
+    <details class="override-details"{% if everywhere %} open{% endif %}>
+      <summary><strong>Everywhere</strong> <span class="muted small">{{ everywhere|length|plural('capability', 'capabilities') }} changed</span></summary>
+      <div class="scroll-x">
+      <table class="override-table small">
+        <thead><tr><th>Capability</th><th>Role gives it</th><th>For {{ user.username }}</th></tr></thead>
+        <tbody>
+        {% for c in capabilities if c.key in allowed_capabilities %}
+        <tr><td title="{{ c.help }}">{{ c.title }}</td>
+          <td>{{ 'Yes' if c.key in role.capabilities else '–' }}</td>
+          <td><span class="radios">
+            <label><input type="radio" name="g_{{ c.key }}" value=""{% if c.key not in everywhere %} checked{% endif %}> As the role</label>
+            <label><input type="radio" name="g_{{ c.key }}" value="allow"{% if everywhere.get(c.key) is true %} checked{% endif %}> Allowed</label>
+            <label><input type="radio" name="g_{{ c.key }}" value="deny"{% if everywhere.get(c.key) is false %} checked{% endif %}> Taken away</label>
+          </span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </details>
+    <fieldset>
+      <legend>On one client</legend>
+      {% set per_client = overrides|rejectattr('tenant_id', 'none')|list %}
+      {% if per_client %}
+      <ul class="plain-list small">
+        {% for o in per_client %}{% set t = tenant_names.get(o.tenant_id) %}
+        <li><label class="check m0"><input type="checkbox" name="drop" value="{{ o.capability }}|{{ o.tenant_id }}"> <span><strong>{{ capability_titles.get(o.capability, o.capability) }}</strong> {{ 'allowed' if o.allow else 'taken away' }} on {{ t or 'a deleted client' }} <span class="faint">(tick to remove)</span></span></label></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="muted small">Nothing yet.</p>{% endif %}
+      <div class="inline-fields">
+        <label>Add on <select name="add_tenant"><option value="">Choose a client…</option>{% for t in tenants if not t.archived_at %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+        <label>Capability <select name="add_capability"><option value="">Choose…</option>{% for c in capabilities if c.key in allowed_capabilities %}<option value="{{ c.key }}">{{ c.title }}</option>{% endfor %}</select></label>
+        <label>Which <select name="add_allow"><option value="allow">Allowed</option><option value="deny">Taken away</option></select></label>
+      </div>
+    </fieldset>
+    <div class="form-actions"><button class="primary">Save access</button></div>
+  </form>
+</section>
+{% endif %}
 <section class="card narrow-lg">
   <h2>Sign-in security</h2>
   <dl class="kv">

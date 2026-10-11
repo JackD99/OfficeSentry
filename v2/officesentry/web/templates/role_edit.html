@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}{{ role.name }} · Roles{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><a href="{{ url_for('roles.index') }}">Roles</a><span>/</span><span>{{ role.name }}</span></div>
+<div class="page-head"><div><h1>{{ role.name }}</h1>
+  <div class="sub">{{ 'Built-in' if role.built_in else 'Custom' }} role for {{ 'everyone who runs Office Sentry' if role.kind == 'admin' else 'staff' if role.kind == 'staff' else "a client's people" }}
+    · {{ holders|length|plural('person', 'people') }} hold{{ 's' if holders|length == 1 else '' }} it{% if role.changed_from_template %} · changed from its default{% endif %}</div></div></div>
+
+{% if not role.editable %}
+<div class="callout">{{ icon('shield') }}<span class="grow"><strong>Administrator can't be changed.</strong> It holds every capability on every client, so there is always someone who can fix things. Give people a narrower role, or take single capabilities away on their page.</span></div>
+{% endif %}
+
+<form method="post" class="grid-main" id="role-form">
+  {{ csrf() }}
+  <div>
+    <section class="card">
+      <h2>Capabilities</h2>
+      {% for key, title, help in groups %}{% set caps = capabilities|selectattr('group', 'equalto', key)|list %}{% if caps %}
+      <fieldset>
+        <legend>{{ title }}</legend>
+        <p class="muted small m0">{{ help }}</p>
+        <div class="check-grid">
+        {% for c in caps %}
+        <label class="check" title="{{ c.help }}"><input type="checkbox" name="capabilities" value="{{ c.key }}" data-cap="{{ c.key }}"{% if c.key in role.capabilities %} checked{% endif %}{% if not role.editable %} disabled{% endif %}>
+          <span>{{ c.title }}{% if template and (c.key in template.capabilities) != (c.key in role.capabilities) %} <span class="faint small">({{ 'on' if c.key in template.capabilities else 'off' }} by default)</span>{% endif %}<span class="sub faint small">{{ c.help }}</span></span></label>
+        {% endfor %}
+        </div>
+      </fieldset>
+      {% endif %}{% endfor %}
+    </section>
+  </div>
+
+  <div>
+    <section class="card">
+      <h2>Details</h2>
+      <label>Name <input name="name" maxlength="60" required value="{{ role.name }}" autocomplete="off"{% if not role.editable %} disabled{% endif %}></label>
+      <label>Description <input name="description" maxlength="300" value="{{ role.description }}" autocomplete="off"{% if not role.editable %} disabled{% endif %}>
+        <span class="hint">Shown beside the role on each person's page.</span></label>
+      {% if role.kind == 'staff' %}
+      <fieldset class="choices">
+        <legend>Clients</legend>
+        {% for value, label in scopes %}
+        <label class="choice"><input type="radio" name="scope" value="{{ value }}"{% if role.scope == value %} checked{% endif %}> <span>{{ label }}</span></label>
+        {% endfor %}
+      </fieldset>
+      {% elif role.kind == 'client' %}
+      <p class="muted small">A client's people only ever see the clients granted on their page, and only report capabilities.</p>
+      {% endif %}
+      {% if role.editable %}
+      <div class="form-actions wrap"><button class="primary">Save role</button><a class="btn ghost" href="{{ url_for('roles.index') }}">Cancel</a></div>
+      {% endif %}
+    </section>
+
+    <section class="card" id="preview">
+      <h2>At a glance</h2>
+      <p class="muted small">What someone with this role sees, updated as you tick.</p>
+      {% if menu %}<h3>Menu</h3>
+      <ul class="preview-list">{% for label, needs in menu %}<li data-needs="{{ needs|join(' ') }}">{{ icon('check', 'ok') }}<span>{{ label }}</span></li>{% endfor %}</ul>{% endif %}
+      <h3>On a client</h3>
+      <ul class="preview-list">{% for label, needs in tabs %}<li data-needs="{{ needs|join(' ') }}">{{ icon('check', 'ok') }}<span>{{ label }}</span></li>{% endfor %}</ul>
+      <p class="footnote m0">Downloads need <strong>Download files</strong>; every page checks on the server as well.</p>
+    </section>
+
+    {% if holders %}
+    <section class="card">
+      <h2>Who holds it</h2>
+      <ul class="plain-list small">{% for u in holders %}<li><a href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a>{% if u.disabled %} <span class="pill">Disabled</span>{% endif %}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+  </div>
+</form>
+
+{% if role.editable %}
+<section class="card narrow-lg{{ ' danger-zone' if not role.built_in }}">
+  {% if role.built_in %}
+  <h2>Back to default</h2>
+  <p class="muted small">Put {{ role.name }} back to what it ships with{% if not role.changed_from_template %} (it's there now){% endif %}.</p>
+  <form method="post" action="{{ url_for('roles.reset', role_id=role.id) }}">{{ csrf() }}<button{% if not role.changed_from_template %} disabled{% endif %} data-confirm="Put {{ role.name }} back to its default? Everyone holding it will sign in again.">Reset to default</button></form>
+  {% else %}
+  <h2>Delete role</h2>
+  <p class="muted small">Only a role nobody holds can be deleted. Move people to another role first.</p>
+  <form method="post" action="{{ url_for('roles.delete', role_id=role.id) }}">{{ csrf() }}<button class="danger"{% if holders %} disabled{% endif %} data-confirm="Delete {{ role.name }}? This can't be undone.">Delete {{ role.name }}</button></form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var boxes = document.querySelectorAll('input[data-cap]');
+  var items = document.querySelectorAll('#preview li[data-needs]');
+  var admin = {{ 'true' if role.kind == 'admin' else 'false' }};
+  function held() {
+    var s = {};
+    boxes.forEach(function (b) { if (b.checked) s[b.dataset.cap] = true; });
+    return s;
+  }
+  function show() {
+    var s = held();
+    items.forEach(function (li) {
+      var ok = admin || li.dataset.needs.split(' ').filter(Boolean).every(function (need) {
+        return need.split('|').some(function (c) { return s[c]; });
+      });
+      li.classList.toggle('off', !ok);
+    });
+  }
+  boxes.forEach(function (b) { b.addEventListener('change', show); });
+  show();
+  document.querySelectorAll('[data-confirm]').forEach(function (b) {
+    b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
+  });
+})();
+</script>
+{% endblock %}

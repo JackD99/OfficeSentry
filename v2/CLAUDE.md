@@ -33,7 +33,15 @@ overview and DEPLOY.md for running it on a server.
   URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
   for it in the `world` fixture) or `OTHER_ARGS`. Templates use
   `can('<capability>', tenant.id)` to show or hide; never `current_user.role`
-  except to tell a client account from staff.
+  except to tell a client account from staff. Roles live in `roles` (built-in
+  ones by `key`, editable except Administrator, custom ones too) and a person's
+  overrides in `user_access`; `roles.py` reads and writes both (every change
+  audited: `role_created`, `role_updated`, `role_deleted`,
+  `user_access_changed`) and `web/roles.py` and `admin.user_access` are their
+  pages. A new capability is a `Capability` in `permissions.CAPABILITIES`,
+  added to the built-in roles that should hold it (`TEMPLATES`; the
+  migration seeded those rows, so a later change to a template needs a
+  migration of its own if existing installs should pick it up).
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
 - **Microsoft hosts come from `clouds.py`** (commercial, GCC High, DoD,
   China). A tenant (`tenants.cloud`) only signs in with an app connection of

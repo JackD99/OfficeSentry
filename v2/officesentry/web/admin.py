@@ -203,6 +203,9 @@ def edit_user(user_id: int):
         capabilities=permissions.CAPABILITIES,
         groups_of_capabilities=permissions.GROUPS,
         overrides=roles.overrides(g.db, user_id),
+        allowed_capabilities=permissions.allowed_for(current_role.kind, permissions.KEYS),
+        capability_titles={c.key: c.title for c in permissions.CAPABILITIES},
+        tenant_names={t["id"]: t["name"] for t in tenants},
         groups=tenant_groups.all_groups(g.db),
         granted_groups=tenant_groups.user_groups(g.db, user_id),
         sessions=sessions.list_for(user_id),
@@ -211,6 +214,40 @@ def edit_user(user_id: int):
         two_step_required=current_app.extensions["officesentry.config"].mfa_required(user["role"], g.db),
         last_admin=current_role.kind == permissions.ADMIN and _last_admin(user_id),
     )
+
+
+@bp.post("/users/<int:user_id>/access")
+@needs("users.manage")
+def user_access(user_id: int):
+    """Single capabilities added or taken away for this person: everywhere (one choice per capability) and
+    on one client (rows kept, dropped or added). Administrators hold everything, so there's nothing to set."""
+    user = _user_or_404(user_id)
+    role = roles.role_of(g.db, user)
+    if role.kind == permissions.ADMIN:
+        flash("An Administrator holds every capability; give them another role to narrow what they can do.", "error")
+        return redirect(url_for("admin.edit_user", user_id=user_id))
+    f = request.form
+    allowed = permissions.allowed_for(role.kind, permissions.KEYS)
+    items = []
+    for cap in allowed:
+        choice = f.get(f"g_{cap}", "")
+        if choice in ("allow", "deny"):
+            items.append(roles.Override(cap, None, choice == "allow"))
+    dropped = set(f.getlist("drop"))
+    for o in roles.overrides(g.db, user_id):
+        if o.tenant_id is not None and f"{o.capability}|{o.tenant_id}" not in dropped:
+            items.append(o)
+    tenant = f.get("add_tenant", "")
+    cap = f.get("add_capability", "")
+    if tenant.isdigit() and cap in allowed:
+        if not g.db.execute("SELECT 1 FROM tenants WHERE id = ?", (int(tenant),)).fetchone():
+            abort(400)
+        items = [o for o in items if not (o.capability == cap and o.tenant_id == int(tenant))]
+        items.append(roles.Override(cap, int(tenant), f.get("add_allow") == "allow"))
+    with transaction(g.db):
+        changed = roles.set_overrides(g.db, g.user["username"], user, items)
+    flash("Saved. They'll sign in again to pick it up." if changed else "Nothing changed.", "success")
+    return redirect(url_for("admin.edit_user", user_id=user_id) + "#access")
 
 
 def _is_locked(user) -> bool:
