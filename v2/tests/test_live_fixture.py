@@ -39,6 +39,28 @@ RECORDED = datetime(2026, 10, 10, 19, 30, tzinfo=UTC)
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
 STAND_INS: dict[str, dict] = {
+    # Site access (collectors/site_access.py): each site's hidden user list and its default library's
+    # permissions, in Microsoft's documented shapes.
+    "/v1.0/sites/{id}/lists/User%20Information%20List/items": {
+        "value": [
+            {
+                "id": "1",
+                "contentType": {"name": "Person"},
+                "fields": {
+                    "Title": "Site Admin",
+                    "EMail": "admin@contoso.example",
+                    "Name": "i:0#.f|membership|admin@contoso.example",
+                    "IsSiteAdmin": True,
+                    "Deleted": False,
+                },
+            }
+        ]
+    },
+    "/v1.0/sites/{id}/drive/root/permissions": {
+        "value": [
+            {"id": "1", "roles": ["owner"], "grantedToV2": {"siteGroup": {"displayName": "Site Owners", "id": "3"}}}
+        ]
+    },
     # The recording's Secure Score page carries a next link that the collector didn't follow when it was
     # made (it read one page); now it does, and the page behind the link is answered empty until the next
     # recording has it.

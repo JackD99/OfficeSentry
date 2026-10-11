@@ -100,3 +100,51 @@ def sharepoint_storage_space(snap: TenantSnapshot, now: datetime):
         for s in sites[:5]
     ]
     return ("fail", summary, findings)
+
+
+@rule(
+    "site_owners",
+    "Every site has at least two owners",
+    "Sharing",
+    "Give each site a second owner (in the Microsoft 365 group, or as a site administrator) so access "
+    "requests and content questions have someone to go to when one person leaves. The Site access report "
+    "lists each site's owners.",
+)
+def site_owners(snap: TenantSnapshot, now: datetime):
+    status = (snap.objects("site_access", "access_status") or [None])[0]
+    if status is None:
+        return _unavailable("Site access hasn't been collected yet")
+    if not status.get("available"):
+        return _unavailable(
+            "The tenant has no SharePoint licence"
+            if status.get("reason") == "no_sharepoint"
+            else "Office Sentry can't read this tenant's sites yet (Sites.Read.All)"
+        )
+    sites = [s for s in snap.objects("site_access", "site") or [] if isinstance(s, dict)]
+    findings = []
+    for s in sites:
+        count = s.get("ownerCount")
+        if count is None or count >= 2:
+            continue
+        where = "Microsoft 365 group" if s.get("ownerSource") == "group" else "site administrators"
+        findings.append(
+            Finding(
+                "high" if count == 0 else "low",
+                s.get("name") or s.get("url") or "?",
+                f"No enabled owner ({where})" if count == 0 else f"One owner ({where})",
+                s["_id"],
+            )
+        )
+    known = sum(1 for s in sites if s.get("ownerCount") is not None)
+    if findings:
+        none = sum(1 for f in findings if f.severity == "high")
+        summary = ", ".join(
+            part
+            for part in (
+                f"{plural(none, 'site')} with no owner" if none else "",
+                f"{plural(len(findings) - none, 'site')} with one owner" if len(findings) > none else "",
+            )
+            if part
+        )
+        return ("fail", summary, findings)
+    return ("pass", f"{plural(known, 'site')} checked, each with two or more owners", [])

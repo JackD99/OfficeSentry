@@ -92,6 +92,13 @@ client's approval.
 - The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
   every line says which request, user, client, run or task it belongs to. A page that fails shows a
   reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
+- **Site access** report (Files and Teams): who owns, administers and can reach each SharePoint site.
+  Sites with no enabled owner or only one, each site's owners, administrators, members and guests, what
+  the default library grants and to whom, every guest with the sites they can reach, and who administers
+  many sites. A new check, "Every site has at least two owners", flags ownerless and single-owner sites.
+  Read with the existing `Sites.Read.All` permission from each site's user list and default library;
+  members of SharePoint groups on sites with no Microsoft 365 group wait for the SharePoint permission in
+  the next consent batch, and the report says so.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
   Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with an app role for each
   built-in role (Admin for Administrator, TeamLeader, Analyst for Second line, FirstLine, AccountManager and
