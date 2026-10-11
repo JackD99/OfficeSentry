@@ -88,6 +88,8 @@ class PagedResult:
     items: list = field(default_factory=list)
     truncated: bool = False
     pages: int = 0
+    # The ``@odata.deltaLink`` of a delta query's last page: fetching it later returns only what changed since.
+    delta_link: str | None = None
 
 
 def _parse_error(resp: requests.Response) -> GraphError:
@@ -295,4 +297,6 @@ class GraphClient:
             result.items.extend(data.get("value", []))
             result.pages += 1
             url = data.get("@odata.nextLink")
+            if not url:
+                result.delta_link = data.get("@odata.deltaLink")
         return result

@@ -281,6 +281,14 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
     `Sites.Read.All` on Office 365 SharePoint Online and the app's
     certificate; until the client approves that permission the report says
     it's waiting.
+  - *File and folder permissions*: who can open each shared file or folder
+    in SharePoint and OneDrive and how (given access directly, sent a link,
+    an anyone or organisation-wide link), who shared it and when, what was
+    newly shared in the last 30 days, links past their expiry or expiring
+    within 30 days, and access by person with guests and outside addresses
+    first. After a library's first walk, each night asks Microsoft only for
+    what changed in it and re-reads those items' permissions; every library
+    is walked whole again after 30 days. Needs `Sites.Read.All`.
   - *Licences and subscriptions*: for renewals and fixing licence problems.
     Every product with licences purchased, in a grace period, suspended,
     assigned and available, and its monthly cost at your prices; every

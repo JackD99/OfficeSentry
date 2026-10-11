@@ -127,6 +127,13 @@ limiter and telemetry, and is GET only. Its paths are catalogued in
 Online; until a client approves it, SharePoint answers 401 and the collector
 stores the reason `consent` so the report says it's waiting, without a warning.
 
+The shared-files scan (`SharedFiles`) walks each library once, then keeps its
+delta link as a `drive_cursor` object and asks Microsoft only for what changed
+each night (`FULL_SCAN_DAYS` apart it walks the library whole again; a 410 from
+the link does the same). Unchanged items are carried from the last snapshot, so
+a `shared_item` keeps its `firstSeen`; `describe_permissions` lists every way in
+as `grants` and drops grants past their expiry from exposure.
+
 ## Adding a check or report
 
 - Checks live in the `checks/` package: `checks/base.py` is the framework
