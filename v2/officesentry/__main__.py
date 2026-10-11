@@ -11,7 +11,7 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from . import alerts, mailer, sso, store, totp
+from . import alerts, logs, mailer, sso, store, totp
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -33,6 +33,7 @@ def cmd_serve(args, cfg):
 def cmd_worker(args, cfg):
     from .worker import run_worker
 
+    logs.setup(cfg.data_dir, "worker")
     run_worker(cfg, once=args.once)
 
 
@@ -506,6 +507,38 @@ def cmd_delete_tenant(args, cfg):
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
 
+def cmd_support_package(args, cfg, config_error: str | None = None):
+    """Write the support package (support.py): a zip of versions, settings, health, failures and logs with
+    secrets and client data taken out, to attach to a bug report. Works when the portal won't start: a
+    database that won't open or a configuration that won't load leaves a note in the zip, not an error."""
+    from pathlib import Path
+
+    from . import support
+
+    conn = None
+    if cfg is not None:
+        try:
+            conn = connect(cfg.db_path)
+            conn.execute("SELECT 1 FROM sqlite_master").fetchone()
+        except Exception as exc:  # noqa: BLE001 (a broken database is exactly when this command is needed)
+            print(f"The database couldn't be opened ({type(exc).__name__}); the package says so.", file=sys.stderr)
+            conn = None
+    pkg = support.build(conn, cfg, include_identifiers=args.include_identifiers, config_error=config_error)
+    if conn is not None:
+        conn.close()
+    out = None if args.out == "-" else Path(args.out or pkg.filename)
+    written = support.write(pkg, out)
+    say = sys.stderr if out is None else sys.stdout
+    print(f"Wrote {written or 'the package to standard output'} ({plural(len(pkg.files), 'file')}).", file=say)
+    if pkg.include_identifiers:
+        print("It includes client names, tenant IDs and domains: share it through a private channel only.", file=say)
+    else:
+        print("Clients appear as numbers; secrets, addresses and names were taken out.", file=say)
+    for part in pkg.problems:
+        print(f"  {part.name}: {part.note}", file=say)
+    print("Attach it to a bug report: https://github.com/JackD99/OfficeSentry/issues/new?template=bug.yml", file=say)
+
+
 def cmd_live_test(args, cfg):
     """Collect from a real test tenant with a client secret (development only)."""
     from pathlib import Path
@@ -646,6 +679,21 @@ def main(argv=None):
     delete.add_argument("--yes", action="store_true", help="don't ask for the client's name (for scripts)")
     delete.set_defaults(func=cmd_delete_tenant)
 
+    pkg = sub.add_parser(
+        "support-package",
+        help="write a zip of versions, settings, health checks, recent failures and logs, with secrets and client "
+        "data taken out, to attach to a bug report",
+    )
+    pkg.add_argument(
+        "--out", help="the file to write (default: officesentry-support-<date>.zip here; - for standard output)"
+    )
+    pkg.add_argument(
+        "--include-identifiers",
+        action="store_true",
+        help="keep client names, Microsoft tenant IDs, domains and user names (for a private channel only)",
+    )
+    pkg.set_defaults(func=cmd_support_package)
+
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")
     live.add_argument("--collector", action="append", help="only run this collector (repeatable)")
     live.add_argument("--out", help="also write XLSX exports to this folder")
@@ -668,6 +716,16 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.command == "support-package":
+        # The one command that must work when the configuration doesn't load: the package then says why.
+        try:
+            cfg = load_config()
+        except ValueError as exc:
+            print(f"The configuration didn't load ({exc}); the package says so.", file=sys.stderr)
+            cmd_support_package(args, None, config_error=str(exc))
+            return
+        cmd_support_package(args, cfg)
+        return
     args.func(args, load_config())
 
 

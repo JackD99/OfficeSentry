@@ -22,6 +22,12 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
 - **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
+### Added
+
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
+
 ### New Microsoft permissions
 
 None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
@@ -59,6 +65,15 @@ first.
 - Users and roles can be handed to someone who isn't an Administrator: they give out only what they hold
   themselves, only on the clients they see (other clients' names don't show), can't change their own role
   or access, and can't change an Administrator or anyone who can do or see more than they can.
+- **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
+  failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
+  addresses and client names taken out (clients appear as numbers unless you tick *Include client
+  identifiers*). `python -m officesentry support-package` makes the same zip from the shell when the portal
+  won't start, over a broken database or a configuration that won't load.
+  [Getting help](v2/docs/getting-help.md) says what's in it.
+- The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
+  every line says which request, user, client, run or task it belongs to. A page that fails shows a
+  reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
   Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with an app role for each
   built-in role (Admin for Administrator, TeamLeader, Analyst for Second line, FirstLine, AccountManager and
@@ -73,6 +88,11 @@ first.
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
   and the members of each unit by name. A new Administrative units collector reads them with the permissions
   the app already has, and each person's page shows the units they are in and administer.
+- One page per mailbox: Users > Mailboxes lists every mailbox with its size, forwarding, who else can
+  open it and its inbox rules, and each opens a page with what needs attention first, then size and growth
+  over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
+  settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
+  Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
 
 ### Changed
 

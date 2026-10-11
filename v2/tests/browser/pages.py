@@ -34,6 +34,8 @@ PAGES = [
     Page("licence-rightsizing", "/tenants/{t}/data/licence-rightsizing"),
     Page("people", "/tenants/{t}/users"),
     Page("person", "/tenants/{t}/users/u1"),
+    Page("mailboxes-list", "/tenants/{t}/mailboxes"),
+    Page("mailbox", "/tenants/{t}/mailboxes/x-acc"),
     Page("monthly-review", "/tenants/{t}/report"),
     Page("evidence", "/tenants/{t}/evidence"),
     Page("tenant-projects", "/tenants/{t}/projects"),

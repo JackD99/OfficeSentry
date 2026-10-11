@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, sev_counts, sev_legend %}
 {% from "_groups.html" import group_picker, in_group with context %}
+{% from "_get_started.html" import get_started as get_started_card %}
 {% block title %}Clients · Office Sentry{% endblock %}
 {% macro kpi(row, key, unit='', spark=false) -%}
 {% set k = row.kpis[key] %}
@@ -19,7 +20,9 @@
   </div>
 </div>
 
+{% if get_started %}{{ get_started_card(get_started) }}{% endif %}
 {% if not rows %}
+{% if not get_started %}
 <div class="card empty">
   {% if can('settings.manage') %}
   <h3>No clients yet</h3>
@@ -30,6 +33,7 @@
   <p>You haven't been given access to any clients yet. Ask an admin to grant access.</p>
   {% endif %}
 </div>
+{% endif %}
 {% else %}
 {% set sec = can('reports.security') %}{% set ident = can('reports.identity') %}{% set lic = can('reports.tenant') %}
 <div class="tiles">
