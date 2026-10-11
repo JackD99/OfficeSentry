@@ -145,6 +145,7 @@ def test_report_stops_waiting_after_a_while(app, db, cfg, two_tenants, vault, se
 # -- Retention ---------------------------------------------------------------
 
 
+@pytest.mark.timeout(600)  # 603 runs, each committed: over two minutes on Windows, where every commit syncs
 def test_retention_keeps_30_dailies_and_12_monthlies(db, two_tenants):
     alpha, bravo = two_tenants
     start = datetime(2025, 1, 1, 2, 0, tzinfo=UTC)
