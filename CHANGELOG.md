@@ -24,6 +24,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   never granted isn't approved and sent a report with that part missing. A client that removed the app,
   whose report could only say "Nothing has been collected, so no security checks could run", is flagged
   "No checks could run": it was marked Ready and sent in bulk before.
+- On the public demo, picking a client group in the Group picker now shows that group, and the choice
+  follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
+  to every client, because demo visitors have no sign-in to keep the choice on.
 
 ## [2.2.0] - 2026-10-11
 
