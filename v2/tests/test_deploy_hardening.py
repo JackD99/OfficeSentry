@@ -294,6 +294,8 @@ def test_the_hetzner_token_and_the_backup_keys_stay_away_from_the_code_the_deplo
     # backup keys: the website job builds the site and the server job only fetches the files.
     website = yaml.safe_load(workflow)["jobs"]["website"]
     assert "secrets." not in yaml.safe_dump(website) and website["permissions"] == {"contents": "read"}
+    # It runs whichever ref the deploy names, so it saves no cache that main's own runs would restore.
+    assert not [step for step in website["steps"] if "cache" in step.get("with", {})]
     assert "website" in server["needs"] and "Fetch the website" in names
     assert not [step for step in steps if re.search(r"pip install|playwright", step.get("run", ""))]
     assert not [step for step in steps if step.get("uses", "").startswith("actions/setup-python@")]

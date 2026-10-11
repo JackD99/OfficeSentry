@@ -92,14 +92,11 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
           persist-credentials: false
 
+      # No pip cache: this job runs whichever ref the deploy names, and a cache it saved would be restored by
+      # the main branch's own runs.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.12'
-          cache: pip
-          cache-dependency-path: |
-            website/requirements.txt
-            v2/requirements-dev.txt
-            v2/tests/browser/requirements.txt
 
       # Fresh screenshots and example reports of this exact code, from the fictional demo data, so the website
       # shows every page as it is now (v2/scripts/screenshots.py). If this fails, the site uses the copies in
