@@ -3,6 +3,7 @@
 import importlib.util
 import re
 import tomllib
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -54,13 +55,15 @@ def test_the_database_remembers_the_release_and_pre_upgrade_copies_name_it(cfg, 
     [saved] = (cfg.data_dir / "backups").glob("pre-upgrade-*.db")
     assert re.fullmatch(rf"pre-upgrade-v4-to-v{every[-1][0]}-\d{{8}}-\d{{6}}-from-2\.0\.0\.db", saved.name)
     # The copy is the database as 2.0.0 left it, so restoring it means going back to 2.0.0.
-    assert stored_app_version(connect(saved)) == "2.0.0"
+    with closing(connect(saved)) as copy:
+        assert stored_app_version(copy) == "2.0.0"
 
     # Going back to 2.0.0's code without restoring: the refusal names the release that upgraded it,
     # and the copy to restore.
     monkeypatch.setattr(db_module, "migration_files", lambda: [m for m in every if m[0] <= 4])
     with pytest.raises(db_module.DatabaseTooNew, match=r"upgraded by Office Sentry 2\.1\.0 .*" + re.escape(saved.name)):
         migrate(conn)
+    conn.close()
 
 
 def test_a_database_from_before_releases_gets_a_plain_pre_upgrade_name(cfg, monkeypatch):
@@ -73,6 +76,7 @@ def test_a_database_from_before_releases_gets_a_plain_pre_upgrade_name(cfg, monk
     migrate(conn)
     [saved] = (cfg.data_dir / "backups").glob("pre-upgrade-*.db")
     assert re.fullmatch(rf"pre-upgrade-v4-to-v{every[-1][0]}-\d{{8}}-\d{{6}}\.db", saved.name)
+    conn.close()
 
 
 def test_rotation_keeps_the_newest_copies_whatever_their_database_version(tmp_path):

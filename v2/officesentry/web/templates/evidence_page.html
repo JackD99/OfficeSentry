@@ -8,9 +8,9 @@
 <div class="report-layout">
 {{ report_picker(pack.tenant, 'evidence') }}
 <div class="report-main" id="report" tabindex="-1">
-<nav class="seg evidence-sets" aria-label="Question set">
-  {% for key, s in sets.items() %}<a href="{{ url_for('reports.evidence_pack', tenant_id=pack.tenant.id, set=key if key != 'insurance' else none) }}"{% if view == key %} aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}
-  <a href="{{ url_for('reports.evidence_pack', tenant_id=pack.tenant.id, set='controls') }}"{% if view == 'controls' %} aria-current="page"{% endif %}>Controls</a>
+<nav class="subtabs evidence-sets" aria-label="Question set">
+  {% for key, s in sets.items() %}<a href="{{ url_for('reports.evidence_pack', tenant_id=pack.tenant.id, set=key if key != 'insurance' else none) }}"{% if view == key %} class="active" aria-current="page"{% endif %}>{{ s.short }}</a>{% endfor %}
+  <a href="{{ url_for('reports.evidence_pack', tenant_id=pack.tenant.id, set='controls') }}"{% if view == 'controls' %} class="active" aria-current="page"{% endif %}>Controls</a>
 </nav>
 
 {% if sheet %}
@@ -40,10 +40,10 @@
 </div>
 {% if sheet.qset.source %}<p class="small muted set-source">{{ icon('library') }} {{ sheet.qset.source }} <a href="{{ sheet.qset.source_url }}" rel="noopener noreferrer" target="_blank">IASME's question set</a></p>{% endif %}
 {% set here = {'tenant_id': pack.tenant.id, 'set': view if view != 'insurance' else none} %}
-<nav class="seg show-filter" aria-label="Show">
-  <a href="{{ url_for('reports.evidence_pack', **here) }}"{% if not show %} aria-current="page"{% endif %}>All<span class="count">{{ total }}</span></a>
-  <a href="{{ url_for('reports.evidence_pack', show='input', **here) }}"{% if show == 'input' %} aria-current="page"{% endif %}>Your input<span class="count">{{ n.input }}</span></a>
-  <a href="{{ url_for('reports.evidence_pack', show='attention', **here) }}"{% if show == 'attention' %} aria-current="page"{% endif %}>Partly or No<span class="count">{{ n.attention }}</span></a>
+<nav class="subtabs show-filter" aria-label="Show">
+  <a href="{{ url_for('reports.evidence_pack', **here) }}"{% if not show %} class="active" aria-current="page"{% endif %}>All<span class="n">{{ total }}</span></a>
+  <a href="{{ url_for('reports.evidence_pack', show='input', **here) }}"{% if show == 'input' %} class="active" aria-current="page"{% endif %}>Your input<span class="n">{{ n.input }}</span></a>
+  <a href="{{ url_for('reports.evidence_pack', show='attention', **here) }}"{% if show == 'attention' %} class="active" aria-current="page"{% endif %}>Partly or No<span class="n">{{ n.attention }}</span></a>
 </nav>
 
 {% set seen = [] %}

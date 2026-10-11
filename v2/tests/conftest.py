@@ -1,9 +1,13 @@
+import os
+import sqlite3
+import traceback
+
 import pytest
 from werkzeug.security import generate_password_hash
 
 from officesentry import store
 from officesentry.certs import generate_certificate
-from officesentry.config import load_config
+from officesentry.config import ENV_PREFIX, load_config
 from officesentry.crypto import Vault
 from officesentry.db import connect, migrate, utcnow
 from officesentry.web import create_app
@@ -32,6 +36,58 @@ def pytest_ignore_collect(collection_path, config):
     if collection_path.name == "nightly" and not config.getoption("--nightly"):
         return True
     return None
+
+
+@pytest.fixture(autouse=True)
+def _no_settings_from_the_shell(monkeypatch):
+    """The developer's shell may carry OFFICESENTRY_* settings (a data folder, the public demo switch, a
+    two-step policy, the live test tenant); a test sees none of them and sets the ones it needs itself."""
+    for var in list(os.environ):
+        if var.startswith(ENV_PREFIX):
+            monkeypatch.delenv(var)
+
+
+class TrackedConnection(sqlite3.Connection):
+    """A connection that knows whether it was closed, so the test can tell at its end."""
+
+    closed = False
+
+    def close(self):
+        self.closed = True
+        super().close()
+
+
+@pytest.fixture(autouse=True)
+def _every_connection_is_closed(monkeypatch):
+    """A database connection opened during a test and still open when it ends fails the test. Python only
+    warns about those (and only when the object is collected, so the warning lands on whichever test runs
+    next), and nothing turned the warnings into failures; a connection the code under test forgets stays
+    open on a server for as long as the process runs. Fixtures of a wider scope (``seeded`` and the like)
+    open theirs before this runs and close them in their own teardown."""
+    real, opened = sqlite3.connect, []
+
+    def connect(*args, **kwargs):
+        kwargs.setdefault("factory", TrackedConnection)
+        conn = real(*args, **kwargs)
+        if isinstance(conn, TrackedConnection):
+            where = traceback.StackSummary.extract(traceback.walk_stack(None), limit=10, lookup_lines=False)
+            where.reverse()
+            opened.append((conn, where, args[0] if args else kwargs.get("database")))
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    yield
+    monkeypatch.undo()
+    left = []
+    for conn, where, database in opened:
+        if conn.closed:
+            continue
+        left.append(f"{database}, opened from:\n" + "".join(where.format()))
+        try:
+            conn.close()
+        except sqlite3.ProgrammingError:  # another thread's; it goes when the thread does
+            pass
+    assert not left, f"{len(left)} database connection(s) left open at the end of the test:\n" + "\n".join(left)
 
 
 @pytest.fixture(autouse=True)

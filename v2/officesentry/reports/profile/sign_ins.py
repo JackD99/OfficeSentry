@@ -278,7 +278,7 @@ def sign_in_history_part(p: Person) -> Part | None:
     recent = f"{p.end - timedelta(days=30):%Y-%m-%d}"
     days_30 = {r.day for r in rows if r.day > recent}
     result.summary = f"Signed in on {_plural(len(days_30), 'day')} of the last 30"
-    result.facts.append(("History from", f"{_day(kept)}"))
+    result.facts.append(("History from", _day(kept)))
     result.facts.append(("Last sign-in", _when(max(r.last for r in rows), p.now)))
     countries = sorted({r.country for r in rows if r.country})
     if countries:

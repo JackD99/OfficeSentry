@@ -20,7 +20,8 @@ from officesentry.ratelimit import Claim, Limiter, Telemetry
 from officesentry.worker import execute_run
 from tests import replay
 from tests.conftest import login, make_user
-from tests.seed import seed_tenant
+from tests.seed import PAGE, seed_tenant
+from tests.test_collectors import USERS as SEED_USERS
 
 USERS = f"{GRAPH_ROOT}/v1.0/users"
 SIGN_INS = f"{GRAPH_ROOT}/v1.0/auditLogs/signIns"
@@ -279,10 +280,11 @@ def test_every_run_records_its_requests(db, two_tenants):
     runs = db.execute("SELECT * FROM runs WHERE tenant_id = ?", (alpha,)).fetchall()
     assert {r["collector"] for r in runs} == set(REGISTRY)
     users = next(r for r in runs if r["collector"] == "users")
-    assert (users["requests"], users["throttled"], users["wait_seconds"]) == (1, 0, 0)
+    pages = -(-len(SEED_USERS) // PAGE)  # the seed answers a page at a time, and every page is a request
+    assert (users["requests"], users["throttled"], users["wait_seconds"]) == (pages, 0, 0)
     rows = db.execute("SELECT * FROM run_requests WHERE run_id = ?", (users["id"],)).fetchall()
     assert [(r["endpoint"], r["throttle_limit"], r["calls"], r["units"]) for r in rows] == [
-        ("v1.0 /users (signInActivity)", "signin_activity", 1, 2)
+        ("v1.0 /users (signInActivity)", "signin_activity", pages, 2 * pages)
     ]
     assert (
         db.execute(
