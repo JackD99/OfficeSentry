@@ -36,6 +36,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
   (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
   History list on person, mailbox, group and site pages, where a long address now wraps.
+- On phones the Group picker fits its row when a group has a long name: it cuts the name it shows instead
+  of widening Today, Clients, What changed, the All clients pages and the month-end queue.
 
 ## [2.2.0] - 2026-10-11
 
