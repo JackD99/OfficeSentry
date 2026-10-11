@@ -117,7 +117,7 @@ class Subject:
         self.tenant_id = snap.tenant["id"]
         self.attention: list[Attention] = []
         self._people: dict[str, str] | None = None
-        self._pages: dict[str, str] | None = None
+        self._pages: list | None = None
 
     def flag(self, severity: str, text: str, part: str = "") -> None:
         self.attention.append(Attention(severity, text, part))
@@ -128,7 +128,8 @@ class Subject:
             self._people = people_index(self.snap)
             self._pages = page_index(self.snap)
         link_people(sections, self.tenant_id, self._people)
-        link_pages(sections, {k: v for k, v in (self._pages or {}).items() if not self.is_me(v)})
+        others = [({k: v for k, v in names.items() if not self.is_me(v)}, where) for names, where in self._pages or []]
+        link_pages(sections, others)
 
     def is_me(self, href: str) -> bool:
         return False

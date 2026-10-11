@@ -8,6 +8,7 @@ from . import (  # noqa: F401
     deleted_items,
     distribution_lists,
     group_membership,
+    group_page,
     group_structure,
     identity_reports,
     mail_compliance,

@@ -25,6 +25,7 @@ from flask import Blueprint, abort, g, render_template, request, url_for
 from ..checks.apps import app_risks
 from ..mailflow import inbox_rule_risk, mailbox_forwarding
 from ..reports import sign_in_reports
+from ..reports.group_page import group_type
 from ..reports.views import slug
 from ..snapshot import TenantSnapshot
 from ..text import plural
@@ -254,9 +255,24 @@ def _domain(t: Tenant, _org: dict, name: str) -> Hit:
     )
 
 
+def _group(t: Tenant, g: dict, _v: str) -> Hit:
+    words = [group_type(g).lower()]
+    if g.get("examined") and isinstance(g.get("memberCount"), int):
+        words.append(plural(g["memberCount"], "member"))
+    if g.get("guestCount"):
+        words.append(plural(g["guestCount"], "guest"))
+    return Hit(
+        "Group",
+        _text(g.get("displayName")) or g["_id"],
+        ", ".join(w for w in (_text(g.get("mail")), *words) if w),
+        url_for("group_pages.group", tenant_id=t.id, gid=g["_id"]),
+    )
+
+
 # In the order results are listed within a tenant.
 KINDS: tuple[Kind, ...] = (
     Kind("users", "user", lambda u: (u.get("displayName"), u.get("userPrincipalName"), u.get("mail")), _person),
+    Kind("groups", "group", lambda g: (g.get("displayName"), g.get("mail")), _group),
     Kind(
         "mailboxes",
         "mailbox",

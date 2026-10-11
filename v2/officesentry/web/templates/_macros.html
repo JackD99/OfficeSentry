@@ -73,7 +73,7 @@
 {% set TAB_OF = {
   'data': 'reports', 'evidence': 'reports', 'review': 'reports', 'history': 'reports', 'designs': 'reports',
   'schedules': 'emails', 'projects': 'findings', 'collection': 'settings', 'manage': 'settings',
-  'activity': 'changes', 'mailboxes': 'users',
+  'activity': 'changes', 'mailboxes': 'users', 'group_pages': 'users',
 } %}
 
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. On laptops the tab bar
@@ -114,6 +114,7 @@
 {% if tab == 'users' %}
   {% set _ = pages.append(('users', 'People', url_for('people.people', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('mailboxes', 'Mailboxes', url_for('mailboxes.mailboxes', tenant_id=tenant.id))) %}
+  {% set _ = pages.append(('group_pages', 'Groups and teams', url_for('group_pages.groups', tenant_id=tenant.id))) %}
 {% elif tab == 'changes' and staff %}
   {% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
   {% set _ = pages.append(('activity', 'Activity history', url_for('history.activity', tenant_id=tenant.id))) %}

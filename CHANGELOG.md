@@ -36,6 +36,13 @@ No.
   over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
   settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
   Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
+- One page per group: Users > Groups and teams lists every team, Microsoft 365 group, security group and
+  distribution list with its owners, members, guests and membership type, and each opens a page with what
+  needs attention first, then its owners, members and the groups inside it, what membership gives
+  (Conditional Access policies, admin roles, licences), its mail settings and traffic, the team's site with
+  its headline sharing figures, how it's set up, admin changes, open findings and what changed. Group names
+  and addresses in reports, the person page and search results open the page, and it downloads as PDF and
+  XLSX.
 
 ### Fixed
 

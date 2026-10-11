@@ -118,6 +118,9 @@ changed over time. Useful for offboarding checks and "was this account compromis
 Mailboxes get the same treatment: **Users > Mailboxes** lists every mailbox with its size, forwarding and who
 else can open it, and each has a page with its size and growth over time, inbox rules, access, protocols, automatic
 reply, the phones syncing it and what changed. Mailbox addresses in reports and search results open it.
+So do groups: **Users > Groups and teams** lists every team, Microsoft 365 group, security group and distribution
+list, and each has a page with its owners and members, what membership gives (Conditional Access, admin roles,
+licences), its mail and team site, how it's set up and what changed.
 
 ### Across all clients, and what changed
 
