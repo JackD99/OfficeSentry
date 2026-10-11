@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 from officesentry import store
 from officesentry.db import utcnow
 from officesentry.graph import GRAPH_ROOT
+from officesentry.reports import views
 from officesentry.reports.data_reports import REPORTS, build
 from officesentry.snapshot import TenantSnapshot
 from tests import graphdata as gd
@@ -52,6 +53,13 @@ def figures(report):
     return {h.label: h.value for h in report.highlights}
 
 
+def opened(report, label):
+    """The first column of the rows a headline figure's link shows."""
+    rows = next(h for h in report.highlights if h.label == label).rows
+    view, _ = views.rows_view(report, rows)
+    return [r[0] for s in views.apply(report, view).sections if s.title == rows.table for r in s.rows]
+
+
 def price(db, part, amount):
     db.execute(
         "INSERT INTO sku_prices (sku_part_number, monthly_price, updated_at) VALUES (?, ?, ?)", (part, amount, utcnow())
@@ -90,6 +98,7 @@ def test_mfa_coverage_cross_checks_registration_against_policies(db, p1_tenant):
     assert ["Report-only MFA policies (not enforced)", "MFA for admins (report only)"] in s["How MFA is required"].rows
     f = figures(report)
     assert f["Fully protected"] == "1 of 3" and f["No MFA at all"] == 1 and f["Admins with a gap"] == 1
+    assert opened(report, "Admins with a gap") == ["bg@x.com"]  # not Carl, who isn't an admin
     assert not report.notes
 
 
@@ -100,9 +109,11 @@ def test_mfa_coverage_counts_only_privileged_roles_as_admins(db, two_tenants, mo
     reader = {**gd.ROLE_ASSIGNMENTS[3], "id": "a-carl", "principalId": "u6", "principal": carl}
     monkeypatch.setattr(gd, "ROLE_ASSIGNMENTS", [*gd.ROLE_ASSIGNMENTS, reader])
     seed_tenant(db, alpha, users=USERS + [CARL, BREAKGLASS])
-    gaps = sections(build(db, store.get_tenant(db, alpha), "mfa", NOW))["Accounts with a gap"]
+    report = build(db, store.get_tenant(db, alpha), "mfa", NOW)
+    gaps = sections(report)["Accounts with a gap"]
     carl = next(i for i, r in enumerate(gaps.rows) if r[0] == "carl@x.com")
     assert gaps.rows[carl][1] == "Directory Readers" and gaps.flags[carl] == "medium"
+    assert figures(report)["Admins with a gap"] == 1 and opened(report, "Admins with a gap") == ["bg@x.com"]
 
 
 def test_admins_report_names_the_group_a_role_comes_through(db, two_tenants, monkeypatch):

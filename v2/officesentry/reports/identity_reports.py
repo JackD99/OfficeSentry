@@ -88,7 +88,8 @@ def _sign_in(user: dict | None) -> str:
 
 
 def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
-    """Role holders by principal: label, kind, and active and PIM-eligible role names."""
+    """Role holders by principal: label, kind, and active and PIM-eligible role names (``privileged_roles``:
+    the active ones that are privileged)."""
     rows = snap.objects("admin_roles", "role_assignment")
     if rows is None:
         return None
@@ -109,6 +110,7 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
                 "eligible": [],
                 "privileged": False,
                 "privileged_active": False,
+                "privileged_roles": [],
                 "global_admin": False,
                 "groups": [],
             },
@@ -124,6 +126,8 @@ def _roles(snap: TenantSnapshot) -> dict[str, dict] | None:
         if r.get("privileged"):
             p["privileged"] = True
             p["privileged_active"] |= r.get("assignment") == "active"
+            if r.get("assignment") == "active" and name not in p["privileged_roles"]:
+                p["privileged_roles"].append(name)
         p["global_admin"] |= r.get("roleName") == "Global Administrator" and r.get("assignment") == "active"
     return out
 
@@ -137,6 +141,13 @@ def _through(p: dict) -> str:
 
 def _admin_role_names(roles: dict[str, dict] | None) -> dict[str, list[str]]:
     return {pid: p["active"] + [f"{n} (eligible)" for n in p["eligible"]] for pid, p in (roles or {}).items()}
+
+
+def _privileged_names(holders) -> list[str]:
+    """The active privileged roles these holders hold, named as the role columns show them, so a filter on them
+    keeps exactly the rows of people with an active privileged role. Never empty: with nobody holding one, the
+    filter still shows no rows rather than every row."""
+    return sorted({n for p in holders for n in p["privileged_roles"]}) or ["Global Administrator"]
 
 
 METHOD_NAMES = {
@@ -449,7 +460,13 @@ def mfa(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             admin_gaps if enf.known else "Not checked",
             "Fix these first",
             "bad" if admin_gaps else None,
-            Rows("Accounts with a gap"),
+            Rows(
+                "Accounts with a gap",
+                {
+                    "Admin roles": _privileged_names(held[pid] for pid in privileged),
+                    "Gap": [GAP_TEXT[k][0] for k in ("none", "not_required", "not_registered")] + ["Not required"],
+                },
+            ),
         ),
     ]
     if counts["unknown"]:
