@@ -17,6 +17,7 @@ in plain words what's wrong with its connection and where to fix it.
 | Are both containers up and healthy? | `docker compose ps` (both `web` and `worker` should say *healthy*) |
 | What did the portal log? | `docker compose logs --tail 100 web` |
 | What is the worker doing? | `docker compose logs -f worker` |
+| Everything a bug report needs, in one zip | **Settings → Support**, or `docker compose run --rm -T web python -m officesentry support-package --out - > support.zip` ([Getting help](getting-help.md)) |
 
 ## Contents
 
@@ -202,9 +203,13 @@ PDF attachments. Run it with Docker to get real PDF files.
 
 ## Asking for help
 
-Open an issue with the **Bug** form. Issues are public, so first remove
-tenant names and IDs, domains, user names and email addresses, and IP
-addresses from any error or log you paste. Keep Microsoft's error codes
+Open an issue with the **Bug** form and attach a **support package**:
+**Settings → Support** makes one zip of the version, settings, health
+checks, recent failures and logs, with secrets and client names taken out
+([Getting help](getting-help.md) says exactly what's in it). Quote the
+reference shown on the error page if there was one. Issues are public, so
+remove tenant names and IDs, domains, user names and email addresses, and IP
+addresses from anything you paste yourself. Keep Microsoft's error codes
 (`AADSTS...`, `Authorization_RequestDenied`): they help and identify nobody.
 Security problems go through [private vulnerability reporting](../../SECURITY.md)
 instead.

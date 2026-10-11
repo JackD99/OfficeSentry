@@ -1,0 +1,65 @@
+{#- What's new and why (web/onboarding.whats_new_pack): for a client already using Office Sentry, the new
+    read-only permissions of a batch, what each reads and adds, and how to approve them. For the client's
+    Global Administrator, so it names nothing they don't need. -#}
+{% extends "reports/_layout.html" %}
+{% import "reports/_components.html" as ui with context %}
+{% set compact_cover = true %}
+{% set document = true %}
+
+{% block doc_title %}New read-only permissions to approve{% endblock %}
+{% block client %}{{ tenant.name }}{% endblock %}
+{% block cover_subtitle %}<p class="cover-sub">What's new in your Microsoft 365 reports from {{ brand.display_name }}, and why</p>{% endblock %}
+{% block toolbar %}
+  <a class="back" href="{{ url_for('onboarding.send', tenant_id=tenant.id) }}">&larr; {{ tenant.name }}</a>
+  <span class="spacer"></span>
+  <a class="button primary" href="{{ url_for('onboarding.whats_new_pack', tenant_id=tenant.id) }}"><span class="wide">Download </span>PDF</a>
+{% endblock %}
+{% block cover_meta %}
+  {{ ui.meta('Prepared by', brand.display_name) }}
+  {{ ui.meta('Date', today.day ~ ' ' ~ today.strftime('%B %Y')) }}
+  {{ ui.meta('Microsoft 365 tenant', tenant.tenant_ref) }}
+  {{ ui.meta('App', app) }}
+{% endblock %}
+{% block footer_note %}For {{ tenant.name }}{% endblock %}
+
+{% block body %}
+<p class="lede">Office Sentry, which {{ brand.display_name }} uses for your Microsoft 365 reports, can now report on more of your Microsoft 365. It needs {{ new|length|plural('new read-only permission') }} for that, approved once by a <strong>Global Administrator</strong>. Nothing changes until you approve, and everything you have today keeps working.</p>
+
+<section class="doc-section">
+  <h2>What's new and why</h2>
+  <p class="section-intro">Each permission in Microsoft's name, what Office Sentry uses it to read, and what it adds to your reports. All of them are read-only.</p>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Permission</th><th>What it reads</th><th>What it adds</th></tr></thead>
+    <tbody>
+    {% for i in new %}<tr><td class="nw"><code>{{ i.name }}</code><br><span class="muted">{{ i.resource }}</span></td><td>{{ i.reads }}</td><td>{{ i.adds }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="doc-section keep">
+  <h2>How to approve</h2>
+  {% if link %}
+  <ol class="pack-steps">
+    <li>Open this link and sign in with a Global Administrator account of {{ tenant.name }}:
+      <p class="pack-link"><a href="{{ link }}">{{ link|breakable }}</a></p></li>
+    <li>Microsoft shows <strong>{{ app }}</strong> and every permission it has, the ones you approved before and the new ones, all of them read-only. Press <strong>Accept</strong>.</li>
+    <li>You land on a {{ brand.display_name }} page saying thank you. The new reports fill in after the next nightly collection.</li>
+  </ol>
+  {% else %}
+  <p class="section-intro">{{ brand.display_name }} will send you the approval link separately.</p>
+  {% endif %}
+  <p class="section-intro">Nothing else changes: the app keeps the Global Reader role you gave it, which can view settings but not change them.</p>
+</section>
+
+<section class="doc-section keep">
+  <h2>What it still never reads</h2>
+  <ul class="pack-list">{% for item in never %}<li>{{ item }}</li>{% endfor %}</ul>
+  <p class="section-intro">Office Sentry connects as an app with a certificate {{ brand.display_name }} holds, not with anyone's password. Every request it makes to Microsoft 365 is a read. You can remove its access at any time in the Microsoft Entra admin centre, under <strong>Enterprise applications</strong>.</p>
+</section>
+
+<section class="cta keep">
+  <h3>Questions?</h3>
+  <p>Ask us before you approve anything you're unsure of.</p>
+  <p class="contact">{{ brand.display_name }}{% if brand.contact %} · {{ brand.contact }}{% endif %}</p>
+</section>
+{% endblock %}

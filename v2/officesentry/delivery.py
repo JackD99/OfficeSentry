@@ -133,6 +133,13 @@ def catalog(conn=None) -> list[ReportOption]:
             True,
         ),
         ReportOption(
+            monthly_review.SUMMARY_KEY,
+            monthly_review.SUMMARY_TITLE,
+            "The monthly review's two summary pages, without the appendix of detail.",
+            True,
+            False,
+        ),
+        ReportOption(
             "evidence",
             "Insurance evidence pack",
             "The controls cyber-insurance questionnaires ask about, answered from the data.",
@@ -185,6 +192,9 @@ def attachment_plan(tenant, keys: list[str], include_xlsx: bool, conn=None) -> l
                 out.append((key, f"{stem}-{slug}.pdf"))
             if include_xlsx or not pdf:
                 out.append((key, f"{stem}-{slug}.xlsx"))
+        elif key == monthly_review.SUMMARY_KEY:
+            if pdf:
+                out.append((key, f"{monthly_review.SUMMARY_STEM}-{slug}.pdf"))
         elif designs.id_of(key) is not None:
             if pdf:
                 out.append((key, f"{_slug(known[key].title)}-{slug}.pdf"))
@@ -570,6 +580,9 @@ def _attachments(
                 if filename.endswith(".pdf")
                 else export.to_xlsx(report, brand=brand)
             )
+        elif key == monthly_review.SUMMARY_KEY:
+            report = built.setdefault("review", review or monthly_review.build(conn, tenant, now))
+            data = _pdf(app, "reports/monthly_review.html", report=report, appendix=False, **(review_context or {}))
         elif key == "evidence":
             pack = built.setdefault(key, evidence.build(conn, tenant, now))
             data = (

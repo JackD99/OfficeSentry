@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon, csrf %}
 {% block title %}Report designs · Office Sentry{% endblock %}
 {% block content %}
-{% set admin = current_user.role == 'admin' %}
+{% set admin = can('designs.manage') and can('settings.manage') %}
 <div class="crumbs"><a href="{{ url_for('reporting.index') }}">Month-end</a><span>/</span><span>Report designs</span></div>
 <div class="page-head">
   <div><h1>Report designs</h1>

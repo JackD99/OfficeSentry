@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf %}
+{% block title %}Roles · Office Sentry{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="{{ url_for('admin.users') }}">Users</a><span>/</span><span>Roles</span></div>
+<div class="page-head"><div><h1>Roles</h1>
+  <div class="sub">What each kind of person can see and do. Pick a role on each person's page; add or take away single capabilities there.</div></div></div>
+
+<div class="grid-main">
+<div>
+  <section class="card flush">
+    <table class="stack-sm">
+      <thead><tr><th>Role</th><th>For</th><th>Clients</th><th class="num">People</th><th>Can</th></tr></thead>
+      <tbody>
+      {% for r in roles %}
+      <tr><td><a class="strong" href="{{ url_for('roles.edit', role_id=r.id) }}">{{ r.name }}</a>
+          {% if not r.built_in %}<span class="pill">Custom</span>{% elif r.changed_from_template %}<span class="pill info" title="Changed from what it ships with">Changed</span>{% endif %}
+          <span class="sub muted">{{ r.description }}</span></td>
+        <td data-label="For">{{ 'Everyone' if r.kind == 'admin' else 'Staff' if r.kind == 'staff' else "A client's people" }}</td>
+        <td data-label="Clients">{{ 'All' if r.scope == 'all' else 'Granted' }}</td>
+        <td class="num" data-label="People">{{ members.get(r.id, 0) }}</td>
+        <td data-label="Can" class="small muted">{% if r.kind == 'admin' %}Everything{% else %}
+          {% set parts = [] %}{% for key, title, help in groups %}{% set n = capabilities|selectattr('group', 'equalto', key)|selectattr('key', 'in', r.capabilities)|list|length %}{% if n %}{% set _ = parts.append(title ~ ' ' ~ n) %}{% endif %}{% endfor %}{{ parts|join(' · ') if parts else 'Nothing yet' }}{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<div>
+  <section class="card">
+    <h2>New role</h2>
+    <form method="post" action="{{ url_for('roles.create') }}">
+      {{ csrf() }}
+      <label>Name <input name="name" maxlength="60" required placeholder="Service desk, Finance, Client admin…" autocomplete="off"></label>
+      <label>Start from <select name="copy">
+        <option value="">Nothing: a staff role with no capabilities yet</option>
+        {% for r in roles if r.kind != 'admin' %}<option value="{{ r.id }}">A copy of {{ r.name }}{% if r.kind == 'client' %} (client role){% endif %}</option>{% endfor %}
+        <option value="client">Nothing: a client role (their reports only)</option>
+      </select>
+      <span class="hint">Whether a role is for staff or for a client's people is fixed once it's made.</span></label>
+      <div class="form-actions"><button class="primary">{{ icon('plus') }} Create and choose capabilities</button></div>
+    </form>
+  </section>
+  <section class="card">
+    <h2>How roles work</h2>
+    <ul class="group-help small">
+      <li>A role is a set of capabilities (what someone may do) and a scope (every client, or the clients and groups granted on their page).</li>
+      <li>Built-in roles can be changed and put back to their defaults. Administrator always holds everything, so there is always someone who can fix things.</li>
+      <li>On a person's page you can add or take away single capabilities for them, everywhere or on one client. Taking away always wins.</li>
+      <li>Changing a role signs out everyone holding it, so they pick up the change when they next sign in.</li>
+    </ul>
+  </section>
+</div>
+</div>
+{% endblock %}

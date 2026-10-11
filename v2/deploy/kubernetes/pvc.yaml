@@ -1,0 +1,14 @@
+# The database, activity history and nightly backups. Office Sentry keeps its database in SQLite (WAL mode),
+# so this must be block storage that one node mounts (ReadWriteOnce): Azure Disk (managed-csi) on AKS, EBS (gp3)
+# on EKS, Persistent Disk (standard-rwo) on GKE, Longhorn or local-path elsewhere. Never NFS, Azure Files, EFS
+# or another network file share. Size it from v2/DEPLOY.md, "How much disk"; most classes can grow it later.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: officesentry-data
+spec:
+  accessModes: [ReadWriteOnce]
+  # storageClassName: managed-csi
+  resources:
+    requests:
+      storage: 20Gi

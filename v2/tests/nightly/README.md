@@ -5,8 +5,8 @@ request. Each opens an issue when it fails (labelled `nightly` or `canary`), upd
 failing, and closes it when a run passes again, so a failure arrives as a notification rather than a red run
 nobody opens.
 
-While the repository is private they run on Mondays, to save Actions minutes; set the repository variable
-`SCHEDULED_CHECKS_NIGHTLY` to `true` (at go-public, when standard runners are free) and they run every night.
+They run on Mondays; set the repository variable `SCHEDULED_CHECKS_NIGHTLY` to `true` and they run every
+night (standard runners are free for a public repository).
 Either can be run by hand: **Actions**, pick the workflow, **Run workflow**.
 
 ## Nightly suite (`.github/workflows/nightly.yml`)
@@ -34,9 +34,11 @@ python -m pytest tests/nightly --nightly
 
 The run's **pdf-pages** download (kept three days) has each changed page, its baseline and a picture of the
 difference in red; locally they're in `output/`. If the change is a mistake, fix it. If you meant it, refresh
-the baselines: in GitHub, **Actions > nightly > Run workflow**, pick the branch and tick **Save new PDF
-baselines** (it commits them to the branch), or run `pytest tests/nightly/test_pdf_snapshots.py --nightly
---update` on Ubuntu 24.04 with the packages `nightly.yml` installs. Look at the new images before merging.
+the baselines: add the label **refresh-baselines** to the pull request (it redraws them, commits them to the
+branch, takes the label off and starts the checks again), or in GitHub, **Actions > Nightly checks > Run
+workflow**, pick the branch and tick **Save new PDF baselines** (it commits them to the branch), or run `pytest
+tests/nightly/test_pdf_snapshots.py --nightly --update` on Ubuntu 24.04 with the packages `nightly.yml`
+installs. Look at the new images before merging.
 
 ### When a page goes over its time budget
 
@@ -53,9 +55,9 @@ sends a `Deprecation` or `Sunset` header the recording doesn't have. Re-recordin
 headers, which acknowledges them; they stay listed in every report, with their dates. No response is saved
 or uploaded, and the log shows each collector's status only.
 
-In GitHub Actions it signs in with no stored secret: the run's own OIDC token, which the test tenant's app
-trusts through a federated credential. Until the two repository variables below exist the workflow skips
-itself. To set it up (once, about 10 minutes):
+In GitHub Actions it signs in with no stored password or key: the run's own OIDC token, which the test
+tenant's app trusts through a federated credential. Until the `CANARY_CLIENT_ID` variable below exists the
+workflow skips itself. To set it up (once, about 10 minutes):
 
 1. Go to **https://entra.microsoft.com** and sign in to the test tenant as a Global Administrator.
 2. Open **Applications**, then **App registrations**, then **All applications**, and click the test app
@@ -68,11 +70,11 @@ itself. To set it up (once, about 10 minutes):
    `repo:JackD99/OfficeSentry:ref:refs/heads/main`.
 6. Set **Name** to `github-canary-main`, leave **Audience** as `api://AzureADTokenExchange`, and click **Add**.
 7. Still on the app, open **Overview** and copy the **Application (client) ID** and the **Directory (tenant) ID**.
-8. In GitHub, open the repository's **Settings**, then **Secrets and variables**, then **Actions**, then the
-   **Variables** tab (not Secrets), and add two repository variables:
-   - `CANARY_TENANT_ID`: the Directory (tenant) ID
+8. In GitHub, open the repository's **Settings**, then **Secrets and variables**, then **Actions**. Add the
+   first as a repository secret (**Secrets** tab) and the second as a repository variable (**Variables** tab):
+   - `CANARY_TENANT_ID`: the Directory (tenant) ID, a secret so it never shows in the public run logs
    - `CANARY_CLIENT_ID`: the Application (client) ID
-9. Open **Actions**, click **canary**, then **Run workflow** on `main`. It takes about three minutes; a green
+9. Open **Actions**, click **Live canary**, then **Run workflow** on `main`. It takes about three minutes; a green
    run with "Nothing changed" in its summary means it works.
 
 The credential only lets workflow runs on `main` sign in as the test app, which can only read. A pull request,
