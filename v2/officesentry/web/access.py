@@ -216,13 +216,11 @@ def visible_tenants(conn, user, archived: bool = False):
 
 def tenant_ids(conn, user) -> set[int] | None:
     """The ids of the tenants this person's scope covers, whatever the current view needs (``None``: every
-    client). For comparing two people's reach; pages list tenants with ``visible_tenants``."""
+    client). For comparing two people's reach; pages list tenants with ``visible_tenants``. A grant their
+    organisation hides from them now (``_organisation``) still counts: it would show again if they were
+    disconnected from Microsoft."""
     a = access_of(user, conn)
-    tid = _organisation(user, a)
-    if tid is None:
-        return None if a.sees_all else {r[0] for r in conn.execute(_GRANTED, _params(user, a))}
-    sql = "SELECT * FROM tenants" + ("" if a.sees_all else f" WHERE id IN ({_GRANTED})")
-    return {t["id"] for t in conn.execute(sql, _params(user, a)).fetchall() if sso.directory_id(conn, t) == tid}
+    return None if a.sees_all else {r[0] for r in conn.execute(_GRANTED, _params(user, a))}
 
 
 def can_see_tenant(conn, user, tenant_id: int) -> bool:

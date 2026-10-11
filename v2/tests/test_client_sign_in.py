@@ -23,8 +23,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509 import load_pem_x509_certificate
 from responses import matchers
 
+from officesentry import permissions, sso, store
 from officesentry import roles as office_roles
-from officesentry import sso, store
 from tests.conftest import PASSWORD, PASSWORD_HASH, login, make_user
 
 LOGIN = "https://login.microsoftonline.com"
@@ -262,10 +262,11 @@ def test_accounts_are_matched_on_tenant_and_object_id_never_on_a_name(client, db
     sign_in(client, JO, preferred_username=PAT["upn"], email=PAT["upn"])
     assert signed_in_as(client) is None
 
-    # Pat herself, renamed in Alpha since: still Pat, by her object ID; the new name is only shown.
-    assert sign_in(client, PAT, preferred_username="pat.new@alpha.example", email="").status_code == 302
+    # Pat, renamed in Alpha since: still Pat, by their object ID. Staff pages keep showing the address from
+    # Alpha's directory, not whatever the token says.
+    assert sign_in(client, PAT, preferred_username="jack@msp.example", email="").status_code == 302
     assert signed_in_as(client) == "pat@alpha.example"
-    assert user(db, "pat@alpha.example")["entra_upn"] == "pat.new@alpha.example"
+    assert user(db, "pat@alpha.example")["entra_upn"] == PAT["upn"]
 
 
 @responses.activate
@@ -320,6 +321,41 @@ def test_a_client_account_only_ever_sees_its_own_organisation(client, db, world)
     assert "can't be given Bravo Inc" in page(client, f"/admin/users/{jo}")
     grants = [r[0] for r in db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ?", (jo,))]
     assert grants == [alpha]
+
+
+def _grants(db, user_id: int) -> list[int]:
+    return [r[0] for r in db.execute("SELECT tenant_id FROM user_tenants WHERE user_id = ? ORDER BY 1", (user_id,))]
+
+
+@responses.activate
+def test_disconnecting_never_makes_another_organisations_client_count(client, db, world):
+    alpha, bravo = world
+    jo = client_account(db, "jo@alpha.example", [alpha, bravo], password=True, person=JO)
+    sign_in(client, JO)
+    assert client.get(f"/tenants/{bravo}/findings").status_code == 404
+    client.post("/account/microsoft/disconnect", data={"password": PASSWORD})
+    assert user(db, "jo@alpha.example")["entra_oid"] is None and signed_in_as(client) == "jo@alpha.example"
+    # Bravo was never theirs to see, so it goes rather than starting to count; Alpha stays.
+    assert _grants(db, jo) == [alpha]
+    assert client.get(f"/tenants/{bravo}/findings").status_code == 404
+    assert client.get(f"/tenants/{alpha}/findings").status_code == 200
+
+
+def test_staff_limited_to_one_client_cant_change_an_account_holding_another(client, db, world):
+    """A grant the account can't see now still puts it out of reach of staff without that client."""
+    alpha, bravo = world
+    jo = client_account(db, "jo@alpha.example", [alpha, bravo], password=True, person=JO)
+    role = office_roles.create(db, "owner", "Alpha's manager", "", "staff", "granted", permissions.KEYS)
+    manager = make_user(db, "manager", role="analyst", tenants=[alpha])
+    db.execute("UPDATE users SET role_id = ? WHERE id = ?", (role, manager))
+    db.commit()
+    login(client, "manager")
+    before = tuple(user(db, "jo@alpha.example"))
+    new = {"tenants": [str(alpha)], "password": "Kettle-Drum-Orchard-42", "admin_password": PASSWORD}
+    client.post(f"/admin/users/{jo}", data=new)
+    resp = client.post(f"/admin/users/{jo}/microsoft/disconnect")
+    assert "only an Administrator can change their account" in page(client, resp.headers["Location"])
+    assert tuple(user(db, "jo@alpha.example")) == before and _grants(db, jo) == [alpha, bravo]
 
 
 @responses.activate

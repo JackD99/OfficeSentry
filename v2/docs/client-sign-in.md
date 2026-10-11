@@ -69,10 +69,14 @@ their administrator has approved the sign-in app, and:
 
 When they sign in, Office Sentry matches the account on Microsoft's ID for that person in that client's
 tenant only, never on a name or email address, which their organisation's administrators can change. A later
-rename doesn't matter, and someone given their old address doesn't become them.
+rename doesn't matter, and someone given their old address doesn't become them. The address shown for them
+here stays the one found in the client's directory when they were added.
 
 A client's person signed in this way only ever sees clients in their own organisation, even if they're given
 another one by mistake, and the Users page won't grant them one. Their account can't be given a staff role.
+Disconnecting their Microsoft account (if they also have a password) takes away any grant of a client in
+another organisation rather than letting it count, and staff limited to some clients can't change an account
+that holds a client outside them, even one it can't see.
 Microsoft sign-in doesn't ask for Office Sentry's own two-step sign-in, whatever `OFFICESENTRY_REQUIRE_MFA`
 says: their organisation's MFA and Conditional Access apply instead.
 

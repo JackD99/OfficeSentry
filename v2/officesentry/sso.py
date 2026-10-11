@@ -815,7 +815,8 @@ def client_account_for(conn, identity: Identity, s: dict, now: str | None = None
     are the token's, as staff added it from the client's directory (``directory_person``). Never by sign-in
     name or email address, which a tenant's administrator can set to anything. It must be granted a client
     whose Directory ID is the token's tenant. Never a staff account, never a new account, and the token's app
-    roles count for nothing. Returns (user row, the clients it matched). Raises ``Refused``."""
+    roles count for nothing. The sign-in address shown for them stays the one from the client's directory,
+    not the token's. Returns (user row, the clients it matched). Raises ``Refused``."""
     now = now or utcnow()
     if not clients_enabled(s):
         raise Refused(OTHER_ORGANISATION)
@@ -829,12 +830,11 @@ def client_account_for(conn, identity: Identity, s: dict, now: str | None = None
         raise Refused(NOT_SET_UP)
     if user["disabled"]:
         raise Refused("Your account here is disabled. Ask your IT provider if you need it back.")
-    conn.execute("UPDATE users SET entra_upn = ? WHERE id = ?", (identity.upn, user["id"]))
     conn.executemany(
         "UPDATE tenants SET sign_in_approved_at = COALESCE(sign_in_approved_at, ?) WHERE id = ?",
         [(now, t["id"]) for t in matched],
     )
-    return conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone(), matched
+    return user, matched
 
 
 def client_people(conn, tenant_id: int) -> list:
@@ -871,10 +871,20 @@ def link(conn, user_id: int, identity: Identity, now: str | None = None) -> None
 
 
 def unlink(conn, user_id: int) -> bool:
-    """Disconnect. Refused (False) for an account with no password: it would have no way to sign in."""
-    user = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+    """Disconnect. Refused (False) for an account with no password: it would have no way to sign in. A
+    client's account connected in its own organisation also loses its grants of clients in any other: they
+    count for nothing while it's connected (``web.access._organisation``), and mustn't start counting now."""
+    user = conn.execute("SELECT role, entra_tid, password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
     if user is None or not has_password(user):
         return False
+    if user["role"] == "client" and user["entra_tid"]:
+        granted = conn.execute(
+            "SELECT t.* FROM tenants t JOIN user_tenants ut ON ut.tenant_id = t.id WHERE ut.user_id = ?", (user_id,)
+        ).fetchall()
+        conn.executemany(
+            "DELETE FROM user_tenants WHERE user_id = ? AND tenant_id = ?",
+            [(user_id, t["id"]) for t in granted if directory_id(conn, t) != user["entra_tid"]],
+        )
     conn.execute(
         "UPDATE users SET entra_oid = NULL, entra_tid = NULL, entra_upn = NULL, entra_linked_at = NULL WHERE id = ?",
         (user_id,),
