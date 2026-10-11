@@ -212,6 +212,11 @@ Sentry and isn't a copy of an earlier one sent again:
   the one whose key id matches, then save the new one in Office Sentry and
   remove the old one from the receiver.
 
+Use a long random secret: Office Sentry refuses one shorter than 16
+characters, since anyone who sees one signed request could find a short secret
+by trying them all, then sign requests of their own. `openssl rand -hex 32`
+makes a good one.
+
 Refuse a request whose signature doesn't match or whose timestamp is more than
 five minutes from your clock. In Python:
 

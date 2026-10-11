@@ -573,7 +573,9 @@ These areas have no real recording and are tested with simulated data only:
 - **Activity log:** Administrators and Team leaders see sign-ins and every
   change, with the address, under *Settings → Activity log* (filters, paging,
   CSV). Failed sign-ins are kept for 90 days, the rest for good unless
-  *Settings → Data retention* sets a period (never under a year).
+  *Settings → Data retention* sets a period (never under a year). A custom
+  role given the activity log that only sees some clients reads only the
+  entries about those clients.
 - **Cookies** are `Secure`, `HttpOnly`, `SameSite=Lax` and use the `__Host-`
   prefix. Behind a reverse proxy, set `OFFICESENTRY_TRUSTED_PROXIES=1` so the
   real client IP and scheme are used.

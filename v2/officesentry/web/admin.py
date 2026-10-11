@@ -36,7 +36,7 @@ from ..certs import cert_der, generate_certificate
 from ..db import audit, transaction, utcnow
 from ..text import plural
 from . import sessions
-from .access import access_of, current, needs, tenant_ids, visible_tenants
+from .access import access_of, current, needs, tenant_ids, unseen_client_accounts, visible_tenants
 from .auth import confirm_password, password_problem
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -45,8 +45,9 @@ GUID_RE = re.compile(r"^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
 
 
 def _user_or_404(user_id: int):
+    """The account, unless it's missing or a client account of clients the signed-in person doesn't see."""
     user = g.db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    if user is None:
+    if user is None or user_id in unseen_client_accounts(g.db, g.user):
         abort(404)
     return user
 
@@ -101,7 +102,7 @@ def _out_of_reach(user) -> str | None:
         return "Only an Administrator can change an Administrator's account."
     mine, theirs = tenant_ids(g.db, g.user), tenant_ids(g.db, user)
     wider = mine is not None and (theirs is None or not theirs <= mine)
-    if wider or target.anywhere() - actor.capabilities:
+    if wider or target.anywhere() - actor.everywhere():
         return f"{user['username']} can do or see more than you can, so only an Administrator can change their account."
     return None
 
@@ -119,7 +120,7 @@ def _givable(role: roles.Role) -> bool:
     actor = current()
     if actor.is_admin:
         return True
-    if role.kind == permissions.ADMIN or role.capabilities - actor.capabilities:
+    if role.kind == permissions.ADMIN or role.capabilities - actor.everywhere():
         return False
     return role.scope != permissions.ALL_CLIENTS or role.kind != permissions.STAFF or actor.sees_all
 
@@ -139,7 +140,8 @@ def _manageable_tenants():
 @bp.get("/users")
 @needs("users.manage")
 def users():
-    rows = g.db.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
+    unseen = unseen_client_accounts(g.db, g.user)
+    rows = [u for u in g.db.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE") if u["id"] not in unseen]
     cfg = current_app.extensions["officesentry.config"]
     two_step = {
         "policy": cfg.mfa_policy(g.db),
@@ -292,7 +294,7 @@ def edit_user(user_id: int):
         actor=actor,
         out_of_reach=_out_of_reach(user),
         own_access=_own_access(user),
-        grantable=actor.capabilities if not actor.is_admin else frozenset(permissions.KEYS),
+        grantable=actor.everywhere(),
         capabilities=permissions.CAPABILITIES,
         groups_of_capabilities=permissions.GROUPS,
         overrides=roles.overrides(g.db, user_id),
@@ -327,7 +329,7 @@ def user_access(user_id: int):
     allowed = permissions.allowed_for(role.kind, permissions.KEYS)
     before = roles.overrides(g.db, user_id)
     # Without the capability yourself you can take it away but not add it; what's set already stays.
-    grantable = set(permissions.KEYS) if actor.is_admin else set(actor.capabilities)
+    grantable = set(actor.everywhere())
     shown = {t["id"] for t in _manageable_tenants()}
     items = []
     for cap in allowed:

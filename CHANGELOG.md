@@ -9,6 +9,25 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.2.1] - Unreleased
+
+### Security
+
+- Someone who manages users without being an Administrator, and has a capability taken away on one client,
+  no longer counts as holding it everywhere: they can't give it to anyone, put it in a role, or change an
+  account that holds it.
+- The user pages no longer show a user manager who only sees some clients the client accounts of other
+  clients, and the activity log shows a custom role that only sees some clients only the entries about
+  those clients.
+- The support package keeps clients as numbers for anyone who doesn't see every client: *Include client
+  identifiers* is only offered to people who see them all.
+- Webhook signing secrets must be at least 16 characters, since a short one can be worked out from a single
+  signed request. A shorter secret already saved keeps working until it is changed; a long random one
+  (`openssl rand -hex 32`) is best.
+- New tests attack sign-in, sessions and forms on every route: a form sent without this browser's own token
+  is refused, opening a page never changes stored data, sign-in answers the same whatever was wrong, and a
+  copied cookie stops working whenever its session ends.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site
@@ -718,6 +737,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.2.1]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0
