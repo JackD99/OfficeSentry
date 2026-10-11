@@ -13,7 +13,7 @@
     <div class="hero-copy">
       <p class="eyebrow">{{ "Free and open source" if source_public else "Free software" }} · Built for MSPs</p>
       <h1>Microsoft 365 reports for every client, without the busywork</h1>
-      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, evidence for Cyber Essentials and insurance forms, about 30 detail reports, a view across every client and what changed since last month.</p>
+      <p class="lead">Office Sentry reads each client's Microsoft 365 tenant every night, keeps the history and turns it into the reports you actually send: a branded monthly review, evidence for Cyber Essentials and insurance forms, 44 detail reports, a page for every person, mailbox, group and site, a view across every client and what changed since last month.</p>
       <div class="actions">
         <a class="btn primary lg" href="{{ demo_url }}">Try the live demo</a>
         {% if contact and not source_public %}<a class="btn lg" href="{{ contact }}">Ask for early access</a>
@@ -61,12 +61,12 @@
     <article class="feature">
       <div class="feature-copy">
         <h3>A monthly review your clients will read</h3>
-        <p>The Monthly Security &amp; Licensing Review opens with a verdict and a plain-English summary, then the figures that matter.</p>
+        <p>The Monthly Security &amp; Licensing Review leads with the answer on two summary pages, then puts the detail in an appendix.</p>
         <ul class="ticks">
-          <li>{{ check() }}Key figures with their four-week change</li>
-          <li>{{ check() }}What to fix first, and what changed</li>
-          <li>{{ check() }}Secure Score, and licence waste in money</li>
-          <li>{{ check() }}A web page, a branded PDF and a spreadsheet</li>
+          <li>{{ check() }}At a glance: what was checked, what changed and the key figures</li>
+          <li>{{ check() }}This month: findings found and fixed, what was done and what to do next</li>
+          <li>{{ check() }}Each failing check, Secure Score and licence waste in money</li>
+          <li>{{ check() }}A web page, a branded PDF, a two-page summary PDF and a spreadsheet</li>
         </ul>
         <a class="more" href="/examples/monthly-security-licensing-review.pdf">Open the example PDF</a>
       </div>
@@ -78,8 +78,8 @@
 
     <article class="feature flip">
       <div class="feature-copy">
-        <h3>About 30 detail reports you can filter, save and export</h3>
-        <p>Identity, email, files, devices and licences: MFA coverage, mail forwarding, mailbox permissions, sign-ins, Conditional Access, licence right-sizing and more.</p>
+        <h3>44 detail reports you can filter, save and export</h3>
+        <p>Identity, email, files and Teams, devices and licences: MFA coverage, mail forwarding, mailbox permissions, sign-ins, Conditional Access, administrative units, Teams channels and their guests, who can reach each SharePoint site, licence changes month by month, licence right-sizing and more.</p>
         <ul class="ticks">
           <li>{{ check() }}Filter by any value or date, sort and hide columns</li>
           <li>{{ check() }}Save a view and reuse it on any client</li>
@@ -107,7 +107,7 @@
     <article class="feature flip">
       <div class="feature-copy">
         <h3>SharePoint storage: why it's full and what to clean up</h3>
-        <p>See how full a tenant is and when it will run out at the current rate, where the space goes, and the biggest folders, files, version histories and recycle bin items, each with what to do about it.</p>
+        <p>See how full a client's SharePoint is and when it will run out at the current rate, where the space goes, and the biggest folders, files, version histories and recycle bin items, each with what to do about it.</p>
         <a class="more" href="/examples/sharepoint-storage.pdf">Open the 19-page example</a>
       </div>
       <div class="feature-media">{{ window('sharepoint-storage', 'SharePoint storage: 88% used, full in about 3 months, and where the space goes') }}</div>
@@ -117,21 +117,21 @@
       <div class="feature-copy">
         <h3>Cyber Essentials and insurance evidence, answered from the data</h3>
         <p>Cyber Essentials and CE Plus are judged from the data control by control, with what to fix before applying and the answers for the IASME portal ready to paste. The insurance evidence pack answers the controls cyber-insurance questionnaires ask about, such as MFA, admin accounts, legacy sign-in, email authentication, forwarding, leavers and devices, with the gaps listed.</p>
-        <a class="more" href="/examples/insurance-evidence-pack.pdf">Open the example pack</a>
+        <a class="more" href="/examples/cyber-essentials-evidence.pdf">Open the Cyber Essentials example</a>
       </div>
-      <div class="feature-media">{{ window('evidence', 'Insurance evidence: each control with the evidence and the gaps') }}</div>
+      <div class="feature-media">{{ window('cyber-essentials', "Cyber Essentials: what to fix, each control's verdict and the text to paste") }}</div>
     </article>
 
     <div class="cards">
       <article class="card">
         {{ shot('person', 'An account page: needs attention, MFA, admin roles, licences and devices') }}
-        <h3>One page per person</h3>
-        <p>Sign-in, MFA, admin roles, licences, mailbox forwarding, devices and sharing for one account, with how it changed. Handy for offboarding and "was this account compromised?"</p>
+        <h3>A page for every person, mailbox, group and site</h3>
+        <p>Sign-in, MFA, admin roles, licences, forwarding, devices and sharing for one account, with how it changed. Mailboxes, teams and groups, and SharePoint sites get a page each too.</p>
       </article>
       <article class="card">
         {{ shot('projects', 'Recommended projects for every client, worst first') }}
         <h3>Projects to recommend</h3>
-        <p>Findings become the projects an account manager can propose, with a branded proposal PDF. A project drops off once the tenant is fixed.</p>
+        <p>Findings become the projects an account manager can propose, with a branded proposal PDF. A project drops off once its findings are fixed.</p>
       </article>
       <article class="card">
         {{ shot('emailed-reports', 'Schedules, alerts, contacts and the delivery history') }}
@@ -156,13 +156,43 @@
       <article class="card">
         {{ shot('tenant-groups', 'Client groups by sector and support tier') }}
         <h3>Groups of clients</h3>
-        <p>Group clients by tier, sector or region. Filter the dashboard, every cross-client page and the digest emails by group, and give an analyst a group instead of a list.</p>
+        <p>Group clients by tier, sector or region. Filter the dashboard, every cross-client page and the digest emails by group, and give someone a group instead of a list.</p>
       </article>
       <article class="card">
         {{ shot('system-status', 'System status: worker, collection, backups, disk and certificates') }}
         <h3>It watches itself</h3>
         <p>The worker, collections, backups, disk space and certificates are checked all the time, with an email or webhook when something goes wrong and an address for your uptime monitor.</p>
       </article>
+      <article class="card">
+        {{ shot('site-access', 'Site access: sites with no owner or one, guests, and sites open to everyone') }}
+        <h3>Who can reach each site and team</h3>
+        <p>Owners, administrators, members and guests of every SharePoint site, and each team's private and shared channels with the guests and apps in them.</p>
+      </article>
+      <article class="card">
+        {{ shot('reports-library', 'The Reports page: every report, searchable, grouped by job') }}
+        <h3>Find a report by the job</h3>
+        <p>The Reports page finds any report by name or by the job you're doing, such as an offboarding check, an insurance renewal or a storage clean-up, for one client or all of them.</p>
+      </article>
+      <article class="card">
+        {{ shot('client-tenants', 'Client settings: connection health for every client') }}
+        <h3>Clients that stay connected</h3>
+        <p>Connection health for every client, worst first. When a release adds permissions, update your app with one sign-in and send each client its What's new page with the approval link.</p>
+      </article>
+      <article class="card">
+        {{ shot('subscriptions', 'Licences and subscriptions: cost, renewals, trials and assignment errors') }}
+        <h3>Licences, renewals and changes</h3>
+        <p>What each subscription costs and when it renews, who was given or lost a licence and who made the change, and licences bought and assigned month by month.</p>
+      </article>
+    </div>
+
+    <div class="extras">
+      <h3>Also included</h3>
+      <ul class="security-list">
+        <li><strong>Quarterly reviews and your own designs</strong> Build a client report from blocks without code, or start from the Quarterly review: three months of score and findings, what was fixed, projects, licence spend and what's coming up. <a href="/examples/quarterly-review.pdf">Open the example</a>.</li>
+        <li><strong>Roles for your team</strong> Seven built-in roles, from Administrator to First line and Auditor, your own roles, and single capabilities given or taken away per person and per client.</li>
+        <li><strong>Staff sign in with Microsoft</strong> Your team uses their work account under your own Conditional Access and MFA, with their role assigned in Entra. Passwords stay as the way in if Microsoft sign-in breaks.</li>
+        <li><strong>A support package</strong> One zip of versions, settings, health checks and logs to attach to a bug report, with keys, tokens, addresses and client names taken out.</li>
+      </ul>
     </div>
   </div>
 </section>
@@ -201,9 +231,10 @@
     </header>
     <ul class="security-list">
       <li><strong>Read-only in your clients' tenants.</strong> The app that reads them asks only for read permissions. The code has no way to write to Microsoft Graph, and only runs Exchange commands that start with Get-.</li>
-      <li><strong>Sending email is separate and optional.</strong> Reports and alerts go out through your own mail server, or through a second app in your own Microsoft 365 tenant that may send mail and nothing else, limited to one mailbox. It has no access to your clients.</li>
+      <li><strong>Sending email is separate and optional.</strong> Reports and alerts go out through your own mail server, or through a separate app in your own Microsoft 365 tenant that may send mail and nothing else, limited to one mailbox. It has no access to your clients.</li>
       <li><strong>Certificate sign-in, no stored passwords.</strong> The app signs in with a certificate whose private key is encrypted in the database. Secrets and private keys can never be downloaded.</li>
-      <li><strong>Every client kept apart.</strong> People see only the clients they're given, and clients see only their own reports.</li>
+      <li><strong>Every client kept apart.</strong> People see only the clients they're given, and only what their role opens there. Clients see only their own reports.</li>
+      <li><strong>Your team signs in your way.</strong> Staff sign in with a password and a code from an authenticator app, or with their Microsoft work account under your own Conditional Access and MFA, through a sign-in app in your tenant that has no access to anything else.</li>
       <li><strong>Runs on your own server.</strong> Your clients' data stays with you. There's no telemetry: nothing is sent to us.</li>
     </ul>
   </div>
@@ -217,12 +248,13 @@
       <p>Office Sentry runs as two Docker containers with everything in one volume. No database server, no Redis.</p>
     </header>
     <ol class="steps">
-      <li><span>1</span><div><h3>Start it</h3><p>Download the compose file, set your domain and timezone, and run <code>docker compose up</code>.</p></div></li>
+      <li><span>1</span><div><h3>Start it</h3><p>Download the compose file, set your domain and timezone, and run <code>docker compose up</code>. Guides cover Portainer, a NAS, Kubernetes, Azure, AWS and other clouds.</p></div></li>
       <li><span>2</span><div><h3>Create the read-only app</h3><p>Press one button and sign in to Microsoft once: Office Sentry creates the app in your own tenant, with its certificate. A Get started checklist on your home page ticks off each step.</p></div></li>
       <li><span>3</span><div><h3>Add your clients</h3><p>Each client approves read access once. The first reports are ready after the first collection.</p></div></li>
     </ol>
     <div class="actions center">
       <a class="btn primary lg" href="/docs/quick-start/">Read the quick start</a>
+      <a class="btn lg" href="/docs/deploy/">Deploy guides</a>
       <a class="btn lg" href="/docs/what-it-reads/">What it reads, for your clients</a>
     </div>
   </div>
@@ -245,6 +277,7 @@
     {% if not source_public %}<details><summary>Can I see the source code?</summary><p>Not yet. The code and its install image stay private while security and reliability testing finishes, and the source is published under the AGPL-3.0 after that.{% if contact %} Until then, <a href="{{ contact }}">ask for early access</a> to try it with your own clients.{% endif %}</p></details>{% endif %}
     <details><summary>Can it change anything in a client's tenant?</summary><p>No. It only asks your clients' tenants for read permissions, and its code can't write to Microsoft Graph or run Exchange commands other than ones that read. The one thing it sends is your own email: reports and alerts, through your mail server or a separate app in your own tenant that can only send mail.</p></details>
     <details><summary>Does it read anyone's email?</summary><p>No. It reads settings, mailbox details such as size, forwarding and permissions, and inbox rules, never message contents. <a href="/docs/what-it-reads/">What Office Sentry reads</a> lists every permission, written for your clients.</p></details>
+    <details><summary>Can my team sign in with their Microsoft accounts?</summary><p>Yes. Office Sentry creates a small sign-in app in your own tenant, with no access to anything else, and your staff sign in under your Conditional Access and MFA. Their role comes from Entra at every sign-in; which clients they see is still set in Office Sentry. <a href="/docs/staff-sign-in/">Staff sign-in</a> has the steps.</p></details>
     <details><summary>Where is the data kept?</summary><p>On your own server, in one database you can back up and restore. Office Sentry has no telemetry, so nothing is sent to us.</p></details>
     <details><summary>How is it different from Microsoft's own admin centres?</summary><p>Microsoft shows one tenant at a time, in its own words, with little history. Office Sentry keeps every night's results for every client, compares them month by month and across clients, and turns them into branded reports.</p></details>
   </div>
