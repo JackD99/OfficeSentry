@@ -5,8 +5,8 @@ request. Each opens an issue when it fails (labelled `nightly` or `canary`), upd
 failing, and closes it when a run passes again, so a failure arrives as a notification rather than a red run
 nobody opens.
 
-While the repository is private they run on Mondays, to save Actions minutes; set the repository variable
-`SCHEDULED_CHECKS_NIGHTLY` to `true` (at go-public, when standard runners are free) and they run every night.
+They run on Mondays; set the repository variable `SCHEDULED_CHECKS_NIGHTLY` to `true` and they run every
+night (standard runners are free for a public repository).
 Either can be run by hand: **Actions**, pick the workflow, **Run workflow**.
 
 ## Nightly suite (`.github/workflows/nightly.yml`)
@@ -34,7 +34,7 @@ python -m pytest tests/nightly --nightly
 
 The run's **pdf-pages** download (kept three days) has each changed page, its baseline and a picture of the
 difference in red; locally they're in `output/`. If the change is a mistake, fix it. If you meant it, refresh
-the baselines: in GitHub, **Actions > nightly > Run workflow**, pick the branch and tick **Save new PDF
+the baselines: in GitHub, **Actions > Nightly checks > Run workflow**, pick the branch and tick **Save new PDF
 baselines** (it commits them to the branch), or run `pytest tests/nightly/test_pdf_snapshots.py --nightly
 --update` on Ubuntu 24.04 with the packages `nightly.yml` installs. Look at the new images before merging.
 
@@ -72,7 +72,7 @@ workflow skips itself. To set it up (once, about 10 minutes):
    first as a repository secret (**Secrets** tab) and the second as a repository variable (**Variables** tab):
    - `CANARY_TENANT_ID`: the Directory (tenant) ID, a secret so it never shows in the public run logs
    - `CANARY_CLIENT_ID`: the Application (client) ID
-9. Open **Actions**, click **canary**, then **Run workflow** on `main`. It takes about three minutes; a green
+9. Open **Actions**, click **Live canary**, then **Run workflow** on `main`. It takes about three minutes; a green
    run with "Nothing changed" in its summary means it works.
 
 The credential only lets workflow runs on `main` sign in as the test app, which can only read. A pull request,

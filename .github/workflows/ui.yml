@@ -1,12 +1,11 @@
-name: ui
+name: Browser tests
 # Screenshots and accessibility checks in a real browser (v2/tests/browser/README.md): about 34 pages at a
 # laptop and a phone width, light and dark, compared with the baselines in the repo, and axe-core on each.
 #
-# It costs minutes on GitHub Free, so it runs only on pull requests that touch what a page looks like, weekly
-# (while the repo is private; nightly once public), and by hand. Screenshots are uploaded only when a
+# It runs on pull requests that touch what a page looks like, weekly, and by hand. Screenshots are uploaded only when a
 # comparison fails, and kept for three days.
 #
-# To refresh the baselines after an intended change: Actions > ui > Run workflow, pick the branch, tick
+# To refresh the baselines after an intended change: Actions > Browser tests > Run workflow, pick the branch, tick
 # "Save new baselines". It commits them to that branch. Look at the new images in the pull request.
 on:
   pull_request:

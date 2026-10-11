@@ -37,7 +37,7 @@ Without `--ui` (as in `pytest -n auto`) this folder isn't collected.
 
 1. Open `output/<page>-<width>-<theme>.diff.png`. If the change is a mistake, fix it.
 2. If you meant it, refresh the baselines: run with `--update` locally as above, or in GitHub go to
-   **Actions > ui > Run workflow**, pick your branch and tick **Save new baselines**; it commits them to
+   **Actions > Browser tests > Run workflow**, pick your branch and tick **Save new baselines**; it commits them to
    the branch. Look at the new images in the pull request before merging. (That commit doesn't start CI
    by itself; your next push does.)
 

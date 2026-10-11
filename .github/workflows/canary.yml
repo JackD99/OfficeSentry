@@ -1,4 +1,4 @@
-name: canary
+name: Live canary
 # The live canary: has Microsoft changed what it sends? Runs every collector against the test tenant and
 # compares the shape of each answer (which fields, what types; never the values) with the recording the tests
 # replay (v2/tests/fixtures/live_tenant.json), and lists the Deprecation and Sunset headers Microsoft puts on
