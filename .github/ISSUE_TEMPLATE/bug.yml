@@ -27,7 +27,7 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Open a tenant's Overview
+        1. Open a client's Overview
         2. Press ...
         3. See ...
   - type: input

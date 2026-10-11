@@ -20,7 +20,7 @@ def mailbox_part(p: Person) -> Part:
         result.unavailable = "This tenant has no Exchange Online licence."
         return result
     if boxes is None:
-        result.unavailable = "Mailboxes haven't been collected yet. Refresh Mailboxes on the tenant page."
+        result.unavailable = "Mailboxes haven't been collected yet. Refresh Mailboxes on the client page."
         return result
     users = p.snap.objects("users", "user") or []
     d = _Directory(boxes, users)
