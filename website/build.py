@@ -293,7 +293,9 @@ WHATS_NEW = {
     "summary": "",  # a sentence under it
     "chip": "",  # a few words for the link at the top of the page, after "New in 2.3:"
     "items": [],  # {"icon", "title", "text", "href", "link"}: "link" names the page "href" opens
-    "also": [],  # smaller changes, a few words each
+    "also": [  # smaller changes, a few words each
+        "month-end emails sent at Microsoft's pace, however many clients you approve at once",
+    ],
 }
 
 # Copied into the site as they are, so the product page and docs can show and link them.
