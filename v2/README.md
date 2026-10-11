@@ -4,7 +4,8 @@ Read-only Microsoft 365 reporting for MSPs: nightly snapshots of every
 client's Microsoft 365, cross-client rollups, month-over-month changes and
 branded client reports. The [root README](../README.md) is the product page
 with screenshots; this page lists every feature in detail and covers setup
-and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
+and development. Running it on a server is in [DEPLOY.md](DEPLOY.md), and on
+Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/README.md).
 
 ## Reports
 

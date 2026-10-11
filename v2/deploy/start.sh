@@ -43,7 +43,7 @@ for service in "${services[@]}"; do
   if [ "$status" != healthy ]; then
     # Only the health check's own answer: the Deploy workflow's log will be
     # public with the repository, and the portal's log names clients and users.
-    # Read that log in a shell (DEPLOY.md, "If you need a shell").
+    # Read that log in a shell on the server.
     docker inspect -f '{{range .State.Health.Log}}{{println .Output}}{{end}}' "$id" | tail -n 3
     echo "::error::$service didn't become healthy. Its log is on the server: docker compose logs $service"
     exit 1

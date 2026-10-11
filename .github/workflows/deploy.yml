@@ -3,15 +3,15 @@ name: Deploy
 # from GitHub (the mobile app's "Run workflow" button works). The server's
 # Hetzner Cloud Firewall keeps SSH closed: each run opens port 22 to this
 # runner's address only, and closes it again at the end, even if a step fails.
-# Setup is in v2/DEPLOY.md ("Hetzner, from a phone"). The same server can also run the project's website
+# It is the project's own server's deploy, so the user docs leave it out: v2/deploy/cloud-init.yaml makes the
+# server, and the secrets and variables read below say where to deploy. The same server can also run the project's website
 # and public demo (v2/deploy/public/README.md). Those two follow main by themselves: every merge whose tests
 # pass updates them (a change to the docs alone, the website straight away), while the portal only updates
 # when someone runs "deploy", or on every merge too once AUTO_DEPLOY is "true".
 #
 # With the PRODUCTION_FROM_TAGS variable set to "true", the portal only takes release tags (v2.1.0), as the
 # published image pinned by its digest, and merges never deploy it, whatever AUTO_DEPLOY says. The website
-# and demo still follow main. Unset, a deploy builds the chosen ref on the server (v2/DEPLOY.md, "Production
-# from releases").
+# and demo still follow main. Unset, a deploy builds the chosen ref on the server.
 #
 # Run logs are public, so nothing here prints the first-admin link, the
 # portal's logs or a secret: the status action reports health and error counts
@@ -129,7 +129,7 @@ jobs:
             [ -n "$DOMAIN" ] || missing="$missing OFFICESENTRY_DOMAIN (secret)"
           fi
           if [ "$ACTION" = setup-link ] && [ "${#SETUP_CODE}" -lt 20 ]; then
-            echo "::error::The setup-link action needs a SETUP_CODE secret of at least 20 characters (a long random password works). Add it under Settings > Secrets and variables > Actions > New repository secret, then run this again. v2/DEPLOY.md, step 6, has the steps."
+            echo "::error::The setup-link action needs a SETUP_CODE secret of at least 20 characters (a long random password works). Add it under Settings > Secrets and variables > Actions > New repository secret, then run this again."
             exit 1
           fi
           if [ "$DEMO" = true ] && [ -z "$DEMO_DOMAIN" ]; then missing="$missing OFFICESENTRY_DEMO_DOMAIN (variable)"; fi
@@ -156,7 +156,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$REF" > /dev/null 2>&1; then
-            echo "::error::The portal only takes release tags while PRODUCTION_FROM_TAGS is on. Type a release tag such as v2.1.0 in the ref box (the Releases page lists them); for the website and demo, run website-and-demo instead. v2/DEPLOY.md, \"Production from releases\", has the steps."
+            echo "::error::The portal only takes release tags while PRODUCTION_FROM_TAGS is on. Type a release tag such as v2.1.0 in the ref box (the Releases page lists them); for the website and demo, run website-and-demo instead. To deploy other code, delete the PRODUCTION_FROM_TAGS variable."
             exit 1
           fi
           version=${REF#v}
@@ -312,14 +312,14 @@ jobs:
           # missing or wrong secret; ssh itself checks against the secret.
           seen=$(ssh-keyscan -t ed25519 "$HOST" 2>/dev/null | cut -d' ' -f2- || true)
           if [ -z "$HOST_KEY" ]; then
-            echo "::error::Add the server's SSH key as a secret named DEPLOY_HOST_KEY (Settings > Secrets and variables > Actions > New repository secret), then run this again. The server at $HOST shows this key: ${seen:-none, as it did not answer}. If you created that server yourself, that's its key. v2/DEPLOY.md, step 5, has the steps."
+            echo "::error::Add the server's SSH key as a secret named DEPLOY_HOST_KEY (Settings > Secrets and variables > Actions > New repository secret), then run this again. The server at $HOST shows this key: ${seen:-none, as it did not answer}. If you created that server yourself, that's its key."
             exit 1
           fi
           # Accept "ssh-ed25519 AAAA..." with or without the address in front.
           read -r a b c _ <<<"$HOST_KEY"
           case "$a" in ssh-*|ecdsa-*) want="$a $b" ;; *) want="$b $c" ;; esac
           if ! grep -qE '^(ssh-[a-z0-9-]+|ecdsa-sha2-nistp[0-9]+) [A-Za-z0-9+/]+=*$' <<<"$want"; then
-            echo "::error::The DEPLOY_HOST_KEY secret doesn't look like an SSH key. It should be one line starting ssh-ed25519 AAAA. v2/DEPLOY.md, step 5, has the steps."
+            echo "::error::The DEPLOY_HOST_KEY secret doesn't look like an SSH key. It should be one line starting ssh-ed25519 AAAA."
             exit 1
           fi
           printf '%s %s\n' "$HOST" "$want" > ~/.ssh/known_hosts
@@ -384,7 +384,7 @@ jobs:
         if: env.ACTION == 'deploy'
         run: |
           if ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' > /dev/null 2>&1; then
-            echo "::notice::No admin account yet. Run Deploy again with the setup-link action (v2/DEPLOY.md, step 6)."
+            echo "::notice::No admin account yet. Add a SETUP_CODE secret of at least 20 characters, then run Deploy again with the setup-link action."
           fi
 
       # Makes the SETUP_CODE secret the one-time code for creating the first
@@ -424,7 +424,7 @@ jobs:
         run: ssh server 'cd /opt/officesentry/v2 && docker compose restart'
 
       # Health and counts only: the portal's own log names tenants, users and
-      # addresses, so reading it needs a shell (v2/DEPLOY.md, "If you need a shell").
+      # addresses, so reading it needs a shell on the server.
       - name: Status
         if: env.ACTION == 'status' || env.ACTION == 'restart'
         run: |
