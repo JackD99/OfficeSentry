@@ -3,10 +3,13 @@
 What changed in each Office Sentry release, written for the people who run it. Read the
 **Action required**, **New Microsoft permissions** and **Database upgrade** parts before updating.
 
-How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
-[CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (Added, Changed, Fixed,
+Security, with the newest release first and a compare link per version) plus those three sections, and
+versions follow [semantic versioning](https://semver.org). How to update: [v2/DEPLOY.md,
+"Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
+"Releases"](CONTRIBUTING.md#releases).
 
-## 2.2.0 (unreleased)
+## [2.2.0] - Unreleased
 
 ### Action required
 
@@ -98,6 +101,12 @@ first.
   its headline sharing figures, how it's set up, admin changes, open findings and what changed. Group names
   and addresses in reports, the person page and search results open the page, and it downloads as PDF and
   XLSX.
+- The **Empty, nested and dynamic groups** report now also lists teams and Microsoft 365 groups the
+  expiration policy will delete within 90 days (with their owners, flagged when no owner can sign in to
+  renew them), role-assignable groups (whose members hold admin roles, flagged when a guest is in one) and
+  every group that still holds a blocked account, naming the accounts. Group nesting keeps the member IDs
+  of security groups and distribution lists for that. **Coming up** and its weekly email list the teams and
+  groups about to expire alongside renewals and app secrets.
 
 ### Changed
 
@@ -125,6 +134,8 @@ first.
 
 ### Fixed
 
+- An Admin activity collection could be marked partial, with a warning that Microsoft timed out, when a
+  second ticked over between two readings of the clock during the run; nothing was actually missing.
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
   invisible to the admin checks and the Admins report. The group's members are now read each night and
   checked like any other admin; the Admins report says which group a role comes through.
@@ -256,6 +267,11 @@ first.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The Deploy workflow reads the server's address and the portal's name from the secrets `DEPLOY_HOST` and
+  `OFFICESENTRY_DOMAIN` (and `OFFICESENTRY_SETTINGS` and `BACKUP_REPOSITORY` when they're secrets), since a
+  public repository's run logs show every variable a step reads. Variables of those names still work; add
+  each as a secret to hide it ([v2/DEPLOY.md, step 5](v2/DEPLOY.md#5-tell-github-where-to-deploy)). The
+  live canary takes the test tenant's ID from the secret `CANARY_TENANT_ID` for the same reason.
 - The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
   page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
   so a client account probing for other clients' data is visible under *Settings → Activity log*.
@@ -268,7 +284,7 @@ first.
 - A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
   itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
-## 2.1.0 (2026-10-10)
+## [2.1.0] - 2026-10-10
 
 The first release from the public repository. The headlines: home pages for technicians and account
 managers, onboarding many clients at once, answers for insurance and supplier questionnaires and Cyber
@@ -469,7 +485,7 @@ copied collection reads back exactly as its snapshot.
 - The public demo no longer stores an authenticator secret on its shared visitor when the two-step setup
   page is opened.
 
-## 2.0.0 (2026-10-09)
+## [2.0.0] - 2026-10-09
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1
 portal. Everything below is new compared with v1.
@@ -524,3 +540,7 @@ first, then upgrades it on start. New installs start with an empty database.
 - Certificate-based, app-only sign-in to client tenants; secrets are encrypted at rest and never shown or
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
+
+[2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

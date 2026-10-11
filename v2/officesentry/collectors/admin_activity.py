@@ -46,7 +46,9 @@ class AdminActivity(Collector):
             "retention_days": None if p1 is None else (WINDOW_DAYS if p1 else FREE_RETENTION_DAYS),
         }
         try:
-            got = events.ingest(ctx, events.AUDIT_LOG, FREE_RETENTION_DAYS if p1 is False else WINDOW_DAYS, PAGE_BUDGET)
+            got = events.ingest(
+                ctx, events.AUDIT_LOG, FREE_RETENTION_DAYS if p1 is False else WINDOW_DAYS, PAGE_BUDGET, now=now
+            )
         except (LicenseRequired, PermissionMissing) as exc:
             why = (
                 "the tenant's licence doesn't include it"
