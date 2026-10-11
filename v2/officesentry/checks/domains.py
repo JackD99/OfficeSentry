@@ -51,7 +51,7 @@ def _transport_rule(snap: TenantSnapshot, area: str):
         return None, DNS_FAILED if unknown else "No domain receives mail"
     checked = [h for h in mail if h.transport_checked]
     if not checked:
-        return None, "Domains haven't been checked for MTA-STS yet; refresh Email domains on the tenant page"
+        return None, "Domains haven't been checked for MTA-STS yet; refresh Email domains on the client page"
     return (findings, checked, unknown), ""
 
 

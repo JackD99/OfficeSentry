@@ -1,20 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Add tenant · Office Sentry{% endblock %}
+{% block title %}Add client · Office Sentry{% endblock %}
 {% block content %}
-<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span><span>Add tenant</span></div>
-<div class="page-head"><div><h1>Add a tenant</h1><div class="sub">Next comes admin consent; collection starts by itself once it's granted.</div></div>
+<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span><span>Add client</span></div>
+<div class="page-head"><div><h1>Add a client</h1><div class="sub">Next comes admin consent; collection starts by itself once it's granted.</div></div>
   <div class="actions"><a class="btn" href="{{ url_for('onboarding.import_tenants') }}">Adding many? Import a CSV</a></div></div>
 {% if not connections %}
 <div class="card empty narrow-lg">
   <h3>Set up the app connection first</h3>
-  <p>Office Sentry needs its read-only app before it can connect to tenants.</p>
+  <p>Office Sentry needs its read-only app before it can connect to clients.</p>
   <a class="btn primary" href="{{ url_for('admin.connections') }}">Set up the app connection</a>
 </div>
 {% else %}
 <form method="post" class="card narrow-lg">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>Client name <input name="name" maxlength="200" required autofocus placeholder="Contoso Ltd" value="{{ request.form.name }}">
-    <span class="hint">How the tenant appears in Office Sentry and on reports.</span></label>
+    <span class="hint">How the client appears in Office Sentry and on reports.</span></label>
   <label>Tenant ID or domain <input name="tenant_ref" placeholder="contoso.onmicrosoft.com" required autocomplete="off" value="{{ request.form.tenant_ref }}">
     <span class="hint">The Directory (tenant) ID, or any domain the tenant uses. It's replaced with the tenant ID once consent is granted.</span></label>
   <label>Microsoft cloud
@@ -38,8 +38,8 @@
     </div>
   </fieldset>
   {% endif %}
-  <div class="form-actions"><button class="primary">Add tenant</button><a class="btn ghost" href="{{ url_for('tenants.dashboard') }}">Cancel</a></div>
-  <p class="footnote m0">The tenant's page then shows a checklist: a Global Administrator of the client's tenant grants admin consent (read-only), assigns Global Reader for mailbox reports, and the first collection runs on its own.</p>
+  <div class="form-actions"><button class="primary">Add client</button><a class="btn ghost" href="{{ url_for('tenants.dashboard') }}">Cancel</a></div>
+  <p class="footnote m0">The client's page then shows a checklist: a Global Administrator of the client's tenant grants admin consent (read-only), assigns Global Reader for mailbox reports, and the first collection runs on its own.</p>
 </form>
 {% endif %}
 {% endblock %}

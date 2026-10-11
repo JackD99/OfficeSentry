@@ -51,7 +51,7 @@ def _tenants(db):
 def test_all_rows_stacks_each_tenants_rows_with_a_tenant_column(db, two_tenants, widgets):
     data = rollups.all_rows(db, _tenants(db), "widgets", href=lambda t: f"/tenants/{t['id']}/data/widgets")
     widgets_table = data.report.sections[0]
-    assert widgets_table.columns == ["Tenant", "Widget", "State", "Count"]
+    assert widgets_table.columns == ["Client", "Widget", "State", "Count"]
     assert [r[:2] for r in widgets_table.rows] == [
         ["Alpha Ltd", "Alpha w1"],
         ["Alpha Ltd", "Alpha w2"],
@@ -83,10 +83,13 @@ def test_rows_page_shows_every_tenant_and_applies_filters(client, db, two_tenant
     assert resp.headers["Location"].endswith("/across/widgets/rows/widgets?f=widgets%2Fstate%3Abad")
     assert client.get("/across/widgets/rows?table=settings").headers["Location"].endswith("/rows/settings")
     page = client.get("/across/widgets/rows/widgets").get_data(as_text=True)
-    assert ">Tenant</a>" in page and "Every row" in page
+    assert ">Client</a>" in page and "Every row" in page
     assert all(w in page for w in ("Alpha w1", "Alpha w2", "Bravo w1", "Bravo w2"))
     page = client.get("/across/widgets/rows/widgets?f=widgets/state:bad").get_data(as_text=True)
     assert "Alpha w2" in page and "Bravo w2" in page and "Alpha w1" not in page and "Bravo w1" not in page
+    page = client.get("/across/widgets/rows/widgets?f=widgets/client:Bravo Inc").get_data(as_text=True)
+    assert "Bravo w1" in page and "Alpha w1" not in page
+    # Links saved before the column was renamed still filter on it.
     page = client.get("/across/widgets/rows/widgets?f=widgets/tenant:Bravo Inc").get_data(as_text=True)
     assert "Bravo w1" in page and "Alpha w1" not in page
     assert client.get("/across/widgets/rows/nope").status_code == 404
@@ -101,16 +104,16 @@ def test_rows_downloads_keep_the_view(client, db, two_tenants, widgets):
     resp = client.get("/across/widgets/rows/widgets.csv?f=widgets/state:bad&hide=widgets/count")
     assert resp.mimetype == "text/csv" and "attachment" in resp.headers["Content-Disposition"]
     rows = _csv(resp.data)
-    assert rows[0] == ["Tenant", "Widget", "State", "Flag"]
+    assert rows[0] == ["Client", "Widget", "State", "Flag"]
     assert rows[1:] == [["Alpha Ltd", "Alpha w2", "bad", "high"], ["Bravo Inc", "Bravo w2", "bad", "high"]]
     resp = client.get("/across/widgets/rows/widgets.xlsx?sort=widgets/widget:desc")
     assert resp.status_code == 200
     wb = load_workbook(io.BytesIO(resp.data))
-    assert wb["Summary"]["A2"].value == "All tenants"
+    assert wb["Summary"]["A2"].value == "All clients"
     sheet = wb.worksheets[1]
     values = [[c.value for c in row] for row in sheet.iter_rows()]
-    header = next(i for i, row in enumerate(values) if row[0] == "Tenant")
-    assert values[header][:3] == ["Tenant", "Widget", "State"]
+    header = next(i for i, row in enumerate(values) if row[0] == "Client")
+    assert values[header][:3] == ["Client", "Widget", "State"]
     assert [row[1] for row in values[header + 1 : header + 5]] == ["Bravo w2", "Bravo w1", "Alpha w2", "Alpha w1"]
     assert len(wb.sheetnames) == 2  # only the table asked for
     assert client.get("/across/widgets/rows/widgets.pdf").status_code == 200
@@ -203,7 +206,7 @@ def test_rollup_page_shows_the_total_row(client, db, two_tenants, widgets):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/across/widgets").get_data(as_text=True)
-    assert 'class="total-row"' in page and "2 tenants" in page
+    assert 'class="total-row"' in page and "2 clients" in page
     assert client.get("/across/widgets.pdf").status_code == 200
 
 
@@ -228,7 +231,7 @@ def test_check_matrix_reads_results_and_accepted_risks(db, two_tenants):
     again = {r.tenant["id"]: r for r in rollups.check_matrix(db, _tenants(db)).rows}[alpha]
     assert again.cells[key].status == "accepted" and again.cells[key].label == "Accepted"
     table = matrix.to_table()
-    assert table.columns[:3] == ["Tenant", "Tenant ID", "Failing"] and len(table.rows) == 2
+    assert table.columns[:3] == ["Client", "Tenant ID", "Failing"] and len(table.rows) == 2
     assert all(len(r) == len(table.columns) for r in table.rows)
 
 

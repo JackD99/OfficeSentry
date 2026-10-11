@@ -41,6 +41,16 @@ Yes (migration 37: Microsoft account links on users, how each session was starte
   turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
   server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
 
+### Changed
+
+- **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
+  say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
+  the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
+  Settings, Client tenants is **Client settings** and Tenant groups is **Client groups**. The account
+  manager's home page (was "Clients") is now **Accounts**. Columns headed "Tenant" are now "Client";
+  saved views and bookmarked links that filter or sort on that column keep working. The group digest is
+  now the "Client digest", and its spreadsheet is named `client-digest-...`.
+
 ### Fixed
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
@@ -127,6 +137,10 @@ Yes (migration 37: Microsoft account links on users, how each session was starte
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- A deploy no longer copies the portal's settings files, among them the off-site backup password, into
+  the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
+  rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy
+  job's runner before it can close it.
 
 ### Security
 

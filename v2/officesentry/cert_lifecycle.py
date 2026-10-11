@@ -102,7 +102,7 @@ class Expiry:
             return "Email from Office Sentry"
         if self.kind == "sign_in":
             return "Signing in with Microsoft"
-        return "Collection from every client tenant"
+        return "Collection from every client"
 
     @property
     def consequence(self) -> str:

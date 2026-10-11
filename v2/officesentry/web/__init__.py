@@ -179,7 +179,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "error.html",
             code=404,
             message="Page not found.",
-            detail="The link may be out of date, or the page belongs to a tenant you haven't been given access to.",
+            detail="The link may be out of date, or the page belongs to a client you haven't been given access to.",
         ), 404
 
     @app.get("/health")

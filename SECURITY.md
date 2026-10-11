@@ -25,7 +25,7 @@ older releases and the removed v1 portal get no fixes.
 
 ## Security model
 
-Office Sentry reads data from many client tenants, so it is built to do as
+Office Sentry reads data from many clients, so it is built to do as
 little as possible with that access. Details and code references are in
 [v2/README.md](v2/README.md), [v2/DEPLOY.md](v2/DEPLOY.md) and
 [v2/CLAUDE.md](v2/CLAUDE.md).
@@ -43,16 +43,16 @@ little as possible with that access. Details and code references are in
   warned on every page, and the MSP's team by email and the alert webhook,
   60, 30 and 7 days before one expires, and it can be replaced without a gap
   (see [If a certificate leaks](#if-a-certificate-or-key-leaks)).
-- **Extra access is shown, not hidden.** Each tenant's connection check
+- **Extra access is shown, not hidden.** Each client's connection check
   lists any permission the tenant granted beyond the read-only set, and any
-  admin role besides Global Reader. Both are warnings on the tenant's Manage
-  page and the Client tenants list.
+  admin role besides Global Reader. Both are warnings on the client's Manage
+  page and the Client settings list.
 - **Tested both ways.** `tests/test_no_writes.py` fails if an HTTP call
   other than GET appears outside a short list of named exceptions (the mail
   app, Exchange's `Get-` cmdlets, creating the app in the MSP's own tenant,
   and alert webhooks), and runs a full collection to check every request is
   a read. `tests/test_isolation_walk.py` opens every tenant-scoped route with
-  another tenant's IDs, as an analyst and as a client, and expects a refusal.
+  another client's IDs, as an analyst and as a client, and expects a refusal.
 - **The mail app is separate and can be fenced in.** Email through
   Microsoft 365 uses its own single-tenant app with `Mail.Send` in the MSP's
   tenant, signing in with a certificate (or a client secret). The settings
@@ -61,17 +61,17 @@ little as possible with that access. Details and code references are in
   credential could send as anyone in the MSP's company.
 - **Bound consent links.** The admin-consent link's signed state carries a
   one-time nonce, stored server-side with the admin and the signed-in
-  browser that opened it, and expires after an hour. A tenant added by
+  browser that opened it, and expires after an hour. A client added by
   domain only takes the tenant ID that comes back with the consent if
   Microsoft's public sign-in metadata gives the same ID for that domain; a
-  tenant that already has its ID never changes it on consent.
+  client that already has its tenant ID never changes it on consent.
 
 ### The portal
 
 | Control | Implementation |
 |---|---|
-| Tenant isolation | Deny by default. Users see only tenants granted to them; others return 404. One gate (`web/access.py`) loads every tenant. |
-| Roles | Admin, analyst, client. Clients see only their own tenant's reports. |
+| Tenant isolation | Deny by default. Users see only clients granted to them; others return 404. One gate (`web/access.py`) loads every client. |
+| Roles | Admin, analyst, client. Clients see only their own organisation's reports. |
 | Sign in with Microsoft | Optional, off until an admin sets it up. OpenID Connect against a single-tenant app in the MSP's own tenant with no API permissions, authorization code with PKCE, a certificate-signed client assertion (`private_key_jwt`; the private key is encrypted in the database) and the ID token verified against the tenant's published keys: signature, audience, issuer, tenant, lifetime and nonce. Roles are app roles assigned in Entra and read at every sign-in; client access is still granted in Office Sentry. Passwords stay as the break-glass route until an admin signed in with Microsoft turns them off; `python -m officesentry staff-sign-in --passwords on` turns them back on from the server. Client accounts never use it. |
 | Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs from before October 2026 keep requiring it for admins and analysts until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Recovery codes are stored as an HMAC under a random key that is itself encrypted with the encryption key, so a copy of the database alone can't be used to guess them. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password, and an admin resetting someone else's password, two-step sign-in or sessions gives their own password too. |
 | Passwords | At least 12 characters, Werkzeug's salted hash. A password an admin set (new user or reset) has to be replaced at the next sign-in. |
@@ -98,7 +98,7 @@ the settings are audited. Details in `v2/DEPLOY.md`.
 
 ### Offboarding a client
 
-Deleting a tenant removes everything stored for it in one transaction and
+Deleting a client removes everything stored for it in one transaction and
 checks nothing tenant-scoped is left. Activity log entries keep who did what
 and when, but details naming the client's people are removed, and client
 accounts deleted with it are anonymised. Deleted rows are overwritten in the
@@ -111,7 +111,7 @@ out** (the last 7 by default), as do copies taken off the server.
 - Certificates and keys: `*.pfx`, `*.cer`, `*.pem`, `*.key`, `*.p12`
 - `.env` files and any credential, key or token
 - The data directory (`data/`, or the `/data` Docker volume): it holds the
-  database, encrypted keys and tenant snapshots
+  database, encrypted keys and client snapshots
 - Report exports: `*.csv`, `*.xlsx`
 
 ## If a certificate or key leaks

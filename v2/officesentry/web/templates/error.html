@@ -8,7 +8,7 @@
   {% if detail %}<p>{{ detail }}</p>{% endif %}
   <div class="form-actions center-actions">
     {% if current_user %}
-    <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">{{ icon('tenants') }} {{ 'Your reports' if current_user.role == 'client' else 'Tenants' }}</a>
+    <a class="btn primary" href="{{ url_for('tenants.dashboard') }}">{{ icon('tenants') }} {{ 'Your reports' if current_user.role == 'client' else 'Clients' }}</a>
     <a class="btn" href="{{ url_for('reports.overview') }}">{{ icon('library') }} {{ 'All reports' if current_user.role == 'client' else 'Reports' }}</a>
     {% else %}
     <a class="btn primary" href="{{ url_for('auth.login') }}">Sign in</a>

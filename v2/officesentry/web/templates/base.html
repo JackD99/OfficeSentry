@@ -13,7 +13,7 @@
 <body{% if not brand.is_default %} class="branded"{% endif %}>
 {#- Admin settings: one sidebar entry, and this row of links on top of each settings page.
     (endpoint, label, other endpoints that belong to the page) -#}
-{% set SETTINGS = [('tenant_admin.clients', 'Client tenants', ['onboarding.index', 'onboarding.import_tenants', 'onboarding.send']), ('groups.index', 'Tenant groups', ['groups.edit']),
+{% set SETTINGS = [('tenant_admin.clients', 'Client settings', ['onboarding.index', 'onboarding.import_tenants', 'onboarding.send']), ('groups.index', 'Client groups', ['groups.edit']),
                    ('admin.connections', 'App connection', []),
                    ('reports.prices', 'Licence prices', []), ('email.settings', 'Email delivery', []),
                    ('alerts.settings', 'Alerts', []), ('branding.settings', 'Branding', []),
@@ -32,13 +32,13 @@
   {{ nav_link('reports.overview', 'All reports', 'library') }}
   {% else %}
   <form method="get" action="{{ url_for('search.index') }}" class="nav-search" role="search">
-    <label>{{ icon('search') }}<span class="sr-only">Search all tenants</span>
-      <input type="search" name="q" placeholder="Search all tenants" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
+    <label>{{ icon('search') }}<span class="sr-only">Search all clients</span>
+      <input type="search" name="q" placeholder="Search all clients" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
   </form>
   {{ nav_link('home.index', 'Home', 'home', ('home.today', 'home.clients')) }}
-  {{ nav_link('tenants.dashboard', 'Tenants', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant')) }}
+  {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant')) }}
   {{ nav_link('reports.overview', 'Reports', 'library') }}
-  {{ nav_link('across.index', 'All tenants', 'grid', ('across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
+  {{ nav_link('across.index', 'All clients', 'grid', ('across.rollup', 'across.rows_index', 'across.rows', 'across.checks')) }}
   {{ nav_link('across.changes', 'What changed', 'clock') }}
   {{ nav_link('upcoming.index', 'Coming up', 'calendar') }}
   {{ nav_link('email.overview', 'Email reports', 'send', ('email.overview', 'email.new_digest', 'email.new_upcoming')) }}
@@ -108,7 +108,7 @@
       {%- if public_demo_link %}<a class="btn sm primary" href="{{ public_demo_link }}">Get Office Sentry</a>{% endif %}</div>{% endif %}
     <main id="main" tabindex="-1">
       {% if worker_down and request.endpoint != 'system.status' %}<div class="callout warn" role="status">{{ icon('alert') }}<span class="grow"><strong>The background worker isn't running.</strong>
-        Tenants won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span><a class="btn sm" href="{{ url_for('system.status') }}">System status</a></div>{% endif %}
+        Clients won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span><a class="btn sm" href="{{ url_for('system.status') }}">System status</a></div>{% endif %}
       {% for e in expiring_certificates %}<div class="callout {{ e.tone }}" role="status">{{ icon('alert') }}<span class="grow"><strong>{{ e.headline }}</strong>
         {{ e.consequence }}</span>{% if e.kind == 'mail' %}<a class="btn sm" href="{{ url_for('email.settings') }}">Renew it</a>{% elif e.kind == 'sign_in' %}<a class="btn sm" href="{{ url_for('sso.settings_page') }}">{{ 'Finish replacing it' if e.replacing else 'Replace it' }}</a>{% elif e.replacing %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Finish replacing it</a>{% else %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Replace it</a>{% endif %}</div>{% endfor %}
       {% if current_user.role == 'admin' and request.endpoint in SETTINGS_ENDPOINTS %}
