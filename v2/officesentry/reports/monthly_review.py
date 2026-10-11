@@ -16,7 +16,7 @@ from pathlib import Path
 from ..changes import Change, all_changes
 from ..checks import SEVERITY_RANK, Finding, RuleResult, evaluate
 from ..collectors import REGISTRY
-from ..db import utcnow
+from ..db import try_write, utcnow
 from ..devices import parse_day
 from ..findings import finding_key, lifecycle_map, resolved_since
 from ..licences import LicenceSummary, licence_summary, load_prices
@@ -375,7 +375,9 @@ def rollup_row(conn, tenant, now: datetime | None = None, cached: bool = False) 
         row = _rollup_row(conn, tenant)
         data = {k: v for k, v in row.items() if k not in ("tenant", "stale_data")}
         data["kpis"] = [asdict(k) for k in row["kpis"].values()]
-        conn.execute(
+        # The row is what the page needs; storing it can wait for the next view if the database is busy.
+        try_write(
+            conn,
             "INSERT INTO rollup_cache (tenant_id, fingerprint, data, built_at) VALUES (?, ?, ?, ?)"
             " ON CONFLICT(tenant_id) DO UPDATE SET fingerprint = excluded.fingerprint,"
             " data = excluded.data, built_at = excluded.built_at",
