@@ -141,6 +141,8 @@ No.
   pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
   still finds the database locked after five seconds is answered with "Office Sentry is busy right
   now, try again in a moment" instead of an error page.
+- On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
+  dates on it are written the same way on every platform.
 
 ### Security
 
