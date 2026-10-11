@@ -312,6 +312,9 @@ class DataReport:
     highlights: list[Highlight] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # what couldn't be checked, and why
     filtered: list[str] = field(default_factory=list)  # the table view a download applies, in words
+    # For a report read in parts, what each part held: "read", "waiting" (for the client to approve a new
+    # permission) or "failed". What changed only compares two days that read the same parts.
+    parts: dict[str, str] = field(default_factory=dict)
 
 
 def _cell(value):

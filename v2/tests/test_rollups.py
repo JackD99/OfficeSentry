@@ -312,6 +312,22 @@ def test_a_report_missing_one_of_its_data_sources_at_the_start_is_not_compared(d
     assert not next(r for r in report.reports if r.key == "guests").note  # it had all its data then
 
 
+def test_a_permission_approved_or_still_awaited_is_not_compared_as_change(db, two_tenants):
+    # Teams channels and site permissions waiting for the client's approval on one of the two days.
+    waiting = {"teams_kw": {"status": 403}, "sharepoint_kw": {"rest": "consent"}}
+    alpha, bravo = two_tenants
+    for tenant_id, then, now in ((alpha, waiting, {}), (bravo, {}, waiting)):
+        seed_tenant(db, tenant_id, **then)
+        _backdate(db, tenant_id, 10)
+        seed_tenant(db, tenant_id, **now)
+    approved = {r.key: r for r in month_changes.build(db, store.get_tenant(db, alpha), 7).reports}
+    assert approved["teams"].count == 0 and approved["teams"].note.startswith("The client approved the permission")
+    assert (approved["site-permissions"].count, approved["site-permissions"].note) == (0, month_changes.NO_START)
+    awaited = {r.key: r for r in month_changes.build(db, store.get_tenant(db, bravo), 7).reports}
+    assert awaited["teams"].count == 0 and awaited["teams"].note.startswith("Parts of it are waiting for the client")
+    assert awaited["site-permissions"].note.startswith("Waiting for the client to approve the SharePoint permission")
+
+
 def test_old_snapshots_skip_runs_whose_objects_were_pruned(db, two_tenants):
     alpha, _ = two_tenants
     tenant = db.execute("SELECT * FROM tenants WHERE id = ?", (alpha,)).fetchone()

@@ -40,6 +40,7 @@ PERIODS = (7, 30, 90)  # days the report can look back
 DEFAULT_DAYS = 30
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+NO_START = "No data from the start of the period to compare with."
 
 # Tracked numbers shown as "then → now". (metric key, label, unit, which direction is good)
 FIGURES = (
@@ -255,6 +256,23 @@ def compare_sections(old: data_reports.Section | None, new: data_reports.Section
     return out
 
 
+def _parts_note(then: dict[str, str], now: dict[str, str]) -> str:
+    """Why a report that read different parts then and now isn't compared."""
+    if "waiting" in now.values():
+        return (
+            "Parts of it are waiting for the client to approve a new permission, so they can't be compared with "
+            "the start of the period."
+        )
+    if "failed" in now.values():
+        return "Parts of it couldn't be read at the end of the period, so they can't be compared."
+    if "waiting" in then.values():
+        return (
+            "The client approved the permission it needs during the period, so there's nothing from the start of "
+            "the period to compare with."
+        )
+    return "Parts of it couldn't be read at the start of the period, so there's nothing to compare them with."
+
+
 def compare_report(
     conn, tenant, key: str, since: datetime, now: datetime, old_snap: TenantSnapshot, new_snap: TenantSnapshot
 ) -> ReportChanges:
@@ -263,7 +281,7 @@ def compare_report(
     old_runs = [old_snap.runs.get(c) for c in collectors]
     new_runs = [new_snap.runs.get(c) for c in collectors]
     if not any(old_runs):
-        result.note = "No data from the start of the period to compare with."
+        result.note = NO_START
         return result
     if [r["id"] if r else None for r in old_runs] == [r["id"] if r else None for r in new_runs]:
         return result  # nothing collected since: nothing can have changed
@@ -290,7 +308,12 @@ def compare_report(
     old = data_reports.build(conn, tenant, key, as_of=since, snap=old_snap)
     new = data_reports.build(conn, tenant, key, now=now, snap=new_snap)
     if old.unavailable or new.unavailable:
-        result.note = new.unavailable or old.unavailable or ""
+        # Why it can't be built now still holds; why it couldn't be then (waiting for a permission the client
+        # has since approved, say) doesn't.
+        result.note = new.unavailable or NO_START
+        return result
+    if old.parts != new.parts:  # a part read on one day only would show all it holds as added or removed
+        result.note = _parts_note(old.parts, new.parts)
         return result
     old_by_title = {s.title: s for s in old.sections}
     new_by_title = {s.title: s for s in new.sections}
