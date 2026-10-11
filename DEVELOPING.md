@@ -74,6 +74,7 @@ v2/
     endpoints.py  every Microsoft call, its permission and limits
     store.py      runs, snapshots and metrics                 db.py         SQLite and migrations
     worker.py     the background process                      delivery.py   scheduled emails
+    logs.py       the rolling log files and line context       support.py    the support package (redacted diagnostics)
     migrations/   numbered SQL files, applied in order, never edited once applied
   tests/          pytest suite; graphdata.py and friends are simulated Microsoft responses
   tests/browser/  screenshot and accessibility tests (their README says how to run them)

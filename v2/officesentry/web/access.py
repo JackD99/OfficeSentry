@@ -44,10 +44,22 @@ def login_required(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
         if g.get("user") is None:
-            return redirect(url_for("auth.login", next=request.full_path.rstrip("?")))
+            return redirect(url_for("auth.login", next=_return_to()))
         return view(*args, **kwargs)
 
     return wrapper
+
+
+def _return_to() -> str | None:
+    """Where sign-in brings the person back to: this page, or for a form posted after the session ended
+    (whose address only answers POST, so a GET of it would be a 405), the page the form was on, if the
+    browser said which. None opens their home page."""
+    if request.method in ("GET", "HEAD"):
+        return request.full_path.rstrip("?")
+    ref = urlsplit(request.referrer or "")
+    if not ref.path or (ref.netloc and ref.netloc != request.host):
+        return None
+    return ref.path + (f"?{ref.query}" if ref.query else "")
 
 
 def roles_required(*roles: str):

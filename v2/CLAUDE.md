@@ -811,6 +811,19 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   missing files.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
+## Logs and the support package
+
+`logs.setup(data_dir, process)` (called by `create_app` and the `worker` command) logs to stderr and to
+`<data dir>/logs/<process>.log` (`LOG_FILES` × `LOG_BYTES`, several processes may share `web.log`). Wrap
+work in `logs.context(run=..., tenant=..., task=...)` so its lines carry that context; the portal sets
+`req=`, `user=` and `tenant=` per request, answers `X-Request-ID`, and the 500 page shows the id as the
+reference to quote. `support.build()` gathers the package from stored state and those files only (never
+Microsoft) and `support.Redactor` sweeps every piece of free text; a new part is a `part(...)` call in
+`build` and a line in `PARTS`, and a new kind of secret is a pattern in `support.PATTERNS` with a case in
+`tests/test_support.py`, which plants each kind of secret and name and searches every byte of the zip.
+Settings values go in the package only when listed in `PLAIN_SETTINGS` (or a prefix in
+`PLAIN_SETTING_PREFIXES`); everything else is a name and a length.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
@@ -851,6 +864,7 @@ and `python -m officesentry <command>`:
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `history [--dry-run\|--backfill\|--verify]` | the daily history: progress, an estimate of the backfill without writing, the backfill now, or a check that it reads back as the snapshots |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
+| `support-package [--out FILE\|-] [--include-identifiers]` | the zip to attach to a bug report (`support.py`): versions, settings, health, failures and logs with secrets and client names taken out; works over a broken database or configuration |
 | `live-test [--record FILE] [--canary REPORT]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture or compare the answers' shape with it (the live canary) |
 
 Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own
