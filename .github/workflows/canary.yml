@@ -5,11 +5,13 @@ name: Live canary
 # APIs it is retiring (officesentry/canary.py). Nothing is written to the tenant, and no response is saved
 # or uploaded: the report holds field names and dates only.
 #
-# It signs in without a stored secret: GitHub gives the run an OIDC token, which the test tenant's app
-# trusts through a federated credential for this repository's main branch. Setting that up is done once in
-# Entra and GitHub (v2/tests/nightly/README.md, "Live canary"): the app's federated credential, then two
-# repository variables, CANARY_TENANT_ID and CANARY_CLIENT_ID. Until both exist the job is skipped. At
-# go-public the credential moves to a protected "canary" environment.
+# It signs in without a stored password or key: GitHub gives the run an OIDC token, which the test tenant's
+# app trusts through a federated credential for this repository's main branch. Setting that up is done once
+# in Entra and GitHub (v2/tests/nightly/README.md, "Live canary"): the app's federated credential, then the
+# repository secret CANARY_TENANT_ID and the repository variable CANARY_CLIENT_ID. The tenant ID is a
+# secret because run logs are public and a step's log opens with its settings, where only secrets are
+# hidden (a CANARY_TENANT_ID variable still works, but shows). Until CANARY_CLIENT_ID exists the job is
+# skipped. At go-public the credential moves to a protected "canary" environment.
 #
 # A failure opens an issue labelled "canary" (or updates the open one), which notifies Jack and closes by itself
 # when a run passes again. Minutes: about 3 a run, on Mondays until the repository variable
@@ -29,7 +31,7 @@ concurrency:
 jobs:
   canary:
     if: >-
-      vars.CANARY_TENANT_ID != '' && vars.CANARY_CLIENT_ID != '' && github.ref == 'refs/heads/main'
+      vars.CANARY_CLIENT_ID != '' && github.ref == 'refs/heads/main'
       && (github.event_name != 'schedule' || github.event.schedule == '41 4 * * 1'
       || vars.SCHEDULED_CHECKS_NIGHTLY == 'true')
     runs-on: ubuntu-24.04
@@ -54,15 +56,20 @@ jobs:
           pip install --require-hashes --no-deps -r requirements-dev.txt
           pip install --no-deps --no-build-isolation -e .
       # Prints each collector's name, status and count only: errors and check results can name the tenant's
-      # people, and run logs will be public once the repository is.
+      # people, and run logs are public. The masks hide the IDs in anything printed later; the settings above
+      # the log are already out by then, which is why the tenant ID is a secret.
       - name: Collect from the test tenant and compare
         id: canary
         continue-on-error: true
         env:
-          OFFICESENTRY_TEST_TENANT_ID: ${{ vars.CANARY_TENANT_ID }}
+          OFFICESENTRY_TEST_TENANT_ID: ${{ secrets.CANARY_TENANT_ID || vars.CANARY_TENANT_ID }}
           OFFICESENTRY_TEST_CLIENT_ID: ${{ vars.CANARY_CLIENT_ID }}
           OFFICESENTRY_DATA_DIR: ${{ runner.temp }}/data
         run: |
+          if [ -z "$OFFICESENTRY_TEST_TENANT_ID" ]; then
+            echo "::error::Add the test tenant's Directory (tenant) ID as the repository secret CANARY_TENANT_ID (v2/tests/nightly/README.md, \"Live canary\", step 8)."
+            exit 1
+          fi
           echo "::add-mask::$OFFICESENTRY_TEST_TENANT_ID"
           echo "::add-mask::$OFFICESENTRY_TEST_CLIENT_ID"
           python -m officesentry live-test --canary "$RUNNER_TEMP/canary.md"

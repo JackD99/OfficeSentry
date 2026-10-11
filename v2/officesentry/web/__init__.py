@@ -49,6 +49,9 @@ from . import (
     upcoming,
 )
 from . import (
+    roles as role_pages,
+)
+from . import (
     sso as sso_web,
 )
 
@@ -165,6 +168,10 @@ def create_app(cfg: Config | None = None) -> Flask:
         cloud_label=lambda key: clouds.get(key).label,
         cloud_of=clouds.of,
         report_catalogue=library.catalogue,
+        can=access.can,
+        report_areas_open=reports.report_groups,
+        report_capability=reports.report_capability,
+        entry_capability=reports.entry_capability,
     )
 
     @app.context_processor
@@ -172,7 +179,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         user = g.get("user")
         # Admins are told when the background worker isn't running: without it
         # nothing is collected and no scheduled email goes out.
-        admin = bool(user and user["role"] == "admin" and "db" in g)
+        admin = bool(user and "db" in g and access.can("settings.manage"))
         worker_down = admin and not worker.is_alive(g.db)
         # ...and when a certificate Office Sentry signs in with is within 60 days of expiring.
         # Not on the page that already says so in full.
@@ -180,9 +187,11 @@ def create_app(cfg: Config | None = None) -> Flask:
             request.endpoint
         )
         certificates = [e for e in cert_lifecycle.expiring(g.db) if e.kind != here] if admin else []
+        a = access.current() if user and "db" in g else None
         sign_in = staff_sign_in.settings(g.db) if g.get("db") is not None else {}
         return {
             "current_user": user,
+            "current_role": a.role if a else None,
             "csp_nonce": g.get("csp_nonce", ""),
             "worker_down": worker_down,
             "expiring_certificates": certificates,
@@ -216,7 +225,7 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.errorhandler(403)
     def _forbidden(_e):
-        # Refusals raised with abort(403) outside roles_required (a client on a staff page) are counted too.
+        # Refusals raised with abort(403) outside needs() (a client on a staff page) are counted too.
         access.refused()
         return _error(403, "You don't have access to this page.", "Ask an admin if you need it.")
 
@@ -296,13 +305,14 @@ def create_app(cfg: Config | None = None) -> Flask:
         health = system_health.assess(g.db, cfg)
         token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         user = g.get("user")
-        detailed = (user is not None and user["role"] == "admin") or system_health.token_matches(g.db, token)
+        detailed = (user is not None and access.can("system.manage")) or system_health.token_matches(g.db, token)
         return (health.as_json() if detailed else {"ok": health.ok}), (200 if health.ok else 503)
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(tenants.bp)
     app.register_blueprint(home.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(role_pages.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(projects.bp)
     app.register_blueprint(email.bp)

@@ -84,7 +84,8 @@
 {# Header shared by every tenant page: breadcrumb, name, actions and the tab bar. On laptops the tab bar
    stays pinned to the top of the window as the page scrolls, with the tenant's name in it (app.js). #}
 {% macro tenant_header(tenant, active, title=None, counts=None, pin=true) -%}
-{% set staff = current_user.role in ('admin', 'analyst') %}
+{% set staff = current_user.role != 'client' %}
+{% set tid = tenant.id %}
 <header class="tenant-head"{% if pin %} data-pin{% endif %}>
 <div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">{{ 'Clients' if staff else 'Your reports' }}</a><span>/</span><span>{{ tenant.name }}</span></div>
 <div class="page-head">
@@ -93,7 +94,7 @@
     <div class="sub">{% if title %}{{ tenant.name }} · {% endif %}<span class="mono">{{ tenant.tenant_ref }}</span>{% if staff and not cloud_of(tenant).is_default %} <span class="pill info" title="Microsoft national cloud">{{ cloud_of(tenant).label }}</span>{% endif %}{% if tenant.archived_at %} <span class="pill info">Archived</span>{% elif not tenant.enabled %} <span class="pill info" title="No collection or emailed reports until it's resumed">Paused</span>{% endif %}</div>
   </div>
   <div class="actions">{{ caller() if caller }}
-    <a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('doc') }} Monthly review</a>
+    {% if can('reports.security', tid) %}<a class="btn primary" href="{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}">{{ icon('doc') }} Monthly review</a>{% endif %}
   </div>
 </div>
 {# Seven tabs; older page keys map onto the tab that now holds them (TAB_OF). Changes and
@@ -102,13 +103,14 @@
 <nav class="tabs" aria-label="{{ tenant.name }}">
   <span class="pin-name" aria-hidden="true">{{ tenant.name }}</span>
   {% set tabs = [] %}
+  {#- Each tab needs the capability its page needs (web/access.py), on this tenant. -#}
   {% if staff %}{% set _ = tabs.append(('overview', 'Overview', url_for('tenants.tenant', tenant_id=tenant.id))) %}{% endif %}
-  {% set _ = tabs.append(('findings', 'Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('changes', 'Changes', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('reports', 'Reports', url_for('reports.data_index', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('users', 'Users', url_for('people.people', tenant_id=tenant.id))) %}
-  {% set _ = tabs.append(('emails', 'Emails', url_for('email.tenant_emails', tenant_id=tenant.id))) %}
-  {% if staff %}{% set _ = tabs.append(('settings', 'Settings', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('reports.security', tid) %}{% set _ = tabs.append(('findings', 'Findings', url_for('reports.tenant_findings', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('reports.changes', tid) or can('reports.activity', tid) %}{% set _ = tabs.append(('changes', 'Changes', url_for('across.tenant_changes' if can('reports.changes', tid) else 'history.activity', tenant_id=tenant.id))) %}{% endif %}
+  {% if report_areas_open(tid) %}{% set _ = tabs.append(('reports', 'Reports', url_for('reports.data_index', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('reports.people', tid) %}{% set _ = tabs.append(('users', 'Users', url_for('people.people', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('emails.view', tid) %}{% set _ = tabs.append(('emails', 'Emails', url_for('email.tenant_emails', tenant_id=tenant.id))) %}{% endif %}
+  {% if staff and (can('collect', tid) or can('clients.manage')) %}{% set _ = tabs.append(('settings', 'Settings', url_for('tenants.collection' if can('collect', tid) else 'tenant_admin.manage', tenant_id=tenant.id))) %}{% endif %}
   {% for key, label, href in tabs %}
   <a href="{{ href }}"{% if key == tab %} class="active" aria-current="{{ 'page' if key == active else 'true' }}"{% endif %}>{{ label }}{% if counts and counts.get(key) %}<span class="count">{{ counts[key] }}</span>{% endif %}</a>
   {% endfor %}
@@ -117,16 +119,17 @@
 {#- The Reports tab's pages are in its report picker (report_picker) rather than a second row. -#}
 {% set pages = [] %}
 {% if tab == 'users' %}
-  {% set _ = pages.append(('users', 'People', url_for('people.people', tenant_id=tenant.id))) %}
-  {% set _ = pages.append(('mailboxes', 'Mailboxes', url_for('mailboxes.mailboxes', tenant_id=tenant.id))) %}
-  {% set _ = pages.append(('group_pages', 'Groups and teams', url_for('group_pages.groups', tenant_id=tenant.id))) %}
+  {% if can('reports.people', tid) %}{% set _ = pages.append(('users', 'People', url_for('people.people', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('reports.email', tid) %}{% set _ = pages.append(('mailboxes', 'Mailboxes', url_for('mailboxes.mailboxes', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('reports.people', tid) %}{% set _ = pages.append(('group_pages', 'Groups and teams', url_for('group_pages.groups', tenant_id=tenant.id))) %}{% endif %}
 {% elif tab == 'changes' and staff %}
-  {% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}
-  {% set _ = pages.append(('activity', 'Activity history', url_for('history.activity', tenant_id=tenant.id))) %}
+  {% if can('reports.changes', tid) %}{% set _ = pages.append(('changes', 'What changed', url_for('across.tenant_changes', tenant_id=tenant.id))) %}{% endif %}
+  {% if can('reports.activity', tid) %}{% set _ = pages.append(('activity', 'Activity history', url_for('history.activity', tenant_id=tenant.id))) %}{% endif %}
 {% elif tab == 'settings' and staff %}
-  {% set _ = pages.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}
+  {% if can('collect', tid) %}{% set _ = pages.append(('collection', 'Data collection', url_for('tenants.collection', tenant_id=tenant.id))) %}{% endif %}
   {% set _ = pages.append(('manage', 'Manage', url_for('tenant_admin.manage', tenant_id=tenant.id))) %}
 {% endif %}
+{% if pages|length < 2 %}{% set pages = [] %}{% endif %}
 {% if pages %}
 <nav class="tab-pages" aria-label="{{ {'changes': 'Changes', 'users': 'Users'}.get(tab, 'Settings') }}">
   {% for key, label, href in pages %}<a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
@@ -148,7 +151,7 @@
    <div class="report-main" id="report" tabindex="-1">. current: a detail report's key, 'review' or 'evidence'. #}
 {% macro _picker_href(tenant, e) %}{% if e.kind == 'review' %}{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}{% elif e.kind == 'evidence' %}{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}{% else %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}{% endif %}{% endmacro %}
 {% macro report_picker(tenant, current) -%}
-{% set staff = current_user.role in ('admin', 'analyst') %}
+{% set staff = current_user.role != 'client' and can('reports.security', tenant.id) %}
 {% set areas = report_catalogue() %}
 {% set shown = ('data', 'review', 'evidence') %}
 <nav class="report-menu" aria-label="Reports">
@@ -158,7 +161,7 @@
     <input id="report-find" type="search" placeholder="Find a report" autocomplete="off" maxlength="100" data-report-search="report-list">
   </div>
   <div class="picker-list" id="report-list">
-    {% for area in areas %}{% set entries = area.entries|selectattr('kind', 'in', shown)|list %}{% if entries %}
+    {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}
     <div class="report-group">
       <p class="picker-label" id="picker-{{ area.key }}">{{ area.title }}</p>
       <ul aria-labelledby="picker-{{ area.key }}">
@@ -174,7 +177,7 @@
 <form method="get" action="{{ url_for('reports.data_index', tenant_id=tenant.id) }}" class="picker-form report-menu-sm" data-autosubmit>
   <label for="report-key">Report</label>
   <select id="report-key" name="key">
-    {% for area in areas %}{% set entries = area.entries|selectattr('kind', 'in', shown)|list %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}{% if loop.first and staff %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>Custom reports</option>{% endif %}</optgroup>{% endif %}{% endfor %}
+    {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}<optgroup label="{{ area.title }}">{% for e in entries %}<option value="{{ e.key }}"{% if e.key == current %} selected{% endif %}>{{ e.title }}</option>{% endfor %}{% if loop.first and staff %}<option value="designs"{% if current == 'designs' %} selected{% endif %}>Custom reports</option>{% endif %}</optgroup>{% endif %}{% endfor %}
   </select>
   <noscript><button class="btn sm">Show</button></noscript>
 </form>

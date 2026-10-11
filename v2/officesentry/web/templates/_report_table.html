@@ -59,7 +59,7 @@
     {% else %}
     <p class="muted small m0">None yet. Filter, sort or hide columns, then save the view here to use it on any client.</p>
     {% endfor %}
-    {% if current and current_user.role in ('admin', 'analyst') %}
+    {% if current and can('emails.manage', tenant.id) %}
     <a class="menu-link small" href="{{ url_for('email.new_schedule', tenant_id=tenant.id, view=current.id) }}">{{ icon('send') }} Email this view on a schedule</a>
     {% endif %}
     {% if view_query and not current %}

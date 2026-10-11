@@ -259,6 +259,22 @@ def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_
     assert workflow.count("cancel-in-progress: false") == 1  # runs never overlap, so the rule found is this run's
 
 
+def test_the_server_address_and_portal_name_stay_out_of_public_run_logs():
+    """A step's log opens with its settings, where only secrets are hidden (DEPLOY.md, step 5)."""
+    workflows = V2.parent / ".github" / "workflows"
+    deploy = (workflows / "deploy.yml").read_text(encoding="utf-8")
+    for name in ("DEPLOY_HOST", "OFFICESENTRY_DOMAIN", "OFFICESENTRY_SETTINGS", "BACKUP_REPOSITORY"):
+        reads = re.findall(r"\$\{\{ ([^}]*\bvars\." + name + r"\b[^}]*) \}\}", deploy)
+        assert reads and set(reads) == {f"secrets.{name} || vars.{name}"}, name
+    # The first-admin step's log and summary don't name the portal either.
+    setup = deploy[deploy.index("name: Set the first-admin code") : deploy.index("name: Back up, or run the restore")]
+    assert "DOMAIN" not in setup
+    canary = (workflows / "canary.yml").read_text(encoding="utf-8")
+    assert re.findall(r"\$\{\{ ([^}]*\bvars\.CANARY_TENANT_ID\b[^}]*) \}\}", canary) == [
+        "secrets.CANARY_TENANT_ID || vars.CANARY_TENANT_ID"
+    ]
+
+
 def test_the_shell_scripts_pass_shellcheck():
     """The server and deploy scripts, at ShellCheck's strictest level; the lint job runs the same."""
     workflow = yaml.safe_load((V2.parent / ".github" / "workflows" / "v2.yml").read_text(encoding="utf-8"))

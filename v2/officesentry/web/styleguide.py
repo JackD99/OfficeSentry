@@ -18,7 +18,7 @@ from flask import Blueprint, render_template, request, url_for
 from ..reports import summary, views
 from ..reports.branding import contrast
 from ..reports.data_reports import Chart, DataReport, Highlight, Link, Section, Tile, Trend
-from .access import roles_required
+from .access import needs
 from .printing import pdf_response
 
 bp = Blueprint("styleguide", __name__)
@@ -186,7 +186,7 @@ def _actions() -> list:
 
 
 @bp.get("/styleguide")
-@roles_required("admin", "analyst")
+@needs(kind="staff")
 def index():
     report = _report()
     view = views.View.parse(request.args)
@@ -203,7 +203,7 @@ def index():
 
 
 @bp.get("/styleguide/report")
-@roles_required("admin", "analyst")
+@needs(kind="staff")
 def report_components():
     return render_template(
         "styleguide_report.html", pdf=False, css_href=url_for("static", filename="report.css"), **_report_context()
@@ -211,7 +211,7 @@ def report_components():
 
 
 @bp.get("/styleguide/report.pdf")
-@roles_required("admin", "analyst")
+@needs(kind="staff")
 def report_components_pdf():
     return pdf_response("styleguide_report.html", "style-guide", **_report_context())
 

@@ -46,7 +46,8 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     hidden copy. Optional note at the top of the email.
   - A cross-client **digest** for your team, worst clients first.
   - A weekly **Coming up** email (and page) for your team: renewals and trials, expiring app secrets and
-    certificates, mailboxes filling up, DMARC still at p=none and accepted risks due in the next 90 days.
+    certificates, teams and groups about to expire, mailboxes filling up, DMARC still at p=none and accepted
+    risks due in the next 90 days.
   - **Alert emails** when a scan finds something new and critical (or high), for
     one client or all of them. They come from the same alert event as the
     Teams/Slack alerts below. A client's first scan never emails.
@@ -191,7 +192,9 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     groups and distribution lists.
   - *Empty, nested and dynamic groups*: groups with no members, security
     groups and distribution lists that contain other groups (and how many
-    levels deep), and dynamic groups with their rule, flagging paused ones.
+    levels deep), dynamic groups with their rule, flagging paused ones, teams
+    and groups about to expire (and whether an owner can renew them),
+    role-assignable groups, and blocked accounts still in groups.
   - *Email domains*: SPF (with DNS lookup count), DMARC and DKIM for every
     verified domain, from public DNS. SPF checks also catch multiple records,
     +all/?all, the ptr mechanism and includes that publish no SPF record;
@@ -403,8 +406,16 @@ These areas have no real recording and are tested with simulated data only:
 - **Extra access is flagged.** A client whose tenant gave the app more than the
   read-only permissions, or any admin role besides Global Reader, shows as
   needing attention on its Manage page and on Client settings.
-- **Deny-by-default access.** Users see only clients granted to them (admins
-  and "all clients" analysts excepted). Hidden clients return 404.
+- **Deny-by-default access.** A person has a role (a set of capabilities:
+  which report areas open for them, downloads, refreshing data, accepting
+  risks, emailed reports, month-end review and approval, projects, custom
+  reports, managing clients, users or settings) and a scope (every client, or
+  the clients and groups granted to them). Seven built-in roles (Administrator,
+  Team leader, Second line, First line, Account manager, Auditor, Client
+  viewer); an admin can also give or take away single capabilities for one
+  person, everywhere or on one client, and taking away always wins. Every
+  page and download checks on the server; hidden clients return 404 and a
+  capability taken away on one client answers 403 there.
 - **Every run is a snapshot** (`runs` → `objects` + `metrics`), so reports
   can show history and changes. Metrics and findings are kept forever; full
   snapshots for the last 30 days plus one per month for 12 months. The daily

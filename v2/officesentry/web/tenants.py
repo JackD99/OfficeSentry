@@ -16,8 +16,9 @@ from ..db import audit, transaction, utcnow
 from ..discovery import tenant_id_for_domain
 from ..entra import admin_consent_url
 from ..text import plural
-from .access import login_required, roles_required, tenant_or_404, visible_tenants
+from .access import can, is_staff, login_required, needs, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
+from .reports import report_groups
 
 bp = Blueprint("tenants", __name__)
 
@@ -108,7 +109,7 @@ def data_health(tenant, latest: dict) -> tuple[str, str, str]:
 def dashboard():
     from ..reports.monthly_review import dashboard_trends, rollup_row, setting
 
-    if g.user["role"] == "client":
+    if not is_staff():
         from . import client_home
 
         return client_home.render(visible_tenants(g.db, g.user))
@@ -145,7 +146,7 @@ def dashboard():
 
 
 @bp.route("/tenants/new", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("clients.manage")
 def new_tenant():
     connections = store.list_connections(g.db)
     if request.method == "POST":
@@ -204,7 +205,7 @@ def _consent_link(t, connection):
     Its signed state carries a random nonce. The callback accepts that nonce once,
     within the hour, from this admin's signed-in browser (see ``consent_requests``).
     """
-    if g.user["role"] != "admin" or not connection or not connection["client_id"] or g.get("session_row") is None:
+    if not can("clients.manage") or not connection or not connection["client_id"] or g.get("session_row") is None:
         return None
     if cloud_mismatch(clouds.of(t).key, connection):
         return None  # that app can't be consented to in this tenant's cloud
@@ -249,13 +250,12 @@ def _use_consent_nonce(tenant_id: int, nonce) -> bool:
 
 
 @bp.get("/tenants/<int:tenant_id>")
-@login_required
+@needs()
 def tenant(tenant_id: int):
-    from ..reports.data_reports import grouped
     from ..reports.monthly_review import build
 
     t = tenant_or_404(tenant_id)
-    if g.user["role"] == "client":  # clients see reports, not collection internals
+    if not is_staff():  # clients see reports, not collection internals
         return redirect(url_for("tenants.dashboard"))
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     latest = _latest_runs(t["id"])
@@ -278,7 +278,7 @@ def tenant(tenant_id: int):
         report=report,
         attention=attention,
         health=data_health(t, latest),
-        report_groups=grouped(),
+        report_groups=report_groups(t["id"]),
         setup=None if setup.onboarded else setup,
         setup_can_check=_check_problem(t) is None,
         cloud_problem=cloud_problem,
@@ -286,7 +286,7 @@ def tenant(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/collection")
-@roles_required("admin", "analyst")
+@needs("collect")
 def collection(tenant_id: int):
     t = tenant_or_404(tenant_id)
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
@@ -307,7 +307,7 @@ def collection(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/collect")
-@roles_required("admin", "analyst")
+@needs("collect")
 def collect(tenant_id: int):
     t = tenant_or_404(tenant_id)
     keys = request.form.getlist("collector") or list(REGISTRY)
@@ -327,7 +327,7 @@ def collect(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/connection")
-@roles_required("admin")
+@needs("clients.manage")
 def set_connection(tenant_id: int):
     t = tenant_or_404(tenant_id)
     conn_id = request.form.get("connection_id", type=int)
@@ -349,7 +349,7 @@ def set_connection(tenant_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/test-connection")
-@roles_required("admin", "analyst")
+@needs("collect")
 def test_connection(tenant_id: int):
     from ..connection_check import check
 
@@ -399,7 +399,7 @@ def consent_callback():
     return _consent_return()
 
 
-@roles_required("admin")
+@needs("clients.manage")
 def _consent_return():
     try:
         data = _consent_serializer().loads(
@@ -486,7 +486,7 @@ def _consent_return():
 
 
 @bp.get("/runs/<int:run_id>")
-@roles_required("admin", "analyst")
+@needs("collect")
 def run(run_id: int):
     r = g.db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
     if r is None:
