@@ -149,6 +149,12 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     licences, source (cloud or synced) and last sign-in; each manager with
     their direct reports; member counts by department. Accounts reporting to
     a manager whose sign-in is blocked are flagged.
+  - *Administrative units*: every unit with its membership (assigned or
+    dynamic, and whether the rule is paused), restricted management units, how
+    many users, groups and devices are in each and which admins are scoped to
+    it; every scoped admin, flagged when the account is blocked or a guest;
+    and the members of each unit by name. Each person's page shows the units
+    they are in and administer.
   - *Conditional Access coverage*: every policy in plain words, and for each
     account which enforced policy requires MFA, whether legacy sign-in is
     blocked, and which policies exclude it (group membership expanded).
@@ -373,6 +379,9 @@ These areas have no real recording and are tested with simulated data only:
 - [Troubleshooting](docs/troubleshooting.md): the common setup errors
   (`AADSTS50011`, `create-app`, Global Reader, the worker not running) and
   their fixes.
+- [Securing the portal](docs/securing-the-portal.md): what the portal does
+  by itself, what the person running it has to do, and reverse proxy setups
+  for Caddy, nginx, Traefik and a CDN.
 
 ## What it does differently from v1
 
