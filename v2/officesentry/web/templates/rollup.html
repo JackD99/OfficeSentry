@@ -25,7 +25,7 @@
 {%- else %}{{ url_for('reports.data_report', tenant_id=t.id, key=link[0]) }}{{ link[1] }}{% endif %}
 {%- endmacro %}
 {% block content %}
-{{ across_head(rollup.key, main, groups, 'tenants' if rollup.tenant_link == 'data' else '') }}
+{{ across_head(rollup.key, main, 'tenants' if rollup.tenant_link == 'data' else '') }}
 
 {% if not rollup.rows %}
 <div class="card empty">
