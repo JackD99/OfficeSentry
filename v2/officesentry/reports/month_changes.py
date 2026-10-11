@@ -128,6 +128,9 @@ class TenantChanges:
     reports: list[ReportChanges]
     baseline: str | None  # when the oldest data used as the starting point was collected
     notes: list[str] = field(default_factory=list)
+    # The whole report, when a PDF keeps only the first rows of each list (printing.cap_changes), so its
+    # figures still count every change and finding.
+    uncut: TenantChanges | None = None
 
     @property
     def report_changes(self) -> int:

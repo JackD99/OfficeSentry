@@ -70,7 +70,7 @@ def pdf_response(template: str, filename: str, **context) -> Response:
 
 def cap_rows(report: DataReport, limit: int | None = None) -> DataReport:
     """The report with at most ``limit`` (``PDF_MAX_ROWS``) rows per table, each cut table saying where the
-    rest are."""
+    rest are and keeping the whole table as ``uncut`` for its counts."""
     limit = limit or PDF_MAX_ROWS
     if all(len(s.rows) <= limit for s in report.sections):
         return report
@@ -84,7 +84,9 @@ def cap_rows(report: DataReport, limit: int | None = None) -> DataReport:
             "Download the spreadsheet (XLSX) for all of them."
         )
         sections.append(
-            dataclasses.replace(s, rows=s.rows[:limit], flags=s.flags[:limit], intro=f"{s.intro} {note}".strip())
+            dataclasses.replace(
+                s, rows=s.rows[:limit], flags=s.flags[:limit], intro=f"{s.intro} {note}".strip(), uncut=s
+            )
         )
     return dataclasses.replace(report, sections=sections)
 
@@ -99,7 +101,9 @@ def cap_rollup(rollup: Rollup, limit: int | None = None) -> Rollup:
     if len(rollup.rows) <= limit:
         return rollup
     note = _cut_note(limit, len(rollup.rows), "clients", "Download the spreadsheet (XLSX) for all of them.")
-    return dataclasses.replace(rollup, rows=rollup.rows[:limit], footnote=f"{rollup.footnote} {note}".strip())
+    return dataclasses.replace(
+        rollup, rows=rollup.rows[:limit], footnote=f"{rollup.footnote} {note}".strip(), uncut=rollup
+    )
 
 
 def cap_changes(tc: TenantChanges, limit: int | None = None) -> TenantChanges:
@@ -128,4 +132,4 @@ def cap_changes(tc: TenantChanges, limit: int | None = None) -> TenantChanges:
             reports.append(dataclasses.replace(r, sections=sections))
     if notes == tc.notes:
         return tc
-    return dataclasses.replace(tc, new_findings=new, fixed_findings=fixed, reports=reports, notes=notes)
+    return dataclasses.replace(tc, new_findings=new, fixed_findings=fixed, reports=reports, notes=notes, uncut=tc)

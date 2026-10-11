@@ -81,6 +81,7 @@ class Rollup:
     currency: str = "GBP"
     tenant_link: str = "tenant"  # which per-tenant page a row links to: tenant | review | evidence | data
     footnote: str = ""
+    uncut: Rollup | None = None  # every client, when a PDF keeps only the first rows (printing.cap_rollup)
 
     @property
     def with_attention(self) -> int:

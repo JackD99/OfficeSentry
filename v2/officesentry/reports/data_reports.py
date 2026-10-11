@@ -74,6 +74,7 @@ class Section:
     review: bool = True  # False: rows already dealt with (accepted, resolved), so no "<n> to review"
     chart: Chart | None = None  # drawn from the rows the view leaves (views.chart)
     figure: str = ""  # the chart as drawn for a download, set by views.apply()
+    uncut: Section | None = None  # the whole table, when a PDF keeps only its first rows (printing.cap_rows)
 
     def add(self, row: list, flag: str | None = None, key=None) -> None:
         self.rows.append([_cell(v) for v in row])
