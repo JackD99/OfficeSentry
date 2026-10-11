@@ -85,6 +85,8 @@ overview and DEPLOY.md for running it on a server.
 
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
+An answer longer than `exchange.MAX_PAGES` pages is cut there, and the run is
+partial with a warning naming the cmdlet (`RunContext.note_exchange_cuts`).
 
 The SharePoint collectors (shared files, storage, site access) list sites
 and OneDrives through `collectors/sharepoint_lookup.Lookups`, all asking for
