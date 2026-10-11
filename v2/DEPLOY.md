@@ -10,7 +10,8 @@ keys that decrypt its stored certificates and passwords in a second one
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
   installed, with at least 2 CPUs and 4 GB of RAM. Disk use grows with the
-  number of tenants and users (see [How much disk](#how-much-disk)).
+  number of tenants and users (see [How much disk](#how-much-disk)); page
+  times hardly do ([How fast](#how-fast)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
 
@@ -45,6 +46,45 @@ docker compose stop worker
 docker compose run --rm --no-deps worker python -m officesentry compact
 docker compose start worker
 ```
+
+### How fast
+
+Measured with `scripts/timings.py` on the same 200-tenant database (90 nights of history, 1.5 GB,
+every tenant with open findings and on a month-end plan), on 4 cores with nothing else running.
+"Normal" is what people get on an ordinary day, after the worker's nightly work; "first" is a page
+nobody has opened since an upgrade or a restore, when the portal builds what the worker hasn't yet.
+
+| Page, at 200 tenants | Normal | First |
+|---|---|---|
+| Dashboard | 0.6 s | 3.9 s |
+| Today | 0.5 s | 0.4 s |
+| Clients | 0.5 s | 6 s |
+| All tenants: monthly review | 0.1 s | 0.1 s |
+| All tenants: checks | 0.3 s | 2 s |
+| All tenants: insurance evidence | 0.05 s | 4 s |
+| All tenants: a report's rollup | 0.05 s | 0.6 to 1 s |
+| All tenants: every row of a report | 0.9 s | 0.7 s |
+| What changed, every tenant | 0.2 s | 25 s |
+| Projects | 0.1 s | 0.2 s |
+| Coming up | 0.3 s | 0.5 s |
+| Month-end queue | 0.05 s | 0.1 s |
+| Search for a name | 0.15 s | 0.9 s |
+| Search for an IP address | 0.35 s | 0.8 s |
+| A tenant's own pages (overview, findings, changes, reports, a person) | 0.01 to 0.2 s | 0.03 to 0.3 s |
+| PDF downloads (a client's review, every tenant's changes, a rollup) | 1.7 to 4.6 s | |
+| XLSX and CSV downloads | 0.05 to 0.9 s | |
+
+| Worker job, at 200 tenants | Time |
+|---|---|
+| Rebuild of every precomputed row (after each night's collection, and once a day) | 91 s in all, about half a second a tenant |
+| Findings sync, every tenant | 3 s |
+| Retention pass | 2 s |
+| Compressed backup (1.5 GB database, 0.77 GB on disk) | 47 s |
+
+Pages that show every tenant read rows the worker keeps up to date, so their time hardly grows with
+the number of tenants; a PDF's time is the rendering, which is why PDFs keep the first 2,000 rows of
+a table. How long the night's collection takes depends on Microsoft's rate limits and each tenant's
+size, not on the server: see `OFFICESENTRY_WORKER_CONCURRENCY` below.
 
 ## First start
 

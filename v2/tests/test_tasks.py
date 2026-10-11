@@ -362,3 +362,62 @@ def test_pdfs_keep_the_first_rows_of_a_big_table(app, monkeypatch):
         g.db, g.user = None, None
         printing.pdf_response("reports/detail.html", "files", report=report)
     assert "first 10 of 25 rows" in html[0] and "f9" in html[0] and "f10<" not in html[0]
+
+
+def test_pdfs_cap_rollups_and_change_reports(app, monkeypatch):
+    from officesentry.reports.month_changes import ReportChanges, RowChange, SectionChanges, TenantChanges
+    from officesentry.reports.rollups import Column, Rollup, RollupRow
+
+    tenants = [{"id": i, "name": f"T{i}", "tenant_ref": str(i)} for i in range(25)]
+    rollup = Rollup("mfa", "MFA", "", [Column("n", "N")], [RollupRow(t, {"n": 1}) for t in tenants], datetime.now(UTC))
+    capped = printing.cap_rollup(rollup, 10)
+    assert len(capped.rows) == 10 and "first 10 of 25 tenants" in capped.footnote and len(rollup.rows) == 25
+    assert printing.cap_rollup(capped, 10) is capped
+
+    changes = [RowChange("added", [f"row {i}"], columns=["Name"]) for i in range(25)]
+    tc = TenantChanges(
+        tenants[0],
+        datetime.now(UTC),
+        datetime.now(UTC),
+        [],
+        [{"severity": "high"}] * 12,
+        [],
+        [],
+        [
+            ReportChanges("a", "A", [SectionChanges("One", ["Name"], changes[:15])]),
+            ReportChanges("b", "B", [SectionChanges("Two", ["Name"], changes[15:])]),
+        ],
+        None,
+    )
+    cut = printing.cap_changes(tc, 10)
+    assert cut.report_changes == 10 and cut.reports[0].count == 10 and cut.reports[1].count == 0
+    assert len(cut.new_findings) == 10 and tc.report_changes == 25 and len(tc.new_findings) == 12
+    assert [n[:45] for n in cut.notes] == [
+        "This PDF shows the first 10 of 12 new finding",
+        "This PDF shows the first 10 of 25 changes in ",
+    ]
+    assert printing.cap_changes(cut, 10) is cut
+
+    monkeypatch.setattr(printing, "PDF_MAX_ROWS", 10)
+    monkeypatch.setattr(printing.export, "pdf_available", lambda: True)
+    html = []
+    monkeypatch.setattr(printing.export, "to_pdf", lambda h, base: html.append(h) or b"%PDF")
+    with app.test_request_context():
+        from flask import g
+
+        g.db, g.user = None, None
+        printing.pdf_response("reports/rollup.html", "mfa", rollup=rollup, key="mfa")
+        from officesentry.reports.month_changes import Summary
+
+        summaries = [Summary(t, 1, 0, 0, 0, {}, True, ["Accounts"]) for t in tenants]
+        totals = {"changed": 25, "new_severe": 0, "new": 0, "fixed": 0, "score": None, "no_baseline": 0}
+        printing.pdf_response(
+            "reports/changes.html",
+            "changes",
+            summaries=summaries,
+            totals=totals,
+            days=30,
+            generated_at=datetime.now(UTC),
+        )
+    assert "first 10 of 25 tenants" in html[0] and "T9<" in html[0] and "T10<" not in html[0]
+    assert "first 10 of 25 tenants" in html[1] and "T9<" in html[1] and "T10<" not in html[1]

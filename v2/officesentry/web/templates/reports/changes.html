@@ -47,6 +47,7 @@
     {% endfor %}
     </tbody>
   </table></div>
+  {% if cut %}<p>This PDF shows the first {{ '{:,}'.format(summaries|length) }} of {{ '{:,}'.format(cut) }} tenants. Download the spreadsheet (XLSX) for all of them.</p>{% endif %}
   {% else %}<p class="empty-note">No tenants to show.</p>{% endif %}
 </section>
 
