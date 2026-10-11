@@ -61,6 +61,9 @@ STAND_INS: dict[str, dict] = {
             {"id": "1", "roles": ["owner"], "grantedToV2": {"siteGroup": {"displayName": "Site Owners", "id": "3"}}}
         ]
     },
+    # Administrative units (the test tenant has none).
+    "/v1.0/directory/administrativeUnits": {"value": []},
+    "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 
