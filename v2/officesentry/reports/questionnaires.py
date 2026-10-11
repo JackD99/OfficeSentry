@@ -360,6 +360,14 @@ CYBER_ESSENTIALS = QuestionSet(
                     "2025. Router and firewall firmware counts as an operating system.",
                 ),
                 Item(
+                    "software_supported",
+                    "Is all the software on your devices supported by a supplier that produces regular "
+                    "security updates, and licensed?",
+                    "A6.2",
+                    "A6.2.1 to A6.2.4 ask for the browser, anti-malware, email and office applications with "
+                    "their versions.",
+                ),
+                Item(
                     "patching_14_days",
                     "Are high-risk and critical updates for operating systems, routers and "
                     "firewalls installed within 14 days of release?",

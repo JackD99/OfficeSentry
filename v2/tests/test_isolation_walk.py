@@ -72,6 +72,7 @@ OTHER_ARGS = {
     "view_id",
     "resolved",
     "group_id",
+    "scheme",
     "design_id",
     "role_id",
 }
@@ -243,6 +244,7 @@ def _url(rule, ids: dict) -> str:
         "ext": "csv",
         "table": "x",
         "user_id": USERS[0]["id"],
+        "scheme": "cyber-essentials",
         "mailbox_id": USERS[0]["id"],  # Ann's mailbox has her account's object ID
         "gid": "g1",  # the Sales team
         "site_id": sd.SITE_USAGE[0]["siteId"],  # Finance
