@@ -34,9 +34,11 @@ python -m pytest tests/nightly --nightly
 
 The run's **pdf-pages** download (kept three days) has each changed page, its baseline and a picture of the
 difference in red; locally they're in `output/`. If the change is a mistake, fix it. If you meant it, refresh
-the baselines: in GitHub, **Actions > nightly > Run workflow**, pick the branch and tick **Save new PDF
-baselines** (it commits them to the branch), or run `pytest tests/nightly/test_pdf_snapshots.py --nightly
---update` on Ubuntu 24.04 with the packages `nightly.yml` installs. Look at the new images before merging.
+the baselines: add the label **refresh-baselines** to the pull request (it redraws them, commits them to the
+branch, takes the label off and starts the checks again), or in GitHub, **Actions > nightly > Run workflow**,
+pick the branch and tick **Save new PDF baselines** (it commits them to the branch), or run `pytest
+tests/nightly/test_pdf_snapshots.py --nightly --update` on Ubuntu 24.04 with the packages `nightly.yml`
+installs. Look at the new images before merging.
 
 ### When a page goes over its time budget
 

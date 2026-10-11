@@ -6,8 +6,9 @@ name: ui
 # (while the repo is private; nightly once public), and by hand. Screenshots are uploaded only when a
 # comparison fails, and kept for three days.
 #
-# To refresh the baselines after an intended change: Actions > ui > Run workflow, pick the branch, tick
-# "Save new baselines". It commits them to that branch. Look at the new images in the pull request.
+# To refresh the baselines after an intended change: add the label "refresh-baselines" to the pull request
+# (refresh-baselines.yml), or Actions > ui > Run workflow, pick the branch, tick "Save new baselines". Either
+# commits them to that branch. Look at the new images in the pull request.
 on:
   pull_request:
     paths:

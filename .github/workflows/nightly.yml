@@ -10,7 +10,8 @@ name: nightly
 # on Mondays only until the repository variable SCHEDULED_CHECKS_NIGHTLY is "true" (set it when the repo goes
 # public and standard runners are free); then every night. Run it by hand any time: Actions > nightly > Run
 # workflow. Pull requests that change the suite or how PDFs are drawn run it too, so baselines are refreshed
-# in the same pull request: Run workflow on the branch with "Save new PDF baselines" ticked commits them.
+# in the same pull request: the label "refresh-baselines" on the pull request (refresh-baselines.yml), or
+# Run workflow on the branch with "Save new PDF baselines" ticked, commits them.
 on:
   schedule:
     - cron: '23 3 * * 1'
