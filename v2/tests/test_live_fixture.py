@@ -42,6 +42,8 @@ STAND_INS: dict[str, dict] = {
     # Administrative units (the test tenant has none).
     "/v1.0/directory/administrativeUnits": {"value": []},
     "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
+    # The Teams collector's activity report (2.2); the test tenant has no Teams, so Microsoft lists no teams.
+    "/beta/reports/getTeamsTeamActivityDetail(period='D90')": {"value": []},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 
@@ -107,9 +109,11 @@ def _results(db, tenant):
 def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
-    # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered.
+    # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered,
+    # and nobody has a manager set.
     nothing_to_check = {
         "tls_rpt",
+        "blocked_manager",
         "device_compliance",
         "device_encryption",
         "intune_enrolled",

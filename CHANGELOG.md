@@ -120,6 +120,10 @@ client's approval.
   PDF for the client. The App connection page updates your app registration with one sign-in (**Update the
   app**), and the new `update-app` command does the same. A client that hasn't approved yet stays *Healthy*:
   the missing permissions are a step to do, not a problem.
+- **Teams channels, guests and apps** report (under *Files and Teams*): each team's private and shared channels
+  with their members and owners, the guests and people from other organisations in them, the apps added to
+  each team (custom uploads flagged), and teams nobody has used in 90 days. Usage reports also read your
+  tenant's "conceal names" setting, so they say outright when Microsoft hides names.
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -163,6 +167,10 @@ client's approval.
   from it, the team or Microsoft 365 group behind it (or its owner), its activity, open findings and what
   changed, with links to the site access and file permission reports for the detail. Site addresses in
   reports, the group page and search results open the page, and it downloads as PDF and XLSX.
+- Five checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
+  blocked. **Guests:** no guest from another organisation owns a team or group. **Storage:** no mailbox and
+  no OneDrive is at or over 90% of its quota (high once it's full). Each goes in the project an MSP would sell
+  it under (account clean-up, sharing and guests, storage), with an effort estimate.
 
 ### Changed
 
@@ -196,6 +204,11 @@ client's approval.
 
 - An Admin activity collection could be marked partial, with a warning that Microsoft timed out, when a
   second ticked over between two readings of the clock during the run; nothing was actually missing.
+- DKIM is now judged for every domain Microsoft 365 sends for, not only domains whose MX records point at
+  Microsoft 365. A domain behind a mail gateway (Mimecast, Proofpoint and the like) whose SPF record still
+  includes `spf.protection.outlook.com` has its selector CNAMEs checked, and the finding says why; a domain
+  Microsoft 365 doesn't send for stays "n/a". Before, those domains were skipped and the check could read "No
+  domain receives mail through Microsoft 365" for a tenant that sends everything from Outlook.
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
   invisible to the admin checks and the Admins report. The group's members are now read each night and
   checked like any other admin; the Admins report says which group a role comes through.
@@ -280,6 +293,11 @@ client's approval.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- The file pickers on Branding and the onboarding import look like the portal's other buttons and show
+  the chosen file's name, the Activity log's filters sit level on one row with their button, the partial-run
+  notice carries the same icon as other notices, each Data retention section says plainly what the next pass would
+  delete, the onboarding "Send link" button has its full label, and a report plan's Save and Cancel stay in view
+  on a long form like the scheduled-email form's.
 - A deploy no longer copies the portal's settings files, among them the off-site backup password, into
   the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
   rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy
@@ -348,6 +366,11 @@ client's approval.
   admin's user forms. Existing passwords aren't checked until they're changed.
 - A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
   itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
+- The Deploy workflow gives the `HCLOUD_TOKEN` secret only to the two steps that open and close SSH, passes
+  the firewall's ID between them as a checked number instead of through the environment of every later step,
+  and writes the backup password and storage keys to disk only after the website is built, so the code it
+  builds and the packages that build installs never see them. Nothing to change in your settings.
+- Copy buttons put their own label back after "Copied" instead of re-reading it from the page as HTML.
 
 ## [2.1.0] - 2026-10-10
 

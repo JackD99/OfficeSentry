@@ -21,6 +21,7 @@ from tests import hybriddata as hd
 from tests import licencedata as ld
 from tests import tenantsettingsdata as tsd
 from tests.sharepoint_data import mock_sharepoint
+from tests.teamsdata import mock_teams
 from tests.test_collectors import SKUS, USERS
 from tests.usagedata import mock_usage
 
@@ -166,6 +167,7 @@ def mock_tenant(
     app_sign_ins=None,
     audits=None,
     admin_units=None,
+    teams_kw=None,
     **phase4,
 ):
     rsps.get(f"{V1}/organization", json={"value": [gd.ORGANIZATION]})
@@ -270,6 +272,7 @@ def mock_tenant(
     mock_phase4(rsps, **phase4)
     mock_sharepoint(rsps, **(sharepoint_kw or {}))
     mock_usage(rsps, **(usage_kw or {}))
+    mock_teams(rsps, **(teams_kw or {}))
 
 
 def exchange_factory(tenant, connection):
