@@ -240,6 +240,11 @@ Microsoft account links on users and how each session was started.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The Deploy workflow reads the server's address and the portal's name from the secrets `DEPLOY_HOST` and
+  `OFFICESENTRY_DOMAIN` (and `OFFICESENTRY_SETTINGS` and `BACKUP_REPOSITORY` when they're secrets), since a
+  public repository's run logs show every variable a step reads. Variables of those names still work; add
+  each as a secret to hide it ([v2/DEPLOY.md, step 5](v2/DEPLOY.md#5-tell-github-where-to-deploy)). The
+  live canary takes the test tenant's ID from the secret `CANARY_TENANT_ID` for the same reason.
 - The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
   page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
   so a client account probing for other clients' data is visible under *Settings → Activity log*.
