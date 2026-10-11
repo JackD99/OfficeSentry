@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-59 checks, 37 data sources (collectors) and 45 detail reports.
+60 checks, 38 data sources (collectors) and 46 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -118,6 +118,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 |---|---|---|---|
 | **No files are shared with anyone links**<br>`anyone_links` | `shared_files`, `sharepoint_usage` | The tenant has no SharePoint licence | Remove anyone links that are no longer needed, and set the rest to view-only with an expiry date. The Shared files report lists each one. |
 | **Files can't be shared with anonymous links**<br>`sharepoint_sharing` | `tenant_policies` |  | Change SharePoint external sharing to "New and existing guests" so every external person signs in. If the client relies on Anyone links, set them to expire and to view-only. |
+| **Guests don't have full control of sites**<br>`site_guest_full_control` | `site_permissions` | The tenant has no SharePoint licence | Take guests out of each site's owners group and away from Full Control; give them Edit or Read through the site's members or visitors group instead. Full Control lets someone outside the organisation change who can open the site and delete anything on it. The Site permissions report lists them. |
 | **Every site has at least two owners**<br>`site_owners` | `site_access` | The tenant has no SharePoint licence | Give each site a second owner (in the Microsoft 365 group, or as a site administrator) so access requests and content questions have someone to go to when one person leaves. The Site access report lists each site's owners. |
 
 ### Storage
@@ -176,6 +177,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
 | `sign_ins` | Sign-in activity | Interactive sign-ins in the last 7 days, summarised by account, country, app and failure reason (needs Entra ID P1; sign-in risk needs P2). | `AuditLog.Read.All` |
 | `site_access` | Site access | Who owns, administers and can reach each SharePoint site: group owners and site admins, guests, what the default library grants, and sites open to everyone. Needs the Sites.Read.All permission. | `Sites.Read.All` |
+| `site_permissions` | Site permissions | Permission levels on each SharePoint site, SharePoint groups and their members, and lists, libraries and subsites with permissions of their own. Needs Sites.Read.All on SharePoint (not Graph). | `Sites.Read.All (SharePoint)` |
 | `teams` | Teams | Each team's channels, the guests and people from other organisations in private and shared channels, the apps added to each team, and when each team was last used. | `Directory.Read.All`, `Reports.Read.All`, `Channel.ReadBasic.All`, `ChannelMember.Read.All`, `TeamsAppInstallation.ReadForTeam.All` |
 | `tenant_policies` | Sharing and consent settings | Guest invitations, user consent to apps, default user permissions, admin consent requests, and SharePoint external sharing. | `Policy.Read.All`, `SharePointTenantSettings.Read.All` |
 | `tenant_profile` | Tenant profile and licences | Organization details, verified domains, subscriptions with renewal dates and licence capabilities. | `Organization.Read.All`, `Directory.Read.All` |
@@ -228,6 +230,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `sharepoint-storage` | SharePoint storage | What fills the tenant's SharePoint storage and what to clean up: sites, folders, large and old files, version history and recycle bins. | `sharepoint_storage`, `sharepoint_usage`, `tenant_profile` |
 | `sign-ins` | Sign-in activity | Failed and successful sign-ins over the last week by account, country and app: password guessing, unusual countries, sign-ins without MFA and risky sign-ins. | `sign_ins`, `tenant_profile` |
 | `site-access` | Site access | Who owns, administers and can reach each SharePoint site: ownerless sites, guests, and sites open to everyone in the organisation. | `groups`, `sharepoint_usage`, `site_access`, `users` |
+| `site-permissions` | Site permissions | Who holds which permission level on each SharePoint site, through which SharePoint group, and the lists, libraries and subsites with permissions of their own. | `groups`, `site_permissions`, `users` |
 | `subscriptions` | Licences and subscriptions | Every subscription with licences bought, assigned and available, its cost and renewal date, trials and lapsing subscriptions, and who has which licence, directly or by group. | `groups`, `tenant_profile`, `users` |
 | `teams` | Teams channels, guests and apps | Each team's private and shared channels and who is in them, guests and people from other organisations, the apps added to each team, and teams nobody has used lately. | `teams` |
 | `tenant-settings` | Tenant settings | What users and guests can do by default, and whether users can ask an admin to approve apps. | `tenant_policies` |
@@ -262,6 +265,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `Sites.Read.All` | SharePoint Online | Who has access to each SharePoint site and list (SharePoint's own permission lists) | not used by a collector yet |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
 | `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage`, `site_access` |
+| `Sites.Read.All (SharePoint)` | ? | Not in the app's permission list | `site_permissions` |
 | `TeamsAppInstallation.ReadForTeam.All` | Microsoft Graph | Apps added to each team | `teams` |
 | `User.Read.All` | Microsoft Graph | Users, licences, password age | `user_details`, `users` |
 | `UserAuthenticationMethod.Read.All` | Microsoft Graph | Registered MFA methods | `mfa_registration` |

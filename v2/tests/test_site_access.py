@@ -163,7 +163,7 @@ def test_report(db, two_tenants):
     assert tiles["Sites with no owner"].value == 1 and tiles["Sites with no owner"].tone == "bad"
     assert tiles["One owner only"].value == 0 and tiles["Guests with access"].value == 1
     assert tiles["Open to everyone in the organisation"].value == 1 and tiles["Sites"].value == 2
-    assert any("SharePoint read permission" in n for n in report.notes)  # Old Projects has no group
+    assert any("Site permissions report" in n for n in report.notes)  # Old Projects has no group
 
     needing = _section(report, "Sites needing an owner")
     assert [str(c) for c in needing.rows[0]] == [

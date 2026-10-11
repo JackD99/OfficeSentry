@@ -306,6 +306,11 @@ def mock_tenant(
     mock_teams(rsps, **(teams_kw or {}))
 
 
+def graph_factory(tenant, connection):
+    """A Graph client that can also sign in to SharePoint, as one made from a certificate can."""
+    return GraphClient(lambda: "t", sleep=lambda s: None, resource_tokens=lambda host: lambda: "t")
+
+
 def exchange_factory(tenant, connection):
     return ExchangeClient(tenant["tenant_ref"], lambda: "t", sleep=lambda s: None)
 
@@ -353,7 +358,9 @@ def seed_tenant(db, tenant_id, dns=None, precompute=False, mark: str | None = No
     named "<name> <mark>" (``mark_names``), so this tenant's data can be told from another's seeded from the
     same ``graphdata``."""
     session = _marking_session(mark) if mark else requests.Session()
-    factory = lambda tenant, connection: GraphClient(lambda: "t", session=session, sleep=lambda s: None)  # noqa: E731
+
+    def factory(tenant, connection):  # can also sign in to SharePoint, as a client made from a certificate can
+        return GraphClient(lambda: "t", session=session, sleep=lambda s: None, resource_tokens=lambda host: lambda: "t")
 
     def exchange(tenant, connection):
         return ExchangeClient(tenant["tenant_ref"], lambda: "t", session=session, sleep=lambda s: None)

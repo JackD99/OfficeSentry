@@ -80,6 +80,7 @@ def test_site_page_brings_storage_and_sharing_together(db, two_tenants):
     )
     assert "Shared files" in reports
     assert reports["Site access"].startswith(f"/tenants/{alpha}/data/site-access")
+    assert reports["Site permissions"].startswith(f"/tenants/{alpha}/data/site-permissions")
     assert site_page.build(db, _tenant(db, alpha), "nope", NOW) is None
 
 

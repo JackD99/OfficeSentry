@@ -271,9 +271,16 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
     and to whom (site groups, groups, people, "Everyone"), every guest and
     the sites they can reach, and the people who administer many sites.
     Read from each site's hidden user list and default library with
-    `Sites.Read.All`; SharePoint group members on sites with no group need
-    a SharePoint permission that comes with the next consent batch, and
-    the report says so.
+    `Sites.Read.All`; SharePoint group members on sites with no group are
+    in Site permissions.
+  - *Site permissions*: each team site's SharePoint groups and who is in
+    them, which permission level each person and group holds, the lists,
+    libraries and subsites that stopped inheriting their site's
+    permissions, and everyone with access by person, guests first. Guests
+    with full control fail a check. Read through SharePoint's own API with
+    `Sites.Read.All` on Office 365 SharePoint Online and the app's
+    certificate; until the client approves that permission the report says
+    it's waiting.
   - *Licences and subscriptions*: for renewals and fixing licence problems.
     Every product with licences purchased, in a grace period, suspended,
     assigned and available, and its monthly cost at your prices; every

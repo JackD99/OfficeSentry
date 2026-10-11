@@ -236,6 +236,7 @@ SHOTS = [
     Shot("review-attention", "/tenants/{t}/report", height=1000, scroll_to="#month"),
     Shot("sharepoint-storage", "/tenants/{t}/data/sharepoint-storage", height=1100),
     Shot("site-access", "/tenants/{t}/data/site-access", height=1100),
+    Shot("site-permissions", "/tenants/{t}/data/site-permissions", height=1100),
     Shot(
         "sharepoint-storage-files",
         "/tenants/{t}/data/sharepoint-storage",
