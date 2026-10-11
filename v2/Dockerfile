@@ -35,5 +35,8 @@ LABEL org.opencontainers.image.title="Office Sentry" \
 # The worker runs the same image with: python -m officesentry worker
 # --preload builds the app (and applies database upgrades) once, before the
 # workers fork, so two workers never upgrade the database at the same moment.
+# The access log keeps the path, never the query string (search terms, filter values, the setup link) or the
+# referer, which carry what people looked at; serve.py uses the same format without Docker.
 CMD ["gunicorn", "--preload", "--workers", "2", "--threads", "4", "--bind", "0.0.0.0:8000", "--timeout", "120", \
-     "--access-logfile", "-", "officesentry.web:create_app()"]
+     "--access-logfile", "-", "--access-logformat", "%(h)s %(t)s \"%(m)s %(U)s %(H)s\" %(s)s %(b)s %(M)sms \"%(a)s\"", \
+     "officesentry.web:create_app()"]
