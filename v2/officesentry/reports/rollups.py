@@ -116,7 +116,7 @@ class Rollup:
         return total if total.values else None
 
     def to_table(self) -> Table:
-        header = ["Tenant", "Tenant ID"]
+        header = ["Client", "Tenant ID"]
         for c in self.columns:
             if c.kind == "sev":
                 header += [f"{c.label}: {s}" for s in SEVERITIES]
@@ -180,7 +180,7 @@ def review_rollup(conn, tenants, now: datetime, cached: bool = False) -> Rollup:
     return Rollup(
         "review",
         "Monthly review",
-        "Findings, Secure Score, MFA, admins and licence waste for every tenant, with the change over 4 weeks.",
+        "Findings, Secure Score, MFA, admins and licence waste for every client, with the change over 4 weeks.",
         columns,
         rows,
         now,
@@ -263,7 +263,7 @@ def evidence_rollup(conn, tenants, now: datetime) -> Rollup:
     return Rollup(
         "evidence",
         "Insurance evidence",
-        "The controls cyber-insurance questionnaires ask about, answered for every tenant.",
+        "The controls cyber-insurance questionnaires ask about, answered for every client.",
         columns,
         rows,
         now,
@@ -343,17 +343,17 @@ def data_rollup(conn, tenants, key: str, now: datetime) -> Rollup:
                     row.links[f"c:{s.title}"] = (key, f"#{views.anchor(table)}")
         rows.append(row)
     footnote = (
-        "Figures are the report's headline numbers for each tenant."
+        "Figures are the report's headline numbers for each client."
         if use_headlines
         else "Numbers count the rows in each of the report's tables."
-    ) + " Each tenant's own report has the detail."
+    ) + " Each client's own report has the detail."
     return Rollup(key, title, description, columns, rows, now, tenant_link="data", footnote=footnote)
 
 
 # -- Every row of a detail report, across tenants ----------------------------------
 
 MAX_ROWS = 10_000  # per table: more than a page or a PDF can sensibly hold
-TENANT = "Tenant"
+TENANT = "Client"
 
 
 @dataclass
@@ -391,7 +391,7 @@ def _place(out: Section, columns: list[str], row: list, tenant_cell) -> list:
     return line
 
 
-def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, label: str = "All tenants") -> AllRows:
+def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, label: str = "All clients") -> AllRows:
     """Build the report for each tenant (with the same builders as its own page) and stack the rows.
 
     ``href(tenant)``, when given, is the tenant's own report page: the Tenant cell links to its table.
@@ -400,7 +400,7 @@ def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, la
     now = now or datetime.now(UTC)
     title, description, _collectors, _builder = data_reports.REPORTS[key]
     combined = DataReport(
-        key, title, description, {"id": 0, "name": label, "tenant_ref": plural(len(tenants), "tenant")}, now
+        key, title, description, {"id": 0, "name": label, "tenant_ref": plural(len(tenants), "client")}, now
     )
     sections: dict[str, Section] = {}
     totals: Counter = Counter()
@@ -433,7 +433,7 @@ def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, la
     combined.sources = list(latest.items())
     combined.notes = [f"{t['name']}: {reason}" for t, reason in without]
     if not combined.sections:
-        combined.unavailable = "No tenant has data for this report yet." if tenants else "No tenants to show."
+        combined.unavailable = "No client has data for this report yet." if tenants else "No clients to show."
     return AllRows(combined, dict(totals), without)
 
 
@@ -448,7 +448,7 @@ def one_table(rows: AllRows, title: str, view: views.View | None = None) -> Data
     if cut:
         out.notice = (
             f"Only the first {MAX_ROWS:,} of {cut:,} rows are included. Filter the table on the page, "
-            "or open each tenant's own report for the rest."
+            "or open each client's own report for the rest."
         )
     return out
 
@@ -512,7 +512,7 @@ class CheckMatrix:
         return sum(1 for r in self.rows if r.count("fail"))
 
     def to_table(self) -> Table:
-        header = ["Tenant", "Tenant ID", "Failing", "Accepted", "Not checked", "Note"]
+        header = ["Client", "Tenant ID", "Failing", "Accepted", "Not checked", "Note"]
         header += [f"{category}: {title}" for _key, title, category in self.checks]
         rows = []
         for r in self.rows:

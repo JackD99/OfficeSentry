@@ -45,7 +45,7 @@ def test_demo_reports_add_up(app, db, vault):
         assert report.new_count == len(report.new_findings)
         page = client.get(f"/tenants/{tid}/report").get_data(as_text=True)
         changes = page.split('id="changes"', 1)[1].split("</section>", 1)[0]
-        findings = changes.split("In the tenant", 1)[0]
+        findings = changes.split("In Microsoft 365", 1)[0]
         assert findings.count("chg-added") == min(report.new_count, 15), tenant["name"]
         assert findings.count("chg-resolved") == min(len(report.resolved), 15), tenant["name"]
         if report.new_count:

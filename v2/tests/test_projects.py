@@ -174,7 +174,7 @@ def test_pipeline_lists_open_and_declined_separately(db, seeded, two_tenants):
     assert data.count(status="agreed") == 1 and data.count(status="declined") == 1
     assert data.tenants_with == 1
     table = projects.to_table(data.items())
-    assert table.columns[:3] == ["Tenant", "Tenant ID", "Project"] and len(table.rows) == len(open_keys)
+    assert table.columns[:3] == ["Client", "Tenant ID", "Project"] and len(table.rows) == len(open_keys)
     assert table.rows[0][table.columns.index("Estimated hours")] == 6
 
 
@@ -207,7 +207,7 @@ def test_pages(client, db, seeded, two_tenants):
     assert client.get(f"/tenants/{two_tenants[1]}/projects").status_code == 404
     assert client.post(f"/tenants/{two_tenants[1]}/projects/identity", data={"status": "agreed"}).status_code == 404
     csv = client.get("/projects.csv").get_data(as_text=True)
-    assert csv.lstrip("\ufeff").startswith("Tenant,Tenant ID,Project") and "Quote sent" in csv
+    assert csv.lstrip("\ufeff").startswith("Client,Tenant ID,Project") and "Quote sent" in csv
     assert client.get("/projects.xlsx").status_code == 200
 
 
