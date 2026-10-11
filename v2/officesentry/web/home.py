@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 
-from .. import home, month_end
+from .. import first_run, home, month_end
 from ..issued import period_label
 from ..reports.monthly_review import setting
 from .access import login_required, roles_required, safe_next
@@ -41,6 +41,24 @@ def _link(reason: home.Reason) -> str:
     return reason.target or url_for("tenants.tenant", tenant_id=reason.tenant_id)
 
 
+def get_started() -> list[first_run.Step] | None:
+    """The Get started checklist for an admin until the first collection has run (first_run.py), with links."""
+    if g.user["role"] != "admin":
+        return None
+    steps = first_run.pending(g.db)
+    for step in steps or ():
+        kind, _, tenant_id = step.target.partition(":")
+        if kind == "connections":
+            step.href = url_for("admin.connections")
+        elif kind == "new_tenant":
+            step.href = url_for("tenants.new_tenant")
+        elif kind == "tenant":
+            step.href = url_for("tenants.tenant", tenant_id=int(tenant_id))
+        elif kind == "collection":
+            step.href = url_for("tenants.collection", tenant_id=int(tenant_id))
+    return steps
+
+
 @bp.get("/home")
 @login_required
 def index():
@@ -55,7 +73,9 @@ def today():
     for row in data.rows:
         for reason in row.reasons:
             reason.href = _link(reason)
-    return render_template("home_today.html", data=data, homes=home.HOMES, mine=home.home_of(g.user))
+    return render_template(
+        "home_today.html", data=data, homes=home.HOMES, mine=home.home_of(g.user), get_started=get_started()
+    )
 
 
 @bp.get("/clients")
@@ -73,6 +93,7 @@ def clients():
         mine=home.home_of(g.user),
         sentence=data.sentence(lambda v: money(v, currency)),
         states=month_end.STATES,
+        get_started=get_started(),
     )
 
 
