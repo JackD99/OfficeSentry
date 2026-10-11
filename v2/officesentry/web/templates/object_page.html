@@ -5,7 +5,7 @@
 {% block title %}{{ page.name }} · {{ tenant.name }}{% endblock %}
 {% set PILL = {'ok': 'ok', 'warn': 'warn', 'bad': 'bad'} %}
 {% macro cell(v) -%}
-{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v }}{% endif %}
+{% if v.page_href is defined and v.page_href %}<a href="{{ v.page_href }}">{{ v.text }}</a>{% elif v.safe_href is defined and v.safe_href %}<a href="{{ v.safe_href }}" target="_blank" rel="noopener noreferrer">{{ v.text }}</a>{% else %}{{ v|readable }}{% endif %}
 {%- endmacro %}
 {% block content %}
 {{ tenant_header(tenant, tab) }}
@@ -53,17 +53,54 @@
       {% endif %}
     </section>
 
-    <nav class="jump" aria-label="Sections">
-      {% for p in page.parts %}<a href="#part-{{ p.key }}">{{ p.title }}</a>{% endfor %}
-      <a href="#history">History</a>
-    </nav>
+    <section class="card">
+      <div class="card-head"><h2>Open findings</h2>
+        {% if page.findings %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
+      {% if page.findings %}
+      <ul class="list compact">
+        {% for f in page.findings %}
+        <li><span class="sevtext {{ f.severity }} sevcol">{{ f.severity }}</span>
+          <div class="grow"><div class="title">{{ f.title }}</div><div class="desc">{{ f.detail }} · since {{ f.first_seen|day }}</div></div></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted small m0">No open findings name this {{ page.kind }}.</p>
+      {% endif %}
+    </section>
+  </div>
 
+  <aside aria-label="{{ page.about_title }} summary">
+    <section class="card">
+      <div class="card-head"><h2>{{ page.about_title }}</h2></div>
+      <dl class="kv stacked">{% for label, value in page.about %}<dt>{{ label }}</dt><dd>{{ cell(value) }}</dd>{% endfor %}</dl>
+    </section>
+
+    {% if page.reports %}
+    <section class="card">
+      <div class="card-head"><h2>In the reports</h2></div>
+      <ul class="link-list">
+        {% for title, href in page.reports %}<li><a href="{{ href }}">{{ title }}</a></li>{% endfor %}
+      </ul>
+      <p class="footnote">The reports these facts come from, opened at this {{ page.kind }} where they list it.</p>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+
+<nav class="jump hide-sm" aria-label="Sections">
+  {% for p in page.parts %}<a href="#part-{{ p.key }}">{{ p.title }}</a>{% endfor %}
+  <a href="#history">History</a>
+</nav>
+
+{#- As on a person's page: below the summary every part takes the page's width and folds to its heading
+    (open on laptops, folded on phones by app.js). -#}
+<div class="parts">
     {% for p in page.parts %}
-    <section class="card part" id="part-{{ p.key }}">
-      <div class="card-head">
+    <details class="card part" id="part-{{ p.key }}" open>
+      <summary class="card-head">
         <h2>{{ p.title }}</h2>
         {% if p.unavailable %}<span class="pill">Not checked</span>{% elif p.summary %}<span class="pill {{ PILL.get(p.tone, '') }}">{{ p.summary }}</span>{% endif %}
-      </div>
+      </summary>
       {% if p.unavailable %}
       <p class="muted m0">{{ p.unavailable }}</p>
       {% else %}
@@ -80,7 +117,7 @@
           <tbody>
           {% for row in t.rows %}{% set flag = t.flags[loop.index0] %}
           <tr{% if flag %} class="flag-{{ flag }}"{% endif %}>
-            {% for v in row %}<td class="wrap"{% if not loop.first %} data-label="{{ t.columns[loop.index0] }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
+            {% for v in row %}<td class="wrap{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ t.columns[loop.index0] }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
           </tr>
           {% endfor %}
           </tbody>
@@ -90,40 +127,8 @@
         {% if not p.facts and not p.tables and not p.chart %}<p class="muted m0">{{ p.empty }}</p>{% endif %}
       {% endif %}
       {% if p.note and not p.unavailable %}<p class="footnote">{{ p.note }}</p>{% endif %}
-    </section>
+    </details>
     {% endfor %}
-  </div>
-
-  <aside aria-label="{{ page.about_title }} summary">
-    <section class="card">
-      <div class="card-head"><h2>{{ page.about_title }}</h2></div>
-      <dl class="kv stacked">{% for label, value in page.about %}<dt>{{ label }}</dt><dd>{{ cell(value) }}</dd>{% endfor %}</dl>
-    </section>
-
-    <section class="card">
-      <div class="card-head"><h2>Open findings</h2>
-        {% if page.findings %}<a class="small" href="{{ url_for('reports.tenant_findings', tenant_id=tenant.id) }}">All findings</a>{% endif %}</div>
-      {% if page.findings %}
-      <ul class="list compact">
-        {% for f in page.findings %}
-        <li><span class="sevtext {{ f.severity }} sevcol">{{ f.severity }}</span>
-          <div class="grow"><div class="title">{{ f.title }}</div><div class="desc">{{ f.detail }} · since {{ f.first_seen|day }}</div></div></li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p class="muted small m0">No open findings name this {{ page.kind }}.</p>
-      {% endif %}
-    </section>
-
-    {% if page.reports %}
-    <section class="card">
-      <div class="card-head"><h2>In the reports</h2></div>
-      <ul class="link-list">
-        {% for title, href in page.reports %}<li><a href="{{ href }}">{{ title }}</a></li>{% endfor %}
-      </ul>
-      <p class="footnote">The reports these facts come from, opened at this {{ page.kind }} where they list it.</p>
-    </section>
-    {% endif %}
 
     <section class="card" id="history">
       <div class="card-head"><h2>History</h2></div>
@@ -139,7 +144,6 @@
       {% endif %}
       <p class="footnote">Found by comparing collections{% if page.history_since %} since {{ page.history_since|day }}{% endif %}. The date is when Office Sentry first saw the change.</p>
     </section>
-  </aside>
 </div>
 
 <p class="footnote">Data from

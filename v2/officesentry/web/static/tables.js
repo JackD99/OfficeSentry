@@ -10,10 +10,10 @@
  *   keeping the scroll position, open menus and anything typed in a row search. Plain links without JS. */
 (function () {
   /* Every page loads this file (base.html); a page that also loads it gets one copy.
-   * Long tables on phones: a stacked table (table.stack-sm) shows its first 20 rows, with "Show all" under it. */
+   * Long tables: a stacked table (table.stack-sm) shows its first rows, with "Show all" under it (capRows). */
   if (window.officeSentryTables) return;
   window.officeSentryTables = true;
-  var CAP = 20;
+  var CAP = 20, FEW = 5;
   var phone = window.matchMedia ? window.matchMedia('(max-width: 640px)') : { matches: false };
   function value(cell) {
     if (!cell) return null;
@@ -148,28 +148,40 @@
     document.querySelectorAll('details.menu[open]').forEach(function (d) { d.open = false; d.querySelector('summary').focus(); });
   });
 
-  /* Long tables on phones: the first CAP rows of a stacked table, then a "Show all" button. */
+  /* Long tables: the first rows of a stacked table, then a "Show all" button. */
   function rows(table) {
     return Array.prototype.filter.call(table.tBodies[0].rows, function (r) { return !r.classList.contains('group'); });
   }
   function markCap(table) {
     if (!table.classList.contains('capped')) return;
+    var cap = Number(table.getAttribute('data-cap')) || CAP;
     var shown = 0;  // a group heading goes with the rows under it
     Array.prototype.forEach.call(table.tBodies[0].rows, function (r) {
-      r.classList.toggle('over-cap', shown >= CAP);
+      r.classList.toggle('over-cap', shown >= cap);
       if (!r.classList.contains('group')) shown++;
     });
   }
   function capRows(root) {
-    if (!phone.matches) return;
-    root.querySelectorAll('table.stack-sm').forEach(function (table) {
-      // Grouped tables (several bodies) fold their groups instead.
-      if (table.tBodies.length !== 1 || table.classList.contains('grouped') || table.hasAttribute('data-cap')) return;
+    // Grouped tables (several bodies) fold their groups instead.
+    var tables = Array.prototype.filter.call(root.querySelectorAll('table.stack-sm'), function (table) {
+      return table.tBodies.length === 1 && !table.classList.contains('grouped') && !table.hasAttribute('data-cap');
+    });
+    // A page of several long tables shows the first few rows of each, so the page reads as a summary
+    // of its tables rather than one endless list: 5 on a phone, 10 on a laptop. One long table on its
+    // own keeps 20 rows on a phone and all of them on a laptop.
+    var long = tables.filter(function (table) { return rows(table).length > (phone.matches ? 8 : 15); });
+    var several = long.length > 1;
+    var cap = phone.matches ? (several ? FEW : CAP) : (several ? 10 : 0);
+    if (!cap) return;
+    long.forEach(function (table) {
       var n = rows(table).length;
-      if (n <= CAP + 5) return;  // hiding a handful saves nothing
-      table.setAttribute('data-cap', '');
+      if (n <= cap + Math.max(3, cap / 4)) return;  // hiding a handful saves nothing
+      table.setAttribute('data-cap', cap);
       table.classList.add('capped');
       markCap(table);
+      // A few rows need no scroll box of their own; "Show all" gives the long table its box back.
+      var box = table.closest('.table-scroll.tall');
+      if (box) box.classList.remove('tall');
       var button = document.createElement('button');
       button.type = 'button';
       button.className = 'show-all';
@@ -177,6 +189,7 @@
       button.addEventListener('click', function () {
         table.classList.remove('capped');
         rows(table).forEach(function (r) { r.classList.remove('over-cap'); });
+        if (box) box.classList.add('tall');
         button.remove();
       });
       var after = table.closest('.table-scroll, .scroll-x') || table;
