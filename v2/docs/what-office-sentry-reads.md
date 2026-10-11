@@ -44,12 +44,15 @@ Office Sentry is built so that it can't change anything in your tenant.
   so Office Sentry refuses to run any command that isn't on its list. Every
   command on the list starts with `Get-` (Exchange's word for "show me"):
 
-  `Get-AcceptedDomain`, `Get-CASMailbox`, `Get-DistributionGroup`,
-  `Get-DistributionGroupMember`, `Get-HostedOutboundSpamFilterPolicy`,
-  `Get-InboxRule`, `Get-Mailbox`, `Get-MailboxPermission`, `Get-MailboxStatistics`,
-  `Get-MailTrafficSummaryReport`, `Get-MessageTraceV2`, `Get-MobileDevice`, `Get-MobileDeviceStatistics`,
-  `Get-OrganizationConfig`, `Get-Recipient`, `Get-RecipientPermission`,
-  `Get-RemoteDomain`, `Get-TransportConfig`.
+  `Get-AcceptedDomain`, `Get-AntiPhishPolicy`, `Get-AntiPhishRule`, `Get-ATPProtectionPolicyRule`,
+  `Get-CASMailbox`, `Get-DistributionGroup`, `Get-DistributionGroupMember`,
+  `Get-EOPProtectionPolicyRule`, `Get-HostedContentFilterPolicy`, `Get-HostedContentFilterRule`,
+  `Get-HostedOutboundSpamFilterPolicy`, `Get-InboundConnector`, `Get-InboxRule`, `Get-Mailbox`,
+  `Get-MailboxPermission`, `Get-MailboxStatistics`, `Get-MailTrafficSummaryReport`,
+  `Get-MalwareFilterPolicy`, `Get-MalwareFilterRule`, `Get-MessageTraceV2`, `Get-MobileDevice`,
+  `Get-MobileDeviceStatistics`, `Get-OrganizationConfig`, `Get-OutboundConnector`, `Get-Recipient`,
+  `Get-RecipientPermission`, `Get-RemoteDomain`, `Get-SafeAttachmentPolicy`, `Get-SafeAttachmentRule`,
+  `Get-SafeLinksPolicy`, `Get-SafeLinksRule`, `Get-TransportConfig`, `Get-TransportRule`.
 
   None of these return the contents of any email. `Get-MailboxStatistics`
   returns a mailbox's size and number of items, and `Get-CASMailbox` returns
@@ -64,7 +67,16 @@ Office Sentry is built so that it can't change anything in your tenant.
   quarantined or failed per day. It never keeps subjects, senders or
   recipients. `Get-MailTrafficSummaryReport` returns Microsoft's own summary
   of the 20 people who got the most spam and phishing in the last 30 days:
-  their addresses and how many such messages each got.
+  their addresses and how many such messages each got. `Get-TransportRule`
+  returns the organisation's mail flow rules (their conditions, actions and
+  exceptions, and the addresses a rule sends copies to), and the connector,
+  policy and rule cmdlets return how mail is routed and filtered: the anti-spam,
+  anti-phishing, anti-malware, Safe Links and Safe Attachments settings and whom
+  each policy applies to. Office Sentry keeps the settings it reports on, cuts
+  free text such as a disclaimer short, and only counts the people an
+  anti-phishing policy protects from impersonation. The Safe Links, Safe
+  Attachments and `Get-ATPProtectionPolicyRule` commands are only run for
+  clients with Defender for Office 365.
 
 The only things Office Sentry ever creates or changes are its own app
 registrations in your **MSP's** tenant: the one that reads your tenant
@@ -112,7 +124,7 @@ built from the checks, so they use all of the information below.
 | `DeviceManagementConfiguration.Read.All` *(new in 2.2)* | Intune configuration and compliance policies, such as firewall, screen lock, encryption and update settings, and which devices they apply to. | To show what each compliance policy requires, which platforms have none, update rings and endpoint security policies, and who each applies to. | Intune policies; the compliance policy coverage check. Needs an Intune licence. |
 | `DeviceManagementApps.Read.All` *(new in 2.2)* | Intune app protection policies and the apps Intune deploys, with their versions. | To show whether company data in apps on phones (including personal ones) is protected by a PIN and kept inside managed apps. | Intune policies (app protection). Needs an Intune licence. |
 | `Sites.Read.All` on **Office 365 SharePoint Online** *(new in 2.2)* | SharePoint's own permission lists: who is in each SharePoint group and who has access to each site and list (it needs the app's certificate). Microsoft lists it under SharePoint, separately from Microsoft Graph's permission of the same name. **Not** what's inside the files. | Graph doesn't say who is in SharePoint's own groups, so without it "who has access to this site" is incomplete. | Site permissions; the guests with full control check. Until it's approved, Site permissions says it's waiting for it. |
-| `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes, mailbox sizes, which protocols each mailbox allows, phones and tablets syncing mail, distribution lists and how much mail they get, how much mail each domain sends and receives, and organisation mail settings. Works only with the Global Reader role (below). | Mail forwarding; Mailbox permissions; Shared mailboxes; Mailbox size; Mobile devices; Distribution lists; Mail flow by domain; Legacy sign-ins; email checks. |
+| `Exchange.ManageAsApp` | Lets the app use Exchange Online's admin commands. Office Sentry only runs the `Get-` commands listed above. | Mailbox forwarding, who has access to which mailbox, shared mailboxes, mailbox sizes, which protocols each mailbox allows, phones and tablets syncing mail, distribution lists and how much mail they get, how much mail each domain sends and receives, organisation mail settings, mail flow rules and connectors, and the spam, phishing and malware filtering policies. Works only with the Global Reader role (below). | Mail forwarding; Mailbox permissions; Shared mailboxes; Mailbox size; Mobile devices; Distribution lists; Mail flow by domain; Mail rules and protection; Legacy sign-ins; email checks. |
 
 A few things Office Sentry checks come from the **public internet**, not from
 your tenant: the SPF, DKIM, DMARC, MTA-STS and TLS-RPT records of your email

@@ -243,7 +243,7 @@ def test_review_suggests_projects_then_quick_fixes(client, db, two_tenants):
     make_user(db, "analyst", role="analyst", all_tenants=True)
     login(client, "analyst")
     offered = month_end.suggestions(db, store.get_tenant(db, alpha))
-    assert [s["rule_key"] for s in offered if s["kind"] == "project"] == ["project:identity", "project:email_security"]
+    assert [s["rule_key"] for s in offered if s["kind"] == "project"] == ["project:email_security", "project:identity"]
     quick = [s for s in offered if s["kind"] == "quick"]
     assert quick[0]["rule_key"] == "admin_mfa" and quick[0]["severity"] == "critical"
     assert "legacy_auth_blocked" not in {s["rule_key"] for s in quick}  # part of the identity project

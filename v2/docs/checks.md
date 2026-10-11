@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-63 checks, 39 data sources (collectors) and 48 detail reports.
+68 checks, 40 data sources (collectors) and 49 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -61,11 +61,16 @@ A check reads only the data its collectors stored. When that data is missing, or
 | **DKIM signing is on for every mail domain**<br>`dkim_enabled` | `domain_health` |  | Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), publishing the two selector CNAME records it shows. This applies to domains behind a mail gateway too when Microsoft 365 still sends for them (their SPF includes spf.protection.outlook.com); a gateway signs only the mail that goes out through it. |
 | **Every domain enforces DMARC**<br>`dmarc_policy` | `domain_health` |  | Publish a DMARC record with a rua= reporting address, start at p=none to see who sends as the domain, then move to p=quarantine and p=reject. Without enforcement, spoofed mail from the domain is delivered. |
 | **No mail is forwarded outside the organisation**<br>`external_forwarding` | `inbox_rules`, `mailboxes`, `tenant_profile` | The tenant has no Exchange Online licence | Remove forwarding to outside addresses unless the client has a documented business reason. Forwarding is the most common way attackers keep reading a mailbox after a password reset. |
+| **No mail flow rule sends mail outside the organisation**<br>`mail_rule_external_copy` | `mailboxes`, `tenant_profile` | The tenant has no Exchange Online licence | Check each rule that redirects mail or sends copies to an outside address with the client, and remove it unless there's a documented reason (a journaling or archiving service). Attackers with admin access add these rules to read a whole organisation's mail. |
+| **No mail flow rule lets mail skip spam filtering**<br>`mail_rule_spam_bypass` | `mailboxes` | The tenant has no Exchange Online licence | Remove mail flow rules that skip spam filtering (set the spam confidence level to -1) for senders picked by their address, domain or a header, which anyone can fake. For mail arriving through another filtering service use enhanced filtering on its inbound connector instead, and for a partner limit the rule to the addresses of their sending servers. |
 | **Mailbox auditing is on**<br>`mailbox_auditing` | `mailboxes` | The tenant has no Exchange Online licence | Turn mailbox auditing back on for the organisation (Set-OrganizationConfig -AuditDisabled $false). Without it there's no record of who read or deleted mail during an incident. |
+| **Risky attachment types are blocked**<br>`malware_file_filter` | `mailboxes` | The tenant has no Exchange Online licence | Turn on the common attachments filter in the anti-malware policies (it's on by default), so program files, disk images and scripts (.exe, .iso, .js and the like) are quarantined rather than delivered. |
 | **Mail domains require encrypted delivery (MTA-STS)**<br>`mta_sts` | `domain_health` |  | Publish an MTA-STS policy so other mail servers only deliver to the domain over a verified, encrypted connection: a TXT record at _mta-sts.<domain> ("v=STSv1; id=20260101") and a policy file at https://mta-sts.<domain>/.well-known/mta-sts.txt listing the domain's MX hosts (for Microsoft 365, "mx: *.mail.protection.outlook.com"). Start with "mode: testing" and TLS-RPT reports, then switch to "mode: enforce" and change the id. |
 | **Shared mailboxes can't be signed in to**<br>`shared_mailbox_signin` | `mailboxes`, `users` | The tenant has no Exchange Online licence | Block sign-in for each shared mailbox's account (it doesn't need a password). An enabled shared mailbox account usually has no MFA and nobody watching it. |
 | **SMTP AUTH is turned off**<br>`smtp_auth` | `mailboxes` | The tenant has no Exchange Online licence | Turn off SMTP AUTH for the organisation and enable it only on the mailboxes of devices or apps that still need it, such as scanners. It accepts passwords without MFA. |
+| **No sender domains are allowed past the spam filter**<br>`spam_allowed_domains` | `mailboxes`, `tenant_profile` | The tenant has no Exchange Online licence | Remove the allowed sender domains from the anti-spam policies: anyone can send mail claiming to be from a domain, so it skips spam and spoofing checks. Where a partner's mail is wrongly caught, report it to Microsoft or add an allow entry for their spoofed sender in the Tenant Allow/Block List instead. |
 | **Every domain has a working SPF record**<br>`spf_record` | `domain_health` |  | Publish one SPF record per domain ending in -all (or ~all while testing), e.g. "v=spf1 include:spf.protection.outlook.com -all". Domains that never send mail should publish "v=spf1 -all". |
+| **Spoof protection is on**<br>`spoof_protection` | `mailboxes` | The tenant has no Exchange Online licence | Turn spoof intelligence and “Honour DMARC policy” back on in the anti-phishing policies (both are on by default). Without them, mail pretending to be from other organisations' domains is delivered. |
 | **No inbox rules hide mail**<br>`suspicious_inbox_rules` | `inbox_rules`, `mailboxes`, `tenant_profile` | The tenant has no Exchange Online licence | Check each rule with the mailbox owner. Rules that delete or bury messages about payments or security alerts are a sign of a compromised account: reset the password, revoke sessions and review sign-ins. |
 | **Encrypted delivery failures are reported (TLS-RPT)**<br>`tls_rpt` | `domain_health` |  | Publish a TXT record at _smtp._tls.<domain> such as "v=TLSRPTv1; rua=mailto:tls-reports@<domain>" (or a reporting service's address), so someone hears when other servers can't deliver mail encrypted, before and after MTA-STS is enforced. |
 
@@ -169,6 +174,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `legacy_signins` | Legacy sign-ins | Sign-ins over SMTP AUTH, IMAP, POP and other basic-auth clients in the last 30 days (needs Entra ID P1). | `AuditLog.Read.All` |
 | `m365_usage` | Microsoft 365 usage | Who used email, Teams, OneDrive, SharePoint and the Office apps in the last 30 days, from Microsoft's usage reports. | `Reports.Read.All`, `ReportSettings.Read.All` |
 | `mail_flow` | Mail flow | How much mail each domain sends and receives, how much is delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing (needs Global Reader). | `Exchange.ManageAsApp` |
+| `mail_protection` | Mail rules and protection | Mail flow rules, connectors, and the anti-spam, anti-phishing and anti-malware policies (with Safe Links and Safe Attachments where Defender for Office 365 is licensed) and whom each applies to (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mailbox_usage` | Mailbox size | Size and item count of every mailbox, against its quota (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mailboxes` | Mailboxes | Mailboxes, forwarding, delegated access and organisation mail settings (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mfa_registration` | MFA registration | Which users have registered a second factor. | `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All` |
@@ -220,6 +226,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `tenant_profile`, `users` |
 | `mail-flow` | Mail flow by domain | How much mail each domain sends and receives, how much was delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing. | `mail_flow` |
+| `mail-protection` | Mail rules and protection | Mail flow rules and what each does, connectors, and the anti-spam, anti-phishing and anti-malware policies (Safe Links and Safe Attachments too) with whom each applies to. | `mail_protection`, `mailboxes` |
 | `mailbox-holds` | Mailbox holds and archiving | Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't held, and large mailboxes that need an archive. | `mailbox_usage`, `mailboxes`, `users` |
 | `mailbox-permissions` | Mailbox permissions | Who can open, send as or send on behalf of each mailbox, by person and by mailbox. | `mailboxes`, `users` |
 | `mailbox-size` | Mailbox size | Every mailbox's size against its quota, largest share of quota first. | `mailbox_usage` |
@@ -258,7 +265,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | `intune_policies` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `teams`, `tenant_profile` |
-| `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mail_flow`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
+| `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mail_flow`, `mail_protection`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |

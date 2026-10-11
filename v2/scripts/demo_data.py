@@ -788,6 +788,142 @@ def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -
     }
 
 
+def mail_protection(t: dict, now: datetime) -> dict:
+    """Get-* results for mail flow rules, connectors and the protection policies: Contoso is set up well (presets
+    on, a filtering service with enhanced filtering), Northwind lets a supplier skip the spam filter, and
+    Fabrikam copies mail to an outside archive, allows a free mail domain and has spoof protection half off."""
+    base = t["base"]
+
+    def day(days: int) -> str:
+        return (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    rules = [
+        {
+            "Name": "Tag mail from outside",
+            "Guid": f"{base}-tr-1",
+            "State": "Enabled",
+            "Mode": "Enforce",
+            "Priority": 0,
+            "FromScope": "NotInOrganization",
+            "PrependSubject": "[EXTERNAL] ",
+            "WhenChanged": day(420),
+        }
+    ]
+    allowed: list[str] = []
+    phish = {"EnableSpoofIntelligence": True, "HonorDmarcPolicy": True, "EnableUnauthenticatedSender": True}
+    file_filter, presets, inbound, outbound = True, [], [], []
+    if base == "northwindtraders":
+        rules.append(
+            {
+                "Name": "Supplier invoices never junk",
+                "Guid": f"{base}-tr-2",
+                "State": "Enabled",
+                "Mode": "Enforce",
+                "Priority": 1,
+                "SenderDomainIs": ["supplierhub.example"],
+                "SetSCL": -1,
+                "WhenChanged": day(300),
+            }
+        )
+        allowed = ["supplierhub.example"]
+    elif base == "fabrikam":
+        rules += [
+            {
+                "Name": "Copy patient letters to archive",
+                "Guid": f"{base}-tr-2",
+                "State": "Enabled",
+                "Mode": "Enforce",
+                "Priority": 1,
+                "SubjectContainsWords": ["Patient letter"],
+                "BlindCopyTo": ["records@dentalarchive.example"],
+                "WhenChanged": day(150),
+            },
+            {
+                "Name": "Old disclaimer",
+                "Guid": f"{base}-tr-3",
+                "State": "Disabled",
+                "Mode": "Enforce",
+                "Priority": 2,
+                "ApplyHtmlDisclaimerText": "<p>Confidential.</p>",
+                "WhenChanged": day(900),
+            },
+        ]
+        allowed = ["gmail.com", "labpartners.example"]
+        phish["HonorDmarcPolicy"] = False
+        file_filter = False
+    else:
+        presets = [{"Name": "Standard Preset Security Policy", "State": "Enabled", "Priority": 0}]
+        inbound = [
+            {
+                "Name": "From mail filtering service",
+                "Enabled": True,
+                "ConnectorType": "Partner",
+                "SenderDomains": ["smtp:*;1"],
+                "SenderIPAddresses": ["198.51.100.20", "198.51.100.21"],
+                "RequireTls": True,
+                "RestrictDomainsToIPAddresses": True,
+                "EFSkipIPs": ["198.51.100.20", "198.51.100.21"],
+                "WhenChanged": day(500),
+            }
+        ]
+        outbound = [
+            {
+                "Name": "To mail filtering service",
+                "Enabled": True,
+                "ConnectorType": "Partner",
+                "RecipientDomains": ["*"],
+                "SmartHosts": ["relay.mailfilter.example"],
+                "UseMXRecord": False,
+                "TlsSettings": "DomainValidation",
+                "TlsDomain": "relay.mailfilter.example",
+                "WhenChanged": day(500),
+            }
+        ]
+    spam = {
+        "Name": "Default",
+        "IsDefault": True,
+        "BulkThreshold": 7,
+        "SpamAction": "MoveToJmf",
+        "HighConfidenceSpamAction": "Quarantine",
+        "PhishSpamAction": "Quarantine",
+        "HighConfidencePhishAction": "Quarantine",
+        "BulkSpamAction": "MoveToJmf",
+        "AllowedSenderDomains": allowed,
+        "SpamZapEnabled": True,
+        "PhishZapEnabled": True,
+        "WhenChanged": day(380),
+    }
+    return {
+        "Get-TransportRule": rules,
+        "Get-InboundConnector": inbound,
+        "Get-OutboundConnector": outbound,
+        "Get-HostedContentFilterPolicy": [spam],
+        "Get-HostedContentFilterRule": [],
+        "Get-AntiPhishPolicy": [
+            {
+                "Name": "Office365 AntiPhish Default",
+                "IsDefault": True,
+                "Enabled": True,
+                **phish,
+                "WhenChanged": day(380),
+            }
+        ],
+        "Get-AntiPhishRule": [],
+        "Get-MalwareFilterPolicy": [
+            {
+                "Name": "Default",
+                "IsDefault": True,
+                "EnableFileFilter": file_filter,
+                "FileTypes": ["ace", "apk", "app", "cab", "dmg", "exe", "iso", "jar", "js", "msi", "ps1", "vbs"],
+                "ZapEnabled": True,
+                "WhenChanged": day(380),
+            }
+        ],
+        "Get-MalwareFilterRule": [],
+        "Get-EOPProtectionPolicyRule": presets,
+    }
+
+
 def replies(t: dict, users: list[dict], now: datetime, first: bool) -> dict:
     """Automatic replies: one left on since the first collection, one on this week, one scheduled, a leaver's."""
     staff = [u for u in users if u["id"].startswith("d")]
@@ -1693,6 +1829,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> 
                     **exchange(t, everyone, first, rng),
                     "Get-InboxRule": folders(rules),
                     **mail_extras(t, everyone, now, random.Random(t["name"] + "mail")),  # noqa: S311
+                    **mail_protection(t, now),
                 }
             },
             devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed, "RECOVERY_KEYS": keys},
