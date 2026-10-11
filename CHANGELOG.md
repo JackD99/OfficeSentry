@@ -228,6 +228,14 @@ client's approval.
   the **month-end review** shows each failing check on one line with "Add a note" at its end.
 - A user's settings show what their role opens beside the form on a wide screen.
 - Report tables and a person's page show dates as "8 Oct 2026, 09:22" rather than `2026-10-08T09:22:00Z`.
+- **Reports use the screen.** Pages can be 1,600 pixels wide instead of 1,240, and the list of reports is an
+  "All reports" menu above the report (every report in columns, with a search box, and the report's area
+  beside it) instead of a column beside it, so a report's table gets the page's width. "Show as it was on"
+  sits on the same row. On a 1920 screen the All users table shows 9 of its 11 columns instead of 6.
+- In report tables a plain flag is a small label beside the row's first value instead of a column that's
+  empty on most rows (named ones, such as Severity on Findings, stay columns). In wide tables, columns that
+  explain a row ("What it means", "What to check", "Why" ...) are a line under it, so the facts stay side by
+  side; downloads keep them as columns. The links to a report's tables look like buttons.
 
 ### Fixed
 

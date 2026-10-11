@@ -67,6 +67,8 @@
         var q = input.value.trim().toLowerCase();
         table.classList.toggle('searching', !!q);
         table.querySelectorAll('tbody tr').forEach(function (tr) {
+          // A row's note line (tr.row-note) goes with the row above it.
+          if (tr.classList.contains('row-note')) { tr.hidden = !!(tr.previousElementSibling && tr.previousElementSibling.hidden); return; }
           tr.hidden = q && (tr.getAttribute('data-name') || '').indexOf(q) === -1;
         });
       });
@@ -139,6 +141,11 @@
     all.querySelector('span').textContent = folded ? 'Expand all' : 'Collapse all';
   });
 
+  /* The All reports menu: its search box takes the typing as it opens. */
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (d.id === 'report-switch' && d.open) { var f = d.querySelector('input[type=search]'); if (f) f.focus(); }
+  }, true);
   /* Menus (<details class="menu">) close on Escape or a click outside. */
   document.addEventListener('click', function (e) {
     document.querySelectorAll('details.menu[open]').forEach(function (d) { if (!d.contains(e.target)) d.open = false; });
@@ -150,15 +157,16 @@
 
   /* Long tables: the first rows of a stacked table, then a "Show all" button. */
   function rows(table) {
-    return Array.prototype.filter.call(table.tBodies[0].rows, function (r) { return !r.classList.contains('group'); });
+    return Array.prototype.filter.call(table.tBodies[0].rows, function (r) { return !r.classList.contains('group') && !r.classList.contains('row-note'); });
   }
   function markCap(table) {
     if (!table.classList.contains('capped')) return;
     var cap = Number(table.getAttribute('data-cap')) || CAP;
-    var shown = 0;  // a group heading goes with the rows under it
+    var shown = 0;  // a group heading goes with the rows under it, a note line with the row above it
     Array.prototype.forEach.call(table.tBodies[0].rows, function (r) {
-      r.classList.toggle('over-cap', shown >= cap);
-      if (!r.classList.contains('group')) shown++;
+      var note = r.classList.contains('row-note');
+      r.classList.toggle('over-cap', note ? shown > cap : shown >= cap);
+      if (!r.classList.contains('group') && !note) shown++;
     });
   }
   function capRows(root) {

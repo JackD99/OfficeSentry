@@ -147,33 +147,41 @@
 </div>
 {%- endmacro %}
 
-{# The Reports tab's one report picker: every report the tenant has, grouped, with a search box. A list on
-   the left on wide screens, a select on narrower ones. The page puts it in a .report-layout beside
+{# The Reports tab's one report picker: every report the tenant has, grouped, with a search box. On
+   laptops an "All reports" menu above the report (its area beside it), so the report has the page's whole
+   width; a select on phones. The page puts it in a .report-layout above
    <div class="report-main" id="report" tabindex="-1">. current: a detail report's key, 'review' or 'evidence'. #}
 {% macro _picker_href(tenant, e) %}{% if e.kind == 'review' %}{{ url_for('reports.tenant_report', tenant_id=tenant.id) }}{% elif e.kind == 'evidence' %}{{ url_for('reports.evidence_pack', tenant_id=tenant.id) }}{% else %}{{ url_for('reports.data_report', tenant_id=tenant.id, key=e.key) }}{% endif %}{% endmacro %}
 {% macro report_picker(tenant, current) -%}
 {% set staff = current_user.role != 'client' and can('reports.security', tenant.id) %}
 {% set areas = report_catalogue() %}
 {% set shown = ('data', 'review', 'evidence') %}
+{% set here = namespace(area='') %}
 <nav class="report-menu" aria-label="Reports">
   <a class="skip-picker" href="#report">Skip to the report</a>
-  <div class="picker-search">
-    {{ icon('search') }}<label for="report-find" class="sr-only">Find a report</label>
-    <input id="report-find" type="search" placeholder="Find a report" autocomplete="off" maxlength="100" data-report-search="report-list">
-  </div>
-  <div class="picker-list" id="report-list">
-    {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% endfor %}{% if entries %}
-    <div class="report-group">
-      <p class="picker-label" id="picker-{{ area.key }}">{{ area.title }}</p>
-      <ul aria-labelledby="picker-{{ area.key }}">
-        {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
-        {% endfor %}
-        {% if loop.first and staff %}<li data-name="custom reports report designs blocks"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Your report designs, on this client's data"{% if current == 'designs' %} aria-current="page"{% endif %}>Custom reports</a></li>{% endif %}
-      </ul>
+  <details class="menu report-switch" id="report-switch">
+    <summary class="btn sm" title="Every report for {{ tenant.name }}">{{ icon('library') }}<span>All reports</span>{{ icon('chevron', 'chev') }}</summary>
+    <div class="menu-panel report-panel">
+      <div class="picker-search">
+        {{ icon('search') }}<label for="report-find" class="sr-only">Find a report</label>
+        <input id="report-find" type="search" placeholder="Find a report" autocomplete="off" maxlength="100" data-report-search="report-list">
+      </div>
+      <div class="picker-list" id="report-list">
+        {% for area in areas %}{% set entries = [] %}{% for e in area.entries if e.kind in shown and can(entry_capability(e), tenant.id) %}{% set _ = entries.append(e) %}{% if e.key == current or (current in ('review', 'evidence') and e.kind == current) %}{% set here.area = area.title %}{% endif %}{% endfor %}{% if entries %}
+        <div class="report-group">
+          <p class="picker-label" id="picker-{{ area.key }}">{{ area.title }}</p>
+          <ul aria-labelledby="picker-{{ area.key }}">
+            {% for e in entries %}<li data-name="{{ e.search }}"><a href="{{ _picker_href(tenant, e) }}" title="{{ e.description }}"{% if e.key == current %} aria-current="page"{% endif %}>{{ e.title }}</a></li>
+            {% endfor %}
+            {% if loop.first and staff %}<li data-name="custom reports report designs blocks"><a href="{{ url_for('designs.tenant_designs', tenant_id=tenant.id) }}" title="Your report designs, on this client's data"{% if current == 'designs' %} aria-current="page"{% endif %}>Custom reports</a></li>{% if current == 'designs' %}{% set here.area = area.title %}{% endif %}{% endif %}
+          </ul>
+        </div>
+        {% endif %}{% endfor %}
+      </div>
+      <p class="no-match" hidden>No report matches. The <a href="{{ url_for('reports.overview', tenant=tenant.id) }}">Reports page</a> searches by job too.</p>
     </div>
-    {% endif %}{% endfor %}
-  </div>
-  <p class="no-match" hidden>No report matches. The <a href="{{ url_for('reports.overview', tenant=tenant.id) }}">Reports page</a> searches by job too.</p>
+  </details>
+  {% if here.area %}<span class="report-area">{{ here.area }}</span>{% endif %}
 </nav>
 <form method="get" action="{{ url_for('reports.data_index', tenant_id=tenant.id) }}" class="picker-form report-menu-sm" data-autosubmit>
   <label for="report-key">Report</label>

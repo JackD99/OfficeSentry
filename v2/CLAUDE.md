@@ -427,6 +427,10 @@ turning each step's `target` into a link.
   keep 10 rows on a laptop and 5 on a phone, one alone keeps every row on a
   laptop and 20 on a phone; a table with `data-cap` set is left alone). A
   page that also loads `tables.js` itself still gets one copy.
+- In `_report_table.html` a plain flag (`flag_name` "Flag") is a `.flag-pill` beside the row's first value;
+  a named one (Severity, Priority) keeps its column. A table showing `views.NOTES_FROM` columns or more
+  draws the ones in `views.NOTE_COLUMNS` ("What it means", "Why" ...) as a `tr.row-note` line under each
+  row; `tables.js` keeps it with its row in search and row caps. Downloads keep both as columns.
 - A list cell (`Many`) of more than three items shows two and "and N more"
   (`_report_table.html`); a cell of 32 characters or fewer gets class
   `short` and sits beside its label in a stacked table on a phone.
@@ -444,9 +448,9 @@ turning each step's `target` into a link.
   top as the page scrolls (`data-pin`, `app.js`: CSS `position: sticky` with a negative top, so nothing
   changes height); pass `pin=false` for a sample header. The Reports tab has no second row: its pages
   (Monthly review, Questionnaires and evidence, every detail report from `library.catalogue()`, and
-  Custom reports for staff) are in `report_picker()`, a searchable list beside the report on wide screens
-  and a select on narrower ones;
-  a page that uses it wraps itself in `.report-layout` with the report in `.report-main`.
+  Custom reports for staff) are in `report_picker()`, an "All reports" menu above the report (every report
+  in columns with a search box, the report's area beside it) and a select on phones, so the report gets the
+  page's width; a page that uses it wraps itself in `.report-layout` with the report in `.report-main`.
 - Show times with the `ts()` macro or the `ago`/`when`/`day` filters, never raw
   ISO strings. Licence flags go through the `capability` filter. Python code
   outside `web/` (reports, emails) uses the same functions from

@@ -106,20 +106,28 @@
   <p class="no-rows">No rows match {{ 'this filter' if tv.chips|length == 1 else 'these filters' }}. <a href="{{ tv.clear_href }}" data-view>Show all {{ tv.total }}</a></p>
   {% else %}
   {% set sortable = tv.total > 1 %}
-  {% set width = tv.shown|length + (1 if tv.flag else 0) + (1 if acts else 0) %}
+  {#- A plain "Flag" sits beside the row's first value (the coloured edge marks the row too); a named one
+      (Severity, Priority) keeps its own column, since people sort by it. -#}
+  {% set flagcol = tv.flag and section.flag_name != 'Flag' %}
+  {% set notes = tv.notes %}
+  {% set width = tv.shown|length - notes|length + (1 if flagcol else 0) + (1 if acts else 0) %}
   <div class="table-scroll{{ ' tall' if tv.rows|length > 12 }}" data-key="{{ tv.slug }}">
   <table class="stack-sm{{ ' grouped' if tv.groups }}" id="tbl-{{ tv.slug }}">
     <thead><tr>
-      {% if tv.flag %}<th class="flagcol" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(tv.flag.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ tv.flag.sort_href }}" data-view title="Sort by {{ tv.flag.name|lower }}">{{ tv.flag.name }}</a>{% else %}{{ tv.flag.name }}{% endif %}{% if tv.flag.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}
-      {% for c in tv.shown %}<th class="{{ 'num' if c.kind == 'num' }}" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(c.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ c.sort_href }}" data-view>{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{% if c.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endfor %}
+      {% if flagcol %}<th class="flagcol" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(tv.flag.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ tv.flag.sort_href }}" data-view title="Sort by {{ tv.flag.name|lower }}">{{ tv.flag.name }}</a>{% else %}{{ tv.flag.name }}{% endif %}{% if tv.flag.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}
+      {% for c in tv.shown %}{% if loop.index0 not in notes %}<th class="{{ 'num' if c.kind == 'num' }}" aria-sort="{{ {'asc': 'ascending', 'desc': 'descending'}.get(c.sort, 'none') }}">{% if sortable %}<a class="sort" href="{{ c.sort_href }}" data-view>{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{% if c.filtered %}<span class="filter-dot" title="Filtered"></span>{% endif %}</th>{% endif %}{% endfor %}
       {% if acts %}<th>{{ action }}</th>{% endif %}
     </tr></thead>
     {% macro row(cells, flag, key) -%}
     <tr{% if flag %} class="flag-{{ flag }}"{% endif %} data-name="{{ cells|join(' ')|lower }}{{ (' ' ~ flag) if flag }}">
-      {% if tv.flag %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}
-      {% for v in cells %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}</td>{% endfor %}
+      {% if flagcol %}<td class="flagcol">{% if flag %}<span class="sevtext {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}
+      {% for v in cells %}{% if loop.index0 not in notes %}{% set c = tv.shown[loop.index0] %}<td class="{{ 'nowrap' if c.kind == 'date' else 'wrap' }}{{ ' num' if c.kind == 'num' }}{{ ' short' if (v|string)|length <= 32 }}"{% if not loop.first %} data-label="{{ c.name }}"{% endif %}>{{ cell(v) }}{% if loop.first and flag and not flagcol %} <span class="flag-pill {{ flag }}">{{ flag }}</span>{% endif %}</td>{% endif %}{% endfor %}
       {% if acts %}<td class="row-action" data-label="{{ action }}">{{ act(key) }}</td>{% endif %}
     </tr>
+    {%- set said = [] %}{% for i in notes if (cells[i]|string) not in ('', 'Nothing', 'None', '-', '–', '—') %}{% set _ = said.append(i) %}{% endfor %}
+    {%- if said %}
+    <tr class="row-note{{ (' flag-' ~ flag) if flag }}"><td colspan="{{ width }}"><div class="note">{% for i in said %}<span><strong>{{ tv.shown[i].name }}:</strong> {{ cell(cells[i]) }}</span>{% endfor %}</div></td></tr>
+    {%- endif %}
     {%- endmacro %}
     {% if tv.groups %}
     {% for gr in tv.groups %}

@@ -39,6 +39,22 @@ AGES = {
     "none": "Never or blank",
 }
 MAX_VALUES = 30  # a column with more distinct values than this gets no value filter
+# Columns that explain a row rather than describe it. On the page, a table this wide draws them as a line
+# under their row, so the facts stay side by side; downloads keep them as columns.
+NOTE_COLUMNS = frozenset(
+    {
+        "What it means",
+        "What to check",
+        "What to do",
+        "What to fix",
+        "What happens",
+        "Why it matters",
+        "Why",
+        "Why we think it's break-glass",
+        "How to free it",
+    }
+)
+NOTES_FROM = 6  # columns shown before the notes move under their rows
 MAX_PARAMS = 60
 _SLUG = re.compile(r"^[a-z0-9-]{1,80}$")
 _DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
@@ -589,6 +605,14 @@ class TableView:
     def shown(self) -> list[Column]:
         """The columns each row draws: the visible ones, less the group column while grouped."""
         return [c for c in self.visible if not (self.groups and c is self.group_column)]
+
+    @property
+    def notes(self) -> list[int]:
+        """Indexes into ``shown`` of the columns the page draws as a line under each row (``NOTE_COLUMNS``)."""
+        shown = self.shown
+        if len(shown) < NOTES_FROM:
+            return []
+        return [i for i, c in enumerate(shown) if i and c.name in NOTE_COLUMNS]
 
     @property
     def filters(self) -> list[Column]:
