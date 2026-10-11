@@ -327,6 +327,7 @@ CATALOG: list[Project] = [
             "guest_access_level": Effort(fixed=0.25),
             "email_verified_join": Effort(fixed=0.25),
             "ownerless_groups": Effort(each=0.25, most=8),
+            "guest_owners": Effort(each=0.25, most=8),
             "group_creation": Effort(fixed=1),  # agree who, set up the group and the policy
             "group_expiration": Effort(fixed=0.5),
         },
@@ -342,7 +343,11 @@ CATALOG: list[Project] = [
             "Version history limits and clean-up",
             "Archiving, or extra storage where it's needed",
         ],
-        checks={"sharepoint_storage_space": Effort(fixed=4)},
+        checks={
+            "sharepoint_storage_space": Effort(fixed=4),
+            "mailbox_quota": Effort(each=0.5, most=8),  # archive on and a retention policy, per mailbox
+            "onedrive_quota": Effort(each=0.25, most=8),
+        },
     ),
     Project(
         "licence_cleanup",
@@ -356,6 +361,7 @@ CATALOG: list[Project] = [
         ],
         checks={
             "stale_users": Effort(each=0.25, most=12),  # confirm with the client, then close each one
+            "blocked_manager": Effort(each=0.1, most=4),
             "licensed_disabled": Effort(each=0.1),
             "unassigned_licences": Effort(each=0.25),
             "licence_assignment_errors": Effort(each=0.25),

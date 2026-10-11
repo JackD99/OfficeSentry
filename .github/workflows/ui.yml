@@ -5,8 +5,9 @@ name: Browser tests
 # It runs on pull requests that touch what a page looks like, weekly, and by hand. Screenshots are uploaded only when a
 # comparison fails, and kept for three days.
 #
-# To refresh the baselines after an intended change: Actions > Browser tests > Run workflow, pick the branch, tick
-# "Save new baselines". It commits them to that branch. Look at the new images in the pull request.
+# To refresh the baselines after an intended change: add the label "refresh-baselines" to the pull request
+# (refresh-baselines.yml), or Actions > Browser tests > Run workflow, pick the branch, tick "Save new baselines".
+# Either commits them to that branch. Look at the new images in the pull request.
 on:
   pull_request:
     paths:
@@ -26,6 +27,10 @@ on:
         description: 'Save new baselines and commit them to this branch'
         type: boolean
         default: false
+      pull_request:
+        description: 'Compare the branch merged with main, as a pull request run does (its number)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -50,6 +55,8 @@ jobs:
       options: --ipc=host
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || '' }}
       - name: Install from the lock files
         run: pip install --root-user-action=ignore --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
       - name: Screenshots and accessibility

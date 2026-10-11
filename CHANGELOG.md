@@ -25,16 +25,27 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
 - **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
-### Added
-
-- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
-  four steps to the first report (the app connection, the first client, its consent and its first
-  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
-
 ### New Microsoft permissions
 
-None for client tenants. Setting up staff sign-in creates a separate app in your own tenant with no API
-permissions.
+Nine read-only application permissions, released together so each client approves once. After updating,
+press **Update the app** under *Settings → App connection* (or run `update-app`), then send each client the
+approval link from its **What's new** page under *Onboarding* ([v2/DEPLOY.md, "When a release adds
+permissions"](v2/DEPLOY.md#when-a-release-adds-permissions)). Until a client approves, everything else keeps
+working and the reports that need them say they're waiting for approval.
+
+| Permission | API | For |
+|---|---|---|
+| `Channel.ReadBasic.All` | Microsoft Graph | Teams channels, including private and shared ones |
+| `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests and people from other organisations |
+| `TeamsAppInstallation.ReadForTeam.All` | Microsoft Graph | Apps added to each team |
+| `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names |
+| `PrivilegedEligibilitySchedule.Read.AzureADGroup` | Microsoft Graph | People who can activate a privileged group's membership (PIM for groups) |
+| `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether each device's BitLocker recovery key is saved (never the key) |
+| `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies |
+| `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and deployed apps |
+| `Sites.Read.All` | Office 365 SharePoint Online | SharePoint group members and who has access to each site and list |
+
+Setting up staff sign-in creates a separate app in your own tenant with no API permissions.
 
 ### Database upgrade
 
@@ -42,10 +53,14 @@ Yes, applied on start as usual: migration 37 adds a table for the search index, 
 Microsoft account links on users and how each session was started, and migration 39 adds roles. Nobody's
 access changes: today's admins become **Administrators**, analysts become **Second line** and client accounts
 **Client viewers**, each holding exactly what the old role could do. As ever, a copy of the database is made
-first.
+first. Migration 40, for the permission batch, adds a column on app connections and a table for each
+client's approval.
 
 ### Added
 
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
 - **Roles and capabilities.** What someone may do is now a role made of capabilities (which report areas
   open for them, downloads, refreshing data, accepting risks, setting up emailed reports, reviewing and
   approving month-end reports, projects, custom reports, managing clients, users or settings) and a scope
@@ -99,6 +114,12 @@ first.
   90 days. Its five blocks (Three-month trend, Fixed this quarter, Projects, Licence spend, Coming up)
   can go in any design, and text blocks take `{quarter}`. The demo data includes one under Custom
   reports.
+- **What's new, for permissions.** When a release adds permissions, the Onboarding tracker lists the clients
+  still to approve them ("New permissions to approve", then sent, then approved), and each client's **What's
+  new** page says what every new permission reads and adds, with the email to send, the approval link and a
+  PDF for the client. The App connection page updates your app registration with one sign-in (**Update the
+  app**), and the new `update-app` command does the same. A client that hasn't approved yet stays *Healthy*:
+  the missing permissions are a step to do, not a problem.
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -142,6 +163,10 @@ first.
   from it, the team or Microsoft 365 group behind it (or its owner), its activity, open findings and what
   changed, with links to the site access and file permission reports for the detail. Site addresses in
   reports, the group page and search results open the page, and it downloads as PDF and XLSX.
+- Five checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
+  blocked. **Guests:** no guest from another organisation owns a team or group. **Storage:** no mailbox and
+  no OneDrive is at or over 90% of its quota (high once it's full). Each goes in the project an MSP would sell
+  it under (account clean-up, sharing and guests, storage), with an effort estimate.
 
 ### Changed
 
@@ -175,6 +200,11 @@ first.
 
 - An Admin activity collection could be marked partial, with a warning that Microsoft timed out, when a
   second ticked over between two readings of the clock during the run; nothing was actually missing.
+- DKIM is now judged for every domain Microsoft 365 sends for, not only domains whose MX records point at
+  Microsoft 365. A domain behind a mail gateway (Mimecast, Proofpoint and the like) whose SPF record still
+  includes `spf.protection.outlook.com` has its selector CNAMEs checked, and the finding says why; a domain
+  Microsoft 365 doesn't send for stays "n/a". Before, those domains were skipped and the check could read "No
+  domain receives mail through Microsoft 365" for a tenant that sends everything from Outlook.
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
   invisible to the admin checks and the Admins report. The group's members are now read each night and
   checked like any other admin; the Admins report says which group a role comes through.

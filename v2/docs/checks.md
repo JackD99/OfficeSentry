@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-54 checks, 34 data sources (collectors) and 42 detail reports.
+58 checks, 34 data sources (collectors) and 42 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -18,6 +18,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
+| **No account reports to a blocked manager**<br>`blocked_manager` | `user_details`, `users` |  | Set a current manager on each listed account (Entra admin center > Users > Properties > Manager, or in on-premises AD for synced accounts). The manager is where approvals, leaver notices and access reviews go; when they've left, those go nowhere, and their blocked account is usually waiting to be deleted too. |
 | **No inactive accounts**<br>`stale_users` | `users` | Sign-in activity needs Entra ID P1 | Disable accounts that haven't signed in for 90 days, or were created over 30 days ago and never used (after checking with the client), then remove their licences. Inactive accounts are a common foothold for attackers. |
 
 ### Admins
@@ -55,7 +56,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
 | **Automatic forwarding to outside addresses is off**<br>`auto_forward_policy` | `mailboxes` | The tenant has no Exchange Online licence | Set the outbound spam filter policy's automatic forwarding to Off (or Automatic, which Microsoft treats as Off), and allow forwarding only for named mailboxes with a separate policy. |
-| **DKIM signing is on for every mail domain**<br>`dkim_enabled` | `domain_health` |  | Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), publishing the two selector CNAME records it shows. |
+| **DKIM signing is on for every mail domain**<br>`dkim_enabled` | `domain_health` |  | Turn on DKIM for each domain in the Defender portal (Email authentication settings > DKIM), publishing the two selector CNAME records it shows. This applies to domains behind a mail gateway too when Microsoft 365 still sends for them (their SPF includes spf.protection.outlook.com); a gateway signs only the mail that goes out through it. |
 | **Every domain enforces DMARC**<br>`dmarc_policy` | `domain_health` |  | Publish a DMARC record with a rua= reporting address, start at p=none to see who sends as the domain, then move to p=quarantine and p=reject. Without enforcement, spoofed mail from the domain is delivered. |
 | **No mail is forwarded outside the organisation**<br>`external_forwarding` | `inbox_rules`, `mailboxes`, `tenant_profile` | The tenant has no Exchange Online licence | Remove forwarding to outside addresses unless the client has a documented business reason. Forwarding is the most common way attackers keep reading a mailbox after a password reset. |
 | **Mailbox auditing is on**<br>`mailbox_auditing` | `mailboxes` | The tenant has no Exchange Online licence | Turn mailbox auditing back on for the organisation (Set-OrganizationConfig -AuditDisabled $false). Without it there's no record of who read or deleted mail during an incident. |
@@ -79,6 +80,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
 | **Only admins and members can invite guests**<br>`guest_invites` | `tenant_policies` |  | Restrict guest invitations to admins and the Guest Inviter role, or at least to members, under External collaboration settings. |
+| **No guest owns a team or group**<br>`guest_owners` | `groups` |  | Make a member of the organisation the owner of each listed team or group and remove the guest as owner (Teams admin center, or Microsoft 365 admin center > Teams & groups). An owner from outside can add members and guests, change settings and see everything in it, and nobody here is accountable for that. |
 | **No old, unaccepted guest invitations**<br>`pending_guests` | `users` |  | Delete guest accounts whose invitation has gone unaccepted for 30 days; re-invite if still needed. |
 
 ### Hybrid identity
@@ -121,6 +123,8 @@ A check reads only the data its collectors stored. When that data is missing, or
 
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
+| **No mailbox is nearly full**<br>`mailbox_quota` | `mailbox_usage`, `mailboxes` | The tenant has no Exchange Online licence | Turn on the online archive for each listed mailbox (Exchange admin center > Mailboxes > Manage mailbox archive) with a retention policy that moves old mail into it, or clear large old items. A mailbox at its quota can't send, and soon after can't receive. |
+| **No OneDrive is nearly full**<br>`onedrive_quota` | `sharepoint_usage` | The tenant has no SharePoint licence | Ask each listed person to clear or archive old files, or raise their OneDrive quota (SharePoint admin center > Settings > OneDrive Storage limit, up to 5 TB with a qualifying licence). A full OneDrive stops syncing and saving. |
 | **SharePoint storage isn't nearly full**<br>`sharepoint_storage_space` | `sharepoint_storage`, `tenant_profile` |  | Free up space before the tenant runs out, when people can no longer save files. The SharePoint storage report shows where the space goes and what to clear first; otherwise buy Office 365 Extra File Storage. |
 
 ### Tenant settings
@@ -231,6 +235,11 @@ Every application permission the app requests (all read-only) and the collectors
 |---|---|---|---|
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `app_sign_ins`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
+| `BitLockerKey.ReadBasic.All` | Microsoft Graph | Whether a device's BitLocker recovery key is saved (never the key) | not used by a collector yet |
+| `Channel.ReadBasic.All` | Microsoft Graph | Teams channels: standard, private and shared | not used by a collector yet |
+| `ChannelMember.Read.All` | Microsoft Graph | Who is in each private and shared channel, guests included | not used by a collector yet |
+| `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and managed apps | not used by a collector yet |
+| `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | not used by a collector yet |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
@@ -238,10 +247,14 @@ Every application permission the app requests (all read-only) and the collectors
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |
 | `Policy.Read.All` | Microsoft Graph | Conditional Access and authorization policies | `auth_methods_policy`, `conditional_access`, `per_user_mfa`, `tenant_policies` |
+| `PrivilegedEligibilitySchedule.Read.AzureADGroup` | Microsoft Graph | Who can activate membership of a privileged group (PIM) | not used by a collector yet |
+| `ReportSettings.Read.All` | Microsoft Graph | Whether usage reports hide people's names | not used by a collector yet |
 | `Reports.Read.All` | Microsoft Graph | Usage and MFA registration reports | `m365_usage`, `sharepoint_usage` |
 | `RoleManagement.Read.Directory` | Microsoft Graph | Admin role holders and PIM | `admin_roles`, `connection` |
 | `SecurityEvents.Read.All` | Microsoft Graph | Secure Score | `secure_score` |
+| `Sites.Read.All` | SharePoint Online | Who has access to each SharePoint site and list (SharePoint's own permission lists) | not used by a collector yet |
 | `SharePointTenantSettings.Read.All` | Microsoft Graph | SharePoint sharing settings | `tenant_policies` |
 | `Sites.Read.All` | Microsoft Graph | Which files are shared, and with whom (read-only) | `shared_files`, `sharepoint_storage` |
+| `TeamsAppInstallation.ReadForTeam.All` | Microsoft Graph | Apps added to each team | not used by a collector yet |
 | `User.Read.All` | Microsoft Graph | Users, licences, password age | `user_details`, `users` |
 | `UserAuthenticationMethod.Read.All` | Microsoft Graph | Registered MFA methods | `mfa_registration` |
