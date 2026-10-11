@@ -127,6 +127,10 @@ client's approval.
   PDF for the client. The App connection page updates your app registration with one sign-in (**Update the
   app**), and the new `update-app` command does the same. A client that hasn't approved yet stays *Healthy*:
   the missing permissions are a step to do, not a problem.
+- **Teams channels, guests and apps** report (under *Files and Teams*): each team's private and shared channels
+  with their members and owners, the guests and people from other organisations in them, the apps added to
+  each team (custom uploads flagged), and teams nobody has used in 90 days. Usage reports also read your
+  tenant's "conceal names" setting, so they say outright when Microsoft hides names.
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -296,6 +300,11 @@ client's approval.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- The file pickers on Branding and the onboarding import look like the portal's other buttons and show
+  the chosen file's name, the Activity log's filters sit level on one row with their button, the partial-run
+  notice carries the same icon as other notices, each Data retention section says plainly what the next pass would
+  delete, the onboarding "Send link" button has its full label, and a report plan's Save and Cancel stay in view
+  on a long form like the scheduled-email form's.
 - A deploy no longer copies the portal's settings files, among them the off-site backup password, into
   the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
   rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy
@@ -364,6 +373,11 @@ client's approval.
   admin's user forms. Existing passwords aren't checked until they're changed.
 - A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
   itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
+- The Deploy workflow gives the `HCLOUD_TOKEN` secret only to the two steps that open and close SSH, passes
+  the firewall's ID between them as a checked number instead of through the environment of every later step,
+  and writes the backup password and storage keys to disk only after the website is built, so the code it
+  builds and the packages that build installs never see them. Nothing to change in your settings.
+- Copy buttons put their own label back after "Copied" instead of re-reading it from the page as HTML.
 
 ## [2.1.0] - 2026-10-10
 

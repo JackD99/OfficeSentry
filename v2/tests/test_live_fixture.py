@@ -64,6 +64,8 @@ STAND_INS: dict[str, dict] = {
     # Administrative units (the test tenant has none).
     "/v1.0/directory/administrativeUnits": {"value": []},
     "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
+    # The Teams collector's activity report (2.2); the test tenant has no Teams, so Microsoft lists no teams.
+    "/beta/reports/getTeamsTeamActivityDetail(period='D90')": {"value": []},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 
