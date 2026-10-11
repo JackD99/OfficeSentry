@@ -64,7 +64,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     if not status.get("users") and not status.get("groups"):
         report.unavailable = (
             "Microsoft didn't return the recycle bin on the last collection. The collection log "
-            "on the tenant page has the reason."
+            "on the client page has the reason."
         )
         return
 

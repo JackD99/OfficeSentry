@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 KEY = "upcoming"
 TITLE = "Coming up"
 DESCRIPTION = (
-    "What will need doing in the next 90 days across your tenants: renewals and trials, expiring app "
+    "What will need doing in the next 90 days across your clients: renewals and trials, expiring app "
     "secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks due for "
     "review."
 )
@@ -512,18 +512,18 @@ def report(up: Upcoming) -> DataReport:
         KEY,
         TITLE,
         DESCRIPTION,
-        {"id": 0, "name": "All tenants", "tenant_ref": plural(up.tenants, "tenant")},
+        {"id": 0, "name": "All clients", "tenant_ref": plural(up.tenants, "client")},
         up.generated_at,
     )
     section = Section(
         TABLE,
-        [WHEN, DUE, "In", "Tenant", "Type", "What", "Details"],
+        [WHEN, DUE, "In", "Client", "Type", "What", "Details"],
         intro="Everything due in the next 90 days, soonest first, then what has no date.",
         empty="Nothing is due in the next 90 days.",
         compare=False,
         flag_name="Priority",
         group=WHEN,
-        filter_columns=(WHEN, "Tenant", "Type"),
+        filter_columns=(WHEN, "Client", "Type"),
         review=False,
     )
     for i in up.items:

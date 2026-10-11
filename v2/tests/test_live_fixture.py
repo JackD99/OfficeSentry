@@ -239,7 +239,7 @@ def test_pages_and_downloads(client, db, live):
     # The first report: nothing to compare with yet, but admin changes from the activity history are listed
     # (an app secret added on 6 Oct 2026) while the report's period still reaches back to the recording.
     changes = page.split('id="changes"')[1].split("</section>")[0]
-    assert "first report for this tenant" in page or "Admin activity" in changes
+    assert "first report for your organisation" in page or "Admin activity" in changes
     assert client.get(f"{t}/activity").status_code == 200
 
 
