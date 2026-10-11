@@ -13,6 +13,7 @@ from datetime import date, datetime
 from .. import usage
 from ..licences import is_stale, load_prices, sku_name
 from ..snapshot import TenantSnapshot
+from ..text import plural
 from ..usage import ACTIVE_DAYS, APPS, PLATFORMS, SERVICES
 from .charts import line_chart
 from .data_reports import DataReport, Highlight, Section, Tile
@@ -265,6 +266,8 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     sku_parts = {s["skuId"]: s.get("skuPartNumber") or "" for s in skus or [] if s.get("skuId")}
     by_upn = {(u.get("userPrincipalName") or "").lower(): u for u in users or []}
     boxes = snap.objects("mailbox_usage", "mailbox_size")
+    # A mailbox is the account's by its directory id; its address needn't be the sign-in name.
+    by_id = {b["mailboxId"]: b for b in boxes or [] if b.get("mailboxId")}
     by_mail = {(b.get("mailbox") or "").lower(): b for b in boxes or []}
     prices = load_prices(snap.conn)
     currency = setting(snap.conn, "currency", "GBP")
@@ -295,6 +298,7 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         empty="Everyone uses every service they're licensed for.",
     )
     found, unpriced, people_moving = [], set(), set()
+    withheld = 0  # people with hidden names whose licence would have been removed
     for upn, r in sorted(rows.items(), key=lambda x: usage.label(x[1]).lower()):
         user = by_upn.get(upn) if users is not None else None
         if user is not None and (
@@ -309,7 +313,15 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
             continue
         who = usage.label(r)
         uses = ", ".join(usage.used_services(r)) or "Nothing"
-        for s in usage.rightsize(r, holder.parts, by_mail.get(upn)):
+        box = (by_id.get(user["_id"]) if user is not None else None) or by_mail.get(upn)
+        suggestions = usage.rightsize(r, holder.parts, box)
+        if r.get("concealed"):
+            # A hidden name can't be matched to its account, so a disabled account or a leaver, whose licences
+            # Licence waste already counts, can't be told apart: removing a licence would count it twice.
+            kept = [s for s in suggestions if s.target != ""]
+            withheld += len(kept) < len(suggestions)
+            suggestions = kept
+        for s in suggestions:
             saving = s.saving(prices)
             if saving is None and s.target is not None:
                 unpriced.update(p for p in (s.current, s.target) if p and p not in prices)
@@ -340,6 +352,12 @@ def rightsizing(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
         moves.add(row, flag)
     report.sections = [moves, unused]
 
+    if withheld:
+        report.notes.append(
+            "Microsoft hides names in this tenant's usage reports, so disabled accounts and leavers can't be told "
+            f"apart from the rest: removing a licence isn't suggested for {plural(withheld, 'person', 'people')}, "
+            "since Licence waste already counts licences on disabled and inactive accounts."
+        )
     if unpriced:
         report.notes.append(
             "Some suggestions have no price, so their saving isn't counted. An admin can add prices "
