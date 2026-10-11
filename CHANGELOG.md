@@ -40,6 +40,9 @@ each client's month. As ever, a copy of the database is made first.
   admin.microsoft.com as a Global Admin", are left out of the client's copy of a report design. The portal
   and the previews still show them, marked "Only your team sees this". A design can include them again
   (**Include setup notes in the client's copy**), and the review can leave them out for one client and month.
+- **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
+  report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
+  drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
 
 ### Fixed
 
@@ -65,6 +68,9 @@ each client's month. As ever, a copy of the database is made first.
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
+  (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
+  History list on person, mailbox, group and site pages, where a long address now wraps.
 
 ## [2.2.0] - 2026-10-11
 

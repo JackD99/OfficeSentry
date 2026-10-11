@@ -1,6 +1,8 @@
 name: Browser tests
 # Screenshots and accessibility checks in a real browser (v2/tests/browser/README.md): about 34 pages at a
 # laptop and a phone width, light and dark, compared with the baselines in the repo, and axe-core on each.
+# Beside it, the Layout job opens every page at four widths for broken layouts (v2/tests/layout/README.md); it
+# reports only, for now, on the run's summary page.
 #
 # It runs on pull requests that touch what a page looks like, weekly, and by hand. Screenshots are uploaded only when a
 # comparison fails, and kept for three days.
@@ -20,6 +22,7 @@ on:
       - 'v2/scripts/screenshots.py'
       - 'v2/scripts/demo_data.py'
       - 'v2/tests/browser/**'
+      - 'v2/tests/layout/**'
       - '.github/workflows/ui.yml'
   schedule:
     - cron: '41 5 * * 1'
@@ -69,6 +72,35 @@ jobs:
           name: screenshots
           path: v2/tests/browser/output/
           retention-days: 3
+          if-no-files-found: ignore
+
+  # Every page at 1366, 1440 and 1920 px and on a phone, with long names and empty states, for pages that
+  # scroll sideways, cut text off, overlap or push controls off the screen (v2/tests/layout/README.md).
+  layout:
+    name: Layout
+    if: ${{ !inputs.update }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.pull_request && format('refs/pull/{0}/merge', inputs.pull_request) || '' }}
+      - name: Install from the lock files
+        run: pip install --root-user-action=ignore --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
+      - name: Every page at four widths
+        # Report only until the pages it lists are fixed: the job passes whatever it finds, and the run's summary
+        # page lists every problem. Then remove continue-on-error so a new problem fails the pull request.
+        continue-on-error: true
+        run: python -m pytest tests/layout --layout -n 4 -p no:cacheprovider -q --tb=no -rf
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: layout
+          path: v2/tests/layout/output/
+          retention-days: 7
           if-no-files-found: ignore
 
   update:

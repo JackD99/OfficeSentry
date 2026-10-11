@@ -1651,7 +1651,9 @@ def directory_groups(now: datetime) -> dict:
     return {"GROUPS": rows, "MEMBERS": members}
 
 
-def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
+def collect(db, tenant_id: int, t: dict, now: datetime, first: bool, **seed) -> None:
+    """Collect tenant ``t`` from the renamed fixtures. ``seed`` goes to ``tests.seed.seed_tenant`` as well
+    (``mark=``, ``ca=``, ...), as the layout checks' stress client does (tests/layout/stress.py)."""
     from tests.seed import seed_tenant
 
     with Renamed(renamer(t)):
@@ -1697,6 +1699,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
                 usage_kw={"active": usagedata.ACTIVE_USERS + active, "apps": usagedata.APP_USERS + apps},
                 inbox_rules=rules,
                 auto_replies=replies(t, everyone, now, first),
+                **seed,
             )
 
 
@@ -1890,6 +1893,20 @@ def evidence_answers(db, tenant_id: int) -> None:
         answers.set_override(db, tenant_id, key, answer, text, "Not known", "demo")
 
 
+def add_tenant(db, connection_id: int, t: dict, now: datetime, **seed) -> int:
+    """Add tenant ``t`` (a dict like those in ``TENANTS``), consented and collected twice five weeks apart,
+    with its activity, metric and list history. ``seed`` goes to ``collect``. Returns its id."""
+    tid = store.create_tenant(db, t["name"], f"{t['base']}.onmicrosoft.com", connection_id)
+    db.execute("UPDATE tenants SET consented_at = ? WHERE id = ?", (utcnow(), tid))
+    collect(db, tid, t, now, first=True, **seed)
+    backdate(db, tid, 35)
+    activity_history(db, tid, t, now)
+    collect(db, tid, t, now, first=False, **seed)
+    metric_history(db, tid, now)
+    list_history(db, tid, now)
+    return tid
+
+
 def populate(
     db,
     vault,
@@ -1905,17 +1922,7 @@ def populate(
     cid = store.create_connection(
         db, vault, "Demo app", generate_certificate("demo"), client_id="11111111-2222-3333-4444-555555555555"
     )
-    ids = []
-    for t in TENANTS:
-        tid = store.create_tenant(db, t["name"], f"{t['base']}.onmicrosoft.com", cid)
-        db.execute("UPDATE tenants SET consented_at = ? WHERE id = ?", (utcnow(), tid))
-        collect(db, tid, t, now, first=True)
-        backdate(db, tid, 35)
-        activity_history(db, tid, t, now)
-        collect(db, tid, t, now, first=False)
-        metric_history(db, tid, now)
-        list_history(db, tid, now)
-        ids.append(tid)
+    ids = [add_tenant(db, cid, t, now) for t in TENANTS]
     groups(db, ids)
     showcase = next((i for i, t in zip(ids, TENANTS, strict=False) if t["name"] == SHOWCASE), ids[0])
     evidence_answers(db, showcase)

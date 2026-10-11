@@ -1,5 +1,6 @@
 """Every page in pages.py, at a laptop and a phone width, light and dark: a screenshot compared with its
-baseline in baselines/, and an axe-core accessibility check at the laptop width.
+baseline in baselines/, a check that nothing makes the page wider than the window, and an axe-core
+accessibility check at the laptop width.
 
 Baselines are 256-colour PNGs (a few MB for all of them). A capture is mapped onto its baseline's colours
 before comparing, so the same page compares exactly; it fails when more than MAX_CHANGED of its pixels
@@ -46,6 +47,9 @@ def test_page(spec, viewport, theme, site, contexts, request):
         page.evaluate("document.fonts.ready")
         problems = []
         name = f"{spec.name}-{viewport}-{theme}"
+        problem = _check_width(page)
+        if problem:
+            problems.append(problem)
         problem = _check_screenshot(page, name, viewport, spec, request.config)
         if problem:
             problems.append(problem)
@@ -54,6 +58,31 @@ def test_page(spec, viewport, theme, site, contexts, request):
         assert not problems, f"{name}:\n" + "\n".join(problems)
     finally:
         page.close()
+
+
+# The page's width against the window's and, when it's wider, the smallest thing past the edge: usually the
+# culprit, such as hidden text a scroll box doesn't clip or a word that can't wrap.
+WIDTH_JS = """() => {
+  const root = document.documentElement, width = root.clientWidth;
+  if (root.scrollWidth <= width) return null;
+  let culprit = null, area = Infinity;
+  for (const el of document.body.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    const size = r.width * r.height;
+    if (r.right > width + 1 && size > 0 && size < area) { culprit = el; area = size; }
+  }
+  const name = culprit
+    ? culprit.tagName.toLowerCase() + (culprit.id ? '#' + culprit.id : '')
+      + [...culprit.classList].map(c => '.' + c).join('') + ' "' + culprit.textContent.trim().slice(0, 40) + '"'
+    : 'text that runs past its box';
+  return root.scrollWidth + 'px wide in a ' + width + 'px window, past the edge: ' + name;
+}"""
+
+
+def _check_width(page) -> str | None:
+    """Pages never scroll sideways: a wide table scrolls in its own box."""
+    over = page.evaluate(WIDTH_JS)
+    return f"wider than the window: {over}" if over else None
 
 
 def _check_screenshot(page, name: str, viewport: str, spec, config) -> str | None:
