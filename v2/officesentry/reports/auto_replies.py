@@ -184,7 +184,9 @@ def auto_replies_report(snap: TenantSnapshot, now: datetime, out: DataReport) ->
             "Replying outside the organisation",
             outside,
             "To everyone or to contacts",
-            rows=Rows(EVERY, {"Replies outside the organisation": ["Everyone", "Contacts only"]}),
+            rows=Rows(
+                EVERY, {"State": [ON, SCHEDULED_ON], "Replies outside the organisation": ["Everyone", "Contacts only"]}
+            ),
         ),
         Tile(
             f"On for over {FORGOTTEN_DAYS} days",

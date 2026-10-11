@@ -20,7 +20,7 @@ from officesentry.collectors.auto_replies import plain_text
 from officesentry.collectors.mobile_devices import owner_name
 from officesentry.exchange import EXCHANGE_ROOT
 from officesentry.graph import GraphClient
-from officesentry.reports import library
+from officesentry.reports import library, views
 from officesentry.reports.auto_replies import ENDED, ON, SCHEDULED_ON, UPCOMING, state
 from officesentry.reports.data_reports import GROUPS, REPORTS, build
 from officesentry.reports.mobile_devices import platform
@@ -59,6 +59,13 @@ def _report(db, tenant, key):
 
 def _tiles(report):
     return {t.label: t for t in report.tiles}
+
+
+def _opens(report, tile):
+    """The first column of the rows a headline figure's link shows."""
+    view, _ = views.rows_view(report, tile.rows)
+    shown = views.apply(report, view)
+    return [r[0] for s in shown.sections if s.title == tile.rows.table for r in s.rows]
 
 
 def _collect(db, tenant_id, key, *, exchange=None, **kwargs):
@@ -307,6 +314,9 @@ def test_scheduled_reply_to_contacts(db, two_tenants):
     row = s["Mailboxes with an automatic reply"].rows[0]
     assert row[:7] == ["info@x.com", "Shared", "Scheduled", soon[:10], later[:10], "Contacts only", ""]
     assert _tiles(report)["Scheduled to start"].value == 1 and _tiles(report)["Replying now"].value == 0
+    # Not replying yet, so not counted as replying outside, and its link doesn't show it either.
+    outside = _tiles(report)["Replying outside the organisation"]
+    assert outside.value == 0 and _opens(report, outside) == []
 
 
 # -- Distribution lists ------------------------------------------------------------------------------------
