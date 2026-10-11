@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-54 checks, 34 data sources (collectors) and 41 detail reports.
+54 checks, 35 data sources (collectors) and 42 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -157,6 +157,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `inbox_rules` | Inbox rules | Every mailbox's inbox rules, to spot forwarding and rules that hide mail. | `MailboxSettings.Read` |
 | `legacy_signins` | Legacy sign-ins | Sign-ins over SMTP AUTH, IMAP, POP and other basic-auth clients in the last 30 days (needs Entra ID P1). | `AuditLog.Read.All` |
 | `m365_usage` | Microsoft 365 usage | Who used email, Teams, OneDrive, SharePoint and the Office apps in the last 30 days, from Microsoft's usage reports. | `Reports.Read.All`, `ReportSettings.Read.All` |
+| `mail_flow` | Mail flow | How much mail each domain sends and receives, how much is delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mailbox_usage` | Mailbox size | Size and item count of every mailbox, against its quota (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mailboxes` | Mailboxes | Mailboxes, forwarding, delegated access and organisation mail settings (needs Global Reader). | `Exchange.ManageAsApp` |
 | `mfa_registration` | MFA registration | Which users have registered a second factor. | `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All` |
@@ -201,6 +202,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `legacy-auth` | Legacy sign-ins | Sign-ins with SMTP AUTH, IMAP, POP and other protocols that can't do MFA, and which mailboxes still allow them. | `legacy_signins`, `mailboxes` |
 | `licence-rightsizing` | Licence right-sizing | People who could move to a cheaper licence, and services people are licensed for but don't use. | `m365_usage`, `mailbox_usage`, `tenant_profile`, `users` |
 | `licences` | Licence waste | Paid licences nobody uses, in money, and the accounts holding them. | `tenant_profile`, `users` |
+| `mail-flow` | Mail flow by domain | How much mail each domain sends and receives, how much was delivered, sent to Junk, quarantined or failed, and who gets the most spam and phishing. | `mail_flow` |
 | `mailbox-holds` | Mailbox holds and archiving | Which mailboxes are on litigation hold or have an archive, leavers' mailboxes that aren't held, and large mailboxes that need an archive. | `mailbox_usage`, `mailboxes`, `users` |
 | `mailbox-permissions` | Mailbox permissions | Who can open, send as or send on behalf of each mailbox, by person and by mailbox. | `mailboxes`, `users` |
 | `mailbox-size` | Mailbox size | Every mailbox's size against its quota, largest share of quota first. | `mailbox_usage` |
@@ -237,7 +239,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `DeviceManagementConfiguration.Read.All` | Microsoft Graph | Intune configuration and compliance policies | not used by a collector yet |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
 | `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `teams`, `tenant_profile` |
-| `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
+| `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mail_flow`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
 | `Organization.Read.All` | Microsoft Graph | Tenant details and subscriptions | `directory_sync`, `tenant_profile` |

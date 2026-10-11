@@ -56,6 +56,7 @@ READ_ONLY_CMDLETS = frozenset(
         "Get-DistributionGroup",
         "Get-DistributionGroupMember",
         "Get-MessageTraceV2",
+        "Get-MailTrafficSummaryReport",
     }
 )
 

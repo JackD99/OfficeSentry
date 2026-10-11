@@ -44,6 +44,7 @@ from tests import (  # noqa: E402  # noqa: E402
     groupdata,
     hybriddata,
     licencedata,
+    mailflowdata,
     sharepoint_data,
     tenantsettingsdata,
     usagedata,
@@ -651,7 +652,8 @@ def _ts(when: datetime) -> str:
 
 
 def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -> dict:
-    """Get-* results for phones syncing mail and distribution lists, with a message trace of the last 10 days."""
+    """Get-* results for phones syncing mail and distribution lists, with a message trace of the last 10 days and
+    Microsoft's top spam and phishing recipients."""
     domain = f"{t['base']}.{t['tld']}"
     people = [u for u in users if u["userType"] == "Member" and u.get("assignedLicenses")]
     devices, stats = [], {}
@@ -748,12 +750,35 @@ def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -
         for _ in range(per_10_days):
             received = now - timedelta(hours=2 + rng.uniform(0, 236))
             trace.append({"RecipientAddress": address, "Received": _ts(received), "Status": "Expanded"})
+
+    # Everyday mail for the mail flow report: about a dozen messages per person over ten days, mostly coming in.
+    senders = ["news@supplierhub.example", "billing@courier.example", "hello@events.example", "offers@deals.example"]
+    partners = ["team@ledgerline.example", "orders@supplierhub.example", "info@clientco.example", "old@gone.example"]
+    flow = []
+    for _ in range(len(staff) * 12):
+        received, who, roll = _ts(now - timedelta(hours=1.5 + rng.uniform(0, 238))), rng.choice(staff), rng.random()
+        if roll < 0.55:
+            status = rng.choices(["Delivered", "FilteredAsSpam", "Quarantined", "Failed"], [88, 8, 3, 1])[0]
+            flow.append({"SenderAddress": rng.choice(senders), "RecipientAddress": who, "Status": status})
+        elif roll < 0.8:
+            partner = rng.choice(partners)
+            status = "Failed" if partner.endswith("gone.example") else "Delivered"
+            flow.append({"SenderAddress": who, "RecipientAddress": partner, "Status": status})
+        else:
+            flow.append({"SenderAddress": who, "RecipientAddress": rng.choice(staff), "Status": "Delivered"})
+        flow[-1]["Received"] = received
+    targets = rng.sample(staff, min(6, len(staff)))
+    top = {
+        "TopSpamRecipient": [{"C1": a, "C2": 60 // (n + 1) + rng.randint(0, 4)} for n, a in enumerate(targets)],
+        "TopPhishRecipient": [{"C1": a, "C2": 4 - n} for n, a in enumerate(targets[:3])],
+    }
     return {
         "Get-MobileDevice": devices,
         "Get-MobileDeviceStatistics": stats,
         "Get-DistributionGroup": groups,
         "Get-DistributionGroupMember": members,
-        "Get-MessageTraceV2": trace,
+        "Get-MessageTraceV2": mailflowdata.message_trace(trace, flow),
+        "Get-MailTrafficSummaryReport": mailflowdata.traffic_summary(top),
     }
 
 

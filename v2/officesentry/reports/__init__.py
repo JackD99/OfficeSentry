@@ -11,6 +11,7 @@ from . import (  # noqa: F401
     group_structure,
     identity_reports,
     mail_compliance,
+    mail_flow,
     mail_reports,
     mailbox_trend,
     mobile_devices,

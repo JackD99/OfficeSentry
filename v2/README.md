@@ -104,6 +104,13 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     with empty, ownerless and unused lists flagged. How much mail each gets is
     counted from the message trace (`Get-MessageTraceV2`, read 10 days at a
     time from where the last run stopped) and kept per day for 90 days.
+  - *Mail flow by domain*: for each of the tenant's domains, how much mail
+    came in, went out and passed between colleagues, and how much was
+    delivered, sent to Junk, quarantined or failed, counted per day from the
+    message trace and kept for 30 days (only counts, never subjects or
+    addresses). Domains where more than 5% of mail fails are flagged. Also
+    Microsoft's top 20 spam and phishing recipients for the last 30 days
+    (`Get-MailTrafficSummaryReport`).
   - *Legacy sign-ins*: SMTP AUTH, IMAP, POP and other basic-auth sign-ins from
     the last 30 days of the sign-in log (Entra ID P1), and which mailboxes
     still allow SMTP AUTH, POP and IMAP.

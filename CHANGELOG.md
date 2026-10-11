@@ -58,6 +58,11 @@ a permission batch.
   with their members and owners, the guests and people from other organisations in them, the apps added to
   each team (custom uploads flagged), and teams nobody has used in 90 days. Usage reports also read your
   tenant's "conceal names" setting, so they say outright when Microsoft hides names.
+- **Mail flow by domain** report (under *Email*): how much mail each domain received, sent and passed between
+  colleagues, and how much was delivered, sent to Junk, quarantined or failed, per day for 30 days, with domains
+  where more than 5% of mail fails flagged. It also lists Microsoft's top spam and phishing recipients for the
+  last 30 days. Only counts are kept from the message trace, never subjects or addresses; it needs no new
+  permission (Global Reader, as for distribution lists).
 
 ### Changed
 

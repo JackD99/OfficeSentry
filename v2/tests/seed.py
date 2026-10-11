@@ -34,6 +34,8 @@ def exchange_callback(data):
         body = json.loads(request.body)["CmdletInput"]
         name, params = body["CmdletName"], body.get("Parameters") or {}
         result = data.get(name, [])
+        if callable(result):  # answers from the parameters, as Microsoft would
+            result = result(params)
         if isinstance(result, dict):  # keyed by Identity (or Mailbox)
             result = result.get(params.get("Identity") or params.get("Mailbox"), [])
         if isinstance(result, tuple):  # (status, error body)

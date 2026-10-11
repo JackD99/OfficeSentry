@@ -41,6 +41,9 @@ RECORDED = datetime(2026, 10, 10, 19, 30, tzinfo=UTC)
 STAND_INS: dict[str, dict] = {
     # The Teams collector's activity report (2.2); the test tenant has no Teams, so Microsoft lists no teams.
     "/beta/reports/getTeamsTeamActivityDetail(period='D90')": {"value": []},
+    # Mail flow (2.2): the whole message trace a day at a time, and Microsoft's top spam and phishing recipients.
+    "Get-MessageTraceV2(EndDate,ResultSize,StartDate)": {"value": []},
+    "Get-MailTrafficSummaryReport": {"value": []},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 
@@ -95,6 +98,11 @@ def test_stand_ins_are_only_for_requests_not_recorded():
     """Once the fixture is re-recorded with these requests, delete them from STAND_INS and NEW_FIELDS."""
     recorded = {replay.request_key(e["url"])[0] for e in FIXTURE["entries"] if e["api"] == "graph"}
     recorded |= {e["cmdlet"]["CmdletName"] for e in FIXTURE["entries"] if e["api"] == "exchange"}
+    recorded |= {
+        f"{e['cmdlet']['CmdletName']}({','.join(sorted(e['cmdlet'].get('Parameters') or {}))})"
+        for e in FIXTURE["entries"]
+        if e["api"] == "exchange"
+    }
     assert not set(STAND_INS) & recorded
     assert not any(re.fullmatch(path.replace("{id}", "[^/]+"), r) for path in STAND_INS for r in recorded)
 
