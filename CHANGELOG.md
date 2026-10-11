@@ -27,7 +27,7 @@ None.
 
 ### Database upgrade
 
-No.
+Yes: a table for the search index. It is applied on start, as usual.
 
 ### Added
 
@@ -39,6 +39,20 @@ No.
 
 ### Changed
 
+- Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
+  rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
+  page now read rows the worker keeps up to date after each collection, as What changed and the check
+  matrix already did; a row is rebuilt the moment anything behind it changes, so nothing shown is older
+  than the live page would be. At 200 clients the Accounts page went from 6 seconds to half a second, the
+  month-end queue from 3.4 seconds to under a tenth, the insurance evidence rollup from 4 seconds to under
+  a tenth, and a report's All clients rollup from about a second to under a tenth.
+- The sidebar search reads an index the worker keeps, instead of scanning every client's data on each
+  search. A client whose index is behind its latest collection is still scanned, so nothing is missed.
+- PDFs of an All clients rollup, What changed and a client's change report keep the first 2,000 rows and
+  say so, as table reports already did, so a very large client can't run a download into the server's
+  timeout. The spreadsheet downloads still have every row.
+- `DEPLOY.md` gives measured page, download and worker times at 200 clients ("How fast"), and
+  `scripts/timings.py` measures them.
 - **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
   say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
   the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
@@ -174,6 +188,17 @@ No.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
+  page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
+  so a client account probing for other clients' data is visible under *Settings → Activity log*.
+- Form-token, wrong-method, oversized-upload and server-error responses use the portal's own error page with
+  plain wording, instead of the web server's.
+- Passwords on lists of commonly used passwords (`password1234`, `qwerty123456` and 20,000 more of 12
+  characters or longer), or containing the person's username or "officesentry", are refused wherever a
+  password is chosen: first-run setup, the account page, the forced change after an admin's reset, and the
+  admin's user forms. Existing passwords aren't checked until they're changed.
+- A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
+  itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
 ## 2.1.0 (2026-10-10)
 
