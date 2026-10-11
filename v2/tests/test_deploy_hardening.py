@@ -193,9 +193,9 @@ def test_check_backup_opens_a_backup_without_restoring_it(env_cfg, db, two_tenan
     saved = next((env_cfg.data_dir / "backups").glob("officesentry-*.db.gz"))
     capsys.readouterr()
     main(["check-backup", str(saved), "--record"])
-    assert "2 tenants" in capsys.readouterr().out
+    assert "2 clients" in capsys.readouterr().out
     entry = backups.read_status(env_cfg.data_dir)["restore_check"]
-    assert entry["ok"] and entry["detail"].startswith(saved.name) and "2 tenants" in entry["detail"]
+    assert entry["ok"] and entry["detail"].startswith(saved.name) and "2 clients" in entry["detail"]
     assert not list(saved.parent.glob("restore-*.part"))  # the unpacked copy is cleaned up
 
 
