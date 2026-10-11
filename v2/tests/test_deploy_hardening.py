@@ -229,6 +229,23 @@ def test_production_from_releases_is_off_unless_set():
     assert "BACKUP_PASSWORD" not in env_block.split("{\n", 1)[-1]
 
 
+def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_lost_runner():
+    workflow = (V2.parent / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    # The demo's copy of the code never gets .env.backup (the off-site password and storage keys) or .env;
+    # rsync's --delete leaves excluded files alone, so copies from before are removed by name.
+    demo = workflow[workflow.index("name: Build the public demo") : workflow.index("name: Pull the release image")]
+    assert "--exclude '.env*'" in demo and "--exclude .env " not in demo
+    assert "rm -f /opt/officesentry/demo-src/.env /opt/officesentry/demo-src/.env.*" in demo
+    # The firewall rule is removed by the deploy job's last step however it ends, and by a job of its own
+    # afterwards for the one case that step can't cover: a runner that disappears.
+    jobs = yaml.safe_load(workflow)["jobs"]
+    assert jobs["close-ssh"]["needs"] == "server" and jobs["close-ssh"]["if"].startswith("always()")
+    assert jobs["close-ssh"]["env"]["RULE"] == jobs["server"]["env"]["RULE"]
+    close = jobs["close-ssh"]["steps"][0]["run"]
+    assert "select(.description != $rule)" in close and "/actions/set_rules" in close
+    assert workflow.count("cancel-in-progress: false") == 1  # runs never overlap, so the rule found is this run's
+
+
 @pytest.fixture
 def env_cfg(cfg, monkeypatch):
     monkeypatch.setenv("OFFICESENTRY_DATA_DIR", str(cfg.data_dir))
