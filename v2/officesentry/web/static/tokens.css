@@ -70,6 +70,7 @@
   --shadow-hover: 0 2px 8px rgba(16, 24, 40, .08);   /* a card or tile under the pointer */
   --shadow-menu: 0 12px 32px rgba(16, 24, 40, .16);  /* menus that drop over the page */
   --shadow-lg: 0 6px 20px rgba(16, 24, 40, .25);     /* floating notices */
+  --scroll-shade: rgba(16, 24, 40, .16);              /* the shaded edge of a table with more to the side */
   color-scheme: light;
 }
 
@@ -89,6 +90,7 @@
     --chart-series: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-grid: #223042; --chart-track: #223042;
     --sidebar: #070b11; --sidebar-active: #152031;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    --scroll-shade: rgba(0, 0, 0, .6);
     color-scheme: dark;
   }
 }

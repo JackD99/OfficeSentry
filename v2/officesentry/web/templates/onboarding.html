@@ -40,9 +40,9 @@
 </div>
 
 <div class="toolbar-row">
-  <nav class="seg" aria-label="Show">
-    {% for key, name in filters.items() %}<a href="{{ url_for('onboarding.index', show=key) }}"{% if show == key and not state %} aria-current="page"{% endif %}>{{ name }}<span class="count">{{ total - counts.connected if key == 'waiting' else total }}</span></a>{% endfor %}
-    {% if state %}<a href="{{ url_for('onboarding.index', show='all', state=state) }}" aria-current="page">{{ 'Waiting on client' if state == 'client' else ('New permissions' if state == 'new' else states[state][0]) }}<span class="count">{{ entries|length }}</span></a>{% endif %}
+  <nav class="subtabs" aria-label="Show">
+    {% for key, name in filters.items() %}<a href="{{ url_for('onboarding.index', show=key) }}"{% if show == key and not state %} class="active" aria-current="page"{% endif %}>{{ name }}<span class="n">{{ total - counts.connected if key == 'waiting' else total }}</span></a>{% endfor %}
+    {% if state %}<a href="{{ url_for('onboarding.index', show='all', state=state) }}" class="active" aria-current="page">{{ 'Waiting on client' if state == 'client' else ('New permissions' if state == 'new' else states[state][0]) }}<span class="n">{{ entries|length }}</span></a>{% endif %}
   </nav>
   {{ downloads([('Consent links (CSV)', url_for('onboarding.export'), 'Every client with something to approve (the app, or new permissions), with its contact and link, for a mail merge')]) }}
 </div>
