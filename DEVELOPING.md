@@ -120,8 +120,11 @@ def test_unreadable_subscriptions_leave_the_rest_of_the_profile(db, two_tenants,
     alpha, _ = two_tenants
     responses.get(f"{V1}/organization", json={"value": [{"id": "org1", "displayName": "Alpha"}]})
     responses.get(f"{V1}/subscribedSkus", json={"value": SKUS})
-    responses.get(f"{V1}/directory/subscriptions", status=403,
-                  json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}})
+    responses.get(
+        f"{V1}/directory/subscriptions",
+        status=403,
+        json={"error": {"code": "Authorization_RequestDenied", "message": "Insufficient privileges"}},
+    )
     run_id, status = _run(db, alpha, "tenant_profile", factory)
     assert status == "partial"
 ```
