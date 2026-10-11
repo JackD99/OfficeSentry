@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import stat
+from contextlib import closing
 
 import pytest
 from cryptography import x509
@@ -18,6 +19,7 @@ def test_migrations_are_idempotent(tmp_path):
     assert v == dbmod.migration_files()[-1][0]
     assert dbmod.migrate(conn) == v
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    conn.close()
 
 
 def test_failed_migration_rolls_back(tmp_path, monkeypatch):
@@ -30,6 +32,7 @@ def test_failed_migration_rolls_back(tmp_path, monkeypatch):
         dbmod.migrate(conn)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 0
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'a'").fetchone() is None
+    conn.close()
 
 
 def test_a_transaction_that_reads_first_waits_for_other_writers(tmp_path):
@@ -39,7 +42,8 @@ def test_a_transaction_that_reads_first_waits_for_other_writers(tmp_path):
     import time
 
     path = tmp_path / "x.db"
-    dbmod.migrate(dbmod.connect(path))
+    with closing(dbmod.connect(path)) as fresh:
+        dbmod.migrate(fresh)
     mine = dbmod.connect(path)
 
     def other_writer():
@@ -55,6 +59,7 @@ def test_a_transaction_that_reads_first_waits_for_other_writers(tmp_path):
         mine.execute("INSERT INTO settings VALUES ('a', '1')")
     meanwhile.join(timeout=30)
     assert {r[0] for r in mine.execute("SELECT key FROM settings WHERE key IN ('a', 'b')")} == {"a", "b"}
+    mine.close()
 
 
 def _migrate_at(path, barrier, results):
@@ -79,7 +84,8 @@ def test_concurrent_first_start_migrates_once(tmp_path):
     import multiprocessing
 
     fresh = tmp_path / "fresh.db"
-    expected = dbmod.migrate(dbmod.connect(fresh))
+    with closing(dbmod.connect(fresh)) as conn:
+        expected = dbmod.migrate(conn)
     ctx = multiprocessing.get_context("spawn")
     for trial in range(3):
         path = tmp_path / f"race{trial}.db"

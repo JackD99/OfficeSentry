@@ -4,6 +4,7 @@ import gzip
 import os
 import sqlite3
 import threading
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -144,6 +145,7 @@ def test_report_stops_waiting_after_a_while(app, db, cfg, two_tenants, vault, se
 # -- Retention ---------------------------------------------------------------
 
 
+@pytest.mark.timeout(600)  # 603 runs, each committed: over two minutes on Windows, where every commit syncs
 def test_retention_keeps_30_dailies_and_12_monthlies(db, two_tenants):
     alpha, bravo = two_tenants
     start = datetime(2025, 1, 1, 2, 0, tzinfo=UTC)
@@ -425,8 +427,8 @@ def test_backup_command(cfg, db, two_tenants, monkeypatch, tmp_path):
     assert 1 <= len(files) <= 2
     plain = tmp_path / "copy.db"
     plain.write_bytes(gzip.decompress(files[-1].read_bytes()))
-    copy = connect(plain)
-    assert copy.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
+    with closing(connect(plain)) as copy:
+        assert copy.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
     if os.name != "nt":  # Windows has no Unix file modes
         assert oct(files[-1].stat().st_mode & 0o777) == "0o600"
 
