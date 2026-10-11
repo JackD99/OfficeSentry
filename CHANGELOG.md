@@ -51,20 +51,18 @@ Microsoft. Nobody's access changes. As ever, a copy of the database is made firs
 - The users page's two-step advice no longer counts client accounts that sign in with Microsoft, and their
   user page says their organisation's MFA applies instead.
 
+### Fixed
+
+- On the public demo, picking a client group in the Group picker now shows that group, and the choice
+  follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
+  to every client, because demo visitors have no sign-in to keep the choice on.
+
 ### Security
 
 - Disconnecting someone's Microsoft account from their user page now needs the right to manage users, and
   only an Administrator can do it to an Administrator. It needed only the right to change settings.
 - With staff passwords turned off, a staff account's right password now gets the same answer as a wrong one,
   and counts as a failed attempt.
-
-## [2.2.1] - Unreleased
-
-### Fixed
-
-- On the public demo, picking a client group in the Group picker now shows that group, and the choice
-  follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
-  to every client, because demo visitors have no sign-in to keep the choice on.
 
 ## [2.2.0] - 2026-10-11
 
@@ -776,7 +774,6 @@ first, then upgrades it on start. New installs start with an empty database.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
 [2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
-[2.2.1]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0
