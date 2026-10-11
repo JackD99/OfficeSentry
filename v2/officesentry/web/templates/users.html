@@ -4,13 +4,13 @@
 {% block content %}
 <div class="page-head"><div><h1>Users</h1><div class="sub">People who can sign in to Office Sentry.</div></div>
   <div class="actions"><a class="btn" href="{{ url_for('roles.index') }}">{{ icon('users') }} Roles</a></div></div>
-<div class="grid-main">
 <section class="card flush">
+  <div class="table-scroll">
   <table class="stack-sm">
     <thead><tr><th>User</th><th>Role</th><th>Clients</th><th>Sign-in</th><th>Status</th><th>Last sign-in</th></tr></thead>
     <tbody>
     {% for u in users %}
-    <tr><td><a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username }}</a>{% if u.id == current_user.id %} <span class="faint small">(you)</span>{% endif %}</td>
+    <tr><td><a class="strong" href="{{ url_for('admin.edit_user', user_id=u.id) }}">{{ u.username|wrappable }}</a>{% if u.id == current_user.id %} <span class="faint small">(you)</span>{% endif %}</td>
       {% set r = role_of[u.id] %}
       <td data-label="Role"><span class="pill {{ 'accent' if r.kind == 'admin' else '' }}">{{ r.name }}</span>{% if overrides.get(u.id) %} <span class="faint small" title="Capabilities added or taken away for this person">{{ overrides[u.id]|plural('override') }}</span>{% endif %}</td>
       <td data-label="Clients">{% if scope_of(u) == 'all' %}All{% elif r.kind != 'client' and group_grants.get(u.id) %}Granted and {{ group_grants[u.id]|plural('group') }}{% else %}Granted only{% endif %}</td>
@@ -20,24 +20,9 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
-<section class="card">
-  <h2>Two-step sign-in</h2>
-  {% set p = two_step.policy %}
-  <p>{% if p == 'all' %}Two-step sign-in is required for everyone, client accounts included.
-    {% elif p == 'staff' %}Two-step sign-in is required for staff. Client accounts can turn it on themselves.
-    {% else %}Two-step sign-in isn't required for anyone.{% endif %}
-    <span class="muted small">{% if two_step.from_env %}Set by <code>OFFICESENTRY_REQUIRE_MFA={{ p }}</code>.{% else %}The default for this install; <code>OFFICESENTRY_REQUIRE_MFA</code> isn't set.{% endif %}</span></p>
-  {% if p != 'all' %}
-  <p class="small"><strong>Recommended: require it for client accounts too.</strong> Clients can see their users' sign-in addresses and locations and every finding, which is useful to someone phishing them. Set <code>OFFICESENTRY_REQUIRE_MFA=all</code> in <code>.env</code> and restart; {% if two_step.clients_without %}{{ two_step.clients_without|plural('client account') }} without two-step will be asked to set it up at {{ 'its' if two_step.clients_without == 1 else 'their' }} next sign-in{% else %}every client account already uses it{% endif %}. Tell them first.</p>
-  {% endif %}
-</section>
-{% if microsoft_sign_in %}
-<section class="card">
-  <h2>Staff who sign in with Microsoft</h2>
-  <p class="small">They appear here by themselves at their first sign-in, with the role their app role in Entra gives them. Grant them clients on their page afterwards. <a href="{{ url_for('sso.settings_page') }}">Staff sign-in settings</a>.</p>
-</section>
-{% endif %}
+<div class="grid-main">
 <section class="card">
   <h2>Add a user</h2>
   <form method="post" action="{{ url_for('admin.create_user') }}">
@@ -56,5 +41,24 @@
     <p class="footnote">New users see no clients until you grant them on their page, unless their role covers every client.</p>
   </form>
 </section>
+<div>
+<section class="card">
+  <h2>Two-step sign-in</h2>
+  {% set p = two_step.policy %}
+  <p>{% if p == 'all' %}Two-step sign-in is required for everyone, client accounts included.
+    {% elif p == 'staff' %}Two-step sign-in is required for staff. Client accounts can turn it on themselves.
+    {% else %}Two-step sign-in isn't required for anyone.{% endif %}
+    <span class="muted small">{% if two_step.from_env %}Set by <code>OFFICESENTRY_REQUIRE_MFA={{ p }}</code>.{% else %}The default for this install; <code>OFFICESENTRY_REQUIRE_MFA</code> isn't set.{% endif %}</span></p>
+  {% if p != 'all' %}
+  <p class="small"><strong>Recommended: require it for client accounts too.</strong> Clients can see their users' sign-in addresses and locations and every finding, which is useful to someone phishing them. Set <code>OFFICESENTRY_REQUIRE_MFA=all</code> in <code>.env</code> and restart; {% if two_step.clients_without %}{{ two_step.clients_without|plural('client account') }} without two-step will be asked to set it up at {{ 'its' if two_step.clients_without == 1 else 'their' }} next sign-in{% else %}every client account already uses it{% endif %}. Tell them first.</p>
+  {% endif %}
+</section>
+{% if microsoft_sign_in %}
+<section class="card">
+  <h2>Staff who sign in with Microsoft</h2>
+  <p class="small">They appear here by themselves at their first sign-in, with the role their app role in Entra gives them. Grant them clients on their page afterwards. <a href="{{ url_for('sso.settings_page') }}">Staff sign-in settings</a>.</p>
+</section>
+{% endif %}
+</div>
 </div>
 {% endblock %}

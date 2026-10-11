@@ -25,6 +25,11 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Long names and addresses no longer run off the screen: on phones, Delete buttons that name a client,
+  group or person wrap, a headline figure such as "+3.8 GB a month" wraps inside its tile instead of over the
+  next one, evidence pages show every download format and their whole answers, and long sign-in
+  addresses in What changed and the Activity history break onto the next line. Settings > Users fits a
+  laptop, with Add a user beside the two-step sign-in policy under the list.
 
 ## [2.2.0] - 2026-10-11
 

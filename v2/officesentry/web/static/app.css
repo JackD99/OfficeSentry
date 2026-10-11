@@ -84,7 +84,7 @@ main { max-width: 1600px; margin: 0 auto; padding: 28px 32px 64px; }
 .tile { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3-5) var(--space-4); box-shadow: var(--shadow); }
 .tile .label { color: var(--muted); font-size: var(--fs-sm); }
 .tile .value { font-size: var(--fs-figure); font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.3; }
-.tile .foot { font-size: var(--fs-xs); color: var(--muted); }
+.tile .foot { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: break-word; }
 /* Each tile spans three shared rows (label, figure, footnote), so figures line up across a row
    even when one label wraps. */
 @supports (grid-template-rows: subgrid) {
@@ -335,6 +335,12 @@ a.preparing { cursor: progress; opacity: .7; }
   .card.flush table.stack-sm tr { padding-left: var(--space-4); padding-right: var(--space-4); }
   table.stack-sm td.wrap:not(:first-child) { display: block; text-align: left; }
   table.stack-sm td.wrap:not(:first-child)::before { display: block; }
+  /* A value too long for its label's line drops under it, and a long address breaks rather than widening
+     the card. */
+  table.stack-sm td { flex-wrap: wrap; overflow-wrap: anywhere; }
+  /* Buttons that name something ("Delete <client>") wrap; the download formats wrap under each other. */
+  button.danger, .btn.danger { white-space: normal; overflow-wrap: break-word; max-width: 100%; }
+  .downloads { flex-wrap: wrap; max-width: 100%; }
 }
 .icon { width: 16px; height: 16px; flex: none; }
 .error-code { font-size: 2.5rem; font-weight: 800; color: var(--faint); letter-spacing: -.03em; }
@@ -455,7 +461,7 @@ ul.ticks li { margin: 3px 0; }
 .answer-row { display: flex; gap: var(--space-3); align-items: baseline; padding: var(--space-3-5) var(--space-5); border-bottom: 1px solid var(--border); }
 .answer-row:last-child { border-bottom: 0; }
 .answer-row > .answer { flex: none; min-width: 112px; justify-content: center; }
-.answer-main { flex: 1; min-width: 0; display: grid; gap: var(--space-1); }
+.answer-main { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); overflow-wrap: break-word; }
 .answer-main .q { font-weight: 500; }
 .answer-main .data-changed { color: var(--warn); }
 .answer-main .data-changed .icon { width: 14px; height: 14px; vertical-align: -2px; }
@@ -704,6 +710,7 @@ th.num button.sort { justify-content: flex-end; }
 .change-list { list-style: none; margin: 0; padding: var(--space-1) 0; }
 .change-list li { display: flex; gap: var(--space-3); align-items: baseline; padding: 9px 20px; border-bottom: 1px solid var(--border); }
 .change-list li:last-child { border-bottom: 0; }
+.change-list li > div { min-width: 0; overflow-wrap: break-word; }
 .change-list .desc { display: block; color: var(--muted); font-size: var(--fs-sm); }
 .card-head.toolbar { margin-bottom: 0; }
 .card-head.toolbar > :first-child { flex: 1 1 16rem; min-width: 0; }
@@ -711,7 +718,7 @@ th.num button.sort { justify-content: flex-end; }
   .picker-form, .picker-form select { width: 100%; }
   .change-list li { padding: 9px 14px; }
 }
-td.tenant-col { min-width: 190px; }
+td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps rather than widening its table */
 @media (max-width: 640px) { td.tenant-col { min-width: 0; } }
 .connection-form { margin: var(--space-4) 0 0; }
 .connection-form > label { flex: 1 1 200px; }
@@ -758,6 +765,7 @@ td.tenant-col { min-width: 190px; }
 .report-main .tile { padding: var(--space-3) var(--space-3-5); }
 .report-main .tile .value { font-size: var(--fs-2xl); white-space: nowrap; }
 .report-main .tile .value.wordy { white-space: normal; }
+@media (max-width: 640px) { .report-main .tile .value { white-space: normal; } } /* "+3.8 GB a month" wraps in a half-width tile */
 @media (max-width: 1100px) {
   .report-main > .toolbar.report-title { flex-wrap: wrap; }
   .report-main > .toolbar.report-title .toolbar-actions { flex: 1 1 auto; justify-content: flex-start; }
