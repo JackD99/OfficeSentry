@@ -32,6 +32,12 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - A project picked in the month-end review lands on the client's report as "Project: Email security" rather than
   "Email security project".
 
+### Fixed
+
+- On the public demo, picking a client group in the Group picker now shows that group, and the choice
+  follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
+  to every client, because demo visitors have no sign-in to keep the choice on.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site
