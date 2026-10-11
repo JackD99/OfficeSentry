@@ -38,7 +38,7 @@ RULE_TITLES = {r.key: r.title for r in RULES}
 
 
 def _download(body: bytes, filename: str, ext: str) -> Response:
-    mimetype = XLSX if ext == "xlsx" else "text/csv; charset=utf-8"
+    mimetype = XLSX if ext == "xlsx" else "text/csv"
     return Response(
         body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}.{ext}"'}
     )

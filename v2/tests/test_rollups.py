@@ -144,7 +144,8 @@ def test_rollup_pages_and_downloads(client, db, two_tenants):
     assert client.get("/across/nope").status_code == 404
     assert client.get("/across?key=mailboxes").headers["Location"].endswith("/across/mailboxes")
     resp = client.get("/across/review.csv")
-    assert resp.mimetype == "text/csv" and "attachment" in resp.headers["Content-Disposition"]
+    assert resp.headers["Content-Type"] == "text/csv; charset=utf-8"  # the charset once
+    assert "attachment" in resp.headers["Content-Disposition"]
     rows = _csv(resp.data)
     assert rows[0][:2] == ["Client", "Tenant ID"] and {r[0] for r in rows[1:]} == {"Alpha Ltd", "Bravo Inc"}
     resp = client.get("/across/mailboxes.xlsx")
