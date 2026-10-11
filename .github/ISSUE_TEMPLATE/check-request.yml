@@ -1,7 +1,7 @@
 name: Check request
 description: Suggest a new security or configuration check, or a change to one.
 title: "Check: "
-labels: [enhancement]
+labels: [enhancement, check]
 body:
   - type: markdown
     attributes:

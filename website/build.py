@@ -154,6 +154,12 @@ SECTIONS = [
                 "Contributing",
                 blurb="Setting up for development, and how changes are built and checked.",
             ),
+            Doc(
+                "SUPPORT.md",
+                "support",
+                "Getting help",
+                blurb="Where to go for what, the support package, and what never goes in an issue.",
+            ),
         ],
     ),
 ]
