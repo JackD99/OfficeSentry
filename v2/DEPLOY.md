@@ -741,7 +741,9 @@ need their addresses here too.
 
 SSH stays closed: the Deploy workflow opens port 22 to its own address for the
 length of each run (a rule named `github-actions-deploy (temporary)`) and
-removes it at the end.
+removes it at the end, whether the run passed, failed or was cancelled; a
+second, separate job removes it again in case GitHub lost the first one's
+runner part way through.
 
 ### 3. Create the server
 
