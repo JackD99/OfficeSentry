@@ -31,7 +31,7 @@ KINDS = {
 }
 PROCESSING = {"On": "Running", "Paused": "Paused"}
 
-NOT_COLLECTED = "Group nesting hasn't been collected yet. Refresh Group nesting on the tenant page."
+NOT_COLLECTED = "Group nesting hasn't been collected yet. Refresh Group nesting on the client page."
 
 
 def _kind(g: dict) -> str:
@@ -112,7 +112,7 @@ def build(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         )
     elif unread:
         report.notes.append(
-            f"Members of {plural(unread, 'group')} couldn't be read. The collection log on the tenant page says why."
+            f"Members of {plural(unread, 'group')} couldn't be read. The collection log on the client page says why."
         )
 
     empty = Section(

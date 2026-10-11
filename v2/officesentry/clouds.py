@@ -144,8 +144,8 @@ def missing(cloud: Cloud | str | None, feature: str) -> str | None:
 def app_needed(cloud: Cloud) -> str:
     """The plain-English "set up an app for this cloud" message."""
     return (
-        f"This tenant is in {cloud.label}, and no app connection is set up for that cloud yet. "
+        f"This client is in {cloud.label}, and no app connection is set up for that cloud yet. "
         f"An app registered in another cloud can't sign in to it: register Office Sentry's app in "
         f"{cloud.label} ({cloud.admin_centre}), then add it under App connection with the cloud set to "
-        f"{cloud.label} and choose it for this tenant under Manage."
+        f"{cloud.label} and choose it for this client under Manage."
     )
