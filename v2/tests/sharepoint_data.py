@@ -136,7 +136,7 @@ DRIVES = {
 USER_DRIVES = {"u1": DRIVES["site-ann"][0]}
 
 
-def _item(iid, name, parent, *, shared=True, folder=False):
+def _item(iid, name, parent, *, shared=True, folder=False, by="ann@x.com", at="2026-08-20T10:00:00Z"):
     item = {
         "id": iid,
         "name": name,
@@ -147,7 +147,11 @@ def _item(iid, name, parent, *, shared=True, folder=False):
     }
     item["folder" if folder else "file"] = {}
     if shared:
-        item["shared"] = {"scope": "users"}
+        item["shared"] = {
+            "scope": "users",
+            "sharedBy": {"user": {"email": by, "displayName": "Ann"}},
+            "sharedDateTime": at,
+        }
     return item
 
 
@@ -156,7 +160,7 @@ DELTA = {
         {"id": "root-fin", "root": {}, "folder": {}, "shared": {}},
         _item("it-clients", "Clients", "root-fin", folder=True),
         _item("it-inside", "Clients plan.docx", "it-clients"),
-        _item("it-budget", "Budget.xlsx", "root-fin"),
+        _item("it-budget", "Budget.xlsx", "root-fin", by="bob@x.com", at=days_ago(5) + "T09:00:00Z"),
         _item("it-policy", "Policy.docx", "root-fin"),
         _item("it-internal", "Internal.docx", "root-fin"),
         _item("it-private", "Notes.txt", "root-fin", shared=False),
@@ -164,6 +168,9 @@ DELTA = {
     ],
     "drv-ann": [_item("it-holiday", "holiday.jpg", "root-ann")],
 }
+# What each library's delta link answers on a later run: only what changed since (``mock_sharepoint``
+# serves these for a delta request carrying a token). Empty by default: nothing changed.
+DELTA_CHANGES: dict[str, list] = {}
 PERMISSIONS = {
     "it-clients": [
         {"id": "p1", "roles": ["write"], "link": {"scope": "anonymous", "type": "edit"}},
@@ -180,10 +187,21 @@ PERMISSIONS = {
             "roles": ["read"],
             "link": {"scope": "users", "type": "view"},
             "grantedToIdentitiesV2": [{"user": {"email": "partner@other.com"}}],
-        }
+            "expirationDateTime": days_ago(-10) + "T00:00:00Z",  # expires in 10 days
+        },
+        {
+            "id": "p2b",
+            "roles": ["read"],
+            "link": {"scope": "users", "type": "view"},
+            "grantedToIdentitiesV2": [{"user": {"email": "old@other.com"}}],
+            "expirationDateTime": days_ago(3) + "T00:00:00Z",  # expired
+        },
     ],
     "it-policy": [{"id": "p3", "roles": ["read"], "link": {"scope": "organization", "type": "view"}}],
-    "it-internal": [{"id": "p4", "roles": ["write"], "grantedToV2": {"user": {"email": "bob@x.com"}}}],
+    "it-internal": [
+        {"id": "p4", "roles": ["write"], "grantedToV2": {"user": {"email": "bob@x.com"}}},
+        {"id": "p4b", "roles": ["read"], "grantedToV2": {"group": {"displayName": "Sales", "id": "g1"}}},
+    ],
     "it-holiday": [
         {
             "id": "p5",
@@ -408,10 +426,20 @@ def mock_sharepoint(rsps, *, sites=None, files=True, site_quota=None, rest=True)
         callback=by_id(USER_DRIVES, 3),
         content_type="application/json",
     )
+
+    def delta(request):  # a whole library, with a delta link; or, with a token, what changed since
+        drive = request.path_url.split("?")[0].split("/")[3]
+        if "token=" in request.path_url:
+            return 200, {}, json.dumps({"value": DELTA_CHANGES.get(drive, []), "@odata.deltaLink": request.url})
+        if drive not in DELTA:
+            return 404, {}, json.dumps({"error": {"code": "itemNotFound", "message": "nope"}})
+        link = f"{V1}/drives/{drive}/root/delta?token=t-{drive}"
+        return 200, {}, json.dumps({"value": DELTA[drive], "@odata.deltaLink": link})
+
     rsps.add_callback(
         responses.GET,
         re.compile(re.escape(V1) + r"/drives/[^/]+/root/delta"),
-        callback=by_id(DELTA, 3),
+        callback=delta,
         content_type="application/json",
     )
     rsps.add_callback(

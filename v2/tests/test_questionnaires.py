@@ -7,7 +7,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 
 from officesentry import store
-from officesentry.reports import evidence, evidence_answers, export, questionnaires
+from officesentry.reports import evidence, evidence_answers, export, questionnaires, schemes
 from officesentry.reports.evidence_base import BLANK, NOT_KNOWN, YES
 from officesentry.reports.questionnaires import INPUT, SETS
 from tests import graphdata as gd
@@ -73,8 +73,11 @@ def test_every_question_names_a_topic_and_every_gap_has_a_template():
         assert q.kind in ("yesno", "text")
         if q.outside:
             assert q.template and BLANK.search(q.template), q.key
+    from officesentry.web import evidence  # noqa: F401  (registers every scheme)
+
     used = {i.topic for s in SETS.values() for i in s.items}
-    assert used == set(topics), f"topics no question set asks: {set(topics) - used}"
+    used |= {c.topic for s in schemes.SCHEMES.values() for c in s.controls if c.topic}
+    assert used == set(topics), f"topics no question set or scheme asks: {set(topics) - used}"
 
 
 def test_a_set_is_checked_when_registered():

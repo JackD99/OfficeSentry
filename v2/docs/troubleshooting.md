@@ -8,7 +8,9 @@ same `python -m officesentry ...` part in the virtual environment.
 For a failed collection, the run's own error message is usually the quickest
 guide: [Onboarding a client](onboarding-a-client.md#errors-on-failed-runs)
 explains each one. A client's **Manage** page (under **Settings**) also says
-in plain words what's wrong with its connection and where to fix it.
+in plain words what's wrong with its connection and where to fix it. For
+staff signing in with Microsoft, [Staff sign-in](staff-sign-in.md#common-errors)
+lists the errors and their fixes.
 
 **Where to look first**
 

@@ -35,6 +35,20 @@ in `v2/docs/deploy/README.md` (`v2/tests/test_deploy_platforms.py` fails until b
 `assets/site.css` the styles (the same colours as the app, light and dark). Screenshots come from
 `docs/screenshots/` (made by `v2/scripts/screenshots.py`), so the page shows the app as it is.
 
+`assets/social-card.png` is the picture shown when someone shares a link to the site (LinkedIn, Reddit,
+Teams, Slack and so on). To change it, replace it with another 1200×630 PNG. `assets/favicon.svg` is the tab
+icon; `favicon.ico` and `apple-touch-icon.png` are the same icon for older browsers and phones, and the build
+also puts those two at the site's root, where they're looked for.
+
+## Search engines
+
+Every page has a title, a description, its canonical address and link preview tags, all in
+`templates/base.html`. A doc's description is its `blurb` in `SECTIONS`, so give every listed doc one. The
+front page also tells search engines the site's name and what Office Sentry is (`home_data` in `build.py`),
+and each doc page says it sits under Docs (`breadcrumbs`). The build writes `sitemap.xml` with every page and
+a `robots.txt` that points to it, and it uses `SITE_URL` with its host in lower case wherever it gives the
+site's address.
+
 ## How the screenshots and example reports stay current
 
 Every time the Deploy workflow updates the website, it first runs `v2/scripts/screenshots.py` on that

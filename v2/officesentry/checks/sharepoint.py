@@ -200,3 +200,47 @@ def site_guest_full_control(snap: TenantSnapshot, now: datetime):
         on = len({f.object_id.split("|", 1)[0] for f in findings})
         return ("fail", f"{plural(guests, 'guest')} with full control of {plural(on, 'site')}", findings)
     return ("pass", f"{plural(len(sites), 'site')} checked; no guest has full control", [])
+
+
+@rule(
+    "outside_edit_access",
+    "People outside can only view shared files",
+    "Sharing",
+    "Change sharing with people outside the organisation to view-only unless they need to edit, and "
+    "remove sharing that's no longer needed. The File and folder permissions report lists each person "
+    "outside and what they can edit.",
+)
+def outside_edit_access(snap: TenantSnapshot, now: datetime):
+    status = (snap.objects("shared_files", "scan_status") or [None])[0]
+    if status is None:
+        return _unavailable("Shared files haven't been scanned yet")
+    if not status.get("available"):
+        return _unavailable(
+            "The tenant has no SharePoint licence"
+            if status.get("reason") == "no_sharepoint"
+            else "Office Sentry can't read this tenant's files (Sites.Read.All)"
+        )
+    items = [i for i in snap.objects("shared_files", "shared_item") or [] if isinstance(i, dict)]
+    if items and not any("grants" in i for i in items):
+        return _unavailable("The last scan was made by an earlier version; the next one records who can edit")
+    findings = []
+    for i in items:
+        editors = sorted(
+            {
+                g["who"]
+                for g in i.get("grants") or []
+                if isinstance(g, dict)
+                and g.get("who")
+                and g.get("outside")
+                and g.get("kind") == "guest"
+                and g.get("can") in ("Edit", "Full control")
+            }
+        )
+        if editors:
+            findings.append(Finding("medium", _where(i), "Can be edited by " + ", ".join(editors), i["_id"]))
+    outside = sum(1 for i in items if i.get("externalPeople"))
+    return (
+        ("fail", f"{plural(len(findings), 'file or folder')} outside people can edit", findings)
+        if findings
+        else ("pass", f"Nothing of the {plural(outside, 'item')} shared outside can be edited from outside", [])
+    )

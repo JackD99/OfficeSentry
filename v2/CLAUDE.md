@@ -127,6 +127,13 @@ limiter and telemetry, and is GET only. Its paths are catalogued in
 Online; until a client approves it, SharePoint answers 401 and the collector
 stores the reason `consent` so the report says it's waiting, without a warning.
 
+The shared-files scan (`SharedFiles`) walks each library once, then keeps its
+delta link as a `drive_cursor` object and asks Microsoft only for what changed
+each night (`FULL_SCAN_DAYS` apart it walks the library whole again; a 410 from
+the link does the same). Unchanged items are carried from the last snapshot, so
+a `shared_item` keeps its `firstSeen`; `describe_permissions` lists every way in
+as `grants` and drops grants past their expiry from exposure.
+
 ## Adding a check or report
 
 - Checks live in the `checks/` package: `checks/base.py` is the framework
@@ -282,7 +289,11 @@ stores the reason `consent` so the report says it's waiting, without a warning.
   `TenantSnapshot` for the "what changed" view. Each scheme is its own module
   (`schemes_cyber_essentials.py`: Cyber Essentials and CE Plus, with the
   assessor's tests as `Audit`s; `schemes_forms.py`: the cyber insurance
-  proposal and the supplier questionnaire, never strict) registered with
+  proposal and the supplier questionnaire, never strict; `schemes_iasme.py`,
+  `schemes_iso27001.py`, `schemes_uk_gdpr.py`, `schemes_cis.py`,
+  `schemes_nist_csf.py`, `schemes_soc2.py`, `schemes_essential_eight.py`;
+  `Scheme.order` places it in its group; a new module is imported in
+  `web/evidence.py` and `delivery.py`) registered with
   `schemes.register()`, which
   refuses unknown rules, topics, question sets and groups, and names its
   question set so the form's answers sit on the same page. Pages and
@@ -938,6 +949,8 @@ and `python -m officesentry <command>`:
 | `create-admin <name>` | create an admin from the shell (no two-step sign-in set up) |
 | `setup-link` | print the one-time link for creating the first admin in the browser |
 | `create-app` | create the read-only multi-tenant Entra app (device sign-in); the App connection page's wizard does the same |
+| `update-app [--connection N]` | add a release's new read-only permissions to an existing app (device sign-in); the App connection page's *Update the app* does the same |
+| `staff-sign-in [--passwords on\|off] [--off]` | show how staff sign in, or switch from the server: passwords back on (break glass), or Microsoft sign-in off |
 | `rotate-keys [--new]` | re-encrypt stored secrets with the newest key, or new keys |
 | `healthcheck web\|worker` | exit 0 if the portal answers or the worker checked in (Docker) |
 | `backup [--dir] [--keep]` | a consistent, compressed copy of the database (keeps 7) |
@@ -985,8 +998,8 @@ files outside `tmp_path`.
   version, or a `v*` tag): the version must match `__version__` and have a
   `CHANGELOG.md` section (`scripts/release_notes.py`) and the commit needs a
   passing v2 run on `main` (reused, not repeated, to save Actions minutes);
-  then an amd64 image with SBOM and provenance (arm64 and signed attestations
-  switch on by themselves once the repository is public),
+  then amd64 and arm64 images with SBOM and provenance and signed attestations
+  (a private fork skips the arm64 build and the attestations by itself),
   a start-up check, a vulnerability scan, version tags, the GitHub release,
   and `scripts/prune_images.py` keeps the last three releases' images. Changes people running it must act on go in
   the changelog's next section under **Action required**, **New Microsoft

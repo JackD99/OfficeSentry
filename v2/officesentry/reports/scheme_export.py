@@ -134,11 +134,15 @@ def _lines(r: SchemeResult, brand_name: str) -> list[tuple[str, str]]:
             out.append(("p", "No control's verdict has changed."))
         else:
             for ch in r.since.changes:
-                out.append(("bullet", f"{ch.control.ref} {ch.control.title}: {ch.before} then, {ch.after} now."))
+                out.append(
+                    ("bullet", f"{ch.control.ref} {ch.control.title}".strip() + f": {ch.before} then, {ch.after} now.")
+                )
     if r.to_fix:
-        out.append(("h1", "Fix before you apply"))
+        out.append(("h1", r.scheme.fix_heading))
         for c in r.to_fix:
-            out.append(("h3", f"{c.control.ref} {c.control.title}" + (" (auto-fail)" if c.control.autofail else "")))
+            out.append(
+                ("h3", f"{c.control.ref} {c.control.title}".strip() + (" (auto-fail)" if c.control.autofail else ""))
+            )
             for g in c.gaps:
                 out.append(("bullet", g.strip()))
             if c.fix:
@@ -146,7 +150,7 @@ def _lines(r: SchemeResult, brand_name: str) -> list[tuple[str, str]]:
     for t in r.themes:
         out.append(("h1", f"{t.theme.title} ({t.verdict})"))
         for c in t.controls:
-            out.append(("h2", f"{c.control.ref} {c.control.title}"))
+            out.append(("h2", f"{c.control.ref} {c.control.title}".strip()))
             out.append(("label", f"Verdict: {c.verdict}" + (f" (decided by {c.set_by})" if c.set_by else "")))
             out.append(("muted", f"Requirement: {c.control.requirement}"))
             for e in c.evidence:
@@ -161,13 +165,15 @@ def _lines(r: SchemeResult, brand_name: str) -> list[tuple[str, str]]:
                 out.append(("label", f"Text to paste: {c.text}"))
             out.append(("muted", f"What Microsoft 365 can't show: {c.control.scope}"))
     if r.scheme.audit:
-        out.append(("h1", "What the assessor tests"))
+        out.append(("h1", "What the assessor checks"))
         for a in r.scheme.audit:
             out.append(("h2", a.title))
             out.append(("p", a.what))
             out.append(("label", f"What Microsoft 365 shows: {a.m365}"))
             verdicts = ", ".join(
-                f"{r.by_key[k].control.ref} {r.by_key[k].verdict}" for k in a.controls if k in r.by_key
+                f"{r.by_key[k].control.ref or r.by_key[k].control.title} {r.by_key[k].verdict}"
+                for k in a.controls
+                if k in r.by_key
             )
             if verdicts:
                 out.append(("label", f"Today: {verdicts}"))

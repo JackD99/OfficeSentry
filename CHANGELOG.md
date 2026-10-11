@@ -118,7 +118,7 @@ client's approval.
   checks, accepted risks, checks that couldn't run) follows as an appendix the summary links into.
   A **Summary PDF** button, and a "Monthly review: summary only" option in report plans and email
   schedules, give the two summary pages on their own.
-- **Quarterly review.** A new starting point in the report designer (Month-end → Custom reports): three
+- **Quarterly review.** A new starting point in the report designer (Month-end → Report designs): three
   months of Secure Score and findings, what was fixed in the quarter, the projects on the table and
   where each stands, licence spend a month and a year with the waste, and what's coming up in the next
   90 days. Its five blocks (Three-month trend, Fixed this quarter, Projects, Licence spend, Coming up)
@@ -139,6 +139,17 @@ client's approval.
   where more than 5% of mail fails flagged. It also lists Microsoft's top spam and phishing recipients for the
   last 30 days. Only counts are kept from the message trace, never subjects or addresses; it needs no new
   permission (Global Reader, as for distribution lists).
+- **File and folder permissions** report (Files and Teams): who can open each shared file or folder in
+  SharePoint and OneDrive and how (given access directly, sent a link, an anyone or organisation-wide link),
+  who shared it and when, what was newly shared in the last 30 days, links past their expiry or expiring
+  within 30 days, and access by person with guests and outside addresses first. The Shared files scan now
+  records files and folders shared with colleagues too (so "who can access what" is complete), the sharer and
+  date from Microsoft, and treats a link past its expiry as no access. A new check, "People outside can only
+  view shared files", flags files and folders guests or outside addresses can edit.
+- **The Shared files scan asks for changes only.** After a library's first walk, each night follows
+  Microsoft's delta link for it and re-reads the permissions of changed items only; the rest keep last
+  night's answer. Every library is walked whole again after 30 days (or when Microsoft drops the link), so a
+  large client's nightly scan is a fraction of what it was.
 - **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
   and whether the rule is paused), restricted management units, how many users, groups and devices are in
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
@@ -180,9 +191,10 @@ client's approval.
   activity and open findings, and each opens a page with what needs attention first, then its storage over the
   retained months with the libraries and largest files that fill it, its sharing settings and the files shared
   from it, the team or Microsoft 365 group behind it (or its owner), its activity, open findings and what
-  changed, with links to the site access and file permission reports for the detail. Site addresses in
+  changed, with links to the Site access, Site permissions and File and folder permissions reports for who
+  can reach it. Site addresses in
   reports, the group page and search results open the page, and it downloads as PDF and XLSX.
-- Five checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
+- Four checks in areas that were thin. **Accounts:** no account reports to a manager whose sign-in is
   blocked. **Guests:** no guest from another organisation owns a team or group. **Storage:** no mailbox and
   no OneDrive is at or over 90% of its quota (high once it's full). Each goes in the project an MSP would sell
   it under (account clean-up, sharing and guests, storage), with an effort estimate.
@@ -198,6 +210,17 @@ client's approval.
   Partly, since insurers price the risk rather than refuse it), with the figures, the fix and the form's
   answers to paste. The emailed
   "Cyber insurance evidence pack" is now this pack; the old controls view and its links open it.
+- Three more packs on the Evidence page. **IASME Cyber Assurance** (Level 1 and Level 2), theme by theme from
+  governance to incidents, judged strictly like Cyber Essentials. **ISO/IEC 27001:2022 Annex A**: the
+  controls Microsoft 365 evidences (5.14 to 5.23, 6.5, 6.7, 7.9, 8.1 to 8.16 and more) with their ISO numbers,
+  for the Statement of Applicability and the audit. **UK GDPR security and accountability**: the ICO's
+  security outcomes (A to D) plus the records a client or the ICO asks for after a breach (record of
+  processing, processor contracts, privacy notice, rights requests, DPIAs, retention, the ICO fee and
+  72-hour breach reporting). Beyond the UK: the **CIS Microsoft 365 Foundations Benchmark** (the
+  recommendations Office Sentry reads, all judged from the data), **NIST CSF 2.0** by category, **SOC 2**
+  Trust Services Criteria (Security and Availability) and Australia's **Essential Eight** at Maturity Level
+  One. Twenty-one new fill-in answers cover the governance, data protection and hardening questions
+  Microsoft 365 can't see, each written once and reused by every pack.
 
 ### Changed
 

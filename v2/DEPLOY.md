@@ -227,7 +227,7 @@ def genuine(headers, body: bytes, secret: str) -> bool:
     return hmac.compare_digest(headers.get("X-OfficeSentry-Signature", ""), "v1=" + mac)
 ```
 
-Before 2.1.0 the signature was `sha256=` and the HMAC of the body alone, with
+Before 2.2.0 the signature was `sha256=` and the HMAC of the body alone, with
 no timestamp, so a copied request could be sent again.
 
 ## Sign-in protection
@@ -257,7 +257,7 @@ wrong passwords come from (15-minute sliding window):
 
 **Two-step sign-in** is required for everyone on a new install, client
 accounts included. An install that was already in use before this release
-keeps requiring it for admins and analysts only, so client users aren't
+keeps requiring it for staff only (everyone but client accounts), so client users aren't
 suddenly asked to enrol; *Settings → Users* shows the current policy. To
 require it for clients too, set `OFFICESENTRY_REQUIRE_MFA=all` in `.env` and
 restart (tell your clients first: they set it up at their next sign-in).

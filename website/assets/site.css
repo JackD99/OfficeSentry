@@ -112,6 +112,9 @@ section.features, section.examples, section.start, section.security { padding: 8
 .card img { border-radius: var(--radius-sm); border: 1px solid var(--border); aspect-ratio: 4 / 3; object-fit: cover; object-position: top left; width: 100%; margin-bottom: 16px; }
 .card h3 { font-size: 1.0625rem; padding: 0 4px; }
 .card p { font-size: .9375rem; color: var(--muted); margin: 0; padding: 0 4px; }
+.extras { margin-top: 72px; }
+.extras > h3 { font-size: 1.5rem; letter-spacing: -.02em; text-align: center; margin-bottom: 24px; }
+.extras .security-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* Home: demo band */
 .demo-band { background: var(--ink); color: var(--ink-text); padding: 56px 0; }
@@ -268,7 +271,7 @@ section.faq { padding: 24px 0 96px; }
   .wrap { padding: 0 16px; }
   body { font-size: 15.5px; }
   .lead { font-size: 1.0625rem; }
-  .pillar-grid, .cards { grid-template-columns: 1fr; gap: 24px; }
+  .pillar-grid, .cards, .extras .security-list { grid-template-columns: 1fr; gap: 24px; }
   .feature-media.pair { grid-template-columns: 1fr; }
   .feature-media.pair .phone { display: none; }
   .actions .btn { flex: 1 1 auto; }
