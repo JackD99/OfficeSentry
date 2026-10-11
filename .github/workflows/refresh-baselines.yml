@@ -1,0 +1,127 @@
+name: Refresh baselines
+# A pull request that changes what a page or a PDF looks like fails the ui or nightly check until its
+# baselines are refreshed, and Run workflow needs someone at the Actions page. Adding the label
+# "refresh-baselines" to the pull request does it from the pull request itself: the pinned browser retakes
+# the screenshots (tests/browser/baselines), the nightly suite redraws the example PDFs' pages
+# (tests/nightly/pdf_baselines), whatever changed is committed to the branch, the label comes off, and the
+# checks start again on that commit (a push made with the workflow's own token starts none by itself).
+# Look at the new images in the pull request before merging.
+#
+# The pages are captured from the pull request merged with main, as the checks compare them (a branch
+# behind main would otherwise get baselines without main's changes), and .github/scripts/commit_baselines.sh
+# carries what changed onto the branch. The ui and nightly runs it starts compare the merged tree too.
+#
+# Only for pull requests from branches of this repository, never main: a fork's token can't push here, and
+# main's baselines change only through a pull request.
+on:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+concurrency:
+  group: refresh-baselines-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  LABEL: refresh-baselines
+
+defaults:
+  run:
+    shell: bash
+    working-directory: v2
+
+jobs:
+  screenshots:
+    if: >-
+      github.event.label.name == 'refresh-baselines' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref != 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write  # commits the new baselines to the pull request's branch
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    # The same image as ui.yml: screenshots only match in the browser that made the baselines.
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        # The pull request merged with main (the event's default), as ui.yml compares it.
+      - name: Install from the lock files
+        run: pip install --root-user-action=ignore --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
+      - name: Save new screenshot baselines (accessibility still checked)
+        run: python -m pytest tests/browser --ui --update -p no:cacheprovider
+      - name: Commit them to the branch
+        id: commit
+        working-directory: .
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name "Jack"
+          git config user.email "50886562+JackD99@users.noreply.github.com"
+          .github/scripts/commit_baselines.sh v2/tests/browser/baselines "Refresh the screenshot baselines"
+
+  pdfs:
+    # After the screenshots, so the two commits don't race for the branch. Ubuntu with the packages
+    # nightly.yml installs, since that's where the PDF baselines are compared.
+    needs: screenshots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write  # commits the new baselines to the pull request's branch
+      pull-requests: write  # takes the label off
+      issues: write  # (a pull request's labels are an issue's)
+      actions: write  # starts the checks on the new commit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        # The pull request merged with main, as nightly.yml compares it (the merge from when the label went
+        # on: the screenshots job's commit changes nothing the PDFs are drawn from).
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: v2/requirements-dev.txt
+      - name: Install Pango and HarfBuzz (as in the Docker image) and pdftoppm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
+            fonts-dejavu-core poppler-utils
+      - name: Install from the lock files
+        run: |
+          pip install --require-hashes --no-deps -r requirements-dev.txt -r tests/nightly/requirements.txt
+          pip install --no-deps --no-build-isolation -e .
+      - name: Save new PDF baselines
+        run: python -m pytest tests/nightly/test_pdf_snapshots.py --nightly --update -p no:cacheprovider
+      - name: Commit them to the branch
+        id: commit
+        working-directory: .
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          git config user.name "Jack"
+          git config user.email "50886562+JackD99@users.noreply.github.com"
+          .github/scripts/commit_baselines.sh v2/tests/nightly/pdf_baselines "Refresh the PDF baselines"
+      - name: Take the label off and start the checks on the new commit
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.head_ref }}
+          SCREENSHOTS: ${{ needs.screenshots.outputs.changed }}
+          PDFS: ${{ steps.commit.outputs.changed }}
+        run: |
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$LABEL"
+          if [ "$SCREENSHOTS" != true ] && [ "$PDFS" != true ]; then
+            echo "Nothing changed, so the checks stand."
+            exit 0
+          fi
+          # The ui and nightly checks only where their baselines changed, comparing the pull request merged
+          # with main as their pull_request runs do; the main suite always, so the new commit has a CI result.
+          gh workflow run v2.yml --ref "$BRANCH"
+          if [ "$SCREENSHOTS" = true ]; then gh workflow run ui.yml --ref "$BRANCH" -f pull_request="$PR"; fi
+          if [ "$PDFS" = true ]; then gh workflow run nightly.yml --ref "$BRANCH" -f pull_request="$PR"; fi
+          echo "Started the checks on $BRANCH."

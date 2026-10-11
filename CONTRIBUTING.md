@@ -102,8 +102,14 @@ Python 3.12 run measures coverage and fails under 90%;
 - Styles use the tokens in `v2/officesentry/web/static/tokens.css`; `/styleguide`
   in a running portal shows them and every shared component. Pull requests
   that touch templates or CSS also run the browser tests (screenshots against
-  baselines, and axe-core); `v2/tests/browser/README.md` says how to run them
-  and how to refresh the baselines after a change you meant.
+  baselines, and axe-core); `v2/tests/browser/README.md` says how to run them.
+- When a screenshot or an example PDF changes because you meant it to, add
+  the label `refresh-baselines` to the pull request: a workflow retakes the
+  screenshots in the pinned browser and redraws the PDF pages (from your
+  branch merged with main, as the checks compare them), commits what
+  changed to the branch, takes the label off and starts the checks again.
+  It only works for branches of this repository, never main or a fork. Look
+  at the new images in the pull request before merging.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class.
 - Never add a write call to a tenant or a non-read-only permission.
