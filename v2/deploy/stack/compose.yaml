@@ -1,0 +1,119 @@
+# Office Sentry as one self-contained stack, for container managers that deploy a single compose file with
+# no files beside it: Portainer, Dockge, Komodo, Coolify, Dokploy, Synology Container Manager, the Unraid
+# Compose Manager plugin and TrueNAS. The guides are in v2/docs/deploy/. On a plain Linux server, use
+# v2/docker-compose.yml with its .env and Caddyfile instead (v2/DEPLOY.md).
+#
+# Same image, containers and hardening as v2/docker-compose.yml, but:
+#   - settings come from the environment variables your manager sets (its "Environment variables" or .env
+#     editor), not from an env_file, so the stack needs nothing next to it;
+#   - the portal listens on 127.0.0.1:8000 (or OFFICESENTRY_PORT) for the proxy you already run (your manager's
+#     own, a NAS reverse proxy); Caddy for HTTPS and Cloudflare Tunnel are optional services below, switched on
+#     with COMPOSE_PROFILES;
+#   - where the data and the keys go can be changed with OFFICESENTRY_DATA and OFFICESENTRY_KEYS: a volume
+#     name, or a folder on the host that user ID 10001 owns (the nightly backups go in the data's backups
+#     folder, so a NAS backup of that folder carries them off the box).
+#
+# No environment variables at all (TrueNAS "Install via YAML")? Replace the ${...} on the right of the lines
+# under x-settings with your own values, and nothing else.
+
+x-settings: &settings
+  # The address people open the portal on, e.g. https://sentry.yourmsp.com. Required.
+  OFFICESENTRY_BASE_URL: ${OFFICESENTRY_BASE_URL:?Set OFFICESENTRY_BASE_URL to the portal's address, such as https://sentry.yourmsp.com}
+  # Collection times and emailed reports use this timezone, e.g. Europe/London.
+  OFFICESENTRY_TIMEZONE: ${OFFICESENTRY_TIMEZONE:-UTC}
+  # When every client is collected, as cron (minute hour day month weekday): 02:00 every night.
+  OFFICESENTRY_COLLECT_CRON: ${OFFICESENTRY_COLLECT_CRON:-0 2 * * *}
+  # How many clients are collected at once; 8 suits about 200.
+  OFFICESENTRY_WORKER_CONCURRENCY: ${OFFICESENTRY_WORKER_CONCURRENCY:-4}
+  # How many reverse proxies sit in front of the portal (v2/docs/securing-the-portal.md). One is usual.
+  OFFICESENTRY_TRUSTED_PROXIES: ${OFFICESENTRY_TRUSTED_PROXIES:-1}
+  # Optional: the session key and the encryption keys from your manager's secret store. Left empty, both are
+  # generated into secrets.json in the keys volume on first start. Never put them in a file you commit.
+  OFFICESENTRY_SECRET_KEY: ${OFFICESENTRY_SECRET_KEY:-}
+  OFFICESENTRY_ENCRYPTION_KEYS: ${OFFICESENTRY_ENCRYPTION_KEYS:-}
+  # Any other setting from v2/.env.example goes here as one more line.
+  OFFICESENTRY_SECRETS_FILE: /keys/secrets.json
+
+x-officesentry: &officesentry
+  image: ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}
+  environment: *settings
+  volumes:
+    - ${OFFICESENTRY_DATA:-officesentry-data}:/data
+    - ${OFFICESENTRY_KEYS:-officesentry-keys}:/keys
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs: ["/tmp"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+
+services:
+  web:
+    <<: *officesentry
+    ports: ["${OFFICESENTRY_PORT:-127.0.0.1:8000}:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "web"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15m
+
+  worker:
+    <<: *officesentry
+    command: ["python", "-m", "officesentry", "worker"]
+    stop_grace_period: 2m
+    depends_on:
+      web: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-m", "officesentry", "healthcheck", "worker"]
+      interval: 1m
+      timeout: 10s
+      start_period: 2m
+
+  # Optional automatic HTTPS, for a server where nothing else uses ports 80 and 443: set OFFICESENTRY_DOMAIN and
+  # COMPOSE_PROFILES=https. The same settings as v2/Caddyfile, written from CADDYFILE at start, so the stack still
+  # needs no file beside it. A manager that ignores COMPOSE_PROFILES: delete the "profiles" line instead.
+  caddy:
+    image: caddy:2@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    profiles: ["https"]
+    environment:
+      SITE_ADDRESS: ${OFFICESENTRY_DOMAIN:-localhost}
+      CADDYFILE: |
+        {$$SITE_ADDRESS} {
+        	encode gzip
+        	header -Server
+        	reverse_proxy web:8000
+        }
+    command: ["sh", "-c", "printf '%s' \"$$CADDYFILE\" > /tmp/Caddyfile && exec caddy run --config /tmp/Caddyfile --adapter caddyfile"]
+    ports: ["80:80", "443:443"]
+    volumes: ["caddy-data:/data", "caddy-config:/config"]
+    depends_on: [web]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+
+  # Optional Cloudflare Tunnel (v2/docs/deploy/cloudflare.md): the portal reachable at your domain with no port
+  # opened on this machine. Set CLOUDFLARE_TUNNEL_TOKEN (the tunnel's token, from your manager's secret store) and
+  # COMPOSE_PROFILES=tunnel, and point the tunnel's public hostname at http://web:8000.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    profiles: ["tunnel"]
+    command: ["tunnel", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on: [web]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+
+volumes:
+  officesentry-data:
+  officesentry-keys:
+  caddy-data:
+  caddy-config:

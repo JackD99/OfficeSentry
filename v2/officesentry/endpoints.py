@@ -1,7 +1,7 @@
 """Every call Office Sentry makes to Microsoft: path, version, permission, throttle limits and fallback.
 
-One list (``GRAPH`` and ``EXCHANGE``) says, for each Graph path and Exchange
-cmdlet the collectors use, which permission it needs, which of Microsoft's
+One list (``GRAPH``, ``EXCHANGE`` and ``SHAREPOINT``) says, for each Graph path,
+Exchange cmdlet and SharePoint REST path the collectors use, which permission it needs, which of Microsoft's
 throttling limits (``LIMITS``) it counts against and how many units it costs,
 and what the collector does when Microsoft can't answer. The shared limiter
 (``ratelimit.py``) reads it before each request, and run telemetry groups
@@ -103,9 +103,12 @@ class Endpoint:
         object.__setattr__(self, "pattern", re.compile(regex + r"\Z"))
 
     def key(self, version: str = "") -> str:
-        """How telemetry names it: ``"v1.0 /users/{id}/drive"``, ``"Exchange Get-Mailbox"``."""
+        """How telemetry names it: ``"v1.0 /users/{id}/drive"``, ``"Exchange Get-Mailbox"``,
+        ``"SharePoint /web/sitegroups"``."""
         if self.api == "exchange":
             return f"Exchange {self.path}"
+        if self.api == "sharepoint":
+            return f"SharePoint {self.path}"
         return f"{version or self.versions[0]} {self.path}" + (f" ({self.select})" if self.select else "")
 
 
@@ -274,6 +277,7 @@ GRAPH: tuple[Endpoint, ...] = (
     ),
     Endpoint("/sites/{site}/drive", V1, "Sites.Read.All", ("sharepoint",), cost=SP_ONE),
     Endpoint("/sites/{site}/drives", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
+    Endpoint("/sites/{site}/drive/root/permissions", V1, "Sites.Read.All", ("sharepoint",), cost=SP_PERMISSIONS),
     Endpoint("/sites/{site}/lists", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
     Endpoint("/sites/{site}/lists/{list}/items", V1, "Sites.Read.All", ("sharepoint",), cost=SP_MANY),
     Endpoint(
@@ -345,6 +349,26 @@ EXCHANGE: tuple[Endpoint, ...] = tuple(
     ),
 )
 
+# SharePoint's own REST API (``sharepoint_api.py``), for what Graph doesn't expose: SharePoint group members,
+# permission levels and inheritance. Paths are what follows a site's ``/_api``. Microsoft counts these against
+# the same tenant SharePoint limits as Graph's SharePoint calls.
+_SP_PERMISSION = "Sites.Read.All (SharePoint)"
+SHAREPOINT: tuple[Endpoint, ...] = tuple(
+    Endpoint(path, ("rest",), _SP_PERMISSION, ("sharepoint",), cost=cost, api="sharepoint", fallback=fallback)
+    for path, cost, fallback in (
+        (
+            "/web",
+            SP_ONE,
+            "Asked first on each site; a refusal means the client hasn't approved the SharePoint permission yet",
+        ),
+        ("/web/roleassignments", SP_MANY, ""),
+        ("/web/sitegroups", SP_MANY, ""),
+        ("/web/lists", SP_MANY, ""),
+        ("/web/lists(guid'{list}')/roleassignments", SP_MANY, "Read for lists with their own permissions only"),
+        ("/web/webs", SP_MANY, ""),
+    )
+)
+
 _EXCHANGE = {e.path: e for e in EXCHANGE}
 _ID = re.compile(
     r"/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|b![^/]+|[^/]*,[^/]*)(?=/|$)", re.IGNORECASE
@@ -388,3 +412,22 @@ def graph_key(url: str, params: dict | None = None) -> str:
 
 def exchange(cmdlet: str) -> Endpoint | None:
     return _EXCHANGE.get(cmdlet)
+
+
+def sharepoint_path(url: str) -> str:
+    """The part of a SharePoint REST URL after the site's ``/_api`` (``/web/sitegroups``)."""
+    path = urlsplit(url).path
+    return path.split("/_api", 1)[1] if "/_api" in path else path
+
+
+def sharepoint(url: str) -> Endpoint | None:
+    """The catalogue entry for a SharePoint REST request (full URL, any site)."""
+    path = sharepoint_path(url)
+    return next((e for e in SHAREPOINT if e.pattern.match(path)), None)
+
+
+def sharepoint_key(url: str) -> str:
+    endpoint = sharepoint(url)
+    if endpoint is not None:
+        return endpoint.key()
+    return "SharePoint " + re.sub(r"\(guid'[^']*'\)", "({id})", sharepoint_path(url))

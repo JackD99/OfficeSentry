@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
 from .checks import SEVERITY_RANK, Finding, RuleResult, evaluate
 from .db import utcnow
 from .findings import finding_key, lifecycle_map
+from .reports.precomputed import Rows, stored_rows
 from .snapshot import TenantSnapshot
 from .text import WHOLE_ORGANISATION, plural
 
@@ -326,6 +327,7 @@ CATALOG: list[Project] = [
             "guest_access_level": Effort(fixed=0.25),
             "email_verified_join": Effort(fixed=0.25),
             "ownerless_groups": Effort(each=0.25, most=8),
+            "guest_owners": Effort(each=0.25, most=8),
             "group_creation": Effort(fixed=1),  # agree who, set up the group and the policy
             "group_expiration": Effort(fixed=0.5),
         },
@@ -341,7 +343,11 @@ CATALOG: list[Project] = [
             "Version history limits and clean-up",
             "Archiving, or extra storage where it's needed",
         ],
-        checks={"sharepoint_storage_space": Effort(fixed=4)},
+        checks={
+            "sharepoint_storage_space": Effort(fixed=4),
+            "mailbox_quota": Effort(each=0.5, most=8),  # archive on and a retention policy, per mailbox
+            "onedrive_quota": Effort(each=0.25, most=8),
+        },
     ),
     Project(
         "licence_cleanup",
@@ -355,6 +361,7 @@ CATALOG: list[Project] = [
         ],
         checks={
             "stale_users": Effort(each=0.25, most=12),  # confirm with the client, then close each one
+            "blocked_manager": Effort(each=0.1, most=4),
             "licensed_disabled": Effort(each=0.1),
             "unassigned_licences": Effort(each=0.25),
             "licence_assignment_errors": Effort(each=0.25),
@@ -563,23 +570,63 @@ class Pipeline:
         return sum(len(row.quick_fixes) for row in self.rows)
 
 
-def pipeline(conn, tenants, now: datetime | None = None) -> Pipeline:
+def pipeline(
+    conn, tenants, now: datetime | None = None, rebuild: bool = False, *, cached: bool | None = None
+) -> Pipeline:
+    """Every tenant's recommendations. ``cached`` (by default when ``now`` isn't given: the pages, which show
+    the present) reads each tenant's row from ``precomputed`` while that's current, and builds and stores it
+    when it isn't (always, with ``rebuild``)."""
+    cached = now is None if cached is None else cached
+    stored = stored_rows(conn, "projects", tenants, None if cached else now, rebuild)
     now = now or datetime.now(UTC)
-    rows = []
-    for t in tenants:
-        row = TenantRow(dict(t))
-        rows.append(row)
-        try:
-            snap = TenantSnapshot(conn, t)
-            if not snap.runs:
-                row.note = "No data collected yet."
-                continue
-            found = assess(conn, t, now, snap)
+    return Pipeline([_tenant_row(conn, t, now, stored) for t in tenants], now)
+
+
+def _tenant_row(conn, tenant, now: datetime, stored: Rows | None) -> TenantRow:
+    row = TenantRow(dict(tenant))
+    fingerprint = stored.fingerprint(tenant) if stored else ""
+    if stored and (data := stored.get(tenant, fingerprint)) is not None:
+        row.note = data["note"]
+        row.recommendations = [_recommendation(r) for r in data["projects"]]
+        row.quick_fixes = [Reason(**r) for r in data["quick"]]
+        return row
+    try:
+        snap = TenantSnapshot(conn, tenant)
+        if not snap.runs:
+            row.note = "No data collected yet."
+        else:
+            found = assess(conn, tenant, now, snap)
             row.recommendations, row.quick_fixes = found.projects, found.quick_fixes
-        except Exception as exc:  # one broken tenant mustn't blank the page
-            logging.getLogger(__name__).exception("Project recommendations failed for tenant %s", t["id"])
-            row.note = f"Couldn't be worked out: {type(exc).__name__}"
-    return Pipeline(rows, now)
+    except Exception as exc:  # one broken tenant mustn't blank the page
+        logging.getLogger(__name__).exception("Project recommendations failed for tenant %s", tenant["id"])
+        row.note = f"Couldn't be worked out: {type(exc).__name__}"
+        return row  # not stored: the next view tries again
+    if stored:
+        stored.save(
+            tenant,
+            fingerprint,
+            {
+                "note": row.note,
+                "projects": [
+                    {**asdict(rec), "project": rec.project.key, "reasons": [asdict(r) for r in rec.reasons]}
+                    for rec in row.recommendations
+                ],
+                "quick": [asdict(r) for r in row.quick_fixes],
+            },
+        )
+    return row
+
+
+def _recommendation(data: dict) -> Recommendation:
+    return Recommendation(
+        PROJECTS[data["project"]],
+        [Reason(**r) for r in data["reasons"]],
+        data["size"],
+        data["status"],
+        data["note"],
+        data["updated_by"],
+        data["updated_at"],
+    )
 
 
 def to_table(items: list[tuple[dict, Recommendation]]):

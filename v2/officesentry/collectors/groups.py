@@ -66,6 +66,7 @@ def _owner(o: dict) -> dict:
         "type": kind,
         # An enabled user account: an app or a disabled leaver can't look after a group.
         "enabled": kind == "user" and o.get("accountEnabled") is not False,
+        "guest": kind == "user" and o.get("userType") == "Guest",
     }
 
 

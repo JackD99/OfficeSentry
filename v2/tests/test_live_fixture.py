@@ -39,6 +39,28 @@ RECORDED = datetime(2026, 10, 10, 19, 30, tzinfo=UTC)
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
 STAND_INS: dict[str, dict] = {
+    # Site access (collectors/site_access.py): each site's hidden user list and its default library's
+    # permissions, in Microsoft's documented shapes.
+    "/v1.0/sites/{id}/lists/User%20Information%20List/items": {
+        "value": [
+            {
+                "id": "1",
+                "contentType": {"name": "Person"},
+                "fields": {
+                    "Title": "Site Admin",
+                    "EMail": "admin@contoso.example",
+                    "Name": "i:0#.f|membership|admin@contoso.example",
+                    "IsSiteAdmin": True,
+                    "Deleted": False,
+                },
+            }
+        ]
+    },
+    "/v1.0/sites/{id}/drive/root/permissions": {
+        "value": [
+            {"id": "1", "roles": ["owner"], "grantedToV2": {"siteGroup": {"displayName": "Site Owners", "id": "3"}}}
+        ]
+    },
     # Administrative units (the test tenant has none).
     "/v1.0/directory/administrativeUnits": {"value": []},
     "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
@@ -74,7 +96,7 @@ def db(cfg):
 def live(db):
     tenant_id = store.create_tenant(db, "Live test", FIXTURE["tenant_id"], None)
     db.execute("INSERT INTO settings (key, value) VALUES ('live_test_client_id', ?)", (FIXTURE["client_id"],))
-    graph = lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
+    graph = lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None, resource_tokens=lambda h: lambda: "t")  # noqa: E731
     exo = lambda t, c: ExchangeClient(t["tenant_ref"], lambda: "t", sleep=lambda s: None)  # noqa: E731
     # The sign-in and audit logs are read up to "now" into the activity history: the recording's now.
     with (
@@ -83,6 +105,8 @@ def live(db):
         patch("officesentry.events.clock", lambda: RECORDED),
     ):
         missing = replay.mock(rsps, FIXTURE, STAND_INS, NEW_FIELDS)
+        # The test tenant hasn't approved the SharePoint permission, so SharePoint's own API refuses the app.
+        rsps.get(re.compile(r"https://[a-z0-9-]+\.sharepoint\.com(/.*)?/_api/.*"), status=401, json={})
         statuses = {}
         for key in REGISTRY:
             store.enqueue_run(db, tenant_id, key)
@@ -107,9 +131,13 @@ def _results(db, tenant):
 def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
-    # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered.
+    # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered,
+    # and nobody has a manager set. It hasn't approved the SharePoint permission, so site permissions wait
+    # for it.
     nothing_to_check = {
+        "site_guest_full_control",
         "tls_rpt",
+        "blocked_manager",
         "device_compliance",
         "device_encryption",
         "intune_enrolled",
@@ -196,6 +224,8 @@ def test_detail_reports_and_exports(db, live, key):
     report = data_reports.build(db, live, key, RECORDED)
     if key == "risky-users":  # the test tenant has no Entra ID P2
         assert "Entra ID P2" in report.unavailable and not report.sections
+    elif key == "site-permissions":  # nor the SharePoint permission
+        assert report.unavailable.startswith("Waiting for the client to approve") and not report.sections
     else:
         assert report.unavailable is None and report.sections
     assert data_reports.to_xlsx(report)[:2] == b"PK"
@@ -291,13 +321,16 @@ def test_subscriptions_on_real_data(db, live):
 
 
 def test_connection_health_on_real_data(db, live):
-    # The test app holds every permission Office Sentry asks for, and Global Reader.
-    from officesentry import tenant_health
+    # The test app holds every permission Office Sentry asked for when it was recorded, and Global Reader.
+    from officesentry import permission_batch, tenant_health
 
     health = tenant_health.assess(db, live)
     result = health.result
-    assert result["app_found"] and result["global_reader"] and not result["missing"]
+    assert result["app_found"] and result["global_reader"] and not health.missing
     assert "Exchange.ManageAsAppV2" in result["other"]  # granted, but not one Office Sentry asks for
+    # Recorded before the 2.2 batch: those wait for approval, which is a step to do, not a problem.
+    assert set(health.waiting) <= set(permission_batch.CURRENT.permissions)
+    assert health.check("permissions").state in ("ok", "todo")
     assert health.onboarded
     # The replay signs in without an app connection; that is all there is to fix.
     assert [c.key for c in health.problems] == ["connection"], health.problems

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, ts, csrf %}
+{% block title %}What's new · {{ tenant.name }} · Office Sentry{% endblock %}
+{% block content %}
+{#- A connected client with new permissions to approve (onboarding.NEW_STATES): what's new and why, and the
+    same link and steps as onboarding_send.html. -#}
+{% set contact_set = row and (row.contact_name or row.contact_email) %}
+{% set sent = ask and ask.sent_at %}
+<div class="crumbs"><a href="{{ url_for('tenant_admin.clients') }}">Client settings</a><span>/</span><a href="{{ url_for('onboarding.index') }}">Onboarding</a><span>/</span><span>{{ tenant.name }}</span></div>
+<div class="page-head">
+  <div>
+    <h1>What's new for {{ tenant.name }} <span class="pill {{ state.tone }}">{{ state.label }}</span></h1>
+    <div class="sub">{{ state.detail }}</div>
+  </div>
+  <div class="actions"><a class="btn" href="{{ url_for('tenant_admin.manage', tenant_id=tenant.id) }}">Manage client</a></div>
+</div>
+
+<p class="lede">Office Sentry {{ batch.release }} asks for {{ new|length|plural('new read-only permission') }}. Until {{ tenant.name }} approves {{ 'it' if new|length == 1 else 'them' }}, the reports that need {{ 'it' if new|length == 1 else 'them' }} say they're waiting for approval; everything else keeps working.</p>
+
+{% if not app_ready %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div class="grow"><strong>First, update your app.</strong>
+  {{ connection.name if connection else 'Your app' }} doesn't ask for these permissions yet, so approving now would grant only the old ones. Update it once, from App connection; then every client approves with their own link.</div>
+  {% if connection %}<a class="btn primary sm" href="{{ url_for('admin.connections') }}#conn-{{ connection.id }}">Update the app</a>{% endif %}</div>
+{% endif %}
+
+<section class="card flush">
+  <div class="card-head"><h2>What's new and why</h2><span class="meta">All read-only</span></div>
+  <div class="scroll-x">
+  <table class="stack-sm whats-new-table">
+    <thead><tr><th>Permission</th><th>What it reads</th><th>What it adds</th></tr></thead>
+    <tbody>
+    {% for i in new %}
+    <tr>
+      <td><code>{{ i.name }}</code><span class="sub">{{ i.resource }}</span></td>
+      <td data-label="What it reads" class="wrap">{{ i.reads }}</td>
+      <td data-label="What it adds" class="wrap">{{ i.adds }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<ol class="setup-steps card send-steps">
+  <li class="{{ 'done' if contact_set else 'current' }}">
+    <div class="step-title">Who it goes to</div>
+    <div class="step-body">
+      <form method="post" action="{{ url_for('onboarding.contact', tenant_id=tenant.id) }}" class="inline-fields">{{ csrf() }}
+        <label>Name <input name="contact_name" maxlength="200" value="{{ row.contact_name if row else '' }}" placeholder="Jane Smith" autocomplete="off"></label>
+        <label>Email <input type="email" name="contact_email" maxlength="200" value="{{ row.contact_email if row else '' }}" placeholder="jane@contoso.com" autocomplete="off"></label>
+        <button class="sm">Save</button>
+      </form>
+      <p class="small muted m0">Someone at {{ tenant.name }} who is, or can reach, a Global Administrator of their Microsoft 365.</p>
+    </div>
+  </li>
+  <li class="{{ 'done' if sent else ('current' if contact_set and app_ready else '') }}">
+    <div class="step-title">Send the approval link and What's new PDF</div>
+    <div class="step-body">
+      {% if not app_ready %}
+      <p class="m0 muted">Update your app first (above), so the link asks for the new permissions.</p>
+      {% elif link %}
+      <p class="m0">It's the same link {{ tenant.name }} approved Office Sentry with. Microsoft lists every permission, old and new, and their Global Administrator presses <em>Accept</em>.</p>
+      <label class="copy-label">Subject <input class="copy-text" value="{{ subject }}" readonly id="email-subject"></label>
+      <label class="copy-label">Message <textarea class="copy-text" rows="14" readonly id="email-body">{{ body }}</textarea></label>
+      <div class="form-actions wrap">
+        <button type="button" class="primary" data-copy="#email-body">Copy message</button>
+        <button type="button" data-copy-text="{{ link }}">Copy link only</button>
+        <a class="btn" href="mailto:{{ row.contact_email if row else '' }}?subject={{ subject|urlencode }}&amp;body={{ body|urlencode }}">{{ icon('mail') }} Open in your email app</a>
+        <a class="btn" href="{{ url_for('onboarding.whats_new_pack', tenant_id=tenant.id) }}">{{ icon('download') }} What's new PDF</a>
+      </div>
+      <form method="post" action="{{ url_for('onboarding.mark_sent', tenant_id=tenant.id) }}" class="sent-row">{{ csrf() }}
+        {% if sent %}<span class="small">{{ icon('check') }} Sent {{ ts(ask.sent_at) }}{% if ask.sent_by %} by {{ ask.sent_by }}{% endif %}.</span>
+          <input type="hidden" name="sent" value="0"><button class="sm ghost">Mark as not sent</button>
+        {% else %}<input type="hidden" name="sent" value="1"><button class="sm">{{ icon('send') }} Mark as sent</button>
+          <span class="small muted">So the tracker shows who you've asked.</span>{% endif %}
+      </form>
+      {% else %}
+      <div class="callout warn">{{ icon('alert') }}<div>No approval link: {{ tenant.name }} has no app connection that's ready for its Microsoft cloud ({{ cloud.label }}). Choose or finish one under <a href="{{ url_for('tenant_admin.manage', tenant_id=tenant.id) }}">Manage</a>.</div></div>
+      {% endif %}
+    </div>
+  </li>
+  <li class="{{ 'current' if sent or state.key == 'new_approved' else '' }}">
+    <div class="step-title">The client approves</div>
+    <div class="step-body">
+      A Global Administrator of {{ tenant.name }} opens the link and presses <em>Accept</em>. Office Sentry re-reads their permissions as soon as they come back, and with every collection; the new reports fill in after the next one.
+      {% if ask and ask.approved_at %}<p class="small">They came back from Microsoft's page {{ ts(ask.approved_at) }}.</p>{% endif %}
+      <form method="post" action="{{ url_for('onboarding.check', tenant_id=tenant.id) }}" class="step-action">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Check now</button></form>
+      <details class="by-hand"><summary>You reach this client through Partner Center (GDAP)?</summary>
+        <p class="small m0">A technician whose GDAP access to {{ tenant.name }} includes <strong>Privileged Role Administrator</strong> can approve for the client: open the link, sign in with your own partner account and accept. Then press <em>Check now</em>.</p>
+      </details>
+    </div>
+  </li>
+</ol>
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  function copied(button) {
+    var label = button.textContent;
+    button.textContent = 'Copied';
+    setTimeout(function () { button.textContent = label; }, 2000);
+  }
+  document.querySelectorAll('[data-copy], [data-copy-text]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var text = button.dataset.copyText || document.querySelector(button.dataset.copy).value;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { copied(button); });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -28,15 +28,17 @@ import sys
 import zlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 V2 = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(V2))
 
 from werkzeug.security import generate_password_hash  # noqa: E402
 
-from officesentry import store  # noqa: E402
+from officesentry import projects, store  # noqa: E402
 from officesentry.certs import generate_certificate  # noqa: E402
 from officesentry.db import utcnow  # noqa: E402
+from officesentry.reports import designs  # noqa: E402
 from tests import (  # noqa: E402  # noqa: E402
     adminactivitydata,
     devicedata,
@@ -713,18 +715,21 @@ def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -
         ("Website enquiries", "enquiries", "ann", rng.sample(staff, min(4, len(staff))), True, 25),
         ("Christmas party 2023", "xmas2023", None, rng.sample(staff, min(9, len(staff))), False, 0),
         ("Old projects", "oldprojects", None, [], False, 0),
+        # Also an Entra group (m1 in the fixtures), so its page joins Exchange's list to the directory's group.
+        ("Finance alerts", "finance-alerts", "ann", rng.sample(staff, min(4, len(staff))), False, 6),
     ]
     groups, members, trace = [], {}, []
     for n, (name, alias, owner, who, outside, per_10_days) in enumerate(lists):
         address = f"{alias}@{domain}"
+        security = name == "Finance alerts"
         groups.append(
             {
                 "Name": name,
                 "DisplayName": name,
                 "PrimarySmtpAddress": address,
                 "Guid": f"dl-{n}",
-                "ExternalDirectoryObjectId": f"dl-{n}",
-                "RecipientTypeDetails": "MailUniversalDistributionGroup",
+                "ExternalDirectoryObjectId": "m1" if security else f"dl-{n}",
+                "RecipientTypeDetails": "MailUniversalSecurityGroup" if security else "MailUniversalDistributionGroup",
                 "ManagedBy": [{"ann": "u1", "bob": "u2"}[owner]] if owner else [],
                 "RequireSenderAuthenticationEnabled": not outside,
                 "IsDirSynced": False,
@@ -984,6 +989,316 @@ def _library(t: dict, now: datetime, slug: str, size: int, rng: random.Random) -
         )
         out.append(_list_item(t, now, f"{root}/Practice database backup.bak", total=31 * GB, modified=820))
     return out
+
+
+OUTSIDE_GUESTS = [
+    "accounts@hollis-partners.example",
+    "j.okafor@brightpath-consulting.example",
+    "lab@dentlab-uk.example",
+    "d.mason@mason-legal.example",
+]
+EVERYONE_BUT_GUESTS = "c:0-.f|rolemanager|spo-grid-all-users/3f1a9c2e-0000-4000-8000-000000000001"
+
+
+def site_people(t: dict, users: list[dict], rng: random.Random) -> tuple[dict, dict]:
+    """The people behind each SharePoint site, for the Site access report: a Microsoft 365 group per
+    group-connected site (owners, members, guests), each site's hidden user list and what its default
+    library grants. Realistic situations: a site whose only owner has left, sites with one owner, guests on
+    the client-facing sites, and an intranet open to everyone in the organisation.
+
+    The same people make up each site's SharePoint groups and permission levels on SharePoint's own API, for
+    the Site permissions report: a guest accountant with full control of Finance, libraries and a subsite
+    with their own permissions, and the intranet open to everyone.
+
+    Returns the group fixtures to add (``GROUPS``, ``OWNERS``, ``MEMBERS``) and the SharePoint fixtures
+    (``USER_INFO``, ``ROOT_PERMISSIONS``, ``SP_REST``)."""
+    domain = f"{t['base']}.{t['tld']}"
+    staff = [u for u in users if u["userType"] == "Member" and u.get("accountEnabled") and u.get("assignedLicenses")]
+    ann = next(u for u in users if u["displayName"] == t["people"]["ann"])
+    bob = next(u for u in users if u["displayName"] == t["people"]["bob"])  # disabled: a leaver
+    heads = [u for u in staff if str(u.get("jobTitle", "")).startswith("Head of")] or staff
+
+    def person(u, admin=False):
+        upn = u["userPrincipalName"]
+        return {
+            "id": str(zlib.crc32(f"{upn}".encode())),
+            "contentType": {"name": "Person"},
+            "fields": {
+                "Title": u["displayName"],
+                "EMail": upn,
+                "Name": f"i:0#.f|membership|{upn}",
+                "UserName": upn,
+                "IsSiteAdmin": admin,
+                "Deleted": False,
+            },
+        }
+
+    def guest_row(address):
+        login = f"i:0#.f|membership|{address.replace('@', '_')}#ext#@{t['base']}.onmicrosoft.com"
+        name = address.split("@")[0].replace(".", " ").title()
+        return {
+            "id": str(zlib.crc32(address.encode())),
+            "contentType": {"name": "Person"},
+            "fields": {
+                "Title": name,
+                "EMail": address,
+                "Name": login,
+                "UserName": address,
+                "IsSiteAdmin": False,
+                "Deleted": False,
+            },
+        }
+
+    def claim(login, title):
+        return {
+            "id": str(zlib.crc32(login.encode())),
+            "contentType": {"name": "Person"},
+            "fields": {
+                "Title": title,
+                "EMail": "",
+                "Name": login,
+                "UserName": "",
+                "IsSiteAdmin": False,
+                "Deleted": False,
+            },
+        }
+
+    def sp_group(name):
+        return {
+            "id": str(zlib.crc32(name.encode())),
+            "contentType": {"name": "SharePointGroup"},
+            "fields": {
+                "Title": name,
+                "EMail": "",
+                "Name": name,
+                "UserName": "",
+                "IsSiteAdmin": False,
+                "Deleted": False,
+            },
+        }
+
+    def member(u):
+        return {
+            "@odata.type": "#microsoft.graph.user",
+            "id": u["id"],
+            "displayName": u["displayName"],
+            "userPrincipalName": u["userPrincipalName"],
+            "mail": u.get("mail") or u["userPrincipalName"],
+            "accountEnabled": u.get("accountEnabled", True),
+            "userType": "Member",
+        }
+
+    def guest(address):
+        return {
+            "@odata.type": "#microsoft.graph.user",
+            "id": "gx-" + re.sub(r"[^a-z0-9]", "", address.split("@")[0]),
+            "userType": "Guest",
+            "accountEnabled": True,
+            "userPrincipalName": address.replace("@", "_") + f"#EXT#@{t['base']}.onmicrosoft.com",
+            "mail": address,
+        }
+
+    def grant(name, role, **identity):
+        who = identity or {"siteGroup": {"displayName": name, "id": str(zlib.crc32(name.encode()) % 100)}}
+        return {"id": f"{zlib.crc32((name + role).encode())}", "roles": [role], "grantedToV2": who}
+
+    host = f"https://{t['base']}.sharepoint.com"
+    finance_head = heads[0]
+
+    def sp_principal(pid, title, login, kind=1, email=""):
+        return {"Id": pid, "Title": title, "LoginName": login, "PrincipalType": kind, "Email": email}
+
+    def sp_person(u):
+        upn = u["userPrincipalName"]
+        return sp_principal(
+            zlib.crc32(upn.encode()) % 10_000 + 100, u["displayName"], f"i:0#.f|membership|{upn}", email=upn
+        )
+
+    def sp_guest(address):
+        login = f"i:0#.f|membership|{address.replace('@', '_')}#ext#@{t['base']}.onmicrosoft.com"
+        name = address.split("@")[0].replace(".", " ").title()
+        return sp_principal(zlib.crc32(address.encode()) % 10_000 + 100, name, login, email=address)
+
+    def sp_claim(gid, title):
+        return sp_principal(
+            zlib.crc32(gid.encode()) % 10_000 + 100, title, f"c:0o.c|federateddirectoryclaimprovider|{gid}", 4
+        )
+
+    def sp_everyone():
+        return sp_principal(22, "Everyone except external users", EVERYONE_BUT_GUESTS, 4)
+
+    def assignment(member, *levels):
+        bindings = [{"Name": n, "Hidden": False} for n in levels] or [{"Name": "Limited Access", "Hidden": True}]
+        return {"PrincipalId": member["Id"], "Member": member, "RoleDefinitionBindings": bindings}
+
+    def rows_staff(rows):
+        return [u for u in staff if any(r["fields"]["EMail"] == u["userPrincipalName"] for r in rows)][:4]
+
+    def library(lid, title, path, unique, count, base=1):
+        return {
+            "Id": lid,
+            "Title": title,
+            "BaseType": base,
+            "HasUniqueRoleAssignments": unique,
+            "ItemCount": count,
+            "RootFolder": {"ServerRelativeUrl": path},
+        }
+
+    def site_rest(url, slug, title, groupset, outside):
+        """SharePoint's answers for one site: its three groups, who holds which level, its lists and subsites."""
+        g_owners, g_members, g_visitors = (
+            sp_principal(n, f"{title} {k}", f"{title} {k}", 8)
+            for n, k in ((3, "Owners"), (5, "Members"), (4, "Visitors"))
+        )
+        path = urlsplit(url).path
+        web = {
+            "Id": f"w-{slug}",
+            "Title": title,
+            "Url": url,
+            "HasUniqueRoleAssignments": True,
+            "AssociatedOwnerGroup": {"Id": 3},
+            "AssociatedMemberGroup": {"Id": 5},
+            "AssociatedVisitorGroup": {"Id": 4},
+        }
+        sitegroups = [
+            {**g, "OwnerTitle": g_owners["Title"], "Users": users}
+            for g, users in zip((g_owners, g_members, g_visitors), groupset, strict=True)
+        ]
+        assignments = [
+            assignment(g_owners, "Full Control"),
+            assignment(g_members, "Edit"),
+            assignment(g_visitors, "Read"),
+        ]
+        assignments += [assignment(sp_guest(a), "Read") for a in outside]
+        lists = [library(f"l-{slug}-docs", "Documents", f"{path}/Shared Documents", False, 120)]
+        answers = {}
+        webs = []
+        if slug == "finance":  # the outside accountant was made a site owner to fix a sharing problem
+            assignments.append(assignment(sp_guest(OUTSIDE_GUESTS[0]), "Full Control"))
+            lists.append(library("l-payroll", "Payroll", f"{path}/Payroll", True, 64))
+            answers["/web/lists(guid'l-payroll')/roleassignments"] = [
+                assignment(g_owners, "Full Control"),
+                assignment(sp_person(finance_head), "Edit"),
+            ]
+        if slug in ("clients", "patient-records"):
+            shared = "Engagement letters" if slug == "clients" else "Lab referrals"
+            lists.append(library("l-contracts", shared, f"{path}/{shared}", True, 38))
+            answers["/web/lists(guid'l-contracts')/roleassignments"] = [
+                assignment(g_owners, "Full Control"),
+                assignment(g_members, "Contribute"),
+                assignment(sp_guest(OUTSIDE_GUESTS[3 if slug == "clients" else 2]), "Read"),
+            ]
+        out = {}
+        if slug == "intranet":  # HR policies kept from the rest of the intranet
+            hr = f"{url}/hr"
+            webs.append({"Title": "HR", "Url": hr, "HasUniqueRoleAssignments": True})
+            out[hr] = {
+                "/web/roleassignments": [
+                    assignment(g_owners, "Full Control"),
+                    assignment(sp_person(finance_head), "Edit"),
+                ]
+            }
+        out[url] = {
+            "/web": web,
+            "/web/sitegroups": sitegroups,
+            "/web/roleassignments": assignments,
+            "/web/lists": lists,
+            "/web/webs": webs,
+            **answers,
+        }
+        return out
+
+    groups, owners, members, user_info, perms, rest = [], {}, {}, {}, {}, {}
+    for slug, title, _, _, template in DENTAL_SITES if t.get("sites") == "dental" else OFFICE_SITES:
+        sid = "site-fin" if slug == "finance" else f"site-{slug}"
+        rows = [claim("SHAREPOINT\\system", "System Account")] + [
+            sp_group(f"{title} {k}") for k in ("Owners", "Members", "Visitors")
+        ]
+        grants = [
+            grant(f"{title} Owners", "owner"),
+            grant(f"{title} Members", "write"),
+            grant(f"{title} Visitors", "read"),
+        ]
+        if template == "Group":
+            gid = f"g-{slug}"
+            site_owners = {
+                "marketing": [bob],  # the only owner has left: an ownerless site
+                "practice": [heads[0]],
+                "operations": [heads[1 % len(heads)]],
+            }.get(slug, [ann, heads[hash(slug) % len(heads)]])
+            site_members = rng.sample(staff, min(len(staff), rng.randint(6, 14)))
+            site_guests = {
+                "clients": OUTSIDE_GUESTS[:2],
+                "finance": OUTSIDE_GUESTS[:1],
+                "patient-records": [OUTSIDE_GUESTS[2]],
+            }.get(slug, [])
+            groups.append(
+                {
+                    "id": gid,
+                    "displayName": title,
+                    "description": None,
+                    "groupTypes": ["Unified"],
+                    "mailEnabled": True,
+                    "securityEnabled": False,
+                    "visibility": "Private",
+                    "resourceProvisioningOptions": ["Team"] if slug not in ("finance", "marketing") else [],
+                    "createdDateTime": "2024-03-04T09:00:00Z",
+                    "mail": f"{slug}@{domain}",
+                    "membershipRule": None,
+                    "onPremisesSyncEnabled": None,
+                    "expirationDateTime": None,
+                }
+            )
+            owners[gid] = [member(u) for u in site_owners]
+            everyone_in = {u["id"]: u for u in site_owners + site_members}
+            members[gid] = [member(u) for u in everyone_in.values()] + [guest(g) for g in site_guests]
+            rows += [
+                claim(f"c:0o.c|federateddirectoryclaimprovider|{gid}", title),
+                claim(f"c:0o.c|federateddirectoryclaimprovider|{gid}_o", title),
+            ]
+            rows += [person(u, admin=True) for u in site_owners]
+            rows += [person(u) for u in site_members[:6]]
+            rows += [guest_row(g) for g in site_guests]
+            if slug == "clients":  # a solicitor given access to one folder, outside the group
+                rows.append(guest_row(OUTSIDE_GUESTS[3]))
+                grants.append(
+                    grant(
+                        OUTSIDE_GUESTS[3],
+                        "read",
+                        siteUser={
+                            "displayName": "D Mason",
+                            "email": OUTSIDE_GUESTS[3],
+                            "loginName": "i:0#.f|membership|"
+                            + OUTSIDE_GUESTS[3].replace("@", "_")
+                            + f"#ext#@{t['base']}.onmicrosoft.com",
+                        },
+                    )
+                )
+        else:
+            admins = {"imaging": [ann, heads[2 % len(heads)]], "old-projects": [bob]}.get(slug, [ann])
+            rows += [person(u, admin=True) for u in admins]
+            rows += [person(u) for u in rng.sample(staff, min(len(staff), 4))]
+            if slug == "intranet":
+                rows.append(claim(EVERYONE_BUT_GUESTS, "Everyone except external users"))
+                grants.append(
+                    grant(
+                        "Everyone except external users",
+                        "read",
+                        siteUser={"displayName": "Everyone except external users", "loginName": EVERYONE_BUT_GUESTS},
+                    )
+                )
+        user_info[sid] = rows
+        perms[sid] = grants
+        if template == "Group":
+            groupset = ([sp_claim(f"{gid}_o", title)], [sp_claim(gid, title)], [])
+            outside = [OUTSIDE_GUESTS[3]] if slug == "clients" else []
+        else:
+            visitors = [sp_everyone()] if slug == "intranet" else []
+            groupset = ([sp_person(u) for u in admins], [sp_person(u) for u in rows_staff(rows)], visitors)
+            outside = []
+        rest.update(site_rest(f"{host}/sites/{slug}", slug, title, groupset, outside))
+    access = {"USER_INFO": user_info, "ROOT_PERMISSIONS": perms, "SP_REST": rest}
+    return {"GROUPS": groups, "OWNERS": owners, "MEMBERS": members}, access
 
 
 def sharepoint(
@@ -1292,6 +1607,23 @@ class Swapped:
             setattr(module, name, value)
 
 
+def directory_groups(now: datetime) -> dict:
+    """The group fixtures plus what the group clean-up report and Coming up show: a team expiring soon that
+    its owner can renew, one nobody can renew, and a role-assignable group with a guest in it."""
+    expiry = {"g4": 24, "g2": 47}
+    rows = [
+        {**g, "expirationDateTime": (now + timedelta(days=expiry[g["id"]])).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if g["id"] in expiry
+        else g
+        for g in groupdata.GROUPS
+    ]
+    rows.append(
+        groupdata._group("s4", "Helpdesk admins", unified=False, mail=False, security=True, isAssignableToRole=True)
+    )
+    members = {**groupdata.MEMBERS, "s4": [groupdata._member("u1"), groupdata._member("u3")]}
+    return {"GROUPS": rows, "MEMBERS": members}
+
+
 def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
     from tests.seed import seed_tenant
 
@@ -1306,6 +1638,8 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
         rng = random.Random(t["name"] + "extras")  # noqa: S311
         entra, managed = devices(everyone, rng)
         rules = inbox_rules(everyone)
+        group_extras, access_extras = site_people(t, everyone, random.Random(t["name"] + "sites"))  # noqa: S311
+        directory = directory_groups(now)
         extras = {
             graphdata: {
                 "EXCHANGE": {
@@ -1315,7 +1649,12 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
                 }
             },
             devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed},
-            sharepoint_data: sharepoint(t, everyone, tenant_skus, now, first, rng),
+            sharepoint_data: {**sharepoint(t, everyone, tenant_skus, now, first, rng), **access_extras},
+            groupdata: {
+                "GROUPS": directory["GROUPS"] + group_extras["GROUPS"],
+                "OWNERS": {**groupdata.OWNERS, **group_extras["OWNERS"]},
+                "MEMBERS": {**directory["MEMBERS"], **group_extras["MEMBERS"]},
+            },
         }
         with Swapped(extras):
             seed_tenant(
@@ -1518,7 +1857,42 @@ def populate(
         settings["brand_logo"] = uri
     for key, value in settings.items():
         db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    # A report design to show under Custom reports, and a quarter's worth of project decisions behind it.
+    quarterly = designs.STARTERS["quarterly"][2]
+    designs.create(db, "Quarterly review", "demo", quarterly, "Three months in one, for the quarterly call")
+    recommended = projects.assess(db, store.get_tenant(db, ids[0])).projects[:2]
+    for rec, status in zip(recommended, ("agreed", "proposed"), strict=False):
+        projects.set_status(db, ids[0], rec.project.key, status, "Discussed on the quarterly call", "demo")
     return ids
+
+
+def team(db, ids: list[int]) -> None:
+    """The MSP's people, one per built-in role, so the Users page and the role picture have something to
+    show. None of them can sign in (random passwords)."""
+    from officesentry import roles
+
+    north, fabrikam, contoso = ids[:3]
+    for username, key, all_tenants, tenants in (
+        ("sam.lead", "team_leader", 0, []),
+        ("priya.tech", "second_line", 1, []),
+        ("jordan.desk", "first_line", 0, [north, fabrikam]),
+        ("alex.accounts", "account_manager", 0, [fabrikam, contoso]),
+        ("auditor", "auditor", 1, []),
+        ("it@fabrikam", "client_viewer", 0, [fabrikam]),
+    ):
+        role = roles.by_key(db, key)
+        uid = db.execute(
+            "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (username, generate_password_hash(secrets.token_urlsafe(32)), role.column, role.id, all_tenants, utcnow()),
+        ).lastrowid
+        db.executemany("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", [(uid, t) for t in tenants])
+    # The first-line technician may also refresh North Light's data, and the account manager never sees
+    # Contoso's people: what the per-person overrides look like.
+    jordan = db.execute("SELECT * FROM users WHERE username = 'jordan.desk'").fetchone()
+    roles.set_overrides(db, "demo", jordan, [roles.Override("collect", north, True)])
+    alex = db.execute("SELECT * FROM users WHERE username = 'alex.accounts'").fetchone()
+    roles.set_overrides(db, "demo", alex, [roles.Override("reports.people", contoso, False)])
 
 
 def main() -> None:
@@ -1553,7 +1927,8 @@ def main() -> None:
 
         # Nobody signs in with a password: visitors are this account without one (public_demo.py).
         db.execute(
-            "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'analyst', 1, ?)",
+            "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
+            " VALUES (?, ?, 'analyst', (SELECT id FROM roles WHERE key = 'second_line'), 1, ?)",
             (public_demo.USERNAME, generate_password_hash(secrets.token_urlsafe(32)), utcnow()),
         )
         db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
@@ -1561,9 +1936,11 @@ def main() -> None:
         return
     password = args.password or secrets.token_urlsafe(12)
     db.execute(
-        "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
+        "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
+        " VALUES (?, ?, 'admin', 1, 1, ?)",
         (args.admin, generate_password_hash(password), utcnow()),
     )
+    team(db, ids)
     print(f"Added {len(ids)} demo tenants to {cfg.db_path}")
     print(f"Sign in as {args.admin} / {password}")
     print(f"Start the portal: OFFICESENTRY_DATA_DIR={args.data_dir} python -m officesentry web")

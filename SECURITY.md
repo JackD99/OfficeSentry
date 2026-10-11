@@ -71,14 +71,15 @@ little as possible with that access. Details and code references are in
 | Control | Implementation |
 |---|---|
 | Tenant isolation | Deny by default. Users see only clients granted to them; others return 404. One gate (`web/access.py`) loads every client. |
-| Roles | Admin, analyst, client. Clients see only their own organisation's reports. |
+| Roles | A role is a set of capabilities and a scope (every client, or those granted). Seven built-in roles (Administrator, Team leader, Second line, First line, Account manager, Auditor, Client viewer), custom roles, and per-person capabilities added or taken away, everywhere or on one client; taking away wins. Every page and download checks on the server. Someone who manages users without being an Administrator can only give out what they hold, on the clients they see. Clients see only their own organisation's reports. |
+| Sign in with Microsoft | Optional, off until an admin sets it up. OpenID Connect against a single-tenant app in the MSP's own tenant with no API permissions, authorization code with PKCE, a certificate-signed client assertion (`private_key_jwt`; the private key is encrypted in the database) and the ID token verified against the tenant's published keys: signature, audience, issuer, tenant, lifetime and nonce. Roles are app roles assigned in Entra (one per built-in role, and values an admin gives custom roles) and read at every sign-in; client access is still granted in Office Sentry. Passwords stay as the break-glass route until an admin signed in with Microsoft turns them off; `python -m officesentry staff-sign-in --passwords on` turns them back on from the server. Client accounts never use it. |
 | Two-step sign-in | Authenticator-app codes (TOTP) with ten one-time recovery codes. New installs require it for everyone; installs from before October 2026 keep requiring it for admins and analysts until `OFFICESENTRY_REQUIRE_MFA=all` is set (the Users page recommends it). A code or recovery code works once, even when sent twice at the same moment. Recovery codes are stored as an HMAC under a random key that is itself encrypted with the encryption key, so a copy of the database alone can't be used to guess them. Adding an authenticator from the account page, turning it off and replacing recovery codes ask for the password, and an admin resetting someone else's password, two-step sign-in or sessions gives their own password too. |
-| Passwords | At least 12 characters, Werkzeug's salted hash. A password an admin set (new user or reset) has to be replaced at the next sign-in. |
+| Passwords | At least 12 characters, not one of the 20,000 most commonly used passwords of that length (from the public list of 10 million leaked passwords), and not containing the username or the product's name; scrypt hash (Werkzeug). A password an admin set (new user or reset) has to be replaced at the next sign-in. |
 | Sign-in limits | Wrong passwords never lock an account. They slow down the address they come from: 5 per username or 20 in all per 15 minutes, counted before the password is checked so parallel requests can't get past them. A spread-out attack on one account slows only addresses that haven't signed in to it before. Five wrong two-step codes lock that step for 15 minutes. The client address comes from `X-Forwarded-For` only behind `OFFICESENTRY_TRUSTED_PROXIES`. |
 | Sessions | Server-side: the cookie holds a random token, stored as a hash. 2 hours idle and 8 hours in total; ended on sign-out, disable, delete, role, password or two-step change. `__Host-` cookie, HttpOnly, SameSite=Lax, Secure over HTTPS. Same-site redirects only. |
 | CSRF | Flask-WTF on every form. |
-| Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, `Cache-Control: no-store`. |
-| Activity log | Sign-ins and every change, with the client address; admins read, filter and export it under *Settings → Activity log*. Failed sign-ins with unknown usernames are counted per address and hour without storing what was typed, and sign-in noise is removed after 90 days. |
+| Headers | Nonce-based CSP with no external assets, HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Opener-Policy and Cross-Origin-Resource-Policy `same-origin`, `Cache-Control: no-store`. The bundled Caddy drops the `Server` header. |
+| Activity log | Sign-ins, every change, and every refusal (a page or tenant someone wasn't allowed, a form sent with a stale token), with the client address; admins read, filter and export it under *Settings → Activity log*. Failed sign-ins with unknown usernames and refusals are counted per address and hour, without storing what was typed, and sign-in noise is removed after 90 days. |
 | Secrets | Session key and encryption key are separate. `python -m officesentry rotate-keys` re-encrypts every encrypted value (certificate keys, two-step secrets and the recovery code key, mail credentials, the alert webhook) and refuses if it finds one it doesn't know. Generated secrets are written with mode `0600`. |
 | PDFs | Rendered by WeasyPrint with a URL fetcher that only loads the app's own static files and `data:` URIs: no other files, no network. |
 | Outbound requests | Webhooks and MTA-STS fetches are HTTPS only, refuse internal addresses and connect to the address that was checked (no DNS rebinding). The SMTP password is never sent without TLS, except to a relay on the same machine. |
@@ -152,10 +153,14 @@ place, but nobody can sign in with the old one.
 
 - Run it with Docker (`v2/docker-compose.yml`) behind a TLS-terminating
   reverse proxy such as Caddy, nginx or Traefik. The compose file only binds
-  to `127.0.0.1`. Set `OFFICESENTRY_TRUSTED_PROXIES` to the number of proxies
+  to `127.0.0.1`, and runs the portal and worker read-only, as a non-root
+  user, with every capability dropped and a process limit. Set `OFFICESENTRY_TRUSTED_PROXIES` to the number of proxies
   in front (1 for the bundled Caddy) so sign-in limits and the activity log
   see real client addresses.
 - Only use `OFFICESENTRY_INSECURE_COOKIES=1` for local development over HTTP.
+  [Securing the portal](v2/docs/securing-the-portal.md) has the full list of
+  what the portal does by itself, what the person running it has to do, and
+  proxy configurations for Caddy, nginx, Traefik and a CDN.
 - Back up the database, ideally encrypted and off the server (restic to
   S3-compatible storage, `v2/DEPLOY.md`, "Off-site backups"), and run the
   restore drill. Keep a copy of `secrets.json` apart from the backups, in a

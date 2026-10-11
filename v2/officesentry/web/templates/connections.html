@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import icon, csrf, ts %}
+{% from "_device_code.html" import device_code %}
 {% block title %}App connection · Office Sentry{% endblock %}
 {% block content %}
 {% set ready = connections|selectattr('client_id')|list %}
@@ -61,7 +62,7 @@
 </details>
 {% endmacro %}
 
-{% if sign_in or not ready %}
+{% if (sign_in and not updating) or not ready %}
 <section class="card setup wizard" id="setup" aria-labelledby="setup-title">
   <div class="card-head"><h2 id="setup-title">{{ 'Create the app for ' ~ cloud_of(sign_in).label if sign_in and not cloud_of(sign_in).is_default else 'Connect Office Sentry to Microsoft 365' }}</h2>
     {% if status == 'done' %}<span class="pill ok">App created</span>{% elif active %}<span class="pill accent">Waiting for sign-in</span>{% endif %}</div>
@@ -71,25 +72,8 @@
       <div class="step-body">
       {% if status == 'done' %}Signed in{% if sign_in.home_tenant %} to tenant <span class="mono small">{{ sign_in.home_tenant }}</span>{% endif %}.
       {% elif active %}
-        <div class="device-code" data-setup-wait="{{ sign_in.poll_seconds }}" data-check="{{ url_for('admin.check_setup') }}">
-          <p class="m0">Open Microsoft's sign-in page and enter this code:</p>
-          <div class="code-row">
-            <output class="user-code mono" id="user-code" aria-label="Sign-in code">{{ sign_in.user_code }}</output>
-            <button type="button" class="sm" data-copy="#user-code">Copy code</button>
-          </div>
-          <div class="step-action">
-            <a class="btn primary" href="{{ sign_in.verification_uri }}" target="_blank" rel="noopener noreferrer">Open Microsoft's sign-in page {{ icon('arrow') }}</a>
-            <span class="muted small">{{ sign_in.verification_uri.split('//', 1)[-1] }}</span>
-          </div>
-          <p class="small">Sign in as someone in your own (the MSP's) tenant who can create app registrations: a Global Administrator, Application Administrator or Cloud Application Administrator. Microsoft may ask you to let <em>Microsoft Graph Command Line Tools</em> (Microsoft's own app) create apps for you. Office Sentry uses this sign-in once, to create its app, and doesn't keep it.</p>
-          <p class="wait-line" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span>
-            <span data-setup-text>{% if status == 'working' %}Signed in. Creating the app…{% elif sign_in.error %}{{ sign_in.error }}{% else %}Waiting for you to sign in. This page moves on by itself.{% endif %}</span></p>
-          <p class="muted small m0">The code works for {% set m = (seconds_left / 60)|round(0, 'ceil')|int %}<span data-setup-left>{{ 'less than a minute' if m <= 1 else m ~ ' more minutes' }}</span>.</p>
-        </div>
-        <div class="step-action">
-          <form method="post" action="{{ url_for('admin.check_setup') }}" class="inline">{{ csrf() }}<button class="sm">I've signed in</button></form>
-          <form method="post" action="{{ url_for('admin.cancel_setup') }}" class="inline">{{ csrf() }}<button class="ghost sm">Cancel</button></form>
-        </div>
+        {{ device_code(sign_in, url_for('admin.check_setup'), url_for('admin.cancel_setup'), seconds_left,
+            "Sign in as someone in your own (the MSP's) tenant who can create app registrations: a Global Administrator, Application Administrator or Cloud Application Administrator. Microsoft may ask you to let Microsoft Graph Command Line Tools (Microsoft's own app) create apps for you. Office Sentry uses this sign-in once, to create its app, and doesn't keep it.") }}
       {% else %}
         {% if status == 'failed' %}
         <div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>The app wasn't created.</strong> {{ sign_in.error }}</div></div>
@@ -105,7 +89,7 @@
       {% if status == 'done' %}
         Created <strong>{{ sign_in.name }}</strong> in your tenant, with client ID <span class="mono small">{{ sign_in.client_id }}</span> and a certificate whose private key stays inside Office Sentry. It's saved below.
       {% else %}
-        A multi-tenant app named “{{ sign_in.name if sign_in else default_app_name }}” with {{ (permissions|length + exchange_permissions|length)|plural('read-only permission') }} (listed at the bottom of this page) and a certificate whose private key never leaves Office Sentry.{% if (sign_in.cloud if sign_in else 'commercial') in pending_clouds %} It uses the certificate you already generated.{% endif %} Nothing from your sign-in is kept.
+        A multi-tenant app named “{{ sign_in.name if sign_in else default_app_name }}” with {{ permissions|length|plural('read-only permission') }} (listed at the bottom of this page) and a certificate whose private key never leaves Office Sentry.{% if (sign_in.cloud if sign_in else 'commercial') in pending_clouds %} It uses the certificate you already generated.{% endif %} Nothing from your sign-in is kept.
       {% endif %}
       </div>
     </li>
@@ -147,6 +131,46 @@
   <div class="callout {{ e.tone }}" role="status">{{ icon('alert') }}<div class="grow"><strong>This certificate {{ e.when }}.</strong>
     {{ e.consequence }} Replacing it takes a few minutes and nothing stops while you do it.</div>
     <form method="post" action="{{ url_for('admin.start_rollover', conn_id=c.id) }}">{{ csrf() }}<button class="primary sm">{{ icon('refresh') }} Replace certificate</button></form></div>
+  {% endif %}
+
+  {% if c.client_id and not app_ready[c.id] %}{% set mine = updating == c.id %}
+  {% set up_status = sign_in.status if mine else none %}
+  <div class="callout {{ 'bad' if up_status == 'failed' else 'warn' }} app-update" role="status" id="update-{{ c.id }}">{{ icon('shield') }}<div class="grow">
+    <strong>Update this app for Office Sentry {{ batch.release }}.</strong>
+    It doesn't ask for the {{ batch.permissions|length|plural('new read-only permission') }} yet ({{ batch.title }}). Office Sentry adds them to the app registration in your own tenant with one sign-in, keeping everything else; then each client approves them with its link, from <a href="{{ url_for('onboarding.index', show='all', state='new') }}">Onboarding</a>. Until then, everything you have today keeps working.
+    {% if mine and up_status in ('waiting', 'working') %}
+    <div class="device-code" data-setup-wait="{{ sign_in.poll_seconds }}" data-check="{{ url_for('admin.check_setup') }}">
+      <p class="m0">Open Microsoft's sign-in page and enter this code:</p>
+      <div class="code-row">
+        <output class="user-code mono" id="user-code" aria-label="Sign-in code">{{ sign_in.user_code }}</output>
+        <button type="button" class="sm" data-copy="#user-code">Copy code</button>
+      </div>
+      <div class="step-action">
+        <a class="btn primary" href="{{ sign_in.verification_uri }}" target="_blank" rel="noopener noreferrer">Open Microsoft's sign-in page {{ icon('arrow') }}</a>
+        <span class="muted small">{{ sign_in.verification_uri.split('//', 1)[-1] }}</span>
+      </div>
+      <p class="small">Sign in to your own (the MSP's) tenant as a Global Administrator, Application Administrator or Cloud Application Administrator, or an owner of the app. Office Sentry uses this sign-in once and doesn't keep it.</p>
+      <p class="wait-line" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span>
+        <span data-setup-text>{% if up_status == 'working' %}Signed in. Updating the app…{% elif sign_in.error %}{{ sign_in.error }}{% else %}Waiting for you to sign in. This page moves on by itself.{% endif %}</span></p>
+      <p class="muted small m0">The code works for {% set m = (seconds_left / 60)|round(0, 'ceil')|int %}<span data-setup-left>{{ 'less than a minute' if m <= 1 else m ~ ' more minutes' }}</span>.</p>
+    </div>
+    <div class="step-action">
+      <form method="post" action="{{ url_for('admin.check_setup') }}" class="inline">{{ csrf() }}<button class="sm">I've signed in</button></form>
+      <form method="post" action="{{ url_for('admin.cancel_setup') }}" class="inline">{{ csrf() }}<button class="ghost sm">Cancel</button></form>
+    </div>
+    {% else %}
+    {% if up_status == 'failed' %}<p class="m0"><strong>The app wasn't updated.</strong> {{ sign_in.error }}</p>{% endif %}
+    <form method="post" action="{{ url_for('admin.update_app', conn_id=c.id) }}" class="step-action">{{ csrf() }}
+      <button class="primary sm">{{ icon('shield') }} {{ 'Try again' if up_status == 'failed' else 'Update the app' }}</button></form>
+    <details class="by-hand small">
+      <summary>Add them by hand instead</summary>
+      <p>In the Entra admin centre{% if not cloud_of(c).is_default %} (<span class="mono small">{{ cloud_of(c).admin_centre }}</span>){% endif %}: <em>App registrations → {{ c.name }} → API permissions → Add a permission</em>, choose the API, then <em>Application permissions</em>, and tick:</p>
+      <ul>{% for p in batch.permissions %}{% set res, name, why = permissions[p] %}<li><code>{{ name }}</code> ({{ res.name }})</li>{% endfor %}</ul>
+      <p>Don't grant admin consent there: each client approves with its own link.</p>
+      <form method="post" action="{{ url_for('admin.app_updated_by_hand', conn_id=c.id) }}">{{ csrf() }}<button class="sm">I've added them</button></form>
+    </details>
+    {% endif %}
+  </div></div>
   {% endif %}
 
   {% if c.old_thumbprint and not c.next_thumbprint %}
@@ -214,61 +238,13 @@
 {% endif %}
 
 <details class="card flush perms">
-  <summary><h2>Permissions the app asks for</h2><span class="meta">{{ permissions|length + exchange_permissions|length }} application permissions, all read-only. Show</span></summary>
+  <summary><h2>Permissions the app asks for</h2><span class="meta">{{ permissions|length }} application permissions, all read-only. Show</span></summary>
   <table class="stack-sm">
     <thead><tr><th>Permission</th><th>Why</th></tr></thead>
     <tbody>
-    {% for p, why in permissions|dictsort %}<tr><td><code>{{ p }}</code><span class="sub">Microsoft Graph</span></td><td data-label="Why">{{ why }}</td></tr>{% endfor %}
-    {% for p, why in exchange_permissions|dictsort %}<tr><td><code>{{ p }}</code><span class="sub">Office 365 Exchange Online</span></td><td data-label="Why">{{ why }}</td></tr>{% endfor %}
+    {% for p, (res, name, why) in permissions.items() %}<tr><td><code>{{ name }}</code>{% if release_of(p) %} <span class="pill info">New in {{ release_of(p) }}</span>{% endif %}<span class="sub">{{ res.name }}</span></td><td data-label="Why">{{ why }}</td></tr>{% endfor %}
     </tbody>
   </table>
   <p class="footnote pad">Exchange access only ever runs <code>Get-</code> commands from a fixed list, so it can't change anything.</p>
 </details>
-{% endblock %}
-{% block scripts %}
-<script nonce="{{ csp_nonce }}">
-(function () {
-  // Copy the sign-in code, and fill in the first tenant's ID with the admin's own.
-  document.querySelectorAll('[data-copy]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      var text = document.querySelector(button.dataset.copy).textContent.trim();
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(function () { button.textContent = 'Copied'; });
-      }
-    });
-  });
-  document.querySelectorAll('[data-fill]').forEach(function (button) {
-    button.addEventListener('click', function () {
-      var input = document.querySelector(button.dataset.fill);
-      input.value = button.dataset.value;
-      input.focus();
-    });
-  });
-  // While Office Sentry waits for the sign-in, check with it every few seconds (it asks Microsoft) and move
-  // on by itself once the app is created or something went wrong.
-  var box = document.querySelector('[data-setup-wait]');
-  if (!box) { return; }
-  var token = document.querySelector('input[name=csrf_token]');
-  var text = box.querySelector('[data-setup-text]'), left = box.querySelector('[data-setup-left]');
-  function minutes(seconds) {
-    var m = Math.ceil(seconds / 60);
-    return m <= 1 ? 'less than a minute' : m + ' more minutes';
-  }
-  function check() {
-    fetch(box.dataset.check, {method: 'POST', credentials: 'same-origin',
-                              headers: {'Accept': 'application/json', 'X-CSRFToken': token ? token.value : ''}})
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        if (!d) { setTimeout(check, 10000); return; }
-        if (d.status !== 'waiting' && d.status !== 'working') { location.reload(); return; }
-        text.textContent = d.status === 'working' ? 'Signed in. Creating the app…'
-          : (d.note || 'Waiting for you to sign in. This page moves on by itself.');
-        if (left) { left.textContent = minutes(d.seconds_left); }
-        setTimeout(check, Math.max(d.wait || 5, 2) * 1000);
-      })
-      .catch(function () { setTimeout(check, 10000); });
-  }
-  setTimeout(check, Math.max(parseInt(box.dataset.setupWait, 10) || 5, 2) * 1000);
-}());
-</script>
 {% endblock %}

@@ -1,11 +1,9 @@
-name: v2
-# v2 is the whole product. While the repo is private on GitHub Free (2,000 Actions minutes a month,
-# Windows minutes counting double), pull requests run lint, the dependency audit, the Docker build and the
-# tests on Python 3.12 with coverage. Pushes to main add Python 3.11 and 3.13, and the weekly and manual
-# runs add the Windows job too; a failure there is fixed on main straight away. The weekly run also catches
-# newly published vulnerabilities in the dependencies. Once the repo is public (standard runners are free
-# there), pull requests get the full matrix and the Windows job by themselves: the jobs below check
-# github.event.repository.private, so nothing needs editing on the day.
+name: CI
+# The product's own checks (v2/ is the whole product): lint and format, the tests on Python 3.11, 3.12 and
+# 3.13 with coverage, a subset on Windows, the Docker build and the dependency audit, on every pull request
+# and push to main. The weekly run also catches newly published vulnerabilities in the dependencies. (On a
+# private fork on GitHub Free, where minutes are limited, pull requests run Python 3.12 only and the Windows
+# job waits for main and the weekly run: the jobs below check github.event.repository.private.)
 #
 # Pull requests and pushes to main that only touch Markdown, docs/, examples/ or website/ skip the jobs
 # (website.yml builds the site), but "CI passed" always runs and reports, so it can be the one required check
@@ -101,6 +99,11 @@ jobs:
           pip install --require-hashes --no-deps -r "$RUNNER_TEMP/ruff.txt"
       - run: ruff check .
       - run: ruff format --check .
+      # The server and deploy scripts (v2/deploy/, .github/scripts/): every tracked .sh file, with the
+      # shellcheck the runner image ships, at its strictest level.
+      - name: shellcheck the shell scripts
+        working-directory: .
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=style
 
   test:
     name: test (Python ${{ matrix.python }})
@@ -158,7 +161,8 @@ jobs:
   windows:
     # Windows without Docker: no Pango, so PDF buttons fall back to print-ready pages and the tests that
     # need real PDF rendering skip themselves. The files below cover the parts that differ on Windows
-    # (file modes, paths, SQLite files, the waitress server). Not required until it has a run of passes.
+    # (file modes, paths, SQLite files, the waitress server, date formats on the account page). Not required
+    # until it has a run of passes.
     # On the weekly and manual runs, and on pull requests once the repo is public: while it's private, Windows
     # minutes count double against GitHub Free's allowance.
     name: test (Windows, no Pango)
@@ -181,6 +185,7 @@ jobs:
           pytest -n auto tests/test_foundation.py tests/test_access.py tests/test_login_security.py
           tests/test_scheduling.py tests/test_backups.py tests/test_serve.py tests/test_recording.py
           tests/test_pdf_export.py tests/test_reports.py tests/test_email.py tests/test_encoding.py
+          tests/test_user_profile.py
 
   docker:
     needs: changes

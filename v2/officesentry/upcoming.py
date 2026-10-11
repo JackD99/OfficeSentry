@@ -42,8 +42,8 @@ KEY = "upcoming"
 TITLE = "Coming up"
 DESCRIPTION = (
     "What will need doing in the next 90 days across your clients: renewals and trials, expiring app "
-    "secrets and certificates, mailboxes filling up, DMARC still at p=none and accepted risks due for "
-    "review."
+    "secrets and certificates, teams and groups about to expire, mailboxes filling up, DMARC still at "
+    "p=none and accepted risks due for review."
 )
 HORIZON = 90  # days ahead
 EXPIRED_DAYS = 30  # app credentials that expired this recently are still listed
@@ -61,9 +61,10 @@ APP_KEY_TYPE = "App secret"  # (named so the linter doesn't take the label for a
 APP_CERTIFICATE = "App certificate"
 OUR_CERTIFICATE = "Office Sentry certificate"
 QUOTA = "Mailbox quota"
+GROUP = "Team or group expiry"
 DMARC = "DMARC"
 RISK = "Accepted risk"
-TYPES = (OUR_CERTIFICATE, SUBSCRIPTION, TRIAL, APP_KEY_TYPE, APP_CERTIFICATE, QUOTA, DMARC, RISK)
+TYPES = (OUR_CERTIFICATE, SUBSCRIPTION, TRIAL, APP_KEY_TYPE, APP_CERTIFICATE, GROUP, QUOTA, DMARC, RISK)
 
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 RULE_TITLES = {r.key: r.title for r in RULES}
@@ -267,6 +268,41 @@ def _app_credentials(snap: TenantSnapshot, tenant, today: date) -> list[Item]:
     return out
 
 
+def _group_expiry(snap: TenantSnapshot, tenant, today: date) -> list[Item]:
+    """Teams and Microsoft 365 groups the expiration policy deletes within the horizon. One that's used renews
+    itself, so what's listed is what nobody has touched; the owners are emailed to renew it."""
+    href = f"/tenants/{tenant['id']}/data/group-structure"
+    out = []
+    for g in snap.objects("groups", "group") or []:
+        when = parse_ts(g.get("expirationDateTime"))
+        if when is None:
+            continue
+        due = when.date()
+        days = _days(due, today)
+        if days > HORIZON:
+            continue
+        kind = "Team" if g.get("isTeam") else "Microsoft 365 group"
+        count = g.get("memberCount")
+        size = f" with {plural(count, 'member')}" if isinstance(count, int) else ""
+        owners = [
+            o.get("name") or o.get("upn") for o in g.get("owners") or [] if isinstance(o, dict) and o.get("enabled")
+        ]
+        owners = [o for o in owners if o]
+        if owners:
+            who = f"{', '.join(owners[:3])}{' and others' if len(owners) > 3 else ''} can renew it"
+            severity = "medium" if days <= 30 else "low"
+        elif g.get("examined"):
+            who = "No owner can sign in to renew it"
+            severity = "high" if days <= 30 else "medium"
+        else:
+            who = "Its owners are emailed to renew it"
+            severity = "medium" if days <= 30 else "low"
+        detail = f"{kind}{size}. {who}; otherwise it's deleted, and can be restored for 30 days."
+        name = g.get("displayName") or str(g.get("_id"))
+        out.append(Item(tenant, GROUP, f"{name} expires", detail, due, days, severity, now=days < 0, href=href))
+    return out
+
+
 def _gb(n: float) -> str:
     return f"{n / 1024**3:.1f} GB"
 
@@ -467,6 +503,7 @@ def _our_certificates(conn, now: datetime, today: date) -> list[Item]:
 PARTS = (
     ("Subscriptions", lambda snap, t, now, today: _subscriptions(snap, t, today)),
     ("App secrets and certificates", lambda snap, t, now, today: _app_credentials(snap, t, today)),
+    ("Teams and groups expiring", lambda snap, t, now, today: _group_expiry(snap, t, today)),
     ("Mailbox quotas", lambda snap, t, now, today: _mailboxes(snap, t, now, today)),
     ("DMARC", lambda snap, t, now, today: _dmarc(snap, t, now)),
     ("Accepted risks", lambda snap, t, now, today: _accepted_risks(snap.conn, t, now, today)),

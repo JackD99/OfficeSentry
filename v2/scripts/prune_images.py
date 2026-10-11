@@ -2,8 +2,8 @@
 
     GH_TOKEN=... python scripts/prune_images.py JackD99 officesentry [--keep 3] [--dry-run]
 
-While the repository is private its image counts against GitHub Free's package allowance, so only the
-newest ``--keep`` releases (candidates included) stay. A release is more than its tagged version: the
+The image counts against GitHub's package storage, so only the newest ``--keep`` releases (candidates
+included) stay. A release is more than its tagged version: the
 platform images, SBOM and provenance records under it are untagged versions of their own, pushed just
 before it, and a signed attestation is a ``sha256-...`` tag pushed just after. So everything older than
 an hour before the oldest kept release goes, and everything newer stays.

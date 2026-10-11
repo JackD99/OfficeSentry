@@ -21,9 +21,11 @@ china          login.chinacloudapi.cn      microsoftgraph.chinacloudapi.cn      
 =============  ==========================  ===================================  ======================
 
 SharePoint hostnames differ too (``*.sharepoint.com``, ``*.sharepoint.us``,
-``*.sharepoint.cn``). Office Sentry never builds SharePoint URLs itself: it
-reads sites through Graph and shows the ``webUrl`` Microsoft returns, so only
-``sharepoint_suffix`` is kept here, for documentation and future use.
+``*.sharepoint-mil.us``, ``*.sharepoint.cn``). Office Sentry never builds SharePoint
+URLs itself: it reads sites through Graph and uses the ``webUrl`` Microsoft returns.
+The site permissions collector signs in to that site's host (``sharepoint_api.py``),
+and ``is_sharepoint`` says whether a host belongs to the cloud before a token is
+asked for it or sent to it.
 
 Every endpoint lookup goes through ``get()``; nothing else in the code should
 spell out a Microsoft host.
@@ -31,6 +33,7 @@ spell out a Microsoft host.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 DEFAULT = "commercial"
@@ -52,6 +55,10 @@ class Cloud:
     def scope(self, resource: str) -> str:
         """The app-only token scope for one of this cloud's resources (``<resource>/.default``)."""
         return f"{resource}/.default"
+
+    def is_sharepoint(self, host: str) -> bool:
+        """True for a tenant's SharePoint host in this cloud (``https://contoso.sharepoint.com``), only."""
+        return re.fullmatch(rf"https://[a-z0-9-]+\.{re.escape(self.sharepoint_suffix)}", host or "") is not None
 
     @property
     def is_default(self) -> bool:

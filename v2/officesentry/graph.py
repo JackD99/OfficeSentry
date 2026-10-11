@@ -125,9 +125,13 @@ class GraphClient:
         telemetry: Telemetry | None = None,
         app: str = "",
         tenant: str = "",
+        resource_tokens: Callable[[str], Callable[[], str]] | None = None,
     ):
         self.cloud = clouds.get(cloud)
         self.root = self.cloud.graph
+        # A token provider for another of the cloud's resources (a SharePoint host), signing in as the same app
+        # with the same certificate; None when this client can't (``sharepoint_api.beside``).
+        self.resource_tokens = resource_tokens
         self.limiter = limiter
         self.telemetry = telemetry or Telemetry()
         self.app, self.tenant = app, tenant  # who the limiter's app-wide and per-tenant buckets belong to
@@ -153,7 +157,10 @@ class GraphClient:
             except TokenError as exc:
                 raise GraphError(401, exc.code, exc.message) from exc
 
-        return cls(token, cloud=cloud, app=client_id, tenant=tenant_ref, **kwargs)
+        def resource_tokens(resource: str) -> Callable[[], str]:
+            return shared_certificate_token_provider(tenant_ref, client_id, key_pem, thumbprint, resource, cloud)
+
+        return cls(token, cloud=cloud, app=client_id, tenant=tenant_ref, resource_tokens=resource_tokens, **kwargs)
 
     # -- URL handling ------------------------------------------------------
 

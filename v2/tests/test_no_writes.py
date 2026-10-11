@@ -31,9 +31,11 @@ SENDING = {"post", "put", "patch", "delete", "request"}
 ALLOWED = {
     "mailer.py": "sendMail from the MSP's own mailbox, through its own single-tenant mail app",
     "exchange.py": "Exchange's admin API takes every cmdlet as a POST; only Get- cmdlets are allowed",
-    "entra.py": "creating Office Sentry's app in the MSP's own tenant (create-app or the setup wizard), and the "
-    "device sign-in that allows it",
+    "entra.py": "creating Office Sentry's app in the MSP's own tenant (create-app or the setup wizard), adding a "
+    "release's new permissions to that app (update-app or the update wizard), and the device sign-in that allows it",
     "alerts.py": "posts alerts to the MSP's own Teams, Slack or webhook URL, never to Microsoft",
+    "sso.py": "staff sign-in with Microsoft: the OpenID Connect token request, and creating the sign-in app in the "
+    "MSP's own tenant from the setup wizard",
     "recording.py": "live-test's recording session passes on whatever method the caller used (GET)",
 }
 

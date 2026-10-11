@@ -164,6 +164,7 @@ def mock_tenant(
     deleted_groups=None,
     risky_users=None,
     app_sign_ins=None,
+    audits=None,
     admin_units=None,
     **phase4,
 ):
@@ -253,7 +254,7 @@ def mock_tenant(
     rsps.get(f"{BETA}/organization", json={"value": [gd.ORGANIZATION]})
     rsps.get(f"{V1}/domains", json={"value": hd.DOMAINS})
     rsps.get(f"{V1}/policies/adminConsentRequestPolicy", json=tsd.ADMIN_CONSENT_POLICY)
-    rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS})
+    rsps.get(f"{V1}/auditLogs/directoryAudits", json={"value": ad.DIRECTORY_AUDITS if audits is None else audits})
     # The whole sign-in log, legacy clients included: the legacy sign-in collector reads them from the stored
     # log once it covers 30 days (the /v1.0 query above is its fallback until then).
     rsps.get(
@@ -271,6 +272,11 @@ def mock_tenant(
     mock_usage(rsps, **(usage_kw or {}))
 
 
+def graph_factory(tenant, connection):
+    """A Graph client that can also sign in to SharePoint, as one made from a certificate can."""
+    return GraphClient(lambda: "t", sleep=lambda s: None, resource_tokens=lambda host: lambda: "t")
+
+
 def exchange_factory(tenant, connection):
     return ExchangeClient(tenant["tenant_ref"], lambda: "t", sleep=lambda s: None)
 
@@ -279,7 +285,7 @@ def seed_tenant(db, tenant_id, dns=None, precompute=False, **kwargs):
     """Collect every source for the tenant from ``graphdata``, as the worker would. The collection
     queues the tenant's precomputed rows; they're dropped unless ``precompute``, so tests of other
     background tasks see only their own."""
-    factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
+    factory = graph_factory
     with (
         responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
         patch("officesentry.dnscheck.lookup", dns or gd.fake_dns),
