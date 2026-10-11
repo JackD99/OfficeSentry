@@ -33,8 +33,9 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
   resolved and reopened dates. Analysts can accept a risk with a reason and an
   optional expiry; accepted risks leave the totals and get their own section.
 - **Since last month**: new and fixed findings, admin role changes, new,
-  disabled and deleted accounts, and Conditional Access policies added,
-  switched or edited, compared with the snapshot from 4+ weeks earlier.
+  disabled and deleted accounts, licences people were given or lost, and
+  Conditional Access policies added, switched or edited, compared with the
+  snapshot from 4+ weeks earlier.
 - **Emailed reports** (a client's *Emailed reports* tab, and *Email reports*
   for everything at once):
   - Send any mix of reports (the monthly review, the evidence pack, any detail
@@ -226,6 +227,14 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     conflicting or missing base licences, usage location) in plain words with
     what to do; licensed accounts without a usage location; licences assigned
     both directly and by a group; and the groups that hand licences out.
+  - *Licence changes*: every paid licence given to or taken from an account,
+    from Office Sentry's own kept collections (to the day for the last month,
+    to the month before that), whether it came directly or from a group, and
+    who made the change and when where the directory audit log has been read
+    (Admin activity). Licences bought and assigned at the end of each month
+    for the last year, with the cost at your prices and a chart of assigned
+    against bought; headline figures say how bought licences and the monthly
+    cost moved since a month ago. Free licences are left out.
   - *Microsoft 365 usage*: who used email, Teams, OneDrive, SharePoint and
     the Office apps in the last 30 days (share of licensed people per
     service, and a trend from Office Sentry's own history), when each person

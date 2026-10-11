@@ -10,6 +10,7 @@ from . import (  # noqa: F401
     group_membership,
     group_structure,
     identity_reports,
+    licence_changes,
     mail_compliance,
     mail_reports,
     mailbox_trend,
