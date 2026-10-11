@@ -473,7 +473,9 @@ turning each step's `target` into a link.
 - Downloads on a page sit in one `downloads([(label, href, title)])` control
   from `_macros.html`, PDF first.
 - Every tenant page starts with `tenant_header(tenant, '<tab>')` from
-  `_macros.html` (import it `with context`). There are seven tabs (Overview,
+  `_macros.html` (import it `with context`). Its heading is always the client's name; a page its tabs
+  don't name passes `title=` for a heading under them, and a page in the Reports tab puts its title in
+  the `toolbar report-title` under the picker, as detail reports do. There are seven tabs (Overview,
   Findings, Changes, Reports, Users, Emails, Settings); a page that belongs
   under one gets its own key, mapped to that tab in `TAB_OF`, and a link in
   the tab's second row (`.tab-pages`), rather than a new tab. On laptops its tab bar stays pinned to the

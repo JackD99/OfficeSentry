@@ -19,6 +19,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   Downloads keep every item. Columns get room by how long their values are, long email addresses wrap after
   the "@", and headings no longer break at a hyphen. A table that still doesn't fit scrolls inside its card,
   with its scrollbar in view and its first column pinned, instead of pushing the page sideways.
+- Every client page leads with the client's name, as the Overview does. Recommended projects, Report
+  history and Offboard put their own title under the tabs, and Evidence and certifications and each
+  evidence pack put theirs under the report picker with their downloads beside it, as detail reports do.
 
 ### Fixed
 

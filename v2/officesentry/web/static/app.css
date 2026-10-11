@@ -383,6 +383,7 @@ details.accept-risk label { margin-bottom: var(--space-2-5); font-size: var(--fs
 @media (max-width: 640px) { table.stack-sm tr.group { padding: 0; border: 0; } table.stack-sm tr.group td { display: block; text-align: left; padding: var(--space-2) var(--space-4) !important; } }
 .m0 { margin: 0; }
 h2.section-title { font-size: 1.1rem; margin: 0 0 var(--space-0-5); }
+h2.page-title { margin-bottom: var(--space-1-5); } /* a client page's own title, under the client's tabs */
 .count-badge { display: inline-block; min-width: 22px; padding: 0 7px; border-radius: var(--radius-pill); background: var(--sunken); color: var(--muted); font-size: var(--fs-xs); font-weight: 600; text-align: center; }
 .jump { display: flex; flex-wrap: wrap; gap: var(--space-1-5) var(--space-4); margin: 0 0 var(--space-4); font-size: var(--fs-base); }
 .jump a { color: var(--text-2); display: inline-flex; gap: var(--space-1-5); align-items: center; }
