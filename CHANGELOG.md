@@ -42,6 +42,11 @@ No.
   Microsoft's delta link for it and re-reads the permissions of changed items only; the rest keep last
   night's answer. Every library is walked whole again after 30 days (or when Microsoft drops the link), so a
   large client's nightly scan is a fraction of what it was.
+- **Administrative units** report (Identity and access): every unit with its membership (assigned or dynamic,
+  and whether the rule is paused), restricted management units, how many users, groups and devices are in
+  each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
+  and the members of each unit by name. A new Administrative units collector reads them with the permissions
+  the app already has, and each person's page shows the units they are in and administer.
 
 ### Changed
 

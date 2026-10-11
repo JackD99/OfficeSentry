@@ -1,6 +1,7 @@
 """Report builders. Importing a module here declares its detail reports (``registry.report``)."""
 
 from . import (  # noqa: F401
+    admin_units,
     all_users,
     auth_methods,
     auto_replies,

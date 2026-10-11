@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-55 checks, 33 data sources (collectors) and 41 detail reports.
+55 checks, 34 data sources (collectors) and 42 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -142,6 +142,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 |---|---|---|---|
 | `admin_activity` | Admin activity | Admin role, Conditional Access, app credential, consent, domain and account changes from the directory audit log, kept in the activity history (Microsoft keeps 30 days with Entra ID P1, otherwise 7). | `AuditLog.Read.All` |
 | `admin_roles` | Admin roles | Who holds each directory role, active and PIM-eligible. | `RoleManagement.Read.Directory` |
+| `admin_units` | Administrative units | Every administrative unit, whether it is assigned or dynamic and restricted, and the users, groups and devices in each. The admins scoped to each unit come from Admin roles. | `Directory.Read.All` |
 | `app_consents` | Apps and consents | Third-party apps, the permissions granted to them, and app secrets or certificates expiring. | `Application.Read.All`, `Directory.Read.All` |
 | `app_sign_ins` | App sign-ins | When each enterprise app last signed in, for a person or on its own (needs Entra ID P1). | `AuditLog.Read.All` |
 | `auth_methods_policy` | Sign-in methods policy | Which sign-in methods the tenant allows and for whom, the registration campaign and system-preferred MFA. | `Policy.Read.All`, `Directory.Read.All` |
@@ -181,6 +182,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | Key | Title | Description | Data from |
 |---|---|---|---|
 | `admin-activity` | Admin activity | Admin roles, Conditional Access, app credentials, consents, domains and account changes from the directory audit log, and who made them. | `admin_activity` |
+| `admin-units` | Administrative units | Every administrative unit with its members and the admins scoped to it, restricted units, and units with nobody in them or nobody administering them. | `admin_roles`, `admin_units`, `groups`, `users` |
 | `admins` | Admins and roles | Every admin role holder with MFA, PIM and sign-in status, and a break-glass check. | `admin_roles`, `conditional_access`, `mfa_registration`, `users` |
 | `all-users` | All users | Every account with its department, job title, manager, licences and last sign-in, its managers and departments, and accounts reporting to a blocked manager. | `tenant_profile`, `user_details`, `users` |
 | `apps` | Apps and consents | Third-party apps with access to the tenant, and app credential expiry. | `app_consents` |
@@ -231,7 +233,7 @@ Every application permission the app requests (all read-only) and the collectors
 | `Application.Read.All` | Microsoft Graph | App registrations, consents, secret expiry | `app_consents`, `connection` |
 | `AuditLog.Read.All` | Microsoft Graph | Sign-in activity and audit logs | `admin_activity`, `app_sign_ins`, `legacy_signins`, `mfa_registration`, `sign_ins`, `users` |
 | `DeviceManagementManagedDevices.Read.All` | Microsoft Graph | Intune device compliance | `devices` |
-| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `tenant_profile` |
+| `Directory.Read.All` | Microsoft Graph | Groups, roles, guests, domains | `admin_units`, `app_consents`, `auth_methods_policy`, `deleted_items`, `devices`, `directory_sync`, `group_nesting`, `groups`, `tenant_profile` |
 | `Exchange.ManageAsApp` | Exchange Online | Mailbox forwarding, permissions and mail settings (read-only cmdlets) | `distribution_lists`, `mailbox_usage`, `mailboxes`, `mobile_devices` |
 | `IdentityRiskyUser.Read.All` | Microsoft Graph | Risky users (Entra ID P2) | `risky_users` |
 | `MailboxSettings.Read` | Microsoft Graph | Inbox rules | `auto_replies`, `inbox_rules` |
