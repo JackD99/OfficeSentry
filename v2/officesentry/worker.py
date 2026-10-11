@@ -80,7 +80,7 @@ def connection_cloud(tenant: dict, connection: dict | None) -> str:
     if not connection or not connection["client_id"]:
         if not cloud.is_default:
             raise NotConnected(clouds.app_needed(cloud))
-        raise NotConnected("tenant has no app connection with a client ID")
+        raise NotConnected("client has no app connection with a client ID")
     if clouds.of(connection).key != cloud.key:
         raise NotConnected(clouds.app_needed(cloud))
     return cloud.key
@@ -186,7 +186,7 @@ def _run_collector(
     tenant = store.get_tenant(conn, run["tenant_id"])
     collector_cls = REGISTRY.get(run["collector"])
     if tenant is None or collector_cls is None:
-        store.finish_run(conn, run_id, "failed", "unknown tenant or collector")
+        store.finish_run(conn, run_id, "failed", "unknown client or collector")
         return "failed"
 
     connection = store.get_connection(conn, tenant["connection_id"]) if tenant["connection_id"] else None
@@ -481,12 +481,14 @@ JOB_MODULES = (
     "officesentry.state_history",
     "officesentry.system_alerts",
     "officesentry.onboarding",
+    "officesentry.lifecycle",
 )
 TASK_MODULES = (
     "officesentry.delivery",
     "officesentry.month_end",
     "officesentry.reports.precomputed",
     "officesentry.onboarding",
+    "officesentry.lifecycle",
 )
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 

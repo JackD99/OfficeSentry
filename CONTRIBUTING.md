@@ -107,7 +107,7 @@ Python 3.12 run measures coverage and fails under 90%;
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class.
 - Never add a write call to a tenant or a non-read-only permission.
-- Every route needs a login check, and tenant pages go through the access
+- Every route needs a login check, and client pages go through the access
   gate in `web/access.py`.
 
 ## Signing off your commits
@@ -145,7 +145,7 @@ The same gates apply to every change, whoever wrote it:
   scrubbed), so collectors are checked against what Microsoft actually
   returns.
 - Rules that matter for safety are enforced by tests, not just by review:
-  every page requires a login, tenant pages go through the access gate,
+  every page requires a login, client pages go through the access gate,
   and the Graph client has no write methods.
 - Pages and reports that change are checked in a real browser, with
   screenshots, before they're merged, and CI compares about 34 pages with

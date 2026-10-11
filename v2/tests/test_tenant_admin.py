@@ -1,13 +1,15 @@
 """Client tenant admin: connection health, onboarding checklist, pause/archive and offboarding."""
 
 import json
-from datetime import UTC, datetime
+import shutil
+import sqlite3
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 import responses
 
-from officesentry import delivery, lifecycle, store, tenant_health
+from officesentry import delivery, lifecycle, store, system_health, tasks, tenant_health
 from officesentry.graph import GraphClient
 from officesentry.worker import execute_run, schedule_tick
 from tests import graphdata as gd
@@ -339,7 +341,7 @@ def test_edit_tenant(client, db, two_tenants, connection_id):
     page = client.post(
         f"/tenants/{alpha}/edit", data=form | {"tenant_ref": "bravo.onmicrosoft.com"}, follow_redirects=True
     ).get_data(as_text=True)
-    assert "Another tenant already uses" in page
+    assert "Another client already uses" in page
 
     # Once data has come in, only a domain -> GUID change is allowed.
     seed_tenant(db, bravo)
@@ -492,7 +494,7 @@ def test_offboarding_erases_client_people_from_the_log_and_the_database_file(app
     # Who did what, and when, is kept; only the detail naming the client's people goes.
     accepted = next(r for r in log if r["action"] == "finding_accepted" and r["tenant_id"] == alpha)
     assert accepted["username"] == "admin" and accepted["ts"] == "2026-01-01T00:00:00Z"
-    assert "removed when the tenant was deleted" in accepted["detail"]
+    assert "removed when the client was deleted" in accepted["detail"]
     # The deleted client account's own activity no longer names them or their address.
     assert not any(r["username"] == "it@alpha-client.example" for r in log)
     assert any(
@@ -502,8 +504,109 @@ def test_offboarding_erases_client_people_from_the_log_and_the_database_file(app
     deleted = next(r for r in log if r["action"] == "tenant_deleted")
     assert deleted["username"] == "admin" and "Alpha Ltd" in deleted["detail"]
     assert any(r["detail"] == "mfa_registered:kept@bravo.example" for r in log)
-    # Nothing readable is left in the database file or its write-ahead log.
+    # The request only deletes; the worker's erase task clears the old copies on disk. After it, nothing
+    # readable is left in the database file or its write-ahead log.
+    assert tasks.pending(db, lifecycle.ERASE_TASK) and lifecycle.erase_state(db)
+    assert tasks.drain(app, db, None, cfg) == 1
     assert person.encode() not in _on_disk(cfg)
+    assert lifecycle.erase_state(db) is None
+    assert db.execute("SELECT 1 FROM audit_log WHERE action = 'tenant_data_erased'").fetchone()
+
+
+def _delete_person(app, db, cfg, person):
+    """Delete Alpha Ltd, which stored ``person``, as an admin would. Returns the admin's client."""
+    alpha, _ = (r["id"] for r in db.execute("SELECT id FROM tenants ORDER BY id"))
+    run = store.enqueue_run(db, alpha, "users")
+    db.execute(
+        "INSERT INTO objects (run_id, kind, object_id, data) VALUES (?, 'user', 'u1', ?)",
+        (run, json.dumps({"userPrincipalName": person, "pad": "x" * 5000})),
+    )
+    make_user(db, "admin")
+    staff = app.test_client()
+    login(staff, "admin")
+    resp = staff.post(f"/tenants/{alpha}/delete", data={"confirm_name": "Alpha Ltd"}, follow_redirects=True)
+    assert "erased from the server in the background" in resp.get_data(as_text=True)
+    return staff
+
+
+def test_without_room_to_rebuild_the_file_deleted_data_is_still_erased(app, db, cfg, two_tenants, monkeypatch):
+    # The shipped Docker setup: a 1 GB database, a nearly full disk. VACUUM's copy can't fit, so it isn't tried
+    # (it used to run in the request, fail, and skip emptying the write-ahead log). The deleted rows are zeros
+    # already; writing the log back is all that's left.
+    from officesentry import packing
+
+    person = "no-room@alpha-client.example"
+    monkeypatch.setattr(packing.shutil, "disk_usage", lambda _p: shutil._ntuple_diskusage(10**9, 10**9, 1000))
+    _delete_person(app, db, cfg, person)
+    assert tasks.drain(app, db, None, cfg) == 1
+    assert person.encode() not in _on_disk(cfg)
+    note = db.execute("SELECT detail FROM audit_log WHERE action = 'tenant_data_erased'").fetchone()[0]
+    assert "wasn't shrunk" in note and "MB free" in note
+    assert lifecycle.erase_state(db) is None
+
+
+def test_an_erase_that_fails_is_shown_alerted_and_tried_again(app, db, cfg, two_tenants, monkeypatch):
+    from officesentry import schedule, system_alerts
+
+    person = "busy@alpha-client.example"
+    staff = _delete_person(app, db, cfg, person)
+    monkeypatch.setattr(lifecycle, "CHECKPOINT_WAIT", 0)
+    reader = sqlite3.connect(cfg.db_path)  # a portal request reading mid-way keeps the log from being emptied
+    reader.execute("BEGIN")
+    reader.execute("SELECT COUNT(*) FROM settings").fetchone()
+    db.execute("INSERT INTO settings (key, value) VALUES ('written_after_the_reader_began', '1')")
+    try:
+        assert tasks.drain(app, db, None, cfg) == 1
+    finally:
+        reader.close()
+    task = tasks.latest(db, lifecycle.ERASE_TASK)
+    assert task["status"] == "failed" and "kept the database busy" in task["error"]
+    failed = db.execute("SELECT * FROM audit_log WHERE action = 'tenant_erase_failed'").fetchone()
+    assert failed["username"] == "admin" and "couldn't be cleared" in failed["detail"]
+
+    # The admin sees it on System status, and the team is told.
+    now = datetime.now(UTC)
+    check = system_health.assess(db, cfg, now).check("erase")
+    assert check.status == system_health.WARN and "isn't fully erased" in check.summary
+    page = staff.get("/admin/status").get_data(as_text=True)
+    assert "Deleted clients" in page and "isn&#39;t fully erased" in page
+    problem = system_alerts.detect("erase", system_health.assess(db, cfg, now), None, now)
+    assert problem is not None and "can still be read" in problem.text
+
+    # Tried again after an hour, and then it works.
+    tick = lambda at: schedule.run_periodic(schedule.TickContext(app=app, conn=db, vault=None, cfg=cfg, now=at))  # noqa: E731
+    tick(now + timedelta(minutes=5))
+    assert tasks.pending(db, lifecycle.ERASE_TASK) is None
+    tick(now + lifecycle.ERASE_RETRY + timedelta(minutes=1))
+    assert tasks.pending(db, lifecycle.ERASE_TASK)
+    assert tasks.drain(app, db, None, cfg) == 1
+    assert person.encode() not in _on_disk(cfg)
+    assert system_health.assess(db, cfg).check("erase").status == system_health.OK
+
+
+def test_a_delete_while_erasing_is_erased_too(app, db, cfg, two_tenants):
+    from officesentry import schedule
+
+    alpha, bravo = two_tenants
+    lifecycle.delete_tenant(db, store.get_tenant(db, alpha), "admin")
+    task = tasks.claim_next(db)
+    # Bravo is deleted while Alpha's erase runs: that try mustn't count for Bravo.
+    real = lifecycle.erase
+
+    def erase_then_delete(conn, progress):
+        note = real(conn, progress)
+        lifecycle.delete_tenant(db, store.get_tenant(db, bravo), "admin")
+        return note
+
+    with patch.object(lifecycle, "erase", erase_then_delete):
+        tasks.run(app, db, None, cfg, task)
+    assert lifecycle.erase_state(db) is not None
+    # The delete couldn't queue a second task while the first ran; the worker's next tick does.
+    assert tasks.pending(db, lifecycle.ERASE_TASK) is None
+    schedule.run_periodic(schedule.TickContext(app=app, conn=db, vault=None, cfg=cfg, now=datetime.now(UTC)))
+    assert tasks.pending(db, lifecycle.ERASE_TASK)
+    assert tasks.drain(app, db, None, cfg) == 1
+    assert lifecycle.erase_state(db) is None
 
 
 def test_delete_refuses_without_foreign_keys(db, two_tenants):

@@ -29,6 +29,16 @@ None.
 
 No.
 
+### Changed
+
+- **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
+  say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
+  the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
+  Settings, Client tenants is **Client settings** and Tenant groups is **Client groups**. The account
+  manager's home page (was "Clients") is now **Accounts**. Columns headed "Tenant" are now "Client";
+  saved views and bookmarked links that filter or sort on that column keep working. The group digest is
+  now the "Client digest", and its spreadsheet is named `client-digest-...`.
+
 ### Fixed
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
@@ -131,6 +141,11 @@ No.
   (they name the old app), and the page says how many clients must approve again.
 - The public demo no longer keeps a visitor's address in the activity log when they open or download a
   report; what was opened is still recorded.
+- Deleting a client no longer rebuilds the whole database inside the web request, which failed for want of
+  room in Docker and left the client's data readable on disk while saying it was erased. The delete is
+  quick, and the worker erases the last copies in the background, rebuilding the file only when there's
+  room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
+  it's tried again every hour.
 
 ## 2.1.0 (2026-10-10)
 

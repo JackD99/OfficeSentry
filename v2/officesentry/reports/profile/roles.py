@@ -11,7 +11,7 @@ def roles_part(p: Person) -> Part:
     result = Part("roles", "Admin roles")
     rows = p.snap.objects("admin_roles", "role_assignment")
     if rows is None:
-        result.unavailable = "Admin roles haven't been collected yet. Refresh Admin roles on the tenant page."
+        result.unavailable = "Admin roles haven't been collected yet. Refresh Admin roles on the client page."
         return result
     mine = [r for r in rows if r.get("principalId") == p.id]
     if not mine:

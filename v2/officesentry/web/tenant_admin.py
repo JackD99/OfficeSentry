@@ -97,9 +97,9 @@ def manage(tenant_id: int):
 def _check_problem(t) -> str | None:
     """Why a connection check can't be queued, or None."""
     if t["archived_at"]:
-        return "This tenant is archived. Restore it first."
+        return "This client is archived. Restore it first."
     if not t["enabled"]:
-        return "Collection is paused for this tenant. Resume it first."
+        return "Collection is paused for this client. Resume it first."
     connection = store.get_connection(g.db, t["connection_id"]) if t["connection_id"] else None
     if not connection or not connection["client_id"] or cloud_mismatch(clouds.of(t).key, connection):
         return not_connected(t)
@@ -170,7 +170,7 @@ def edit(tenant_id: int):
         if has_data and not (GUID_RE.match(ref) and not GUID_RE.match(t["tenant_ref"])):
             problem = (
                 "Office Sentry has already collected data from this tenant, so its tenant ID can't change. "
-                "To report on a different tenant, add it as a new tenant."
+                "To report on a different tenant, add it as a new client."
             )
         elif has_data and (expected := tenant_id_for_domain(t["tenant_ref"].lower(), cloud=cloud)) != ref:
             # Data came from the domain's tenant: the GUID must be that same tenant, not another client's.
@@ -181,7 +181,7 @@ def edit(tenant_id: int):
                 "now. Try again in a few minutes."
             )
         elif g.db.execute("SELECT 1 FROM tenants WHERE tenant_ref = ? AND id <> ?", (ref, t["id"])).fetchone():
-            problem = "Another tenant already uses that tenant ID or domain."
+            problem = "Another client already uses that tenant ID or domain."
     if problem:
         flash(problem, "error")
         return _manage(t["id"])
@@ -213,7 +213,7 @@ def edit(tenant_id: int):
         (name, ref, conn_id, notes, cloud, int(reset_consent), t["id"]),
     )
     audit(g.db, g.user["username"], "tenant_updated", t["id"], "; ".join(changes))
-    flash("Saved." + (" The tenant now needs admin consent for its new app or ID." if reset_consent else ""), "success")
+    flash("Saved." + (" The client now needs admin consent for its new app or ID." if reset_consent else ""), "success")
     if moved_without_app:
         flash(clouds.app_needed(clouds.get(cloud)), "warning")
     return _manage(t["id"])
@@ -245,7 +245,7 @@ def pause(tenant_id: int):
 def resume(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if t["archived_at"]:
-        flash("Restore the tenant before resuming it.", "error")
+        flash("Restore the client before resuming it.", "error")
     elif not t["enabled"]:
         lifecycle.resume(g.db, t, g.user["username"])
         flash(
@@ -262,8 +262,8 @@ def archive(tenant_id: int):
     if not t["archived_at"]:
         lifecycle.archive(g.db, t, g.user["username"])
         flash(
-            f"Archived {t['name']}. It's hidden from tenant lists, dashboards and its client users until restored "
-            "(Client tenants → Archived).",
+            f"Archived {t['name']}. It's hidden from client lists, dashboards and its client users until restored "
+            "(Client settings → Archived).",
             "success",
         )
     return redirect(url_for("tenant_admin.clients"))
@@ -314,7 +314,7 @@ def offboard(tenant_id: int):
 def delete(tenant_id: int):
     t = tenant_or_404(tenant_id)
     if request.form.get("confirm_name", "").strip() != t["name"].strip():
-        flash("Type the tenant's name exactly as shown to delete it.", "error")
+        flash("Type the client's name exactly as shown to delete it.", "error")
         return redirect(url_for("tenant_admin.offboard", tenant_id=t["id"]))
     users = [int(x) for x in request.form.getlist("delete_users") if x.isdigit()]
     try:
@@ -326,7 +326,7 @@ def delete(tenant_id: int):
         f"Deleted {t['name']} and everything stored for it: {plural(removed['runs'], 'run')}, "
         f"{plural(removed['objects'], 'stored object')} and {plural(removed['findings'], 'finding')}"
         + (f", and {plural(removed['users'], 'client account')}" if removed["users"] else "")
-        + ".",
+        + ". Its last copies are erased from the server in the background; System status says if that fails.",
         "success",
     )
     return redirect(url_for("tenant_admin.clients"))

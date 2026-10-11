@@ -91,7 +91,7 @@ def cmd_create_app(args, cfg):
         sys.exit(str(exc))
     audit(conn, "cli", "connection_created", detail=f"{args.name} {app['appId']}")
     print(f"Created app {app['appId']} and app connection #{conn_id}.")
-    print("Next: add tenants in the portal and send each tenant admin its consent link.")
+    print("Next: add clients in the portal and send each client's admin its consent link.")
 
 
 # Every encrypted value at rest, as (table, key column, encrypted column)...
@@ -330,7 +330,7 @@ def cmd_check_backup(args, cfg):
             record_status(cfg.data_dir, "restore_check", False, f"{source.name}: {exc}")
         sys.exit(f"Check failed: {exc}")
     newest = (found["newest_run"] or "none")[:16].replace("T", " ")
-    summary = f"database version {found['version']}, {plural(found['tenants'], 'tenant')}, newest collection {newest}"
+    summary = f"database version {found['version']}, {plural(found['tenants'], 'client')}, newest collection {newest}"
     if args.record:
         record_status(cfg.data_dir, "restore_check", True, detail=f"{source.name}: {summary}")
     print(
@@ -453,7 +453,7 @@ def cmd_delete_tenant(args, cfg):
     migrate(conn)
     tenant = store.get_tenant(conn, args.tenant_id)
     if tenant is None:
-        sys.exit(f"No tenant with id {args.tenant_id}. The id is the number in the tenant's address (/tenants/<id>).")
+        sys.exit(f"No client with id {args.tenant_id}. The id is the number in the client's address (/tenants/<id>).")
     stored = lifecycle.stored(conn, tenant["id"])
     clients = lifecycle.client_only_users(conn, tenant["id"])
     print(
@@ -465,12 +465,12 @@ def cmd_delete_tenant(args, cfg):
     if clients:
         names = ", ".join(u["username"] for u in clients)
         print(
-            f"Client accounts with no other tenant: {names}"
+            f"Client accounts with no other client: {names}"
             + (" (deleted too)" if args.delete_client_users else " (kept; add --delete-client-users to delete)")
         )
     print("This can't be undone. Back up first with: python -m officesentry backup")
     if not args.yes:
-        answer = input(f"Type the tenant's name ({tenant['name']}) to delete it: ")
+        answer = input(f"Type the client's name ({tenant['name']}) to delete it: ")
         if answer.strip() != tenant["name"].strip():
             sys.exit("Not deleted.")
     users = [u["id"] for u in clients] if args.delete_client_users else []
@@ -482,6 +482,9 @@ def cmd_delete_tenant(args, cfg):
         f"Deleted {tenant['name']}: {plural(removed['runs'], 'run')}, {plural(removed['objects'], 'stored item')}"
         + (f" and {plural(removed['users'], 'client account')}" if removed["users"] else "")
         + "."
+    )
+    print(
+        "The worker erases its last copies from the files on disk in the background; System status says if that fails."
     )
     print("Remember the client's side: they delete the Office Sentry enterprise app and its Global Reader role.")
 
@@ -611,12 +614,12 @@ def main(argv=None):
     history.add_argument("--seconds", type=float, default=20, help="with --dry-run: how long to sample for")
     history.set_defaults(func=cmd_history)
 
-    delete = sub.add_parser("delete-tenant", help="delete a client tenant and everything stored for it")
-    delete.add_argument("tenant_id", type=int, help="the number in the tenant's address, /tenants/<id>")
+    delete = sub.add_parser("delete-tenant", help="delete a client and everything stored for it")
+    delete.add_argument("tenant_id", type=int, help="the number in the client's address, /tenants/<id>")
     delete.add_argument(
-        "--delete-client-users", action="store_true", help="also delete client accounts that have no other tenant"
+        "--delete-client-users", action="store_true", help="also delete client accounts that have no other client"
     )
-    delete.add_argument("--yes", action="store_true", help="don't ask for the tenant's name (for scripts)")
+    delete.add_argument("--yes", action="store_true", help="don't ask for the client's name (for scripts)")
     delete.set_defaults(func=cmd_delete_tenant)
 
     live = sub.add_parser("live-test", help="collect from a test tenant using OFFICESENTRY_TEST_* variables")

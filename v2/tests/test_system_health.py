@@ -114,7 +114,16 @@ def test_the_token_or_an_admin_sees_every_check(client, db, two_tenants):
     resp = client.get("/health/ready", headers={"Authorization": f"Bearer {token}"})
     body = resp.json
     assert resp.status_code == 200 and body["ok"] is True and body["status"] in ("ok", "warn")
-    assert set(body["checks"]) == {"database", "schema", "worker", "collection", "backup", "disk", "certificates"}
+    assert set(body["checks"]) == {
+        "database",
+        "schema",
+        "worker",
+        "collection",
+        "backup",
+        "disk",
+        "certificates",
+        "erase",
+    }
     assert body["checks"]["schema"]["version"] == latest_version()
     assert body["checks"]["worker"]["status"] == "ok" and body["checks"]["worker"]["age_seconds"] < 60
     assert body["checks"]["disk"]["used_percent"] == 40.0
@@ -312,7 +321,7 @@ def test_most_tenants_failing_the_last_slot(cfg, db, two_tenants, connection_id)
     assert (result.tenants, result.failed, result.pending) == (3, 2, 0) and result.mass_failure
     assert result.top_error == "Sign-in failed: the certificate has expired"
     check = system_health.check_collection(db, cfg, NOW)
-    assert check.status == "warn" and check.summary == "The last scheduled collection failed for 2 of 3 tenants"
+    assert check.status == "warn" and check.summary == "The last scheduled collection failed for 2 of 3 clients"
     assert "certificate has expired" in check.fix
     assert "expired" not in json.dumps(check.data)  # errors stay out of the JSON
 
@@ -336,7 +345,7 @@ def test_a_report_refresh_does_not_hide_a_night_every_tenant_failed(cfg, db, two
     for collector in ("users", "mfa"):
         _run(db, alpha, "failed", collector, _iso(report_due), created=_iso(report_due), error="Sign-in failed")
     check = system_health.check_collection(db, cfg, NOW)
-    assert check.status == "warn" and check.summary == "The last scheduled collection failed for 2 of 2 tenants"
+    assert check.status == "warn" and check.summary == "The last scheduled collection failed for 2 of 2 clients"
     assert check.data["last_slot"]["at"] == night
 
 
@@ -358,7 +367,7 @@ def test_collection_ok_and_stale(cfg, db, two_tenants):
     check = system_health.check_collection(db, cfg, NOW + timedelta(days=2))
     assert check.status == "warn" and check.summary == "Nothing collected for 2 days"
     db.execute("UPDATE tenants SET enabled = 0")
-    assert system_health.check_collection(db, cfg, NOW).summary == "No client tenants to collect yet"
+    assert system_health.check_collection(db, cfg, NOW).summary == "No clients to collect yet"
 
 
 def test_a_weekly_schedule_allows_a_week(cfg, db):
@@ -466,7 +475,7 @@ def test_mass_failure_alert_waits_for_the_worker(cfg, db, vault, channels, two_t
         _beat(db, NOW)
         assert system_alerts.update(None, db, vault, cfg, ("collection",), NOW) == [("collection", "start")]
         _, hooks = _sent(rsps)
-    assert hooks[0]["title"] == "The last scheduled collection failed for 2 of 2 tenants"
+    assert hooks[0]["title"] == "The last scheduled collection failed for 2 of 2 clients"
     assert "the app was deleted" in hooks[0]["text"]
 
 

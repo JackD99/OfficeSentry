@@ -28,7 +28,7 @@
     <div class="foot">{% if w.data.last_seen %}Checked in {{ ts(w.data.last_seen) }}{% else %}Has never checked in{% endif %}</div></div>{% endif %}
   {% if col %}<div class="tile tone-{{ TONE[col.status] }}"><div class="label"><span class="dot {{ TONE[col.status] }}"></span>Last collection</div>
     <div class="value small-value">{% if col.data.last_success %}{{ col.data.last_success|ago }}{% else %}Not yet{% endif %}</div>
-    <div class="foot">{{ col.data.tenants|plural('tenant') }} on the schedule</div></div>{% endif %}
+    <div class="foot">{{ col.data.tenants|plural('client') }} on the schedule</div></div>{% endif %}
   {% if bak %}<div class="tile tone-{{ TONE[bak.status] }}"><div class="label"><span class="dot {{ TONE[bak.status] }}"></span>Last backup</div>
     {% set newest = bak.data.jobs.values()|map(attribute='last_success')|select|sort|last if bak.data.jobs else none %}
     <div class="value small-value">{% if newest %}{{ newest|ago }}{% else %}None yet{% endif %}</div>
@@ -61,7 +61,7 @@
   {% elif not channels.email and not channels.webhook %}
   <div class="callout warn">{{ icon('alert') }}<span><strong>Nowhere to send them yet.</strong> Add your team under <a href="{{ url_for('email.overview') }}#team">Email reports</a> (with <a href="{{ url_for('email.settings') }}">Email delivery</a> set up), or set up a webhook under <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</span></div>
   {% else %}
-  <p class="muted small">When the worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect, Office Sentry tells
+  <p class="muted small">When the worker stops, a backup fails, the disk is over 85% full, most clients fail to collect or a deleted client can't be erased, Office Sentry tells
     {% if channels.email %}{{ channels.email|plural('team contact') }} by email{% endif %}{% if channels.email and channels.webhook %} and {% endif %}{% if channels.webhook %}your {{ channels.webhook }} webhook{% endif %}: once when it starts, daily while it lasts, and when it's fixed.</p>
   {% endif %}
   {% if tracked %}
