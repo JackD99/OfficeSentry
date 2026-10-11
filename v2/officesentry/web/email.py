@@ -20,8 +20,12 @@ from .filters import _strftime as datefmt
 bp = Blueprint("email", __name__)
 
 ISO = "%Y-%m-%dT%H:%M:%SZ"
-# The rendered email is shown in a sandboxed frame: inline styles only, nothing else.
-EMAIL_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'"
+# The rendered email is shown in a sandboxed frame: inline styles only, nothing else, and nowhere for a link's
+# base or a form to point (default-src doesn't cover either) when the body is opened on its own.
+EMAIL_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; "
+    "form-action 'none'"
+)
 
 
 def _cfg():

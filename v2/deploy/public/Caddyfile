@@ -18,6 +18,8 @@
 		close
 	}
 	encode gzip
+	# The portal sets its own security headers; neither Caddy's nor gunicorn's name reaches the browser.
+	header -Server
 	reverse_proxy web:8000
 }
 
@@ -45,9 +47,10 @@ www.{$WEBSITE_ADDRESS} {
 	redir https://{$WEBSITE_ADDRESS}{uri} permanent
 }
 
-# The demo. The portal sets its own security headers.
+# The demo. The portal sets its own security headers, so only the Server header goes: the website's set above
+# would replace the portal's stricter ones, since a block that removes a header applies all of it last.
 {$DEMO_SITE_ADDRESS} {
-	import headers
+	header -Server
 	encode zstd gzip
 	reverse_proxy demo:8000
 }

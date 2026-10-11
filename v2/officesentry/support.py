@@ -33,9 +33,11 @@ import re
 import sqlite3
 import sys
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import __version__, logs, system_health
 from .config import ENV_PREFIX, Config
@@ -76,19 +78,33 @@ PLAIN_SETTING_PREFIXES = ("retention.", "state_history.", "system_alert.")
 
 # -- Redaction -----------------------------------------------------------------------------------------------
 
+
+def _quoted_removed(m: re.Match) -> str:
+    """``password: "two words"`` keeps its quotes, and loses the whole value, not just its first word."""
+    value = m.group(3)
+    quote = value[0] if value[0] in "'\"" else ""
+    return f"{m.group(1)}{m.group(2)}{quote}[removed]{quote}"
+
+
 # (what it matches, what replaces it). Order matters: PEM blocks and tokens before the long-value sweep.
-PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
+PATTERNS: tuple[tuple[re.Pattern, str | Callable[[re.Match], str]], ...] = (
     (re.compile(r"-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----", re.S), "[certificate or key removed]"),
-    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*"), "[token removed]"),
+    # A JWT, and the portal's own session cookie (whose middle part, a timestamp, is shorter).
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"), "[token removed]"),
     (re.compile(r"\bgAAAAA[A-Za-z0-9_=-]{20,}"), "[encrypted value removed]"),
-    (re.compile(r"(?i)\b(authorization\s*[:=]\s*)(?:bearer\s+)?\S+"), r"\1[removed]"),
+    # A header line, or a header in a printed dict: {'Authorization': 'Bearer …'}.
+    (
+        re.compile(r"(?i)\b(authorization['\"]?\s*[:=]\s*['\"]?)(?:(?:bearer|basic|negotiate)\s+)?[^\s'\",;]+"),
+        r"\1[removed]",
+    ),
+    (re.compile(r"(?i)\b(bearer\s+)(?=[\w.~+/=-]*\d)[\w.~+/=-]{12,}"), r"\1[removed]"),
     (re.compile(r"(?i)\b((?:set-)?cookie\s*[:=]\s*)[^\r\n]+"), r"\1[removed]"),
     (
         re.compile(
             r"(?i)\b([\w-]*(?:password|passwd|pwd|secret|api[_-]?key|private_key|encryption_keys?|token|"
-            r"device_code|sid))\b(\s*[:=]\s*)(['\"]?)[^\s'\"&,;]+"
+            r"device_code|sid))\b(['\"]?\s*[:=]\s*)(\"[^\"\r\n]*\"|'[^'\r\n]*'|['\"]?[^\s'\"&,;]+)"
         ),
-        r"\1\2\3[removed]",
+        _quoted_removed,
     ),
     (
         re.compile(r"(?i)([?&](?:token|code|state|sig|signature|key|secret|password|access_token)=)[^&\s]+"),
@@ -102,7 +118,15 @@ PATTERNS: tuple[tuple[re.Pattern, str], ...] = (
         "[tenant domain]",
     ),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "[ip]"),
-    (re.compile(r"(?i)\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b|(?<![\w:])[0-9a-f]{0,4}::[0-9a-f:]{1,30}\b"), "[ip]"),
+    # IPv6, in full or shortened with "::", and with a prefix length (2001:db8::/32).
+    (
+        re.compile(
+            r"(?i)(?<![\w:])(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}(?:/\d{1,3})?(?![\w:])"
+            r"|(?<![\w:])(?=[:0-9a-f]*[0-9a-f])(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?::"
+            r"(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?(?:/\d{1,3})?(?![\w:])"
+        ),
+        "[ip]",
+    ),
     (re.compile(r"(?i)(C:\\Users\\|/home/|/Users/)[^\\/\s]+"), r"\1[user]"),
     (re.compile(r"[A-Za-z0-9_\-+/=]{40,}"), "[long value removed]"),
 )
@@ -134,9 +158,15 @@ class Redactor:
         return text
 
 
-def names_to_hide(conn) -> dict[str, str]:
-    """What identifies a client or a person in this install, and the label that stands in for it."""
+def names_to_hide(conn, cfg: Config | None = None) -> dict[str, str]:
+    """What identifies a client or a person in this install, and the label that stands in for it. The
+    portal's own address names the MSP too (OFFICESENTRY_DOMAIN is the bundled Caddy's, from the same .env)."""
     names: dict[str, str] = {}
+    hosts = {urlsplit(cfg.base_url).hostname if cfg else None, os.environ.get(ENV_PREFIX + "DOMAIN", "").strip()}
+    for host in hosts - {None, "", "localhost"}:
+        names[host] = "[portal]"
+    if conn is None:
+        return names
     for row in conn.execute("SELECT id, name, tenant_ref FROM tenants").fetchall():
         names[row["name"]] = f"[client {row['id']}]"
         names[row["tenant_ref"]] = f"[client {row['id']}]"
@@ -214,9 +244,9 @@ def build(
     pkg = Package(now, include_identifiers)
     data_dir = Path(data_dir or (cfg.data_dir if cfg else os.environ.get(ENV_PREFIX + "DATA_DIR", "data")))
     try:
-        names = names_to_hide(conn) if conn is not None else {}
+        names = names_to_hide(conn, cfg)
     except sqlite3.Error:
-        names = {}
+        names = names_to_hide(None, cfg)
     redact = Redactor(names, keep_identifiers=include_identifiers)
 
     def part(name: str, title: str, holds: str, make, note=lambda data: ""):
@@ -244,7 +274,7 @@ def build(
         "health.json",
         "Health checks",
         "The System status checks with their result and the suggested fix",
-        lambda: _health(conn, cfg, now),
+        lambda: _health(conn, cfg, now, redact),
         lambda d: f"{d['status']}" if d else "",
     )
     part(
@@ -271,7 +301,7 @@ def build(
     part(
         "worker.json",
         "Worker and queue",
-        "The worker's last heartbeat, what's queued and running, and the scheduled jobs' state",
+        "The worker's last heartbeat and what's queued and running",
         lambda: _worker(conn, now),
     )
     part(
@@ -395,14 +425,26 @@ def _environment(cfg, redact: Redactor) -> dict:
     return {"variables": env, "effective": effective}
 
 
-def _health(conn, cfg, now) -> dict | None:
+def _health(conn, cfg, now, redact: Redactor) -> dict | None:
+    """The checks as the System status page shows them. Their messages and fixes quote errors (a run's,
+    a backup's), so they're swept like any other free text."""
     if conn is None or cfg is None:
         return None
     health = system_health.assess(conn, cfg, now)
     data = health.as_json()
     for check in health.checks:
         data["checks"][check.key]["fix"] = check.fix
-    return data
+    return _redacted(data, redact)
+
+
+def _redacted(value, redact: Redactor):
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, dict):
+        return {k: _redacted(v, redact) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_redacted(v, redact) for v in value]
+    return value
 
 
 def _database(conn, cfg, redact: Redactor) -> dict:
@@ -586,13 +628,6 @@ def _worker(conn, now: datetime) -> dict:
             conn, "SELECT status, COUNT(*) FROM tasks WHERE status IN ('queued', 'running') GROUP BY status"
         )
     }
-    jobs = {
-        k: v
-        for k, v in _tolerant(
-            conn,
-            "SELECT key, value FROM settings WHERE key LIKE 'job.%' OR key LIKE 'periodic.%' OR key LIKE 'schedule.%'",
-        )
-    }
     return {
         "last_heartbeat": _iso(seen),
         "alive": worker.is_alive(conn, now),
@@ -603,7 +638,6 @@ def _worker(conn, now: datetime) -> dict:
         },
         "running_runs": running,
         "tasks": {"queued": tasks.get("queued", 0), "running": tasks.get("running", 0)},
-        "jobs": jobs,
     }
 
 

@@ -20,7 +20,7 @@ The defaults are the secure ones. Nothing below needs switching on.
 | Sessions | Kept on the server: the cookie holds a random token. Two hours idle and eight in total, ended on sign-out and on any change to the account. `__Host-` cookie, HttpOnly, SameSite, Secure over HTTPS. |
 | Who sees what | Every page and download checks on the server what the signed-in person's role and capabilities allow, and on which clients. Clients see their own organisation only. Certificates, private keys and the encryption key can't be downloaded by anyone. |
 | Forms | Every form and autosave carries an anti-forgery token. A missing or stale one is refused, explained, and counted in the activity log. |
-| Browser headers | A nonce-based Content-Security-Policy with no external scripts, styles or fonts, HSTS, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: same-origin`, a Permissions-Policy, cross-origin opener and resource policies of `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, and `Cache-Control: no-store` on every page. |
+| Browser headers | A nonce-based Content-Security-Policy with no external scripts, styles or fonts, HSTS over HTTPS, `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: same-origin`, a Permissions-Policy, cross-origin opener and resource policies of `same-origin`, `X-Permitted-Cross-Domain-Policies: none`, and `Cache-Control: no-store` on every page and download. |
 | Uploads | Requests over 1 MB are refused, which covers the only uploads: a logo and a tenant list to import. |
 | Activity log | Every sign-in, refused page, change and download, with the address it came from. Admins read and export it under *Settings → Activity log*. |
 | Secrets | The session key and the encryption key for stored certificates, two-step secrets and mail credentials are generated into `secrets.json` (mode `0600`) in a volume of its own, apart from the data and its backups. |
@@ -74,6 +74,8 @@ The portal expects a proxy in front of it that ends TLS and passes two headers:
 `X-Forwarded-For` with the visitor's address and `X-Forwarded-Proto` with
 `https`. With `OFFICESENTRY_TRUSTED_PROXIES=1` the portal trusts the last hop
 of those headers and ignores anything the visitor put there themselves.
+The portal always runs at the root of its address, so it never takes a path
+prefix from `X-Forwarded-Prefix`.
 
 **Caddy** (the bundled `Caddyfile`, started with `--profile https`) does all
 of this by itself, including the certificate. Nothing to configure beyond

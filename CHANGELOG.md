@@ -9,7 +9,7 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
-## [2.2.1] - Unreleased
+## [2.3.0] - Unreleased
 
 ### Fixed
 
@@ -29,6 +29,14 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - The project's own GitHub workflows: the tools CI installs for itself come from a hash-pinned lock, and the
   jobs that publish images or deploy no longer leave their token in the checked-out code or build the website
   on the runner that holds the server's keys.
+- The support package also sweeps the System status checks it includes, whose messages can quote a run's or a
+  backup's error, and hides the portal's own address, IPv6 addresses and ranges, and secrets written in quotes
+  or as a header in printed data.
+- Behind a reverse proxy the portal no longer takes a path prefix from the forwarded headers, and sends HSTS only
+  when the visitor came over HTTPS, so a proxy that doesn't pass `X-Forwarded-Proto` shows by its absence
+  ([Securing the portal](v2/docs/securing-the-portal.md#behind-a-reverse-proxy)). The brand colours and logo
+  may be kept by the visitor's browser only, never a shared cache. The page that refuses a form sent with a
+  stale token keeps its script, and email previews also refuse links to other base addresses and form targets.
 
 ## [2.2.0] - 2026-10-11
 
@@ -739,7 +747,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
-[2.2.1]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

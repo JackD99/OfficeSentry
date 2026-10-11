@@ -64,6 +64,14 @@ def _bytes(pkg: support.Package) -> bytes:
         (f"tenant {GUID} refused", [GUID], ["tenant [guid] refused"]),
         ("?code=AQABAAI&state=xyz&next=1", ["AQABAAI", "xyz"], ["code=[removed]", "state=[removed]", "next=1"]),
         ("health.token_hash and the token_hash column", [], ["health.token_hash and the token_hash column"]),
+        ('{"client_secret": "Abc8Q~xyz.value_123"}', ["Abc8Q"], ['"client_secret": "[removed]"']),
+        ('password: "correct horse battery" given', ["horse", "battery"], ['password: "[removed]" given']),
+        ("{'Authorization': 'Basic dXNlcjpwYXNz'}", ["dXNlcjpwYXNz"], ["{'Authorization': '[removed]'}"]),
+        ("Bearer abc123shorttoken refused", ["abc123"], ["Bearer [removed] refused"]),
+        ("Bearer authentication failed", [], ["Bearer authentication failed"]),
+        ("cookie __Host-officesentry=eyJzaWQiOiJ4In0.ZmFrZQ.c2ln", ["eyJzaWQi"], ["[token removed]"]),
+        ("allowed 2001:db8::/32, fe80::1 and ::1", ["db8", "fe80"], ["allowed [ip], [ip] and [ip]"]),
+        ("lasted 0:00:05 and std::vector", [], ["0:00:05", "std::vector"]),
     ],
 )
 def test_redactor_removes_secrets_and_addresses(text, gone, kept):
@@ -240,6 +248,48 @@ def test_package_keeps_identifiers_only_when_asked(cfg, db, two_tenants):
     everything = _bytes(pkg).decode()
     # Still never a secret or an address.
     for secret in (cfg.secret_key, cfg.encryption_keys[0], TOKEN, "adele.vance@", "finance@", "203.0.113.9", "gAAAAAB"):
+        assert secret not in everything, secret
+
+
+def test_health_checks_and_the_portal_address_are_swept_too(cfg, db, two_tenants, monkeypatch):
+    """A night where every client failed: the collection check's fix quotes the most common error, and the
+    backup check quotes the backup's. Both are swept like the failures are, and so is the portal's address."""
+    from officesentry import backups
+
+    alpha, bravo = two_tenants
+    monkeypatch.setenv("OFFICESENTRY_BASE_URL", "https://portal.northwind-it.co.uk")
+    monkeypatch.setenv("OFFICESENTRY_DOMAIN", "reports.northwind-it.co.uk")
+    monkeypatch.setenv("OFFICESENTRY_PORTAL_IPS", "198.51.100.0/24 2001:db8::/32")
+    cfg.base_url = "https://portal.northwind-it.co.uk"
+    slot = "2026-10-10T02:00:00Z"  # the default 02:00 collection before NOW
+    error = f"Sign-in failed for Alpha Ltd ({GUID}, alpha.onmicrosoft.com): adele.vance@alpha.onmicrosoft.com"
+    for tenant in (alpha, bravo):
+        for collector in ("users", "mfa"):
+            db.execute(
+                "INSERT INTO runs (tenant_id, collector, status, trigger, scheduled_for, created_at, finished_at,"
+                " error) VALUES (?, ?, 'failed', 'schedule', ?, ?, ?, ?)",
+                (tenant, collector, slot, slot, slot, f"{error} from 203.0.113.9"),
+            )
+    backups.record_status(
+        cfg.data_dir, "offsite", ok=False, error="unable to open s3:https://203.0.113.7/bucket: password=hunter2"
+    )
+
+    pkg = support.build(db, cfg, now=NOW)
+    health = json.loads(pkg.files["health.json"])
+    assert "[client" in health["checks"]["collection"]["fix"] and health["checks"]["backup"]["fix"]
+    assert json.loads(pkg.files["environment.json"])["effective"]["base_url"] == "https://[portal]"
+    everything = _bytes(pkg).decode()
+    for secret in (
+        GUID,
+        "Alpha Ltd",
+        "alpha.onmicrosoft.com",
+        "adele.vance",
+        "203.0.113",
+        "hunter2",
+        "northwind-it",
+        "198.51.100",
+        "2001:db8",
+    ):
         assert secret not in everything, secret
 
 
