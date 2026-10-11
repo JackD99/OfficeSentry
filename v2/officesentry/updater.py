@@ -9,7 +9,8 @@ So the most a compromised portal can do is ask for a newer, genuine, signed rele
 Installing release X.Y.Z, each step shown on the Updates page:
 
 1. **check**: X.Y.Z is a published GitHub release of this repository, newer than the one running, with the
-   same major version, and there's room for the copy of the database an upgrade makes first.
+   same major version, its ``docker-compose.yml`` and ``Caddyfile`` are the ones in the install's folder
+   (the button only changes the image), and there's room for the copy of the database an upgrade makes first.
 2. **verify**: the image digest GHCR gives for the tag has build provenance signed by this repository's own
    release workflow, naming the commit the release tag points at (cosign, as a helper container pinned by
    digest, so the image gains no tools).
@@ -77,6 +78,11 @@ INDEX_TYPES = (
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
 )
+# The files a release comes with besides the image (release.yml attaches them), where the repository keeps
+# them. The button only changes the image, so it only installs a release whose files are the ones here.
+RELEASE_FILES = {"docker-compose.yml": "v2/docker-compose.yml", "Caddyfile": "v2/Caddyfile"}
+# release.yml writes the release into the compose file's default version, so that alone isn't a change.
+DEFAULT_VERSION = re.compile(r"\$\{OFFICESENTRY_VERSION:-[^}]*\}")
 PROXY_VARIABLES = ("HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY")
 LABEL = "com.docker.compose."
 VERSION_LABEL = "org.opencontainers.image.version"
@@ -326,6 +332,17 @@ class GitHub:
             target = (data or {}).get("object") or {}
         raise Refused(f"GitHub didn't say which commit release {version} was built from.")
 
+    def file(self, path: str, commit: str) -> bytes | None:
+        """A file of the repository as it is at ``commit``, or None when there's none."""
+        response = self._get(
+            f"{GITHUB_API}/contents/{path}", {"Accept": "application/vnd.github.raw+json"}, params={"ref": commit}
+        )
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise Refused(f"GitHub answered {response.status_code} when asked for {path}; try again later.")
+        return response.content
+
     def digest(self, version: Version) -> str:
         """The digest of the multi-platform image GHCR holds under the release's tag, worked out from the
         manifest itself rather than taken on trust."""
@@ -352,6 +369,12 @@ class GitHub:
         if (response.headers.get("Content-Type") or "").split(";")[0].strip() not in INDEX_TYPES:
             raise Refused(f"GHCR's image for {version} isn't the multi-platform image a release publishes.")
         return digest
+
+
+def comparable(data: bytes) -> str:
+    """A compose file or Caddyfile as it's compared: line endings and the default version don't count."""
+    text = data.decode("utf-8", "replace").replace("\r\n", "\n")
+    return DEFAULT_VERSION.sub("${OFFICESENTRY_VERSION}", text).strip()
 
 
 def provenance(output: str) -> list[dict]:
@@ -620,11 +643,13 @@ class Updater:
         if target.major != current.major:
             raise Refused(f"{target} is a new major version. Read its release notes and update by hand (DEPLOY.md).")
         release = self.github.release(target)
+        commit = self.github.tag_commit(target)
+        self.same_files(install, target, commit)
         self.room()
         self.end("check", f"Release {target}, published {str(release.get('published_at') or '')[:10]}")
 
         self.begin("verify", "Checking its image's signature…")
-        checked = Checked(target, self.github.digest(target), self.github.tag_commit(target))
+        checked = Checked(target, self.github.digest(target), commit)
         self.verify(checked)
         self.end(
             "verify",
@@ -648,6 +673,26 @@ class Updater:
         self.job.image, self.job.previous_image = image["Id"], install.image_id
         self.end("download", f"Downloaded {target}")
         return checked, install
+
+    def same_files(self, install: Install, target: Version, commit: str) -> None:
+        """Refuse a release whose docker-compose.yml or Caddyfile isn't the one in the install's folder: a new
+        start-up allowance, volume or Caddy setting only arrives with the file, which the button doesn't
+        install, and Caddy is only recreated when they change. The Caddyfile only counts where Caddy runs
+        (not behind a reverse proxy of the server's own)."""
+        changed = []
+        for name, path in RELEASE_FILES.items():
+            mine = self.project_dir / name
+            if name == "Caddyfile" and not service(self.docker, install.project, "caddy"):
+                continue
+            theirs = self.github.file(path, commit)
+            if theirs is None or not mine.is_file() or comparable(mine.read_bytes()) != comparable(theirs):
+                changed.append(name)
+        if changed:
+            raise Refused(
+                f"{target} comes with a {' and '.join(changed)} that {'aren' if len(changed) > 1 else 'isn'}'t the "
+                "same as yours, and the Update button only changes the image. Update by hand this time, with the "
+                'files attached to the release (DEPLOY.md, "Updating").'
+            )
 
     def room(self) -> None:
         """Refuse, before any downtime, when there's no room for the copy of the database an upgrade makes first

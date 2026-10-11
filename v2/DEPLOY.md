@@ -724,8 +724,9 @@ To turn it on, once:
 Pressing **Update** then:
 
 1. **Checks the release**: it's a published release of this repository on GitHub (not a draft or
-   pre-release), newer than yours with the same major version, and there's room on the disk for the
-   copy of the database an upgrade makes.
+   pre-release), newer than yours with the same major version, its `docker-compose.yml` (and `Caddyfile`,
+   when you run Caddy) is the same as yours, and there's room on the disk for the copy of the database
+   an upgrade makes.
 2. **Verifies its signature**: the image GitHub's registry gives for that version must carry build
    provenance signed by Office Sentry's own release workflow, naming the commit the release's tag points
    at (checked with [cosign](https://github.com/sigstore/cosign)).
@@ -751,6 +752,10 @@ It won't install:
 
 - **a new major version** (3.0.0 on 2.x): read its notes and update by hand, since a major version
   can need new files next to `docker-compose.yml`;
+- **a release whose `docker-compose.yml`, or `Caddyfile` when you run Caddy, isn't the same as
+  yours** (the version it names aside): the button only changes the image, so update to that one by
+  hand with the files attached to the release. That also covers Caddy, which the button never
+  restarts, and a file you edited (keep your changes in `docker-compose.override.yml`);
 - **an older version**: going back is [Rolling back an update](#rolling-back-an-update);
 - anything on a server that **builds Office Sentry from source** (`docker-compose.build.yml`) or runs
   another image, or that doesn't run Office Sentry in Docker.

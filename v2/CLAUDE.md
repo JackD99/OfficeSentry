@@ -944,7 +944,9 @@ updater's own record of a job, which it resumes from after a restart, is `/state
 `updater-state` volume the portal never mounts, so a compromised portal can't forge a rollback. A job is
 check, verify, download, switch, health, finish (`updater.STEPS`); it refuses (`Refused`) anything but a
 published, newer, same-major release of this repository whose index digest has build provenance signed by
-`release.yml` for the tag's commit, and goes back by itself (`Broken`, `rollback`) when the new version
+`release.yml` for the tag's commit and whose `docker-compose.yml` and `Caddyfile` at that commit are the
+install's (`same_files`, `RELEASE_FILES`: the button only changes the image, so a release that changes them,
+or a file edited on the server, is a hand update), and goes back by itself (`Broken`, `rollback`) when the new version
 doesn't start healthy, restoring the `pre-upgrade-*` copy `db.migrate` made when the database changed
 (`pre_upgrade_copy`). `record_finished` audits how each job ended (`update_installed`, `update_rolled_back`,
 `update_failed`, `update_refused`) from the worker; the page audits `update_requested`.

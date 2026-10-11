@@ -24,8 +24,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   says when one is out.
 - The button needs the **updater**, a small container that is off until you turn it on with
   `COMPOSE_PROFILES=updater` in `.env`, using this release's `docker-compose.yml`. It is the only part of
-  Office Sentry given the Docker socket; the portal never is. Updating by hand works as before, with or
-  without it ([v2/DEPLOY.md, "The Update button"](v2/DEPLOY.md#the-update-button)).
+  Office Sentry given the Docker socket; the portal never is. It only changes the image, so a release that
+  changes `docker-compose.yml` or `Caddyfile` says so and is updated by hand. Updating by hand works as
+  before, with or without it ([v2/DEPLOY.md, "The Update button"](v2/DEPLOY.md#the-update-button)).
 - A capability for it, *Install updates*, held by Administrators and available to custom roles.
 
 ### Fixed

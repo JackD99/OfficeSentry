@@ -122,6 +122,14 @@ class FakeDocker:
                 },
                 "Mounts": [],
             }
+        self.box["caddy"] = {  # the https profile's; the updater never restarts it
+            "Id": "caddy-id",
+            "Created": 1,
+            "Image": "sha256:" + "c" * 64,
+            "State": {"Running": True, "Status": "running"},
+            "Config": {"Image": "caddy:2", "Labels": {**labels, f"{LABEL}service": "caddy"}},
+            "Mounts": [],
+        }
         self.box["updater"]["Mounts"] = [
             {"Destination": up.SOCKET, "Source": "/var/run/docker.sock"},
             {"Destination": str(project), "Source": str(project)},
@@ -237,11 +245,18 @@ class FakeDocker:
         return "2"
 
 
+# The install files as the repository keeps them; release.yml attaches the compose file with the release's
+# number as its default version.
+COMPOSE = "services:\n  web:\n    image: ghcr.io/jackd99/officesentry:${OFFICESENTRY_VERSION:-2}\n"
+CADDYFILE = "{$OFFICESENTRY_DOMAIN} {\n\treverse_proxy web:8000\n}\n"
+
+
 class FakeGitHub:
     def __init__(self):
         self.releases = {"2.3.0": {}, "2.4.0": {"published_at": "2026-11-01T10:00:00Z"}}
         self.digests = {"2.4.0": DIGEST}
         self.commit = COMMIT
+        self.files = {"v2/docker-compose.yml": COMPOSE.encode(), "v2/Caddyfile": CADDYFILE.encode()}
 
     def release(self, version: Version) -> dict:
         if str(version) not in self.releases:
@@ -253,6 +268,10 @@ class FakeGitHub:
 
     def tag_commit(self, version: Version) -> str:
         return self.commit
+
+    def file(self, path: str, commit: str) -> bytes | None:
+        assert commit == self.commit  # the files of the commit the image is checked against
+        return self.files.get(path)
 
 
 class Clock:
@@ -270,7 +289,8 @@ class Clock:
 def server(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
-    (project / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    (project / "docker-compose.yml").write_text(COMPOSE.replace(":-2}", ":-2.2.0}"), encoding="utf-8")
+    (project / "Caddyfile").write_text(CADDYFILE, encoding="utf-8")
     (project / ".env").write_text(
         "OFFICESENTRY_BASE_URL=https://sentry.example.com\nOFFICESENTRY_VERSION=2.2.0\n", encoding="utf-8"
     )
@@ -444,6 +464,20 @@ def test_github_release_and_tag():
 
 
 @responses.activate
+def test_github_file_at_the_release_commit():
+    match = [responses.matchers.query_param_matcher({"ref": COMMIT})]
+    responses.get(f"{GH}/contents/v2/docker-compose.yml", body=COMPOSE, match=match)
+    responses.get(f"{GH}/contents/v2/Caddyfile", status=404, match=match)
+    responses.get(f"{GH}/contents/v2/other", status=502, match=match)
+    gh = up.GitHub()
+    assert gh.file("v2/docker-compose.yml", COMMIT) == COMPOSE.encode()
+    assert responses.calls[0].request.headers["Accept"] == "application/vnd.github.raw+json"
+    assert gh.file("v2/Caddyfile", COMMIT) is None
+    with pytest.raises(Refused, match="GitHub answered 502 when asked for v2/other"):
+        gh.file("v2/other", COMMIT)
+
+
+@responses.activate
 def test_the_digest_is_worked_out_from_the_manifest():
     manifest = json.dumps({"schemaVersion": 2, "manifests": []}).encode()
     digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
@@ -605,6 +639,54 @@ def test_a_signature_for_another_commit_is_refused(server, docker, clock):
     u.tick()
     job = updates.status(server / "data").job
     assert job.state == "refused" and "doesn't name the commit" in job.message
+
+
+@pytest.mark.parametrize(
+    ("change", "said"),
+    [
+        (
+            lambda gh, s: gh.files.update({"v2/docker-compose.yml": COMPOSE.encode() + b"    pids_limit: 512\n"}),
+            "2.4.0 comes with a docker-compose.yml that isn't the same as yours",
+        ),
+        (lambda gh, s: gh.files.update({"v2/Caddyfile": b"{\n\tadmin off\n}\n"}), "a Caddyfile that isn't"),
+        (lambda gh, s: gh.files.pop("v2/Caddyfile"), "a Caddyfile that isn't"),
+        # A file edited here is told apart from the release's the same way.
+        (
+            lambda gh, s: (s / "project" / "docker-compose.yml").write_text(COMPOSE + "  # mine\n", encoding="utf-8"),
+            "a docker-compose.yml that isn't",
+        ),
+        (
+            lambda gh, s: (gh.files.clear(), (s / "project" / "Caddyfile").write_text("{}\n", encoding="utf-8")),
+            "a docker-compose.yml and Caddyfile that aren't the same as yours",
+        ),
+    ],
+)
+def test_a_release_with_other_install_files_is_left_to_a_hand_update(server, docker, clock, change, said):
+    github = FakeGitHub()
+    change(github, server)
+    u = make(server, docker, clock, github)
+    ask(server)
+    u.tick()
+    job = updates.status(server / "data").job
+    assert job.state == "refused" and said in job.message
+    assert 'Update by hand this time, with the files attached to the release (DEPLOY.md, "Updating").' in job.message
+    assert steps(job)["check"] == "failed" and steps(job)["verify"] == "skipped"
+    assert env(server).endswith("OFFICESENTRY_VERSION=2.2.0\n")
+    assert not [c for c in docker.calls if c[0] in ("cosign", "pull", "compose")]
+
+
+def test_line_endings_the_default_version_and_no_caddy_dont_count(server, docker, clock):
+    compose = server / "project" / "docker-compose.yml"
+    compose.write_bytes(compose.read_bytes().replace(b"\n", b"\r\n"))
+    docker.box.pop("caddy")  # a server behind a reverse proxy of its own: its Caddyfile isn't used
+    github = FakeGitHub()
+    github.files["v2/Caddyfile"] = b"{\n\tadmin off\n}\n"
+    u = make(server, docker, clock, github)
+    ask(server)
+    with pytest.raises(Killed):
+        u.tick()
+    assert updates.status(server / "data").job.state == "done"
+    assert up.comparable(b"image: x:${OFFICESENTRY_VERSION:-2.4.0}\r\n") == "image: x:${OFFICESENTRY_VERSION}"
 
 
 def test_no_room_for_the_database_copy_is_refused_before_any_downtime(server, docker, clock, monkeypatch):
