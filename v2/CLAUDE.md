@@ -344,6 +344,10 @@ reports to approve and projects to propose). Each opens with one sentence (`Toda
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
 and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
+Until the first collection has run, admins see the **Get started** checklist (`first_run.py`,
+`_get_started.html`) on Today, Accounts and Clients instead of the empty state: the app connection, the first
+client, its consent and its first collection, each read from stored state, with `web/home.get_started`
+turning each step's `target` into a link.
 
 ## Web UI conventions
 
