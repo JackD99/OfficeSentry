@@ -19,7 +19,7 @@ def groups_part(p: Person) -> Part:
     result = Part("groups", "Teams and groups")
     groups = p.snap.objects("groups", "group")
     if groups is None:
-        result.unavailable = "Groups haven't been collected yet. Refresh Groups and Teams on the tenant page."
+        result.unavailable = "Groups haven't been collected yet. Refresh Groups and Teams on the client page."
         return result
     ca = {g["_id"]: g for g in p.snap.objects("conditional_access", "ca_group") or []}
     rows, owned, orphaned = [], 0, []

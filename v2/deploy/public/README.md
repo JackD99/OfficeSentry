@@ -77,7 +77,8 @@ updates the portal as well. Action **website-and-demo** does the automatic updat
 
 The demo builds from its own copy of the code (`/opt/officesentry/demo-src`), so it can run newer code than
 the portal; the Caddy setup and this compose file come from the portal's copy, so a change to them reaches
-the server with the next portal deploy.
+the server with the next portal deploy. The portal's settings files (`.env`, `.env.backup` with the off-site
+backup password, `.env.uptime`) are never copied there.
 
 To turn the demo off, set `DEMO_ENABLED` to `false` and deploy. To take the website down, delete the
 `OFFICESENTRY_WEBSITE_DOMAIN` variable and deploy.
