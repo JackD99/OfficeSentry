@@ -38,6 +38,9 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   root) says so instead of failing with a traceback, and restoring or checking a `.db.gz` no longer leaves
   `restore-*.db.part-shm` and `-wal` files behind. The activity history's backup manifest is readable by its
   owner only, like the copies.
+- The Deploy workflow restarts Caddy after starting the portal, so a deploy that changes only a `Caddyfile`
+  takes effect (Caddy reads it only when it starts, and compose doesn't recreate it for that). The project
+  server's Caddy drops the portal's `Server` header too, as the bundled one does.
 - [v2/DEPLOY.md](v2/DEPLOY.md): *Rolling back an update* copies the key back before 2.0.0 runs anything, and
   *Running your own build* keeps `docker-compose.override.yml` (the `/backups` folder) when `COMPOSE_FILE` is
   set, since Docker stops reading it by itself then.

@@ -727,11 +727,13 @@ permissions** and **Database upgrade**. Skipping releases (2.0.0 straight to
    ```bash
    docker compose --profile https pull
    docker compose --profile https up -d
+   docker compose restart caddy
    ```
 
-   Leave out `--profile https` if you run your own reverse proxy (*First
-   start*, step 4). With Caddy, leaving it out keeps Caddy on its old
-   container and settings.
+   The last line makes Caddy read the new `Caddyfile`, which it only reads when
+   it starts. Running your own reverse proxy (*First start*, step 4)? Leave out
+   `--profile https` and the last line. With Caddy, leaving out the profile
+   keeps Caddy on its old container and settings.
 
 The portal upgrades the database on start, before the worker starts, after
 saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
