@@ -12,7 +12,7 @@
 
 {% if tenant.archived_at %}
 <div class="callout">{{ icon('alert') }}<span class="grow"><strong>Archived {{ ts(tenant.archived_at) }}.</strong>
-  It's hidden from tenant lists, dashboards, rollups and its client users, and nothing is collected or emailed. Its data is kept.</span>
+  It's hidden from client lists, dashboards, rollups and its client users, and nothing is collected or emailed. Its data is kept.</span>
   {% if admin %}<form method="post" action="{{ url_for('tenant_admin.restore', tenant_id=tenant.id) }}">{{ csrf() }}<button class="sm">Restore</button></form>{% endif %}</div>
 {% elif not tenant.enabled %}
 <div class="callout">{{ icon('clock') }}<span class="grow"><strong>Paused{% if tenant.paused_at %} {{ ts(tenant.paused_at) }}{% endif %}.</strong>
@@ -105,7 +105,7 @@
     <section class="card">
       <h2>Collection</h2>
       {% if tenant.archived_at %}
-      <p class="small muted">Archived tenants aren't collected. Restore it, then resume it.</p>
+      <p class="small muted">Archived clients aren't collected. Restore it, then resume it.</p>
       <form method="post" action="{{ url_for('tenant_admin.restore', tenant_id=tenant.id) }}" class="inline">{{ csrf() }}<button>Restore</button></form>
       {% elif tenant.enabled %}
       <p class="small muted">Pause stops collection, emailed reports and alert emails, for example while a client's contract is on hold. Its data and reports stay, and you can resume at any time.</p>
@@ -122,7 +122,7 @@
       <p class="small muted">Archive a client you've stopped working with but may come back: it's hidden from lists, dashboards and its client users, and can be restored with its data.</p>
       <form method="post" action="{{ url_for('tenant_admin.archive', tenant_id=tenant.id) }}" class="inline" data-confirm="Archive {{ tenant.name }}? It's hidden from lists and its client users until restored. Nothing is deleted.">{{ csrf() }}<button>Archive</button></form>
       {% endif %}
-      <p class="small muted manage-gap">Offboarding deletes the tenant and everything Office Sentry stored for it, after a final export.</p>
+      <p class="small muted manage-gap">Offboarding deletes the client and everything Office Sentry stored for it, after a final export.</p>
       <a class="btn danger" href="{{ url_for('tenant_admin.offboard', tenant_id=tenant.id) }}">Offboard…</a>
     </section>
     {% endif %}

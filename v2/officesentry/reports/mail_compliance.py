@@ -91,16 +91,21 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     sizes = {s.get("mailboxId"): s for s in size_rows or []}
 
     every = Section(
-        EVERY, ["Mailbox", "Type", "Account", "Litigation hold", "Archive", "Mailbox size"], empty="No mailboxes."
+        EVERY,
+        ["Mailbox", "Type", "Account", "Litigation hold", "Archive", "Mailbox size"],
+        empty="No mailboxes.",
+        drifts=("Mailbox size",),
     )
     leavers = Section(
         LEAVERS,
         ["Mailbox", "Type", "Why it looks like a leaver", "Archive", "Mailbox size"],
+        drifts=("Mailbox size",),
         empty="Every leaver's mailbox is on litigation hold, or there are no leavers.",
     )
     large = Section(
         LARGE,
         ["Mailbox", "Type", "Mailbox size", "Stops sending at", "Used"],
+        drifts=("Mailbox size", "Used"),
         empty="No mailbox without an archive is close to its quota.",
     )
     held = archived = 0
@@ -146,7 +151,7 @@ def holds(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
         "Mailboxes > the mailbox > Others > Manage litigation hold) before removing the licence."
     )
     if size_rows is None:
-        large.intro = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the tenant page."
+        large.intro = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the client page."
     else:
         large.intro = (
             f"{plural(len(large.rows), 'mailbox')} without an archive "

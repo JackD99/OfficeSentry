@@ -28,7 +28,7 @@
     <div class="foot">{% if w.data.last_seen %}Checked in {{ ts(w.data.last_seen) }}{% else %}Has never checked in{% endif %}</div></div>{% endif %}
   {% if col %}<div class="tile tone-{{ TONE[col.status] }}"><div class="label"><span class="dot {{ TONE[col.status] }}"></span>Last collection</div>
     <div class="value small-value">{% if col.data.last_success %}{{ col.data.last_success|ago }}{% else %}Not yet{% endif %}</div>
-    <div class="foot">{{ col.data.tenants|plural('tenant') }} on the schedule</div></div>{% endif %}
+    <div class="foot">{{ col.data.tenants|plural('client') }} on the schedule</div></div>{% endif %}
   {% if bak %}<div class="tile tone-{{ TONE[bak.status] }}"><div class="label"><span class="dot {{ TONE[bak.status] }}"></span>Last backup</div>
     {% set newest = bak.data.jobs.values()|map(attribute='last_success')|select|sort|last if bak.data.jobs else none %}
     <div class="value small-value">{% if newest %}{{ newest|ago }}{% else %}None yet{% endif %}</div>
@@ -61,7 +61,7 @@
   {% elif not channels.email and not channels.webhook %}
   <div class="callout warn">{{ icon('alert') }}<span><strong>Nowhere to send them yet.</strong> Add your team under <a href="{{ url_for('email.overview') }}#team">Email reports</a> (with <a href="{{ url_for('email.settings') }}">Email delivery</a> set up), or set up a webhook under <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</span></div>
   {% else %}
-  <p class="muted small">When the worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect, Office Sentry tells
+  <p class="muted small">When the worker stops, a backup fails, the disk is over 85% full, most clients fail to collect or a deleted client can't be erased, Office Sentry tells
     {% if channels.email %}{{ channels.email|plural('team contact') }} by email{% endif %}{% if channels.email and channels.webhook %} and {% endif %}{% if channels.webhook %}your {{ channels.webhook }} webhook{% endif %}: once when it starts, daily while it lasts, and when it's fixed.</p>
   {% endif %}
   {% if tracked %}
@@ -77,10 +77,10 @@
   <p class="muted small">So you hear when the server itself is down, point a free uptime monitor (Uptime Kuma, UptimeRobot, Better Stack) at this address. It answers <strong>200</strong> while Office Sentry works and <strong>503</strong> when the database, the worker or the disk has a problem.</p>
   <p class="secret">{{ ready_url }}</p>
   {% if new_token %}
-  <div class="callout warn"><span><strong>Copy this link now: it isn't shown again.</strong> With the token, the address also returns every check as JSON. A monitor can send it as an <span class="mono">Authorization: Bearer</span> header instead.</span></div>
-  <p class="secret">{{ ready_url }}?token={{ new_token }}</p>
+  <div class="callout warn"><span><strong>Copy this token now: it isn't shown again.</strong> A monitor that sends it as an <span class="mono">Authorization: Bearer</span> header also gets every check as JSON. It only works as a header, never in the address, since addresses end up in logs. For example:</span></div>
+  <p class="secret">curl -H "Authorization: Bearer {{ new_token }}" {{ ready_url }}</p>
   {% elif has_token %}
-  <p class="muted small">A monitoring token is set: monitors that send it also get every check as JSON.</p>
+  <p class="muted small">A monitoring token is set: monitors that send it as an <span class="mono">Authorization: Bearer</span> header also get every check as JSON.</p>
   <div class="form-actions">
     <form method="post" action="{{ url_for('system.create_token') }}" data-confirm="Make a new token? Monitors using the old one only see whether Office Sentry is ready until you update them.">{{ csrf() }}<button class="sm">Replace token</button></form>
     <form method="post" action="{{ url_for('system.remove_token') }}" data-confirm="Remove the monitoring token?">{{ csrf() }}<button class="sm ghost danger">Remove</button></form>

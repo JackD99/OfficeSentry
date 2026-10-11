@@ -30,8 +30,8 @@ USES = (
     ("appResource", "As an API"),
 )
 
-NOT_COLLECTED = "App sign-ins haven't been collected yet. Refresh App sign-ins on the tenant page."
-NO_APPS = "Apps haven't been collected yet. Refresh Apps and consents on the tenant page."
+NOT_COLLECTED = "App sign-ins haven't been collected yet. Refresh App sign-ins on the client page."
+NO_APPS = "Apps haven't been collected yet. Refresh Apps and consents on the client page."
 NO_LICENCE = (
     "Microsoft only keeps app sign-in activity for tenants with Entra ID P1 (included in Microsoft 365 "
     "Business Premium, E3 and E5). This tenant doesn't have it, so when each app last signed in isn't "
@@ -39,7 +39,7 @@ NO_LICENCE = (
 )
 NO_PERMISSION = (
     "Office Sentry can't read this tenant's app sign-in activity. It needs the AuditLog.Read.All "
-    "permission: open the tenant page, send the consent link to the client's Global Admin again and "
+    "permission: open the client page, send the consent link to the client's Global Admin again and "
     "ask them to accept."
 )
 

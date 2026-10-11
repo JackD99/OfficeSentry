@@ -49,9 +49,10 @@ overview and DEPLOY.md for running it on a server.
   own container, network and memory-only folder, never with the portal's
   `.env`, data or secrets. A new POST route is refused there automatically;
   `tests/test_public_demo.py` opens every page as the visitor.
-- **Audit with `db.audit()`**; it records the visitor's address. Repeated
-  anonymous events go through `db.audit_counted()` (one row per address and
-  hour), and never store what a stranger typed. Sign-in noise is in
+- **Audit with `db.audit()`**; it records the visitor's address (never on
+  the public demo, where every visitor is a stranger). Repeated anonymous
+  events go through `db.audit_counted()` (one row per address and hour), and
+  never store what a stranger typed. Sign-in noise is in
   `db.AUDIT_NOISE` and pruned after 90 days. Admins read it at `/admin/activity`.
 - **No import cycles.** `tests/test_imports.py` fails on a module-level cycle;
   put what two modules share in a third (as `checks/base.py` and
@@ -170,7 +171,7 @@ needing goes in those lists.
   `Rollup.total_row()` sums counts and money only (int or `Money` headlines,
   not scores or percentages). "Every row" (`/across/<key>/rows/<table slug>`,
   `rollups.all_rows`) stacks each visible tenant's rows from the same builders
-  under a Tenant column, as one `DataReport`, so `views` filters, sorts, saved
+  under a Client column, as one `DataReport`, so `views` filters, sorts, saved
   views and the CSV/XLSX/PDF downloads work unchanged; it keeps
   `rollups.MAX_ROWS` per table and says when it cut. `/across/checks`
   (`rollups.check_matrix`) is every check for every tenant, evaluated from
@@ -190,6 +191,8 @@ needing goes in those lists.
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
   `month_changes.DAY_COUNT_COLUMNS` ("Days", "Days left", ...), are ignored as
   time-driven; "No check-in for N days" in a cell is compared without its number.
+  A section names its columns that drift every night with use (sizes, file and
+  item counts) in `Section(drifts=(...))`, and those are ignored too.
 - Downloads go through `reports/tables.py` (`Table`, `to_csv`, `to_xlsx`): CSV
   prefixes formula characters, XLSX never stores formulas (`safe_xlsx`).
 - Report builders in `reports/` return plain data; templates and
@@ -238,7 +241,7 @@ needing goes in those lists.
 - PDF routes return `web/printing.pdf_response(template, filename, ...)`: a
   WeasyPrint PDF, or without WeasyPrint (Windows without Docker) the same
   template as a print-ready page that opens the browser's print window. Table
-  reports (detail, All tenants, What changed) use `reports/detail.html`,
+  reports (detail, All clients, What changed) use `reports/detail.html`,
   `rollup.html`, `changes.html` and `tenant_changes.html` with
   `document = true` (and `wide = true` for landscape).
 - `tests/test_live_fixture.py` replays `tests/fixtures/live_tenant.json`, real
@@ -304,15 +307,15 @@ searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
 
 `home.py` (pages in `web/home.py`, staff only, `@group_aware` over `scoped_tenants()`): **Today**
 (`/today`, for technicians: critical and high findings new in the last day, failed or out-of-date
-collections, access not granted yet, and Coming up items due within a week) and **Clients** (`/clients`, for
+collections, access not granted yet, and Coming up items due within a week) and **Accounts** (`/clients`, for
 account managers: licence waste from the cached rollup rows, renewals in 30 days, this month's month-end
 reports to approve and projects to propose). Each opens with one sentence (`Today.sentence()`,
 `Clients.sentence()`), then the detail, from stored state only. A person's choice is `users.home` (Account
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
-and signing in without a page to go back to lands there. Clients keep the dashboard. A new reason on Today
+and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
 Until the first collection has run, admins see the **Get started** checklist (`first_run.py`,
-`_get_started.html`) on Today, Clients and Tenants instead of the empty state: the app connection, the first
+`_get_started.html`) on Today, Accounts and Clients instead of the empty state: the app connection, the first
 client, its consent and its first collection, each read from stored state, with `web/home.get_started`
 turning each step's `target` into a link.
 
@@ -397,12 +400,21 @@ being gone (see `changes._baseline_run`). A new store of personal data gets
 a period there, with a dry-run count for the page, and deletes in batches. A side thread records the heartbeat that the portal banner and
 `healthcheck worker` read, but only while the worker makes progress
 (`worker.Liveness`: the main loop came round in the last 10 minutes, no run
-has gone for 4 hours and no task for 1), so a wedged loop or thread shows as down. A failing
+or the daily pass has gone for 4 hours and no task for 1), so a wedged loop or thread shows as down. The
+daily pass (`worker._daily`: retention, every dashboard row, the precompute tasks) runs in its own thread
+(`_daily_thread`), since on a large install it takes longer than the main loop may be away. A failing
 housekeeping pass (say "database is locked") is logged, rolled back and
-retried the next minute; it never ends the worker. `db.transaction` (and
+retried the next minute; it never ends the worker. A collector thread that finds the database locked when
+it records a finished run tries again for a few minutes (`_while_locked`) rather than leave the run to be
+failed as "worker stopped" once its lease runs out. `db.transaction` (and
 `store.atomic`) begin with `BEGIN IMMEDIATE`, so a write that reads first waits
 for other writers instead of failing at once; pass `immediate=False` only for
-a read. Don't add Celery or Redis.
+a read. The portal's connections wait `web.WEB_BUSY_TIMEOUT_MS` (5 seconds) for
+the lock rather than the worker's 30, and a write that still finds it held gets
+the "busy right now" page (503 with `Retry-After`), never a 500. Bookkeeping a
+page can do without once (noting a session was seen, storing a dashboard row it
+just built) goes through `db.try_write`, which waits a quarter of a second and
+skips. Don't add Celery or Redis.
 
 Office Sentry's own health is `system_health.assess()` (database, schema
 version, worker heartbeat, last collection and whether most tenants failed
@@ -442,7 +454,7 @@ never a web request or the main loop: `worker.TASK_THREADS` task threads
 claim tasks (highest priority first) and run the function registered for
 their kind with `@tasks.handler(kind)` (add its module to
 `worker.TASK_MODULES`). Kinds today: `approve` (`month_end.py`),
-`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`) and
+`send_schedule` (`delivery.py`), `consent_check` (`onboarding.py`), `erase` (`lifecycle.py`) and
 `precompute` (`reports/precomputed.py`, below other work). Queue with `tasks.enqueue(conn, kind,
 key=..., payload=...)`: at most one task per `key` is queued or running, so
 use a key that names the thing done once ("approve:<tenant>:<period>").
@@ -457,7 +469,7 @@ progress from the rows (`tasks.batch_progress`, a JSON route polled by
 PDFs keep the first `printing.PDF_MAX_ROWS` (2,000) rows per table and say
 so (`printing.cap_rows`); the XLSX and CSV have every row.
 
-The dashboard and the All tenants review read each tenant's row from
+The dashboard and the All clients review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
 its `_fingerprint` changes (latest run, findings, prices, currency, app
 connections, the code, the day). If the row comes to depend on something
@@ -590,7 +602,11 @@ change is audited; note text is never put in the audit log.
 - A new table with a `tenant_id` gets `REFERENCES tenants(id) ON DELETE
   CASCADE`. `lifecycle.delete_tenant` deletes with foreign keys on and refuses
   (rolls back) if any table with a `tenant_id` still has rows for the tenant;
-  only `audit_log` is kept on purpose (`lifecycle.KEPT`).
+  only `audit_log` is kept on purpose (`lifecycle.KEPT`). The request only
+  deletes (with `secure_delete` on); the `erase` task (`lifecycle.erase`) then
+  removes the tenant's activity history, writes the WAL back and VACUUMs when
+  there's room. `erase.state` in `settings` tracks a delete still to erase; a
+  failure is the `erase` health check and system alert, and is retried hourly.
 - Connection health (`tenant_health.assess`) is built from stored state only:
   the `connection` collector reads the app's own service principal, granted
   app roles and directory roles (GET only). Pages never call Graph for it;
@@ -599,7 +615,7 @@ change is audited; note text is never put in the audit log.
 - Anything the tenant granted the app beyond `entra.GRAPH_PERMISSIONS` and
   `EXCHANGE_PERMISSIONS` (the collector's `other`), and any directory role
   besides Global Reader, is a warning (`tenant_health.extra_permissions`,
-  `extra_roles`) on Manage and the Client tenants list.
+  `extra_roles`) on Manage and the Client settings list.
 - App certificates (`cert_lifecycle.py`): `expiring()` grades every
   certificate in use, each app connection's and the mail app's, at 60, 30
   and 7 days and expired, for the App connection page, the admin banner in
@@ -673,7 +689,7 @@ else.
 Staff pages that list tenants are `@group_aware` (under `@roles_required`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
 `/across/*` (and their downloads), `/changes*`, the month-end queue and
-Client tenants. The choice is kept on the sign-in (`sessions.group_id`); a GET
+Client settings. The choice is kept on the sign-in (`sessions.group_id`); a GET
 with `?group=<id>` or `?group=all` picks and redirects to the plain URL. The
 picker (`_groups.html`, `group_picker()`) only offers groups holding a
 tenant the person sees, and downloads say which group they cover

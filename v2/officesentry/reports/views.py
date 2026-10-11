@@ -42,11 +42,18 @@ MAX_VALUES = 30  # a column with more distinct values than this gets no value fi
 MAX_PARAMS = 60
 _SLUG = re.compile(r"^[a-z0-9-]{1,80}$")
 _DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
+# "3 Sep 2026", as identity reports write dates; read so their columns get age presets and sort by date.
+_PROSE_DATE = re.compile(r"^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})\b")
+_MONTHS = {
+    m: i for i, m in enumerate(("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)
+}
 _SIZE = re.compile(r"^([\d.,]+)\s*(bytes|KB|MB|GB|TB)$")
 _PERCENT = re.compile(r"^-?[\d.,]+%$")
 _SIZES = {"bytes": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 
 Key = tuple[str, str]  # (table slug, column slug)
+# Column titles that were renamed: views saved (and links bookmarked) under the old slug keep working.
+RENAMED = {"tenant": "client"}
 
 
 def slug(text: str) -> str:
@@ -95,6 +102,7 @@ class View:
             table, _, column = target.partition("/")
             if not (_SLUG.match(table) and _SLUG.match(column)):
                 continue
+            column = RENAMED.get(column, column)
             key = (table, column)
             if name == "f":
                 values = view.filters.setdefault(key, [])
@@ -190,13 +198,15 @@ def values_of(cell) -> list[str]:
 
 
 def as_date(cell) -> date | None:
-    m = _DATE.match(str(cell))
-    if not m:
-        return None
+    text = str(cell)
     try:
-        return date(int(m[1]), int(m[2]), int(m[3]))
+        if m := _DATE.match(text):
+            return date(int(m[1]), int(m[2]), int(m[3]))
+        if m := _PROSE_DATE.match(text):
+            return date(int(m[3]), _MONTHS[m[2]], int(m[1]))
     except ValueError:
         return None
+    return None
 
 
 def _is_number(cell) -> bool:
@@ -219,7 +229,10 @@ def sort_key(cell):
     try:
         return float(text.rstrip("%").replace(",", ""))
     except ValueError:
-        return text.lower()
+        pass
+    if _PROSE_DATE.match(text) and (d := as_date(text)):
+        return d.isoformat()  # "3 Sep 2026" sorts by date, not alphabetically
+    return text.lower()
 
 
 def _age_matches(cell, preset: str, today: date) -> bool:

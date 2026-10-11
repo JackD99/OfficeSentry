@@ -10,6 +10,7 @@ import math
 from datetime import date, datetime, timedelta
 
 from .. import store
+from ..collectors.sharepoint_lookup import DENIED_TEXT
 from ..devices import parse_day
 from ..snapshot import TenantSnapshot
 from ..storage import tenant_storage
@@ -182,7 +183,7 @@ def _usage(snap: TenantSnapshot, report: DataReport) -> dict | None:
     status = (snap.objects("sharepoint_usage", "usage_status") or [None])[0]
     if status is None:
         report.unavailable = (
-            'SharePoint usage hasn\'t been collected yet. Refresh "SharePoint and OneDrive usage" on the tenant page.'
+            'SharePoint usage hasn\'t been collected yet. Refresh "SharePoint and OneDrive usage" on the client page.'
         )
         return None
     if not status.get("available"):
@@ -293,6 +294,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     idle = Section(
         "Inactive sites",
         ["Site", "Type", "Owner", "Last activity", "Storage", "Files"],
+        drifts=("Storage", "Files"),
         intro=f"Sites nobody has used in {INACTIVE_DAYS} days. Archive or delete them, or confirm "
         "someone still owns the content.",
         empty=f"Every site has been used in the last {INACTIVE_DAYS} days.",
@@ -322,6 +324,7 @@ def sites(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
             "Last activity",
             "External sharing on",
         ],
+        drifts=("Storage", "Files"),
         intro="Largest first."
         + ("" if before is not None else f" Growth appears once Office Sentry has {GROWTH_DAYS} days of history."),
         empty="No sites.",
@@ -421,6 +424,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     gone = Section(
         "OneDrives of people who've left",
         ["Person", "Account", "Storage", "Files", "Last activity"],
+        drifts=("Storage", "Files"),
         intro="Files here may include client data nobody is looking after. Move what's still needed to a "
         "shared site, then remove the account.",
         empty="Every OneDrive belongs to an enabled account."
@@ -466,6 +470,7 @@ def onedrive(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     every = Section(
         "All OneDrives",
         ["Person", "Account", "Storage", "Of quota", "Files", "Active files (30 days)", "Last activity"],
+        drifts=("Storage", "Of quota", "Files", "Active files (30 days)"),
         intro="Largest first." + _as_of(status),
         empty="No OneDrives.",
     )
@@ -530,14 +535,16 @@ def _link_words(link: dict) -> str:
 def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("shared_files", "scan_status") or [None])[0]
     if status is None:
-        report.unavailable = 'Shared files haven\'t been scanned yet. Refresh "Shared files" on the tenant page.'
+        report.unavailable = 'Shared files haven\'t been scanned yet. Refresh "Shared files" on the client page.'
         return
     if not status.get("available"):
         report.unavailable = (
             "This tenant has no SharePoint licence."
             if status.get("reason") == "no_sharepoint"
+            else DENIED_TEXT
+            if status.get("reason") == "denied"
             else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
-            "permission: open the tenant page, send the consent link to the client's Global "
+            "permission: open the client page, send the consent link to the client's Global "
             "Admin again and ask them to accept. The other SharePoint reports work without it."
         )
         return
@@ -587,7 +594,7 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     if links and not anyone:
         report.notice = (
             f"Microsoft counts {plural(links, 'anyone link')} in this tenant, but the scan found none. "
-            "Some libraries may not have been readable; check the last Shared files run on the tenant "
+            "Some libraries may not have been readable; check the last Shared files run on the client "
             "page."
         )
     report.footnote = (
@@ -618,7 +625,7 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
                 bool(lk) and all(x.get("password") for x in lk),
                 _date(i.get("lastModified")),
             ],
-            flagged(i, "medium" if i.get("neverExpires") else "low"),
+            flagged(i, "medium"),  # as the anyone-links check rates it: an expiry date doesn't stop forwarding
         )
 
     b = Section(

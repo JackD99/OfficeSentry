@@ -28,7 +28,7 @@ HOMES = {
         "What needs you today: new critical and high findings, collections that failed and anything due this week.",
     ),
     CLIENTS: (
-        "Clients",
+        "Accounts",
         "Licence waste, renewals in the next 30 days, reports waiting for approval and projects to propose.",
     ),
 }

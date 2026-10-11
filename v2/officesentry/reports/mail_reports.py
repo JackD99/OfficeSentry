@@ -25,7 +25,7 @@ from .data_reports import (
 )
 from .registry import report
 
-NOT_COLLECTED = "Mailbox data hasn't been collected yet. Refresh Mailboxes on the tenant page."
+NOT_COLLECTED = "Mailbox data hasn't been collected yet. Refresh Mailboxes on the client page."
 RESOURCE_TYPES = {"SharedMailbox": "Shared", "RoomMailbox": "Room", "EquipmentMailbox": "Equipment"}
 
 
@@ -70,7 +70,7 @@ def _plural(n: int, word: str) -> str:
 def inbox_rules(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     rules = snap.objects("inbox_rules", "inbox_rule")
     if rules is None:
-        report.unavailable = "Inbox rules haven't been collected yet. Refresh Inbox rules on the tenant page."
+        report.unavailable = "Inbox rules haven't been collected yet. Refresh Inbox rules on the client page."
         return
     if _no_exchange(snap):
         report.unavailable = "This tenant has no Exchange Online licence."
@@ -347,6 +347,7 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
     section = Section(
         "Shared and resource mailboxes",
         ["Mailbox", "Type", "Sign-in allowed", "Last sign-in", "Licensed", "Full access", "Send as", "Size"],
+        drifts=("Size",),
         empty="No shared, room or equipment mailboxes.",
     )
     for m in sorted(
@@ -415,7 +416,7 @@ def shared_mailboxes(snap: TenantSnapshot, now: datetime, report: DataReport) ->
 def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     sizes = snap.objects("mailbox_usage", "mailbox_size")
     if sizes is None:
-        report.unavailable = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the tenant page."
+        report.unavailable = "Mailbox sizes haven't been collected yet. Refresh Mailbox size on the client page."
         return
     if _no_exchange(snap):
         report.unavailable = "This tenant has no Exchange Online licence."
@@ -441,6 +442,7 @@ def mailbox_size(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
             "Archive",
             "Litigation hold",
         ],
+        drifts=("Size", "Used", "Items", "Recoverable items"),
         intro=(
             f"{_size(total)} across {_plural(len(sizes), 'mailbox')}. "
             + (
@@ -520,7 +522,7 @@ def legacy_auth(snap: TenantSnapshot, now: datetime, report: DataReport) -> None
     if status is None and cas is None:
         report.unavailable = (
             "Sign-in and mailbox data hasn't been collected yet. Refresh Legacy sign-ins and "
-            "Mailboxes on the tenant page."
+            "Mailboxes on the client page."
         )
         return
     sections = []

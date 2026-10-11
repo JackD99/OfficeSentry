@@ -1,6 +1,6 @@
 """The Get started checklist an admin sees until the first collection has run.
 
-Four steps from a fresh install to the first useful report: the app connection, the first client tenant, its
+Four steps from a fresh install to the first useful report: the app connection, the first client, its
 consent and its first collection. Each is read from stored state only (never Graph), so the list ticks
 itself off as Office Sentry sees each step done, and ``pending`` returns nothing once something has been
 collected, which is when the home pages have real figures to show instead.
@@ -55,8 +55,8 @@ def steps(conn) -> list[Step]:
             first is not None,
             f"{first['name']} is added."
             if first
-            else "Any tenant you look after. To see your first reports quickly, start with your own tenant.",
-            "Add a tenant",
+            else "Any client you look after. To see your first reports quickly, start with your own tenant.",
+            "Add a client",
             "new_tenant",
         ),
         Step(
@@ -65,18 +65,18 @@ def steps(conn) -> list[Step]:
             consented is not None,
             f"{consented['name']} approved read-only access."
             if consented
-            else "Open the tenant's page and send its Global Administrator the consent link. They approve"
+            else "Open the client's page and send its Global Administrator the consent link. They approve"
             " read-only access once; for mailbox reports they also give the app the Global Reader role.",
-            f"Open {first['name']}" if first else "Open the tenant",
+            f"Open {first['name']}" if first else "Open the client",
             f"tenant:{first['id']}" if first else "",
         ),
         Step(
             "collection",
             "The first collection runs",
             bool(collected),
-            "Done. The tenant's reports, findings and month-end review are filled in."
+            "Done. The client's reports, findings and month-end review are filled in."
             if collected
-            else "It starts by itself a minute or two after consent and takes a few minutes. Then the tenant's"
+            else "It starts by itself a minute or two after consent and takes a few minutes. Then the client's"
             " reports, findings, licence figures and month-end review fill in, and this list goes away.",
             "See how it's going",
             f"collection:{tenant['id']}" if tenant else "",

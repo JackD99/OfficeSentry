@@ -2,8 +2,12 @@
 keys are", "Off-site backups" and "Restore drill")."""
 
 import json
+import os
 import re
+import shutil
 import stat
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -104,6 +108,64 @@ def test_compose_keeps_the_keys_out_of_the_data_volume():
     assert "chown sentry /data /keys" in dockerfile  # a new keys volume is the app user's
 
 
+def test_a_slow_upgrade_is_given_time_before_the_deploy_gives_up():
+    """A database upgrade copies the whole database before the portal answers, which takes minutes on a large
+    one: the health check's start period, the start script's wait and Docker's live-restore allow for it."""
+    compose = yaml.safe_load((V2 / "docker-compose.yml").read_text(encoding="utf-8"))
+    assert compose["services"]["web"]["healthcheck"]["start_period"] == "15m"
+    assert compose["services"]["worker"]["depends_on"]["web"] == {"condition": "service_healthy"}
+    start = (V2 / "deploy" / "start.sh").read_text(encoding="utf-8")
+    assert "seq 200" in start  # 200 looks, 5 seconds apart
+    cloud_init = yaml.safe_load((V2 / "deploy" / "cloud-init.yaml").read_text(encoding="utf-8"))
+    daemon = next(f for f in cloud_init["write_files"] if f["path"] == "/etc/docker/daemon.json")
+    assert json.loads(daemon["content"])["live-restore"] is True  # a Docker update doesn't stop the portal
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_start_script_starts_the_worker_once_the_portal_is_healthy(tmp_path):
+    """When "compose up" gives up waiting for the portal (an upgrade slower than its health check allows), the
+    worker is created but not started: the script waits for the portal itself, then brings the rest up."""
+    folder = tmp_path / "v2"
+    (folder / "deploy").mkdir(parents=True)
+    (folder / ".env").write_text("COMPOSE_PROFILES=\n", encoding="utf-8")
+    shutil.copy(V2 / "deploy" / "start.sh", folder / "deploy" / "start.sh")
+    shutil.copy(V2 / "deploy" / "jobs.sh", folder / "deploy" / "jobs.sh")
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    calls = tmp_path / "calls.log"
+    docker = tools / "docker"
+    docker.write_text(
+        f"#!{sys.executable}\n"
+        "import pathlib, sys\n"
+        "args = sys.argv[1:]\n"
+        f"log = pathlib.Path({str(calls)!r})\n"
+        "log.open('a').write(' '.join(args) + '\\n')\n"
+        "if args == ['compose', 'up', '-d', '--remove-orphans']:\n"
+        "    if 'compose up -d --remove-orphans' not in log.read_text().splitlines()[:-1]:\n"
+        "        print('dependency failed to start: container v2-web-1 is unhealthy', file=sys.stderr)\n"
+        "        sys.exit(1)\n"
+        "elif args[:2] == ['compose', 'ps'] and '-q' in args:\n"
+        "    print('cid-web' if args[-1] == 'web' else '', end='')\n"
+        "elif args[0] == 'inspect':\n"
+        "    print('healthy')\n",
+        encoding="utf-8",
+    )
+    (tools / "crontab").write_text("#!/usr/bin/env bash\ncat > /dev/null\n", encoding="utf-8")
+    for tool in (docker, tools / "crontab"):
+        tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    env = dict(os.environ, OFFICESENTRY_DIR=str(folder), PATH=f"{tools}{os.pathsep}{os.environ['PATH']}")
+    out = subprocess.run(  # noqa: S603
+        [shutil.which("bash"), "deploy/start.sh"], cwd=folder, env=env, capture_output=True, text=True, check=False
+    )
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "The portal is healthy now; starting the rest." in out.stdout
+    lines = calls.read_text(encoding="utf-8").splitlines()
+    first = lines.index("compose up -d --remove-orphans")
+    second = lines.index("compose up -d --remove-orphans", first + 1)  # once the portal was seen healthy
+    assert lines.count("compose up -d --remove-orphans") == 2
+    assert first < lines.index("inspect -f {{.State.Health.Status}} cid-web") < second
+
+
 def test_offsite_and_drill_record_their_status(env_cfg):
     main(["backup-status", "--record", "offsite", "--ok", "--detail", "copy 1a2b3c4d"])
     main(["backup-status", "--record", "offsite", "--failed", "--error", "wrong password or no key found"])
@@ -131,9 +193,9 @@ def test_check_backup_opens_a_backup_without_restoring_it(env_cfg, db, two_tenan
     saved = next((env_cfg.data_dir / "backups").glob("officesentry-*.db.gz"))
     capsys.readouterr()
     main(["check-backup", str(saved), "--record"])
-    assert "2 tenants" in capsys.readouterr().out
+    assert "2 clients" in capsys.readouterr().out
     entry = backups.read_status(env_cfg.data_dir)["restore_check"]
-    assert entry["ok"] and entry["detail"].startswith(saved.name) and "2 tenants" in entry["detail"]
+    assert entry["ok"] and entry["detail"].startswith(saved.name) and "2 clients" in entry["detail"]
     assert not list(saved.parent.glob("restore-*.part"))  # the unpacked copy is cleaned up
 
 
@@ -155,6 +217,23 @@ def test_production_from_releases_is_off_unless_set():
     # The off-site password reaches the server's .env.backup only, never the portal's .env.
     env_block = workflow[workflow.index("} > v2/.env\n") - 2000 : workflow.index("} > v2/.env\n")]
     assert "BACKUP_PASSWORD" not in env_block.split("{\n", 1)[-1]
+
+
+def test_deploy_keeps_the_settings_files_out_of_the_demo_and_closes_ssh_after_a_lost_runner():
+    workflow = (V2.parent / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    # The demo's copy of the code never gets .env.backup (the off-site password and storage keys) or .env;
+    # rsync's --delete leaves excluded files alone, so copies from before are removed by name.
+    demo = workflow[workflow.index("name: Build the public demo") : workflow.index("name: Pull the release image")]
+    assert "--exclude '.env*'" in demo and "--exclude .env " not in demo
+    assert "rm -f /opt/officesentry/demo-src/.env /opt/officesentry/demo-src/.env.*" in demo
+    # The firewall rule is removed by the deploy job's last step however it ends, and by a job of its own
+    # afterwards for the one case that step can't cover: a runner that disappears.
+    jobs = yaml.safe_load(workflow)["jobs"]
+    assert jobs["close-ssh"]["needs"] == "server" and jobs["close-ssh"]["if"].startswith("always()")
+    assert jobs["close-ssh"]["env"]["RULE"] == jobs["server"]["env"]["RULE"]
+    close = jobs["close-ssh"]["steps"][0]["run"]
+    assert "select(.description != $rule)" in close and "/actions/set_rules" in close
+    assert workflow.count("cancel-in-progress: false") == 1  # runs never overlap, so the rule found is this run's
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon, sev_counts, sev_legend %}
 {% from "_groups.html" import group_picker, in_group with context %}
 {% from "_get_started.html" import get_started as get_started_card %}
-{% block title %}Tenants · Office Sentry{% endblock %}
+{% block title %}Clients · Office Sentry{% endblock %}
 {% macro kpi(row, key, unit='', spark=false) -%}
 {% set k = row.kpis[key] %}
 {% if k.value is none %}<span class="faint">–</span>{% else %}<span class="kpi-cell"><span>{{ k.value|money(currency) if unit == 'money' else '%g'|format(k.value) ~ unit }}{% if k.delta %} <span class="delta {{ k.trend }} tiny">{{ '%+g'|format(k.delta) }}</span>{% endif %}</span>{% if spark and k.spark_label %}{{ sparkline(k.spark, label=row.tenant.name ~ ': ' ~ k.spark_label, width=64, height=16)|safe }}{% endif %}</span>{% endif %}
@@ -10,13 +10,13 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Tenants</h1>
-    <div class="sub">{% if group_scope and group_scope.group %}Latest results for the {{ rows|length|plural('tenant') }} in {{ group_scope.group.name }}, worst first.{% else %}Latest results for every tenant you look after, worst first.{% endif %}</div>
+    <h1>Clients</h1>
+    <div class="sub">{% if group_scope and group_scope.group %}Latest results for the {{ rows|length|plural('client') }} in {{ group_scope.group.name }}, worst first.{% else %}Latest results for every client you look after, worst first.{% endif %}</div>
   </div>
   <div class="actions">
     {{ group_picker() }}
     <a class="btn" href="{{ url_for('tenant_admin.clients') }}">{{ icon('connection') }} Connection health</a>
-    {% if current_user.role == 'admin' %}<a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add tenant</a>{% endif %}
+    {% if current_user.role == 'admin' %}<a class="btn primary" href="{{ url_for('tenants.new_tenant') }}">{{ icon('plus') }} Add client</a>{% endif %}
   </div>
 </div>
 
@@ -25,38 +25,38 @@
 {% if not get_started %}
 <div class="card empty">
   {% if current_user.role == 'admin' %}
-  <h3>No tenants yet</h3>
-  <p>Sign in to Microsoft once so Office Sentry can create its read-only app, then add each client tenant.</p>
+  <h3>No clients yet</h3>
+  <p>Sign in to Microsoft once so Office Sentry can create its read-only app, then add each client.</p>
   <a class="btn primary" href="{{ url_for('admin.connections') }}">Set up the app connection</a>
   {% else %}
-  <h3>No tenants to show</h3>
-  <p>You haven't been given access to any tenants yet. Ask an admin to grant access.</p>
+  <h3>No clients to show</h3>
+  <p>You haven't been given access to any clients yet. Ask an admin to grant access.</p>
   {% endif %}
 </div>
 {% endif %}
 {% else %}
 <div class="tiles">
-  <div class="tile"><div class="label">Tenants</div><div class="value">{{ rows|length }}</div>
+  <div class="tile"><div class="label">Clients</div><div class="value">{{ rows|length }}</div>
     <div class="foot">{{ summary.up_to_date }} up to date{% if summary.data_issues %}, <span class="warn-text">{{ summary.data_issues }} with data problems</span>{% endif %}</div></div>
   <div class="tile{{ ' tone-warn' if summary.urgent }}"><div class="label">Need urgent attention</div><div class="value">{{ summary.urgent }}</div>
     <div class="foot">with critical or high findings</div></div>
   <div class="tile{{ ' tone-bad' if summary.severe }}"><div class="label">Critical and high findings</div>
     <div class="value{{ ' has-spark' if summary.severe_trend }}"><span>{{ summary.severe }}</span>{% if summary.severe_trend %}{{ sparkline(summary.severe_trend.values, label=summary.severe_trend.label)|safe }}{% endif %}</div>
-    <div class="foot">across {{ group_scope.group.name if group_scope and group_scope.group else 'all tenants' }}</div></div>
+    <div class="foot">across {{ group_scope.group.name if group_scope and group_scope.group else 'all clients' }}</div></div>
   <div class="tile"><div class="label">Average Secure Score</div>
     <div class="value{{ ' has-spark' if summary.score_trend }}"><span>{{ '%.0f%%'|format(summary.avg_score) if summary.avg_score is not none else '–' }}</span>{% if summary.score_trend %}{{ sparkline(summary.score_trend.values, label=summary.score_trend.label)|safe }}{% endif %}</div>
-    <div class="foot">{% if summary.scored %}across {{ summary.scored|plural('tenant') }} with a score{% else %}no scores collected yet{% endif %}</div></div>
+    <div class="foot">{% if summary.scored %}across {{ summary.scored|plural('client') }} with a score{% else %}no scores collected yet{% endif %}</div></div>
 </div>
 
 <div class="card flush">
   <div class="card-head toolbar">
-    <div><h2>{{ group_scope.group.name if group_scope and group_scope.group else 'All tenants' }}</h2>{{ sev_legend() }}</div>
-    {% if rows|length > 5 %}<input class="search" type="search" id="tenant-filter" placeholder="Filter tenants…" aria-label="Filter tenants">{% endif %}
+    <div><h2>{{ group_scope.group.name if group_scope and group_scope.group else 'All clients' }}</h2>{{ sev_legend() }}</div>
+    {% if rows|length > 5 %}<input class="search" type="search" id="tenant-filter" placeholder="Filter clients…" aria-label="Filter clients">{% endif %}
   </div>
   <div class="scroll-x">
   <table class="stack-sm" id="tenant-table">
     <thead><tr>
-      <th>Tenant</th><th title="Critical, high, medium and low">Open findings</th>
+      <th>Client</th><th title="Critical, high, medium and low">Open findings</th>
       <th class="num">Secure Score</th><th class="num">Users with MFA</th><th class="num">Licence waste / mo</th><th>Data</th><th>Monthly review</th>
     </tr></thead>
     <tbody>

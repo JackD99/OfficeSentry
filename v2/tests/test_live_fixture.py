@@ -38,7 +38,11 @@ RECORDED = datetime(2026, 10, 10, 19, 30, tzinfo=UTC)
 # Requests added since the recording, answered with Microsoft's documented response shape, and requests whose
 # $select asks for fields added since (the recorded response is served). Empty while the recording is current:
 # add an entry when a collector starts asking for something new, and re-record soon after.
-STAND_INS: dict[str, dict] = {}
+STAND_INS: dict[str, dict] = {
+    # Administrative units (the test tenant has none).
+    "/v1.0/directory/administrativeUnits": {"value": []},
+    "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
+}
 NEW_FIELDS: frozenset[str] = frozenset()
 
 
@@ -237,7 +241,7 @@ def test_pages_and_downloads(client, db, live):
     # The first report: nothing to compare with yet, but admin changes from the activity history are listed
     # (an app secret added on 6 Oct 2026) while the report's period still reaches back to the recording.
     changes = page.split('id="changes"')[1].split("</section>")[0]
-    assert "first report for this tenant" in page or "Admin activity" in changes
+    assert "first report for your organisation" in page or "Admin activity" in changes
     assert client.get(f"{t}/activity").status_code == 200
 
 
@@ -278,7 +282,7 @@ def test_subscriptions_on_real_data(db, live):
     # Business Premium (no Teams), Power Automate Free and a suspended Business Standard trial.
     report = data_reports.build(db, live, "subscriptions", RECORDED)
     renewals = next(s for s in report.sections if s.title == "Renewals and expiry")
-    assert (str(renewals.rows[0][0]), renewals.rows[0][1]) == ("Microsoft 365 Business Standard", "Suspended")
+    assert (str(renewals.rows[0][0]), renewals.rows[0][2]) == ("Microsoft 365 Business Standard", "Suspended")
     who = next(s for s in report.sections if s.title == "Who has which licence")
     assert who.rows and {r[2] for r in who.rows} == {"Directly"}
     results = _results(db, live)

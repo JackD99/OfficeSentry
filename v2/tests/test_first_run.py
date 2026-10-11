@@ -53,7 +53,7 @@ def test_admins_see_the_checklist_on_every_home_page_until_the_first_collection(
     for path in ("/today", "/clients", "/"):
         page = client.get(path).get_data(as_text=True)
         assert "Get started" in page and "1 of 4 done" in page, path
-        assert 'href="/tenants/new"' in page and "Add a tenant" in page, path  # the current step's button
+        assert 'href="/tenants/new"' in page and "Add a client" in page, path  # the current step's button
         assert "No clients" not in page and "No tenants yet" not in page, path
 
     a = store.create_tenant(db, "Alpha Ltd", "alpha.onmicrosoft.com", connection_id)
@@ -82,8 +82,8 @@ def test_an_analyst_with_nothing_granted_sees_the_empty_state(client, db):
     assert "Get started" not in page and "haven't been given access" in page
 
 
-def test_the_report_library_does_not_count_zero_tenants(client, db):
+def test_the_report_library_does_not_count_zero_clients(client, db):
     make_user(db, "admin")
     login(client, "admin")
     page = client.get("/reports").get_data(as_text=True)
-    assert "across all 0" not in page and "No tenants yet" in page
+    assert "across all 0" not in page and "No clients yet" in page

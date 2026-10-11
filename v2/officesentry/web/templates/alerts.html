@@ -2,7 +2,7 @@
 {% from "_macros.html" import icon %}
 {% block title %}Alerts · Office Sentry{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Alerts</h1><div class="sub">Post to Microsoft Teams, Slack or any webhook when a tenant gets new findings, a collection starts failing or a client's report is ready.</div></div>
+<div class="page-head"><div><h1>Alerts</h1><div class="sub">Post to Microsoft Teams, Slack or any webhook when a client gets new findings, a collection starts failing or a client's report is ready.</div></div>
   {% if s['alerts.enabled'] == '1' %}<span class="pill ok">On</span>{% else %}<span class="pill warn">Off</span>{% endif %}</div>
 <div class="grid-main">
 <form method="post" action="{{ url_for('alerts.save') }}" class="card">
@@ -17,20 +17,20 @@
     <span class="hint">Must start with https://. It's stored encrypted and never shown again.</span></label>
   {% if url_hint %}<label class="check"><input type="checkbox" name="clear_url" value="1"> Remove the saved URL</label>{% endif %}
   <label>Signing secret (optional) <input type="password" name="secret" autocomplete="new-password" placeholder="{{ 'Saved, leave blank to keep' if s['alerts.secret_enc'] else '' }}">
-    <span class="hint">For your own webhooks: each request gets an <span class="mono">X-OfficeSentry-Signature: sha256=…</span> header, the HMAC-SHA256 of the body with this secret.</span></label>
+    <span class="hint">For your own webhooks: each request gets <span class="mono">X-OfficeSentry-Timestamp</span>, <span class="mono">X-OfficeSentry-Key-Id</span> and <span class="mono">X-OfficeSentry-Signature: v1=…</span>, the HMAC-SHA256 with this secret of the timestamp, a full stop and the body. Refuse requests more than five minutes old, so a copied one can't be sent again (DEPLOY.md, "Signed webhooks").</span></label>
   {% if s['alerts.secret_enc'] %}<label class="check"><input type="checkbox" name="clear_secret" value="1"> Remove the saved secret</label>{% endif %}
   <h2>What to send</h2>
   <label>New findings rated <select name="min_severity">
     {% for v in severities %}<option value="{{ v }}" {% if s['alerts.min_severity'] == v %}selected{% endif %}>{{ v|capitalize }}{{ ' only' if v == 'critical' else ' or worse' }}</option>{% endfor %}
   </select>
-    <span class="hint">All new findings from one collection go in one message per tenant. Accepted risks are left out.</span></label>
+    <span class="hint">All new findings from one collection go in one message per client. Accepted risks are left out.</span></label>
   <label class="check"><input type="checkbox" name="on_failures" value="1" {% if s['alerts.on_failures'] == '1' %}checked{% endif %}> A collection fails after working last time</label>
   <label class="check"><input type="checkbox" name="on_recovery" value="1" {% if s['alerts.on_recovery'] == '1' %}checked{% endif %}> A failing collection works again</label>
   <p class="footnote">Failures alert once when they start, not every night they continue.</p>
   <label class="check"><input type="checkbox" name="on_reports" value="1" {% if s['alerts.on_reports'] == '1' %}checked{% endif %}> A client's report is ready</label>
   <p class="footnote">“The October 2026 report for Contoso is ready”, when a report email goes out or a month-end report is published. It links to the client's report history and never carries the files, so only people signed in with access to that client can open them.</p>
   <h2>Problems with Office Sentry</h2>
-  <label class="check"><input type="checkbox" name="system" value="1" {% if s['alerts.system'] == '1' %}checked{% endif %}> The worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect</label>
+  <label class="check"><input type="checkbox" name="system" value="1" {% if s['alerts.system'] == '1' %}checked{% endif %}> The worker stops, a backup fails, the disk is over 85% full or most clients fail to collect</label>
   <p class="footnote">These go to your team contacts by email and to the webhook above, once when a problem starts, daily while it lasts and once when it's fixed. See <a href="{{ url_for('system.status') }}">System status</a>.</p>
   <div class="form-actions"><button class="primary">Save</button></div>
 </form>
@@ -44,17 +44,17 @@
 </form>
 <section class="card">
   <h2>{{ icon('mail') }} By email</h2>
-  <p class="muted small">The same new-finding alerts can go to people by email: for one tenant on its <em>Emailed reports</em> tab, or for every tenant under <a href="{{ url_for('email.overview') }}">Email reports</a>.{% if email_alerts %} {{ email_alerts }} email alert{{ 's' if email_alerts != 1 }} on.{% endif %}</p>
+  <p class="muted small">The same new-finding alerts can go to people by email: for one client on its <em>Emailed reports</em> tab, or for every client under <a href="{{ url_for('email.overview') }}">Email reports</a>.{% if email_alerts %} {{ email_alerts }} email alert{{ 's' if email_alerts != 1 }} on.{% endif %}</p>
 </section>
 <section class="card flush">
   <div class="card-head"><h2>Recent alerts</h2></div>
   {% if recent %}
   <table class="stack-sm">
-    <thead><tr><th>When</th><th>Tenant</th><th>Result</th></tr></thead>
+    <thead><tr><th>When</th><th>Client</th><th>Result</th></tr></thead>
     <tbody>
     {% for a in recent %}
     <tr><td class="nowrap"><time title="{{ a.ts|when }}">{{ a.ts|ago }}</time></td>
-      <td data-label="Tenant">{{ a.tenant_name or '–' }}</td>
+      <td data-label="Client">{{ a.tenant_name or '–' }}</td>
       <td data-label="Result">{% if a.action == 'alert_sent' %}<span class="pill ok">Sent</span>{% else %}<span class="pill warn">Failed</span>{% endif %} <span class="muted small">{{ a.detail }}</span></td></tr>
     {% endfor %}
     </tbody>
