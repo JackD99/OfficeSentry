@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
 import responses
@@ -127,6 +127,7 @@ def test_group_nesting_reads_members_of_security_groups_and_lists_only(db, two_t
     assert read == {"s1", "s2", "s3", "m1", "d1"}  # teams and Microsoft 365 groups can't hold groups
     groups = {g["_id"]: g for g in store.run_objects(db, run_id, "group")}
     assert groups["s2"]["groupIds"] == ["s3"] and groups["s2"]["memberCount"] == 2
+    assert groups["s2"]["userIds"] == ["u1"] and groups["s2"]["userIdsComplete"] is True
     assert groups["s3"]["memberCount"] == 0 and groups["s3"]["examined"]
     assert groups["s1"]["dynamic"] and groups["s1"]["ruleState"] == "On"
     assert groups["g1"]["examined"] is False and groups["g1"]["isTeam"]
@@ -230,6 +231,72 @@ def test_a_paused_dynamic_rule_and_a_group_loop_are_reported(db, two_tenants, mo
     assert {t.label: t.tone for t in report.tiles}["Paused dynamic rules"] == "bad"
     assert _rows(s["Groups inside groups"])["Info"][0][4] == 4  # each group in the loop counted once
     assert not s["Empty groups"].rows
+
+
+def _expiring_groups(now):
+    expiry = {"g4": 20, "g2": 50, "g1": 200}  # days from now; Sales is past the horizon
+    out = []
+    for g in grp.GROUPS:
+        if g["id"] in expiry:
+            g = {**g, "expirationDateTime": (now + timedelta(days=expiry[g["id"]])).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        out.append(g)
+    out.append(grp._group("s4", "Helpdesk admins", unified=False, mail=False, security=True, isAssignableToRole=True))
+    return out
+
+
+def test_group_structure_shows_expiring_role_assignable_and_blocked_members(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    now = datetime.now(UTC)
+    monkeypatch.setitem(grp.MEMBERS, "s4", [grp._member("u1"), grp._member("u3"), grp._member("u2")])
+    monkeypatch.setitem(grp.MEMBERS, "m1", [*grp.MEMBERS["m1"], grp._member("u2")])
+    seed_tenant(db, alpha, groups=_expiring_groups(now))
+    report = build(db, store.get_tenant(db, alpha), "group-structure", now)
+    assert report.unavailable is None and not report.notes
+    s = _sections(report)
+
+    expiring = _rows(s["Expiring soon"])
+    assert list(expiring) == ["Board", "Project Phoenix"]  # Sales expires in 200 days
+    board, flag = expiring["Board"]
+    assert board[1:4] == ["Team", (now + timedelta(days=20)).strftime("%Y-%m-%d"), 20] and flag == "low"
+    assert board[4].parts == ("Ann",) and board[5] == 2
+    phoenix, flag = expiring["Project Phoenix"]
+    assert phoenix[3] == 50 and phoenix[4].parts == ("Bob",) and flag == "medium"  # Bob is blocked: nobody renews
+
+    role = _rows(s["Role-assignable groups"])
+    assert list(role) == ["Helpdesk admins"]
+    assert role["Helpdesk admins"][0][1:5] == ["Security group", 3, 1, ""] and role["Helpdesk admins"][1] == "medium"
+
+    blocked = _rows(s["Blocked members"])
+    assert list(blocked) == ["Finance alerts", "Helpdesk admins", "Project Phoenix"]
+    assert blocked["Finance alerts"][0][2].parts == ("Bob",) and blocked["Finance alerts"][1] == "low"
+    assert blocked["Helpdesk admins"][1] == "medium"  # a blocked account in a role-assignable group
+    assert blocked["Project Phoenix"][0][3:5] == [1, 3]
+    assert _rows(s["Every group"])["Board"][0][7] == (now + timedelta(days=20)).strftime("%Y-%m-%d")
+
+    tiles = {t.label: t for t in report.tiles}
+    assert (tiles["Expiring soon"].value, tiles["Expiring soon"].foot, tiles["Expiring soon"].tone) == (
+        2,
+        "1 with nobody to renew",
+        "warn",
+    )
+    assert (tiles["Role-assignable groups"].value, tiles["Role-assignable groups"].tone) == (1, "bad")
+    assert (tiles["Blocked members"].value, tiles["Blocked members"].foot) == (3, "3 blocked accounts still in groups")
+    assert tiles["Blocked members"].rows.table == "Blocked members"
+
+
+def test_group_structure_without_users_or_expiring_groups(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    report = build(db, store.get_tenant(db, alpha), "group-structure", datetime.now(UTC))
+    s = _sections(report)
+    assert not s["Expiring soon"].rows and not s["Role-assignable groups"].rows
+    assert list(_rows(s["Blocked members"])) == ["Project Phoenix"]  # Bob, its blocked owner, is a member too
+    tiles = {t.label: t for t in report.tiles}
+    assert tiles["Expiring soon"].foot == "Within 90 days" and tiles["Role-assignable groups"].value == 0
+    db.execute("DELETE FROM runs WHERE collector = 'users' AND tenant_id = ?", (alpha,))
+    report = build(db, store.get_tenant(db, alpha), "group-structure", datetime.now(UTC))
+    assert report.notes == ["Blocked accounts still in groups show after Users is collected."]
+    assert not _sections(report)["Blocked members"].rows
 
 
 def test_reports_are_listed_and_render_with_downloads(client, db, two_tenants):

@@ -76,6 +76,12 @@ Microsoft account links on users and how each session was started.
   its headline sharing figures, how it's set up, admin changes, open findings and what changed. Group names
   and addresses in reports, the person page and search results open the page, and it downloads as PDF and
   XLSX.
+- The **Empty, nested and dynamic groups** report now also lists teams and Microsoft 365 groups the
+  expiration policy will delete within 90 days (with their owners, flagged when no owner can sign in to
+  renew them), role-assignable groups (whose members hold admin roles, flagged when a guest is in one) and
+  every group that still holds a blocked account, naming the accounts. Group nesting keeps the member IDs
+  of security groups and distribution lists for that. **Coming up** and its weekly email list the teams and
+  groups about to expire alongside renewals and app secrets.
 
 ### Changed
 
