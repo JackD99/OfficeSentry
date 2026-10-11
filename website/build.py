@@ -109,6 +109,60 @@ SECTIONS = [
         ],
     ),
     (
+        "Deploy",
+        [
+            Doc(
+                "v2/docs/deploy/README.md",
+                "deploy",
+                "Choosing a platform",
+                blurb="Which guide to follow, what every platform needs, and keys from a secret store.",
+            ),
+            Doc(
+                "v2/docs/deploy/portainer.md",
+                "deploy/portainer",
+                blurb="One stack with HTTPS, behind your own proxy, backups and updates.",
+            ),
+            Doc(
+                "v2/docs/deploy/container-managers.md",
+                "deploy/container-managers",
+                blurb="The same stack in Dockge, Komodo, Coolify and Dokploy.",
+            ),
+            Doc(
+                "v2/docs/deploy/nas.md",
+                "deploy/nas",
+                "Unraid, Synology, TrueNAS",
+                blurb="On a NAS, with its own folders, scheduled backups and reverse proxy.",
+            ),
+            Doc(
+                "v2/docs/deploy/kubernetes.md",
+                "deploy/kubernetes",
+                blurb="Manifests for AKS, EKS, GKE, k3s and others: one pod, a disk, backups and restores.",
+            ),
+            Doc(
+                "v2/docs/deploy/azure.md",
+                "deploy/azure",
+                "Azure",
+                blurb="A small Linux VM set up with one paste, its firewall, backups and updates.",
+            ),
+            Doc(
+                "v2/docs/deploy/aws.md",
+                "deploy/aws",
+                "AWS",
+                blurb="A Lightsail or EC2 server set up with one paste, its firewall, snapshots and updates.",
+            ),
+            Doc(
+                "v2/docs/deploy/other-clouds.md",
+                "deploy/other-clouds",
+                blurb="DigitalOcean, Google Cloud, Linode, Vultr, Oracle Cloud and any VPS that takes cloud-init.",
+            ),
+            Doc(
+                "v2/docs/deploy/cloudflare.md",
+                "deploy/cloudflare",
+                blurb="DNS only, a Cloudflare Tunnel with Access, or proxied, and what Cloudflare must leave alone.",
+            ),
+        ],
+    ),
+    (
         "Reference",
         [
             Doc(

@@ -39,9 +39,10 @@ updates:
       docker:
         patterns: ["*"]
 
-  # The Caddy image in docker-compose.yml, pinned by digest like the Dockerfile's base.
+  # The Caddy image in docker-compose.yml, and Caddy and cloudflared in the one-file stack
+  # (deploy/stack/compose.yaml), pinned by digest like the Dockerfile's base.
   - package-ecosystem: docker-compose
-    directory: /v2
+    directories: ["/v2", "/v2/deploy/stack"]
     schedule:
       interval: weekly
       day: monday

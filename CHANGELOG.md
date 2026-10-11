@@ -82,6 +82,13 @@ Microsoft account links on users and how each session was started.
   every group that still holds a blocked account, naming the accounts. Group nesting keeps the member IDs
   of security groups and distribution lists for that. **Coming up** and its weekly email list the teams and
   groups about to expire alongside renewals and app secrets.
+- **Deploy guides by platform** ([v2/docs/deploy](v2/docs/deploy/README.md), and under *Deploy* on the
+  website): Portainer; Dockge, Komodo, Coolify and Dokploy; Unraid, Synology and TrueNAS; Kubernetes (AKS,
+  EKS, GKE, k3s and others); Azure and AWS virtual machines; DigitalOcean, Google Cloud, Linode, Vultr,
+  Oracle Cloud and other VPS hosts; and Cloudflare (DNS only, a Tunnel with Access, or proxied). With them
+  come a one-file stack for container managers and NAS systems (`v2/deploy/stack/compose.yaml`), Kubernetes
+  manifests (`v2/deploy/kubernetes/`) and a start-up file for a new cloud server
+  (`v2/deploy/cloud-init-server.yaml`). Each guide says which of its steps have been tested.
 
 ### Changed
 
@@ -215,6 +222,11 @@ Microsoft account links on users and how each session was started.
   rather than to an address that only takes forms ("Method not allowed").
 - The daily rebuild of the What changed and check matrix rows is no longer lost for a client whose
   rows were being refreshed at that moment.
+- The advice for Cloudflare or another CDN in front of the proxy (`OFFICESENTRY_TRUSTED_PROXIES=2` alone)
+  left every visitor looking like the proxy, with the bundled Caddy and the nginx example alike, so they
+  all shared one address's sign-in limits. [Securing the
+  portal](v2/docs/securing-the-portal.md#behind-a-reverse-proxy) now says what Caddy, nginx and Traefik each
+  need to trust the CDN's addresses.
 
 ### Security
 

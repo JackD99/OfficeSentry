@@ -1,0 +1,35 @@
+# Office Sentry on Kubernetes: the guide is v2/docs/deploy/kubernetes.md. Before "kubectl apply -k .":
+#   1. set the release under images (newTag) and your settings under configMapGenerator;
+#   2. set your domain (and ingress class) in ingress.yaml, or use httproute.yaml with the Gateway API;
+#   3. create the officesentry-keys Secret (the guide has the command). It is never in these files.
+# maintenance.yaml isn't listed: it's a pod for restoring a backup, applied by hand when needed.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: officesentry
+labels:
+  - pairs:
+      app.kubernetes.io/name: officesentry
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - backup-cronjob.yaml
+  - service.yaml
+  - ingress.yaml
+  # - httproute.yaml   # instead of ingress.yaml, with the Gateway API
+
+images:
+  - name: ghcr.io/jackd99/officesentry
+    newTag: "2.1.0"
+
+configMapGenerator:
+  - name: officesentry-settings
+    literals:
+      - OFFICESENTRY_BASE_URL=https://sentry.example.com
+      - OFFICESENTRY_TIMEZONE=Europe/London
+      - OFFICESENTRY_COLLECT_CRON=0 2 * * *
+      - OFFICESENTRY_WORKER_CONCURRENCY=4
+      # One proxy in front of the portal: the ingress controller or gateway.
+      - OFFICESENTRY_TRUSTED_PROXIES=1
