@@ -73,7 +73,7 @@ def test_admin_creates_fills_renames_and_deletes_a_group(client, db, two_tenants
         (group["id"],),
     )
     resp = client.post(f"/admin/groups/{group['id']}/delete", follow_redirects=True)
-    assert "1 digest now covers every tenant" in _text(resp)
+    assert "1 digest now covers every client" in _text(resp)
     assert db.execute("SELECT group_id FROM email_schedules").fetchone()[0] is None
     assert db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 2
     assert db.execute("SELECT COUNT(*) FROM tenant_group_members").fetchone()[0] == 0
@@ -133,13 +133,13 @@ def test_picking_a_group_narrows_the_dashboard_until_changed(client, db, three):
     _admin(client, db)
     page = _text(client.get("/"))
     assert all(n in page for n in ("Alpha Ltd", "Bravo Inc", "Charlie Co"))
-    assert 'id="group-pick"' in page and "Gold (2)" in page and "All tenants (3)" in page
+    assert 'id="group-pick"' in page and "Gold (2)" in page and "All clients (3)" in page
 
     resp = client.get(f"/?group={gold}")
     assert resp.status_code == 302 and resp.headers["Location"] == "/"
     page = _text(client.get("/"))
     assert "Alpha Ltd" in page and "Charlie Co" in page and "Bravo Inc" not in page
-    assert "the 2 tenants in Gold" in page and 'class="group-picker on"' in page
+    assert "the 2 clients in Gold" in page and 'class="group-picker on"' in page
 
     # The choice follows to the other pages, and to their downloads.
     assert "Bravo Inc" not in _text(client.get("/across/review"))
@@ -247,7 +247,7 @@ def test_a_digest_can_cover_one_group(client, db, three):
     _admin(client, db)
     _configure(client)
     team = delivery.add_contact(db, None, "Me", "me@msp.com")
-    assert "Gold (2 tenants)" in _text(client.get("/emails/digests/new"))
+    assert "Gold (2 clients)" in _text(client.get("/emails/digests/new"))
     assert (
         client.post(
             "/emails/digests/new",
@@ -277,13 +277,13 @@ def test_a_digest_can_cover_one_group(client, db, three):
     )
     s = db.execute("SELECT * FROM email_schedules WHERE kind = 'digest'").fetchone()
     assert s["group_id"] == gold
-    assert "Tenant digest · Gold" in _text(client.get("/emails"))
+    assert "Client digest · Gold" in _text(client.get("/emails"))
     client.post(f"/schedules/{s['id']}/send")
     ((_, _, msg, _),) = sends()
-    assert msg["Subject"].startswith("Tenant digest · Gold · ")
+    assert msg["Subject"].startswith("Client digest · Gold · ")
     html = msg.get_body(("html",)).get_content()
-    assert "Alpha Ltd" in html and "Bravo Inc" not in html and "Tenant digest: Gold" in html
-    assert [p.get_filename() for p in msg.iter_attachments()][0].startswith("tenant-digest-gold-")
+    assert "Alpha Ltd" in html and "Bravo Inc" not in html and "Client digest: Gold" in html
+    assert [p.get_filename() for p in msg.iter_attachments()][0].startswith("client-digest-gold-")
     # Editing keeps the group; choosing "Every tenant" clears it.
     assert "selected>Tier: Gold" in _text(client.get(f"/schedules/{s['id']}/edit"))
     client.post(
@@ -333,7 +333,7 @@ def test_user_page_grants_groups_to_analysts_only(client, db, three):
     _admin(client, db)
     ann = make_user(db, "ann", role="analyst")
     page = _text(client.get(f"/admin/users/{ann}"))
-    assert "Tenant groups" in page and "Gold" in page
+    assert "Client groups" in page and "Gold" in page
     client.post(f"/admin/users/{ann}", data={"role": "analyst", "groups": [str(gold), "777"]})
     assert tenant_groups.user_groups(db, ann) == {gold}
     assert "Granted and 1 group" in _text(client.get("/admin/users"))
@@ -348,4 +348,4 @@ def test_group_page_names_analysts_who_see_it(client, db, three):
     ann = make_user(db, "ann", role="analyst")
     tenant_groups.set_user_groups(db, ann, [gold])
     page = _text(client.get(f"/admin/groups/{gold}"))
-    assert "1 analyst can see every tenant in this group" in page and "ann" in page
+    assert "1 analyst can see every client in this group" in page and "ann" in page

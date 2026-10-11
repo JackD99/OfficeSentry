@@ -123,14 +123,14 @@ def _access_rows(row: dict) -> list[tuple[list, str | None]]:
 def site_access(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("site_access", "access_status") or [None])[0]
     if status is None:
-        report.unavailable = 'Site access hasn\'t been collected yet. Refresh "Site access" on the tenant page.'
+        report.unavailable = 'Site access hasn\'t been collected yet. Refresh "Site access" on the client page.'
         return
     if not status.get("available"):
         report.unavailable = (
             "This tenant has no SharePoint licence."
             if status.get("reason") == "no_sharepoint"
             else "Office Sentry can't read this tenant's sites yet. It needs the Sites.Read.All permission: "
-            "open the tenant page, send the consent link to the client's Global Admin again and ask them "
+            "open the client page, send the consent link to the client's Global Admin again and ask them "
             "to accept."
         )
         return

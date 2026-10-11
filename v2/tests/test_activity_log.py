@@ -84,17 +84,17 @@ def test_activity_log_filters_pages_and_exports(client, db, connection_id):
     login(client, "boss")
     page = client.get("/admin/activity").get_data(as_text=True)
     assert "Activity log" in page and "Alpha Ltd" in page and "192.0.2.1" in page
-    assert "Tenant #999 (deleted or not visible)" in page
+    assert "Client #999 (deleted or not visible)" in page
 
     page = client.get("/admin/activity", query_string={"user": "ana", "action": "collect_requested"}).get_data(
         as_text=True
     )
-    assert "Collect requested" in page and "Tenant updated" not in page.split("<tbody>")[1]
+    assert "Collect requested" in page and "Client updated" not in page.split("<tbody>")[1]
     page = client.get(
         "/admin/activity", query_string={"tenant": alpha, "from": "2026-09-02", "to": "2026-09-02"}
     ).get_data(as_text=True)
     body = page.split("<tbody>")[1]
-    assert "Tenant updated" in body and "Collect requested" not in body
+    assert "Client updated" in body and "Collect requested" not in body
 
     for i in range(60):
         audit(db, "ana", "report_downloaded", detail=f"report {i}")
@@ -105,6 +105,6 @@ def test_activity_log_filters_pages_and_exports(client, db, connection_id):
 
     csv = client.get("/admin/activity.csv", query_string={"tenant": alpha}).get_data(as_text=True)
     lines = csv.strip().splitlines()
-    assert lines[0].lstrip("﻿") == "Time (UTC),User,Action,Tenant,Address,Detail"
+    assert lines[0].lstrip("﻿") == "Time (UTC),User,Action,Client,Address,Detail"
     assert len(lines) == 3 and "'=HYPERLINK" in csv  # formulas are defused
     assert db.execute("SELECT 1 FROM audit_log WHERE action = 'activity_log_downloaded'").fetchone()

@@ -5,7 +5,7 @@
 {% block content %}
 {% set back = url_for('email.tenant_emails', tenant_id=tenant.id) if tenant else url_for('email.overview') %}
 <div class="crumbs">
-  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span><a href="{{ back }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
+  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span><a href="{{ back }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
   {% else %}<a href="{{ back }}">Email reports</a>{% endif %}
 </div>
 <div class="page-head">

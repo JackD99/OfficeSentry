@@ -208,7 +208,7 @@ def b_breakdown(ctx: Context, s: dict) -> dict:
     failing = ctx.review.failing
     ran = len(ctx.review.results) - len(ctx.review.unavailable)
     if not ran:
-        return {"empty": "No checks have run for this tenant yet."}
+        return {"empty": "No checks have run for this client yet."}
     bars = [(label, n, key) for key, label in SEVERITIES if (n := sum(1 for r in failing if r.severity == key))]
     return {
         "title": f"{len(failing)} of {ran} checks need attention" if failing else f"All {ran} checks passed",
@@ -368,7 +368,7 @@ WIDGETS: dict[str, Widget] = {
         Widget(
             "verdict",
             "Status verdict",
-            "One line on how the tenant is doing, coloured by its worst finding.",
+            "One line on how the client is doing, coloured by its worst finding.",
             "Summary",
             (),
             b_verdict,
@@ -493,12 +493,12 @@ WIDGETS: dict[str, Widget] = {
         Widget(
             "changes",
             "What changed",
-            "Findings fixed and new since last month, and changes in the tenant.",
+            "Findings fixed and new since last month, and changes in Microsoft 365.",
             "Checks",
             (
                 _heading("What changed"),
                 Field("findings", "Findings fixed and new", "checkbox", True),
-                Field("tenant", "Changes in the tenant", "checkbox", True),
+                Field("tenant", "Changes in Microsoft 365", "checkbox", True),
                 Field("max", "Items per list", "number", 15, min=3, max=50),
             ),
             b_changes,

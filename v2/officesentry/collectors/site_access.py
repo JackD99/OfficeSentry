@@ -229,7 +229,7 @@ class SiteAccess(Collector):
         except PermissionMissing as exc:
             ctx.warn(
                 "Reading site access needs the Sites.Read.All permission. Re-send the consent link from the "
-                f"tenant page to add it. ({exc.message})"
+                f"client page to add it. ({exc.message})"
             )
             ctx.objects("access_status", [("status", {"available": False, "reason": "permission"})])
             return
