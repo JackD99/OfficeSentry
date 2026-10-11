@@ -392,8 +392,8 @@ def test_the_upgrade_adds_empty_tables_and_changes_no_rows(cfg, monkeypatch):
     from officesentry import db as db_module
 
     every = db_module.migration_files()
-    added = next(v for v, path in every if "state_history" in str(path))
-    before = [m for m in every if m[0] < added]
+    first = next(n for n, path in every if "state_history" in str(path))
+    before = [m for m in every if m[0] < first]  # a database from before the daily history (and anything since)
     monkeypatch.setattr(db_module, "migration_files", lambda: before)
     conn = connect(cfg.db_path)
     migrate(conn)
