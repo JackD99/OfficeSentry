@@ -157,6 +157,10 @@ Yes: a table for the search index. It is applied on start, as usual.
   now, try again in a moment" instead of an error page.
 - On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
   dates on it are written the same way on every platform.
+- A tenant whose consent is missing the AuditLog.Read.All permission still gets its users collected each
+  night, with the run partial and the permission named, instead of the Users collection failing.
+- An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
+  cmdlet, instead of failing the whole collection.
 
 ### Security
 
