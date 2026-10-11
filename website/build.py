@@ -50,11 +50,11 @@ GITHUB = f"https://github.com/{REPO}"
 
 @dataclass
 class Doc:
-    path: str            # in the repository
-    slug: str            # the page is /docs/<slug>/
-    title: str = ""      # default: the file's first heading
-    section: str = ""    # only this "## " section of the file (for the root README's Quick start)
-    blurb: str = ""      # one line for the docs home page
+    path: str  # in the repository
+    slug: str  # the page is /docs/<slug>/
+    title: str = ""  # default: the file's first heading
+    section: str = ""  # only this "## " section of the file (for the root README's Quick start)
+    blurb: str = ""  # one line for the docs home page
     html: str = ""
     toc: list = field(default_factory=list)
     search: list = field(default_factory=list)
@@ -65,38 +65,87 @@ class Doc:
 
 
 SECTIONS = [
-    ("Get started", [
-        Doc("README.md", "quick-start", "Quick start", section="Quick start",
-            blurb="Run it with Docker, create the read-only app and add your first client."),
-        Doc("v2/DEPLOY.md", "install", "Running it on your own server",
-            blurb="HTTPS, a Hetzner server from your phone, backups, updates and Windows."),
-        Doc("v2/docs/onboarding-a-client.md", "onboarding",
-            blurb="Consent, Global Reader, the first collection, connection health and offboarding."),
-        Doc("v2/docs/troubleshooting.md", "troubleshooting",
-            blurb="The common setup and collection errors, and how to fix them."),
-        Doc("v2/docs/securing-the-portal.md", "securing",
-            blurb="What the portal does by itself, what you have to do, and reverse proxy setups."),
-    ]),
-    ("Reference", [
-        Doc("v2/README.md", "reference", "Reports and features",
-            blurb="Every report and check, Exchange data, sign-in security, national clouds."),
-        Doc("v2/docs/checks.md", "checks",
-            blurb="Every check with its data source, detail report and permission."),
-        Doc("v2/docs/what-office-sentry-reads.md", "what-it-reads",
-            blurb="For clients approving access: every permission, and what is and isn't read."),
-        Doc("examples/README.md", "examples", "Example reports",
-            blurb="Real PDF and spreadsheet exports, made from fictional demo data."),
-    ]),
-    ("Project", [
-        Doc("SECURITY.md", "security", "Security",
-            blurb="The security model, and how to report a vulnerability privately."),
-        Doc("CHANGELOG.md", "changelog", "What's new", blurb="What changed in each release."),
-        Doc("ROADMAP.md", "roadmap", "Roadmap", blurb="What's planned next, and what's out of scope."),
-        Doc("DEVELOPING.md", "developing", "Developer guide",
-            blurb="Running it locally, how it fits together, tests and simulated Microsoft responses."),
-        Doc("CONTRIBUTING.md", "contributing", "Contributing",
-            blurb="Setting up for development, and how changes are built and checked."),
-    ]),
+    (
+        "Get started",
+        [
+            Doc(
+                "README.md",
+                "quick-start",
+                "Quick start",
+                section="Quick start",
+                blurb="Run it with Docker, create the read-only app and add your first client.",
+            ),
+            Doc(
+                "v2/DEPLOY.md",
+                "install",
+                "Running it on your own server",
+                blurb="HTTPS, a Hetzner server from your phone, backups, updates and Windows.",
+            ),
+            Doc(
+                "v2/docs/onboarding-a-client.md",
+                "onboarding",
+                blurb="Consent, Global Reader, the first collection, connection health and offboarding.",
+            ),
+            Doc(
+                "v2/docs/troubleshooting.md",
+                "troubleshooting",
+                blurb="The common setup and collection errors, and how to fix them.",
+            ),
+            Doc(
+                "v2/docs/securing-the-portal.md",
+                "securing",
+                blurb="What the portal does by itself, what you have to do, and reverse proxy setups.",
+            ),
+        ],
+    ),
+    (
+        "Reference",
+        [
+            Doc(
+                "v2/README.md",
+                "reference",
+                "Reports and features",
+                blurb="Every report and check, Exchange data, sign-in security, national clouds.",
+            ),
+            Doc("v2/docs/checks.md", "checks", blurb="Every check with its data source, detail report and permission."),
+            Doc(
+                "v2/docs/what-office-sentry-reads.md",
+                "what-it-reads",
+                blurb="For clients approving access: every permission, and what is and isn't read.",
+            ),
+            Doc(
+                "examples/README.md",
+                "examples",
+                "Example reports",
+                blurb="Real PDF and spreadsheet exports, made from fictional demo data.",
+            ),
+        ],
+    ),
+    (
+        "Project",
+        [
+            Doc(
+                "SECURITY.md",
+                "security",
+                "Security",
+                blurb="The security model, and how to report a vulnerability privately.",
+            ),
+            Doc("CHANGELOG.md", "changelog", "What's new", blurb="What changed in each release."),
+            Doc("ROADMAP.md", "roadmap", "Roadmap", blurb="What's planned next, and what's out of scope."),
+            Doc(
+                "DEVELOPING.md",
+                "developing",
+                "Developer guide",
+                blurb="Running it locally, how it fits together, tests and simulated Microsoft responses.",
+            ),
+            Doc(
+                "CONTRIBUTING.md",
+                "contributing",
+                "Contributing",
+                blurb="Setting up for development, and how changes are built and checked.",
+            ),
+        ],
+    ),
 ]
 GUIDES = "Guides"  # v2/docs/*.md not listed above
 
@@ -118,8 +167,13 @@ def settings() -> dict:
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", contact):
             sys.exit(f"SITE_CONTACT must be an email address or an https:// link, not {contact!r}")
         contact = f"mailto:{contact}?subject=Office%20Sentry%20early%20access"
-    return {"site_url": site, "demo_url": demo, "github": GITHUB, "contact": contact,
-            "source_public": os.environ.get("SITE_SOURCE_PUBLIC", "").strip().lower() == "true"}
+    return {
+        "site_url": site,
+        "demo_url": demo,
+        "github": GITHUB,
+        "contact": contact,
+        "source_public": os.environ.get("SITE_SOURCE_PUBLIC", "").strip().lower() == "true",
+    }
 
 
 # -- Markdown -------------------------------------------------------------------------------------------------
@@ -142,8 +196,9 @@ def _highlight(code: str, lang: str, _attrs) -> str:
 
 def markdown() -> MarkdownIt:
     md = MarkdownIt("commonmark", {"html": True, "highlight": _highlight}).enable(["table", "strikethrough"])
-    anchors_plugin(md, min_level=1, max_level=6, slug_func=github_slug, permalink=True, permalinkSymbol="#",
-                   permalinkBefore=False)
+    anchors_plugin(
+        md, min_level=1, max_level=6, slug_func=github_slug, permalink=True, permalinkSymbol="#", permalinkBefore=False
+    )
     return md
 
 
@@ -186,7 +241,7 @@ class Links:
             return "/" + anchor
         for source, published in COPIED.items():
             if path.startswith(source + "/") and (ROOT / path).is_file():
-                return f"/{published}/{path[len(source) + 1:]}"
+                return f"/{published}/{path[len(source) + 1 :]}"
         kind = "tree" if (ROOT / path).is_dir() else "blob"
         return f"{GITHUB}/{kind}/{BRANCH}/{path}{anchor}"
 
@@ -212,8 +267,7 @@ def render(md: MarkdownIt, doc: Doc, links: Links) -> None:
                 elif child.type == "image":
                     child.attrSet("src", links.resolve(doc.path, child.attrGet("src") or ""))
                 elif child.type == "html_inline":
-                    child.content = _HTML_URL.sub(lambda m: f'{m[1]}="{links.resolve(doc.path, m[2])}"',
-                                                  child.content)
+                    child.content = _HTML_URL.sub(lambda m: f'{m[1]}="{links.resolve(doc.path, m[2])}"', child.content)
         elif tok.type == "html_block":
             tok.content = _HTML_URL.sub(lambda m: f'{m[1]}="{links.resolve(doc.path, m[2])}"', tok.content)
         elif tok.type == "heading_open" and tok.tag in ("h2", "h3"):
@@ -245,8 +299,7 @@ def search_entries(doc: Doc, tokens) -> list[dict]:
     entries = [{"t": doc.title, "h": "", "u": doc.url, "x": []}]
     for i, tok in enumerate(tokens):
         if tok.type == "heading_open":
-            entries.append({"t": doc.title, "h": _plain(tokens[i + 1]), "u": f"{doc.url}#{tok.attrGet('id')}",
-                            "x": []})
+            entries.append({"t": doc.title, "h": _plain(tokens[i + 1]), "u": f"{doc.url}#{tok.attrGet('id')}", "x": []})
         elif tok.type == "inline" and (i == 0 or tokens[i - 1].type != "heading_open"):
             entries[-1]["x"].append(_plain(tok))
     for e in entries:
@@ -267,17 +320,33 @@ def png_size(path: Path) -> tuple[int, int]:
 
 def examples() -> list[dict]:
     """The example exports, from the table in examples/README.md (file and what it is)."""
-    rows = re.findall(r"^\| \[([^\]]+)\]\(([^)]+)\) \| (.+?) \|$", (ROOT / "examples/README.md").read_text("utf-8"),
-                      re.M)
-    return [{"file": f, "href": f"/examples/{f}", "text": text, "kind": f.rsplit(".", 1)[-1].upper(),
-             "title": example_title(name)} for name, f, text in rows if (ROOT / "examples" / f).is_file()]
+    rows = re.findall(
+        r"^\| \[([^\]]+)\]\(([^)]+)\) \| (.+?) \|$", (ROOT / "examples/README.md").read_text("utf-8"), re.M
+    )
+    return [
+        {
+            "file": f,
+            "href": f"/examples/{f}",
+            "text": text,
+            "kind": f.rsplit(".", 1)[-1].upper(),
+            "title": example_title(name),
+        }
+        for name, f, text in rows
+        if (ROOT / "examples" / f).is_file()
+    ]
 
 
 # File names are lower case; these words aren't.
-_WORDS = {"monthly security licensing review": "Monthly Security & Licensing Review", "mfa": "MFA",
-          "all tenants monthly review": "Monthly review for all clients", "sharepoint": "SharePoint",
-          "what changed all tenants": "What changed across all clients", "conditional access": "Conditional Access",
-          "sign in": "sign-in", "right sizing": "right-sizing"}
+_WORDS = {
+    "monthly security licensing review": "Monthly Security & Licensing Review",
+    "mfa": "MFA",
+    "all tenants monthly review": "Monthly review for all clients",
+    "sharepoint": "SharePoint",
+    "what changed all tenants": "What changed across all clients",
+    "conditional access": "Conditional Access",
+    "sign in": "sign-in",
+    "right sizing": "right-sizing",
+}
 
 
 def example_title(name: str) -> str:
@@ -300,8 +369,11 @@ def version() -> str:
 
 def all_sections() -> list[tuple[str, list[Doc]]]:
     listed = {d.path for _, docs in SECTIONS for d in docs}
-    guides = [Doc(f"v2/docs/{p.name}", p.stem) for p in sorted((ROOT / "v2/docs").glob("*.md"))
-              if f"v2/docs/{p.name}" not in listed]
+    guides = [
+        Doc(f"v2/docs/{p.name}", p.stem)
+        for p in sorted((ROOT / "v2/docs").glob("*.md"))
+        if f"v2/docs/{p.name}" not in listed
+    ]
     return SECTIONS + ([(GUIDES, guides)] if guides else [])
 
 
@@ -320,34 +392,50 @@ def build() -> Path:
         shutil.copytree(ROOT / source, OUT / published, ignore=shutil.ignore_patterns("*.md"))
     (OUT / "assets/code.css").write_text(code_css(), encoding="utf-8")
 
-    shots = {p.stem: {"src": f"/screenshots/{p.name}", "w": png_size(p)[0], "h": png_size(p)[1]}
-             for p in sorted((ROOT / "docs/screenshots").glob("*.png"))}
-    env = Environment(loader=FileSystemLoader(HERE / "templates"), autoescape=select_autoescape(["html"]),
-                      trim_blocks=True, lstrip_blocks=True)
+    shots = {
+        p.stem: {"src": f"/screenshots/{p.name}", "w": png_size(p)[0], "h": png_size(p)[1]}
+        for p in sorted((ROOT / "docs/screenshots").glob("*.png"))
+    }
+    env = Environment(
+        loader=FileSystemLoader(HERE / "templates"),
+        autoescape=select_autoescape(["html"]),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
     env.globals.update(cfg, sections=sections, shots=shots, version=version())
 
     def page(template: str, path: str, **ctx) -> None:
         target = OUT / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(env.get_template(template).render(path="/" + path.removesuffix("index.html"), **ctx),
-                          encoding="utf-8")
+        target.write_text(
+            env.get_template(template).render(path="/" + path.removesuffix("index.html"), **ctx), encoding="utf-8"
+        )
 
     page("home.html", "index.html", examples=examples())
     page("docs_index.html", "docs/index.html", title="Documentation")
     for doc in docs:
-        page("doc.html", f"docs/{doc.slug}/index.html", doc=doc, title=doc.title,
-             edit=f"{GITHUB}/edit/{BRANCH}/{doc.path}")
+        page(
+            "doc.html",
+            f"docs/{doc.slug}/index.html",
+            doc=doc,
+            title=doc.title,
+            edit=f"{GITHUB}/edit/{BRANCH}/{doc.path}",
+        )
     page("404.html", "404.html", title="Page not found")
 
     (OUT / "assets/search.json").write_text(
-        json.dumps([e for d in docs for e in d.search], ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        json.dumps([e for d in docs for e in d.search], ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
     urls = ["/", "/docs/"] + [d.url for d in docs]
     (OUT / "sitemap.xml").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
         + "".join(f"  <url><loc>{html.escape(cfg['site_url'] + u)}</loc></url>\n" for u in urls)
-        + "</urlset>\n", encoding="utf-8")
-    (OUT / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {cfg['site_url']}/sitemap.xml\n",
-                                    encoding="utf-8")
+        + "</urlset>\n",
+        encoding="utf-8",
+    )
+    (OUT / "robots.txt").write_text(
+        f"User-agent: *\nAllow: /\nSitemap: {cfg['site_url']}/sitemap.xml\n", encoding="utf-8"
+    )
     return OUT
 
 
@@ -356,7 +444,7 @@ def code_css() -> str:
     light = HtmlFormatter(style="default").get_style_defs(".prose pre")
     dark = HtmlFormatter(style="github-dark").get_style_defs(".prose pre")
     strip = re.compile(r"^.*\{ (?:background|line-height)[^}]*\}\n?", re.M)  # the page sets those
-    return (strip.sub("", light) + "\n@media (prefers-color-scheme: dark) {\n" + strip.sub("", dark) + "\n}\n")
+    return strip.sub("", light) + "\n@media (prefers-color-scheme: dark) {\n" + strip.sub("", dark) + "\n}\n"
 
 
 if __name__ == "__main__":
