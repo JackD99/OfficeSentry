@@ -468,7 +468,11 @@ def flags_for(conn, tenant, facts: ReviewFacts, period: str, now: datetime) -> t
         flags.append("No data collected yet")
     elif facts.oldest < cutoff:
         flags.append("Data older than 24 hours")
-    if len(facts.missing) == 1:
+    if facts.oldest and facts.verdict.label == summary.NOT_CHECKED:
+        # Sign-in failing (the client removed the app): a few sources that need no answer from Microsoft
+        # still finish, but the report would only say nothing could be checked.
+        flags.append("No checks could run")
+    elif len(facts.missing) == 1:
         flags.append(f"{facts.missing[0]} not collected")
     elif facts.missing:
         flags.append(f"{len(facts.missing)} data sources not collected")

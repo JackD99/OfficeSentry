@@ -644,7 +644,9 @@ sender, `PER_MINUTE`), and a Graph 429 or 503 holds that sender for its
 `Retry-After` and is sent again. Only sends inside `mailer.patient()` wait (the
 `approve` and `send_schedule` task handlers, up to `BACKGROUND_PATIENCE`); a web
 request or the main loop sends at once and gets Microsoft's refusal as before.
-Tests start each with a fresh pacer (`conftest._fresh_mail_pacer`).
+Once Microsoft has refused a sender for that long (an outage), later sends try
+once and fail, rather than each holding a task thread for ten minutes. Tests
+start each with a fresh pacer (`conftest._fresh_mail_pacer`).
 
 **Coming up** (`upcoming.py`, page `/upcoming` in `web/upcoming.py`, admin and analyst) lists what falls
 due in the next 90 days across the visible, active tenants: subscription renewals and trials (lapsing ones
@@ -686,8 +688,9 @@ report, who has no contacts or recipients) with a fix link per gap.
 implicit Draft per month (`report_reviews` only gets a row once someone acts),
 then In review, Approved, Sent. The period is the schedule period the report
 goes out in. Flags: new critical findings since the last issued report, data
-older than 24 h, a data source never collected while others were
-(`ReviewFacts.missing`), checks that couldn't run. "Ready" means not yet issued and
+older than 24 h, no check able to run (`summary.NOT_CHECKED`: sign-in failing),
+else a data source never collected while others were (`ReviewFacts.missing`),
+checks that crashed. "Ready" means not yet issued and
 nothing flagged. The review screen (`/reporting/<period>/<tenant>`) edits the
 month's commentary, the tenant's "What we recommend next" items
 (`report_actions`, kept across months, prefilled from

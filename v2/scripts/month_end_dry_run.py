@@ -460,7 +460,7 @@ def month_end_done(conn) -> bool:
 
 
 def rss_mb() -> float:
-    for line in Path("/proc/self/status").read_text().splitlines():
+    for line in Path("/proc/self/status").read_text(encoding="utf-8").splitlines():
         if line.startswith("VmRSS:"):
             return int(line.split()[1]) / 1024
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024

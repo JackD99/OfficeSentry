@@ -298,7 +298,7 @@ def test_the_pacer_keeps_a_sender_under_microsofts_rate():
     assert fake.slept == [30] and fake.now == 1060
     pacer.turn("reports@msp.com", fake.now)  # with no patience it goes at once, and Microsoft decides
     assert fake.slept == [30]
-    pacer.hold("reports@msp.com", 120)  # Microsoft said wait: every later message waits too
+    pacer.refused("reports@msp.com", 120)  # Microsoft said wait: every later message waits too
     pacer.turn("reports@msp.com", fake.now + 600)
     assert fake.slept == [30, 120]
 
@@ -335,6 +335,30 @@ def test_a_page_never_waits_for_microsoft(db, vault, monkeypatch):
     with mailer.patient(1000):
         assert mailer.send(db, vault, email) == "graph"
     assert len(responses.calls) == 3 and fake.slept == [20, 900]
+
+
+@responses.activate
+def test_an_outage_fails_later_sends_at_once(db, vault, monkeypatch):
+    """Each send waits out Microsoft for up to ten minutes; once Microsoft has refused that long, the rest try
+    once and fail, so a month-end during an outage doesn't take ten minutes a client to fail."""
+    fake = paced(monkeypatch)
+    monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
+    _graph_db(db, vault)
+    down = responses.post(GRAPH_SEND, status=503, json={"error": {"code": "ServiceUnavailable"}})
+    email = mailer.Email(to=["a@x.com"], subject="s", text="t")
+    with mailer.patient(), pytest.raises(mailer.MailError, match="503"):
+        mailer.send(db, vault, email)
+    tries = mailer.BACKGROUND_PATIENCE // mailer.DEFAULT_RETRY_AFTER + 1  # at once, then every 30 seconds
+    assert down.call_count == tries and sum(fake.slept) == mailer.BACKGROUND_PATIENCE
+    fake.slept.clear()
+    with mailer.patient(), pytest.raises(mailer.MailError, match="503"):
+        mailer.send(db, vault, email)
+    assert down.call_count == tries + 1 and fake.slept == []
+    # Once Microsoft takes one again, sends wait their turn as before.
+    responses.replace(responses.POST, GRAPH_SEND, status=202)
+    with mailer.patient():
+        mailer.send(db, vault, email)
+    assert mailer.PACER.refusing_for("reports@msp.com") == 0
 
 
 def test_unconfigured_email_records_failure(client, db, two_tenants):

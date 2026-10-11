@@ -227,6 +227,12 @@ def test_a_data_source_never_collected_is_flagged(client, db, two_tenants):
     db.execute("UPDATE runs SET status = 'succeeded' WHERE status = 'failed'")
     assert all(r.ready for r in month_end.queue(db, tenants, PERIOD, cached=False))
 
+    # A client that removed the app: sign-in fails, and only a source that needed nothing from Microsoft
+    # finished, so its report would say no check could run. That's never Ready either.
+    db.execute("UPDATE runs SET status = 'failed' WHERE tenant_id = ? AND collector != 'inbox_rules'", (bravo,))
+    rows = {r.tenant["id"]: r for r in month_end.queue(db, tenants, PERIOD, cached=False)}
+    assert rows[bravo].flags == ["No checks could run"] and not rows[bravo].ready and rows[alpha].ready
+
 
 def test_review_suggests_projects_then_quick_fixes(client, db, two_tenants):
     """Projects are half a day or more; smaller fixes are offered separately, and nothing is offered twice."""
