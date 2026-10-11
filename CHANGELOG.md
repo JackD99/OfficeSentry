@@ -27,7 +27,7 @@ None.
 
 ### Database upgrade
 
-No.
+Yes: a table for the search index. It is applied on start, as usual.
 
 ### Added
 
@@ -39,6 +39,20 @@ No.
 
 ### Changed
 
+- Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
+  rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
+  page now read rows the worker keeps up to date after each collection, as What changed and the check
+  matrix already did; a row is rebuilt the moment anything behind it changes, so nothing shown is older
+  than the live page would be. At 200 clients the Accounts page went from 6 seconds to half a second, the
+  month-end queue from 3.4 seconds to under a tenth, the insurance evidence rollup from 4 seconds to under
+  a tenth, and a report's All clients rollup from about a second to under a tenth.
+- The sidebar search reads an index the worker keeps, instead of scanning every client's data on each
+  search. A client whose index is behind its latest collection is still scanned, so nothing is missed.
+- PDFs of an All clients rollup, What changed and a client's change report keep the first 2,000 rows and
+  say so, as table reports already did, so a very large client can't run a download into the server's
+  timeout. The spreadsheet downloads still have every row.
+- `DEPLOY.md` gives measured page, download and worker times at 200 clients ("How fast"), and
+  `scripts/timings.py` measures them.
 - **"Clients" for the companies you look after.** Pages, menus, emails, PDFs, spreadsheets and the docs now
   say client where they said tenant; "tenant" is kept only for the Microsoft 365 side (Tenant ID, consent in
   the client's tenant). In the menu, Tenants is now **Clients**, All tenants is **All clients**, and under
@@ -141,6 +155,8 @@ No.
   pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
   still finds the database locked after five seconds is answered with "Office Sentry is busy right
   now, try again in a moment" instead of an error page.
+- On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
+  dates on it are written the same way on every platform.
 
 ### Security
 
