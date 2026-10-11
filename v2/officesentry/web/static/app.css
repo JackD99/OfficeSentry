@@ -231,6 +231,11 @@ details.help > summary { font-size: var(--fs-base); }
 .settings-nav a { padding: 5px 11px; border-radius: var(--radius-pill); color: var(--muted); font-weight: 500; font-size: var(--fs-sm); white-space: nowrap; }
 .settings-nav a:hover { color: var(--text); background: var(--sunken); text-decoration: none; }
 .settings-nav a.active { background: var(--text); color: var(--surface); }
+/* On a laptop the row wraps rather than hiding its end; on a phone it scrolls sideways. */
+@media (min-width: 641px) { .settings-nav { flex-wrap: wrap; overflow: visible; row-gap: var(--space-1); } }
+.package-form label.identifiers { align-items: flex-start; }
+.package-form label.identifiers input { margin-top: 4px; }
+.package-form .form-actions { margin-top: var(--space-3); }
 
 /* -- Month-end review: suggested projects and quick fixes, and the approve bar on phones ------------ */
 .action-row.suggestions { display: block; }
@@ -792,6 +797,11 @@ a.tile.link:hover .go { opacity: 1; color: var(--accent); transform: translateX(
 .person-head .person-actions { flex: none; align-self: center; }
 .person-actions .leaver-link { display: block; margin-top: var(--space-1-5); text-align: right; }
 .part-downloads { margin: -4px 0 12px; }
+.person-actions .external-link { display: block; margin-top: var(--space-1-5); text-align: right; }
+.person-actions .external-link .icon { width: 14px; height: 14px; vertical-align: -2px; }
+.card.part .part-chart { padding: var(--space-2) 0 var(--space-3); border-bottom: 0; }
+.part-intro { margin: 0 0 var(--space-2); }
+.link-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1-5); font-size: var(--fs-base); }
 .card.part .kv { margin-bottom: var(--space-1); }
 .part-sub { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin: 18px 0 4px; display: flex; gap: var(--space-2); align-items: center; }
 .card-head + .scroll-x > .part-table { margin-top: -4px; }

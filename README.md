@@ -115,6 +115,10 @@ changed over time. Useful for offboarding checks and "was this account compromis
 
 ![An account page: needs attention, MFA, admin roles, licences and devices](docs/screenshots/person.png)
 
+Mailboxes get the same treatment: **Users > Mailboxes** lists every mailbox with its size, forwarding and who
+else can open it, and each has a page with its size and growth over time, inbox rules, access, protocols, automatic
+reply, the phones syncing it and what changed. Mailbox addresses in reports and search results open it.
+
 ### Across all clients, and what changed
 
 The **Clients** page puts every client side by side, worst first. **All clients** compares any report across every
@@ -276,14 +280,14 @@ cp env.example .env           # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN a
 docker compose --profile https up -d
 ```
 
-The image is `ghcr.io/jackd99/officesentry`, for amd64 servers (arm64 too once the repository is public); each release lists what changed in
-[CHANGELOG.md](CHANGELOG.md). While this repository is private the image is too, so the server needs
-`docker login ghcr.io` with a GitHub token that can read packages.
+The image is `ghcr.io/jackd99/officesentry`, public, for amd64 servers and (from the first release after
+2.1.0) arm64 ones; each release lists what changed in [CHANGELOG.md](CHANGELOG.md).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
 
 1. Run `docker compose logs web` and open the link on the line starting **No admin account yet** to create the
-   first admin (with two-step sign-in).
+   first admin (with two-step sign-in). Your home page then shows a **Get started** checklist of the next
+   three steps, which ticks itself off as you go.
 2. Open **Settings → App connection** and press **Sign in to Microsoft**. The page shows a code and Microsoft's
    link: enter the code there and sign in as an admin of **your own** (MSP) tenant who can create app
    registrations. Office Sentry then creates its multi-tenant, read-only app with a certificate and saves it, with
@@ -293,7 +297,9 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
    tenant grants consent, you assign Global Reader, and the first collection runs.
 
 Stuck? [Troubleshooting](v2/docs/troubleshooting.md) covers the common errors, such as `AADSTS50011` on the
-consent page, mailboxes failing without Global Reader and the worker not running.
+consent page, mailboxes failing without Global Reader and the worker not running. For anything else,
+**Settings → Support** makes a support package to attach to a bug report, with secrets and client names taken
+out ([Getting help](v2/docs/getting-help.md)).
 
 [v2/DEPLOY.md](v2/DEPLOY.md) covers HTTPS, the collection schedule, retention, backups and updating.
 
@@ -307,6 +313,7 @@ consent page, mailboxes failing without Global Reader and the worker not running
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
+- [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
 - [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be

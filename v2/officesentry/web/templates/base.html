@@ -21,7 +21,8 @@
                    ('alerts.settings', 'Alerts', [], 'settings.manage'), ('branding.settings', 'Branding', [], 'settings.manage'),
                    ('retention.settings', 'Data retention', [], 'settings.manage'), ('admin.users', 'Users', ['admin.edit_user', 'roles.index', 'roles.edit'], 'users.manage'),
                    ('sso.settings_page', 'Staff sign-in', [], 'settings.manage'),
-                   ('activity.index', 'Activity log', [], 'activity_log.read'), ('system.status', 'System status', [], 'system.manage')] %}
+                   ('activity.index', 'Activity log', [], 'activity_log.read'), ('system.status', 'System status', [], 'system.manage'),
+                   ('support.index', 'Support', [], 'system.manage')] %}
 {% set SETTINGS = [] %}
 {% for entry in ALL_SETTINGS %}{% if current_user and (not entry[3] or can(entry[3])) %}{% set _ = SETTINGS.append(entry) %}{% endif %}{% endfor %}
 {% set SETTINGS_ENDPOINTS = SETTINGS|map(attribute=0)|list + SETTINGS|map(attribute=2)|sum(start=[]) %}
