@@ -59,8 +59,15 @@ first.
   always wins; a client account only ever holds report capabilities). The menu, a client's tabs and the
   report picker show only what the person may open, every page and download checks on the server, and the
   cross-client pages leave out a client where a capability was taken away. There is always at least one
-  Administrator: the last one can't be demoted, disabled or deleted. Editing roles and adding custom ones
-  come in the next release.
+  Administrator: the last one can't be demoted, disabled or deleted.
+- **Roles** (*Settings → Users → Roles*): change what a built-in role holds (not Administrator), put it back
+  to its default, or add custom roles from scratch or as a copy of another, with a preview of the menu and
+  client tabs the role opens. Changing a role signs out everyone holding it, so they pick it up at their next
+  sign-in, and every change is in the activity log. On a person's page, **Customise** sets single
+  capabilities for them: everywhere (as the role, allowed, or taken away) or on one client.
+- Users and roles can be handed to someone who isn't an Administrator: they give out only what they hold
+  themselves, only on the clients they see (other clients' names don't show), can't change their own role
+  or access, and can't change an Administrator or anyone who can do or see more than they can.
 - **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
   failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
   addresses and client names taken out (clients appear as numbers unless you tick *Include client
@@ -71,8 +78,10 @@ first.
   every line says which request, user, client, run or task it belongs to. A page that fails shows a
   reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
-  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
-  roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with an app role for each
+  built-in role (Admin for Administrator, TeamLeader, Analyst for Second line, FirstLine, AccountManager and
+  Auditor) to assign people or groups to in Entra; a custom role gets an app role value of its own on the
+  same page. The role follows Entra at every sign-in. Staff then press *Sign in with Microsoft* and use their
   work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
   sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
   turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
@@ -100,6 +109,13 @@ first.
   every group that still holds a blocked account, naming the accounts. Group nesting keeps the member IDs
   of security groups and distribution lists for that. **Coming up** and its weekly email list the teams and
   groups about to expire alongside renewals and app secrets.
+- **Licence changes** report (Tenant and licences): every paid licence given to or taken from an account, with
+  when it happened (to the day for the last month, to the month before that), whether it came directly or
+  from a group, and, where the directory audit log has been read, who made the change. Licences bought and
+  assigned month by month for the last year with what they cost at your prices, a chart of assigned licences
+  against bought, and how bought licences and the monthly cost moved since a month ago, for checking a
+  client's bill. Built from Office Sentry's own history; no new permission. The monthly review's "since last
+  month" changes and What changed now list who was given or lost a licence.
 - **Deploy guides by platform** ([v2/docs/deploy](v2/docs/deploy/README.md), and under *Deploy* on the
   website): Portainer; Dockge, Komodo, Coolify and Dokploy; Unraid, Synology and TrueNAS; Kubernetes (AKS,
   EKS, GKE, k3s and others); Azure and AWS virtual machines; DigitalOcean, Google Cloud, Linode, Vultr,

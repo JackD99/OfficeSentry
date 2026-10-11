@@ -56,6 +56,8 @@ PAGES = [
     Page("client-tenants", "/admin/tenants"),
     Page("onboarding-tracker", "/admin/onboarding"),
     Page("users", "/admin/users"),
+    Page("roles", "/admin/roles"),
+    Page("role-edit", "/admin/roles/4"),  # First line, the fourth built-in role
     Page("branding", "/admin/branding"),
     Page("system-status", "/admin/status"),
     Page("client-home", "/", user="client"),

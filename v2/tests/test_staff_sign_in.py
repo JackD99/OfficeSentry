@@ -163,7 +163,7 @@ def test_new_admin_signs_in_with_microsoft(client, db, vault, configured, cfg):
     assert db.execute("SELECT method FROM sessions").fetchone()["method"] == "microsoft"
     assert signed_in_as(client) == "jack@msp.example"
     actions = [(r["action"], r["detail"]) for r in db.execute("SELECT action, detail FROM audit_log ORDER BY id")]
-    assert ("user_created", "jack@msp.example (admin), Microsoft sign-in") in actions
+    assert ("user_created", "jack@msp.example (Administrator), Microsoft sign-in") in actions
     assert ("login", "Microsoft") in actions
     # The account page: no password to change, no authenticator; Microsoft is the way in.
     text = page(client, "/account")
@@ -197,41 +197,103 @@ def test_role_follows_entra_and_client_grants_stay(client, db, vault, configured
     assert db.execute("SELECT COUNT(*) FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()[0] == 1
 
 
+def _role_key(db, oid: str) -> str | None:
+    user = db.execute("SELECT * FROM users WHERE entra_oid = ?", (oid,)).fetchone()
+    return office_roles.role_of(db, user).key
+
+
 @responses.activate
-def test_entra_says_admin_or_staff_and_office_sentry_picks_the_staff_role(client, db, vault, configured):
-    sent = start(client)
-    come_back(client, sent, id_token(AMY, sent["nonce"], roles=["Analyst"]))
-    client.post("/logout")
-    amy = db.execute("SELECT id FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()["id"]
+def test_each_app_role_in_entra_gives_its_office_sentry_role(client, db, vault, configured):
+    # The app the wizard makes declares one app role per built-in role, with ids a hand-made app can copy.
+    assert [r["value"] for r in sso.APP_ROLE_DEFINITIONS] == list(sso.APP_ROLES)
+    assert len({r["id"] for r in sso.APP_ROLE_DEFINITIONS}) == len(sso.APP_ROLES)
+    by_value = {r["value"]: r for r in sso.APP_ROLE_DEFINITIONS}
+    assert by_value["Analyst"]["displayName"] == "Second line" and by_value["Admin"]["displayName"] == "Administrator"
 
-    def role_key():
-        user = db.execute("SELECT * FROM users WHERE id = ?", (amy,)).fetchone()
-        return office_roles.role_of(db, user).key
-
-    assert role_key() == "second_line"
-    # On her page an admin can pick another staff role, but not make her an Administrator or a client.
-    login(client, "owner")
-    first_line, administrator = office_roles.by_key(db, "first_line"), office_roles.by_key(db, "administrator")
-    text = page(client, f"/admin/users/{amy}")
-    assert "app role assigned in Entra decides" in text
-    client.post(f"/admin/users/{amy}", data={"role": str(administrator.id)})
-    assert role_key() == "second_line"
-    assert "Change it there" in page(client, f"/admin/users/{amy}")
-    client.post(f"/admin/users/{amy}", data={"role": str(first_line.id)})
-    assert role_key() == "first_line"
-    client.post("/logout")
-
-    # Signing in as an Analyst again keeps First line; Admin in Entra makes her an Administrator, and taking
-    # it away again lands on Second line, not on a role picked for her before.
-    for entra_roles, expected in (
-        (["Analyst"], "first_line"),
-        (["Admin"], "administrator"),
-        (["Analyst"], "second_line"),
+    # The first role in APP_ROLES order wins; the role (and users.role, the kind) follow Entra every time.
+    for entra_roles, expected, column in (
+        (["FirstLine"], "first_line", "analyst"),
+        (["Auditor", "TeamLeader"], "team_leader", "analyst"),
+        (["FirstLine", "Admin"], "administrator", "admin"),
+        (["Analyst"], "second_line", "analyst"),
+        (["AccountManager"], "account_manager", "analyst"),
     ):
         sent = start(client)
-        come_back(client, sent, id_token(AMY, sent["nonce"], roles=entra_roles), code=f"code-{expected}")
-        assert role_key() == expected
+        resp, _ = come_back(client, sent, id_token(AMY, sent["nonce"], roles=entra_roles), code=f"code-{expected}")
+        assert resp.status_code == 302 and signed_in_as(client) == "amy@msp.example"
+        assert _role_key(db, AMY["oid"]) == expected
+        assert db.execute("SELECT role FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()[0] == column
         client.post("/logout")
+    assert "role from Entra: Account manager" in [
+        r[0] for r in db.execute("SELECT detail FROM audit_log WHERE action = 'user_updated'")
+    ]
+
+    # Her user page says the role is set in Entra, and picking another one there is refused.
+    amy = db.execute("SELECT id FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()["id"]
+    login(client, "owner")
+    assert "their role is the app role assigned to them in Entra" in page(client, f"/admin/users/{amy}")
+    client.post(f"/admin/users/{amy}", data={"role": str(office_roles.by_key(db, "auditor").id)})
+    assert _role_key(db, AMY["oid"]) == "account_manager"
+    assert "Change it there" in page(client, f"/admin/users/{amy}")
+
+
+@responses.activate
+def test_a_custom_role_is_reached_through_the_value_an_admin_gives_it(client, db, vault, configured):
+    desk = office_roles.create(db, "owner", "Service desk", "", "staff", "granted", ["reports.people"])
+    other = office_roles.create(db, "owner", "Finance", "", "staff", "granted", ["reports.email"])
+    db.commit()
+    login(client, "owner")
+    text = page(client, "/admin/sign-in")
+    assert "Custom roles from Entra" in text and f'name="value-{desk}" value=""' in text
+
+    # Values Entra wouldn't accept, or that another role already has, are refused and nothing is saved.
+    for value, problem in (("Service desk", "no spaces"), ("analyst", "already an app role")):
+        resp = client.post("/admin/sign-in/roles", data={f"value-{desk}": value})
+        assert problem in html.unescape(client.get(resp.headers["Location"]).get_data(as_text=True))
+        assert sso.custom_values(sso.settings(db)) == {}
+    client.post("/admin/sign-in/roles", data={f"value-{desk}": "Desk", f"value-{other}": "desk"})
+    assert sso.custom_values(sso.settings(db)) == {}
+    client.post("/admin/sign-in/roles", data={f"value-{desk}": "ServiceDesk", f"value-{other}": ""})
+    assert sso.custom_values(sso.settings(db)) == {"ServiceDesk": desk}
+    assert "roles from Entra: ServiceDesk=Service desk" in [
+        r[0] for r in db.execute("SELECT detail FROM audit_log WHERE action = 'staff_sign_in_changed'")
+    ]
+    text = page(client, "/admin/sign-in")
+    assert 'value="ServiceDesk"' in text
+    client.post("/logout")
+
+    sent = start(client)
+    come_back(client, sent, id_token(AMY, sent["nonce"], roles=["ServiceDesk"]))
+    assert _role_key(db, AMY["oid"]) is None  # a custom role has no key
+    user = db.execute("SELECT * FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()
+    assert office_roles.role_of(db, user).id == desk and user["role"] == "analyst"
+    client.post("/logout")
+    # A built-in role in the token comes first.
+    sent = start(client)
+    come_back(client, sent, id_token(AMY, sent["nonce"], roles=["ServiceDesk", "Auditor"]), code="code-2")
+    assert _role_key(db, AMY["oid"]) == "auditor"
+    client.post("/logout")
+
+    # Deleting the role takes its value away, so a role made later with its id isn't reached from Entra.
+    office_roles.remove(db, "owner", office_roles.get(db, other))
+    db.execute("UPDATE users SET role_id = ? WHERE entra_oid = ?", (office_roles.by_key(db, "auditor").id, AMY["oid"]))
+    office_roles.remove(db, "owner", office_roles.get(db, desk))
+    db.commit()
+    assert sso.custom_values(sso.settings(db)) == {}
+    sent = start(client)
+    resp, _ = come_back(client, sent, id_token(AMY, sent["nonce"], roles=["ServiceDesk"]), code="code-3")
+    assert resp.headers["Location"].endswith("/login") and signed_in_as(client) is None
+
+
+@responses.activate
+def test_a_value_left_for_a_role_that_is_gone_refuses_rather_than_guessing(client, db, vault, configured):
+    sso.save(db, {"sso_role_values": '{"Ghost": 9999}'})
+    db.commit()
+    sent = start(client)
+    resp, _ = come_back(client, sent, id_token(AMY, sent["nonce"], roles=["Ghost"]))
+    assert resp.headers["Location"].endswith("/login") and signed_in_as(client) is None
+    assert "doesn't match a role in Office Sentry any more" in page(client, "/login")
+    assert db.execute("SELECT COUNT(*) FROM users WHERE entra_oid = ?", (AMY["oid"],)).fetchone()[0] == 0
 
 
 @responses.activate
@@ -650,7 +712,14 @@ def test_the_wizard_creates_the_sign_in_app_and_turns_it_on(client, db, vault):
     s = sso.settings(db)
     assert body["signInAudience"] == "AzureADMyOrg" and body["displayName"] == "Office Sentry sign-in"
     assert body["web"]["redirectUris"] == [CALLBACK]
-    assert [r["value"] for r in body["appRoles"]] == ["Admin", "Analyst"]
+    assert [r["value"] for r in body["appRoles"]] == [
+        "Admin",
+        "TeamLeader",
+        "Analyst",
+        "FirstLine",
+        "AccountManager",
+        "Auditor",
+    ]
     assert body["keyCredentials"][0]["key"] and "requiredResourceAccess" not in body  # no API permissions
     assert json.loads(sp.calls[0].request.body) == {"appId": CLIENT_ID, "appRoleAssignmentRequired": True}
     assert json.loads(assign.calls[0].request.body) == {

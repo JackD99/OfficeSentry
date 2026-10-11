@@ -1330,6 +1330,19 @@ input.copy-text { font-size: var(--fs-sm); margin: var(--space-1) 0 0; }
 /* A person's effective access on their user page: what their role (and overrides) open, by group. */
 .cap-list { list-style: none; padding: 0; margin: var(--space-1-5) 0 var(--space-3); display: grid; gap: var(--space-1); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); font-size: var(--fs-sm); }
 .cap-list li.faint s { text-decoration-color: var(--decor); }
+/* The role editor's preview (role_edit.html): menu entries and tabs the ticked capabilities open. */
+.preview-list { list-style: none; padding: 0; margin: var(--space-1-5) 0 var(--space-3); display: grid; gap: var(--space-1); font-size: var(--fs-sm); }
+.preview-list li { display: flex; gap: var(--space-1-5); align-items: flex-start; }
+.preview-list li .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+.preview-list li.off { color: var(--faint); }
+.preview-list li.off .icon { visibility: hidden; }
+.plain-list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-1); }
+/* Per-person overrides on the user page: a row per capability, as the role gives it, allowed or taken away. */
+.override-table td, .override-table th { padding: var(--space-1-5) var(--space-2); }
+.override-table .radios { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.override-table .radios label { display: inline-flex; gap: var(--space-1); align-items: center; font-weight: 400; margin: 0; white-space: nowrap; }
+.override-details { margin-bottom: var(--space-3); }
+.check-grid label.check .sub { display: block; }
 
 /* Sign in with Microsoft (login.html): the Microsoft button leads; the password form follows an "or" line, or
  * folds away when passwords are off for staff. */
