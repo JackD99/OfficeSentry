@@ -290,6 +290,20 @@ def test_a_reply_left_on_for_weeks_is_flagged(db, tenant):
     assert s["Mailboxes with an automatic reply"].flags == [None]
 
 
+def test_a_reply_keeps_its_first_day_once_retention_removes_that_snapshot(db, tenant):
+    first = db.execute(
+        "SELECT id FROM runs WHERE tenant_id = ? AND collector = 'auto_replies'", (tenant["id"],)
+    ).fetchone()["id"]
+    _backdate(db, first, 40)
+    _collect(db, tenant["id"], "auto_replies")
+    db.execute("DELETE FROM objects WHERE run_id = ?", (first,))  # as the retention policy does
+    then = (datetime.now(UTC) - timedelta(days=40)).date().isoformat()
+    _, s = _report(db, tenant, "auto-replies")
+    assert s["Mailboxes with an automatic reply"].rows[0][6] == then  # read from the daily history
+    past = build(db, tenant, "auto-replies", as_of=datetime.now(UTC) - timedelta(days=20))
+    assert past.sections[0].rows[0][6] == then
+
+
 def test_scheduled_reply_to_contacts(db, two_tenants):
     alpha, _ = two_tenants
     soon = (datetime.now(UTC) + timedelta(days=5)).strftime("%Y-%m-%dT08:00:00.0000000")
