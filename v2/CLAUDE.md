@@ -93,6 +93,13 @@ each night reuses the first one's site list and OneDrives, and people without
 a OneDrive aren't asked about for a week. A field either collector starts
 needing goes in those lists.
 
+The shared-files scan (`SharedFiles`) walks each library once, then keeps its
+delta link as a `drive_cursor` object and asks Microsoft only for what changed
+each night (`FULL_SCAN_DAYS` apart it walks the library whole again; a 410 from
+the link does the same). Unchanged items are carried from the last snapshot, so
+a `shared_item` keeps its `firstSeen`; `describe_permissions` lists every way in
+as `grants` and drops grants past their expiry from exposure.
+
 ## Adding a check or report
 
 - Checks live in the `checks/` package: `checks/base.py` is the framework

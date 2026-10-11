@@ -29,6 +29,20 @@ None.
 
 No.
 
+### Added
+
+- **File and folder permissions** report (Files and Teams): who can open each shared file or folder in
+  SharePoint and OneDrive and how (given access directly, sent a link, an anyone or organisation-wide link),
+  who shared it and when, what was newly shared in the last 30 days, links past their expiry or expiring
+  within 30 days, and access by person with guests and outside addresses first. The Shared files scan now
+  records files and folders shared with colleagues too (so "who can access what" is complete), the sharer and
+  date from Microsoft, and treats a link past its expiry as no access. A new check, "People outside can only
+  view shared files", flags files and folders guests or outside addresses can edit.
+- **The Shared files scan asks for changes only.** After a library's first walk, each night follows
+  Microsoft's delta link for it and re-reads the permissions of changed items only; the rest keep last
+  night's answer. Every library is walked whole again after 30 days (or when Microsoft drops the link), so a
+  large client's nightly scan is a fraction of what it was.
+
 ### Fixed
 
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were

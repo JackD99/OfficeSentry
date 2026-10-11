@@ -1070,11 +1070,13 @@ def sharepoint(
                 owner=t["people"]["ann"],
             )
         )
-    # Shared files: keep the fixture's Finance library and OneDrive (renamed) so sharing links show up.
+    # Shared files: the fixture's Finance library id and Ann's OneDrive (renamed), with this tenant's sharing.
     drives["site-fin"] = sharepoint_data.DRIVES["site-fin"]
-    delta.update({k: sharepoint_data.DELTA[k] for k in ("drv-fin", "drv-ann")})
+    delta["drv-ann"] = sharepoint_data.DELTA["drv-ann"]
     sites.append(sharepoint_data.SITES[1])
     drives[sharepoint_data.SITES[1]["id"]] = sharepoint_data.DRIVES[sharepoint_data.SITES[1]["id"]]
+    shared = sharing(t, now, first, host)
+    delta.update(shared["DELTA"])
     growth = (current - then) * quota / 35
     history = [
         {
@@ -1102,7 +1104,174 @@ def sharepoint(
         "SITE_STORAGE": history,
         "ONEDRIVE_USAGE": onedrives,
         "DELTA": delta,
+        "DELTA_CHANGES": shared["DELTA_CHANGES"],
+        "PERMISSIONS": {**sharepoint_data.PERMISSIONS, **shared["PERMISSIONS"]},
     }
+
+
+# Sharing on each site's library: (site slug, path, folder?, who shared it, days ago, the permissions).
+# A person is a staff key ("carol"), an outside address a plain address, a guest a (address, name) pair.
+# Permissions: ("anyone", type, days until expiry or None), ("org", type), ("link", type, [people], expiry),
+# ("direct", role, [people], expiry). Anything shared in the last ``RECENT_DAYS`` days is new since the first
+# collection: the first walk doesn't see it, and the second asks for changes and finds it.
+RECENT_DAYS = 35
+OFFICE_SHARING = [
+    (
+        "clients",
+        "Client files/Hartley & Co",
+        True,
+        "ann",
+        140,
+        [("direct", "read", [("j.hartley@hartleyandco.example", "James Hartley")], None)],
+    ),
+    (
+        "clients",
+        "Engagement letters/Engagement 2026.pdf",
+        False,
+        "carol",
+        50,
+        [("link", "view", ["accounts@hartleyandco.example"], 12)],
+    ),
+    (
+        "clients",
+        "Year end/Draft accounts FY26.xlsx",
+        False,
+        "bob",
+        6,
+        [("link", "edit", ["partner@mason-legal.example"], None)],
+    ),
+    ("clients", "Payroll", True, "ann", 300, [("direct", "write", ["carol", "erin"], None)]),
+    ("finance", "Budget 2027.xlsx", False, "bob", 20, [("org", "view")]),
+    ("finance", "Board pack", True, "ann", 200, [("direct", "read", ["dan"], None)]),
+    (
+        "finance",
+        "Supplier contracts/Fabrikam MSA.pdf",
+        False,
+        "carol",
+        100,
+        [("link", "view", ["legal@fabrikam-supplies.example"], -5)],
+    ),
+    ("marketing", "Brand assets", True, "eve", 400, [("anyone", "view", None)]),
+    ("marketing", "Campaign video.mp4", False, "eve", 3, [("anyone", "edit", 25)]),
+    ("operations", "Rotas/Rota October.xlsx", False, "carl", 10, [("link", "view", ["mallory", "dan"], None)]),
+]
+DENTAL_SHARING = [
+    (
+        "patient-records",
+        "Treatment plans/Referral letters",
+        True,
+        "ann",
+        30,
+        [("link", "view", ["referrals@cityhospital.example"], 8)],
+    ),
+    (
+        "patient-records",
+        "Lab dockets",
+        True,
+        "bob",
+        250,
+        [("direct", "write", [("orders@dentallab.example", "Dental Lab Orders")], None)],
+    ),
+    ("patient-records", "Consent forms", True, "ann", 500, [("direct", "read", ["carol", "erin", "dan"], None)]),
+    ("imaging", "Referral images/Case 4471", True, "carl", 90, [("link", "view", ["dr.lee@orthoclinic.example"], -20)]),
+    ("practice", "Rotas", True, "carol", 15, [("org", "view")]),
+    ("practice", "Policies/Safeguarding policy.pdf", False, "ann", 60, [("org", "view")]),
+    ("marketing", "Open day flyer.pdf", False, "eve", 120, [("anyone", "view", None)]),
+    ("finance", "Budget.xlsx", False, "bob", 4, [("link", "edit", ["accountant@hargreaves-partners.example"], 30)]),
+]
+# Each site is drawn by the second collection too, with one sharing taken away since the first: the Finance
+# board pack (office) and the consent forms (dental) are no longer shared.
+UNSHARED = {"Board pack", "Consent forms"}
+
+
+def sharing(t: dict, now: datetime, first: bool, host: str) -> dict:
+    """Delta pages, change pages and permissions for the tenant's shared files and folders."""
+
+    def person(who):
+        if isinstance(who, tuple):  # a guest account
+            address, name = who
+            login = f"i:0#.f|membership|{address.replace('@', '_')}#ext#@{t['base']}.onmicrosoft.com"
+            return {"siteUser": {"loginName": login, "email": address, "displayName": name}}
+        if "@" in who:
+            return {"user": {"email": who, "displayName": who.split("@")[0].replace(".", " ").title()}}
+        return {"user": {"email": _upn(t, who), "displayName": t["people"][who]}}
+
+    def expiry(days):
+        return None if days is None else _iso(now + timedelta(days=days))
+
+    delta: dict[str, list] = {}
+    changes: dict[str, list] = {}
+    perms: dict[str, list] = {}
+    rows = DENTAL_SHARING if t.get("sites") == "dental" else OFFICE_SHARING
+    for n, (slug, path, folder, by, days, grants) in enumerate(rows):
+        drive = "drv-fin" if slug == "finance" else f"drv-{slug}"
+        iid = f"it-{slug}-{n}"
+        name = path.rsplit("/", 1)[-1]
+        parent = path.rsplit("/", 1)[0] if "/" in path else ""
+        item = {
+            "id": iid,
+            "name": name,
+            "webUrl": f"{host}/sites/{slug}/Shared Documents/{path}".replace(" ", "%20"),
+            "lastModifiedDateTime": _iso(now - timedelta(days=max(days - 2, 0))),
+            "parentReference": {"id": f"root-{slug}", "path": f"/drives/{drive}/root:/{parent}".rstrip("/")},
+            "size": 48 * MB if folder else 2 * MB,
+            "folder" if folder else "file": {"childCount": 12} if folder else {},
+            "shared": {
+                "scope": "users",
+                "sharedBy": {"user": {"email": _upn(t, by), "displayName": t["people"][by]}},
+                "sharedDateTime": _iso(now - timedelta(days=days)),
+            },
+        }
+        new = days < RECENT_DAYS
+        gone = name in UNSHARED and not first
+        if gone:  # still there, no longer shared
+            item = {k: v for k, v in item.items() if k != "shared"}
+        if not (new and first):
+            delta.setdefault(drive, []).append(item)
+        if new or gone:
+            changes.setdefault(drive, []).append(item)
+        perms[iid] = []
+        for g in grants:
+            if g[0] == "anyone":
+                perms[iid].append(
+                    {
+                        "id": f"p-{iid}-{len(perms[iid])}",
+                        "roles": ["write" if g[1] == "edit" else "read"],
+                        "link": {"scope": "anonymous", "type": g[1]},
+                        "expirationDateTime": expiry(g[2]),
+                    }
+                )
+            elif g[0] == "org":
+                perms[iid].append(
+                    {
+                        "id": f"p-{iid}-{len(perms[iid])}",
+                        "roles": ["write" if g[1] == "edit" else "read"],
+                        "link": {"scope": "organization", "type": g[1]},
+                    }
+                )
+            elif g[0] == "link":
+                perms[iid].append(
+                    {
+                        "id": f"p-{iid}-{len(perms[iid])}",
+                        "roles": ["write" if g[1] == "edit" else "read"],
+                        "link": {"scope": "users", "type": g[1]},
+                        "grantedToIdentitiesV2": [person(w) for w in g[2]],
+                        "expirationDateTime": expiry(g[3]),
+                    }
+                )
+            else:
+                for w in g[2]:
+                    perms[iid].append(
+                        {
+                            "id": f"p-{iid}-{len(perms[iid])}",
+                            "roles": [g[1]],
+                            "grantedToV2": person(w),
+                            "expirationDateTime": expiry(g[3]),
+                        }
+                    )
+    for drive in delta:
+        delta[drive].insert(0, {"id": f"root-{drive}", "root": {}, "folder": {}})
+    return {"DELTA": delta, "DELTA_CHANGES": changes if not first else {}, "PERMISSIONS": perms}
 
 
 class Swapped:

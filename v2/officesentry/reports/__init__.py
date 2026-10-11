@@ -7,6 +7,7 @@ from . import (  # noqa: F401
     data_reports,
     deleted_items,
     distribution_lists,
+    file_permissions,
     group_membership,
     group_structure,
     identity_reports,

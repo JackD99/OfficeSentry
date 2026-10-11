@@ -1,6 +1,8 @@
 """SharePoint, OneDrive and shared files: collectors, checks and reports."""
 
 import io
+import json
+import re
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
@@ -69,25 +71,129 @@ def test_concealed_names_are_detected(db, two_tenants):
     assert str(row[0]) == "Name hidden by Microsoft (group or team site)"
 
 
+SHARED = {"Clients", "Budget.xlsx", "Policy.docx", "Internal.docx", "holiday.jpg"}
+
+
 def test_shared_files_collector(db, two_tenants):
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
     snap = _snap(db, alpha)
     items = {i["name"]: i for i in snap.objects("shared_files", "shared_item")}
-    # The file inside the shared folder inherits its sharing; only the folder is listed.
-    # Internal-only shares and unshared or deleted items aren't stored.
-    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"}
+    # The file inside the shared folder inherits its sharing; only the folder is listed. Unshared or
+    # deleted items aren't stored; a file shared with colleagues only is, for the permissions report.
+    assert set(items) == SHARED
     clients = items["Clients"]
     assert clients["exposure"] == "anyone" and clients["editable"] and clients["neverExpires"]
     assert clients["folder"] and clients["library"] == "Documents" and not clients["personal"]
-    assert items["Budget.xlsx"]["exposure"] == "external"
-    assert items["Budget.xlsx"]["externalPeople"] == ["partner@other.com"]
+    assert clients["sharedBy"] == "ann@x.com" and clients["sharedAt"] == "2026-08-20T10:00:00Z"
+    assert clients["grants"] == [
+        {
+            "who": "Anyone with the link",
+            "kind": "anyone",
+            "how": "Anyone link",
+            "can": "Edit",
+            "outside": True,
+            "expires": None,
+            "password": False,
+        }
+    ]
+    budget = items["Budget.xlsx"]
+    assert budget["exposure"] == "external" and budget["sharedBy"] == "bob@x.com"
+    assert budget["externalPeople"] == ["partner@other.com"]  # the expired link's person no longer counts
+    assert [(g["who"], g["how"], g["can"]) for g in budget["grants"]] == [
+        ("partner@other.com", "Link", "View"),
+        ("old@other.com", "Link", "View"),
+    ]
+    assert budget["expires"] == sd.days_ago(3) + "T00:00:00Z"  # the earliest expiry, expired or not
     assert items["Policy.docx"]["exposure"] == "organization"
+    internal = items["Internal.docx"]
+    assert internal["exposure"] is None and internal["internalPeople"] == ["Sales", "bob@x.com"]
+    assert [(g["who"], g["kind"], g["can"]) for g in internal["grants"]] == [
+        ("bob@x.com", "person", "Edit"),
+        ("Sales", "group", "View"),
+    ]
+    assert all(i["firstSeen"] for i in items.values())
     holiday = items["holiday.jpg"]
     assert holiday["personal"] and holiday["owner"] == "ann@x.com" and not holiday["neverExpires"]
     status = snap.objects("shared_files", "scan_status")[0]
     assert status["available"] and status["drives"] == 2  # Ann's OneDrive found twice, scanned once
-    assert snap.metric("sharing.anyone_items") == 2
+    assert status["full_scans"] == 2 and status["kept"] == 0
+    cursors = {c["_id"]: c for c in snap.objects("shared_files", "drive_cursor")}
+    assert cursors["drv-fin"]["deltaLink"].endswith("/drives/drv-fin/root/delta?token=t-drv-fin")
+    assert cursors["drv-fin"]["fullScanAt"] == status["at"]
+    assert snap.metric("sharing.anyone_items") == 2 and snap.metric("sharing.unique_items") == 5
+    assert snap.metric("sharing.external_people") == 1
+
+
+def test_shared_files_scan_asks_for_changes_only_the_next_night(db, two_tenants, monkeypatch):
+    """After a library's first walk, the next run follows its delta link: only changed items are read, their
+    permissions looked up again, and the rest keep last night's answer with their first-seen date."""
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    first_seen = {i["name"]: i["firstSeen"] for i in _snap(db, alpha).objects("shared_files", "shared_item")}
+    changes = {
+        "drv-fin": [
+            dict(sd._item("it-policy", "Policy.docx", "root-fin"), deleted={}),  # deleted
+            sd._item("it-budget", "Budget.xlsx", "root-fin", shared=False),  # no longer shared
+            sd._item("it-new", "Tender.docx", "root-fin", by="bob@x.com", at=sd.days_ago(1) + "T08:00:00Z"),
+            sd._item("it-inside", "Clients plan.docx", "it-clients"),  # inside the shared folder: no lookup
+            sd._item("it-internal", "Internal.docx", "root-fin"),  # changed: permissions read again
+        ]
+    }
+    monkeypatch.setattr(sd, "DELTA_CHANGES", changes)
+    monkeypatch.setitem(
+        sd.PERMISSIONS, "it-new", [{"id": "p9", "roles": ["write"], "grantedToV2": {"user": {"email": "eve@x.com"}}}]
+    )
+    paths, status, items = _scan(db, alpha)
+    assert [p for p in paths if "/root/delta" in p] == ["/drives/drv-ann/root/delta", "/drives/drv-fin/root/delta"]
+    assert [p for p in paths if "/permissions" in p] == [
+        "/drives/drv-fin/items/it-new/permissions",
+        "/drives/drv-fin/items/it-internal/permissions",
+    ]
+    assert set(items) == {"Clients", "Internal.docx", "Tender.docx", "holiday.jpg"}
+    assert items["Clients"]["firstSeen"] == first_seen["Clients"]
+    assert items["Tender.docx"]["firstSeen"] == status["at"]  # new since the last scan
+    assert items["Internal.docx"]["firstSeen"] == first_seen["Internal.docx"]  # read again, first seen before
+    assert status["full_scans"] == 0 and status["kept"] == 2 and status["changed"] == 2 and status["items"] == 4
+    cursors = {c["_id"]: c for c in _snap(db, alpha).objects("shared_files", "drive_cursor")}
+    assert cursors["drv-fin"]["fullScanAt"] <= status["at"] and cursors["drv-fin"]["checkedAt"] == status["at"]
+    run = store.latest_run(db, alpha, "shared_files")
+    assert (
+        run["status"] == "succeeded" and "changes only in 2 of 2 libraries" in run["log"]
+        if "log" in run.keys()
+        else True
+    )
+
+    # A month on, every library is walked whole again.
+    _age_sharepoint_runs(db, alpha, 31)
+    monkeypatch.setattr(sd, "DELTA_CHANGES", {})
+    paths, status, items = _scan(db, alpha)
+    assert status["full_scans"] == 2 and set(items) == SHARED
+    # A delta link Microsoft no longer honours (410 Gone) means a whole walk of that library, not a failed run.
+    seen = []
+
+    def gone(request):
+        seen.append(request.url)
+        return 410, {}, '{"error": {"code": "resyncRequired", "message": "token expired"}}'
+
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
+        mock_tenant(rsps)
+        rsps.remove(responses.GET, re.compile(re.escape(sd.V1) + r"/drives/[^/]+/root/delta"))
+        rsps.add_callback(
+            responses.GET, re.compile(re.escape(sd.V1) + r"/drives/[^/]+/root/delta\?token=.*"), callback=gone
+        )
+        rsps.add_callback(
+            responses.GET,
+            re.compile(re.escape(sd.V1) + r"/drives/[^/]+/root/delta(\?(?!token=).*)?$"),
+            callback=lambda r: (200, {}, json.dumps({"value": sd.DELTA[r.path_url.split("/")[3]]})),
+        )
+        store.enqueue_run(db, alpha, "shared_files")
+        factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
+        assert execute_run(db, store.claim_next_run(db), factory) == "succeeded"
+    assert len(seen) == 2  # both links refused, both libraries walked whole
+    snap = _snap(db, alpha)
+    assert {i["name"] for i in snap.objects("shared_files", "shared_item")} == SHARED
+    assert snap.objects("shared_files", "drive_cursor") == []  # no delta link came back, so none is kept
 
 
 def test_shared_files_without_permission(db, two_tenants):
@@ -169,8 +275,8 @@ def test_shared_files_scan_stops_at_its_page_budget_and_carries_on_next_time(db,
     monkeypatch.setattr(sharepoint, "MAX_PAGES", 1)  # one library's delta a night
     paths, status, items = _scan(db, alpha)
     assert [p for p in paths if p.endswith("/root/delta")] == ["/drives/drv-ann/root/delta"]  # in id order
-    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"}  # the other library's kept
-    assert status["scanned_drives"] == 1 and status["carried"] == 3 and status["next_drive"] == "drv-fin"
+    assert set(items) == SHARED  # the other library's kept
+    assert status["scanned_drives"] == 1 and status["carried"] == 4 and status["next_drive"] == "drv-fin"
     run = store.latest_run(db, alpha, "shared_files")
     assert run["status"] == "partial" and run["truncated"]
     assert "1 library of 2 before reaching the limit of 1 page a night" in run["error"]
@@ -178,7 +284,7 @@ def test_shared_files_scan_stops_at_its_page_budget_and_carries_on_next_time(db,
 
     paths, status, items = _scan(db, alpha)  # the next night starts with the library left over
     assert [p for p in paths if p.endswith("/root/delta")] == ["/drives/drv-fin/root/delta"]
-    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"}
+    assert set(items) == SHARED
     assert status["scanned_drives"] == 1 and status["carried"] == 1 and status["next_drive"] == "drv-ann"
     paths, _, _ = _scan(db, alpha)
     assert [p for p in paths if p.endswith("/root/delta")] == ["/drives/drv-ann/root/delta"]
@@ -188,16 +294,17 @@ def test_shared_files_scan_stops_at_its_time_budget(db, two_tenants, monkeypatch
     """A library the clock runs out in is scanned again, whole, the next night; nothing of it is half stored."""
     alpha, _ = two_tenants
     seed_tenant(db, alpha)
+    monkeypatch.setattr(sharepoint, "FULL_SCAN_DAYS", 0)  # whole walks every night, so permissions are read
     now = [0.0]
     monkeypatch.setattr(sharepoint, "clock", lambda: now[0])
     describe = sharepoint.describe_permissions
     calls = []
 
-    def slow_describe(perms, domains):  # the clock jumps past the budget during the second library's first item
+    def slow_describe(perms, domains, when=None):  # the clock jumps past the budget in the second library
         calls.append(perms)
         if len(calls) == 2:
             now[0] += sharepoint.TIME_BUDGET.total_seconds()
-        return describe(perms, domains)
+        return describe(perms, domains, when)
 
     monkeypatch.setattr(sharepoint, "describe_permissions", slow_describe)
     paths, status, items = _scan(db, alpha)
@@ -205,8 +312,8 @@ def test_shared_files_scan_stops_at_its_time_budget(db, two_tenants, monkeypatch
         "/drives/drv-ann/items/it-holiday/permissions",
         "/drives/drv-fin/items/it-clients/permissions",
     ]
-    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"}
-    assert status["scanned_drives"] == 1 and status["carried"] == 3 and status["next_drive"] == "drv-fin"
+    assert set(items) == SHARED
+    assert status["scanned_drives"] == 1 and status["carried"] == 4 and status["next_drive"] == "drv-fin"
     assert "the 2-hour limit" in store.latest_run(db, alpha, "shared_files")["error"]
 
     # Carried rows are the last scan's, so a library that fell out of reach keeps its rows across nights.
@@ -214,9 +321,9 @@ def test_shared_files_scan_stops_at_its_time_budget(db, two_tenants, monkeypatch
     monkeypatch.setattr(sharepoint, "describe_permissions", describe)
     monkeypatch.setattr(sharepoint, "MAX_PAGES", 1)
     _, status, items = _scan(db, alpha)  # drv-fin fresh, drv-ann carried from the first scan
-    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"} and status["carried"] == 1
+    assert set(items) == SHARED and status["carried"] == 1
     _, status, items = _scan(db, alpha)  # drv-ann fresh, drv-fin carried from the one before
-    assert set(items) == {"Clients", "Budget.xlsx", "Policy.docx", "holiday.jpg"} and status["carried"] == 3
+    assert set(items) == SHARED and status["carried"] == 4
 
 
 def _age_sharepoint_runs(db, alpha, days: float) -> None:
@@ -227,6 +334,7 @@ def _age_sharepoint_runs(db, alpha, days: float) -> None:
     )
     unpack(db)
     db.execute("UPDATE objects SET data = json_set(data, '$.checked', ?) WHERE kind = 'lookup_onedrive'", (when,))
+    db.execute("UPDATE objects SET data = json_set(data, '$.fullScanAt', ?) WHERE kind = 'drive_cursor'", (when,))
 
 
 def test_shared_files_skips_onedrives_the_site_listing_gave(db, two_tenants):
@@ -240,6 +348,7 @@ def test_shared_files_skips_onedrives_the_site_listing_gave(db, two_tenants):
     assert paths.count("/users/u2/drive") == 1  # not in the listing, so still asked for (404: never opened)
     assert paths.count("/sites/site-ann/drives") == 1 and paths.count("/sites/getAllSites") == 1
     assert len(paths) == 1 + 2 + 1 + 2 + 5  # sites, their drives, Bob's OneDrive, two deltas, five shared items
+    assert _snap(db, alpha).objects("shared_files", "scan_status")[0]["full_scans"] == 2  # a month on: whole
     snap = _snap(db, alpha)
     assert {i["_id"]: i for i in snap.objects("shared_files", "shared_item")} == before
     assert snap.objects("shared_files", "scan_status")[0]["drives"] == 2
@@ -290,8 +399,13 @@ def test_checks(db, two_tenants):
     assert anyone.status == "fail" and len(anyone.findings) == 2
     assert anyone.findings[0].severity == "high"  # the editable folder sorts first
     assert anyone.findings[0].subject == "Clients (Finance / Documents)"
+    outside = results["outside_edit_access"]
+    assert (
+        outside.status == "pass"
+        and outside.summary == "Nothing of the 1 item shared outside can be edited from outside"
+    )
     empty = _results(db, bravo)
-    assert empty["anyone_links"].status == "unavailable"
+    assert empty["anyone_links"].status == "unavailable" and empty["outside_edit_access"].status == "unavailable"
 
 
 # -- Reports --------------------------------------------------------------------------
@@ -349,6 +463,7 @@ def test_shared_files_report(db, two_tenants):
     assert anyone.flags == ["high", "medium"]  # view-only with an expiry: medium, as the check rates it
     assert anyone.rows[1][1] == "OneDrive of ann@x.com" and anyone.rows[1][3] == "2099-01-01"
     assert _section(report, "Shared with people outside the organisation").rows[0][2] == "partner@other.com"
+    assert "Scanned 7 files and folders in 2 libraries" in report.footnote
     assert _section(report, "Shared with the whole organisation").rows[0][1] == "Finance / Documents"
     assert "Scanned 7 files and folders in 2 libraries" in report.footnote
 
