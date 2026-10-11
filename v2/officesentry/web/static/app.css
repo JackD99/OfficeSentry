@@ -1412,3 +1412,10 @@ details.part:not([open]) > summary.card-head { margin-bottom: 0; }
   .grid-main > aside .kv.stacked { grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2) var(--space-4); }
   .grid-main > aside .kv.stacked dt { font-size: inherit; margin-top: 0; }
 }
+
+/* -- Page review 2: a user's settings ---------------------------------------------------------------- */
+/* On a wide screen what the role opens sits beside the form instead of a screen below it. */
+@media (min-width: 1280px) {
+  .edit-pair { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 0 var(--space-5); align-items: start; }
+  .edit-pair > .card { max-width: none; }
+}

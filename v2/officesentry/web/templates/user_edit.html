@@ -6,6 +6,8 @@
   <div class="sub">{{ 'Last signed in ' ~ (user.last_login_at|ago) if user.last_login_at else 'Has never signed in' }}</div></div></div>
 {% set locked_out = out_of_reach or own_access %}
 {% if locked_out %}<p class="callout narrow-lg">{{ locked_out }}</p>{% endif %}
+{#- The form and what the role opens side by side on a wide screen, so a change shows its effect beside it. -#}
+<div class="edit-pair">
 {% if not out_of_reach %}
 {% if not own_access %}
 <form method="post" class="card narrow-lg">
@@ -18,7 +20,7 @@
     <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if (user.id == current_user.id and r.kind != 'admin') or (r.id != role.id and r.id not in givable) or (user.entra_oid and r.kind != role.kind) %} disabled{% endif %}>
       <span><span class="strong">{{ r.name }}{% if r.kind == 'client' %} <span class="faint small">client role</span>{% endif %}</span><span class="hint">{{ r.description }}</span></span></label>
     {% endfor %}
-    <p class="footnote m0">{% if can('users.manage') %}Roles are built-in sets of capabilities. What each one opens is listed under <strong>What {{ user.username }} can do</strong> below.{% endif %}{% if not actor.is_admin and givable|length < roles|length %} Roles that hold more than yours can only be given by an Administrator.{% endif %}</p>
+    <p class="footnote m0">{% if can('users.manage') %}Roles are built-in sets of capabilities. What each one opens is listed under <strong>What {{ user.username }} can do</strong>.{% endif %}{% if not actor.is_admin and givable|length < roles|length %} Roles that hold more than yours can only be given by an Administrator.{% endif %}</p>
   </fieldset>
   <fieldset>
     <legend>Clients</legend>
@@ -60,6 +62,7 @@
   {% endif %}
   {% endfor %}
 </section>
+</div>
 {% if role.kind != 'admin' and not locked_out %}
 <section class="card narrow-lg" id="access">
   <h2>Customise for {{ user.username }}</h2>
