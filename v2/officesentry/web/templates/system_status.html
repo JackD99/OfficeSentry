@@ -61,7 +61,7 @@
   {% elif not channels.email and not channels.webhook %}
   <div class="callout warn">{{ icon('alert') }}<span><strong>Nowhere to send them yet.</strong> Add your team under <a href="{{ url_for('email.overview') }}#team">Email reports</a> (with <a href="{{ url_for('email.settings') }}">Email delivery</a> set up), or set up a webhook under <a href="{{ url_for('alerts.settings') }}">Alerts</a>.</span></div>
   {% else %}
-  <p class="muted small">When the worker stops, a backup fails, the disk is over 85% full or most tenants fail to collect, Office Sentry tells
+  <p class="muted small">When the worker stops, a backup fails, the disk is over 85% full, most tenants fail to collect or a deleted client can't be erased, Office Sentry tells
     {% if channels.email %}{{ channels.email|plural('team contact') }} by email{% endif %}{% if channels.email and channels.webhook %} and {% endif %}{% if channels.webhook %}your {{ channels.webhook }} webhook{% endif %}: once when it starts, daily while it lasts, and when it's fixed.</p>
   {% endif %}
   {% if tracked %}

@@ -119,6 +119,14 @@ No.
   and worker stopped when the restore fails, rather than starting them over an empty database.
 - A nightly backup whose activity history copy failed says the database was copied and what failed, rather
   than "No backup made", and still removes old copies.
+- One huge client can't make the worker look down. The shared-files scan has a night's share of pages and
+  time (about a million items or two hours); the libraries left over keep their last results and are
+  scanned first the next night. The daily pass (retention, the dashboard rows) runs beside the worker's main
+  loop rather than in it, and a run that finds the database locked as it's recorded is tried again for a
+  few minutes rather than failed later as "worker stopped".
+- A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
+  minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
+  containers running while it is itself updated (`live-restore`, on new servers).
 
 ### Security
 
@@ -135,6 +143,11 @@ No.
   (they name the old app), and the page says how many clients must approve again.
 - The public demo no longer keeps a visitor's address in the activity log when they open or download a
   report; what was opened is still recorded.
+- Deleting a client no longer rebuilds the whole database inside the web request, which failed for want of
+  room in Docker and left the client's data readable on disk while saying it was erased. The delete is
+  quick, and the worker erases the last copies in the background, rebuilding the file only when there's
+  room. If that can't be done, System status says so under **Deleted clients**, the team is alerted, and
+  it's tried again every hour.
 
 ## 2.1.0 (2026-10-10)
 

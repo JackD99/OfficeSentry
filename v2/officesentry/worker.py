@@ -229,11 +229,17 @@ def _run_collector(
         store.finish_run(conn, run_id, "failed", f"{type(exc).__name__}: {exc}")
         return "failed"
 
-    if ctx.truncated:
-        conn.execute("UPDATE runs SET truncated = 1 WHERE id = ?", (run_id,))
     status = "partial" if ctx.warnings else "succeeded"
-    store.log_event(conn, run_id, "info", f"Finished: {status}")
-    store.finish_run(conn, run_id, status, "; ".join(ctx.warnings) or None)
+
+    def finish() -> None:
+        with store.atomic(conn):
+            if ctx.truncated:
+                conn.execute("UPDATE runs SET truncated = 1 WHERE id = ?", (run_id,))
+            store.log_event(conn, run_id, "info", f"Finished: {status}")
+            store.finish_run(conn, run_id, status, "; ".join(ctx.warnings) or None)
+
+    # The data is stored by now: a lock here mustn't leave the run to be failed later as "worker stopped".
+    _while_locked(conn, finish)
     try:
         state_history.record_finished(conn, run_id)
     except Exception:  # the history is a second copy, written in shadow: it must never fail a collection
@@ -249,6 +255,24 @@ def _run_collector(
         if queued:
             store.log_event(conn, run_id, "info", f"Consent confirmed; queued {plural(queued, 'data source')}")
     return status
+
+
+FINISH_TRIES = 10  # each waits out the 30-second busy timeout first, so about 5 minutes in all
+FINISH_WAIT = 2  # seconds between tries
+
+
+def _while_locked(conn, step) -> None:
+    """Run ``step`` (one transaction), trying again while the database stays locked by another writer."""
+    for attempt in range(FINISH_TRIES):
+        try:
+            step()
+            return
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc) and "busy" not in str(exc) or attempt + 1 == FINISH_TRIES:
+                raise
+            log.warning("The database is busy; trying again to record a finished run")
+            _rollback(conn)
+            time.sleep(FINISH_WAIT)
 
 
 def warm_rollup(conn, tenant) -> None:
@@ -340,6 +364,8 @@ def is_alive(conn, now: datetime | None = None) -> bool:
 LOOP_STALE = timedelta(minutes=10)
 RUN_STALE = timedelta(hours=4)
 TASK_STALE = timedelta(hours=1)
+DAILY_STALE = timedelta(hours=4)  # the daily pass (retention, every dashboard row), in its own thread
+STALE = {"run": RUN_STALE, "task": TASK_STALE, "daily": DAILY_STALE}
 
 
 class Liveness:
@@ -349,9 +375,10 @@ class Liveness:
     wedged main loop or a collector thread stuck in one run (a deadlocked
     write, a hung request) stops the heartbeat and shows as unhealthy in the
     portal banner and ``healthcheck worker``. Collector threads record their
-    runs with ``start_run``/``end_run`` and task threads their tasks with
-    ``start_task``/``end_task``; the main loop calls ``tick``. ``held`` is what
-    this process has claimed, whose leases the heartbeat thread renews.
+    runs with ``start_run``/``end_run``, task threads their tasks with
+    ``start_task``/``end_task`` and the daily pass ``start_run(0, "daily")``;
+    the main loop calls ``tick``. ``held`` is what this process has claimed,
+    whose leases the heartbeat thread renews.
     """
 
     def __init__(self, clock=time.monotonic):
@@ -387,7 +414,7 @@ class Liveness:
         with self._lock:
             now = self.clock()
             for kind, item, started in self.runs.values():
-                if now - started > (RUN_STALE if kind == "run" else TASK_STALE).total_seconds():
+                if now - started > STALE.get(kind, TASK_STALE).total_seconds():
                     return f"{kind} {item} has been going for {int((now - started) // 60)} minutes"
             if now - self.loop_at > LOOP_STALE.total_seconds():
                 return f"the main loop hasn't moved for {int((now - self.loop_at) // 60)} minutes"
@@ -458,12 +485,14 @@ JOB_MODULES = (
     "officesentry.state_history",
     "officesentry.system_alerts",
     "officesentry.onboarding",
+    "officesentry.lifecycle",
 )
 TASK_MODULES = (
     "officesentry.delivery",
     "officesentry.month_end",
     "officesentry.reports.precomputed",
     "officesentry.onboarding",
+    "officesentry.lifecycle",
 )
 TASK_THREADS = 2  # rendering is CPU-bound: two let one client's approval pass a long run of others
 
@@ -619,6 +648,28 @@ def _daily(conn, cfg: Config) -> None:
     _queue_precompute(conn, rebuild=bool(removed))
 
 
+def _daily_thread(cfg: Config, liveness: Liveness) -> threading.Thread:
+    """The daily pass, beside the main loop: on a large install it takes longer than ``LOOP_STALE``, and the
+    main loop has to keep coming round (schedules, alerts, the heartbeat) meanwhile."""
+
+    def work():
+        liveness.start_run(0, "daily")
+        try:
+            conn = connect(cfg.db_path)
+            try:
+                _daily(conn, cfg)
+            finally:
+                conn.close()
+        except Exception:  # say, the database stayed locked: the next day's pass tries again
+            log.exception("The daily pass failed")
+        finally:
+            liveness.end_run()
+
+    thread = threading.Thread(target=work, name="daily", daemon=True)
+    thread.start()
+    return thread
+
+
 def run_worker(
     cfg: Config, *, once: bool = False, graph_factory=None, exchange_factory=None, stop: threading.Event | None = None
 ) -> None:
@@ -663,18 +714,18 @@ def run_worker(
     ]
     collectors += [_task_thread(app, vault, cfg, n + 1, stop, liveness) for n in range(TASK_THREADS)]
 
-    last_day = None
+    last_day = daily = None
     while not stop.is_set():
         started = time.monotonic()
         liveness.tick()
         _housekeeping(app, conn, vault, cfg, liveness)
         today = datetime.now(UTC).date()
-        if today != last_day:
-            _daily(conn, cfg)
+        if today != last_day and (daily is None or not daily.is_alive()):
+            daily = _daily_thread(cfg, liveness)
             last_day = today
         liveness.tick()
         stop.wait(max(IDLE_WAIT, TICK_EVERY - (time.monotonic() - started)))
-    for thread in collectors:
+    for thread in collectors + ([daily] if daily else []):
         thread.join()
     heartbeat.join(timeout=10)
     try:
