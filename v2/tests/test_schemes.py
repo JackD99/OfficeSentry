@@ -177,3 +177,13 @@ def test_old_links_land_on_the_scheme_pages(client, db, two_tenants):
         assert client.get(f"/tenants/{bravo}/evidence.{ext}").status_code == 404
     assert client.get(f"/tenants/{alpha}/evidence.pdf").headers["Location"].endswith("/evidence/insurance.pdf")
     assert client.get(f"/tenants/{alpha}/evidence.doc").status_code == 404
+
+
+def test_a_gap_summary_says_for_example_only_before_something_named():
+    control = ce.THEMES[0].controls[0]
+    named = schemes.ControlResult(control, FAIL, gaps=["2 accounts.", "  ann@x.example: no MFA."])
+    named.named.add(named.gaps[1])
+    assert named.gap_summary == "2 accounts. For example ann@x.example: no MFA."
+    whole = schemes.ControlResult(control, FAIL, gaps=["Legacy sign-in allowed.", "  no enabled policy blocks it."])
+    assert whole.gap_summary == "Legacy sign-in allowed. No enabled policy blocks it."
+    assert schemes.ControlResult(control, FAIL, gaps=["Only this."]).gap_summary == "Only this."
