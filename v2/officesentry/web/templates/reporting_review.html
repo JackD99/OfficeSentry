@@ -241,11 +241,11 @@
     <div class="card-head">
       <h2>The client's copy</h2>
       {% if contents|length > 1 %}<select id="preview-report" aria-label="Report to preview">
-        {% for c in contents %}<option value="{{ url_for('reporting.preview', period=period, tenant_id=tenant.id, report=c.key) }}">{{ c.title }}</option>{% endfor %}
+        {% for c in contents %}<option value="{{ c.key }}">{{ c.title }}</option>{% endfor %}
       </select>{% endif %}
       <a class="small" id="preview-open" href="{{ first }}" target="_blank" rel="noopener">Open full size {{ icon('external') }}</a>
     </div>
-    <div class="paper" data-paper><iframe id="review-preview" title="Preview of {{ tenant.name }}'s report" src="{{ first }}" loading="lazy"></iframe></div>
+    <div class="paper" data-paper><iframe id="review-preview" title="Preview of {{ tenant.name }}'s report" src="{{ first }}" data-base="{{ url_for('reporting.preview', period=period, tenant_id=tenant.id) }}" data-report="{{ contents[0].key }}" loading="lazy"></iframe></div>
     <p class="small muted m0">As it goes out if you approve now: client-visible notes only, without what's left out.</p>
   </section>
 </div>

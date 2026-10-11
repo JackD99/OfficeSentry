@@ -11,18 +11,21 @@
 
   function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
 
+  // The preview's address for one of the plan's reports (a key like "review" or "design:3").
+  function previewUrl(report) { return frame.dataset.base + '?report=' + encodeURIComponent(report); }
+
   // A second frame loads behind the first and takes its place once drawn, at the same scroll position.
-  function redraw(src) {
+  // Without a report it draws the one showing again.
+  function redraw(report) {
     if (!frame) return;
     var y = 0;
-    try { if (!src) y = frame.contentWindow.scrollY; } catch (e) { y = 0; }
+    try { if (!report) y = frame.contentWindow.scrollY; } catch (e) { y = 0; }
     var next = frame.cloneNode(false);
     next.removeAttribute('id');
     next.removeAttribute('loading');
     next.classList.add('loading');
-    var url = new URL(src || frame.getAttribute('src'), window.location.href);
-    url.searchParams.set('v', Date.now());
-    next.src = url.pathname + url.search;
+    next.dataset.report = report || frame.dataset.report;
+    next.src = previewUrl(next.dataset.report) + '&v=' + Date.now();
     next.addEventListener('load', function () {
       try { next.contentWindow.scrollTo(0, y); } catch (e) { /* nothing to restore */ }
       if (!next.parentNode) return;
@@ -93,7 +96,7 @@
 
   if (pick) {
     pick.addEventListener('change', function () {
-      if (open) open.href = pick.value;
+      if (open && frame) open.href = previewUrl(pick.value);
       redraw(pick.value);
     });
   }

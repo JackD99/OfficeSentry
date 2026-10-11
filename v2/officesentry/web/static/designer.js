@@ -296,6 +296,12 @@
       });
   }
 
+  // The client picked to preview, as a number: it only ever goes into a URL as one.
+  function tenantId() {
+    var pick = document.getElementById('preview-tenant');
+    return pick ? parseInt(pick.value, 10) || 0 : 0;
+  }
+
   // The preview reloads into a second frame that replaces the first once it has loaded at the same
   // scroll position, so the page doesn't flash white and jump back to the top on every change.
   function reloadPreview() {
@@ -305,7 +311,7 @@
     var next = preview.cloneNode(false);
     next.removeAttribute('id');
     next.classList.add('loading');
-    next.src = root.dataset.preview + '?tenant=' + document.getElementById('preview-tenant').value + '&v=' + Date.now();
+    next.src = root.dataset.preview + '?tenant=' + tenantId() + '&v=' + Date.now();
     next.addEventListener('load', function () {
       try { next.contentWindow.scrollTo(0, y); } catch (e) {}
       if (!next.parentNode) return;
@@ -458,12 +464,12 @@
   document.getElementById('design-description').addEventListener('input', function () { changed(null, false); });
   var tenantPick = document.getElementById('preview-tenant');
   if (tenantPick) tenantPick.addEventListener('change', function () {
-    data.tenant = tenantPick.value;
+    data.tenant = tenantId();
     ['open-pdf', 'open-page'].forEach(function (id) {
       var a = document.getElementById(id);
-      if (a) a.href = a.dataset.pattern.replace('/tenants/0/', '/tenants/' + tenantPick.value + '/');
+      if (a) a.href = a.dataset.pattern.replace('/tenants/0/', '/tenants/' + tenantId() + '/');
     });
-    history.replaceState(null, '', location.pathname + '?tenant=' + tenantPick.value);
+    history.replaceState(null, '', location.pathname + '?tenant=' + tenantId());
     reloadPreview();
   });
   window.addEventListener('beforeunload', function (e) { if (dirty || saving) { e.preventDefault(); e.returnValue = ''; } });
