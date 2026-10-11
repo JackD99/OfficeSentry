@@ -30,9 +30,9 @@ from ..reports import (
     tables,
 )
 from ..reports.docx_writer import MIMETYPE as DOCX
-from .access import login_required, tenant_or_404
+from .access import can, needs, tenant_or_404
 from .printing import pdf_response
-from .reports import STAFF, XLSX
+from .reports import XLSX
 
 bp = Blueprint("evidence", __name__)
 
@@ -69,7 +69,7 @@ def _name(tenant, key: str, ext: str) -> str:
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence/<scheme>")
-@login_required
+@needs("reports.security")
 def scheme_page(tenant_id: int, scheme: str):
     t = tenant_or_404(tenant_id)
     r = _result(t, scheme)
@@ -87,14 +87,14 @@ def scheme_page(tenant_id: int, scheme: str):
         since_options=SINCE,
         copy_all=copy_all,
         answers=evidence_answers.ANSWERS,
-        staff=g.user["role"] in STAFF,
+        staff=can("findings.manage", t["id"]),
         max_note=evidence_answers.MAX_NOTE,
         V=schemes,
     )
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence/<scheme>.pdf")
-@login_required
+@needs("reports.security", "export")
 def scheme_pdf(tenant_id: int, scheme: str):
     t = tenant_or_404(tenant_id)
     r = _result(t, scheme)
@@ -103,7 +103,7 @@ def scheme_pdf(tenant_id: int, scheme: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence/<scheme>.txt")
-@login_required
+@needs("reports.security", "export")
 def scheme_text(tenant_id: int, scheme: str):
     t = tenant_or_404(tenant_id)
     r = _result(t, scheme)
@@ -116,7 +116,7 @@ def scheme_text(tenant_id: int, scheme: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence/<scheme>.docx")
-@login_required
+@needs("reports.security", "export")
 def scheme_docx(tenant_id: int, scheme: str):
     t = tenant_or_404(tenant_id)
     r = _result(t, scheme)
@@ -129,7 +129,7 @@ def scheme_docx(tenant_id: int, scheme: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence/<scheme>.xlsx")
-@login_required
+@needs("reports.security", "export")
 def scheme_xlsx(tenant_id: int, scheme: str):
     t = tenant_or_404(tenant_id)
     r = _result(t, scheme)
@@ -142,7 +142,7 @@ def scheme_xlsx(tenant_id: int, scheme: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence/<scheme>.csv")
-@login_required
+@needs("reports.security", "export")
 def scheme_csv(tenant_id: int, scheme: str):
     t = tenant_or_404(tenant_id)
     r = _result(t, scheme)

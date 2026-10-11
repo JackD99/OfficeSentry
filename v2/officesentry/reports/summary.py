@@ -136,7 +136,7 @@ def monthly(report) -> ExecSummary:
     if report.unavailable:
         paragraphs.append(
             f"{plural(len(report.unavailable), 'check', 'checks')} couldn't run because the data or "
-            "a licence they need is missing. They're listed at the end."
+            "a licence they need is missing."
         )
 
     actions = [
@@ -145,6 +145,15 @@ def monthly(report) -> ExecSummary:
         if r.severity in ("critical", "high")
     ][:3]
     return ExecSummary(verdict, paragraphs, actions)
+
+
+def next_steps(report, limit: int = 3, anchors: bool = True) -> list[Action]:
+    """The summary's top recommendations: the critical and high checks, else the worst failing ones. Without
+    ``anchors`` (no appendix to point to) they don't link to the check's detail."""
+    found = monthly(report).actions or [
+        Action(r.action, r.summary, r.severity or "info", f"check-{r.key}") for r in report.failing
+    ]
+    return [a if anchors else Action(a.title, a.why, a.severity) for a in found[:limit]]
 
 
 def evidence(pack) -> ExecSummary:

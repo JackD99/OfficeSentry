@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..db import utcnow
-from . import data_reports, evidence, monthly_review, summary
+from . import data_reports, evidence, monthly_review, quarterly, summary
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ KPI_OPTIONS = (
     ("stale", "Inactive accounts"),
     ("waste", "Licence waste / month"),
 )
-PLACEHOLDERS = "{client}, {month}, {msp} and {date}"
+PLACEHOLDERS = "{client}, {month}, {quarter}, {msp} and {date}"
 
 
 # -- What a widget is ---------------------------------------------------------------------------------
@@ -119,6 +119,7 @@ class Context:
         self._review = None
         self._summary = None
         self._evidence = None
+        self._quarter = None
         self._reports: dict[str, data_reports.DataReport] = {}
 
     @property
@@ -139,6 +140,12 @@ class Context:
             self._evidence = evidence.build(self.conn, self.tenant, self.now)
         return self._evidence
 
+    @property
+    def quarter(self) -> quarterly.Quarter:
+        if self._quarter is None:
+            self._quarter = quarterly.build(self.conn, self.tenant, self.review, self.now)
+        return self._quarter
+
     def report(self, key: str) -> data_reports.DataReport:
         if key not in self._reports:
             self._reports[key] = data_reports.build(self.conn, self.tenant, key, self.now)
@@ -154,10 +161,11 @@ class Context:
         values = {
             "client": self.tenant["name"],
             "month": self.now.strftime("%B %Y"),
+            "quarter": quarterly.quarter_label(self.now),
             "msp": self.brand.display_name if self.brand else "",
             "date": f"{self.now.day} {self.now:%B %Y}",
         }
-        return re.sub(r"\{(client|month|msp|date)\}", lambda m: values[m.group(1)], text)
+        return re.sub(r"\{(client|month|quarter|msp|date)\}", lambda m: values[m.group(1)], text)
 
 
 # -- The widgets --------------------------------------------------------------------------------------
@@ -334,6 +342,56 @@ def b_evidence(ctx: Context, s: dict) -> dict:
     return {"answers": answers, "more": max(0, len(pack.answers) - len(answers))}
 
 
+def b_quarter_trend(ctx: Context, s: dict) -> dict:
+    q = ctx.quarter
+    if all(m.found is None and m.score is None for m in q.months):
+        return {"empty": "Nothing has been collected for this client yet."}
+    return {"quarter": q, "chart": q.chart, "currency": q.currency}
+
+
+def b_quarter_fixed(ctx: Context, s: dict) -> dict:
+    q = ctx.quarter
+    if not q.fixed:
+        return {"empty": f"Nothing was fixed between {q.label}."}
+    limit = int(s.get("max") or 10)
+    return {
+        "quarter": q,
+        "groups": q.fixed[:limit],
+        "more": sum(len(g.subjects) for g in q.fixed[limit:]),
+        "subjects": int(s.get("subjects") or 0),
+    }
+
+
+def b_projects(ctx: Context, s: dict) -> dict:
+    a = ctx.quarter.projects
+    recs = [r for r in a.projects if r.status != "declined" or s.get("declined")]
+    if not recs and not a.quick_fixes:
+        return {"empty": "No projects to propose: nothing failing calls for one."}
+    return {
+        "projects": recs,
+        "quick_fixes": a.quick_fixes[: int(s.get("quick") or 0)],
+        "quick_count": len(a.quick_fixes),
+    }
+
+
+def b_licence_spend(ctx: Context, s: dict) -> dict:
+    q = ctx.quarter
+    if not q.spend:
+        return {"empty": "No paid licences in the data yet."}
+    priced = [ln for ln in q.spend if ln.monthly_price is not None]
+    if not priced:
+        return {"empty": "No licence prices have been entered yet (Client settings → Licence prices)."}
+    return {"quarter": q, "lines": q.spend, "currency": q.currency, "waste": bool(s.get("waste", True))}
+
+
+def b_upcoming(ctx: Context, s: dict) -> dict:
+    items = ctx.quarter.upcoming
+    if not items:
+        return {"empty": "Nothing falls due in the next 90 days."}
+    limit = int(s.get("max") or 10)
+    return {"rows": items[:limit], "more": max(0, len(items) - limit)}
+
+
 def b_heading(ctx: Context, s: dict) -> dict:
     return {"intro": ctx.fill(str(s.get("intro") or ""))}
 
@@ -505,6 +563,49 @@ WIDGETS: dict[str, Widget] = {
             halfable=False,
         ),
         Widget(
+            "quarter_trend",
+            "Three-month trend",
+            "Secure Score at the end of each of the last three months, and findings found and fixed in each.",
+            "Summary",
+            (_heading("The last three months"),),
+            b_quarter_trend,
+            halfable=False,
+        ),
+        Widget(
+            "quarter_fixed",
+            "Fixed this quarter",
+            "Everything fixed in the last three months, grouped by check.",
+            "Checks",
+            (
+                _heading("What was fixed"),
+                Field("max", "Checks at most", "number", 10, min=1, max=50),
+                Field(
+                    "subjects",
+                    "Name the accounts or items up to",
+                    "number",
+                    3,
+                    min=0,
+                    max=10,
+                    help="0 shows only how many.",
+                ),
+            ),
+            b_quarter_fixed,
+            halfable=False,
+        ),
+        Widget(
+            "projects",
+            "Projects",
+            "The projects worth doing, with where each one stands, and the quick fixes.",
+            "Checks",
+            (
+                _heading("Projects"),
+                Field("declined", "Include declined projects", "checkbox", False),
+                Field("quick", "Quick fixes to list", "number", 5, min=0, max=25, help="0 shows only how many."),
+            ),
+            b_projects,
+            halfable=False,
+        ),
+        Widget(
             "licences",
             "Licences",
             "Paid licences: bought, assigned, unassigned and what is wasted.",
@@ -514,6 +615,30 @@ WIDGETS: dict[str, Widget] = {
                 Field("waste", "Call out the monthly waste", "checkbox", True),
             ),
             b_licences,
+            halfable=False,
+        ),
+        Widget(
+            "licence_spend",
+            "Licence spend",
+            "What the paid licences cost a month and a year, and what part of it is wasted.",
+            "Licences and data",
+            (
+                _heading("Licence spend"),
+                Field("waste", "Show the waste column", "checkbox", True),
+            ),
+            b_licence_spend,
+            halfable=False,
+        ),
+        Widget(
+            "upcoming",
+            "Coming up",
+            "Renewals, expiring credentials, filling mailboxes and risk reviews due in the next 90 days.",
+            "Licences and data",
+            (
+                _heading("Coming up"),
+                Field("max", "At most", "number", 10, min=1, max=50),
+            ),
+            b_upcoming,
             halfable=False,
         ),
         Widget(
@@ -835,6 +960,25 @@ STARTERS: dict[str, tuple[str, str, dict]] = {
                 _b("passing"),
                 _b("accepted"),
                 _b("unavailable"),
+                _b("about"),
+            ],
+        },
+    ),
+    "quarterly": (
+        "Quarterly review",
+        "Three months in one: the score and findings trend, what was fixed, projects, licence spend and what's next.",
+        {
+            "settings": {"title": "Quarterly review", "subtitle": "{quarter}"},
+            "blocks": [
+                _b("summary_text"),
+                _b("kpis", keys=["secure_score.pct", "mfa.registered_pct", "stale", "waste"], columns=4),
+                _b("quarter_trend"),
+                _b("quarter_fixed"),
+                _b("projects"),
+                _b("licence_spend"),
+                _b("upcoming"),
+                _b("actions", max=5),
+                _b("contact"),
                 _b("about"),
             ],
         },

@@ -7,6 +7,7 @@ import re
 import pytest
 
 from officesentry.reports import data_reports
+from tests import sharepoint_data as sd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 
@@ -59,8 +60,14 @@ def test_every_tenant_page_opens_one_tab(client, db, seeded):
         f"/tenants/{alpha}/activity": ("Changes", "Activity history"),
         f"/tenants/{alpha}/data/mailboxes": ("Reports", None),
         f"/tenants/{alpha}/evidence": ("Reports", None),
-        f"/tenants/{alpha}/users": ("Users", None),
-        _user_href(client, alpha): ("Users", None),
+        f"/tenants/{alpha}/users": ("Users", "People"),
+        _user_href(client, alpha): ("Users", "People"),
+        f"/tenants/{alpha}/mailboxes": ("Users", "Mailboxes"),
+        f"/tenants/{alpha}/mailboxes/u1": ("Users", "Mailboxes"),
+        f"/tenants/{alpha}/groups": ("Users", "Groups and teams"),
+        f"/tenants/{alpha}/groups/g1": ("Users", "Groups and teams"),
+        f"/tenants/{alpha}/sites": ("Users", "Sites"),
+        f"/tenants/{alpha}/sites/{sd.SITE_USAGE[0]['siteId']}": ("Users", "Sites"),
         f"/tenants/{alpha}/schedules": ("Emails", None),
         f"/tenants/{alpha}/collection": ("Settings", "Data collection"),
         f"/tenants/{alpha}/manage": ("Settings", "Manage"),
