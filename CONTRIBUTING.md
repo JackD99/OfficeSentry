@@ -81,6 +81,11 @@ ruff check .
 pytest -n auto      # plain `pytest` runs one test at a time, easier for debugging
 ```
 
+A change to a shell script (`v2/deploy/`, `.github/scripts/`) is also checked
+with [ShellCheck](https://www.shellcheck.net) at its strictest level:
+`shellcheck --severity=style <file>` (`tests/test_deploy_hardening.py` runs it
+too when it's installed).
+
 CI runs the same on Python 3.11, 3.12 and 3.13 for every pull request, with
 a Docker image build, a dependency audit (`pip-audit`) and a subset on
 Windows. Changes that only touch Markdown, `docs/`, `examples/` or
@@ -97,8 +102,14 @@ Python 3.12 run measures coverage and fails under 90%;
 - Styles use the tokens in `v2/officesentry/web/static/tokens.css`; `/styleguide`
   in a running portal shows them and every shared component. Pull requests
   that touch templates or CSS also run the browser tests (screenshots against
-  baselines, and axe-core); `v2/tests/browser/README.md` says how to run them
-  and how to refresh the baselines after a change you meant.
+  baselines, and axe-core); `v2/tests/browser/README.md` says how to run them.
+- When a screenshot or an example PDF changes because you meant it to, add
+  the label `refresh-baselines` to the pull request: a workflow retakes the
+  screenshots in the pinned browser and redraws the PDF pages (from your
+  branch merged with main, as the checks compare them), commits what
+  changed to the branch, takes the label off and starts the checks again.
+  It only works for branches of this repository, never main or a fork. Look
+  at the new images in the pull request before merging.
 - Mock Microsoft Graph at the HTTP layer with `responses`, never by
   replacing the client class.
 - Never add a write call to a tenant or a non-read-only permission.
@@ -128,10 +139,11 @@ The same gates apply to every change, whoever wrote it:
 
 - Every change is a pull request against `main`; nothing is pushed to `main`
   directly.
-- CI runs `ruff check` and `ruff format --check`, the full test suite on
-  Python 3.11, 3.12 and 3.13 (with a 90% coverage floor), a Windows subset,
-  a Docker build and `pip-audit` over every lock file on every pull
-  request, and a pull request isn't merged until it's green. The pull
+- CI runs `ruff check` and `ruff format --check`, ShellCheck over the shell
+  scripts, the full test suite on Python 3.11, 3.12 and 3.13 (with a 90%
+  coverage floor), a Windows subset, a Docker build and `pip-audit` over
+  every lock file on every pull request, and a pull request isn't merged
+  until it's green. The pull
   request template's checklist covers migrations, new permissions, the
   access gate and read-only access.
 - Tests simulate Microsoft Graph and Exchange at the HTTP level, and
@@ -149,12 +161,23 @@ The same gates apply to every change, whoever wrote it:
 The project's direction, scope and releases are decided by its maintainer,
 [@JackD99](https://github.com/JackD99).
 
-## Issues and conduct
+## Issues, labels and conduct
 
-Use the issue forms for bugs, report requests and check requests. Issues are
+Use the [issue forms](https://github.com/JackD99/OfficeSentry/issues/new/choose)
+for bugs (with the support package from the portal's Settings), report
+requests, check requests and other feature requests; questions go in
+[Discussions](https://github.com/JackD99/OfficeSentry/discussions). Issues are
 public: remove tenant names and IDs, domains, user names and email
-addresses, and IP addresses from anything you paste. Everyone taking part
-agrees to the [code of conduct](CODE_OF_CONDUCT.md).
+addresses, and IP addresses from anything you paste. [SUPPORT.md](SUPPORT.md)
+has the full list of where to go for what.
+
+Labels are defined in [`.github/labels.yml`](.github/labels.yml) and synced
+to GitHub by the Labels workflow when that file changes on `main`; edit the
+file, not the label on GitHub. **good first issue** and **help wanted** mark
+issues a new contributor could take; **needs info** means an issue is
+waiting for its reporter.
+
+Everyone taking part agrees to the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Releases
 
@@ -163,26 +186,26 @@ features, `2.1.1` only fixes. The [release workflow](.github/workflows/release.y
 does the work. To make a release:
 
 1. Open a pull request that sets `__version__` in
-   `v2/officesentry/__init__.py` (`2.1.0`) and gives the `## 2.1.0` section of
-   [CHANGELOG.md](CHANGELOG.md) its date (`## 2.1.0 (2026-11-02)`). Fill in
+   `v2/officesentry/__init__.py` (`2.1.0`) and gives the `## [2.1.0]` section of
+   [CHANGELOG.md](CHANGELOG.md) its date (`## [2.1.0] - 2026-11-02`), with its
+   compare link at the foot of the file. Fill in
    **Action required**, **New Microsoft permissions** and **Database upgrade**
    even when the answer is "None" or "No". Merge it once CI is green.
-2. On GitHub: **Actions** → **release** → **Run workflow**, leave "Use
+2. On GitHub: **Actions** → **Release** → **Run workflow**, leave "Use
    workflow from" on `main`, type the version (`2.1.0`) and press **Run
    workflow**. (Pushing a tag, `git push origin v2.1.0`, does the same.)
 3. The run checks the version matches `__version__` and the changelog, and
-   that the commit passed its full v2 run on `main` (so release from `main`
+   that the commit passed its full CI run on `main` (so release from `main`
    once that run is green; the release reuses it rather than testing again).
-   It builds the amd64 and arm64 images (arm64 only once the repository is
-   public) with an SBOM and build provenance, starts each once, scans them,
-   signs their provenance (public repository only), publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
+   It builds the amd64 and arm64 images (arm64 natively on GitHub's Arm
+   runner) with an SBOM and build provenance, starts each once, scans them,
+   signs their provenance, publishes `ghcr.io/jackd99/officesentry:2.1.0` (and `2.1`,
    `2` and `latest`), creates the `v2.1.0` tag and the GitHub release with
    the notes and install files, and removes images older than the last three
    releases. Nothing is published until the checks and the scan have passed.
-   While the repository is private, a run costs about 5 of GitHub Free's
-   2,000 Actions minutes a month.
+   A run takes about 5 Actions minutes, which are free for a public repository.
 4. Open a pull request that moves `__version__` on to the next development
-   version (`2.2.0.dev0`) and adds a `## 2.2.0 (unreleased)` section.
+   version (`2.2.0.dev0`) and adds a `## [2.2.0] - Unreleased` section.
 
 To try the pipeline without releasing, run a release candidate: run the
 workflow with `2.1.0-rc.1`. It can come straight from the development version

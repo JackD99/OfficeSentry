@@ -4,7 +4,7 @@
 {% from "_groups.html" import group_picker, group_chips with context %}
 {% block title %}Client settings · Office Sentry{% endblock %}
 {% block content %}
-{% set admin = current_user.role == 'admin' %}
+{% set admin = can('clients.manage') %}
 <div class="page-head">
   <div>
     <h1>Client settings</h1>

@@ -35,6 +35,13 @@ def group_owner_problem(g: dict) -> str | None:
     return f"No enabled owner ({', '.join([p + ': disabled' for p in people] + [a + ': app' for a in apps])})"
 
 
+def owner_is_guest(owner: dict) -> bool:
+    """A guest from another organisation. Snapshots from before the flag was stored go by the sign-in name."""
+    if "guest" in owner:
+        return owner.get("guest") is True
+    return owner.get("type") == "user" and "#EXT#" in (owner.get("upn") or "")
+
+
 def _group_object(snap: TenantSnapshot, kind: str, what: str):
     rows = snap.objects("groups", kind)
     if rows is None:
@@ -82,6 +89,43 @@ def ownerless_groups(snap: TenantSnapshot, now: datetime):
             f"{every(len(checked), 'team or group', start=True)} {verb(len(checked), 'has', 'have')} an owner{scope}",
             [],
         )
+    )
+
+
+@rule(
+    "guest_owners",
+    "No guest owns a team or group",
+    "Guests",
+    "Make a member of the organisation the owner of each listed team or group and remove the guest as owner "
+    "(Teams admin center, or Microsoft 365 admin center > Teams & groups). An owner from outside can add "
+    "members and guests, change settings and see everything in it, and nobody here is accountable for that.",
+)
+def guest_owners(snap: TenantSnapshot, now: datetime):
+    groups = m365_groups(snap)
+    if groups is None:
+        return _unavailable("Group data hasn't been collected yet")
+    if not groups:
+        return _unavailable("The tenant has no teams or Microsoft 365 groups")
+    checked = [g for g in groups if g.get("examined")]
+    if not checked:
+        return _unavailable("Owners of teams and groups couldn't be read")
+    findings = []
+    for g in checked:
+        guests = [o.get("name") or o.get("upn") or "?" for o in g.get("owners") or [] if owner_is_guest(o)]
+        if guests:
+            findings.append(
+                Finding(
+                    "medium" if g.get("isTeam") else "low",
+                    g.get("displayName") or g["_id"],
+                    f"{group_type(g)}, owned by {', '.join(guests)} (guest)",
+                    g["_id"],
+                )
+            )
+    scope = f" ({len(checked)} of {len(groups)} checked)" if len(checked) < len(groups) else ""
+    return (
+        ("fail", f"{plural(len(findings), 'team or group')} with a guest as owner{scope}", findings)
+        if findings
+        else ("pass", f"No guest owns any of {plural(len(checked), 'team or group')}{scope}", [])
     )
 
 

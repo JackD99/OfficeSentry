@@ -1,0 +1,49 @@
+#cloud-config
+# Office Sentry on a new Ubuntu 24.04 server at any cloud: paste this as the server's user data (Azure "Custom
+# data", AWS "User data", Lightsail "Launch script", DigitalOcean, Linode, Vultr and Google Cloud "user-data")
+# after setting the two lines marked "yours" below. It installs Docker, downloads the newest release's
+# docker-compose.yml, Caddyfile and env.example into /opt/officesentry, writes .env from them and starts
+# Office Sentry with automatic HTTPS, which gets its certificate once the domain points at the server. A
+# database backup runs every night at 03:45 (server time, UTC unless changed).
+# The guides are in v2/docs/deploy/. (deploy/cloud-init.yaml is the Hetzner deploy's, for its GitHub workflow.)
+
+package_update: true
+package_upgrade: true
+packages: [docker.io, docker-compose-v2, curl, cron, unattended-upgrades]
+
+write_files:
+  - path: /etc/docker/daemon.json
+    content: |
+      {"log-driver": "local", "log-opts": {"max-size": "20m", "max-file": "5"}, "live-restore": true}
+  - path: /etc/cron.d/officesentry-backup
+    content: |
+      45 3 * * * root cd /opt/officesentry && docker compose exec -T web python -m officesentry backup --keep 14 >> /var/log/officesentry-backup.log 2>&1
+  - path: /opt/officesentry/install.sh
+    permissions: "0700"
+    content: |
+      #!/bin/sh
+      # Run once by cloud-init. Running it again downloads the newest release's files but keeps .env.
+      set -eu
+      DOMAIN=sentry.yourmsp.com    # yours: the domain people will open the portal on
+      TIMEZONE=Europe/London       # yours: for collection times and emailed reports
+      cd /opt/officesentry
+      release=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/JackD99/OfficeSentry/releases/latest)
+      release=${release##*/}
+      for f in docker-compose.yml Caddyfile env.example; do
+        curl -fsSL -o "$f" "https://github.com/JackD99/OfficeSentry/releases/download/$release/$f"
+      done
+      if [ ! -e .env ]; then
+        sed -e "s#^OFFICESENTRY_BASE_URL=.*#OFFICESENTRY_BASE_URL=https://$DOMAIN#" \
+            -e "s#^OFFICESENTRY_DOMAIN=.*#OFFICESENTRY_DOMAIN=$DOMAIN#" \
+            -e "s#^OFFICESENTRY_TIMEZONE=.*#OFFICESENTRY_TIMEZONE=$TIMEZONE#" env.example > .env
+        printf '\n# Every "docker compose" command here includes Caddy, for HTTPS.\nCOMPOSE_PROFILES=https\n' >> .env
+        chmod 600 .env
+      fi
+      docker compose up -d
+
+runcmd:
+  - systemctl enable --now docker
+  - systemctl restart docker
+  - sh /opt/officesentry/install.sh
+  # The cloud's own admin user (azureuser, ubuntu...) can then run "docker compose" in /opt/officesentry.
+  - sh -c 'u=$(getent passwd 1000 | cut -d: -f1); [ -z "$u" ] || { usermod -aG docker "$u"; chown -R "$u" /opt/officesentry; }'

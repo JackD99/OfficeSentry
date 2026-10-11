@@ -117,9 +117,11 @@ def _results(db, tenant):
 def test_every_check_runs_on_real_data(db, live):
     results = _results(db, live)
     # The test tenant has no Intune devices and no MTA-STS, so those checks have nothing to read, and no
-    # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered.
+    # Entra ID P2, so sign-in risk and risky users are hidden. Its one Windows PC is only Entra-registered,
+    # and nobody has a manager set.
     nothing_to_check = {
         "tls_rpt",
+        "blocked_manager",
         "device_compliance",
         "device_encryption",
         "intune_enrolled",

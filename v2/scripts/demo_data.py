@@ -34,9 +34,10 @@ sys.path.insert(0, str(V2))
 
 from werkzeug.security import generate_password_hash  # noqa: E402
 
-from officesentry import store  # noqa: E402
+from officesentry import projects, store  # noqa: E402
 from officesentry.certs import generate_certificate  # noqa: E402
 from officesentry.db import utcnow  # noqa: E402
+from officesentry.reports import designs  # noqa: E402
 from tests import (  # noqa: E402  # noqa: E402
     adminactivitydata,
     devicedata,
@@ -715,18 +716,21 @@ def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -
         ("Website enquiries", "enquiries", "ann", rng.sample(staff, min(4, len(staff))), True, 25),
         ("Christmas party 2023", "xmas2023", None, rng.sample(staff, min(9, len(staff))), False, 0),
         ("Old projects", "oldprojects", None, [], False, 0),
+        # Also an Entra group (m1 in the fixtures), so its page joins Exchange's list to the directory's group.
+        ("Finance alerts", "finance-alerts", "ann", rng.sample(staff, min(4, len(staff))), False, 6),
     ]
     groups, members, trace = [], {}, []
     for n, (name, alias, owner, who, outside, per_10_days) in enumerate(lists):
         address = f"{alias}@{domain}"
+        security = name == "Finance alerts"
         groups.append(
             {
                 "Name": name,
                 "DisplayName": name,
                 "PrimarySmtpAddress": address,
                 "Guid": f"dl-{n}",
-                "ExternalDirectoryObjectId": f"dl-{n}",
-                "RecipientTypeDetails": "MailUniversalDistributionGroup",
+                "ExternalDirectoryObjectId": "m1" if security else f"dl-{n}",
+                "RecipientTypeDetails": "MailUniversalSecurityGroup" if security else "MailUniversalDistributionGroup",
                 "ManagedBy": [{"ann": "u1", "bob": "u2"}[owner]] if owner else [],
                 "RequireSenderAuthenticationEnabled": not outside,
                 "IsDirSynced": False,
@@ -1148,6 +1152,23 @@ class Swapped:
             setattr(module, name, value)
 
 
+def directory_groups(now: datetime) -> dict:
+    """The group fixtures plus what the group clean-up report and Coming up show: a team expiring soon that
+    its owner can renew, one nobody can renew, and a role-assignable group with a guest in it."""
+    expiry = {"g4": 24, "g2": 47}
+    rows = [
+        {**g, "expirationDateTime": (now + timedelta(days=expiry[g["id"]])).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if g["id"] in expiry
+        else g
+        for g in groupdata.GROUPS
+    ]
+    rows.append(
+        groupdata._group("s4", "Helpdesk admins", unified=False, mail=False, security=True, isAssignableToRole=True)
+    )
+    members = {**groupdata.MEMBERS, "s4": [groupdata._member("u1"), groupdata._member("u3")]}
+    return {"GROUPS": rows, "MEMBERS": members}
+
+
 def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
     from tests.seed import seed_tenant
 
@@ -1172,6 +1193,7 @@ def collect(db, tenant_id: int, t: dict, now: datetime, first: bool) -> None:
             },
             devicedata: {"ENTRA_DEVICES": entra, "MANAGED_DEVICES": managed},
             sharepoint_data: sharepoint(t, everyone, tenant_skus, now, first, rng),
+            groupdata: directory_groups(now),
         }
         with Swapped(extras):
             seed_tenant(
@@ -1374,7 +1396,42 @@ def populate(
         settings["brand_logo"] = uri
     for key, value in settings.items():
         db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    # A report design to show under Custom reports, and a quarter's worth of project decisions behind it.
+    quarterly = designs.STARTERS["quarterly"][2]
+    designs.create(db, "Quarterly review", "demo", quarterly, "Three months in one, for the quarterly call")
+    recommended = projects.assess(db, store.get_tenant(db, ids[0])).projects[:2]
+    for rec, status in zip(recommended, ("agreed", "proposed"), strict=False):
+        projects.set_status(db, ids[0], rec.project.key, status, "Discussed on the quarterly call", "demo")
     return ids
+
+
+def team(db, ids: list[int]) -> None:
+    """The MSP's people, one per built-in role, so the Users page and the role picture have something to
+    show. None of them can sign in (random passwords)."""
+    from officesentry import roles
+
+    north, fabrikam, contoso = ids[:3]
+    for username, key, all_tenants, tenants in (
+        ("sam.lead", "team_leader", 0, []),
+        ("priya.tech", "second_line", 1, []),
+        ("jordan.desk", "first_line", 0, [north, fabrikam]),
+        ("alex.accounts", "account_manager", 0, [fabrikam, contoso]),
+        ("auditor", "auditor", 1, []),
+        ("it@fabrikam", "client_viewer", 0, [fabrikam]),
+    ):
+        role = roles.by_key(db, key)
+        uid = db.execute(
+            "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (username, generate_password_hash(secrets.token_urlsafe(32)), role.column, role.id, all_tenants, utcnow()),
+        ).lastrowid
+        db.executemany("INSERT INTO user_tenants (user_id, tenant_id) VALUES (?, ?)", [(uid, t) for t in tenants])
+    # The first-line technician may also refresh North Light's data, and the account manager never sees
+    # Contoso's people: what the per-person overrides look like.
+    jordan = db.execute("SELECT * FROM users WHERE username = 'jordan.desk'").fetchone()
+    roles.set_overrides(db, "demo", jordan, [roles.Override("collect", north, True)])
+    alex = db.execute("SELECT * FROM users WHERE username = 'alex.accounts'").fetchone()
+    roles.set_overrides(db, "demo", alex, [roles.Override("reports.people", contoso, False)])
 
 
 def main() -> None:
@@ -1409,7 +1466,8 @@ def main() -> None:
 
         # Nobody signs in with a password: visitors are this account without one (public_demo.py).
         db.execute(
-            "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'analyst', 1, ?)",
+            "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
+            " VALUES (?, ?, 'analyst', (SELECT id FROM roles WHERE key = 'second_line'), 1, ?)",
             (public_demo.USERNAME, generate_password_hash(secrets.token_urlsafe(32)), utcnow()),
         )
         db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, '1')", (public_demo.MARKER,))
@@ -1417,9 +1475,11 @@ def main() -> None:
         return
     password = args.password or secrets.token_urlsafe(12)
     db.execute(
-        "INSERT INTO users (username, password_hash, role, all_tenants, created_at) VALUES (?, ?, 'admin', 1, ?)",
+        "INSERT INTO users (username, password_hash, role, role_id, all_tenants, created_at)"
+        " VALUES (?, ?, 'admin', 1, 1, ?)",
         (args.admin, generate_password_hash(password), utcnow()),
     )
+    team(db, ids)
     print(f"Added {len(ids)} demo tenants to {cfg.db_path}")
     print(f"Sign in as {args.admin} / {password}")
     print(f"Start the portal: OFFICESENTRY_DATA_DIR={args.data_dir} python -m officesentry web")

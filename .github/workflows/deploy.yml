@@ -3,19 +3,23 @@ name: Deploy
 # from GitHub (the mobile app's "Run workflow" button works). The server's
 # Hetzner Cloud Firewall keeps SSH closed: each run opens port 22 to this
 # runner's address only, and closes it again at the end, even if a step fails.
-# Setup is in v2/DEPLOY.md ("Hetzner, from a phone"). The same server can also run the project's website
+# It is the project's own server's deploy, so the user docs leave it out: v2/deploy/cloud-init.yaml makes the
+# server, and the secrets and variables read below say where to deploy. The same server can also run the project's website
 # and public demo (v2/deploy/public/README.md). Those two follow main by themselves: every merge whose tests
 # pass updates them (a change to the docs alone, the website straight away), while the portal only updates
 # when someone runs "deploy", or on every merge too once AUTO_DEPLOY is "true".
 #
 # With the PRODUCTION_FROM_TAGS variable set to "true", the portal only takes release tags (v2.1.0), as the
 # published image pinned by its digest, and merges never deploy it, whatever AUTO_DEPLOY says. The website
-# and demo still follow main. Unset, a deploy builds the chosen ref on the server (v2/DEPLOY.md, "Production
-# from releases").
+# and demo still follow main. Unset, a deploy builds the chosen ref on the server.
 #
-# Run logs will be public once the repository is, so nothing here prints the
-# first-admin link, the portal's logs or a secret: the status action reports
-# health and error counts only.
+# Run logs are public, so nothing here prints the first-admin link, the
+# portal's logs or a secret: the status action reports health and error counts
+# only. Every step's log opens with its settings, and only secrets are hidden
+# there, so the server's address, the portal's name, extra .env lines and the
+# backup location are read from secrets of those names (DEPLOY_HOST,
+# OFFICESENTRY_DOMAIN, OFFICESENTRY_SETTINGS, BACKUP_REPOSITORY) when they
+# exist. A variable of the same name still works, but shows in every run.
 on:
   workflow_dispatch:
     inputs:
@@ -29,10 +33,10 @@ on:
         default: main
   # Deploy main after its tests pass, once AUTO_DEPLOY is set to "true".
   workflow_run:
-    workflows: [v2]
+    workflows: [CI]
     types: [completed]
     branches: [main]
-  # The website shows the docs, which the v2 workflow doesn't test, so their changes update it straight away
+  # The website shows the docs, which the CI workflow doesn't test, so their changes update it straight away
   # (the website-and-demo action without the demo, as the code hasn't changed).
   push:
     branches: [main]
@@ -93,7 +97,7 @@ jobs:
       REF: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
       RELEASES_ONLY: ${{ vars.PRODUCTION_FROM_TAGS == 'true' }}
       IMAGE: ghcr.io/jackd99/officesentry
-      HOST: ${{ vars.DEPLOY_HOST }}
+      HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
       # The public demo (v2/deploy/public/) runs while DEMO_ENABLED is "true". Deploys and website-and-demo
       # runs rebuild it from their code (a docs-only change leaves it), and it starts afresh every night by itself.
       DEMO_DOMAIN: ${{ vars.DEMO_ENABLED == 'true' && vars.OFFICESENTRY_DEMO_DOMAIN || '' }}
@@ -102,30 +106,32 @@ jobs:
       WEBSITE_DOMAIN: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
       SITE: ${{ vars.OFFICESENTRY_WEBSITE_DOMAIN != '' && contains(fromJSON('["deploy", "website-and-demo"]'), inputs.action || (github.event_name == 'workflow_run' && vars.AUTO_DEPLOY == 'true' && vars.PRODUCTION_FROM_TAGS != 'true' && 'deploy') || 'website-and-demo') }}
       FIREWALL: ${{ vars.HCLOUD_FIREWALL || 'officesentry' }}
-      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      # The Hetzner token (secrets.HCLOUD_TOKEN) isn't set here: only the two firewall steps get it, so the
+      # code this job checks out and builds, and the tools it installs for that, never see it.
       API: https://api.hetzner.cloud/v1
       # Marks the temporary rule so it is the only one this workflow removes.
       RULE: github-actions-deploy (temporary)
     steps:
       - name: Check the settings
         env:
+          HAS_HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN != '' }}
           HAS_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
           SETUP_CODE: ${{ secrets.SETUP_CODE }}
-          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
-          BACKUP_REPOSITORY: ${{ vars.BACKUP_REPOSITORY }}
+          DOMAIN: ${{ secrets.OFFICESENTRY_DOMAIN || vars.OFFICESENTRY_DOMAIN }}
+          BACKUP_REPOSITORY: ${{ secrets.BACKUP_REPOSITORY || vars.BACKUP_REPOSITORY }}
           HAS_BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD != '' }}
           HAS_BACKUP_KEY_ID: ${{ secrets.BACKUP_KEY_ID != '' }}
           HAS_BACKUP_SECRET_KEY: ${{ secrets.BACKUP_SECRET_KEY != '' }}
         run: |
           missing=""
-          [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (variable)"
-          [ -n "$HCLOUD_TOKEN" ] || missing="$missing HCLOUD_TOKEN (secret)"
+          [ -n "$HOST" ] || missing="$missing DEPLOY_HOST (secret)"
+          [ "$HAS_HCLOUD_TOKEN" = true ] || missing="$missing HCLOUD_TOKEN (secret)"
           [ "$HAS_KEY" = true ] || missing="$missing DEPLOY_SSH_KEY (secret)"
           if [ "$DEPLOYS" = true ] || [ "$ACTION" = setup-link ]; then
-            [ -n "$DOMAIN" ] || missing="$missing OFFICESENTRY_DOMAIN (variable)"
+            [ -n "$DOMAIN" ] || missing="$missing OFFICESENTRY_DOMAIN (secret)"
           fi
           if [ "$ACTION" = setup-link ] && [ "${#SETUP_CODE}" -lt 20 ]; then
-            echo "::error::The setup-link action needs a SETUP_CODE secret of at least 20 characters (a long random password works). Add it under Settings > Secrets and variables > Actions > New repository secret, then run this again. v2/DEPLOY.md, step 6, has the steps."
+            echo "::error::The setup-link action needs a SETUP_CODE secret of at least 20 characters (a long random password works). Add it under Settings > Secrets and variables > Actions > New repository secret, then run this again."
             exit 1
           fi
           if [ "$DEMO" = true ] && [ -z "$DEMO_DOMAIN" ]; then missing="$missing OFFICESENTRY_DEMO_DOMAIN (variable)"; fi
@@ -152,7 +158,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ ! "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$REF" > /dev/null 2>&1; then
-            echo "::error::The portal only takes release tags while PRODUCTION_FROM_TAGS is on. Type a release tag such as v2.1.0 in the ref box (the Releases page lists them); for the website and demo, run website-and-demo instead. v2/DEPLOY.md, \"Production from releases\", has the steps."
+            echo "::error::The portal only takes release tags while PRODUCTION_FROM_TAGS is on. Type a release tag such as v2.1.0 in the ref box (the Releases page lists them); for the website and demo, run website-and-demo instead. To deploy other code, delete the PRODUCTION_FROM_TAGS variable."
             exit 1
           fi
           version=${REF#v}
@@ -161,7 +167,7 @@ jobs:
             -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
             "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/$version" | tr -d '\r' | sed -n 's/^docker-content-digest: *//Ip' || true)
           if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::There's no published image for $REF. Make the release first (Actions > release > Run workflow; CONTRIBUTING.md, \"Releases\"), then deploy it."
+            echo "::error::There's no published image for $REF. Make the release first (Actions > Release > Run workflow; CONTRIBUTING.md, \"Releases\"), then deploy it."
             exit 1
           fi
           echo "RELEASE_DIGEST=$digest" >> "$GITHUB_ENV"
@@ -172,15 +178,56 @@ jobs:
         with:
           ref: ${{ env.REF }}
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        if: env.SITE == 'true'
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            website/requirements.txt
+            v2/requirements-dev.txt
+            v2/tests/browser/requirements.txt
+
+      # Fresh screenshots and example reports of this exact code, from the fictional demo data, so the website
+      # shows every page as it is now (v2/scripts/screenshots.py). If this fails, the site uses the copies in
+      # the repository (docs/screenshots/, examples/) instead.
+      - name: Take the website's screenshots and example reports
+        if: env.SITE == 'true'
+        continue-on-error: true
+        working-directory: v2
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core poppler-utils
+          pip install -q --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
+          pip install -q --no-deps --no-build-isolation -e .
+          python -m playwright install --with-deps chromium
+          python scripts/screenshots.py
+
+      # The product page and the repository's docs as web pages (website/README.md). It holds nothing that
+      # isn't in the repository already.
+      - name: Build the website
+        if: env.SITE == 'true'
+        env:
+          SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
+          SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
+          SITE_SOURCE_PUBLIC: ${{ !github.event.repository.private }}
+          # The project's own address unless the variable says otherwise (v2/deploy/public/README.md).
+          SITE_CONTACT: ${{ vars.OFFICESENTRY_WEBSITE_CONTACT || (vars.OFFICESENTRY_WEBSITE_DOMAIN == 'officesentry.co.uk' && 'hello@officesentry.co.uk') || '' }}
+        run: |
+          pip install -q --require-hashes -r website/requirements.txt
+          python website/build.py
+
+      # Written after the website build, so the packages it installs and runs never find the backup password
+      # and storage keys on disk.
       - name: Write the server's settings files
         if: env.DEPLOYS == 'true'
         env:
-          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
+          DOMAIN: ${{ secrets.OFFICESENTRY_DOMAIN || vars.OFFICESENTRY_DOMAIN }}
           TIMEZONE: ${{ vars.OFFICESENTRY_TIMEZONE || 'UTC' }}
-          EXTRA: ${{ vars.OFFICESENTRY_SETTINGS }}
-          # A secret, so the addresses stay out of the run logs, which will be public with the repository.
+          EXTRA: ${{ secrets.OFFICESENTRY_SETTINGS || vars.OFFICESENTRY_SETTINGS }}
+          # A secret, so the addresses stay out of the run logs, which are public.
           PORTAL_IPS: ${{ secrets.PORTAL_ALLOWED_IPS }}
-          BACKUP_REPOSITORY: ${{ vars.BACKUP_REPOSITORY }}
+          BACKUP_REPOSITORY: ${{ secrets.BACKUP_REPOSITORY || vars.BACKUP_REPOSITORY }}
           BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
           BACKUP_KEY_ID: ${{ secrets.BACKUP_KEY_ID }}
           BACKUP_SECRET_KEY: ${{ secrets.BACKUP_SECRET_KEY }}
@@ -233,46 +280,10 @@ jobs:
             if [ -n "$UPTIME_PING_URL" ]; then echo "UPTIME_PING_URL='$UPTIME_PING_URL'"; fi
           } > v2/.env.uptime
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        if: env.SITE == 'true'
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: |
-            website/requirements.txt
-            v2/requirements-dev.txt
-            v2/tests/browser/requirements.txt
-
-      # Fresh screenshots and example reports of this exact code, from the fictional demo data, so the website
-      # shows every page as it is now (v2/scripts/screenshots.py). If this fails, the site uses the copies in
-      # the repository (docs/screenshots/, examples/) instead.
-      - name: Take the website's screenshots and example reports
-        if: env.SITE == 'true'
-        continue-on-error: true
-        working-directory: v2
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core poppler-utils
-          pip install -q --require-hashes --no-deps -r requirements-dev.txt -r tests/browser/requirements.txt
-          pip install -q --no-deps --no-build-isolation -e .
-          python -m playwright install --with-deps chromium
-          python scripts/screenshots.py
-
-      # The product page and the repository's docs as web pages (website/README.md). It holds nothing that
-      # isn't in the repository already.
-      - name: Build the website
-        if: env.SITE == 'true'
-        env:
-          SITE_URL: https://${{ vars.OFFICESENTRY_WEBSITE_DOMAIN }}
-          SITE_DEMO_URL: ${{ vars.OFFICESENTRY_DEMO_DOMAIN && format('https://{0}', vars.OFFICESENTRY_DEMO_DOMAIN) || '' }}
-          SITE_SOURCE_PUBLIC: ${{ !github.event.repository.private }}
-          # The project's own address unless the variable says otherwise (v2/deploy/public/README.md).
-          SITE_CONTACT: ${{ vars.OFFICESENTRY_WEBSITE_CONTACT || (vars.OFFICESENTRY_WEBSITE_DOMAIN == 'officesentry.co.uk' && 'hello@officesentry.co.uk') || '' }}
-        run: |
-          pip install -q --require-hashes -r website/requirements.txt
-          python website/build.py
-
       - name: Open SSH to this runner in the Hetzner firewall
+        id: open-ssh
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
           ip=$(curl -fsS https://api.ipify.org)
           echo "::add-mask::$ip"
@@ -281,7 +292,14 @@ jobs:
             echo "::error::No Hetzner Cloud Firewall named \"$FIREWALL\" (set HCLOUD_FIREWALL if yours is named differently)"
             exit 1
           fi
-          echo "FIREWALL_ID=$(jq -r .id <<<"$fw")" >> "$GITHUB_ENV"
+          id=$(jq -r .id <<<"$fw")
+          if [[ ! "$id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Hetzner's answer for the firewall \"$FIREWALL\" has no firewall ID, so SSH stays closed. Run this again; if it happens again, check the firewall in the Hetzner console."
+            exit 1
+          fi
+          # Only the closing step reads the ID (this step's output), set before the change so that step
+          # still runs if the change half fails. Nothing goes into the environment of the steps between.
+          echo "firewall_id=$id" >> "$GITHUB_OUTPUT"
           # set_rules replaces the whole list: keep every rule except an old
           # temporary one, then add this run's.
           jq --arg ip "$ip/32" --arg rule "$RULE" '{rules: ([.rules[] | select(.description != $rule)]
@@ -289,7 +307,7 @@ jobs:
               | map(with_entries(select(.value != null and .value != []))
                     | if .direction == "in" then del(.destination_ips) else del(.source_ips) end)}' <<<"$fw" > rules.json
           curl -fsS -X POST -H "Authorization: Bearer $HCLOUD_TOKEN" -H "Content-Type: application/json" \
-            --data @rules.json "$API/firewalls/$(jq -r .id <<<"$fw")/actions/set_rules" > /dev/null
+            --data @rules.json "$API/firewalls/$id/actions/set_rules" > /dev/null
 
       # SSH only talks to a server whose host key matches the DEPLOY_HOST_KEY
       # secret, so a server swapped in at the same address gets nothing: not
@@ -308,19 +326,19 @@ jobs:
           # missing or wrong secret; ssh itself checks against the secret.
           seen=$(ssh-keyscan -t ed25519 "$HOST" 2>/dev/null | cut -d' ' -f2- || true)
           if [ -z "$HOST_KEY" ]; then
-            echo "::error::Add the server's SSH key as a secret named DEPLOY_HOST_KEY (Settings > Secrets and variables > Actions > New repository secret), then run this again. The server at $HOST shows this key: ${seen:-none, as it did not answer}. If you created that server yourself, that's its key. v2/DEPLOY.md, step 5, has the steps."
+            echo "::error::Add the server's SSH key as a secret named DEPLOY_HOST_KEY (Settings > Secrets and variables > Actions > New repository secret), then run this again. The server at $HOST shows this key: ${seen:-none, as it did not answer}. If you created that server yourself, that's its key."
             exit 1
           fi
           # Accept "ssh-ed25519 AAAA..." with or without the address in front.
           read -r a b c _ <<<"$HOST_KEY"
           case "$a" in ssh-*|ecdsa-*) want="$a $b" ;; *) want="$b $c" ;; esac
           if ! grep -qE '^(ssh-[a-z0-9-]+|ecdsa-sha2-nistp[0-9]+) [A-Za-z0-9+/]+=*$' <<<"$want"; then
-            echo "::error::The DEPLOY_HOST_KEY secret doesn't look like an SSH key. It should be one line starting ssh-ed25519 AAAA. v2/DEPLOY.md, step 5, has the steps."
+            echo "::error::The DEPLOY_HOST_KEY secret doesn't look like an SSH key. It should be one line starting ssh-ed25519 AAAA."
             exit 1
           fi
           printf '%s %s\n' "$HOST" "$want" > ~/.ssh/known_hosts
           if [ -n "$seen" ] && [ "${want%% *}" = ssh-ed25519 ] && [ "$seen" != "$want" ]; then
-            echo "::error::The server at $HOST shows a different SSH key from the DEPLOY_HOST_KEY secret, so nothing was sent to it. If you rebuilt or replaced the server, set DEPLOY_HOST_KEY to: $seen. If you didn't, change nothing and check the DEPLOY_HOST variable and the server in the Hetzner console."
+            echo "::error::The server at $HOST shows a different SSH key from the DEPLOY_HOST_KEY secret, so nothing was sent to it. If you rebuilt or replaced the server, set DEPLOY_HOST_KEY to: $seen. If you didn't, change nothing and check the DEPLOY_HOST secret and the server in the Hetzner console."
             exit 1
           fi
 
@@ -380,7 +398,7 @@ jobs:
         if: env.ACTION == 'deploy'
         run: |
           if ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' > /dev/null 2>&1; then
-            echo "::notice::No admin account yet. Run Deploy again with the setup-link action (v2/DEPLOY.md, step 6)."
+            echo "::notice::No admin account yet. Add a SETUP_CODE secret of at least 20 characters, then run Deploy again with the setup-link action."
           fi
 
       # Makes the SETUP_CODE secret the one-time code for creating the first
@@ -389,7 +407,6 @@ jobs:
         if: env.ACTION == 'setup-link'
         env:
           SETUP_CODE: ${{ secrets.SETUP_CODE }}
-          DOMAIN: ${{ vars.OFFICESENTRY_DOMAIN }}
         run: |
           # Its output is the current link, so it's only searched, never shown.
           if ! out=$(ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry setup-link' 2>&1); then
@@ -401,7 +418,8 @@ jobs:
             exit 1
           fi
           printf '%s' "$SETUP_CODE" | ssh server 'cd /opt/officesentry/v2 && docker compose exec -T web sh -c "umask 077 && cat > /data/setup-token"'
-          echo "Open https://$DOMAIN/setup and enter your SETUP_CODE secret as the setup code." | tee -a "$GITHUB_STEP_SUMMARY"
+          # The portal's name stays out of the public log and summary; you know it.
+          echo 'Open `https://<your domain>/setup` and enter your SETUP_CODE secret as the setup code.' | tee -a "$GITHUB_STEP_SUMMARY"
 
       # backup: a database copy now, then the off-site copy when it's set up.
       # restore-drill: restore the newest off-site copy to a scratch volume and check it.
@@ -420,7 +438,7 @@ jobs:
         run: ssh server 'cd /opt/officesentry/v2 && docker compose restart'
 
       # Health and counts only: the portal's own log names tenants, users and
-      # addresses, so reading it needs a shell (v2/DEPLOY.md, "If you need a shell").
+      # addresses, so reading it needs a shell on the server.
       - name: Status
         if: env.ACTION == 'status' || env.ACTION == 'restart'
         run: |
@@ -437,7 +455,10 @@ jobs:
           EOF
 
       - name: Close SSH again
-        if: always() && env.FIREWALL_ID != ''
+        if: always() && steps.open-ssh.outputs.firewall_id != ''
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          FIREWALL_ID: ${{ steps.open-ssh.outputs.firewall_id }}
         run: |
           fw=$(curl -fsS -H "Authorization: Bearer $HCLOUD_TOKEN" "$API/firewalls/$FIREWALL_ID" | jq '.firewall')
           jq --arg rule "$RULE" '{rules: [.rules[] | select(.description != $rule)]

@@ -48,7 +48,7 @@
 {% macro checklist(health, tenant, consent_link, redirect_uri, can_check, back='overview') -%}
 {% set nxt = health.next_step %}
 {% set r = health.result or {} %}
-{% set admin = current_user.role == 'admin' %}
+{% set admin = can('clients.manage') %}
 <section class="card setup onboarding">
   <div class="card-head"><h2>{{ icon('shield') }} Set up {{ tenant.name }}</h2>
     <span class="meta">{{ health.steps|selectattr('done')|list|length }} of {{ health.steps|length }} done</span></div>

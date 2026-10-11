@@ -36,6 +36,7 @@ log = logging.getLogger(__name__)
 
 EXCHANGE_ROOT = clouds.get(clouds.DEFAULT).exchange  # commercial; a client for another cloud uses its own
 RETRY_STATUSES = {429, 500, 502, 503, 504}
+MAX_PAGES = 200  # pages of one cmdlet's answer (Exchange sends up to 1,000 results a page) before it's cut
 
 READ_ONLY_CMDLETS = frozenset(
     {
@@ -119,6 +120,7 @@ class ExchangeClient:
         self._max_retries = max_retries
         self._timeout = timeout
         self._sleep = sleep
+        self.truncated: dict[str, int] = {}  # cmdlets whose answer was cut at the page cap, and the cap
 
     @classmethod
     def from_certificate(
@@ -187,10 +189,13 @@ class ExchangeClient:
                 raise _parse_error(resp)
             return resp.json() if resp.content else {}
 
-    def invoke(self, cmdlet: str, parameters: dict | None = None, *, max_pages: int = 200) -> list[dict]:
-        """Run a read-only cmdlet and return every result, following paging."""
+    def invoke(self, cmdlet: str, parameters: dict | None = None, *, max_pages: int | None = None) -> list[dict]:
+        """Run a read-only cmdlet and return every result, following paging. An answer longer than
+        ``max_pages`` (``MAX_PAGES``) pages is cut there and noted in ``truncated`` (the run becomes partial
+        and says so), rather than failing the whole collection over one huge list."""
         if cmdlet not in READ_ONLY_CMDLETS:
             raise ValueError(f"{cmdlet} is not an allowed read-only Exchange cmdlet")
+        max_pages = MAX_PAGES if max_pages is None else max_pages
         body = {"CmdletInput": {"CmdletName": cmdlet, "Parameters": parameters or {}}}
         url: str | None = self.url
         items: list[dict] = []
@@ -199,7 +204,9 @@ class ExchangeClient:
             if not url.startswith(f"{self.root}/adminapi/"):
                 raise ValueError(f"refusing to send an Exchange token to {url.split('/')[2]}")
             if pages >= max_pages:
-                raise ExchangeError(0, "too_many_pages", f"{cmdlet} returned more than {max_pages} pages")
+                log.warning("Stopped paging %s after %s pages", cmdlet, max_pages)
+                self.truncated[cmdlet] = max_pages
+                break
             data = self._post(url, body)
             items.extend(data.get("value", []))
             pages += 1

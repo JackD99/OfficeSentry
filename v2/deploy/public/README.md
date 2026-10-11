@@ -41,15 +41,15 @@ The steps for the project's server, in order. Each takes a minute or two.
    the domain is on Cloudflare): the portal's name (such as `reports` under your company's own domain), the website's
    (`@` and `www` under `officesentry.co.uk`) and the demo's (`demo` under `officesentry.co.uk`).
 2. **GitHub variables** (the repository's *Settings → Secrets and variables → Actions → Variables*):
-   - `OFFICESENTRY_DOMAIN`: the portal's name, `reports.yourmsp.example`
    - `OFFICESENTRY_WEBSITE_DOMAIN`: `officesentry.co.uk`
    - `OFFICESENTRY_DEMO_DOMAIN`: `demo.officesentry.co.uk`, and `DEMO_ENABLED`: `true`
    - `OFFICESENTRY_WEBSITE_CONTACT` (optional): where interested MSPs get in touch, an email address or an
      `https://` link. The website shows "Get in touch" and "Ask for early access" with it. On
      officesentry.co.uk it's `hello@officesentry.co.uk` unless this is set.
-3. **GitHub secret** (same page, *Secrets* tab): `PORTAL_ALLOWED_IPS`, the addresses that may open the
-   portal, separated by commas (`203.0.113.7, 198.51.100.0/24`). Without it anyone can reach the portal's
-   sign-in page (two-step sign-in still protects it). The old `DEMO_PASSWORD` secret isn't used any more;
+3. **GitHub secrets** (same page, *Secrets* tab): `OFFICESENTRY_DOMAIN`, the portal's name
+   (`reports.yourmsp.example`), a secret so it stays out of the public run logs, and `PORTAL_ALLOWED_IPS`,
+   the addresses that may open the portal, separated by commas (`203.0.113.7, 198.51.100.0/24`). Without
+   `PORTAL_ALLOWED_IPS` anyone can reach the portal's sign-in page (two-step sign-in still protects it). The old `DEMO_PASSWORD` secret isn't used any more;
    delete it.
 4. **Microsoft Entra**, only if the portal's name changed: in the Entra admin centre, *App registrations →*
    your Office Sentry app *→ Authentication*, add the redirect URI
