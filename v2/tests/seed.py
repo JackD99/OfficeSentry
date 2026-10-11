@@ -201,6 +201,7 @@ def mock_tenant(
     deleted_groups=None,
     risky_users=None,
     app_sign_ins=None,
+    admin_units=None,
     **phase4,
 ):
     paged(rsps, f"{V1}/organization", [gd.ORGANIZATION])
@@ -266,6 +267,18 @@ def mock_tenant(
         rsps,
         f"{V1}/directory/deletedItems/microsoft.graph.group",
         gd.DELETED_GROUPS if deleted_groups is None else deleted_groups,
+    )
+    paged(rsps, f"{V1}/directory/administrativeUnits", gd.ADMIN_UNITS if admin_units is None else admin_units)
+
+    def unit_members(request):
+        uid = request.path_url.split("?")[0].split("/")[4]
+        return 200, {}, json.dumps(page_of(request.url, gd.ADMIN_UNIT_MEMBERS.get(uid, []), _page(request)))
+
+    rsps.add_callback(
+        responses.GET,
+        re.compile(re.escape(V1) + r"/directory/administrativeUnits/[^/]+/members"),
+        callback=unit_members,
+        content_type="application/json",
     )
     paged(rsps, f"{V1}/groupSettings", grp.GROUP_SETTINGS)
     paged(rsps, f"{V1}/groupLifecyclePolicies", grp.LIFECYCLE_POLICIES)

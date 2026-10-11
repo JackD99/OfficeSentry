@@ -43,6 +43,9 @@ STAND_INS: dict[str, dict] = {
     # made (it read one page); now it does, and the page behind the link is answered empty until the next
     # recording has it.
     "/v1.0/security/secureScores" + replay.PAGED: {"value": []},
+    # Administrative units (the test tenant has none).
+    "/v1.0/directory/administrativeUnits": {"value": []},
+    "/v1.0/directory/administrativeUnits/{id}/members": {"value": []},
 }
 NEW_FIELDS: frozenset[str] = frozenset()
 

@@ -17,6 +17,7 @@ the leaver checklist.
 
 # Part modules register themselves with @part on import; the page sorts them by order.
 from . import (  # noqa: F401
+    admin_units,
     apps,
     devices,
     groups,
