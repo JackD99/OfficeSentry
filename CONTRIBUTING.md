@@ -107,9 +107,9 @@ Python 3.12 run measures coverage and fails under 90%;
   leave a database connection open, and fail after two minutes if they
   hang. Coverage counts branches as well as lines.
 - Never add a write call to a tenant or a non-read-only permission.
-- Every route needs a login check, and tenant pages go through the access
+- Every route needs a login check, and client pages go through the access
   gate in `web/access.py`. `tests/test_isolation_walk.py` opens every
-  tenant route with another tenant's IDs; a new POST route goes in its
+  client route with another client's IDs; a new POST route goes in its
   `FORMS` (the form the route accepts) so the walk sends a form the route
   would act on, not an empty one.
 
@@ -148,9 +148,9 @@ The same gates apply to every change, whoever wrote it:
   scrubbed), so collectors are checked against what Microsoft actually
   returns.
 - Rules that matter for safety are enforced by tests, not just by review:
-  every page requires a login, tenant pages go through the access gate
-  (walked with another tenant's IDs, by GET and by POST with a valid form,
-  against a second tenant whose data is marked so that any of it showing
+  every page requires a login, client pages go through the access gate
+  (walked with another client's IDs, by GET and by POST with a valid form,
+  against a second client whose data is marked so that any of it showing
   up is caught), and the Graph client has no write methods.
 - Pages and reports that change are checked in a real browser, with
   screenshots, before they're merged, and CI compares about 34 pages with

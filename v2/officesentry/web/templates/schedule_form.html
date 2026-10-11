@@ -32,18 +32,18 @@
 {% if not pdf_available %}<p class="footnote m0">This server can't make PDFs, so a view chosen as PDF goes as a spreadsheet (XLSX).</p>{% endif %}
 {% else %}
 <div class="empty compact"><p>{% if digest %}You haven't saved a view of a detail report yet.{% else %}You haven't saved any views yet.{% endif %} Open a report, filter, sort or hide columns, then choose <strong>Views</strong> and save it. It can then be sent here.</p>
-  <a class="btn sm" href="{{ url_for('across.index') if digest else url_for('reports.data_index', tenant_id=tenant.id) }}">Open {{ 'All tenants' if digest else 'detail reports' }}</a></div>
+  <a class="btn sm" href="{{ url_for('across.index') if digest else url_for('reports.data_index', tenant_id=tenant.id) }}">Open {{ 'All clients' if digest else 'detail reports' }}</a></div>
 {% endif %}
 {%- endmacro %}
 {% block content %}
 <div class="crumbs">
-  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span>
+  {% if tenant %}<a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span>
   <a href="{{ url_for('email.tenant_emails', tenant_id=tenant.id) }}">{{ tenant.name }}</a><span>/</span><span>Emailed reports</span>
   {% else %}<a href="{{ url_for('email.overview') }}">Email reports</a>{% endif %}
 </div>
 <div class="page-head">
   <div><h1>{{ heading }}</h1>
-    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every tenant.{% elif views_email %}Your saved views of a report, with every tenant's rows (or one group's), for your team.{% elif digest %}One email to your team summarising every tenant, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
+    <div class="sub">{% if coming_up %}One email to your team of what falls due in the next 90 days, across every client.{% elif views_email %}Your saved views of a report, with every client's rows (or one group's), for your team.{% elif digest %}One email to your team summarising every client, or one group of them.{% else %}{{ tenant.name }}'s reports, sent automatically.{% endif %}</div></div>
 </div>
 
 <form method="post" class="schedule-form narrow-lg" id="schedule-form">
@@ -55,26 +55,26 @@
     <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every item</label>
     {% elif views_email %}
     {% if groups %}
-    <label>Tenants
+    <label>Clients
       <select name="group_id">
-        <option value="">Every tenant</option>
-        {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('tenant') }})</option>{% endfor %}
+        <option value="">Every client</option>
+        {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('client') }})</option>{% endfor %}
       </select>
-      <span class="hint">Each view stacks these tenants' rows under a Tenant column, like the All tenants report.</span></label>
+      <span class="hint">Each view stacks these clients' rows under a Client column, like the All clients report.</span></label>
     {% endif %}
     <div class="label-sm">Your saved views <span class="muted">· PDF and XLSX have the tables the view shapes; CSV is one file per table</span></div>
     {{ view_choices(view_options) }}
     {% elif digest %}
-    <p class="muted small">Which tenants need attention, what's new and what's been fixed, with each tenant's Secure Score. Worst tenants first.</p>
+    <p class="muted small">Which clients need attention, what's new and what's been fixed, with each client's Secure Score. Worst clients first.</p>
     {% if groups %}
-    <label>Tenants
+    <label>Clients
       <select name="group_id">
-        <option value="">Every tenant</option>
-        {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('tenant') }})</option>{% endfor %}
+        <option value="">Every client</option>
+        {% for gr in groups %}<option value="{{ gr.id }}"{% if s.group_id == gr.id %} selected{% endif %}>{{ gr.category ~ ': ' if gr.category }}{{ gr.name }} ({{ gr.tenants|plural('client') }})</option>{% endfor %}
       </select>
       <span class="hint">One digest per group lets each account manager get just their own clients.</span></label>
     {% endif %}
-    <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every tenant's numbers</label>
+    <label class="check"><input type="checkbox" name="include_xlsx" value="1" {% if s.include_xlsx %}checked{% endif %}> Attach a spreadsheet with every client's numbers</label>
     {% else %}
     {% set options = {} %}{% for o in catalog %}{% set _ = options.update({o.key: o}) %}{% endfor %}
     <fieldset class="choices">

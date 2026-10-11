@@ -20,7 +20,7 @@
   <p class="muted small">Everything a collection read: every user, mailbox, device, policy and group, with names and addresses. Reports, the change history and each person's page read them. Trend numbers (counts only) are kept forever.</p>
   <div class="form-row">
     <label>Daily snapshots (days) <input type="number" name="keep_daily" min="{{ limits.keep_daily[0] }}" max="{{ limits.keep_daily[1] }}" value="{{ p.keep_daily }}" required>
-      <span class="hint">The last run of each day, per tenant and data source. Default: {{ describe('keep_daily', d.keep_daily) }}.</span></label>
+      <span class="hint">The last run of each day, per client and data source. Default: {{ describe('keep_daily', d.keep_daily) }}.</span></label>
     <label>Monthly snapshots (months) <input type="number" name="keep_monthly" min="{{ limits.keep_monthly[0] }}" max="{{ limits.keep_monthly[1] }}" value="{{ p.keep_monthly if p.keep_monthly is not none else d.keep_monthly }}" required>
       <span class="hint">The last run of each month, for month-over-month changes. Default: {{ describe('keep_monthly', d.keep_monthly) }}.</span></label>
   </div>
@@ -29,9 +29,9 @@
   {{ next_run(counts.snapshots, 'older snapshot') }}
 
   <h2 id="daily-history">Daily history</h2>
-  <p class="muted small">The same data as the snapshots, but each user, mailbox, device and policy is stored once, and again only when it changes, so a tenant can be shown as it was on any day. It takes far less room than a snapshot a day. It starts with the snapshots already kept, so on the day it's turned on it reaches back as far as they do.</p>
+  <p class="muted small">The same data as the snapshots, but each user, mailbox, device and policy is stored once, and again only when it changes, so a client can be shown as it was on any day. It takes far less room than a snapshot a day. It starts with the snapshots already kept, so on the day it's turned on it reaches back as far as they do.</p>
   {{ number('state_months', p.state_months, d.state_months, 'Keep forever', unit='Months', label='Keep for') }}
-  <p class="footnote">The latest state of each tenant and data source is always kept. Sign-in detail isn't part of it; the full sign-in log is kept under Activity history below.</p>
+  <p class="footnote">The latest state of each client and data source is always kept. Sign-in detail isn't part of it; the full sign-in log is kept under Activity history below.</p>
   {{ next_run(counts.state_months, 'older collection') }}
 
   <h2>Sign-in detail</h2>
@@ -41,7 +41,7 @@
   {{ next_run(counts.signin_days, 'sign-in row') }}
 
   <h2 id="history">Activity history</h2>
-  <p class="muted small">Every sign-in and directory audit event Office Sentry has read from each tenant's logs, kept beyond the 30 days Microsoft keeps them: who signed in, when, from which address, country and app, and every admin change in Entra ID. Each tenant's Activity history page, each person's page and the Admin activity report read it. It's stored in monthly files beside the database, and a month older than its period is deleted as a whole.</p>
+  <p class="muted small">Every sign-in and directory audit event Office Sentry has read from each client's logs, kept beyond the 30 days Microsoft keeps them: who signed in, when, from which address, country and app, and every admin change in Entra ID. Each client's Activity history page, each person's page and the Admin activity report read it. It's stored in monthly files beside the database, and a month older than its period is deleted as a whole.</p>
   {{ number('history_signin_days', p.history_signin_days, d.history_signin_days, label='Every sign-in') }}
   {{ next_run(counts.history_signin_days, 'sign-in') }}
   {{ number('history_daily_months', p.history_daily_months, d.history_daily_months, 'Keep forever', unit='Months', label='Daily sign-in summaries') }}
@@ -52,7 +52,7 @@
   {{ next_run(counts.history_audit_years, 'audit event') }}
 
   <h2>Resolved findings</h2>
-  <p class="muted small">Findings that were fixed: the check, the account or object it named and when it was first seen, last seen and resolved. Open findings and accepted risks are never deleted. Each tenant's findings from its first scan are kept, so alert emails can still tell them apart.</p>
+  <p class="muted small">Findings that were fixed: the check, the account or object it named and when it was first seen, last seen and resolved. Open findings and accepted risks are never deleted. Each client's findings from its first scan are kept, so alert emails can still tell them apart.</p>
   {{ number('findings_days', p.findings_days, 365, 'Keep forever') }}
   <p class="footnote">Counted from the day a finding was resolved. If it comes back after it's been deleted, it shows as new.</p>
   {{ next_run(counts.findings_days, 'resolved finding') }}
@@ -71,7 +71,7 @@
   <h2>Issued reports</h2>
   <p class="muted small">The exact PDF and spreadsheet files sent or approved for clients (Report history), with their recipients.</p>
   {{ number('issued_days', p.issued_days, 365 * 3, 'Keep forever') }}
-  <p class="footnote">Never less than {{ issued_floor|plural('day') }}, and the latest file of each report for each tenant is always kept, because month-end reporting compares against it.</p>
+  <p class="footnote">Never less than {{ issued_floor|plural('day') }}, and the latest file of each report for each client is always kept, because month-end reporting compares against it.</p>
   {{ next_run(counts.issued_days, 'issued report') }}
 
   <div class="form-actions"><button class="primary">Save</button></div>

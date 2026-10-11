@@ -17,30 +17,30 @@
 {%- endmacro %}
 
 {% block doc_title %}{{ rollup.title }}{% endblock %}
-{% block client %}{{ group_scope.label if group_scope else 'All tenants' }}{% endblock %}
-{% block footer_note %}{{ brand.display_name }} internal: {{ ('tenants in ' ~ group_scope.group.name) if group_scope and group_scope.group else 'every tenant' }}{% endblock %}
+{% block client %}{{ group_scope.label if group_scope else 'All clients' }}{% endblock %}
+{% block footer_note %}{{ brand.display_name }} internal: {{ ('clients in ' ~ group_scope.group.name) if group_scope and group_scope.group else 'every client' }}{% endblock %}
 {% block cover_meta %}
   {{ ui.meta('Prepared by', brand.display_name) }}
   {{ ui.meta('Date', rollup.generated_at|day) }}
-  {{ ui.meta('Tenants', rollup.rows|length) }}
+  {{ ui.meta('Clients', rollup.rows|length) }}
   {{ ui.meta('Report', rollup.title) }}
 {% endblock %}
 
 {% block body %}
 <p class="lede">{{ rollup.description }}</p>
 {% call ui.figures(3) %}
-  {{ ui.figure('Tenants', rollup.rows|length, 'in this report') }}
+  {{ ui.figure('Clients', rollup.rows|length, 'in this report') }}
   {{ ui.figure('Need attention', rollup.with_attention,
                'with critical or high findings' if rollup.key == 'review' else ('with controls partly or not in place' if rollup.key == 'evidence' else 'with rows flagged for review'),
                'warn' if rollup.with_attention else none) }}
-  {{ ui.figure('No data for this report', rollup.without_data, 'the reason is under the tenant name' if rollup.without_data else 'every tenant has data') }}
+  {{ ui.figure('No data for this report', rollup.without_data, 'the reason is under the client name' if rollup.without_data else 'every client has data') }}
 {% endcall %}
 
 <section class="doc-section">
   <h2>{{ rollup.title }} <span class="count">{{ rollup.rows|length }}</span></h2>
   {% if rollup.rows %}
   <div class="table-wrap"><table class="data">
-    <thead><tr><th>Tenant</th>{% for c in rollup.columns %}<th class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}">{{ c.label }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th>Client</th>{% for c in rollup.columns %}<th class="{{ 'num' if c.kind in ('num', 'pct', 'money') }}">{{ c.label }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in rollup.rows %}
     <tr><td><strong>{{ row.tenant.name }}</strong>{% if row.note %}<span class="sub">{{ row.note }}</span>{% endif %}</td>
@@ -54,11 +54,11 @@
     {% endif %}
   </table></div>
   {% if rollup.columns|selectattr('kind', 'equalto', 'sev')|list %}<p class="legend-note">Findings are counted by severity, left to right: <span class="sevbar"><span class="n critical">Critical</span> <span class="n high">High</span> <span class="n medium">Medium</span> <span class="n low">Low</span></span></p>{% endif %}
-  {% else %}<p class="empty-note">No tenants to show.</p>{% endif %}
+  {% else %}<p class="empty-note">No clients to show.</p>{% endif %}
 </section>
 
 <footer class="about keep">
   {% if rollup.footnote %}<p>{{ rollup.footnote }}</p>{% endif %}
-  <p>Prepared by {{ brand.display_name }} from each tenant's latest collection. Collected from Microsoft 365 with read-only access; nothing was changed.</p>
+  <p>Prepared by {{ brand.display_name }} from each client's latest collection. Collected from Microsoft 365 with read-only access; nothing was changed.</p>
 </footer>
 {% endblock %}
