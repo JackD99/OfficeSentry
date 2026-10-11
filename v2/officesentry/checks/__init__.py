@@ -11,7 +11,7 @@ from .base import RULES, SEVERITIES, SEVERITY_RANK, Finding, Rule, RuleResult, e
 
 # isort: off
 from . import identity, email, apps, tenant_settings, sharing, domains, groups, devices, hybrid
-from . import admin_activity, sharepoint, auth_methods, licences, sign_ins, risky_users
+from . import admin_activity, sharepoint, auth_methods, licences, sign_ins, risky_users, accounts, storage
 # isort: on
 
 AREAS = (
@@ -30,4 +30,6 @@ AREAS = (
     licences,
     sign_ins,
     risky_users,
+    accounts,
+    storage,
 )
