@@ -115,6 +115,10 @@ No.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- A tenant whose consent is missing the AuditLog.Read.All permission still gets its users collected each
+  night, with the run partial and the permission named, instead of the Users collection failing.
+- An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
+  cmdlet, instead of failing the whole collection.
 
 ### Security
 
