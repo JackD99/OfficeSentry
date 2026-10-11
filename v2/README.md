@@ -316,12 +316,13 @@ Portainer, a NAS, Kubernetes or a cloud in the [deploy guides](docs/deploy/READM
   show every control as Pass, Fail, Partly or Your evidence, with the
   figures, the fix, a text to paste, what changed since an earlier day and
   what the CE Plus assessor tests, plus the answers for the IASME portal
-  (Danzell set, by question number). **Questionnaires** (`?set=`) give the
-  answers for cyber insurance proposal forms and supplier security
-  questionnaires in each form's wording with text to copy and paste, and the
-  Microsoft 365 data and date behind each. Questions Microsoft 365 can't
-  answer carry a text to complete. Staff can override any answer with a
-  note, which fills every form and scheme.
+  (Danzell set, by question number). The **cyber insurance proposal** and
+  **supplier security questionnaire** packs judge the controls those forms
+  ask about the same way (a gap on a few accounts is Partly) and give the answers
+  in each form's wording with text to copy and paste, and the Microsoft 365
+  data and date behind each. Questions Microsoft 365 can't answer carry a
+  text to complete. Staff can override any answer with a note, which fills
+  every form and scheme.
 - **Recommended projects** (`/projects` and `/tenants/<id>/projects`, for roles
   with *Recommended projects*): each client's failing checks and missing
   licences grouped into the projects that fix them (Identity and Conditional
