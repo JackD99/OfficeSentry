@@ -12,6 +12,7 @@ from officesentry import store
 from officesentry.collectors import mail_flow
 from officesentry.reports import data_reports
 from tests import graphdata as gd
+from tests import seed
 from tests.seed import seed_tenant
 from tests.test_collectors import SKUS
 
@@ -71,8 +72,9 @@ def test_counts_mail_per_domain_and_lists_the_top_spam_and_phishing_recipients(d
     assert "Private subject" not in stored and "news@outside.example" not in stored and "ann@" not in stored
 
 
-def test_trace_is_read_a_day_at_a_time_and_only_what_is_new(db, two_tenants):
+def test_trace_is_read_a_day_at_a_time_and_only_what_is_new(db, two_tenants, monkeypatch):
     alpha, _ = two_tenants
+    monkeypatch.setattr(seed, "PAGE", 1000)  # one page a day, so the calls count the days
     seed_tenant(db, alpha)
     first = _run(db, alpha)
     (calls,) = db.execute(
