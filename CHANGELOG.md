@@ -115,6 +115,8 @@ No.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
+  dates on it are written the same way on every platform.
 
 ### Security
 
