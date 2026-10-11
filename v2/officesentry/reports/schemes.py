@@ -227,6 +227,7 @@ class ControlResult:
     verdict: str
     evidence: list[str] = field(default_factory=list)  # what the data shows, with its figures
     gaps: list[str] = field(default_factory=list)  # the things wrong, named
+    named: set[str] = field(default_factory=set)  # the gap lines that name an account, device or site
     figures: list[tuple[str, str]] = field(default_factory=list)  # (label, value)
     fix: str = ""  # the first thing to do
     fix_detail: str = ""  # the full recommendation
@@ -253,6 +254,17 @@ class ControlResult:
             return self.answer.text
         found = [e for e in self.evidence if not e.startswith(("Supporting: ", "But: "))]
         return " ".join(found + [g for g in self.gaps if not g.startswith("  ")]) or self.reason
+
+    @property
+    def gap_summary(self) -> str:
+        """The first gap and, when the next line names something, that as an example."""
+        if not self.gaps:
+            return ""
+        first = self.gaps[0].strip()
+        if len(self.gaps) < 2 or not self.gaps[1].startswith("  "):
+            return first
+        detail = self.gaps[1].strip().rstrip(".")
+        return f"{first} For example {detail}." if self.gaps[1] in self.named else f"{first} {_sentence(detail)}"
 
     @property
     def blanks(self) -> list[str]:
@@ -302,7 +314,7 @@ def _from_answer(answer: str, strict: bool) -> str:
     return MANUAL
 
 
-def _describe(r: RuleResult, evidence: list[str], gaps: list[str]) -> None:
+def _describe(r: RuleResult, evidence: list[str], gaps: list[str], named: set[str]) -> None:
     if r.status in ("pass",):
         evidence.append(_sentence(r.summary))
     elif r.status == "accepted":
@@ -312,7 +324,11 @@ def _describe(r: RuleResult, evidence: list[str], gaps: list[str]) -> None:
     else:
         gaps.append(_sentence(r.summary))
         for f in r.findings[:GAP_LIMIT]:
-            gaps.append(f"  {f.detail}" if f.subject in WHOLE_ORGANISATION else f"  {f.subject}: {f.detail}")
+            if f.subject in WHOLE_ORGANISATION:
+                gaps.append(f"  {f.detail}")
+            else:
+                gaps.append(f"  {f.subject}: {f.detail}")
+                named.add(gaps[-1])
         if len(r.findings) > GAP_LIMIT:
             gaps.append(f"  and {len(r.findings) - GAP_LIMIT} more")
 
@@ -325,7 +341,7 @@ def judge(c: Control, scheme: Scheme, ctx: Context) -> ControlResult:
     ran = [r for r in results if r.status != "unavailable"]
     if c.rules:
         for r in results:
-            _describe(r, out.evidence, out.gaps)
+            _describe(r, out.evidence, out.gaps, out.named)
         if not ran:
             out.verdict = UNKNOWN
             out.reason = _sentence(results[0].summary) if results else "The data hasn't been collected yet."

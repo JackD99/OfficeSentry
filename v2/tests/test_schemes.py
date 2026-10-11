@@ -136,3 +136,13 @@ def test_assess_all_judges_every_scheme_once(db, two_tenants):
     seed_tenant(db, alpha)
     results = schemes.assess_all(db, store.get_tenant(db, alpha))
     assert [r.scheme.key for r in results] == list(schemes.SCHEMES)
+
+
+def test_a_gap_summary_says_for_example_only_before_something_named():
+    control = ce.THEMES[0].controls[0]
+    named = schemes.ControlResult(control, FAIL, gaps=["2 accounts.", "  ann@x.example: no MFA."])
+    named.named.add(named.gaps[1])
+    assert named.gap_summary == "2 accounts. For example ann@x.example: no MFA."
+    whole = schemes.ControlResult(control, FAIL, gaps=["Legacy sign-in allowed.", "  no enabled policy blocks it."])
+    assert whole.gap_summary == "Legacy sign-in allowed. No enabled policy blocks it."
+    assert schemes.ControlResult(control, FAIL, gaps=["Only this."]).gap_summary == "Only this."
