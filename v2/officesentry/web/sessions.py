@@ -18,6 +18,8 @@ from datetime import UTC, datetime, timedelta
 
 from flask import current_app, g, request, session
 
+from ..db import try_write
+
 TOUCH_EVERY = timedelta(minutes=1)  # don't write on every request
 
 
@@ -86,7 +88,10 @@ def current():
         session.clear()
         return None, None
     if now - last_seen >= TOUCH_EVERY:
-        g.db.execute("UPDATE sessions SET last_seen_at = ? WHERE id = ?", (_iso(now), row["id"]))
+        # Best effort: with the write lock held elsewhere for long (a restore, an erase's VACUUM), a page
+        # view must neither wait for it nor fail; the next request a moment later notes the time instead,
+        # well within the idle limit.
+        try_write(g.db, "UPDATE sessions SET last_seen_at = ? WHERE id = ?", (_iso(now), row["id"]))
     return row, user
 
 
