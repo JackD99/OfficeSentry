@@ -9,6 +9,55 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.3.0] - Unreleased
+
+### Action required
+
+- **Client sign-in with Microsoft** needs nothing on upgrade: it's off until an admin turns it on. Turning it
+  on makes the staff sign-in app accept other organisations' accounts (one setting on the app in your own
+  tenant, done by **Sign in to Microsoft** under *Settings → Microsoft sign-in*); who can sign in is still
+  decided by Office Sentry ([v2/docs/client-sign-in.md](v2/docs/client-sign-in.md)).
+
+### Database upgrade
+
+Yes, applied on start as usual: migration 41 adds the tenant a Microsoft account belongs to on each account,
+when each client's administrator approved client sign-in, and when a session last confirmed a change with
+Microsoft. Nobody's access changes. As ever, a copy of the database is made first.
+
+### Added
+
+- **Client sign-in with Microsoft.** A client's people can sign in with the work account they already use,
+  under their own organisation's MFA and Conditional Access, instead of a password from you. Each client's
+  **Settings → Client sign-in** page lists who there can sign in and how, adds their primary contacts by work
+  address (found in the client's directory as Office Sentry last collected it; report contacts without an
+  account are a click away), gives each person a sign-in link with their address filled in, and has a
+  message to send them and an approval link for their Microsoft 365 administrator, which asks for nothing but
+  sign-in. Office Sentry only lets them in from their own company's tenant, into their own client account,
+  matched on Microsoft's ID for that person and never on a name or address: never as staff, never into a new
+  account, whatever roles their own tenant gives them, and only ever to clients in their own organisation.
+  Nobody is invited into your tenant as a guest.
+- **Settings → Microsoft sign-in** (was *Staff sign-in*) has a *Your clients' people* card: let the sign-in
+  app accept clients' accounts with one Microsoft sign-in (or by hand), turn client sign-in on, and each
+  client's people and approval at a glance.
+- **Confirm with Microsoft.** An admin who signs in only with Microsoft has no password to type before a
+  security change (setting someone's password, signing someone out, resetting their two-step sign-in), so
+  those forms sign them in to Microsoft again instead; it counts for ten minutes.
+- **Adding staff who sign in with Microsoft** on *Settings → Users*: no password, the username is their
+  sign-in address, and the account is connected at their first sign-in. Staff can be granted clients before
+  they first sign in.
+
+### Changed
+
+- The users page's two-step advice no longer counts client accounts that sign in with Microsoft, and their
+  user page says their organisation's MFA applies instead.
+
+### Security
+
+- Disconnecting someone's Microsoft account from their user page now needs the right to manage users, and
+  only an Administrator can do it to an Administrator. It needed only the right to change settings.
+- With staff passwords turned off, a staff account's right password now gets the same answer as a wrong one,
+  and counts as a failed attempt.
+
 ## [2.2.0] - 2026-10-11
 
 Who can open what, and evidence for more than Cyber Essentials. The headlines: Site access, Site
@@ -718,6 +767,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

@@ -92,6 +92,11 @@ SECTIONS = [
                 blurb="Let your team sign in with their Microsoft account, with roles assigned in Entra.",
             ),
             Doc(
+                "v2/docs/client-sign-in.md",
+                "client-sign-in",
+                blurb="Let your clients' people sign in with their own work account, from their own tenant.",
+            ),
+            Doc(
                 "v2/docs/troubleshooting.md",
                 "troubleshooting",
                 blurb="The common setup and collection errors, and how to fix them.",

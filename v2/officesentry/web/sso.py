@@ -1,5 +1,6 @@
-"""Sign in with Microsoft (sso.py): the browser side, the Account page's connect button and the admin's
-Staff sign-in settings page with its setup wizard."""
+"""Sign in with Microsoft (sso.py): the browser side for staff and clients' people, confirming a change with
+Microsoft, the Account page's connect button, the admin's Microsoft sign-in settings page with its setup
+wizards, and the page a client's administrator comes back to after approving the sign-in app."""
 
 from __future__ import annotations
 
@@ -21,19 +22,25 @@ from flask import (
     session,
     url_for,
 )
+from itsdangerous import BadSignature, URLSafeSerializer
 
-from .. import app_setup, cert_lifecycle, clouds, entra, permissions, roles, sso
+from .. import app_setup, cert_lifecycle, clouds, entra, permissions, roles, sso, store
 from ..certs import cert_der
-from ..db import audit, transaction, utcnow
-from . import sessions
-from .access import login_required, needs, safe_next
+from ..db import audit, audit_counted, transaction, utcnow
+from . import public_demo, sessions
+from .access import login_required, needs, safe_next, visible_tenants
+from .admin import _out_of_reach, _user_or_404
 from .auth import confirm_password
 from .home import home_url
 
 bp = Blueprint("sso", __name__)
 
 FLOW_KEY = "microsoft"
+# Set when Microsoft said the sign-in app only takes the MSP's own accounts: the sign-in page then offers
+# staff the way in through their own tenant (``?as=staff``) until client sign-in is finished.
+FALLBACK_KEY = "microsoft_staff_fallback"
 GUID_RE = re.compile(r"^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
+HINT_RE = re.compile(r"^[^@\s]{1,100}@[A-Za-z0-9.-]{1,100}$")
 
 
 def _cfg():
@@ -58,36 +65,59 @@ def _begin(flow: sso.Flow, s: dict, login_hint: str | None = None, prompt: str |
 
 @bp.get("/login/microsoft")
 def start():
+    """ "Sign in with Microsoft". With client sign-in on it goes to ``organizations`` and the token's tenant
+    decides who it is; ``?as=staff`` keeps to the MSP's own tenant. ``?hint=`` (an invitation's link) fills
+    in the address on Microsoft's page."""
     s = sso.settings(g.db)
-    if not sso.enabled(s):
+    if not sso.shown(s):
         abort(404)
     if g.user is not None:
         return redirect(home_url(g.user))  # already signed in: the sign-in page would do the same
-    return _begin(sso.Flow.new(next_url=request.args.get("next")), s)
+    clients = sso.clients_enabled(s) and request.args.get("as") != "staff"
+    hint = request.args.get("hint", "").strip()
+    return _begin(
+        sso.Flow.new(next_url=request.args.get("next"), clients=clients),
+        s,
+        login_hint=hint if HINT_RE.match(hint) else None,
+    )
 
 
 @bp.get(sso.CALLBACK_PATH)
 def callback():
     s = sso.settings(g.db)
+    if (tenant := _approval_tenant(request.args.get("state"))) is not None:
+        return _approval_returned(s, tenant)  # a client's administrator, back from approving the sign-in app
     flow = sso.Flow.from_dict(session.pop(FLOW_KEY, None))
     if not sso.is_configured(s):
         abort(404)
     linking = flow is not None and flow.link_user_id is not None
-    back = url_for("auth.account") if linking else url_for("auth.login")
+    confirming = flow is not None and flow.confirm_user_id is not None
+    if linking:
+        back = url_for("auth.account")
+    elif confirming:
+        back = safe_next(flow.next, url_for("auth.account"))
+    else:
+        back = url_for("auth.login")
     if flow is None or flow.expired or request.args.get("state", "") != flow.state:
         flash("That sign-in didn't start in this browser, or took too long. Please try again.", "error")
         return redirect(back)
     if request.args.get("error"):
-        flash(sso.problem(request.args.get("error"), request.args.get("error_description")), "error")
+        description = request.args.get("error_description")
+        if "AADSTS50194" in (description or "") and sso.enabled(s):
+            session[FALLBACK_KEY] = True
+        flash(sso.problem(request.args.get("error"), description, clients=flow.clients), "error")
         return redirect(back)
     code = request.args.get("code", "")
     if not code:
         flash("Microsoft didn't send a sign-in code back. Please try again.", "error")
         return redirect(back)
-    if not linking and not sso.enabled(s):
+    if not (linking or confirming) and not sso.shown(s):
         abort(404)
     if linking and (g.user is None or g.user["id"] != flow.link_user_id):
         flash("Sign in first, then connect your Microsoft account from your account page.", "error")
+        return redirect(url_for("auth.login"))
+    if confirming and (g.user is None or g.user["id"] != flow.confirm_user_id):
+        flash("Your session ended meanwhile. Sign in again, then make the change.", "error")
         return redirect(url_for("auth.login"))
 
     try:
@@ -96,14 +126,17 @@ def callback():
         except InvalidToken as exc:  # the keys were rotated without re-encrypting the settings
             raise sso.SignInError(
                 "Office Sentry can't read the key of its sign-in certificate. An admin should make a new"
-                " certificate under Settings → Staff sign-in, or run rotate-keys again."
+                " certificate under Settings → Microsoft sign-in, or run rotate-keys again."
             ) from exc
         identity = sso.verify_id_token(s, sso.exchange_code(s, key_pem, code, _redirect_uri(), flow), flow)
     except sso.SignInError as exc:
         audit(g.db, g.user["username"] if g.user else None, "login_failed", detail=f"Microsoft: {exc}"[:300])
         flash(str(exc), "error")
         return redirect(back)
+    session.pop(FALLBACK_KEY, None)
 
+    if confirming:
+        return _confirmed(identity, back)
     if linking:
         try:
             with transaction(g.db):
@@ -123,6 +156,12 @@ def callback():
             flash(f"Connected to {identity.upn}. You can sign in with Microsoft from now on.", "success")
         return redirect(back)
 
+    if identity.tid != s["sso_tenant"].lower():
+        return _client_signed_in(identity, s, flow)
+    if not sso.enabled(s):
+        audit(g.db, identity.username, "login_failed", detail="Microsoft: staff sign-in with Microsoft is off")
+        flash("Microsoft sign-in is off for staff here. Sign in with your password.", "error")
+        return redirect(url_for("auth.login"))
     try:
         with transaction(g.db):
             user, outcome = sso.account_for(g.db, identity, s)
@@ -143,6 +182,10 @@ def callback():
         audit(g.db, identity.username, "login_failed", detail=f"Microsoft: {exc}"[:300])
         flash(str(exc), "error")
         return redirect(url_for("auth.login"))
+    return _signed_in(user, flow)
+
+
+def _signed_in(user, flow: sso.Flow):
     g.db.execute(
         "UPDATE users SET failed_logins = 0, locked_until = NULL, last_login_at = ? WHERE id = ?",
         (utcnow(), user["id"]),
@@ -151,6 +194,123 @@ def callback():
     audit(g.db, user["username"], "login", detail="Microsoft")
     target = flow.next
     return redirect(safe_next(target) if target and target != "/" else home_url(user))
+
+
+def _client_signed_in(identity: sso.Identity, s: dict, flow: sso.Flow):
+    """Someone from a client's own tenant (only ever through ``organizations``): their client account, or
+    nothing. The refusal never says whether an account by that name exists."""
+    try:
+        with transaction(g.db):
+            user, _ = sso.client_account_for(g.db, identity, s)
+    except sso.Refused as exc:
+        if str(exc) in (sso.NOT_SET_UP, sso.OTHER_ORGANISATION):
+            # Anyone with a work account anywhere gets this far: counted per address, without their name.
+            audit_counted(g.db, "login_failed_unknown", (request.remote_addr or "")[:64], detail="Microsoft")
+            if sso.enabled(s):
+                session[FALLBACK_KEY] = True  # staff with a guest account go in through the MSP's tenant
+        else:
+            audit(g.db, identity.username, "login_failed", detail=f"Microsoft, tenant {identity.tid}: {exc}"[:300])
+        flash(str(exc), "error")
+        return redirect(url_for("auth.login"))
+    return _signed_in(user, flow)
+
+
+# -- Confirming a change with Microsoft (accounts with no password) ------------------------------------------
+
+
+@bp.post("/account/microsoft/confirm")
+@login_required
+def confirm():
+    """Sign in to Microsoft again (``prompt=login``) to confirm a security change, where someone with a
+    password would type it. Comes back to ``?next=``, the page the change is made on."""
+    s = sso.settings(g.db)
+    if (
+        not sso.is_configured(s)
+        or not g.user["entra_oid"]
+        or g.user["role"] == "client"
+        or sso.has_password(g.user)
+        or g.get("public_demo")
+    ):
+        abort(404)
+    back = safe_next(request.args.get("next"), url_for("auth.account"))
+    flow = sso.Flow.new(next_url=back, confirm_user_id=g.user["id"])
+    return _begin(flow, s, login_hint=g.user["entra_upn"] or None, prompt="login")
+
+
+def _confirmed(identity: sso.Identity, back: str):
+    if identity.oid != (g.user["entra_oid"] or "").lower():
+        audit(g.db, g.user["username"], "confirm_failed", detail=f"Microsoft: signed in as {identity.upn}"[:300])
+        flash(
+            f"That was {identity.upn or 'another Microsoft account'}, not the account you sign in with here. "
+            "Nothing was confirmed.",
+            "error",
+        )
+        return redirect(back)
+    sessions.confirm()
+    audit(g.db, g.user["username"], "confirmed_with_microsoft")
+    flash(f"Confirmed. Make the change within {sso.CONFIRM_MINUTES} minutes.", "success")
+    return redirect(back)
+
+
+# -- A client's administrator approving the sign-in app for their organisation ----------------------------
+
+
+def _approval_serializer() -> URLSafeSerializer:
+    return URLSafeSerializer(current_app.config["SECRET_KEY"], salt="client-sign-in-approval")
+
+
+def approval_link(s: dict, t) -> str | None:
+    """The link to send a client's Microsoft 365 administrator so they approve the sign-in app for their
+    organisation, or None until client sign-in is ready and the client's Directory ID is known. The state
+    names the tenant and when it was added, as the consent link's does, so it never points at a later client
+    that reuses the number."""
+    tid = sso.directory_id(g.db, t)
+    if not sso.clients_enabled(s) or tid is None or clouds.of(t).key != sso.cloud(s).key:
+        return None
+    state = _approval_serializer().dumps({"t": t["id"], "c": t["created_at"]})
+    return sso.approval_url(s, tid, _redirect_uri(), state)
+
+
+def _approval_tenant(state: str | None):
+    if not state or "." not in state:
+        return None
+    try:
+        data = _approval_serializer().loads(state)
+    except BadSignature:
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("t"), int) or not isinstance(data.get("c"), str):
+        return None
+    tenant = store.get_tenant(g.db, data["t"])
+    return tenant if tenant is not None and tenant["created_at"] == data["c"] else None
+
+
+def _approval_returned(s: dict, t):
+    """Public: a client's administrator back from Microsoft's approval page, with no Office Sentry sign-in.
+    Notes the approval when Microsoft says it was given for this client's own tenant; shows none of
+    Microsoft's text, only a known explanation."""
+    error = request.args.get("error")
+    returned = request.args.get("tenant", "").lower()
+    approved = not error and request.args.get("admin_consent", "").lower() == "true"
+    mine = approved and returned == (sso.directory_id(g.db, t) or "")
+    audit_counted(
+        g.db,
+        "client_sign_in_approved" if mine else "client_sign_in_not_approved",
+        (request.remote_addr or "")[:64],
+    )
+    if mine and not t["archived_at"] and not public_demo.active(g.db):
+        with transaction(g.db):
+            g.db.execute(
+                "UPDATE tenants SET sign_in_approved_at = COALESCE(sign_in_approved_at, ?) WHERE id = ?",
+                (utcnow(), t["id"]),
+            )
+            audit(g.db, None, "client_sign_in_approved", t["id"], f"tenant {returned}")
+    problem = sso.known_problem(error, request.args.get("error_description"), clients=True) if error else None
+    return render_template(
+        "client_sign_in_approved.html",
+        approved=mine,
+        other_tenant=approved and not mine,
+        problem=problem,
+    )
 
 
 # -- Account page ----------------------------------------------------------------------------------------
@@ -187,12 +347,12 @@ def disconnect():
 
 
 @bp.post("/admin/users/<int:user_id>/microsoft/disconnect")
-@needs("settings.manage")
+@needs("users.manage")
 def admin_disconnect(user_id: int):
-    user = g.db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    if user is None:
-        abort(404)
-    if sso.unlink(g.db, user_id):
+    user = _user_or_404(user_id)
+    if problem := _out_of_reach(user):
+        flash(problem, "error")
+    elif sso.unlink(g.db, user_id):
         g.db.execute("UPDATE users SET session_version = session_version + 1 WHERE id = ?", (user_id,))
         audit(g.db, g.user["username"], "microsoft_disconnected", detail=user["username"])
         flash(f"{user['username']} is disconnected from Microsoft and signs in with a password.", "success")
@@ -205,7 +365,7 @@ def admin_disconnect(user_id: int):
     return redirect(url_for("admin.edit_user", user_id=user_id))
 
 
-# -- Settings → Staff sign-in -------------------------------------------------------------------------
+# -- Settings → Microsoft sign-in -------------------------------------------------------------------------
 
 
 def _page():
@@ -220,6 +380,10 @@ def settings_page():
     if sign_in and sign_in["status"] == "done" and not sso.is_configured(s):
         app_setup.cancel(g.db, g.user["id"], "sign_in")  # the app it made was removed since
         sign_in = None
+    update = app_setup.current(g.db, g.user["id"], "sign_in_update")
+    if update and update["status"] == "done" and not sso.multi_tenant(s):
+        app_setup.cancel(g.db, g.user["id"], "sign_in_update")
+        update = None
     linked, staff = sso.staff_counts(g.db)
     expiry = cert_lifecycle.sign_in_expiry(s)
     return render_template(
@@ -227,6 +391,11 @@ def settings_page():
         s=s,
         configured=sso.is_configured(s),
         enabled=sso.enabled(s),
+        multi_tenant=sso.multi_tenant(s),
+        clients_enabled=sso.clients_enabled(s),
+        client_rows=_client_rows(s) if sso.is_configured(s) else [],
+        update=update,
+        update_seconds_left=app_setup.seconds_left(update) if update else 0,
         sign_in=sign_in,
         seconds_left=app_setup.seconds_left(sign_in) if sign_in else 0,
         redirect_uri=_redirect_uri(),
@@ -243,6 +412,25 @@ def settings_page():
         me_linked=bool(g.user["entra_oid"]),
         notes=[n for n in (s.get("sso_notes") or "").split("\n") if n],
     )
+
+
+def _client_rows(s: dict) -> list[dict]:
+    """Each client the admin sees, for the Clients card: who there can sign in, and whether their own
+    administrator has approved the sign-in app."""
+    rows = []
+    for t in visible_tenants(g.db, g.user):
+        people = sso.client_people(g.db, t["id"])
+        rows.append(
+            {
+                "tenant": t,
+                "people": len(people),
+                "microsoft": sum(1 for u in people if sso.signs_in_with_microsoft(u)),
+                "approved": t["sign_in_approved_at"],
+                "known": sso.directory_id(g.db, t) is not None,
+                "same_cloud": clouds.of(t).key == sso.cloud(s).key,
+            }
+        )
+    return rows
 
 
 def _app_roles() -> list[tuple[str, str]]:
@@ -329,6 +517,105 @@ def save_settings():
             )
     flash("Saved.", "success")
     return _page()
+
+
+# Client sign-in: the switch, and the sign-in app accepting other organisations' accounts.
+
+
+def _to_clients():
+    return redirect(url_for("sso.settings_page") + "#clients")
+
+
+@bp.post("/admin/sign-in/clients")
+@needs("settings.manage")
+def save_clients():
+    s = sso.settings(g.db)
+    if not sso.is_configured(s):
+        return _page()
+    on = request.form.get("clients") == "1"
+    if on and not sso.multi_tenant(s):
+        flash("First let the sign-in app accept your clients' accounts (step 1).", "error")
+        return _to_clients()
+    if on != (s.get("sso_clients") == "1"):
+        with transaction(g.db):
+            sso.save(g.db, {"sso_clients": "1" if on else ""})
+            audit(g.db, g.user["username"], "staff_sign_in_changed", detail=f"clients={'on' if on else 'off'}")
+    flash(
+        "Client sign-in is on. Add each client's people on the client's Settings → Client sign-in page."
+        if on
+        else "Client sign-in is off. Client accounts sign in with a password.",
+        "success",
+    )
+    return _to_clients()
+
+
+@bp.post("/admin/sign-in/clients/by-hand")
+@needs("settings.manage")
+def clients_by_hand():
+    """The admin changed the app's supported account types in Entra themselves."""
+    s = sso.settings(g.db)
+    if not sso.is_configured(s):
+        return _page()
+    with transaction(g.db):
+        sso.save(g.db, {"sso_multi_tenant": "1", "sso_multi_tenant_by": f"{g.user['username']} (by hand)"})
+        audit(
+            g.db,
+            g.user["username"],
+            "sign_in_app_updated",
+            detail=f"{s['sso_client_id']}: accepts other organisations (by hand)",
+        )
+    flash("Noted. Now turn client sign-in on (step 2).", "success")
+    return _to_clients()
+
+
+@bp.post("/admin/sign-in/clients/setup")
+@needs("settings.manage")
+def start_update():
+    s = sso.settings(g.db)
+    if not sso.is_configured(s):
+        return _page()
+    try:
+        app_setup.start(
+            g.db,
+            _vault(),
+            g.user["id"],
+            g.user["username"],
+            s["sso_tenant"],
+            sso.cloud(s).key,
+            s.get("sso_app_name") or sso.DEFAULT_NAME,
+            purpose="sign_in_update",
+        )
+    except entra.SignInError as exc:
+        flash(str(exc), "error")
+    return _to_clients()
+
+
+@bp.post("/admin/sign-in/clients/setup/check")
+@needs("settings.manage")
+def check_update():
+    row = app_setup.check(g.db, _vault(), g.user["id"], g.user["username"], _redirect_uri(), purpose="sign_in_update")
+    if request.accept_mimetypes.best == "application/json":
+        if row is None:
+            return jsonify(status="none")
+        return jsonify(
+            status=row["status"],
+            note=row["error"] if row["status"] == "waiting" else None,
+            wait=row["poll_seconds"],
+            seconds_left=app_setup.seconds_left(row),
+        )
+    if row is not None and row["status"] == "waiting" and not row["error"]:
+        flash(
+            "Microsoft says sign-in hasn't finished yet. Enter the code on Microsoft's page, then check again.",
+            "warning",
+        )
+    return _to_clients()
+
+
+@bp.post("/admin/sign-in/clients/setup/cancel")
+@needs("settings.manage")
+def cancel_update():
+    app_setup.cancel(g.db, g.user["id"], "sign_in_update")
+    return _to_clients()
 
 
 # The setup wizard, the sign-in app's version (app_setup.py with purpose "sign_in").
@@ -485,6 +772,7 @@ def remove():
     with transaction(g.db):
         sso.forget(g.db)
         app_setup.cancel(g.db, g.user["id"], "sign_in")
+        app_setup.cancel(g.db, g.user["id"], "sign_in_update")
         audit(g.db, g.user["username"], "staff_sign_in_removed")
     flash(
         "Microsoft sign-in is removed. Accounts stay connected to their Microsoft accounts in case you set it up "

@@ -51,9 +51,11 @@ NO_ANSWER = "Microsoft didn't answer just now. Office Sentry will keep checking.
 
 # Statuses: waiting (for the admin to sign in), working (one check is talking to Microsoft), done, failed.
 ACTIVE = ("waiting", "working")
-# What a sign-in is for: creating the read-only app connection, the staff sign-in app (sso.py), or adding a
-# permission batch to an existing connection's app (``connection_id`` names it from the start).
-PURPOSES = ("connection", "sign_in", "update")
+# What a sign-in is for: creating the read-only app connection, the staff sign-in app (sso.py), adding a
+# permission batch to an existing connection's app (``connection_id`` names it from the start), or letting the
+# sign-in app accept other organisations' accounts for client sign-in (``sso.allow_other_organisations``).
+PURPOSES = ("connection", "sign_in", "update", "sign_in_update")
+SIGN_IN_PURPOSES = ("sign_in", "sign_in_update")
 
 
 def _iso(dt: datetime) -> str:
@@ -176,7 +178,10 @@ def start(
         purpose, cloud, name = "update", clouds.of(connection).key, connection["name"]
     if purpose not in PURPOSES:
         raise ValueError(purpose)
-    scope = sso.setup_scope(cloud) if purpose == "sign_in" else None
+    scope = None
+    if purpose in SIGN_IN_PURPOSES:
+        asks = sso.UPDATE_PERMISSIONS if purpose == "sign_in_update" else sso.SETUP_PERMISSIONS
+        scope = sso.setup_scope(cloud, asks)
     code = entra.start_device_sign_in(tenant, cloud, session=session, scope=scope)
     conn.execute("DELETE FROM setup_sign_ins WHERE user_id = ? AND purpose = ?", (user_id, purpose))
     conn.execute(
@@ -205,7 +210,7 @@ def start(
         actor,
         "app_update_started" if purpose == "update" else "app_setup_started",
         detail=(cloud if tenant == ANY_TENANT else f"{cloud} {tenant}")
-        + (" (sign-in app)" if purpose == "sign_in" else ""),
+        + (" (sign-in app)" if purpose in SIGN_IN_PURPOSES else ""),
     )
     return current(conn, user_id, purpose)
 
@@ -282,6 +287,8 @@ def check(
         return _finish_update(conn, row, poll.token, home, actor, user_id, session, now)
     if purpose == "sign_in":
         return _finish_sign_in_app(conn, vault, row, poll.token, redirect_uri, actor, home, now, session)
+    if purpose == "sign_in_update":
+        return _finish_sign_in_update(conn, row, poll.token, actor, home, now, session)
     try:
         conn_id, app = register_app(conn, vault, poll.token, redirect_uri, row["name"], row["cloud"], session=session)
     except entra.SignInError as exc:
@@ -337,6 +344,27 @@ def _finish_sign_in_app(conn, vault, row, token: str, redirect_uri: str, actor: 
     )
     audit(conn, actor, "sign_in_app_created", detail=f"{row['name']} {created.client_id} {row['cloud']} (setup wizard)")
     return current(conn, row["user_id"], "sign_in")
+
+
+def _finish_sign_in_update(conn, row, token: str, actor: str, home, now, session):
+    """The sign-in app (sso.py) changed to accept other organisations' accounts, for client sign-in."""
+    s = sso.settings(conn)
+    if not sso.is_configured(s):
+        _fail(conn, row, "Microsoft sign-in was removed meanwhile, so there's no sign-in app to change.", actor)
+        return current(conn, row["user_id"], "sign_in_update")
+    try:
+        sso.allow_other_organisations(token, s, row["cloud"], session=session)
+    except sso.SignInError as exc:
+        _fail(conn, row, str(exc), actor)
+        return current(conn, row["user_id"], "sign_in_update")
+    sso.save(conn, {"sso_multi_tenant": "1", "sso_multi_tenant_by": f"{actor} (wizard)"})
+    conn.execute(
+        "UPDATE setup_sign_ins SET status = 'done', device_code_enc = NULL, error = NULL, client_id = ?,"
+        " home_tenant = ?, updated_at = ? WHERE id = ?",
+        (s["sso_client_id"], home, _iso(now), row["id"]),
+    )
+    audit(conn, actor, "sign_in_app_updated", detail=f"{s['sso_client_id']}: accepts other organisations (wizard)")
+    return current(conn, row["user_id"], "sign_in_update")
 
 
 def seconds_left(row, now: datetime | None = None) -> int:

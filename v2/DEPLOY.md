@@ -233,10 +233,12 @@ no timestamp, so a copied request could be sent again.
 ## Sign-in protection
 
 **Staff can sign in with their Microsoft account** instead of a password and authenticator code: an admin
-sets it up under *Settings → Staff sign-in* in about two minutes, and
+sets it up under *Settings → Microsoft sign-in* in about two minutes, and
 [docs/staff-sign-in.md](docs/staff-sign-in.md) walks through it, including turning passwords off for staff
 and turning them back on from the server (`python -m officesentry staff-sign-in --passwords on`) if
-Microsoft sign-in ever breaks. The rest of this section is about password sign-ins.
+Microsoft sign-in ever breaks. **Your clients' people can too**, with their own work account from their own
+company's tenant, once you turn client sign-in on ([docs/client-sign-in.md](docs/client-sign-in.md)). The
+rest of this section is about password sign-ins.
 
 Wrong passwords never lock an account, so nobody can keep you out just by
 knowing your username. Instead, Office Sentry slows down **where** the

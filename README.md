@@ -278,7 +278,9 @@ proposal PDF to send them. A project drops off by itself once its findings are f
 ### A view for clients
 
 Client users can sign in too. They see only their own organisation's reports, key numbers and downloads, never
-collection internals, run logs or other clients.
+collection internals, run logs or other clients. They can sign in with their own work Microsoft account, under
+their organisation's own MFA, from their own tenant only: no guest accounts in yours and no passwords to hand
+out ([Client sign-in](v2/docs/client-sign-in.md)).
 
 ![What a client sees when they sign in](docs/screenshots/client-view.png)
 
@@ -414,6 +416,8 @@ from there.
 - [Deploy guides](v2/docs/deploy/README.md): Portainer and other container managers, Unraid, Synology and
   TrueNAS, Kubernetes, Azure, AWS, other clouds and Cloudflare
 - [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md): let your team sign in with their Entra ID account
+- [Client sign-in with Microsoft](v2/docs/client-sign-in.md): let your clients' people sign in with their own
+  work account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
