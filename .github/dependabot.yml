@@ -1,5 +1,5 @@
 # Weekly dependency updates, one grouped pull request per ecosystem, so they arrive as a handful of PRs on
-# Monday rather than one per package. CI (v2.yml) tests each like any other PR. Security fixes still come
+# Monday rather than one per package. The CI workflow (v2.yml) tests each like any other PR. Security fixes still come
 # as soon as GitHub publishes them, outside this schedule.
 version: 2
 updates:
