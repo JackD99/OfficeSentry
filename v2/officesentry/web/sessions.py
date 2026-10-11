@@ -39,15 +39,16 @@ def _cfg():
     return current_app.extensions["officesentry.config"]
 
 
-def start(user) -> None:
-    """Sign ``user`` in on this browser. Clears any earlier session state first."""
+def start(user, method: str = "password") -> None:
+    """Sign ``user`` in on this browser (``method``: "password" or "microsoft"). Clears any earlier session state
+    first."""
     cfg = _cfg()
     session.clear()
     token = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     g.db.execute(
         "INSERT INTO sessions (token_hash, user_id, session_version, created_at, last_seen_at, expires_at,"
-        " ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        " ip, user_agent, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             _hash(token),
             user["id"],
@@ -57,6 +58,7 @@ def start(user) -> None:
             _iso(now + timedelta(hours=cfg.session_hours)),
             (request.remote_addr or "")[:64],
             (request.user_agent.string or "")[:300],
+            method,
         ),
     )
     session.permanent = True
