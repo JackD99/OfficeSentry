@@ -28,6 +28,7 @@ from .collectors.apps import MICROSOFT_TENANTS
 from .exchange import EXCHANGE_ROOT
 from .graph import GRAPH_ROOT
 from .text import plural
+from .usage import concealed
 
 GUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 # SharePoint drive IDs are "b!" and the site, web and list GUIDs (48 bytes) in base64url, so GUID never sees them.
@@ -371,8 +372,10 @@ def _collect_names(log: list) -> tuple[list[str], dict[str, str], set[str]]:
         for item in _objects(e.get("body")):
             if "userPrincipalName" not in item and "userDisplayName" not in item:
                 continue
+            # Usage reports in a tenant that hides names carry 32-character codes instead: they aren't
+            # names, and the replay needs them to stay codes.
             display = item.get("displayName") or item.get("userDisplayName")
-            if display and display not in names:
+            if display and display not in names and not concealed(display):
                 people += 1
                 names[display] = f"Test User {people}"
             for key in ("givenName", "surname", "mailNickname"):
@@ -380,7 +383,7 @@ def _collect_names(log: list) -> tuple[list[str], dict[str, str], set[str]]:
                     names.setdefault(item[key], f"Name{people}")
                     personal.add(item[key])
             upn = (item.get("userPrincipalName") or "").split("@")[0].split("#")[0]
-            if len(upn) >= 3:
+            if len(upn) >= 3 and not concealed(upn):
                 names.setdefault(upn, f"user{people}")
                 personal.add(upn)
     for e in log:
