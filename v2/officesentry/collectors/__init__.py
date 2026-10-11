@@ -21,6 +21,7 @@ from . import directory_sync  # noqa: F401
 from . import sharepoint  # noqa: F401  (shared files reuse the users and tenant profile snapshots)
 from . import sharepoint_storage  # noqa: F401
 from . import usage  # noqa: F401
+from . import teams  # noqa: F401
 from . import app_sign_ins, group_nesting, user_details  # noqa: F401  (their reports join Apps, Groups and Users)
 from .base import REGISTRY, Collector, RunContext
 

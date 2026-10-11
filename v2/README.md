@@ -183,6 +183,11 @@ and development. Running it on a server is in [DEPLOY.md](DEPLOY.md).
     enabled owner or a single one, every team and group with its owners,
     members and guests, every guest in a team or group, and counts of security
     groups and distribution lists.
+  - *Teams channels, guests and apps*: each team's private and shared
+    channels with their members, owners, guests and people from other
+    organisations, the apps added to each team (custom uploads flagged), and
+    teams with no activity in 90 days. Channels and apps need the 2.2
+    permissions; until a client approves them the report says it's waiting.
   - *Empty, nested and dynamic groups*: groups with no members, security
     groups and distribution lists that contain other groups (and how many
     levels deep), and dynamic groups with their rule, flagging paused ones.

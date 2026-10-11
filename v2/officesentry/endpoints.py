@@ -63,6 +63,9 @@ LIMITS: dict[str, Limit] = {
         Limit("outlook", 10_000, 600, "tenant", "Outlook mail settings"),  # Microsoft's is per mailbox
         # Resource units; this is the tier for up to 1,000 licences (more licences allow up to 5 times as many).
         Limit("sharepoint", 1_250, 60, "tenant", "SharePoint and OneDrive", SHAREPOINT_DOCS, resource_units=True),
+        # Microsoft's lowest per-app-per-tenant rate for the Teams calls made (installed apps; channels and
+        # members allow 60), in requests per second.
+        Limit("teams", 30, 1, "tenant", "Microsoft Teams"),
         Limit("exchange", None, 0, "tenant", "Exchange admin API"),  # no documented rate
         Limit(
             "message_trace",
@@ -219,6 +222,28 @@ GRAPH: tuple[Endpoint, ...] = (
         ("identity_protection",),
         fallback="Needs Entra ID P2; shown as unavailable without it",
     ),
+    # Teams (permissions added in 2.2; skipped while the client hasn't approved them).
+    Endpoint(
+        "/teams/{id}/channels",
+        V1,
+        "Channel.ReadBasic.All",
+        ("teams",),
+        fallback="Skipped, and the Teams report says so, until the client approves the permission",
+    ),
+    Endpoint(
+        "/teams/{id}/channels/{id}/members",
+        V1,
+        "ChannelMember.Read.All",
+        ("teams",),
+        fallback="Only private and shared channels; skipped until the client approves the permission",
+    ),
+    Endpoint(
+        "/teams/{id}/installedApps",
+        V1,
+        "TeamsAppInstallation.ReadForTeam.All",
+        ("teams",),
+        fallback="Skipped, and the Teams report says so, until the client approves the permission",
+    ),
     # Microsoft 365 usage reports. v1.0 returns CSV only, so these use beta's JSON.
     *(
         Endpoint(
@@ -234,11 +259,18 @@ GRAPH: tuple[Endpoint, ...] = (
             "getOffice365ActivationsUserDetail",
             "getEmailActivityUserDetail(period={period})",
             "getTeamsUserActivityUserDetail(period={period})",
+            "getTeamsTeamActivityDetail(period={period})",
             "getSharePointSiteUsageDetail(period={period})",
             "getOneDriveUsageAccountDetail(period={period})",
             "getSharePointSiteUsageStorage(period={period})",
             "getOneDriveUsageStorage(period={period})",
         )
+    ),
+    Endpoint(
+        "/admin/reportSettings",
+        V1,
+        "ReportSettings.Read.All",
+        fallback="Concealed names are told from the codes in the reports until the client approves the permission",
     ),
     Endpoint(
         "/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period={period})",

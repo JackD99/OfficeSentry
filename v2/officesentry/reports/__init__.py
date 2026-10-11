@@ -19,6 +19,7 @@ from . import (  # noqa: F401
     sharepoint_storage,
     sign_in_reports,
     subscriptions,
+    teams,
     unused_apps,
     usage_reports,
 )
