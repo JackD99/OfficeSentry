@@ -184,6 +184,11 @@ Yes: a table for the search index. It is applied on start, as usual.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
+  page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
+  so a client account probing for other clients' data is visible under *Settings → Activity log*.
+- Form-token, wrong-method, oversized-upload and server-error responses use the portal's own error page with
+  plain wording, instead of the web server's.
 
 ## 2.1.0 (2026-10-10)
 

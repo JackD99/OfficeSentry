@@ -8,13 +8,13 @@ import sqlite3
 from datetime import timedelta
 
 from flask import Flask, g, render_template, request
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFError, CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .. import __version__, system_alerts, system_health, worker
 from ..config import Config, load_config, setup_token
 from ..crypto import Vault
-from ..db import connect, is_locked, migrate
+from ..db import audit_counted, connect, is_locked, migrate
 from . import (
     access,
     across,
@@ -169,6 +169,9 @@ def create_app(cfg: Config | None = None) -> Flask:
             "public_demo_link": public_demo.link() if g.get("public_demo") else "",
         }
 
+    def _error(code: int, message: str, detail: str = ""):
+        return render_template("error.html", code=code, message=message, detail=detail), code
+
     @app.errorhandler(sqlite3.OperationalError)
     def _busy(exc):
         # A write that waited WEB_BUSY_TIMEOUT_MS for the lock and still found it held (a restore, a backup,
@@ -187,19 +190,59 @@ def create_app(cfg: Config | None = None) -> Flask:
 
     @app.errorhandler(403)
     def _forbidden(_e):
-        return render_template(
-            "error.html", code=403, message="You don't have access to this page.", detail="Ask an admin if you need it."
-        ), 403
+        # Refusals raised with abort(403) outside roles_required (a client on a staff page) are counted too.
+        access.refused()
+        return _error(403, "You don't have access to this page.", "Ask an admin if you need it.")
 
     @app.errorhandler(404)
     def _not_found(_e):
         # Tenants someone hasn't been granted are 404s too, so say both without confirming either.
-        return render_template(
-            "error.html",
-            code=404,
-            message="Page not found.",
-            detail="The link may be out of date, or the page belongs to a client you haven't been given access to.",
-        ), 404
+        return _error(
+            404,
+            "Page not found.",
+            "The link may be out of date, or the page belongs to a client you haven't been given access to.",
+        )
+
+    @app.errorhandler(CSRFError)
+    def _csrf_failed(_e):
+        # The form's token didn't match the session: usually a page left open past sign-out or the idle limit,
+        # sometimes a request another site tried to make. Counted per address and hour, with the person's name
+        # when a session is still there (the check runs before the request's user is loaded).
+        if "db" not in g:
+            g.db = connect(cfg.db_path)
+        if "user" not in g:
+            access.load_user()
+        user = g.get("user")
+        audit_counted(
+            g.db, "csrf_failed", (request.remote_addr or "")[:64], user["username"] if user else None, request.path
+        )
+        return _error(
+            400,
+            "That form couldn't be sent.",
+            "Your session ended, or the page was open too long. Go back, reload the page and try again.",
+        )
+
+    @app.errorhandler(400)
+    def _bad_request(_e):
+        return _error(400, "That request couldn't be understood.", "Go back and try again.")
+
+    @app.errorhandler(405)
+    def _method_not_allowed(_e):
+        return _error(405, "That page can't be opened this way.", "Use the portal's own links and buttons.")
+
+    @app.errorhandler(413)
+    def _too_large(_e):
+        limit = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+        return _error(413, "That file is too large.", f"Uploads are limited to {limit} MB.")
+
+    @app.errorhandler(500)
+    def _server_error(_e):
+        return _error(
+            500,
+            "Something went wrong on the server.",
+            "Nothing was changed. Try again in a moment; if it keeps happening, tell your admin, who can read the "
+            "portal's log.",
+        )
 
     @app.get("/health")
     def health():
