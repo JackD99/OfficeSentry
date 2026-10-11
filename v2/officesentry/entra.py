@@ -321,14 +321,18 @@ def _json(resp: requests.Response) -> dict:
 
 
 def start_device_sign_in(
-    tenant: str = "organizations", cloud: str | None = None, session: requests.Session | None = None
+    tenant: str = "organizations",
+    cloud: str | None = None,
+    session: requests.Session | None = None,
+    scope: str | None = None,
 ) -> DeviceCode:
-    """Ask Microsoft for a device code. Only ``setup_scope`` is requested: no refresh token, no profile."""
+    """Ask Microsoft for a device code. Only ``setup_scope`` (or the ``scope`` given, for the staff sign-in app)
+    is requested: no refresh token, no profile."""
     http = session or requests.Session()
     try:
         resp = http.post(
             f"{clouds.get(cloud).login}/{tenant}/oauth2/v2.0/devicecode",
-            data={"client_id": GRAPH_CLI_CLIENT_ID, "scope": setup_scope(cloud)},
+            data={"client_id": GRAPH_CLI_CLIENT_ID, "scope": scope or setup_scope(cloud)},
             timeout=30,
         )
     except requests.RequestException as exc:

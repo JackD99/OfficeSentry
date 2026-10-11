@@ -9,7 +9,7 @@ from flask import Blueprint, Response, abort, g, render_template, request
 from ..db import audit
 from ..reports import branding, data_reports
 from ..reports import profile as profiles
-from .access import login_required, tenant_or_404
+from .access import needs, tenant_or_404
 from .printing import pdf_response
 
 bp = Blueprint("people", __name__)
@@ -28,7 +28,7 @@ def _profile(tenant_id: int, user_id: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/users")
-@login_required
+@needs("reports.people")
 def people(tenant_id: int):
     t = tenant_or_404(tenant_id)
     found = profiles.directory(g.db, t)
@@ -37,7 +37,7 @@ def people(tenant_id: int):
 
 
 @bp.get("/tenants/<int:tenant_id>/users/<user_id>")
-@login_required
+@needs("reports.people")
 def person(tenant_id: int, user_id: str):
     t = tenant_or_404(tenant_id)
     # ?leaver=1 shows the leaver checklist for an account whose sign-in is still allowed.
@@ -48,7 +48,7 @@ def person(tenant_id: int, user_id: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/users/<user_id>.pdf")
-@login_required
+@needs("reports.people", "export")
 def person_pdf(tenant_id: int, user_id: str):
     t, profile = _profile(tenant_id, user_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "user.pdf")
@@ -58,7 +58,7 @@ def person_pdf(tenant_id: int, user_id: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/users/<user_id>.xlsx")
-@login_required
+@needs("reports.people", "export")
 def person_xlsx(tenant_id: int, user_id: str):
     t, profile = _profile(tenant_id, user_id)
     audit(g.db, g.user["username"], "report_downloaded", t["id"], "user.xlsx")
@@ -70,7 +70,7 @@ def person_xlsx(tenant_id: int, user_id: str):
 
 
 @bp.get("/tenants/<int:tenant_id>/users/<user_id>/leaver.pdf")
-@login_required
+@needs("reports.people", "export")
 def leaver_pdf(tenant_id: int, user_id: str):
     """The 'Before you close this account' checklist on one page, for the client to sign off."""
     t = tenant_or_404(tenant_id)

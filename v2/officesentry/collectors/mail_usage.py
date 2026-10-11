@@ -133,7 +133,7 @@ class LegacySignIns(Collector):
         start = now - timedelta(days=SIGNIN_DAYS)
         since = _iso(start)
         try:
-            got = sign_ins.read_log(ctx)
+            got = sign_ins.read_log(ctx, now)
         except (LicenseRequired, PermissionMissing) as exc:
             ctx.warn(f"The sign-in log isn't available: {exc.message}")
             ctx.objects("legacy_signin_status", [("status", {"available": False})])

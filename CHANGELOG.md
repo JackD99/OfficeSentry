@@ -3,10 +3,13 @@
 What changed in each Office Sentry release, written for the people who run it. Read the
 **Action required**, **New Microsoft permissions** and **Database upgrade** parts before updating.
 
-How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases are made:
-[CONTRIBUTING.md, "Releases"](CONTRIBUTING.md#releases).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (Added, Changed, Fixed,
+Security, with the newest release first and a compare link per version) plus those three sections, and
+versions follow [semantic versioning](https://semver.org). How to update: [v2/DEPLOY.md,
+"Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
+"Releases"](CONTRIBUTING.md#releases).
 
-## 2.2.0 (unreleased)
+## [2.2.0] - Unreleased
 
 ### Action required
 
@@ -20,6 +23,7 @@ How to update: [v2/DEPLOY.md, "Updating"](v2/DEPLOY.md#updating). How releases a
   `X-OfficeSentry-Key-Id` says which secret signed it. Change your receiver to check the new signature when you
   upgrade (it can accept either while you switch); until then it refuses every alert ([v2/DEPLOY.md, "Signed
   webhooks"](v2/DEPLOY.md#signed-webhooks)). Teams and Slack don't check signatures, so they need nothing.
+- **Staff sign-in with Microsoft** needs nothing on upgrade: it's off until an admin sets it up.
 
 ### New Microsoft permissions
 
@@ -41,13 +45,62 @@ working and the reports that need them say they're waiting for approval.
 | `DeviceManagementApps.Read.All` | Microsoft Graph | Intune app protection policies and deployed apps |
 | `Sites.Read.All` | Office 365 SharePoint Online | SharePoint group members and who has access to each site and list |
 
+Setting up staff sign-in creates a separate app in your own tenant with no API permissions.
+
 ### Database upgrade
 
-Yes, applied on start as usual: a table for the search index, and for the permission batch a column on app
-connections, one on setup sign-ins and a table for each client's approval.
+Yes, applied on start as usual: migration 37 adds a table for the search index, migration 38 adds
+Microsoft account links on users and how each session was started, and migration 39 adds roles. Nobody's
+access changes: today's admins become **Administrators**, analysts become **Second line** and client accounts
+**Client viewers**, each holding exactly what the old role could do. As ever, a copy of the database is made
+first. Migration 40, for the permission batch, adds a column on app connections and a table for each
+client's approval.
 
 ### Added
 
+- **A Get started checklist for new installs.** After creating the first admin, the home page lists the
+  four steps to the first report (the app connection, the first client, its consent and its first
+  collection), ticks each off as Office Sentry sees it done and goes away after the first collection.
+- **Roles and capabilities.** What someone may do is now a role made of capabilities (which report areas
+  open for them, downloads, refreshing data, accepting risks, setting up emailed reports, reviewing and
+  approving month-end reports, projects, custom reports, managing clients, users or settings) and a scope
+  (every client, or the clients and groups granted to them). Seven built-in roles: **Administrator**,
+  **Team leader** (every client and every report, manages clients and approves month-end reports, not users
+  or settings), **Second line** (what an analyst could do), **First line** (looks things up: people,
+  identity, email and device reports, nothing to change), **Account manager** (licences, renewals,
+  month-end reports and projects for their clients), **Auditor** (every report, read-only) and **Client
+  viewer** (a client's own people). The user page picks a role and shows what the person can do, and an
+  admin can give or take away single capabilities for one person, everywhere or on one client (taking away
+  always wins; a client account only ever holds report capabilities). The menu, a client's tabs and the
+  report picker show only what the person may open, every page and download checks on the server, and the
+  cross-client pages leave out a client where a capability was taken away. There is always at least one
+  Administrator: the last one can't be demoted, disabled or deleted.
+- **Roles** (*Settings → Users → Roles*): change what a built-in role holds (not Administrator), put it back
+  to its default, or add custom roles from scratch or as a copy of another, with a preview of the menu and
+  client tabs the role opens. Changing a role signs out everyone holding it, so they pick it up at their next
+  sign-in, and every change is in the activity log. On a person's page, **Customise** sets single
+  capabilities for them: everywhere (as the role, allowed, or taken away) or on one client.
+- Users and roles can be handed to someone who isn't an Administrator: they give out only what they hold
+  themselves, only on the clients they see (other clients' names don't show), can't change their own role
+  or access, and can't change an Administrator or anyone who can do or see more than they can.
+- **Settings → Support** and a support package: one zip of the version, settings, health checks, recent
+  failures and the portal's and worker's logs to attach to a bug report, with keys, certificates, tokens,
+  addresses and client names taken out (clients appear as numbers unless you tick *Include client
+  identifiers*). `python -m officesentry support-package` makes the same zip from the shell when the portal
+  won't start, over a broken database or a configuration that won't load.
+  [Getting help](v2/docs/getting-help.md) says what's in it.
+- The portal and the worker keep a short rolling log in `<data dir>/logs/` (three files of 2 MB each), and
+  every line says which request, user, client, run or task it belongs to. A page that fails shows a
+  reference to quote; the same reference is on the error's line in the log and in the `X-Request-ID` header.
+- **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with an app role for each
+  built-in role (Admin for Administrator, TeamLeader, Analyst for Second line, FirstLine, AccountManager and
+  Auditor) to assign people or groups to in Entra; a custom role gets an app role value of its own on the
+  same page. The role follows Entra at every sign-in. Staff then press *Sign in with Microsoft* and use their
+  work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
+  sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
+  turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the
+  server. Client accounts keep passwords. See [docs/staff-sign-in.md](v2/docs/staff-sign-in.md).
 - **What's new, for permissions.** When a release adds permissions, the Onboarding tracker lists the clients
   still to approve them ("New permissions to approve", then sent, then approved), and each client's **What's
   new** page says what every new permission reads and adds, with the email to send, the approval link and a
@@ -59,8 +112,44 @@ connections, one on setup sign-ins and a table for each client's approval.
   each and which admins are scoped to it; every scoped admin, flagged when the account is blocked or a guest;
   and the members of each unit by name. A new Administrative units collector reads them with the permissions
   the app already has, and each person's page shows the units they are in and administer.
+- One page per mailbox: Users > Mailboxes lists every mailbox with its size, forwarding, who else can
+  open it and its inbox rules, and each opens a page with what needs attention first, then size and growth
+  over the retained months, forwarding and inbox rules, who can open or send from it, protocols and
+  settings, its automatic reply, the phones syncing it, email activity, open findings and what changed.
+  Mailbox addresses in reports and search results open the page, and it downloads as PDF and XLSX.
+- One page per group: Users > Groups and teams lists every team, Microsoft 365 group, security group and
+  distribution list with its owners, members, guests and membership type, and each opens a page with what
+  needs attention first, then its owners, members and the groups inside it, what membership gives
+  (Conditional Access policies, admin roles, licences), its mail settings and traffic, the team's site with
+  its headline sharing figures, how it's set up, admin changes, open findings and what changed. Group names
+  and addresses in reports, the person page and search results open the page, and it downloads as PDF and
+  XLSX.
+- The **Empty, nested and dynamic groups** report now also lists teams and Microsoft 365 groups the
+  expiration policy will delete within 90 days (with their owners, flagged when no owner can sign in to
+  renew them), role-assignable groups (whose members hold admin roles, flagged when a guest is in one) and
+  every group that still holds a blocked account, naming the accounts. Group nesting keeps the member IDs
+  of security groups and distribution lists for that. **Coming up** and its weekly email list the teams and
+  groups about to expire alongside renewals and app secrets.
+- **Licence changes** report (Tenant and licences): every paid licence given to or taken from an account, with
+  when it happened (to the day for the last month, to the month before that), whether it came directly or
+  from a group, and, where the directory audit log has been read, who made the change. Licences bought and
+  assigned month by month for the last year with what they cost at your prices, a chart of assigned licences
+  against bought, and how bought licences and the monthly cost moved since a month ago, for checking a
+  client's bill. Built from Office Sentry's own history; no new permission. The monthly review's "since last
+  month" changes and What changed now list who was given or lost a licence.
+- **Deploy guides by platform** ([v2/docs/deploy](v2/docs/deploy/README.md), and under *Deploy* on the
+  website): Portainer; Dockge, Komodo, Coolify and Dokploy; Unraid, Synology and TrueNAS; Kubernetes (AKS,
+  EKS, GKE, k3s and others); Azure and AWS virtual machines; DigitalOcean, Google Cloud, Linode, Vultr,
+  Oracle Cloud and other VPS hosts; and Cloudflare (DNS only, a Tunnel with Access, or proxied). With them
+  come a one-file stack for container managers and NAS systems (`v2/deploy/stack/compose.yaml`), Kubernetes
+  manifests (`v2/deploy/kubernetes/`) and a start-up file for a new cloud server
+  (`v2/deploy/cloud-init-server.yaml`). Each guide says which of its steps have been tested.
 
 ### Changed
+
+- [Running it on your own server](v2/DEPLOY.md) no longer has the Hetzner walkthrough, which was written for
+  the project's own server. Off-site backups, the restore drill and restoring from the off-site copy are now
+  written for any server, with `deploy/jobs.sh` run in the folder with `docker-compose.yml`.
 
 - Pages that show every client at once stay quick as the number of clients grows. The insurance evidence
   rollup, every report's All clients rollup, the month-end queue, Recommended projects and the Accounts home
@@ -86,6 +175,8 @@ connections, one on setup sign-ins and a table for each client's approval.
 
 ### Fixed
 
+- An Admin activity collection could be marked partial, with a warning that Microsoft timed out, when a
+  second ticked over between two readings of the clock during the run; nothing was actually missing.
 - Admins who hold their role through a group (a role-assignable group, active or eligible through PIM) were
   invisible to the admin checks and the Admins report. The group's members are now read each night and
   checked like any other admin; the Admins report says which group a role comes through.
@@ -180,6 +271,21 @@ connections, one on setup sign-ins and a table for each client's approval.
   now, try again in a moment" instead of an error page.
 - On Windows without Docker, an account's page no longer fails once its sign-in history is kept: the
   dates on it are written the same way on every platform.
+- A tenant whose consent is missing the AuditLog.Read.All permission still gets its users collected each
+  night, with the run partial and the permission named, instead of the Users collection failing.
+- An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
+  cmdlet, instead of failing the whole collection.
+- A session or proxy setting that can't work (`OFFICESENTRY_SESSION_HOURS=0`, which signed everyone out
+  on their next request) stops the portal at start with a plain message, like the other settings.
+- A form sent after the session had ended comes back, after signing in, to the page the form was on
+  rather than to an address that only takes forms ("Method not allowed").
+- The daily rebuild of the What changed and check matrix rows is no longer lost for a client whose
+  rows were being refreshed at that moment.
+- The advice for Cloudflare or another CDN in front of the proxy (`OFFICESENTRY_TRUSTED_PROXIES=2` alone)
+  left every visitor looking like the proxy, with the bundled Caddy and the nginx example alike, so they
+  all shared one address's sign-in limits. [Securing the
+  portal](v2/docs/securing-the-portal.md#behind-a-reverse-proxy) now says what Caddy, nginx and Traefik each
+  need to trust the CDN's addresses.
 
 ### Security
 
@@ -207,8 +313,24 @@ connections, one on setup sign-ins and a table for each client's approval.
   which carried search terms, filter values and the one-time setup link.
 - The containers get a process limit, and the bundled Caddy runs with every capability but binding its
   ports dropped, like the portal and worker.
+- The Deploy workflow reads the server's address and the portal's name from the secrets `DEPLOY_HOST` and
+  `OFFICESENTRY_DOMAIN` (and `OFFICESENTRY_SETTINGS` and `BACKUP_REPOSITORY` when they're secrets), since a
+  public repository's run logs show every variable a step reads. Variables of those names still work; add
+  each as a secret to hide it. The
+  live canary takes the test tenant's ID from the secret `CANARY_TENANT_ID` for the same reason.
+- The activity log now records pages people weren't allowed to open (another client's tenant, a staff-only
+  page) and forms sent with a stale token, counted per person, address and hour with the latest page named,
+  so a client account probing for other clients' data is visible under *Settings → Activity log*.
+- Form-token, wrong-method, oversized-upload and server-error responses use the portal's own error page with
+  plain wording, instead of the web server's.
+- Passwords on lists of commonly used passwords (`password1234`, `qwerty123456` and 20,000 more of 12
+  characters or longer), or containing the person's username or "officesentry", are refused wherever a
+  password is chosen: first-run setup, the account page, the forced change after an admin's reset, and the
+  admin's user forms. Existing passwords aren't checked until they're changed.
+- A new docs page, [Securing the portal](v2/docs/securing-the-portal.md), lists what the portal does by
+  itself, what the person running it has to do, and how to put it behind Caddy, nginx, Traefik or a CDN.
 
-## 2.1.0 (2026-10-10)
+## [2.1.0] - 2026-10-10
 
 The first release from the public repository. The headlines: home pages for technicians and account
 managers, onboarding many clients at once, answers for insurance and supplier questionnaires and Cyber
@@ -280,8 +402,7 @@ copied collection reads back exactly as its snapshot.
 - The project's website ([website/](website/README.md)): a page about Office Sentry and these docs as web
   pages with search, rebuilt from the repository whenever a doc changes, and a public read-only demo.
 - Deploy workflow: a `restore-drill` action, backup status in `status`, and a `PRODUCTION_FROM_TAGS`
-  variable that makes the portal take release tags only, as the published image pinned by digest
-  ([v2/DEPLOY.md, "Production from releases"](v2/DEPLOY.md#production-from-releases)).
+  variable that makes the portal take release tags only, as the published image pinned by digest.
 - Activity history: every sign-in and directory audit event is kept beyond the 30 days Microsoft keeps them.
   Each collection reads on from where the last one stopped, so a run that times out, hits its page limit or
   is interrupted carries on next time with nothing lost or counted twice, and a busy tenant's sign-in log is
@@ -409,7 +530,7 @@ copied collection reads back exactly as its snapshot.
 - The public demo no longer stores an authenticator secret on its shared visitor when the two-step setup
   page is opened.
 
-## 2.0.0 (2026-10-09)
+## [2.0.0] - 2026-10-09
 
 The first release of Office Sentry v2: read-only Microsoft 365 reporting for MSPs, rebuilt from the v1
 portal. Everything below is new compared with v1.
@@ -464,3 +585,7 @@ first, then upgrades it on start. New installs start with an empty database.
 - Certificate-based, app-only sign-in to client tenants; secrets are encrypted at rest and never shown or
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
+
+[2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/JackD99/OfficeSentry/releases/tag/v2.0.0

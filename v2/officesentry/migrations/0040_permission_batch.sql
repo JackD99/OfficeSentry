@@ -9,11 +9,9 @@
 -- client's admin came back from Microsoft's page through it. Neither is proof: the connection check
 -- reads which permissions the tenant actually granted.
 --
--- setup_sign_ins.purpose says what a wizard sign-in is for: creating the app, or updating the
--- permissions of an existing one (connection_id names it from the start).
+-- A wizard sign-in that updates an existing app's permissions is a setup_sign_ins row with purpose
+-- 'update' (the column is from 0038), its connection_id set from the start.
 ALTER TABLE app_connections ADD COLUMN permissions_release TEXT;
-
-ALTER TABLE setup_sign_ins ADD COLUMN purpose TEXT NOT NULL DEFAULT 'create';
 
 CREATE TABLE permission_requests (
     tenant_id   INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

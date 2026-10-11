@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, csrf, ts %}
+{% from "_device_code.html" import device_code %}
+{% block title %}Staff sign-in · Office Sentry{% endblock %}
+{% block content %}
+{% set status = sign_in.status if sign_in else none %}
+{% set active = status in ('waiting', 'working') %}
+{% set c = cloud_of({'cloud': s.sso_cloud or 'commercial'}) %}
+<div class="page-head"><div><h1>Staff sign-in</h1>
+  <div class="sub">How your team signs in to Office Sentry. Client accounts always use a password and a two-step code.</div></div>
+  {% if enabled %}<div class="actions"><a class="btn" href="{{ admin_centre }}" target="_blank" rel="noopener noreferrer">Assign people in Entra {{ icon('arrow') }}</a></div>{% endif %}</div>
+
+{% if configured %}
+<div class="tiles">
+  <div class="tile"><div class="label">Sign in with Microsoft</div><div class="value small-value">{% if enabled %}<span class="pill ok">On</span>{% else %}<span class="pill">Off</span>{% endif %}</div>
+    <div class="foot">{{ 'Staff see the button on the sign-in page.' if enabled else 'Set up, but the button is hidden.' }}</div></div>
+  <div class="tile"><div class="label">Staff connected</div><div class="value">{{ linked }}<span class="muted small"> of {{ staff }}</span></div>
+    <div class="foot">{{ 'Accounts linked to a Microsoft account.' if staff else 'No staff accounts yet.' }}</div></div>
+  <div class="tile"><div class="label">Passwords for staff</div><div class="value small-value">{% if s.sso_passwords == 'off' %}<span class="pill warn">Off</span>{% else %}<span class="pill ok">Allowed</span>{% endif %}</div>
+    <div class="foot">{{ 'Staff must use Microsoft.' if s.sso_passwords == 'off' else 'The break-glass way in if Microsoft is down.' }}</div></div>
+</div>
+{% endif %}
+
+{% if expiry and expiry.level %}
+<div class="callout {{ expiry.tone }}" role="status">{{ icon('alert') }}<div class="grow"><strong>The sign-in app's certificate {{ expiry.when }}.</strong>
+  {{ expiry.consequence }} Make a new one below, upload it to Entra and switch; nothing stops in between.</div></div>
+{% endif %}
+
+{% for note in notes %}
+<div class="callout warn" role="status">{{ icon('alert') }}<div><strong>One step to do by hand.</strong> {{ note }}</div></div>
+{% endfor %}
+
+{% if not configured %}
+<section class="card setup wizard" id="setup" aria-labelledby="setup-title">
+  <div class="card-head"><h2 id="setup-title">Let your team sign in with Microsoft</h2>
+    {% if active %}<span class="pill accent">Waiting for sign-in</span>{% endif %}</div>
+  <p class="muted">Your staff sign in with the Microsoft account they already use, protected by your own Conditional Access and MFA. Office Sentry creates one small app in your tenant for it; your read-only connection to client tenants doesn't change.</p>
+  <ol class="setup-steps flush-steps">
+    <li class="current">
+      <div class="step-title">Sign in to Microsoft</div>
+      <div class="step-body">
+      {% if active %}
+        {{ device_code(sign_in, url_for('sso.check_setup'), url_for('sso.cancel_setup'), seconds_left,
+            "Sign in as a Global Administrator of your own (the MSP's) tenant, or someone who can create app registrations and assign people to them. Microsoft may ask you to let Microsoft Graph Command Line Tools (Microsoft's own app) manage apps for you. Office Sentry uses this sign-in once and doesn't keep it.") }}
+      {% else %}
+        {% if status == 'failed' %}
+        <div class="callout bad" role="alert">{{ icon('alert') }}<div><strong>The sign-in app wasn't created.</strong> {{ sign_in.error }}</div></div>
+        {% endif %}
+        Office Sentry shows you a code; you sign in on Microsoft's page in another tab, as a Global Administrator of your own tenant. Your password never passes through Office Sentry.
+        <form method="post" action="{{ url_for('sso.start_setup') }}" class="step-form setup-start">
+          {{ csrf() }}
+          <div class="form-actions"><button class="primary">{{ icon('shield') }} Sign in to Microsoft</button></div>
+          <details class="by-hand small">
+            <summary>More options</summary>
+            <div class="form-row">
+              <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+                <span class="hint">Leave on Commercial unless your own tenant is in US Government GCC High or DoD, or China (21Vianet).</span></label>
+              <label>Your tenant <input name="tenant" placeholder="Any tenant" autocomplete="off" class="mono">
+                <span class="hint">Blank works for most people. If you sign in with an account that's a guest in your tenant, enter your tenant's domain or ID.</span></label>
+              <label>App name <input name="name" value="{{ default_app_name }}" maxlength="100">
+                <span class="hint">How the app appears in Entra and on the sign-in page's consent screen.</span></label>
+            </div>
+          </details>
+        </form>
+      {% endif %}
+      </div>
+    </li>
+    <li>
+      <div class="step-title">Office Sentry creates the sign-in app</div>
+      <div class="step-body">A single-tenant app named “{{ sign_in.name if sign_in else default_app_name }}” with no permissions at all: it only tells Office Sentry who signed in. It gets a certificate whose private key never leaves Office Sentry, an app role for each Office Sentry role (<strong>Admin</strong> for Administrator, <strong>Analyst</strong> for Second line, and so on), and you're assigned Admin. Only people you assign can sign in.</div>
+    </li>
+    <li>
+      <div class="step-title">Try it</div>
+      <div class="step-body">Microsoft sign-in is turned on straight away. Connect your own account from the button that appears here, then sign out and press <em>Sign in with Microsoft</em>. Passwords keep working until you turn them off.</div>
+    </li>
+  </ol>
+  <div class="card-foot">
+  <details class="by-hand other-ways"{% if status == 'failed' %} open{% endif %}>
+    <summary>Set it up by hand instead</summary>
+    <div class="small">
+      <p>If Conditional Access blocks device sign-in, or you'd rather make the app yourself:</p>
+      <ol>
+        <li>Make the certificate here and download its .cer file.</li>
+        <li>In the Entra admin centre: <em>App registrations → New registration</em>. Name it <em>{{ default_app_name }}</em>. Supported account types: <em>Accounts in this organizational directory only</em>. Redirect URI (Web): <code>{{ redirect_uri }}</code>.</li>
+        <li>Under <em>Certificates &amp; secrets → Certificates</em>, upload the .cer file.</li>
+        <li>Under <em>App roles</em>, create a role for each Office Sentry role you'll use, all for <em>Users/Groups</em>, with these values: {% for value, name in app_roles %}<code>{{ value }}</code> ({{ name }}){{ ', ' if not loop.last else '' }}{% endfor %}. <code>Admin</code> is the one you need now.</li>
+        <li>Under <em>Enterprise applications → {{ default_app_name }} → Properties</em>, set <em>Assignment required</em> to Yes. Under <em>Users and groups</em>, assign yourself the Admin role.</li>
+        <li>Copy the app's <em>Application (client) ID</em> and <em>Directory (tenant) ID</em> from its overview page into the form below.</li>
+      </ol>
+      {% if s.sso_thumbprint %}
+      <p>Certificate <span class="mono">{{ s.sso_thumbprint }}</span> · <a href="{{ url_for('sso.download_certificate') }}">{{ icon('download') }} Download .cer</a></p>
+      {% else %}
+      <form method="post" action="{{ url_for('sso.make_certificate') }}" class="step-form">{{ csrf() }}<button>Make the certificate</button></form>
+      {% endif %}
+      <form method="post" action="{{ url_for('sso.save_manual') }}" class="form-row step-form">
+        {{ csrf() }}
+        <label>Directory (tenant) ID <input name="tenant" value="{{ s.sso_tenant or '' }}" placeholder="00000000-0000-0000-0000-000000000000" required class="mono" autocomplete="off"></label>
+        <label>Application (client) ID <input name="client_id" value="{{ s.sso_client_id or '' }}" placeholder="00000000-0000-0000-0000-000000000000" required class="mono" autocomplete="off"></label>
+        <label>Microsoft cloud <select name="cloud">{% for key, label in cloud_choices %}<option value="{{ key }}"{% if key == (s.sso_cloud or 'commercial') %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <button>Save</button>
+      </form>
+    </div>
+  </details>
+  </div>
+</section>
+
+{% else %}
+
+<section class="card" id="settings">
+  <h2>Settings</h2>
+  <form method="post" action="{{ url_for('sso.save_settings') }}">
+    {{ csrf() }}
+    <label class="check"><input type="checkbox" name="enabled" value="1"{% if enabled %} checked{% endif %}> Let staff sign in with Microsoft <span class="hint">Shows <em>Sign in with Microsoft</em> on the sign-in page.</span></label>
+    <fieldset class="choices">
+      <legend>Passwords for staff</legend>
+      <label class="choice"><input type="radio" name="passwords" value="on"{% if s.sso_passwords != 'off' %} checked{% endif %}>
+        <span><span class="choice-title">Allowed</span><span class="hint">Staff can still sign in with a password and two-step code: the way in if Microsoft is down or the app breaks.</span></span></label>
+      <label class="choice"><input type="radio" name="passwords" value="off"{% if s.sso_passwords == 'off' %} checked{% endif %}{% if not microsoft_session and s.sso_passwords != 'off' %} disabled{% endif %}>
+        <span><span class="choice-title">Off</span><span class="hint">Staff must sign in with Microsoft. {% if not microsoft_session and s.sso_passwords != 'off' %}Sign in with Microsoft yourself first, so you can't lock yourself out.{% else %}If it ever breaks, <code>python -m officesentry staff-sign-in --passwords on</code> on the server turns passwords back on.{% endif %}</span></span></label>
+    </fieldset>
+    <fieldset class="choices">
+      <legend>People in your tenant with no Office Sentry role</legend>
+      {% for key, label in default_roles.items() %}
+      <label class="choice"><input type="radio" name="default_role" value="{{ key }}"{% if (s.sso_default_role or '') == key %} checked{% endif %}>
+        <span><span class="choice-title">{{ label }}</span>{% if not key %}<span class="hint">Only people assigned a role in Entra get in. Recommended.</span>{% else %}<span class="hint">Anyone in your tenant who can reach the app gets a Second line account that sees no clients until you grant some. Needs <em>Assignment required</em> off on the enterprise app.</span>{% endif %}</span></label>
+      {% endfor %}
+    </fieldset>
+    <div class="form-actions"><button class="primary">Save</button></div>
+  </form>
+</section>
+
+<div class="grid-2">
+<section class="card" id="roles">
+  <div class="card-head"><h2>Who can sign in</h2></div>
+  <p>Roles come from Entra. Assign a person, or a group, to an app role on the sign-in app in the Entra admin centre; it gives them the Office Sentry role below the next time they sign in. Someone with more than one gets the first in this list.</p>
+  <table class="small">
+    <thead><tr><th>App role in Entra</th><th>Office Sentry role</th></tr></thead>
+    <tbody>
+    {% for value, name in app_roles %}<tr><td class="mono">{{ value }}</td><td>{{ name }}</td></tr>{% endfor %}
+    {% for role, value in custom_roles if value %}<tr><td class="mono">{{ value }}</td><td>{{ role.name }} <span class="faint">custom</span></td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if custom_roles %}
+  <details class="small"{% if custom_roles|map(attribute=1)|select|list %} open{% endif %}>
+    <summary>Custom roles from Entra</summary>
+    <p class="muted">Create an app role on the sign-in app (<em>App registrations → {{ s.sso_app_name or default_app_name }} → App roles</em>, for <em>Users/Groups</em>), then type its value next to the role it gives. Leave it empty for a role nobody gets from Entra.</p>
+    <form method="post" action="{{ url_for('sso.save_role_values') }}">
+      {{ csrf() }}
+      {% for role, value in custom_roles %}
+      <label>{{ role.name }}<input name="value-{{ role.id }}" value="{{ value }}" maxlength="60" pattern="[A-Za-z0-9][A-Za-z0-9._:\-]{0,59}" placeholder="App role value, such as ServiceDesk" autocomplete="off" spellcheck="false"></label>
+      {% endfor %}
+      <div class="form-actions"><button>Save</button></div>
+    </form>
+  </details>
+  {% endif %}
+  <ol class="steps small">
+    <li>Open <a href="{{ admin_centre }}" target="_blank" rel="noopener noreferrer">Enterprise applications → {{ s.sso_app_name or default_app_name }} → Users and groups</a> in the Entra admin centre.</li>
+    <li>Choose <em>Add user/group</em>, pick the people or a group, and pick the role.</li>
+    <li>Which clients someone sees is still set on their <a href="{{ url_for('admin.users') }}">user page</a> here.</li>
+  </ol>
+  {% if not me_linked %}
+  <div class="callout" role="status">{{ icon('shield') }}<div class="grow"><strong>Connect your own account</strong> so you can sign in with Microsoft too.</div>
+    <form method="post" action="{{ url_for('sso.connect') }}">{{ csrf() }}<button class="primary sm">Connect my Microsoft account</button></form></div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>The sign-in app</h2>{% if expiry and expiry.level %}<span class="pill {{ expiry.tone }}">{{ 'Certificate expired' if expiry.level == 'expired' else 'Certificate expires soon' }}</span>{% endif %}</div>
+  <dl class="kv">
+    <dt>Name</dt><dd>{{ s.sso_app_name or default_app_name }}{% if s.sso_set_up_at %} <span class="muted small">· set up {{ ts(s.sso_set_up_at) }}{% if s.sso_set_up_by %} by {{ s.sso_set_up_by }}{% endif %}</span>{% endif %}</dd>
+    <dt>Application (client) ID</dt><dd class="mono small">{{ s.sso_client_id }}</dd>
+    <dt>Directory (tenant) ID</dt><dd class="mono small">{{ s.sso_tenant }}</dd>
+    {% if not c.is_default %}<dt>Microsoft cloud</dt><dd>{{ c.label }}</dd>{% endif %}
+    <dt>Reply address</dt><dd class="mono small">{{ redirect_uri }}</dd>
+    <dt>Certificate</dt><dd><span class="mono small">{{ s.sso_thumbprint }}</span> · <a href="{{ url_for('sso.download_certificate') }}">{{ icon('download') }} Download .cer</a></dd>
+    <dt>Expires</dt><dd>{{ s.sso_cert_not_after|day }}{% if expiry %} <span class="muted">({{ expiry.relative }})</span>{% endif %}</dd>
+  </dl>
+
+  {% if s.sso_next_thumbprint %}
+  <div class="rollover">
+    <h3>Replacing the certificate</h3>
+    <p class="muted small">Sign-ins keep using the current certificate until you switch, so nothing stops in between.</p>
+    <ol class="setup-steps flush-steps">
+      <li class="done"><div class="step-title">New certificate made</div>
+        <div class="step-body"><span class="mono small">{{ s.sso_next_thumbprint }}</span>, valid until {{ s.sso_next_not_after|day }}.</div></li>
+      <li class="current"><div class="step-title">Add it to the app registration, next to the old one</div>
+        <div class="step-body">In the Entra admin centre: <em>App registrations → {{ s.sso_app_name or default_app_name }} → Certificates &amp; secrets → Certificates → Upload certificate</em>, and choose the new .cer.
+          <div class="step-action"><a class="btn sm" href="{{ url_for('sso.download_certificate', which='next') }}">{{ icon('download') }} Download new .cer</a></div></div></li>
+      <li><div class="step-title">Switch to it</div>
+        <div class="step-body">Sign-ins use the new certificate from then on. A newly uploaded certificate can take 5 to 10 minutes to work. Afterwards, delete the old one from the app registration.
+          <div class="step-action">
+            <form method="post" action="{{ url_for('sso.switch_certificate') }}" class="inline">{{ csrf() }}<button class="primary">Switch to the new certificate</button></form>
+            <form method="post" action="{{ url_for('sso.cancel_certificate') }}" class="inline">{{ csrf() }}<button class="ghost sm">Cancel replacement</button></form>
+          </div></div></li>
+    </ol>
+  </div>
+  {% else %}
+  <details class="by-hand small">
+    <summary>Replace the certificate</summary>
+    <p class="muted">Do this before it expires, or straight away if the private key may have leaked. You add the new certificate next to the old one and switch, so sign-in doesn't stop.</p>
+    <form method="post" action="{{ url_for('sso.make_certificate') }}">{{ csrf() }}<button class="sm">{{ icon('refresh') }} Make a new certificate</button></form>
+  </details>
+  {% endif %}
+  <details class="by-hand small">
+    <summary>Change the IDs</summary>
+    <p class="muted">Only if you recreated the app in Entra. The certificate stays the same; upload its .cer to the new app.</p>
+    <form method="post" action="{{ url_for('sso.save_manual') }}" class="form-row step-form">
+      {{ csrf() }}
+      <label>Directory (tenant) ID <input name="tenant" value="{{ s.sso_tenant }}" required class="mono" autocomplete="off"></label>
+      <label>Application (client) ID <input name="client_id" value="{{ s.sso_client_id }}" required class="mono" autocomplete="off"></label>
+      <input type="hidden" name="cloud" value="{{ s.sso_cloud or 'commercial' }}">
+      <input type="hidden" name="name" value="{{ s.sso_app_name or '' }}">
+      <button class="sm">Save</button>
+    </form>
+  </details>
+</section>
+</div>
+
+<section class="card danger-zone">
+  <h2>Remove Microsoft sign-in</h2>
+  <p class="muted small">Everyone goes back to passwords. Accounts stay connected to their Microsoft accounts in case you set it up again; an account that never had a password needs one set on its user page. The app registration stays in Entra until you delete it there.</p>
+  <form method="post" action="{{ url_for('sso.remove') }}">{{ csrf() }}<button class="danger" data-confirm="Remove Microsoft sign-in? Staff will need passwords.">Remove Microsoft sign-in</button></form>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+document.querySelectorAll('[data-confirm]').forEach(function (b) {
+  b.addEventListener('click', function (e) { if (!confirm(b.dataset.confirm)) e.preventDefault(); });
+});
+</script>
+{% endblock %}

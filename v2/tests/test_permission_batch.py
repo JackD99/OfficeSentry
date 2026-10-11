@@ -355,7 +355,7 @@ def test_update_wizard_says_why_when_the_account_cant_change_the_app(client, db,
     responses.post(f"{LOGIN}/organizations/oauth2/v2.0/token", json={"access_token": TOKEN})
     responses.get(f"{GRAPH}/applications", json={"value": []})
     client.post("/admin/connections/setup/check", headers={"Accept": "application/json"})
-    row = app_setup.current(db, db.execute("SELECT id FROM users").fetchone()["id"])
+    row = app_setup.current(db, db.execute("SELECT id FROM users").fetchone()["id"], "update")
     assert row["status"] == "failed" and "no app registration with client ID" in row["error"]
     assert store.get_connection(db, connection_id)["permissions_release"] is None
 
