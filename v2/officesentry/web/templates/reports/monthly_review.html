@@ -98,7 +98,7 @@
 <section class="page-break" id="changes">
   <h2>What changed since {{ since }}</h2>
   {% if report.first_report and not report.changes and not report.resolved and not report.new_count %}
-  <p class="muted">This is the first report for this tenant, so the findings below are the starting point. Changes are tracked from here on.</p>
+  <p class="muted">This is the first report for your organisation, so the findings below are the starting point. Changes are tracked from here on.</p>
   {% elif not report.changes and not report.resolved and not report.new_count %}
   <p class="muted">No changes recorded in this period{% if not report.changes %}. Change tracking starts once there are two collections at least 4 weeks apart{% endif %}.</p>
   {% else %}
@@ -114,7 +114,7 @@
   </ul>
   {% endif %}
   {% if report.changes %}
-  <h3 class="changes-head">In the tenant</h3>
+  <h3 class="changes-head">In Microsoft 365</h3>
   <ul class="changes">
     {% for c in report.changes[:30] %}<li>{{ ui.change_tag(c.kind) }} <strong>{{ c.area }}:</strong> {{ c.subject }}: {{ c.detail }}</li>{% endfor %}
     {% if report.changes|length > 30 %}<li class="muted">…and {{ report.changes|length - 30 }} more changes</li>{% endif %}

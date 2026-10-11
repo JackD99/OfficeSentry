@@ -77,10 +77,10 @@ def test_parse_explains_every_problem(db):
         "“x@nowhere” isn't an email address.",
     ]
     assert rows[1].ok and rows[1].contact_name == "Jo"
-    assert rows[2].problems == ["The same tenant as line 3."]
+    assert rows[2].problems == ["The same client as line 3."]
     assert "The cloud should be" in rows[3].problems[0]
     assert onboarding.parse(db, "client,where\nA,b.com\n").error.startswith("The first row needs column names")
-    assert onboarding.parse(db, "name,tenant\n").error == "The file has column names but no tenants under them."
+    assert onboarding.parse(db, "name,tenant\n").error == "The file has column names but no clients under them."
     assert "import up to 1,000" in onboarding.parse(db, "name,tenant\n" + "a,b.com\n" * 1001).error
     assert onboarding.split_contact("Smith, Jane <j@x.com>") == ("Smith, Jane", "j@x.com")
 
@@ -97,7 +97,7 @@ def test_import_fifty_tenants_previews_then_adds(client, db, connection_id):
     _admin(client, db)
     text = _csv(50)
     preview = client.post("/admin/onboarding/import", data={"text": text}).get_data(as_text=True)
-    assert "Import 50 tenants" in preview and "New group: <strong>Tier 1</strong>" in preview
+    assert "Import 50 clients" in preview and "New group: <strong>Tier 1</strong>" in preview
     assert db.execute("SELECT COUNT(*) FROM tenants").fetchone()[0] == 0  # nothing until confirmed
 
     resp = client.post("/admin/onboarding/import", data={"text": text, "confirm": "1"})
@@ -113,7 +113,7 @@ def test_import_fifty_tenants_previews_then_adds(client, db, connection_id):
     assert db.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'tenant_created'").fetchone()[0] == 50
 
     page = client.get("/admin/onboarding").get_data(as_text=True)
-    assert "0 of 50 tenants fully connected." in page and page.count('data-copy-text="https://login') == 50
+    assert "0 of 50 clients fully connected." in page and page.count('data-copy-text="https://login') == 50
     again = client.post("/admin/onboarding/import", data={"text": text}).get_data(as_text=True)
     assert 'Will be added</div><div class="value">0<' in again and 'name="confirm"' not in again
     assert again.count("Already in Office Sentry as") == 50
@@ -147,7 +147,7 @@ def test_import_preview_names_analysts_who_will_see_the_tenants(client, db, conn
     lead = make_user(db, "lead", role="analyst")
     db.execute("INSERT INTO user_tenant_groups (user_id, group_id) VALUES (?, 1)", (lead,))
     page = client.post("/admin/onboarding/import", data={"text": _csv(2)}).get_data(as_text=True)
-    assert "Analysts given the group <strong>Tier 1</strong> will see its new tenants: lead." in page
+    assert "Analysts given the group <strong>Tier 1</strong> will see its new clients: lead." in page
 
 
 def test_import_upload_and_template(client, db, connection_id):
@@ -159,7 +159,7 @@ def test_import_upload_and_template(client, db, connection_id):
     ansi = _csv(2).lstrip("\ufeff").replace("Person 0", "Ren\u00e9e").encode("cp1252")  # Excel's "CSV" on Windows
     data = {"file": (io.BytesIO(ansi), "clients.csv")}
     page = client.post("/admin/onboarding/import", data=data, content_type="multipart/form-data")
-    assert "Import 2 tenants" in page.get_data(as_text=True)
+    assert "Import 2 clients" in page.get_data(as_text=True)
     page = client.post("/admin/onboarding/import", data={"text": "nothing useful"}).get_data(as_text=True)
     assert "Nothing was imported." in page
 
@@ -411,7 +411,7 @@ def test_bulk_actions_on_the_tracker(client, db, two_tenants):
     page = client.post(
         "/admin/onboarding/bulk", data={"action": "check", "tenant": [alpha, bravo]}, follow_redirects=True
     ).get_data(as_text=True)
-    assert "Checking 1 tenant by signing in" in page
+    assert "Checking 1 client by signing in" in page
     assert tasks.pending(db, f"consent_check:{alpha}") and not tasks.pending(db, f"consent_check:{bravo}")
     client.post("/admin/onboarding/bulk", data={"action": "unsent", "tenant": [alpha]})
     assert onboarding.row_for(db, alpha)["sent_at"] is None
