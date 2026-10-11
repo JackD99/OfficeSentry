@@ -49,6 +49,13 @@ def test_csv_neutralises_formulas_and_keeps_numbers():
     assert rows[5] == ["Yes", "a, b"]
 
 
+def test_csv_leaves_a_signed_number_alone_but_not_a_formula_that_starts_like_one():
+    for text in ("+2", "-1", "+4.6%", "-1.5", "+£23.00", "-$1,234.50"):
+        assert tables.csv_cell(text) == text
+    for text in ("-1+cmd|' /C calc'!A0", "+2\n", "-2+3", "+A$1", "-1e3", "+SUM(1)", "-", "+£"):
+        assert tables.csv_cell(text) == "'" + text
+
+
 def test_xlsx_never_contains_formulas_and_names_sheets_safely():
     body = tables.to_xlsx(
         [
