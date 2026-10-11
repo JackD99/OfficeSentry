@@ -397,6 +397,7 @@ def sign_in_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         intro=f"Every account that signed in interactively in the last {days} days. Open an account "
         "for the rest of what Office Sentry knows about it.",
         empty=f"No interactive sign-ins in the last {days} days.",
+        optional=("Succeeded", "Prompts", "Apps", "Last failure reason"),
     )
     for a in sorted(accounts, key=lambda a: _text(a.get("user")).lower()):
         everyone.add(

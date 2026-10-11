@@ -120,6 +120,7 @@ def auto_replies_report(snap: TenantSnapshot, now: datetime, out: DataReport) ->
             "Reply to outside senders",
         ],
         empty="No mailbox has an automatic reply on or scheduled.",
+        optional=("Type", "First seen on", "Account"),
     )
     sending = outside = forgotten = upcoming = 0
     entries = []

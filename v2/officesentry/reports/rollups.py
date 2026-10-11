@@ -478,7 +478,13 @@ def all_rows(conn, tenants, key: str, now: datetime | None = None, href=None, la
             out = sections.get(s.title)
             if out is None:
                 out = sections[s.title] = Section(
-                    s.title, [TENANT, *s.columns], intro=s.intro, empty=s.empty, compare=s.compare, chart=s.chart
+                    s.title,
+                    [TENANT, *s.columns],
+                    intro=s.intro,
+                    empty=s.empty,
+                    compare=s.compare,
+                    chart=s.chart,
+                    optional=s.optional,
                 )
             cell = UserLink(t["name"], f"{href(t)}#{views.anchor(slug)}") if href else t["name"]
             totals[s.title] += len(s.rows)

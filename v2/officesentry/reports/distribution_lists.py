@@ -123,6 +123,7 @@ def lists_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
             "Created",
         ],
         empty="This tenant has no distribution lists.",
+        optional=("Type", "Last mail received", "Synced from AD", "Created"),
     )
     attention = Section(
         ATTENTION,

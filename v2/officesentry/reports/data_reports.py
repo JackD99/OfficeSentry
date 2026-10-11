@@ -71,6 +71,9 @@ class Section:
     group: str = ""
     group_ids: dict[str, str] = field(default_factory=dict)
     filter_columns: tuple[str, ...] = ()
+    # Columns the page leaves out until someone shows them (Columns), so a wide table fits a laptop with the
+    # columns that answer its question. Downloads keep them (views._visible).
+    optional: tuple[str, ...] = ()
     keys: list = field(default_factory=list)
     review: bool = True  # False: rows already dealt with (accepted, resolved), so no "<n> to review"
     chart: Chart | None = None  # drawn from the rows the view leaves (views.chart)
@@ -668,6 +671,7 @@ def admin_activity(snap: TenantSnapshot, now: datetime, report: DataReport) -> N
         intro=f"Every admin role, Conditional Access, policy, app, domain and account change "
         f"in {covered}, newest first.",
         empty="No admin changes in the window.",
+        optional=("Area", "IP address"),
     )
     actors: dict[str, dict] = {}
     for e in events:
@@ -1339,6 +1343,7 @@ def device_report(snap: TenantSnapshot, now: datetime, report: DataReport) -> No
                 "Model",
             ],
             empty="No devices are enrolled in Intune.",
+            optional=("Enrolled", "Model"),
         )
         every.chart = Chart("Compliance")
         for d in sorted(managed, key=lambda d: (d.get("deviceName") or "").lower()):

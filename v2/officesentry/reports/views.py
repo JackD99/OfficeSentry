@@ -5,12 +5,14 @@ A view lives in the query string, so it can be linked to, saved and exported:
     f=<table>/<column>:<value>      keep rows with that value (repeat: any of the values)
     age=<table>/<column>:<preset>   date columns, a key of ``AGES``
     hide=<table>/<column>           hide a column
+    show=<table>/<column>           show one of the section's ``optional`` columns, which the page leaves out
     sort=<table>/<column>:asc|desc  sort a table
 
 ``<table>`` and ``<column>`` are slugs of the section title and column name.
 The flag column is ``flag``, with values critical, high, medium, low and none.
 The page, PDF, XLSX and CSV all apply the same view, so a download matches
-what's on screen. A headline figure points at its rows with ``data_reports.Rows``.
+what's on screen, except that downloads keep a section's ``optional`` columns unless the view hides
+them. A headline figure points at its rows with ``data_reports.Rows``.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from ..text import fold
 from . import charts
 from .data_reports import FLAG_ORDER, DataReport, Many, Rows, Section
 
-PARAMS = ("f", "age", "hide", "sort")
+PARAMS = ("f", "age", "hide", "show", "sort")
 FLAG = "flag"
 FLAGS = {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low", "info": "Info", "none": "No flag"}
 REVIEW = ("critical", "high", "medium")  # what "to review" counts
@@ -108,6 +110,7 @@ class View:
     ages: dict[Key, str] = field(default_factory=dict)
     hidden: list[Key] = field(default_factory=list)
     sorts: dict[str, tuple[str, bool]] = field(default_factory=dict)  # table -> (column, descending)
+    shown: list[Key] = field(default_factory=list)  # optional columns shown on the page
 
     @classmethod
     def parse(cls, args) -> View:
@@ -119,7 +122,7 @@ class View:
         pairs = list(args.items(multi=True)) if hasattr(args, "items") and hasattr(args, "getlist") else list(args)
         view = cls()
         for name, raw in [p for p in pairs if p[0] in PARAMS][:MAX_PARAMS]:
-            target, _, value = str(raw).partition(":") if name != "hide" else (str(raw), "", "")
+            target, _, value = str(raw).partition(":") if name not in ("hide", "show") else (str(raw), "", "")
             table, _, column = target.partition("/")
             if not (_SLUG.match(table) and _SLUG.match(column)):
                 continue
@@ -133,6 +136,8 @@ class View:
                 view.ages[key] = value
             elif name == "hide" and key not in view.hidden:
                 view.hidden.append(key)
+            elif name == "show" and key not in view.shown:
+                view.shown.append(key)
             elif name == "sort" and value in ("asc", "desc"):
                 view.sorts[table] = (column, value == "desc")
         return view
@@ -141,6 +146,7 @@ class View:
         out = [("f", f"{t}/{c}:{v}") for (t, c), values in self.filters.items() for v in values]
         out += [("age", f"{t}/{c}:{a}") for (t, c), a in self.ages.items()]
         out += [("hide", f"{t}/{c}") for t, c in self.hidden]
+        out += [("show", f"{t}/{c}") for t, c in self.shown]
         out += [("sort", f"{t}/{c}:{'desc' if d else 'asc'}") for t, (c, d) in self.sorts.items()]
         return out
 
@@ -148,15 +154,21 @@ class View:
         return urlencode(self.params())
 
     def __bool__(self) -> bool:
-        return bool(self.filters or self.ages or self.hidden or self.sorts)
+        return bool(self.filters or self.ages or self.hidden or self.sorts or self.shown)
 
     def tables(self) -> set[str]:
-        return {t for t, _ in [*self.filters, *self.ages, *self.hidden]} | set(self.sorts)
+        return {t for t, _ in [*self.filters, *self.ages, *self.hidden, *self.shown]} | set(self.sorts)
 
     # Each edit returns a new view, so the page can build a link for every option.
 
     def _copy(self) -> View:
-        return View({k: list(v) for k, v in self.filters.items()}, dict(self.ages), list(self.hidden), dict(self.sorts))
+        return View(
+            {k: list(v) for k, v in self.filters.items()},
+            dict(self.ages),
+            list(self.hidden),
+            dict(self.sorts),
+            list(self.shown),
+        )
 
     def toggle_value(self, key: Key, value: str) -> View:
         v = self._copy()
@@ -177,12 +189,23 @@ class View:
             v.ages[key] = preset
         return v
 
-    def toggle_hidden(self, key: Key) -> View:
+    def picks(self, key: Key) -> bool:
+        """Whether the view shows an ``optional`` column: asked to, or filtering by it."""
+        return key in self.shown or key in self.filters or key in self.ages
+
+    def toggle_hidden(self, key: Key, optional: bool = False) -> View:
+        """Hide a shown column or show a hidden one. An ``optional`` column shows only when the view picks it."""
         v = self._copy()
-        if key in v.hidden:
-            v.hidden.remove(key)
+        if key not in v.hidden and (not optional or v.picks(key)):
+            if key in v.shown:
+                v.shown.remove(key)
+            if not optional or v.picks(key):  # still shown (a filter shows it): hide it outright
+                v.hidden.append(key)
         else:
-            v.hidden.append(key)
+            if key in v.hidden:
+                v.hidden.remove(key)
+            if optional and not v.picks(key):
+                v.shown.append(key)
         return v
 
     def sorted_by(self, table: str, column: str, descending: bool) -> View:
@@ -202,9 +225,10 @@ class View:
         v.ages = {k: x for k, x in v.ages.items() if k[0] != table}
         return v
 
-    def showing_all(self, table: str) -> View:
+    def showing_all(self, table: str, optional: list[Key] = ()) -> View:
         v = self._copy()
         v.hidden = [k for k in v.hidden if k[0] != table]
+        v.shown += [k for k in optional if k not in v.shown]
         return v
 
 
@@ -326,9 +350,14 @@ def _matching_rows(section: Section, table: str, view: View, today: date) -> lis
     return rows
 
 
-def _visible(section: Section, table: str, view: View) -> list[int]:
-    cols = column_slugs(section)
-    shown = [i for i, s in enumerate(cols) if (table, s) not in view.hidden]
+def _visible(section: Section, table: str, view: View, page: bool = False) -> list[int]:
+    """The columns a view shows: on the page, a section's ``optional`` columns only when the view picks them."""
+    optional = set(section.optional) if page else set()
+    shown = [
+        i
+        for i, (name, s) in enumerate(zip(section.columns, column_slugs(section), strict=True))
+        if (table, s) not in view.hidden and (name not in optional or view.picks((table, s)))
+    ]
     return shown or [0]  # never hide every column
 
 
@@ -384,6 +413,7 @@ def apply(report: DataReport, view: View) -> DataReport:
                 group=section.group,
                 group_ids=section.group_ids,
                 filter_columns=section.filter_columns,
+                optional=section.optional,
                 keys=[section.keys[r] for r in rows] if section.keys else [],
                 review=section.review,
                 chart=section.chart,
@@ -559,6 +589,7 @@ class Column:
     index: int
     kind: str  # text | date | num | flag
     hidden: bool = False
+    optional: bool = False  # one of the section's optional columns, left out until shown
     toggle_href: str = ""  # show or hide it
     sort: str | None = None  # asc | desc
     sort_href: str = ""
@@ -652,6 +683,11 @@ class TableView:
         return sum(c.hidden for c in self.columns)
 
     @property
+    def chosen(self) -> bool:
+        """Whether the view picks this table's columns (the section's optional columns aside)."""
+        return any(c.hidden != c.optional for c in self.columns)
+
+    @property
     def total(self) -> int:
         return len(self.section.rows)
 
@@ -704,7 +740,7 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
     today = report.generated_at.date()
     slugs = column_slugs(section)
     rows = _matching_rows(section, table, view, today)
-    shown = set(_visible(section, table, view))
+    shown = set(_visible(section, table, view, page=True))
     sort = view.sorts.get(table)
     columns = []
     for i, (name, s) in enumerate(zip(section.columns, slugs, strict=True)):
@@ -712,8 +748,9 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
         cells = [r[i] for r in section.rows]
         kind = _kind(cells)
         col = Column(name, s, i, kind, hidden=i not in shown, filtered=key in view.filters or key in view.ages)
+        col.optional = name in section.optional
         col.width = _width(cells, kind)
-        col.toggle_href = link(path, view.toggle_hidden(key), anchor(table))
+        col.toggle_href = link(path, view.toggle_hidden(key, col.optional), anchor(table))
         col.sort = ("desc" if sort[1] else "asc") if sort and sort[0] == s else None
         # First click: text A to Z, numbers largest first; then flip.
         descending = col.sort == "asc" if col.sort else (kind == "num" and i > 0)
@@ -732,7 +769,11 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
         if review:  # one option for everything flagged for review, then each level
             reviewing = sorted(wanted) == sorted(review)
             base = view.without(key)
-            target = base if reviewing else View({**base.filters, key: review}, base.ages, base.hidden, base.sorts)
+            target = (
+                base
+                if reviewing
+                else View({**base.filters, key: review}, base.ages, base.hidden, base.sorts, base.shown)
+            )
             flag.options.append(
                 Option("To review", sum(counts[f] for f in review), reviewing, link(path, target, anchor(table)))
             )
@@ -762,7 +803,9 @@ def table_view(report: DataReport, index: int, view: View, path: str) -> TableVi
         rows=[([section.rows[r][i] for i in visible], flags[r]) for r in rows],
         chips=chips,
         clear_href=link(path, view.without_filters(table), anchor(table)),
-        show_all_href=link(path, view.showing_all(table), anchor(table)),
+        show_all_href=link(
+            path, view.showing_all(table, [(table, c.slug) for c in columns if c.optional]), anchor(table)
+        ),
         keys=keys,
         chart=chart(section, table, rows, view, path),
     )

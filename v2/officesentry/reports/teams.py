@@ -121,6 +121,7 @@ def teams_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         ],
         empty="This tenant has no teams.",
         drifts=(f"Active people ({INACTIVE_DAYS} days)",),
+        optional=("Private channels", "Shared channels", "Created"),
     )
     inactive = Section(
         INACTIVE,

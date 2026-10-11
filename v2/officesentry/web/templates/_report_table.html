@@ -34,16 +34,19 @@
 </details>
 {%- endmacro %}
 
+{#- A wide report starts without its optional columns (Section.optional), so the button shows how many are
+    shown; it's highlighted only once the view picks the columns itself. -#}
 {% macro column_menu(tv) -%}
 {% set only = tv.visible|length == 1 %}
 <details class="menu" id="columns-{{ tv.slug }}">
-  <summary class="btn sm{{ ' on' if tv.hidden_count else ' ghost' }}" title="Choose the columns to show">{{ icon('columns') }} Columns{% if tv.hidden_count %} <span class="n">{{ tv.visible|length }}/{{ tv.columns|length }}</span>{% endif %}</summary>
+  <summary class="btn sm{{ ' on' if tv.chosen else ' ghost' }}" title="Choose the columns to show">{{ icon('columns') }} Columns{% if tv.hidden_count %} <span class="n">{{ tv.visible|length }}/{{ tv.columns|length }}</span>{% endif %}</summary>
   <div class="menu-panel" role="group" aria-label="Columns in {{ tv.section.title }}">
     <div class="menu-head"><strong>Columns</strong>{% if tv.hidden_count %}<a href="{{ tv.show_all_href }}" data-view>Show all</a>{% endif %}</div>
     {% for c in tv.columns %}
     {% if only and not c.hidden %}<span class="check on disabled" title="At least one column stays">{{ icon('check') }}{{ c.name }}</span>
     {% else %}<a class="check{{ ' on' if not c.hidden }}" href="{{ c.toggle_href }}" data-view role="menuitemcheckbox" aria-checked="{{ 'false' if c.hidden else 'true' }}">{{ icon('check') }}{{ c.name }}</a>{% endif %}
     {% endfor %}
+    {% if tv.columns|selectattr('optional')|selectattr('hidden')|list %}<p class="menu-note">Downloads include the columns hidden to fit the page.</p>{% endif %}
   </div>
 </details>
 {%- endmacro %}
@@ -98,7 +101,7 @@
       {% if tv.groups|length > 1 %}<button type="button" class="btn sm ghost" data-groups="tbl-{{ tv.slug }}" aria-expanded="true" title="Fold every {{ section.group|lower }} to its heading, or open them all">{{ icon('chevron') }} <span>Collapse all</span></button>{% endif %}
       {% if tv.filters %}{{ filter_menu(tv) }}{% endif %}
       {% if tv.columns|length > 2 and (tv.total > 1 or tv.hidden_count) %}{{ column_menu(tv) }}{% endif %}
-      {% if csv_href %}<a class="btn sm ghost" href="{{ csv_href }}" title="Download {{ 'the rows and columns shown' if filtered or tv.hidden_count else 'this table' }} as CSV">{{ icon('download') }} CSV</a>{% endif %}
+      {% if csv_href %}<a class="btn sm ghost" href="{{ csv_href }}" title="Download {{ 'the rows and columns shown' if filtered or tv.chosen else 'this table' }} as CSV">{{ icon('download') }} CSV</a>{% endif %}
     </div>
   </div>
   {% if section.intro %}<p class="intro">{{ section.intro }}</p>{% endif %}

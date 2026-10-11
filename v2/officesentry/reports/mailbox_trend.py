@@ -124,6 +124,7 @@ def trend_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None:
         ],
         empty="No mailboxes.",
         compare=False,
+        optional=(f"{SPANS[0]} days ago", f"{SPANS[1]} days ago"),
     )
     entries = []
     soon = 0

@@ -105,6 +105,7 @@ def devices_report(snap: TenantSnapshot, now: datetime, out: DataReport) -> None
             "Account",
         ],
         empty="No phone or tablet syncs mail with this tenant.",
+        optional=("Platform", "First synced"),
     )
     attention = Section(
         ATTENTION,
