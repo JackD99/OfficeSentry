@@ -16,6 +16,57 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- Spreadsheet downloads no longer fail when a tenant's text holds a control character (an inbox rule
+  name with a vertical tab, say); evidence documents drop them the same way.
+- Spreadsheets keep changes such as +4.6%, +2.2 and -1.5 GB, and dates written as "6 Feb 2026", as numbers
+  and dates Excel can sort, and 29% no longer reads 29.0%. Person, mailbox, group and site spreadsheets
+  open without Excel offering to repair them (they had a sheet called History, a name Excel keeps for
+  itself), and the summary sheet's links reach sheets whose names have an apostrophe.
+- CSV downloads show signed numbers such as +2, -1 and +4.6% without an apostrophe in front; anything
+  that could be read as a formula still gets one. CSV and text downloads name their character set once.
+- Change columns (30-day change, Growth a month) sort by size, so +21.1 GB comes above +7.7 GB, and names
+  with accented letters sort in place (Åsa with the As, Émile with the Es) instead of after Z.
+- A PDF of a report long enough to be cut at 2,000 rows counts every row in its figures and headings, as
+  the page and spreadsheet do.
+- The All clients review download marks its percentage columns with % and writes counts as whole numbers.
+- Headline figures now open exactly the rows they count: Replying outside the organisation (replies on now,
+  not scheduled ones), Admins with a gap, Global Administrators and Privileged accounts, No mail in 90
+  days, Signed in with an old protocol (sign-ins that worked), and Not synced in 90 days and Password over
+  a year old, which now count calendar days as their links do.
+- Deleted users and groups gives separate figures for users and for groups about to go for good, each
+  opening its own table, on the report and on All clients.
+- Shared mailboxes over 50 GB are no longer flagged as disabled accounts wasting a licence. The check read
+  mailbox sizes from the wrong place and never saw them.
+- Licence right-sizing matches a mailbox to its account when the mailbox address differs from the sign-in
+  name, so someone with a 48 GB mailbox and an archive isn't told Plan 1 will do. When Microsoft hides
+  names in usage reports it no longer suggests removing licences, which Licence waste already counts, and
+  a note says why.
+- When Microsoft hides names in usage reports, OneDrive and SharePoint show hidden owners as "Hidden name
+  (E6F395)", as the usage reports do, instead of a 32-character code.
+- Mail flow shows "Not read" instead of green zeros when Microsoft refuses the message trace, says why at
+  the top, and stays out of the All clients totals.
+- Site permissions no longer waits for the client's approval forever because one locked site answered
+  first while the permission is granted, and no longer passes "no guest has full control" when it couldn't
+  read a single site.
+- Teams no longer says it's waiting for the client's approval when the permissions are granted; a part
+  Microsoft refuses is reported as failed. Site access only says the SharePoint permission is awaited while
+  it is.
+- A tenant with no outbound spam policy reads Unknown for automatic forwarding instead of Blocked, and the
+  forwarding check can't run instead of passing.
+- Sign-in retention now removes legacy sign-ins (accounts, addresses and countries) too; they were kept
+  for good. A past day whose sign-in detail is gone says so instead of leaving its tables out.
+- What changed no longer lists a report's data as new when one of its sources hadn't been collected at the
+  start of the period, its sign-in detail was removed by retention, or the client approved a permission it
+  needs in between (every Teams channel and guest read as added). It says why it didn't compare them, and
+  no longer keeps saying a report is waiting for approval once the client has approved.
+- What changed ignores what moves only with the clock (Not synced for 201 days, No mail in 90 days, Inactive
+  for 6 to 12 months, Last 30 days), and a changed row shows as changed when another row has the same name
+  (two groups called Marketing) instead of as added and removed.
+- On a past day, What changed since then starts after the day shown. On a Changes page for chosen dates,
+  Open report shows each report as it was at the end date, and the spreadsheet names that date instead of
+  "Now".
+- Automatic replies keep their First seen on date, and mailbox and site growth keep their figures, once
+  older snapshots are pruned.
 
 ## [2.2.0] - 2026-10-11
 
