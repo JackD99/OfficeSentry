@@ -19,9 +19,9 @@ LISTED = 20  # sites named in a person's row before "and N more"
 
 EVERYONE_WORDS = {"all": "Yes, including guests", "members": "Yes"}
 WAITING_NOTE = (
-    "Members of SharePoint groups on {sites} with no Microsoft 365 group can't be listed yet. That needs "
-    "the SharePoint read permission, which arrives with the next consent batch; those sites show their "
-    "site administrators and what the default library grants."
+    "Members of SharePoint groups on {sites} with no Microsoft 365 group aren't listed here; those sites show "
+    "their site administrators and what the default library grants. The Site permissions report lists every "
+    "SharePoint group and its members once the client approves the SharePoint permission."
 )
 
 

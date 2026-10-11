@@ -4,6 +4,7 @@ import json
 import re
 import zlib
 from datetime import UTC, datetime, timedelta
+from urllib.parse import unquote
 
 import responses
 
@@ -365,7 +366,9 @@ RECYCLE_BIN = {
 }
 
 
-def mock_sharepoint(rsps, *, sites=None, files=True, site_quota=None):
+def mock_sharepoint(rsps, *, sites=None, files=True, site_quota=None, rest=True):
+    """Graph's SharePoint answers; ``rest`` adds SharePoint's own API (True), refuses it (``"consent"``, the
+    SharePoint permission not approved yet) or leaves it out (False)."""
     rsps.get(
         f"{BETA}/reports/getSharePointSiteUsageDetail(period='D30')",
         json={"value": SITE_USAGE if sites is None else sites},
@@ -380,6 +383,8 @@ def mock_sharepoint(rsps, *, sites=None, files=True, site_quota=None):
         )
         return
     rsps.get(f"{V1}/sites/getAllSites", json={"value": SITES})
+    if rest:
+        mock_sharepoint_rest(rsps, approved=rest != "consent")
 
     def by_id(table, index, status_if_missing=404):
         def callback(request):
@@ -465,5 +470,192 @@ def mock_sharepoint(rsps, *, sites=None, files=True, site_quota=None):
         responses.GET,
         re.compile(re.escape(BETA) + r"/sites/[^/]+/recycleBin/items"),
         callback=by_id({**{s["id"]: [] for s in SITES}, **RECYCLE_BIN}, 3),
+        content_type="application/json",
+    )
+
+
+# -- Site permissions (SharePoint's own REST API) --------------------------------------
+
+
+def _principal(pid, title, login, kind=1, email=""):
+    return {"Id": pid, "Title": title, "LoginName": login, "PrincipalType": kind, "Email": email}
+
+
+def _assignment(member, *levels, hidden=()):
+    return {
+        "PrincipalId": member["Id"],
+        "Member": member,
+        "RoleDefinitionBindings": [{"Name": n, "Hidden": False} for n in levels]
+        + [{"Name": n, "Hidden": True} for n in hidden],
+    }
+
+
+def _sp_group(gid, title, users, owner=None):
+    return {"Id": gid, "Title": title, "LoginName": title, "OwnerTitle": owner or title, "Users": users}
+
+
+PAT = "i:0#.f|membership|pat_supplier.com#ext#@x.onmicrosoft.com"
+DAN = "i:0#.f|membership|dan_contractor.com#ext#@x.onmicrosoft.com"
+SALES_OWNERS, SALES_MEMBERS, SALES_VISITORS, BOARD = (
+    _principal(3, "Sales Owners", "Sales Owners", 8),
+    _principal(5, "Sales Members", "Sales Members", 8),
+    _principal(4, "Sales Visitors", "Sales Visitors", 8),
+    _principal(7, "Board pack readers", "Board pack readers", 8),
+)
+OLD_OWNERS, OLD_MEMBERS = (
+    _principal(3, "Old Projects Owners", "Old Projects Owners", 8),
+    _principal(5, "Old Projects Members", "Old Projects Members", 8),
+)
+BOB = _principal(11, "Bob", "i:0#.f|membership|bob@x.com", email="bob@x.com")
+ANN = _principal(10, "Ann", "i:0#.f|membership|ann@x.com", email="ann@x.com")
+EVE = _principal(12, "Eve", "i:0#.f|membership|eve@x.com", email="eve@x.com")
+DAN_GUEST = _principal(14, "Dan Contractor", DAN, email="dan@contractor.com")
+SYSTEM = _principal(1, "System Account", "SHAREPOINT\\system")
+BOARD_URL = "https://x.sharepoint.com/sites/finance/Board pack"
+ARCHIVE = "https://x.sharepoint.com/sites/finance/archive"
+SP_REST = {
+    FINANCE: {
+        "/web": {
+            "Id": "w-fin",
+            "Title": "Finance",
+            "Url": FINANCE,
+            "HasUniqueRoleAssignments": True,
+            "AssociatedOwnerGroup": {"Id": 3},
+            "AssociatedMemberGroup": {"Id": 5},
+            "AssociatedVisitorGroup": {"Id": 4},
+        },
+        "/web/sitegroups": [
+            _sp_group(
+                3, "Sales Owners", [_principal(20, "Sales Owners", "c:0o.c|federateddirectoryclaimprovider|g1_o", 4)]
+            ),
+            _sp_group(
+                5,
+                "Sales Members",
+                [
+                    _principal(21, "Sales Members", "c:0o.c|federateddirectoryclaimprovider|g1", 4),
+                    _principal(13, "Pat Supplier", PAT, email="pat@supplier.com"),
+                ],
+                owner="Sales Owners",
+            ),
+            _sp_group(4, "Sales Visitors", [_principal(22, "Everyone except external users", EVERYONE_BUT_GUESTS, 4)]),
+            _sp_group(7, "Board pack readers", [EVE], owner="Sales Owners"),
+        ],
+        "/web/roleassignments": [
+            _assignment(SALES_OWNERS, "Full Control"),
+            _assignment(SALES_MEMBERS, "Edit"),
+            _assignment(SALES_VISITORS, "Read"),
+            _assignment(BOB, "Contribute"),
+            _assignment(DAN_GUEST, "Full Control"),
+            _assignment(EVE, hidden=("Limited Access",)),  # given one file: left out
+            _assignment(SYSTEM, "Full Control"),
+        ],
+        "/web/lists": [
+            {
+                "Id": "l-docs",
+                "Title": "Documents",
+                "BaseType": 1,
+                "HasUniqueRoleAssignments": False,
+                "ItemCount": 40,
+                "RootFolder": {"ServerRelativeUrl": "/sites/finance/Shared Documents"},
+            },
+            {
+                "Id": "l-board",
+                "Title": "Board pack",
+                "BaseType": 1,
+                "HasUniqueRoleAssignments": True,
+                "ItemCount": 12,
+                "RootFolder": {"ServerRelativeUrl": "/sites/finance/Board pack"},
+            },
+            {
+                "Id": "l-exp",
+                "Title": "Expenses",
+                "BaseType": 0,
+                "HasUniqueRoleAssignments": True,
+                "ItemCount": 230,
+                "RootFolder": {"ServerRelativeUrl": "/sites/finance/Lists/Expenses"},
+            },
+            {
+                "Id": "l-style",
+                "Title": "Style Library",
+                "BaseType": 1,
+                "HasUniqueRoleAssignments": True,
+                "IsSystemList": True,
+                "ItemCount": 3,
+                "RootFolder": {"ServerRelativeUrl": "/sites/finance/Style Library"},
+            },
+        ],
+        "/web/lists(guid'l-board')/roleassignments": [
+            _assignment(SALES_OWNERS, "Full Control"),
+            _assignment(BOARD, "Read"),
+        ],
+        "/web/lists(guid'l-exp')/roleassignments": [
+            _assignment(SALES_OWNERS, "Full Control"),
+            _assignment(ANN, "Edit"),
+            _assignment(_principal(13, "Pat Supplier", PAT, email="pat@supplier.com"), "Read"),
+        ],
+        "/web/webs": [
+            {"Title": "Archive", "Url": ARCHIVE, "HasUniqueRoleAssignments": True},
+            {"Title": "Team wiki", "Url": FINANCE + "/wiki", "HasUniqueRoleAssignments": False},
+        ],
+    },
+    ARCHIVE: {"/web/roleassignments": [_assignment(SALES_OWNERS, "Full Control"), _assignment(BOB, "Read")]},
+    OLD: {
+        "/web": {
+            "Id": "w-old",
+            "Title": "Old projects",
+            "Url": OLD,
+            "AssociatedOwnerGroup": {"Id": 3},
+            "AssociatedMemberGroup": {"Id": 5},
+            "AssociatedVisitorGroup": None,
+        },
+        "/web/sitegroups": [
+            _sp_group(3, "Old Projects Owners", [BOB]),
+            _sp_group(
+                5, "Old Projects Members", [_principal(22, "Everyone except external users", EVERYONE_BUT_GUESTS, 4)]
+            ),
+        ],
+        "/web/roleassignments": [_assignment(OLD_OWNERS, "Full Control"), _assignment(OLD_MEMBERS, "Edit")],
+        "/web/lists": [
+            {
+                "Id": "l-old",
+                "Title": "Documents",
+                "BaseType": 1,
+                "HasUniqueRoleAssignments": False,
+                "ItemCount": 2,
+                "RootFolder": {"ServerRelativeUrl": "/sites/old-projects/Shared Documents"},
+            },
+        ],
+        "/web/webs": [],
+    },
+}
+
+
+def mock_sharepoint_rest(rsps, *, approved=True, rest=None):
+    """SharePoint's REST API on the tenant's host: each site's answers from ``SP_REST`` (or ``rest``), or 401
+    everywhere until the client approves the SharePoint permission."""
+    table = SP_REST if rest is None else rest
+
+    def callback(request):
+        if not approved:
+            body = {"error_description": "Unsupported app only token."}
+            return 401, {}, json.dumps(body)
+        url = request.url.split("?")[0]
+        site, _, api = url.partition("/_api")
+        answers = table.get(unquote(site))
+        if answers is None or unquote(api) not in answers:
+            err = {
+                "odata.error": {
+                    "code": "-2147024894, System.IO.FileNotFoundException",
+                    "message": {"value": "Not found"},
+                }
+            }
+            return 404, {}, json.dumps(err)
+        value = answers[unquote(api)]
+        return 200, {}, json.dumps({"value": value} if isinstance(value, list) else value)
+
+    rsps.add_callback(
+        responses.GET,
+        re.compile(r"https://[a-z0-9-]+\.sharepoint\.com(/.*)?/_api/.*"),
+        callback=callback,
         content_type="application/json",
     )

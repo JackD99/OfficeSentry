@@ -38,6 +38,10 @@ No.
   Read with the existing `Sites.Read.All` permission from each site's user list and default library;
   members of SharePoint groups on sites with no Microsoft 365 group wait for the SharePoint permission in
   the next consent batch, and the report says so.
+- **Site permissions** report (Files and Teams): each team site's SharePoint groups and their members, who
+  holds which permission level, and the lists, libraries and subsites with their own permissions, with a check
+  for guests with full control. Needs the SharePoint permission (Sites.Read.All on Office 365 SharePoint
+  Online) from the next consent update; until a client approves it, the report says it's waiting.
 
 ### Changed
 

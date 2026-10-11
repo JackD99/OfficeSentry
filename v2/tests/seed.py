@@ -255,6 +255,11 @@ def mock_tenant(
     mock_usage(rsps, **(usage_kw or {}))
 
 
+def graph_factory(tenant, connection):
+    """A Graph client that can also sign in to SharePoint, as one made from a certificate can."""
+    return GraphClient(lambda: "t", sleep=lambda s: None, resource_tokens=lambda host: lambda: "t")
+
+
 def exchange_factory(tenant, connection):
     return ExchangeClient(tenant["tenant_ref"], lambda: "t", sleep=lambda s: None)
 
@@ -263,7 +268,7 @@ def seed_tenant(db, tenant_id, dns=None, precompute=False, **kwargs):
     """Collect every source for the tenant from ``graphdata``, as the worker would. The collection
     queues the tenant's precomputed rows; they're dropped unless ``precompute``, so tests of other
     background tasks see only their own."""
-    factory = lambda tenant, connection: GraphClient(lambda: "t", sleep=lambda s: None)  # noqa: E731
+    factory = graph_factory
     with (
         responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
         patch("officesentry.dnscheck.lookup", dns or gd.fake_dns),

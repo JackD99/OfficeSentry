@@ -28,6 +28,7 @@ import sys
 import zlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 V2 = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(V2))
@@ -1001,8 +1002,12 @@ def site_people(t: dict, users: list[dict], rng: random.Random) -> tuple[dict, d
     library grants. Realistic situations: a site whose only owner has left, sites with one owner, guests on
     the client-facing sites, and an intranet open to everyone in the organisation.
 
+    The same people make up each site's SharePoint groups and permission levels on SharePoint's own API, for
+    the Site permissions report: a guest accountant with full control of Finance, libraries and a subsite
+    with their own permissions, and the intranet open to everyone.
+
     Returns the group fixtures to add (``GROUPS``, ``OWNERS``, ``MEMBERS``) and the SharePoint fixtures
-    (``USER_INFO``, ``ROOT_PERMISSIONS``)."""
+    (``USER_INFO``, ``ROOT_PERMISSIONS``, ``SP_REST``)."""
     domain = f"{t['base']}.{t['tld']}"
     staff = [u for u in users if u["userType"] == "Member" and u.get("accountEnabled") and u.get("assignedLicenses")]
     ann = next(u for u in users if u["displayName"] == t["people"]["ann"])
@@ -1093,7 +1098,113 @@ def site_people(t: dict, users: list[dict], rng: random.Random) -> tuple[dict, d
         who = identity or {"siteGroup": {"displayName": name, "id": str(zlib.crc32(name.encode()) % 100)}}
         return {"id": f"{zlib.crc32((name + role).encode())}", "roles": [role], "grantedToV2": who}
 
-    groups, owners, members, user_info, perms = [], {}, {}, {}, {}
+    host = f"https://{t['base']}.sharepoint.com"
+    finance_head = heads[0]
+
+    def sp_principal(pid, title, login, kind=1, email=""):
+        return {"Id": pid, "Title": title, "LoginName": login, "PrincipalType": kind, "Email": email}
+
+    def sp_person(u):
+        upn = u["userPrincipalName"]
+        return sp_principal(
+            zlib.crc32(upn.encode()) % 10_000 + 100, u["displayName"], f"i:0#.f|membership|{upn}", email=upn
+        )
+
+    def sp_guest(address):
+        login = f"i:0#.f|membership|{address.replace('@', '_')}#ext#@{t['base']}.onmicrosoft.com"
+        name = address.split("@")[0].replace(".", " ").title()
+        return sp_principal(zlib.crc32(address.encode()) % 10_000 + 100, name, login, email=address)
+
+    def sp_claim(gid, title):
+        return sp_principal(
+            zlib.crc32(gid.encode()) % 10_000 + 100, title, f"c:0o.c|federateddirectoryclaimprovider|{gid}", 4
+        )
+
+    def sp_everyone():
+        return sp_principal(22, "Everyone except external users", EVERYONE_BUT_GUESTS, 4)
+
+    def assignment(member, *levels):
+        bindings = [{"Name": n, "Hidden": False} for n in levels] or [{"Name": "Limited Access", "Hidden": True}]
+        return {"PrincipalId": member["Id"], "Member": member, "RoleDefinitionBindings": bindings}
+
+    def rows_staff(rows):
+        return [u for u in staff if any(r["fields"]["EMail"] == u["userPrincipalName"] for r in rows)][:4]
+
+    def library(lid, title, path, unique, count, base=1):
+        return {
+            "Id": lid,
+            "Title": title,
+            "BaseType": base,
+            "HasUniqueRoleAssignments": unique,
+            "ItemCount": count,
+            "RootFolder": {"ServerRelativeUrl": path},
+        }
+
+    def site_rest(url, slug, title, groupset, outside):
+        """SharePoint's answers for one site: its three groups, who holds which level, its lists and subsites."""
+        g_owners, g_members, g_visitors = (
+            sp_principal(n, f"{title} {k}", f"{title} {k}", 8)
+            for n, k in ((3, "Owners"), (5, "Members"), (4, "Visitors"))
+        )
+        path = urlsplit(url).path
+        web = {
+            "Id": f"w-{slug}",
+            "Title": title,
+            "Url": url,
+            "HasUniqueRoleAssignments": True,
+            "AssociatedOwnerGroup": {"Id": 3},
+            "AssociatedMemberGroup": {"Id": 5},
+            "AssociatedVisitorGroup": {"Id": 4},
+        }
+        sitegroups = [
+            {**g, "OwnerTitle": g_owners["Title"], "Users": users}
+            for g, users in zip((g_owners, g_members, g_visitors), groupset, strict=True)
+        ]
+        assignments = [
+            assignment(g_owners, "Full Control"),
+            assignment(g_members, "Edit"),
+            assignment(g_visitors, "Read"),
+        ]
+        assignments += [assignment(sp_guest(a), "Read") for a in outside]
+        lists = [library(f"l-{slug}-docs", "Documents", f"{path}/Shared Documents", False, 120)]
+        answers = {}
+        webs = []
+        if slug == "finance":  # the outside accountant was made a site owner to fix a sharing problem
+            assignments.append(assignment(sp_guest(OUTSIDE_GUESTS[0]), "Full Control"))
+            lists.append(library("l-payroll", "Payroll", f"{path}/Payroll", True, 64))
+            answers["/web/lists(guid'l-payroll')/roleassignments"] = [
+                assignment(g_owners, "Full Control"),
+                assignment(sp_person(finance_head), "Edit"),
+            ]
+        if slug in ("clients", "patient-records"):
+            shared = "Engagement letters" if slug == "clients" else "Lab referrals"
+            lists.append(library("l-contracts", shared, f"{path}/{shared}", True, 38))
+            answers["/web/lists(guid'l-contracts')/roleassignments"] = [
+                assignment(g_owners, "Full Control"),
+                assignment(g_members, "Contribute"),
+                assignment(sp_guest(OUTSIDE_GUESTS[3 if slug == "clients" else 2]), "Read"),
+            ]
+        out = {}
+        if slug == "intranet":  # HR policies kept from the rest of the intranet
+            hr = f"{url}/hr"
+            webs.append({"Title": "HR", "Url": hr, "HasUniqueRoleAssignments": True})
+            out[hr] = {
+                "/web/roleassignments": [
+                    assignment(g_owners, "Full Control"),
+                    assignment(sp_person(finance_head), "Edit"),
+                ]
+            }
+        out[url] = {
+            "/web": web,
+            "/web/sitegroups": sitegroups,
+            "/web/roleassignments": assignments,
+            "/web/lists": lists,
+            "/web/webs": webs,
+            **answers,
+        }
+        return out
+
+    groups, owners, members, user_info, perms, rest = [], {}, {}, {}, {}, {}
     for slug, title, _, _, template in DENTAL_SITES if t.get("sites") == "dental" else OFFICE_SITES:
         sid = "site-fin" if slug == "finance" else f"site-{slug}"
         rows = [claim("SHAREPOINT\\system", "System Account")] + [
@@ -1174,7 +1285,16 @@ def site_people(t: dict, users: list[dict], rng: random.Random) -> tuple[dict, d
                 )
         user_info[sid] = rows
         perms[sid] = grants
-    return {"GROUPS": groups, "OWNERS": owners, "MEMBERS": members}, {"USER_INFO": user_info, "ROOT_PERMISSIONS": perms}
+        if template == "Group":
+            groupset = ([sp_claim(f"{gid}_o", title)], [sp_claim(gid, title)], [])
+            outside = [OUTSIDE_GUESTS[3]] if slug == "clients" else []
+        else:
+            visitors = [sp_everyone()] if slug == "intranet" else []
+            groupset = ([sp_person(u) for u in admins], [sp_person(u) for u in rows_staff(rows)], visitors)
+            outside = []
+        rest.update(site_rest(f"{host}/sites/{slug}", slug, title, groupset, outside))
+    access = {"USER_INFO": user_info, "ROOT_PERMISSIONS": perms, "SP_REST": rest}
+    return {"GROUPS": groups, "OWNERS": owners, "MEMBERS": members}, access
 
 
 def sharepoint(

@@ -223,7 +223,7 @@ def _age_sharepoint_runs(db, alpha, days: float) -> None:
     when = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute(
         "UPDATE runs SET finished_at = ? WHERE tenant_id = ?"
-        " AND collector IN ('shared_files', 'sharepoint_storage', 'site_access')",
+        " AND collector IN ('shared_files', 'sharepoint_storage', 'site_access', 'site_permissions')",
         (when, alpha),
     )
     unpack(db)

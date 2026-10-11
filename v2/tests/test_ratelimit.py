@@ -291,7 +291,9 @@ def test_every_run_records_its_requests(db, two_tenants):
         == 0
     )  # DNS only: nothing asked of Microsoft
     # Every Microsoft call any collector made is in the endpoint catalogue.
-    catalogued = {e.key(v) for e in endpoints.GRAPH for v in e.versions} | {e.key() for e in endpoints.EXCHANGE}
+    catalogued = {e.key(v) for e in endpoints.GRAPH for v in e.versions} | {
+        e.key() for e in endpoints.EXCHANGE + endpoints.SHAREPOINT
+    }
     made = {r[0] for r in db.execute("SELECT DISTINCT endpoint FROM run_requests")}
     assert made - catalogued == set()
 
