@@ -262,7 +262,7 @@ class Book:
             for sheet, count, description in self.sheets:
                 ws.append(_row([sheet, count, description or None]))
                 cell = ws.cell(ws.max_row, 1)
-                cell.hyperlink = f"#'{sheet}'!A1"
+                cell.hyperlink = "#'" + sheet.replace("'", "''") + "'!A1"  # Excel doubles a quote in a sheet name
                 cell.font = Font(color="1D4ED8", underline="single")
                 ws.cell(ws.max_row, 2).alignment = Alignment(horizontal="left")
                 ws.cell(ws.max_row, 3).alignment = Alignment(wrap_text=True, vertical="top")

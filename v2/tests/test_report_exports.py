@@ -116,6 +116,18 @@ def test_tenant_text_with_control_characters_still_makes_a_workbook_and_a_docume
             assert "Moveto RSS" in ElementTree.fromstring(z.read(part)).itertext()  # noqa: S314 (our own file)
 
 
+def test_summary_links_open_sheets_with_quotes_and_no_sheet_takes_excels_history_name():
+    book = workbook.Book()
+    book.table("OneDrives of people who've left", ["Name"], [["Ann"]])
+    book.table("History", ["When"], [["2026-10-01"]])
+    wb = load_workbook(io.BytesIO(book.save(workbook.Cover("Ann's account"))))
+    assert wb.sheetnames == ["Summary", "OneDrives of people who've left", "History (2)"]
+    links = [c.hyperlink.target for c in wb["Summary"]["A"] if c.hyperlink]
+    assert links == ["#'OneDrives of people who''ve left'!A1", "#'History (2)'!A1"]
+    assert tables.sheet_name("HISTORY", set()) == "HISTORY (2)"
+    assert tables.sheet_name("History of sign-ins", set()) == "History of sign-ins"
+
+
 def test_plain_table_downloads_have_no_cover_unless_asked():
     body = tables.to_xlsx([tables.Table("Rows", ["A"], [["x"]])])
     assert load_workbook(io.BytesIO(body)).sheetnames == ["Rows"]

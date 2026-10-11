@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from io import StringIO
 
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n")
+RESERVED_SHEET = "history"  # Excel keeps this sheet name for itself and offers to repair a workbook that uses it
 
 
 @dataclass
@@ -50,7 +51,7 @@ def to_csv(table: Table) -> bytes:
 def sheet_name(title: str, used: set[str]) -> str:
     name = re.sub(r"[\[\]:*?/\\\x00-\x1f]", " ", title).strip()[:31] or "Sheet"
     base, n = name, 2
-    while name.lower() in used:
+    while name.lower() in used or name.lower() == RESERVED_SHEET:
         suffix = f" ({n})"
         name = base[: 31 - len(suffix)] + suffix
         n += 1
