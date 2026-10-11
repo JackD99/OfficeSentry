@@ -17,6 +17,8 @@ x-officesentry: &officesentry
   tmpfs: ["/tmp"]
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
+  # The portal runs 2 workers x 4 threads and the worker up to 32 collector threads; a leak can't take the host.
+  pids_limit: 256
 
 # The portal and worker keep secrets.json (the keys that decrypt stored
 # certificates and passwords) in a volume of its own, apart from the data and
@@ -68,6 +70,11 @@ services:
       - caddy-config:/config
     depends_on: [web]
     restart: unless-stopped
+    # Caddy only needs to bind 80 and 443; it writes certificates to its own volumes.
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
 
   # Optional encrypted off-site backups with restic (https://restic.net) to any
   # S3-compatible storage, set in .env.backup. Never runs by itself:
