@@ -9,7 +9,6 @@ from __future__ import annotations
 import math
 from datetime import date, datetime, timedelta
 
-from .. import store
 from ..collectors.sharepoint_lookup import DENIED_TEXT
 from ..devices import parse_day
 from ..snapshot import TenantSnapshot
@@ -101,7 +100,10 @@ def site_cell(row: dict):
 
 
 def _objects_before(snap: TenantSnapshot, collector: str, kind: str, before: datetime) -> dict[str, dict] | None:
-    """Objects from the latest successful run at or before ``before`` (for growth)."""
+    """Objects from the latest successful run at or before ``before`` (for growth), read from the daily history
+    once retention has removed its snapshot."""
+    from .. import state_history  # here: the history imports the worker's schedule
+
     row = snap.conn.execute(
         "SELECT id FROM runs WHERE tenant_id = ? AND collector = ? AND status IN ('succeeded', 'partial')"
         " AND finished_at <= ? ORDER BY finished_at DESC, id DESC LIMIT 1",
@@ -109,7 +111,7 @@ def _objects_before(snap: TenantSnapshot, collector: str, kind: str, before: dat
     ).fetchone()
     if row is None:
         return None
-    return {o["_id"]: o for o in store.run_objects(snap.conn, row["id"], kind)}
+    return {o["_id"]: o for o in state_history.objects_of(snap.conn, row["id"], kind)}
 
 
 def storage_points(snap: TenantSnapshot, area: str) -> list[tuple[date, float]]:

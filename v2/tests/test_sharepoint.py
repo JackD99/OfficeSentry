@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 import responses
 from openpyxl import load_workbook
 
-from officesentry import store
+from officesentry import state_history, store
 from officesentry.collectors import sharepoint
 from officesentry.collectors.sharepoint import concealed, describe_permissions
 from officesentry.graph import GraphClient
@@ -437,6 +437,21 @@ def test_site_growth_against_a_month_ago(db, two_tenants):
         (alpha, old, old),
     )
     store.add_objects(db, cur.lastrowid, "site", [(sd.FINANCE, {"storageUsed": 4 * 1024**3})])
+    seed_tenant(db, alpha)
+    row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == sd.FINANCE)
+    assert row[4] == "+1.0 GB"
+
+
+def test_site_growth_reads_the_daily_history_once_that_snapshot_is_pruned(db, two_tenants):
+    alpha, _ = two_tenants
+    old = store.enqueue_run(db, alpha, "sharepoint_usage")
+    store.claim_next_run(db)
+    store.add_objects(db, old, "site", [(sd.FINANCE, {"storageUsed": 4 * 1024**3})])
+    store.finish_run(db, old, "succeeded")
+    when = (datetime.now(UTC) - timedelta(days=31)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.execute("UPDATE runs SET created_at = ?, finished_at = ? WHERE id = ?", (when, when, old))
+    assert state_history.record_run(db, db.execute("SELECT * FROM runs WHERE id = ?", (old,)).fetchone())
+    db.execute("DELETE FROM objects WHERE run_id = ?", (old,))  # as the retention policy does
     seed_tenant(db, alpha)
     row = next(r for r in _section(_report(db, alpha, "sharepoint"), "All sites").rows if str(r[0]) == sd.FINANCE)
     assert row[4] == "+1.0 GB"
