@@ -713,18 +713,21 @@ def mail_extras(t: dict, users: list[dict], now: datetime, rng: random.Random) -
         ("Website enquiries", "enquiries", "ann", rng.sample(staff, min(4, len(staff))), True, 25),
         ("Christmas party 2023", "xmas2023", None, rng.sample(staff, min(9, len(staff))), False, 0),
         ("Old projects", "oldprojects", None, [], False, 0),
+        # Also an Entra group (m1 in the fixtures), so its page joins Exchange's list to the directory's group.
+        ("Finance alerts", "finance-alerts", "ann", rng.sample(staff, min(4, len(staff))), False, 6),
     ]
     groups, members, trace = [], {}, []
     for n, (name, alias, owner, who, outside, per_10_days) in enumerate(lists):
         address = f"{alias}@{domain}"
+        security = name == "Finance alerts"
         groups.append(
             {
                 "Name": name,
                 "DisplayName": name,
                 "PrimarySmtpAddress": address,
                 "Guid": f"dl-{n}",
-                "ExternalDirectoryObjectId": f"dl-{n}",
-                "RecipientTypeDetails": "MailUniversalDistributionGroup",
+                "ExternalDirectoryObjectId": "m1" if security else f"dl-{n}",
+                "RecipientTypeDetails": "MailUniversalSecurityGroup" if security else "MailUniversalDistributionGroup",
                 "ManagedBy": [{"ann": "u1", "bob": "u2"}[owner]] if owner else [],
                 "RequireSenderAuthenticationEnabled": not outside,
                 "IsDirSynced": False,

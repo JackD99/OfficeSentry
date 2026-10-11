@@ -133,7 +133,15 @@ def dashboard():
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
         **dashboard_trends(g.db, rows),
     }
-    return render_template("dashboard.html", rows=rows, summary=summary, currency=setting(g.db, "currency", "GBP"))
+    from .home import get_started
+
+    return render_template(
+        "dashboard.html",
+        rows=rows,
+        summary=summary,
+        currency=setting(g.db, "currency", "GBP"),
+        get_started=get_started(),
+    )
 
 
 @bp.route("/tenants/new", methods=["GET", "POST"])

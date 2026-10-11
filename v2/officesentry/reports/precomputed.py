@@ -1,12 +1,20 @@
-"""Precomputed cross-tenant rows: each tenant's line on What changed (``/changes``) and on the
-check matrix (``/across/checks``).
+"""Precomputed cross-tenant rows: each tenant's line on the pages that show one row per tenant.
 
-Both pages show one row per tenant, and working a row out is the slow part: a tenant's change
-summary builds every detail report twice, and its check-matrix row evaluates every check. At 200
-tenants What changed took about 30 seconds. So each tenant's rows are kept in ``summary_cache``,
-one per kind (``changes:7``, ``changes:30``, ``changes:90`` and ``checks``). The worker builds
-them after the tenant's collection (``queue``) and once a day (``queue_all``), as ``precompute``
-tasks, and the pages read them.
+Working a tenant's row out is the slow part of those pages: a change summary builds every detail
+report twice, a check-matrix row evaluates every check, and so on for each tenant on the page. At
+200 tenants What changed took about 30 seconds and the Clients home page 5 seconds. So each
+tenant's rows are kept in ``summary_cache``, one per kind:
+
+* ``changes:7``, ``changes:30``, ``changes:90``: What changed (``month_changes.across``);
+* ``checks``: the check matrix (``rollups.check_matrix``);
+* ``evidence``: the insurance evidence rollup (``rollups.evidence_rollup``);
+* ``rollup:<report key>``: a detail report's rollup (``rollups.data_rollup``);
+* ``review``: the month-end queue's verdict and flags (``month_end.review_facts``), also on Clients;
+* ``projects``: recommended projects and quick fixes (``projects.pipeline``), also on Clients;
+* ``search``: the fingerprint of the tenant's rows in ``search_index`` (``search_index.py``).
+
+The worker builds them after the tenant's collection (``queue``) and once a day (``queue_all``),
+as ``precompute`` tasks (``refresh``), and the pages read them.
 
 A stored row is used only while its fingerprint matches what the row would be built from now:
 
@@ -14,12 +22,14 @@ A stored row is used only while its fingerprint matches what the row would be bu
   run, licence flags and cloud, licence prices, currency and Office Sentry's own app IDs;
 * ``changes:<days>``: the tenant's latest run finished by the start of the period, the data the
   period is compared with;
-* ``checks``: the tenant's open findings and which of them are accepted risks now.
+* ``checks``, ``evidence``, ``review`` and ``projects``: the tenant's open findings and which of
+  them are accepted risks now; ``projects`` also what the account manager set on each project.
 
-When it doesn't match, the page builds that tenant's row as before and stores it. New and fixed
-findings and the key figures on What changed are always read live: they're cheap, and they move
-as findings sync. The daily retention pass can remove a period's starting data, so after it
-removes anything every row is built again.
+When it doesn't match, the page builds that tenant's row as before and stores it, so nobody ever
+sees a figure built from older data than the live page would use. New and fixed findings and the
+key figures on What changed are always read live: they're cheap, and they move as findings sync.
+The daily retention pass can remove a period's starting data, so after it removes anything every
+row is built again.
 
 Rows are per tenant, never per person: pages read them only for the tenants ``scoped_tenants()``
 gives the person (and the group they picked), so a stored row never shows anyone a tenant they
@@ -31,7 +41,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 
 from .. import tasks
 from ..db import utcnow
@@ -66,6 +76,29 @@ def _open_findings(conn, tenant_id: int, now: datetime) -> list:
     return list(row)
 
 
+# Kinds whose rows depend on the tenant's open findings and accepted risks.
+FINDINGS_KINDS = ("checks", "evidence", "review", "projects")
+
+
+def _project_statuses(conn, tenant_id: int) -> list:
+    """What the account manager set on the tenant's projects, as ``projects.statuses`` reads it."""
+    row = conn.execute(
+        "SELECT COUNT(*), MAX(updated_at), GROUP_CONCAT(project_key || ':' || status || ':' || IFNULL(note, ''), ';')"
+        " FROM (SELECT * FROM project_status WHERE tenant_id = ? ORDER BY project_key)",
+        (tenant_id,),
+    ).fetchone()
+    return list(row)
+
+
+def stored_rows(conn, kind: str, tenants, now: datetime | None, rebuild: bool = False):
+    """The ``Rows`` a page reads when it shows the present (``now`` is None), else None.
+
+    Rollups and rows of a past moment (``now`` given) are always built live, so a stored row is
+    never shown as something it isn't.
+    """
+    return Rows(conn, kind, tenants, now or datetime.now(UTC), rebuild) if now is None else None
+
+
 class Rows:
     """One kind's stored rows for a list of tenants, read in one query.
 
@@ -96,8 +129,10 @@ class Rows:
         parts = [*self.shared, tenant["capabilities"], tenant["cloud"], _last_run(self.conn, tenant["id"])]
         if since is not None:
             parts.append(_last_run(self.conn, tenant["id"], since.strftime(ISO)))
-        if self.kind == "checks":
+        if self.kind in FINDINGS_KINDS:
             parts.append(_open_findings(self.conn, tenant["id"], self.now))
+        if self.kind == "projects":
+            parts.append(_project_statuses(self.conn, tenant["id"]))
         return json.dumps(parts)
 
     def get(self, tenant, fingerprint: str):
@@ -121,20 +156,34 @@ class Rows:
 
 
 def refresh(conn, tenant, rebuild: bool = False) -> None:
-    """Build the tenant's rows that are out of date (every row with ``rebuild``)."""
-    from . import month_changes, rollups  # they import this module
+    """Build the tenant's rows that are out of date (every row with ``rebuild``), and its search index."""
+    from .. import month_end, projects, search_index
+    from ..snapshot import TenantSnapshot
+    from . import data_reports, month_changes, rollups  # they import this module
 
     for days in month_changes.PERIODS:
         month_changes.across(conn, [tenant], days, rebuild=rebuild)
     rollups.check_matrix(conn, [tenant], rebuild=rebuild)
+    rollups.evidence_rollup(conn, [tenant], rebuild=rebuild)
+    month_end.review_facts(conn, [tenant], rebuild=rebuild)
+    projects.pipeline(conn, [tenant], rebuild=rebuild)
+    snap = TenantSnapshot(conn, tenant)  # one read of each collector's data for every report's rollup
+    for key in data_reports.REPORTS:
+        rollups.data_rollup(conn, [tenant], key, rebuild=rebuild, snap=snap)
+    search_index.refresh(conn, tenant, snap=snap, rebuild=rebuild)
 
 
 def queue(conn, tenant_id: int, rebuild: bool = False) -> int:
-    """Queue a refresh of one tenant's rows (once: a refresh already queued is reused)."""
+    """Queue a refresh of one tenant's rows (once: a refresh already queued is reused, and made a rebuild if
+    this one is). A rebuild asked for while the tenant's refresh is already running is queued behind it under
+    its own key, since the running one read its payload when it started and would finish without rebuilding."""
+    key = f"{KIND}:{tenant_id}"
+    if rebuild and (running := tasks.pending(conn, key)) and running["status"] == "running":
+        key = f"{key}:again"
     task_id = tasks.enqueue(
         conn,
         KIND,
-        key=f"{KIND}:{tenant_id}",
+        key=key,
         tenant_id=tenant_id,
         priority=PRIORITY,
         payload={"rebuild": True} if rebuild else None,
