@@ -37,6 +37,8 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
+- The Projects list fits a laptop screen: long client and project names wrap instead of pushing the Status
+  column out of view.
 
 ## [2.2.0] - 2026-10-11
 

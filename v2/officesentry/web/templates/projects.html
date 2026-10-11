@@ -49,10 +49,10 @@
     <tbody>
     {% for t, rec in items %}
     <tr data-name="{{ (t.name ~ ' ' ~ rec.project.title ~ ' ' ~ rec.reasons|map(attribute='headline')|join(' '))|lower }}">
-      <td><a class="strong" href="{{ url_for('projects.tenant', tenant_id=t.id) }}#project-{{ rec.project.key }}">{{ t.name }}</a></td>
-      <td data-label="Project">{{ rec.project.title }}</td>
+      <td class="name"><a class="strong" href="{{ url_for('projects.tenant', tenant_id=t.id) }}#project-{{ rec.project.key }}">{{ t.name }}</a></td>
+      <td data-label="Project" class="name">{{ rec.project.title }}</td>
       <td data-label="Priority"><span class="sevtext {{ rec.severity }}">{{ rec.severity }}</span></td>
-      <td data-label="Why" class="wrap small">{% for r in rec.reasons[:3] %}{{ r.headline }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if rec.reasons|length > 3 %}<span class="faint"><br>and {{ rec.reasons|length - 3 }} more</span>{% endif %}
+      <td data-label="Why" class="wrap small why">{% for r in rec.reasons[:3] %}{{ r.headline }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if rec.reasons|length > 3 %}<span class="faint"><br>and {{ rec.reasons|length - 3 }} more</span>{% endif %}
         {% if rec.note %}<span class="sub muted">Note: {{ rec.note }}</span>{% endif %}</td>
       <td data-label="Size" class="nowrap">{{ rec.size or '–' }}<span class="sub muted">{{ rec.effort }}</span></td>
       <td data-label="Status">{{ status_form(t, rec, statuses, back='all', project=project, note=False) }}</td>
