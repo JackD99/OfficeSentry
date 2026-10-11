@@ -191,6 +191,12 @@ Microsoft account links on users and how each session was started.
   night, with the run partial and the permission named, instead of the Users collection failing.
 - An Exchange list longer than 200 pages (200,000 results) is cut there with a warning naming the
   cmdlet, instead of failing the whole collection.
+- A session or proxy setting that can't work (`OFFICESENTRY_SESSION_HOURS=0`, which signed everyone out
+  on their next request) stops the portal at start with a plain message, like the other settings.
+- A form sent after the session had ended comes back, after signing in, to the page the form was on
+  rather than to an address that only takes forms ("Method not allowed").
+- The daily rebuild of the What changed and check matrix rows is no longer lost for a client whose
+  rows were being refreshed at that moment.
 
 ### Security
 
