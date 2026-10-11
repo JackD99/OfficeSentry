@@ -60,8 +60,10 @@ first.
   themselves, only on the clients they see (other clients' names don't show), can't change their own role
   or access, and can't change an Administrator or anyone who can do or see more than they can.
 - **Staff sign in with Microsoft.** Under *Settings → Staff sign-in*, an admin presses *Sign in to
-  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with Admin and Analyst
-  roles to assign people or groups to in Entra. Staff then press *Sign in with Microsoft* and use their
+  Microsoft* and Office Sentry creates a small sign-in app in the MSP's own tenant, with an app role for each
+  built-in role (Admin for Administrator, TeamLeader, Analyst for Second line, FirstLine, AccountManager and
+  Auditor) to assign people or groups to in Entra; a custom role gets an app role value of its own on the
+  same page. The role follows Entra at every sign-in. Staff then press *Sign in with Microsoft* and use their
   work account, under the MSP's own Conditional Access and MFA; new staff get an account at their first
   sign-in, existing accounts link from their Account page. Passwords stay as the break-glass route until
   turned off, and `python -m officesentry staff-sign-in --passwords on` turns them back on from the

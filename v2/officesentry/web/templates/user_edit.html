@@ -12,10 +12,10 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if last_admin %}<p class="callout warn small">This is the only Administrator. Make someone else an Administrator before changing their role or disabling the account.</p>{% endif %}
   <fieldset class="choices" data-roles>
-    <legend>Role{% if user.entra_oid %} <span class="faint small">(partly set in Entra)</span>{% endif %}</legend>
-    {% if user.entra_oid %}<p class="muted small m0">{{ user.username }} signs in with Microsoft, so the app role assigned in Entra decides at each sign-in whether they're an Administrator or staff. Change that there; which staff role they hold is picked here.</p>{% endif %}
+    <legend>Role{% if user.entra_oid %} <span class="faint small">(set in Entra)</span>{% endif %}</legend>
+    {% if user.entra_oid %}<p class="muted small m0">{{ user.username }} signs in with Microsoft, so their role is the app role assigned to them in Entra at each sign-in. Change it there{% if can('settings.manage') %}; <a href="{{ url_for('sso.settings_page') }}#roles">Staff sign-in</a> says which app role gives which role{% endif %}.</p>{% endif %}
     {% for r in roles %}
-    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if (user.id == current_user.id and r.kind != 'admin') or (r.id != role.id and r.id not in givable) or (user.entra_oid and r.kind != role.kind) %} disabled{% endif %}>
+    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if (user.id == current_user.id and r.kind != 'admin') or (r.id != role.id and r.id not in givable) or (user.entra_oid and r.id != role.id) %} disabled{% endif %}>
       <span><span class="strong">{{ r.name }}{% if r.kind == 'client' %} <span class="faint small">client role</span>{% endif %}</span><span class="hint">{{ r.description }}</span></span></label>
     {% endfor %}
     <p class="footnote m0">{% if can('users.manage') %}Roles are built-in sets of capabilities. What each one opens is listed under <strong>What {{ user.username }} can do</strong> below.{% endif %}{% if not actor.is_admin and givable|length < roles|length %} Roles that hold more than yours can only be given by an Administrator.{% endif %}</p>
