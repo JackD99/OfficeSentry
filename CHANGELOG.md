@@ -131,6 +131,10 @@ No.
   the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
   rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy
   job's runner before it can close it.
+- A long write to the database (a restore, a backup, a large delete) no longer makes every page fail:
+  pages don't wait for it to note a sign-in was seen or to store a dashboard row, and a change that
+  still finds the database locked after five seconds is answered with "Office Sentry is busy right
+  now, try again in a moment" instead of an error page.
 
 ### Security
 
