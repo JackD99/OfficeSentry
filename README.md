@@ -64,6 +64,8 @@ summary, a full review, a licensing review or a **Quarterly review**: three mont
 what was fixed, the projects on the table and where each stands, licence spend and what's coming up in the next
 90 days ([example PDF](examples/quarterly-review.pdf)).
 
+![The report designer with the Quarterly review: blocks, the layout, and a preview on a real client](docs/screenshots/design-editor.png)
+
 ### SharePoint storage: why it's full and what to clean up
 
 When a client's SharePoint fills up, the storage report shows how full it is (its quota worked out from
@@ -92,13 +94,25 @@ See the full 19-page [example PDF](examples/sharepoint-storage.pdf) for a client
 only one, each site's owners, administrators, members and guests, what the default library grants and to whom,
 every guest with the sites they can reach, and who administers many sites. **Site permissions** goes a level
 deeper with SharePoint's own permissions: who is in each SharePoint group, the permission level each person and
-group holds, the lists, libraries and subsites with permissions of their own, and any guest with full control. **File and folder permissions** answers who can open what: every file
-and folder with permissions of its own, who shared it and when, links past or near their expiry, and people
-outside who can edit. **Teams channels, guests and apps** does
-the same for Teams: each team's private and shared channels with their members, the guests and people from other
-organisations in them, the apps added to each team (custom uploads flagged) and teams nobody has used in 90 days.
+group holds, the lists, libraries and subsites with permissions of their own, and any guest with full control.
+**File and folder permissions** answers who can open what: every file and folder with permissions of its own, who
+shared it and when, links past or near their expiry, and people outside who can edit. **Teams channels, guests and
+apps** does the same for Teams: each team's private and shared channels with their members, the guests and people
+from other organisations in them, the apps added to each team (custom uploads flagged) and teams nobody has used in
+90 days.
 
-![Site access: sites with no owner or one, guests, and sites open to everyone in the organisation](docs/screenshots/site-access.png)
+![Site permissions: guests with full control, access given directly, and who holds which permission level on each site](docs/screenshots/site-permissions.png)
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/site-access.png" alt="Site access"></td>
+    <td width="50%"><img src="docs/screenshots/file-permissions.png" alt="File and folder permissions"></td>
+  </tr>
+  <tr>
+    <td>Site access: sites with no owner or one, guests, and sites open to everyone</td>
+    <td>File and folder permissions: what was newly shared, links expiring, and who can open each item</td>
+  </tr>
+</table>
 
 ### Detail reports you can filter, save and export
 
@@ -123,6 +137,14 @@ the PDF, XLSX and CSV downloads contain exactly the rows shown. Every headline f
     <td><img src="docs/screenshots/conditional-access.png" alt="Conditional Access coverage"><br>Conditional Access in plain words, and who each policy really covers</td>
     <td><img src="docs/screenshots/devices.png" alt="Devices"><br>Devices: Windows support dates, compliance, encryption, check-ins</td>
   </tr>
+  <tr>
+    <td><img src="docs/screenshots/licence-changes.png" alt="Licence changes"><br>Licence changes: who was given or lost a licence, and licences bought and assigned month by month</td>
+    <td><img src="docs/screenshots/mail-flow.png" alt="Mail flow by domain"><br>Mail flow by domain: mail received and sent, quarantined and failed mail, top spam and phishing recipients</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/teams.png" alt="Teams channels, guests and apps"><br>Teams: private and shared channels, the guests in them and the apps added</td>
+    <td><img src="docs/screenshots/admin-units.png" alt="Administrative units"><br>Administrative units: membership and who administers each unit</td>
+  </tr>
 </table>
 
 The full list (mailboxes, inbox rules, shared mailboxes, mailbox size and its trend, automatic replies, mobile
@@ -135,7 +157,7 @@ by name or by the job you're doing ("Offboarding check", "Insurance renewal", "S
 
 ![The Reports page: every report, searchable, grouped by job](docs/screenshots/reports-library.png)
 
-### One page per person
+### A page for every person, mailbox, group and site
 
 Everything about one account on one page: sign-in, MFA and methods, admin roles, licences and what they're used for,
 mailbox forwarding and delegates, devices, sharing, the administrative units it's in, and a "Needs attention" list,
@@ -153,6 +175,19 @@ licences), its mail and team site, how it's set up and what changed.
 And SharePoint sites: **Users > Sites** lists every site with its storage, sharing links and last activity, and
 each has a page with its storage and what fills it, how it's shared, the team behind it, its activity and what
 changed. Site addresses in reports and on group pages open it.
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/mailbox-page.png" alt="A shared mailbox's page"></td>
+    <td width="33%"><img src="docs/screenshots/group-page.png" alt="A team's page"></td>
+    <td width="33%"><img src="docs/screenshots/site-page.png" alt="A SharePoint site's page"></td>
+  </tr>
+  <tr>
+    <td>A shared mailbox: size, rules, who can open it</td>
+    <td>A team: owners, members and what membership gives</td>
+    <td>A site: storage, sharing, the team behind it and its findings</td>
+  </tr>
+</table>
 
 ### Across all clients, and what changed
 
@@ -206,6 +241,8 @@ accountability records) are judged the same way, and so are the **CIS Microsoft 
 questionnaire** packs turn the same data into answers in each form's wording, with a text to complete where
 Microsoft 365 can't answer; one written answer fills every pack.
 
+![The Evidence page: each pack's verdict, grouped by UK certification, insurance and supplier questionnaires, data protection and frameworks](docs/screenshots/evidence.png)
+
 <table>
   <tr>
     <td width="60%"><img src="docs/screenshots/cyber-essentials.png" alt="Cyber Essentials evidence"></td>
@@ -254,6 +291,17 @@ in: Administrator, Team leader, Second line, First line (looks things up, change
 takes away single capabilities, everywhere or on one client. Staff can sign in with their Microsoft work account,
 under your own Conditional Access and MFA, with their role assigned in Entra ([Staff
 sign-in](v2/docs/staff-sign-in.md)).
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/roles.png" alt="Roles"></td>
+    <td width="50%"><img src="docs/screenshots/staff-sign-in.png" alt="Staff sign-in"></td>
+  </tr>
+  <tr>
+    <td>Roles: what each kind of person can see and do</td>
+    <td>Staff sign-in: one button sets up sign-in with Microsoft</td>
+  </tr>
+</table>
 
 ### Managing clients
 

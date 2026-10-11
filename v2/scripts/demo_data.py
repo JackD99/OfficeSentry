@@ -1399,18 +1399,19 @@ def sharepoint(
                 )
             ]
         )
-        usage.append(
-            sharepoint_data._site(
-                url,
-                template,
-                activity=410 if slug == "old-projects" else rng.choice([0, 1, 2, 4]),
-                storage=size,
-                anyone=2 if slug == "marketing" else 0,
-                guest=1 if slug in ("finance", "clients") else 0,
-                company=3,
-                owner=t["people"]["ann"],
-            )
+        row = sharepoint_data._site(
+            url,
+            template,
+            activity=410 if slug == "old-projects" else rng.choice([0, 1, 2, 4]),
+            storage=size,
+            anyone=2 if slug == "marketing" else 0,
+            guest=1 if slug in ("finance", "clients") else 0,
+            company=3,
+            owner=t["people"]["ann"],
         )
+        # The helper makes the owner's address from the name it's given; give it this tenant's address instead.
+        row["ownerPrincipalName"] = f"{_local(t['people']['ann'])}@{t['base']}.{t['tld']}"
+        usage.append(row)
     # Shared files: the fixture's Finance library id and Ann's OneDrive (renamed), with this tenant's sharing.
     drives["site-fin"] = sharepoint_data.DRIVES["site-fin"]
     delta["drv-ann"] = sharepoint_data.DELTA["drv-ann"]
