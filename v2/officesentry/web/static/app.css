@@ -50,6 +50,8 @@ main { max-width: 1240px; margin: 0 auto; padding: 28px 32px 64px; }
 .crumbs a { color: var(--muted); }
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); margin-bottom: var(--space-5); flex-wrap: wrap; }
 .page-head .sub { color: var(--muted); margin-top: var(--space-1); }
+/* A long description wraps beside the page's actions rather than pushing them under the title. */
+.page-head > :first-child:not(:only-child) { flex: 1 1 20rem; min-width: 0; }
 .page-head .actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
 .tabs { display: flex; gap: var(--space-0-5); border-bottom: 1px solid var(--border); margin: -4px 0 24px; overflow-x: auto; scrollbar-width: none; }
 .tabs a { padding: 9px 12px; color: var(--muted); font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
@@ -198,7 +200,8 @@ details > summary { cursor: pointer; color: var(--accent); font-weight: 500; lis
 details > summary::-webkit-details-marker { display: none; }
 details[open] > summary { margin-bottom: var(--space-2-5); }
 pre.log { margin: 0; white-space: pre-wrap; font: .8125rem/1.5 var(--mono); max-height: 460px; overflow: auto; background: var(--sunken); padding: var(--space-3); border-radius: var(--radius-sm); }
-.log .warning { color: var(--warn); } .log .error { color: var(--bad); }
+/* --warn is a pill colour; on the log's background only the severity text colour meets AA. */
+.log .warning { color: var(--sev-medium); } .log .error { color: var(--bad); }
 .toolbar { display: flex; gap: var(--space-2-5); align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: var(--space-3-5); }
 form.accept { margin-top: var(--space-2-5); min-width: 240px; }
 .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: var(--space-6) var(--space-4); }
@@ -682,6 +685,7 @@ th.num button.sort { justify-content: flex-end; }
 .change-list li:last-child { border-bottom: 0; }
 .change-list .desc { display: block; color: var(--muted); font-size: var(--fs-sm); }
 .card-head.toolbar { margin-bottom: 0; }
+.card-head.toolbar > :first-child { flex: 1 1 16rem; min-width: 0; }
 @media (max-width: 640px) {
   .picker-form, .picker-form select { width: 100%; }
   .change-list li { padding: 9px 14px; }
@@ -878,7 +882,24 @@ details.menu[open] > summary { margin: 0; background: var(--sunken); }
 .filter-dot { display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
 /* The card lets menus overflow; the scroll box clips the table to the card's corners instead. */
 .card.flush.table-card { overflow: visible; }
-.table-scroll { overflow-x: auto; border-radius: 0 0 var(--radius) var(--radius); }
+.table-scroll { overflow-x: auto; border-radius: 0 0 var(--radius) var(--radius);
+  /* Shaded edges while there is more table to either side: the covers scroll with the content and hide the
+     shadows at the ends, the shadows stay put. */
+  background: linear-gradient(to right, var(--surface) 40%, transparent) 0 0, linear-gradient(to left, var(--surface) 40%, transparent) 100% 0,
+    radial-gradient(farthest-side at 0 50%, var(--scroll-shade), transparent) 0 0, radial-gradient(farthest-side at 100% 50%, var(--scroll-shade), transparent) 100% 0;
+  background-repeat: no-repeat; background-size: 48px 100%, 48px 100%, 16px 100%, 16px 100%; background-attachment: local, local, scroll, scroll; }
+@media (min-width: 641px) {
+  /* A wide table takes the width its columns need and scrolls sideways, instead of squeezing its text column. */
+  .table-scroll table { width: max-content; min-width: 100%; }
+  .table-scroll td.wrap { max-width: 28em; min-width: 8em; }
+  /* The first column (the flag and the name) stays in view while the rest scrolls. */
+  .table-scroll th.flagcol, .table-scroll td.flagcol { width: 5.5rem; min-width: 5.5rem; box-sizing: border-box; }
+  .table-scroll td:first-child, .table-scroll :is(thead, tfoot) th:first-child, .table-scroll .flagcol + td, .table-scroll thead .flagcol + th { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+  .table-scroll .flagcol + td, .table-scroll thead .flagcol + th { left: 5.5rem; }
+  .table-scroll thead th:first-child, .table-scroll thead .flagcol + th { z-index: 3; }
+  .table-scroll :is(thead, tfoot) th:first-child, .table-scroll thead .flagcol + th { background: var(--surface-2); }
+  .table-scroll tbody tr:hover td:first-child, .table-scroll tbody tr:hover .flagcol + td { background: var(--surface-2); }
+}
 .table-scroll.tall { max-height: max(420px, calc(100vh - 140px - var(--pin-h, 0px))); overflow: auto; overscroll-behavior: contain; }
 .table-scroll thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
 th a.sort { color: inherit; display: inline-flex; align-items: center; gap: var(--space-1); }
@@ -1050,7 +1071,7 @@ a.chk:hover, a.chk:focus-visible { outline: 2px solid var(--accent); outline-off
   .tabs a { padding: 8px 9px; }
 }
 /* Links in running text are underlined, not told apart by colour alone. */
-main :is(p, .callout, .footnote, .help) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+main :is(p, .callout, .footnote, .help, .group-help) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
 /* Skip link: off screen until it gets keyboard focus. */
 .skip-link { position: absolute; left: 12px; top: -48px; z-index: 100; padding: var(--space-2) var(--space-3-5); border-radius: var(--radius-sm); background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: var(--shadow); }
 .skip-link:focus { top: 12px; }
@@ -1090,7 +1111,8 @@ textarea.commentary { width: 100%; min-height: 9em; }
 td .project-status { flex-wrap: nowrap; }
 
 /* Report tables grouped under collapsible headings (Findings, by check) */
-.subtabs a .n { margin-left: var(--space-1); font-size: var(--fs-xs); opacity: .7; font-variant-numeric: tabular-nums; }
+.subtabs a :is(.n, .count) { margin-left: var(--space-1); font-size: var(--fs-xs); font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }
+.subtabs a.active :is(.n, .count) { color: inherit; opacity: .8; }
 table.grouped tr.group-head th { padding: 0; background: var(--surface-2); border-top: 1px solid var(--border); text-transform: none; letter-spacing: 0; }
 table.grouped tbody.group:first-of-type tr.group-head th { border-top: 0; }
 .group-toggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: 9px 16px; border: 0; border-radius: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-base); font-weight: 600; text-align: left; cursor: pointer; }
@@ -1315,7 +1337,7 @@ button.layout-head { padding: 8px 10px; }
 
 /* -- Onboarding many clients (web/onboarding.py): tracker, import, send page ---------------- */
 .toolbar-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
-.toolbar-row .seg { margin-bottom: 0; }
+.toolbar-row :is(.seg, .subtabs) { margin-bottom: 0; }
 .onboarding-table td:first-child, .onboarding-table th:first-child { width: 1%; }
 .action-row .hint { align-self: center; }
 @media (max-width: 640px) {  /* each tenant a card: tick box beside the name, then the details */

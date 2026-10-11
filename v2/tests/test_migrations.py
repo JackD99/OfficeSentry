@@ -2,6 +2,7 @@
 
 import re
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -48,6 +49,7 @@ def test_two_migrations_with_one_number_stop_the_upgrade(cfg, tmp_path, monkeypa
     # Nothing was applied, rather than 0002_c.sql being skipped without a word.
     assert schema_version(conn) == 0
     assert conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall() == []
+    conn.close()
 
 
 def _upgraded_then_rolled_back(cfg, monkeypatch):
@@ -77,6 +79,7 @@ def test_older_code_refuses_a_newer_database(cfg, monkeypatch):
     # The portal and the worker both migrate when they start, so neither runs old code on the new schema.
     with pytest.raises(db_module.DatabaseTooNew):
         create_app(cfg)
+    conn.close()
 
 
 def test_the_refusal_points_at_the_backups_folder_when_no_copy_fits(cfg, monkeypatch):
@@ -86,11 +89,12 @@ def test_the_refusal_points_at_the_backups_folder_when_no_copy_fits(cfg, monkeyp
     conn.execute(f"PRAGMA user_version = {latest + 1}")
     with pytest.raises(db_module.DatabaseTooNew, match=re.escape(str(cfg.data_dir / "backups"))):
         migrate(conn)
+    conn.close()
 
-    memory = sqlite3.connect(":memory:")
-    memory.execute(f"PRAGMA user_version = {latest + 1}")
-    with pytest.raises(db_module.DatabaseTooNew, match="pre-upgrade"):
-        migrate(memory)
+    with closing(sqlite3.connect(":memory:")) as memory:
+        memory.execute(f"PRAGMA user_version = {latest + 1}")
+        with pytest.raises(db_module.DatabaseTooNew, match="pre-upgrade"):
+            migrate(memory)
 
 
 def test_restoring_the_pre_upgrade_copy_lets_older_code_start(env, monkeypatch, capsys):
@@ -99,6 +103,6 @@ def test_restoring_the_pre_upgrade_copy_lets_older_code_start(env, monkeypatch, 
     saved = next((env.data_dir / "backups").glob(f"pre-upgrade-v{old}-to-v{new}-*.db"))
     main(["restore", str(saved)])
     assert "Restored" in capsys.readouterr().out
-    conn = connect(env.db_path)
-    assert migrate(conn) == old
-    assert conn.execute("SELECT name FROM tenants").fetchone()[0] == "Old"
+    with closing(connect(env.db_path)) as conn:
+        assert migrate(conn) == old
+        assert conn.execute("SELECT name FROM tenants").fetchone()[0] == "Old"

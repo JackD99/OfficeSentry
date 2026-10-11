@@ -11,10 +11,12 @@ name: Browser tests
 on:
   pull_request:
     paths:
-      - 'v2/officesentry/web/templates/**'
-      - 'v2/officesentry/web/static/**'
-      - 'v2/officesentry/web/styleguide.py'
-      - 'v2/officesentry/reports/charts.py'
+      # What a page looks like comes from the templates and styles, but also from what the view and the
+      # report builder put on it, so a change to either runs the screenshots too.
+      - 'v2/officesentry/web/**'
+      - 'v2/officesentry/reports/**'
+      - 'v2/officesentry/home.py'
+      - 'v2/officesentry/month_end.py'
       - 'v2/scripts/screenshots.py'
       - 'v2/scripts/demo_data.py'
       - 'v2/tests/browser/**'

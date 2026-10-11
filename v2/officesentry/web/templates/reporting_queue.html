@@ -43,8 +43,8 @@
 {% endif %}
 {% endif %}
 
-<nav class="seg" aria-label="Show">
-  {% for key, name in filters.items() %}<a href="{{ url_for('reporting.queue', period=period, show=key or none) }}"{% if show == key %} aria-current="page"{% endif %}>{{ name }}<span class="count">{{ counts[key] }}</span></a>{% endfor %}
+<nav class="subtabs" aria-label="Show">
+  {% for key, name in filters.items() %}<a href="{{ url_for('reporting.queue', period=period, show=key or none) }}"{% if show == key %} class="active" aria-current="page"{% endif %}>{{ name }}<span class="n">{{ counts[key] }}</span></a>{% endfor %}
 </nav>
 
 <section class="card flush">

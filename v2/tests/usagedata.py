@@ -132,7 +132,7 @@ TEAMS = [
 ]
 
 
-def mock_usage(rsps, *, active=None, apps=None, status=200, copilot_status=200):
+def mock_usage(rsps, *, active=None, apps=None, status=200, copilot_status=200, concealed=False):
     def get(path, value, code=200):
         body = {"value": value} if code == 200 else {"error": {"code": "Forbidden", "message": "Denied"}}
         rsps.get(f"{BETA}/reports/{path}", json=body, status=code)
@@ -142,6 +142,10 @@ def mock_usage(rsps, *, active=None, apps=None, status=200, copilot_status=200):
     get("getOffice365ActivationsUserDetail", ACTIVATIONS)
     get("getEmailActivityUserDetail(period='D30')", EMAIL)
     get("getTeamsUserActivityUserDetail(period='D30')", TEAMS)
+    rsps.get(
+        f"{GRAPH_ROOT}/v1.0/admin/reportSettings",
+        json={"id": "reportSettings", "displayConcealedNames": concealed},
+    )
     body = {"value": []} if copilot_status == 200 else {"error": {"code": "BadRequest", "message": "Bad period"}}
     rsps.get(
         f"{BETA}/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period='D90')", json=body, status=copilot_status

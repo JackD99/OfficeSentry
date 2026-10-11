@@ -85,7 +85,7 @@ type that value next to the role under *Who can sign in → Custom roles from En
 They come after the built-in roles in the order above. Deleting a custom role removes its value too.
 
 New staff don't need an account made for them: their account appears on **Settings → Users** at their first
-sign-in. Then grant them clients on their user page as usual (or tick *All clients*, or a client group).
+sign-in. Then grant them clients on their user page as usual (or tick *Every client, including ones added later*, or a client group).
 
 Existing accounts are linked to a Microsoft account in one of two ways:
 

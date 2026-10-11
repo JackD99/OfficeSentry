@@ -94,12 +94,14 @@ def create_app(cfg: Config | None = None) -> Flask:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n, x_port=n, x_prefix=n)
 
     conn = connect(cfg.db_path)
-    migrate(conn)
-    if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
-        app.logger.warning(
-            "No admin account yet. To create one, open %s/setup?token=%s", cfg.base_url, setup_token(cfg.data_dir)
-        )
-    conn.close()
+    try:
+        migrate(conn)
+        if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is None:
+            app.logger.warning(
+                "No admin account yet. To create one, open %s/setup?token=%s", cfg.base_url, setup_token(cfg.data_dir)
+            )
+    finally:
+        conn.close()
 
     csrf.init_app(app)
     filters.register(app)
