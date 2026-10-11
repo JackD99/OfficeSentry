@@ -28,6 +28,7 @@ from flask import Blueprint, abort, g, render_template, request, url_for
 from .. import search_index
 from ..checks.apps import app_risks
 from ..reports import sign_in_reports
+from ..reports.group_page import group_type
 from ..reports.views import slug
 from ..search_index import KINDS
 from ..snapshot import TenantSnapshot
@@ -241,9 +242,24 @@ def _domain(t: Tenant, _org: dict, name: str) -> Hit:
     )
 
 
+def _group(t: Tenant, g: dict, _v: str) -> Hit:
+    words = [group_type(g).lower()]
+    if g.get("examined") and isinstance(g.get("memberCount"), int):
+        words.append(plural(g["memberCount"], "member"))
+    if g.get("guestCount"):
+        words.append(plural(g["guestCount"], "guest"))
+    return Hit(
+        "Group",
+        _text(g.get("displayName")) or g["_id"],
+        ", ".join(w for w in (_text(g.get("mail")), *words) if w),
+        url_for("group_pages.group", tenant_id=t.id, gid=g["_id"]),
+    )
+
+
 # How a match of each kind in ``search_index.KINDS`` is shown: (tenant, object, the value that matched).
 SHOW: dict[str, Callable[[Tenant, dict, str], Hit]] = {
     "person": _person,
+    "group": _group,
     "mailbox": _mailbox,
     "forwarding": _forwarding,
     "rule": _rule,

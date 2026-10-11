@@ -58,6 +58,7 @@ def _domain_names(org: dict) -> list[str]:
 # In the order results are listed within a tenant.
 KINDS: tuple[Kind, ...] = (
     Kind("person", "users", "user", lambda u: (u.get("displayName"), u.get("userPrincipalName"), u.get("mail"))),
+    Kind("group", "groups", "group", lambda g: (g.get("displayName"), g.get("mail"))),
     Kind(
         "mailbox",
         "mailboxes",

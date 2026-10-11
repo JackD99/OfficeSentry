@@ -134,31 +134,46 @@ def user_path(tenant_id: int, user_id: str) -> str:
 # How other things with a page of their own are named in reports: each function returns {lower-cased name
 # or address: page path} for one tenant's latest snapshot. Page modules add theirs on import
 # (``mailbox_page.py``, ...), and ``build()`` links every cell that is exactly one of those names.
-PAGE_INDEXES: list[Callable[[TenantSnapshot], dict[str, str]]] = []
+@dataclass(frozen=True)
+class PageIndex:
+    """How one kind of page's objects are named in reports: ``build(snap)`` gives lower-cased name -> page path.
+    ``where(table title, column)`` says which cells may be a name (None: any cell); a bare display name like
+    "Sales" is only linked in a column about groups, while an address is unmistakable anywhere."""
+
+    build: Callable[[TenantSnapshot], dict[str, str]]
+    where: Callable[[str, str], bool] | None = None
 
 
-def page_index(snap: TenantSnapshot) -> dict[str, str]:
-    out: dict[str, str] = {}
+PAGE_INDEXES: list[PageIndex] = []  # one per kind of page (mailbox_page, group_page, ...)
+
+
+def page_index(snap: TenantSnapshot) -> list[tuple[dict[str, str], Callable[[str, str], bool] | None]]:
+    """Every kind of page's names and where they may be linked, for ``link_pages``."""
+    out = []
     for index in PAGE_INDEXES:
         try:
-            found = index(snap)
+            found = index.build(snap)
         except Exception:  # one kind of page's odd data mustn't take every report down
-            logging.getLogger(__name__).exception("Page index %s failed", index.__module__)
+            logging.getLogger(__name__).exception("Page index %s failed", index.build.__module__)
             continue
-        for key, href in found.items():
-            out.setdefault(key, href)
+        if found:
+            out.append((found, index.where))
     return out
 
 
-def link_pages(sections: list[Section], index: dict[str, str]) -> None:
-    """Turn every plain-text cell that is exactly a name in ``index`` into a link to that page. Cells already
-    linked (people, files) are left alone."""
-    if not index:
+def link_pages(sections: list[Section], indexes: list[tuple[dict[str, str], Callable | None]]) -> None:
+    """Turn every plain-text cell that is exactly a name in an index into a link to that page. Cells already
+    linked (people, files) are left alone, and a name is only linked where its index says it may be."""
+    if not indexes:
         return
     for section in sections:
+        lookups: list[dict[str, str]] = []
+        for column in section.columns:
+            allowed = [names for names, where in indexes if where is None or where(section.title, column)]
+            lookups.append({k: v for names in reversed(allowed) for k, v in names.items()})
         for row in section.rows:
             for i, v in enumerate(row):
-                if type(v) is str and (href := index.get(v.lower())):
+                if i < len(lookups) and type(v) is str and (href := lookups[i].get(v.lower())):
                     row[i] = PageLink(v, href)
 
 
