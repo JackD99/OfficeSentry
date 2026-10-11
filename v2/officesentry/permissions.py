@@ -70,7 +70,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         "reports.activity", "Activity history", "Kept sign-in and audit history beyond Microsoft's 30 days.", "see"
     ),
     Capability(
-        "emails.view", "Emailed reports", "A client's report schedules, previews and report history.", "see", True
+        "emails.view",
+        "Emailed reports",
+        "A client's report schedules and report history; previews also need security findings.",
+        "see",
+        True,
     ),
     Capability("projects.view", "Recommended projects", "Projects and quick fixes worked out from the checks.", "see"),
     Capability("export", "Download files", "PDF, Excel and CSV downloads of what they can see.", "see", True),

@@ -19,7 +19,7 @@
       <td class="wrap"><span class="strong">{{ s.period_label or 'Sent by hand' }}</span>
         <span class="sub">{{ s.titles|join(' + ') }}{% if s.version > 1 %} · {{ 'issued' if s.trigger == 'approval' else 'sent' }} again (version {{ s.version }}){% endif %}{% if s.reason %} · {{ s.reason }}{% endif %}</span></td>
       <td data-label="Files" class="wrap">{% for f in s.files %}
-        <a href="{{ url_for('email.issued_report', tenant_id=tenant.id, report_id=f.id) }}" title="{{ f.filename }}{% if staff %} · SHA-256 {{ f.sha256 }}{% endif %}">{{ icon('download') }} {{ f.title }} ({{ f.format }}, {{ f.size_label }})</a>{% if not loop.last %}<br>{% endif %}
+        {% if downloads %}<a href="{{ url_for('email.issued_report', tenant_id=tenant.id, report_id=f.id) }}" title="{{ f.filename }}{% if staff %} · SHA-256 {{ f.sha256 }}{% endif %}">{{ icon('download') }} {{ f.title }} ({{ f.format }}, {{ f.size_label }})</a>{% else %}{{ f.title }} ({{ f.format }}, {{ f.size_label }}){% endif %}{% if not loop.last %}<br>{% endif %}
       {% endfor %}</td>
       {% if staff %}<td data-label="To" class="wrap small">{{ s.recipients }}{% if s.bcc %}<span class="sub">Hidden copy: {{ s.bcc }}</span>{% endif %}</td>{% endif %}
       <td data-label="Sent" class="nowrap">{{ ts(s.issued_at) }}{% if staff %}<span class="sub">{% if s.trigger == 'schedule' %}On schedule{% elif s.trigger == 'approval' %}Approved by {{ s.issued_by or 'someone' }}{% else %}By {{ s.issued_by or 'someone' }}{% endif %}</span>{% endif %}</td>

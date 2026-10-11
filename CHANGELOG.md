@@ -26,6 +26,20 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
   clients and sees every one; a role held by anyone who sees or does more than you can only be changed by an
   Administrator; the import preview, activity log and user list leave out other clients; and *Settings* and
   *System status* only work for someone who sees every client. The built-in roles were never affected.
+- **A report area someone can't open stays closed everywhere.** A role without a report area (an Account
+  manager has no identity reports, for example), or someone with an area taken away on one client, could
+  still get that area's reports through a scheduled email, the report history or a report design, and the
+  home pages counted findings they couldn't open. Now a schedule only sends reports its maker can open on
+  that client, and only someone who can open everything a schedule sends can change it; the report history
+  lists only reports the person can open and downloads need *Download files*; designs leave out tables the
+  viewer can't open; and the Clients, Today and Accounts pages and a client's home page count and show only
+  what the person may see. Every report email opens with the client's security summary, so setting one up,
+  changing it or previewing it, and previewing alerts, now needs *Security findings and reviews*: First line
+  no longer previews emails.
+- **Draft commentary waits for approval in every email.** For a client whose month-end reports wait for
+  approval, a monthly review attached to another scheduled email carried the month's commentary while it was
+  still in review. It now carries it once the month is approved. Clients also no longer see which member of
+  your team sent an email by hand, and staff-only notes follow *Review month-end reports* on each client.
 
 ## [2.2.0] - 2026-10-11
 

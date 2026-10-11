@@ -124,15 +124,22 @@ def dashboard():
             r["tenant"]["name"].lower(),
         )
     )
-    scores = [r["kpis"]["secure_score.pct"].value for r in rows if r["kpis"]["secure_score.pct"].value is not None]
+    # The tiles add up only the clients whose cells the person may see: findings, and Secure Score (tenant).
+    secure = [r for r in rows if can("reports.security", r["tenant"]["id"])]
+    scored = [r for r in rows if can("reports.tenant", r["tenant"]["id"])]
+    scores = [r["kpis"]["secure_score.pct"].value for r in scored if r["kpis"]["secure_score.pct"].value is not None]
+    trends = dashboard_trends(g.db, secure)
+    if scored != secure:
+        trends.pop("score_trend", None)
+        trends |= {k: v for k, v in dashboard_trends(g.db, scored).items() if k == "score_trend"}
     summary = {
         "up_to_date": sum(r["health"][0] == "ok" for r in rows),
-        "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in rows),
-        "severe": sum(r["counts"]["critical"] + r["counts"]["high"] for r in rows),
+        "urgent": sum(bool(r["counts"]["critical"] or r["counts"]["high"]) for r in secure),
+        "severe": sum(r["counts"]["critical"] + r["counts"]["high"] for r in secure),
         "avg_score": sum(scores) / len(scores) if scores else None,
         "scored": len(scores),
         "data_issues": sum(r["health"][0] in ("bad", "warn") for r in rows),
-        **dashboard_trends(g.db, rows),
+        **trends,
     }
     from .home import get_started
 

@@ -51,7 +51,16 @@ overview and DEPLOY.md for running it on a server.
   user list, import preview and activity log leave other clients out, and
   `permissions.EVERY_CLIENT` (settings, system status) never takes effect
   without every client (`roles.access_for`); `test_limited_roles.py` covers
-  each. A new capability is a `Capability` in `permissions.CAPABILITIES`,
+  each. A report area someone can't open on a client stays closed where a
+  page shows or sends a report from inside another: schedules only take
+  reports and saved views the person opens there (`web/email._needs`), and
+  only someone who opens all of a schedule's reports changes it; report
+  history downloads need `export` and the file's area; designs leave out
+  tables the viewer can't open (`designs.Context.opens`); Today
+  (`home.today(shows=)`), the dashboard tiles and the Accounts page count only
+  what the person sees; `test_report_areas_everywhere.py` covers each. A new
+  place that shows a report from inside another page checks its area the same
+  way. A new capability is a `Capability` in `permissions.CAPABILITIES`,
   added to the built-in roles that should hold it (`TEMPLATES`; the
   migration seeded those rows, so a later change to a template needs a
   migration of its own if existing installs should pick it up).
@@ -65,6 +74,9 @@ overview and DEPLOY.md for running it on a server.
   collector key or `"<collector>.<part>"`): the worker warns instead of
   running it, and reports and checks show it as unavailable with that reason.
 - **Credentials never touch disk as files** and are never sent to the browser.
+  `tests/test_no_secrets_downloadable.py` plants one of every kind of secret
+  and searches every page and download, as an admin, an analyst and a client,
+  for any of them; a new kind of secret gets planted there.
 - **Mock Graph with `responses`, never by replacing `GraphClient`.**
 - **Sessions are server-side** (`web/sessions.py`). To sign someone out, bump
   `users.session_version` or delete their `sessions` rows; never trust anything
@@ -667,8 +679,10 @@ recipients, SHA-256). Snapshot pruning doesn't touch it; it's kept until the
 admin's retention setting says otherwise (never under a year, and never a
 tenant's latest file of each report), is backed up with the database and goes with the tenant on delete. The
 tenant's Report history page (`/tenants/<id>/report-history`, linked from
-Emailed reports and the client home) lists and downloads them; clients see
-the files but not who they went to. Archiving never fails a send.
+Emailed reports and the client home) lists and downloads them (only files of
+reports the person opens on that client, downloads with `export`); clients see
+the files but not who they went to, and their delivery history doesn't name who
+on the team sent an email. Archiving never fails a send.
 
 ## Month-end reporting
 
@@ -695,8 +709,10 @@ month's commentary, the tenant's "What we recommend next" items
 (`finding_notes`, client-visible or staff-only). They reach the monthly review
 template as `month_end` from `month_end.report_context()`, passed by the route
 (`web/reporting.report_extras`), not the builder; staff-only notes only ever
-reach staff on the web page, never a client or any PDF. A client's live report shows none
-of it until the month is approved or sent (`report_context(..., approved_only=True)`).
+reach staff on the web page (with `month_end.review` on that client), never a client or any
+PDF. A client's live report shows none of it until the month is approved or sent
+(`report_context(..., approved_only=True)`), and nor does a review attached to any other
+scheduled email of a client whose reports wait for approval (`month_end.needs_approval`).
 
 Approving queues an `approve` task per client and month
 (`month_end.queue_approval`; bulk approval queues one per ticked client under

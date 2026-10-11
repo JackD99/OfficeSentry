@@ -44,7 +44,7 @@ def report_extras(tenant, *, page: bool) -> dict:
     """Template context for the monthly review page (``page``) or its PDF: this month's commentary,
     recommendations and notes. Staff-only notes only reach staff on the page; clients and PDFs never get them.
     Clients see none of it until the month is approved (or an automatic plan sent it)."""
-    staff = is_staff() and can("month_end.review")
+    staff = is_staff() and can("month_end.review", tenant["id"])
     period = _period_now()
     extras = month_end.report_context(g.db, tenant["id"], period, staff=staff and page, approved_only=not staff)
     if staff and page:
