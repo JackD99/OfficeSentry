@@ -37,6 +37,8 @@ ALLOWED = {
     "sso.py": "staff sign-in with Microsoft: the OpenID Connect token request, and creating the sign-in app in the "
     "MSP's own tenant from the setup wizard",
     "recording.py": "live-test's recording session passes on whatever method the caller used (GET)",
+    "docker_api.py": "the updater container's calls to this server's own Docker engine (pull a checked release, "
+    "restart the portal and worker), never to Microsoft",
 }
 
 

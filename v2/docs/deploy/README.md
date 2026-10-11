@@ -55,9 +55,16 @@ Whichever guide you follow, these hold. They explain most of the choices in the 
 - **Size.** At least 2 CPUs and 4 GB of memory for the two together, and disk by the number of clients
   ([How much disk](../../DEPLOY.md#how-much-disk)). The image is published for amd64 (Intel and AMD) and,
   from 2.1.0, arm64 (such as Ampere, AWS Graviton and Raspberry Pi 4 or 5).
-- **Network.** The server makes outbound HTTPS calls to Microsoft (sign-in, Graph and Exchange Online) and to
-  `ghcr.io` for updates. Nothing from Microsoft ever connects in: only the people using the portal need to
+- **Network.** The server makes outbound HTTPS calls to Microsoft (sign-in, Graph and Exchange Online), to
+  `ghcr.io` for updates, and once a day to `api.github.com` for the list of releases (*Settings → Updates*
+  can turn that off). Nothing from Microsoft ever connects in: only the people using the portal need to
   reach it, plus a client's administrator returning from Microsoft's consent page (`/consent/callback`).
+- **Updating.** Each guide says how: change the release and redeploy. *Settings → Updates* lists every new
+  release and what it asks of you. Its **Update button** needs the updater container that the release's
+  `docker-compose.yml` adds, run by Docker Compose from a folder on the server
+  ([The Update button](../../DEPLOY.md#the-update-button)), so it works on a plain Docker server and the cloud
+  guides built on one (Azure, AWS, other clouds), not under Portainer, another container manager, a NAS or
+  Kubernetes.
 - **Health checks.** `/health` answers 200 while the portal runs: use it for a platform's liveness and
   readiness checks. `/health/ready` also answers 503 when the worker, the database or the disk has a problem:
   use it for an uptime monitor ([Hear about problems without signing in](../../DEPLOY.md#hear-about-problems-without-signing-in)),

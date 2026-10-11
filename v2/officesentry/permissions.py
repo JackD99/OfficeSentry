@@ -107,6 +107,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability("activity_log.read", "Activity log", "Who did what in Office Sentry.", "run"),
     Capability("system.manage", "System status", "Health checks, the monitoring token and support.", "run"),
+    Capability(
+        "system.update",
+        "Install updates",
+        "Install a new release of Office Sentry with the Update button (the portal restarts).",
+        "run",
+    ),
 )
 BY_KEY: dict[str, Capability] = {c.key: c for c in CAPABILITIES}
 KEYS: tuple[str, ...] = tuple(BY_KEY)

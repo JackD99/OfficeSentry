@@ -32,6 +32,7 @@ lists the errors and their fixes.
 - [Mailboxes fail: Global Reader is missing](#mailboxes-fail-global-reader-is-missing)
 - [The background worker isn't running](#the-background-worker-isnt-running)
 - [Other sign-in errors (AADSTS codes)](#other-sign-in-errors-aadsts-codes)
+- [The Update button isn't offered, or an update didn't happen](#the-update-button-isnt-offered-or-an-update-didnt-happen)
 - [PDF buttons open a print window instead of a file](#pdf-buttons-open-a-print-window-instead-of-a-file)
 - [Asking for help](#asking-for-help)
 
@@ -195,6 +196,22 @@ page and the Manage page. The ones met most during setup:
 | `AADSTS53003` | A Conditional Access policy in the client's tenant blocks the app. | The client excludes Office Sentry's app from that policy, or allows your server's location. |
 | `AADSTS7000112` | The client disabled the app. | *Enterprise applications → (the app) → Properties → Enabled for users to sign in: Yes*. |
 | `AADSTS700024` | The server's clock is wrong. | Set the server's time to sync automatically. |
+
+## The Update button isn't offered, or an update didn't happen
+
+*Settings → Updates* says why under the release, and the updater's card says what it last saw. The
+usual reasons:
+
+| The page says | Fix |
+|---|---|
+| *Turn on the Update button* | The updater is off. Turn it on once ([The Update button](../DEPLOY.md#the-update-button)). |
+| *The updater isn't running* | It stopped, or the server restarted without it: `docker compose up -d updater`, then `docker compose logs --tail 50 updater` if it stops again. |
+| *The updater can't reach Docker* | The socket isn't where `docker-compose.yml` mounts it from. With rootless Docker, set `OFFICESENTRY_DOCKER_SOCKET` in `.env` (usually `/run/user/1000/docker.sock`) and run `docker compose up -d`. |
+| *This server builds Office Sentry from its source* | `COMPOSE_FILE` adds `docker-compose.build.yml`: update with `git pull` and `docker compose up -d --build` ([Updating](../DEPLOY.md#updating)). |
+| *The updater didn't pick up the request* | It wasn't running when Update was pressed. Start it and press Update again; a request is only acted on within ten minutes. |
+| *isn't signed by Office Sentry's release workflow, or the signature couldn't be checked* | Usually the server can't reach `ghcr.io` or `tuf-repo-cdn.sigstore.dev`; `docker compose logs updater` has cosign's answer. Nothing was installed. If the server can reach both, report it as a security issue ([SECURITY.md](../../SECURITY.md)). |
+| *Rolled back* | The new version didn't start, so the updater put the old one back, with the database from before. The message says what failed; `docker compose logs web` from the attempt has the rest. Tell us with a support package ([Getting help](getting-help.md)). |
+| *Failed* | Going back didn't work either. Follow [Rolling back an update](../DEPLOY.md#rolling-back-an-update) by hand. |
 
 ## PDF buttons open a print window instead of a file
 

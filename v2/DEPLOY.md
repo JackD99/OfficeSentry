@@ -672,10 +672,13 @@ Old backups are still encrypted with the old key.
 
 ## Updating
 
-Read the release's notes first ([releases](https://github.com/JackD99/OfficeSentry/releases),
-or `CHANGELOG.md`), above all **Action required**, **New Microsoft
-permissions** and **Database upgrade**. Then set the new version in `.env`
-(`OFFICESENTRY_VERSION=2.1.0`) and run:
+Read the release's notes first, above all **Action required**, **New Microsoft
+permissions** and **Database upgrade**. *Settings → Updates* shows them for every
+release since yours (Office Sentry asks GitHub for the list of releases once a
+day; nothing about your server is sent, and the page can turn it off); they're
+also on the [releases](https://github.com/JackD99/OfficeSentry/releases) page and
+in `CHANGELOG.md`. Then install it with the **Update button** (below), or by hand:
+set the new version in `.env` (`OFFICESENTRY_VERSION=2.1.0`) and run:
 
 ```bash
 docker compose pull
@@ -692,6 +695,80 @@ running shows at the foot of the menu and at `/health`.
 
 If the release notes change `docker-compose.yml` or `Caddyfile`, download
 the new ones as well; they are attached to every release.
+
+### The Update button
+
+From 2.3.0, *Settings → Updates* can install a release for you: it checks the
+release is genuine, downloads it, restarts the portal and the worker on it, and
+goes back to the version you had if the new one doesn't start. It does nothing
+until someone with *Install updates* (Administrators) presses **Update**, and
+never installs anything by itself.
+
+The installing is done by the **updater**, a small extra container that is off
+until you turn it on. It is the only part of Office Sentry given the Docker
+socket, which is as good as root on the server, and the folder with
+`docker-compose.yml`; the portal never gets either, and the updater takes
+nothing from the portal but the release number asked for. If your policy rules
+out giving a container the Docker socket, leave it off and update by hand.
+
+To turn it on, once:
+
+1. In the folder with `docker-compose.yml`, add `COMPOSE_PROFILES=updater` to `.env`, or add `updater`
+   to the `COMPOSE_PROFILES` line already there (`COMPOSE_PROFILES=https,updater`). Start Office Sentry
+   with `--profile https`? Put `COMPOSE_PROFILES=https,updater` in `.env` instead and leave the flag out
+   from now on: a `--profile` on the command line overrides the line in `.env`.
+2. If your `docker-compose.yml` came with a release before 2.3.0, download the one attached to the
+   newest release: it has the `updater` service.
+3. Run `docker compose up -d`. Within a minute *Settings → Updates* shows the updater as *Ready*.
+
+Pressing **Update** then:
+
+1. **Checks the release**: it's a published release of this repository on GitHub (not a draft or
+   pre-release), newer than yours with the same major version, and there's room on the disk for the
+   copy of the database an upgrade makes.
+2. **Verifies its signature**: the image GitHub's registry gives for that version must carry build
+   provenance signed by Office Sentry's own release workflow, naming the commit the release's tag points
+   at (checked with [cosign](https://github.com/sigstore/cosign)).
+3. **Downloads it** by its digest, so Docker checks every byte against what was verified.
+4. **Restarts on the new version**: the `OFFICESENTRY_VERSION` line in `.env` becomes the version and
+   the exact image it checked (`2.3.1@sha256:...`), and the old file is kept as `.env.before-update`;
+   then `docker compose up -d web worker`, the same as updating by hand. The portal is down until the new
+   one is up, longer while the database is upgraded (a `pre-upgrade-*` copy is made first, as always).
+5. **Checks it's working**: the portal and the worker must report healthy on exactly that image.
+6. **Restarts the updater** on the new version too.
+
+The page follows along, through the portal's restart, and the activity log records who asked for what
+and how it ended.
+
+If the new version doesn't start healthy, the updater **goes back by itself**: it stops both,
+puts `.env` back, restores the `pre-upgrade-*` copy when the database was upgraded (the upgraded one
+stays in `backups` as a `pre-restore-*` copy), starts the old version and waits for it to be healthy.
+An update cut off part way, by the server restarting, is finished or gone back the same way when the
+updater starts again. If going back fails too, the page says so: follow [Rolling back an
+update](#rolling-back-an-update).
+
+It won't install:
+
+- **a new major version** (3.0.0 on 2.x): read its notes and update by hand, since a major version
+  can need new files next to `docker-compose.yml`;
+- **an older version**: going back is [Rolling back an update](#rolling-back-an-update);
+- anything on a server that **builds Office Sentry from source** (`docker-compose.build.yml`) or runs
+  another image, or that doesn't run Office Sentry in Docker.
+
+**What it needs to reach.** The portal's daily check asks `api.github.com`. The updater asks
+`api.github.com` and `ghcr.io` (and Docker downloads from `ghcr.io` and
+`pkg-containers.githubusercontent.com`, as for any update), cosign reads Sigstore's keys from
+`tuf-repo-cdn.sigstore.dev`, and the first update downloads two helper images, pinned by digest:
+Docker's command line (which restarts the portal and the worker) from Docker Hub
+(`registry-1.docker.io`), and cosign from `ghcr.io`. Behind a proxy, `HTTPS_PROXY` and `NO_PROXY` in `.env` are used by the updater and the
+signature check; Docker's own downloads use Docker's proxy settings.
+
+**Rootless Docker**, or a socket somewhere else: set `OFFICESENTRY_DOCKER_SOCKET` in `.env` to its
+path (rootless Docker's is usually `/run/user/1000/docker.sock`).
+
+To turn it off, take `updater` out of `COMPOSE_PROFILES` and run
+`docker compose --profile updater rm --stop --force updater`. Updating by hand works the same with or
+without it, and a version pinned by the button (`2.3.1@sha256:...`) can be replaced by a plain one.
 
 ### When a release adds permissions
 
@@ -722,6 +799,9 @@ your own)? Add `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` to
 
 ### Rolling back an update
 
+The Update button does this by itself when a new version doesn't start. These are the steps by hand: for
+when it couldn't, for an update made by hand, or to go back later.
+
 Database upgrades only go forward, so going back to an older version means
 going back to the database from before the upgrade. Anything collected since
 the upgrade is lost. An older version started on the upgraded database
@@ -730,8 +810,8 @@ restore.
 
 1. `docker compose stop web worker`
 2. Go back to the version you had: set it in `.env` (`OFFICESENTRY_VERSION=2.0.0`)
-   and run `docker compose pull`. Building your own? `git checkout <commit>`
-   and `docker compose build`.
+   and run `docker compose pull`. After the Update button, `.env.before-update` is `.env` as it was
+   before. Building your own? `git checkout <commit>` and `docker compose build`.
 3. Restore the copy taken before the upgrade. Its name ends with the version
    that made it (`-from-2.0.0`), when it was made by 2.0.0 or later:
 

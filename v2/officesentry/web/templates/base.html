@@ -22,7 +22,7 @@
                    ('retention.settings', 'Data retention', [], 'settings.manage'), ('admin.users', 'Users', ['admin.edit_user', 'roles.index', 'roles.edit'], 'users.manage'),
                    ('sso.settings_page', 'Staff sign-in', [], 'settings.manage'),
                    ('activity.index', 'Activity log', [], 'activity_log.read'), ('system.status', 'System status', [], 'system.manage'),
-                   ('support.index', 'Support', [], 'system.manage')] %}
+                   ('support.index', 'Support', [], 'system.manage'), ('updates.index', 'Updates', [], 'system.update')] %}
 {% set SETTINGS = [] %}
 {% for entry in ALL_SETTINGS %}{% if current_user and (not entry[3] or can(entry[3])) %}{% set _ = SETTINGS.append(entry) %}{% endif %}{% endfor %}
 {% set SETTINGS_ENDPOINTS = SETTINGS|map(attribute=0)|list + SETTINGS|map(attribute=2)|sum(start=[]) %}
@@ -93,7 +93,8 @@
 {%- endmacro %}
 {#- Signed-in pages say which version is running, for support and after an update; the sign-in page doesn't. -#}
 {% macro powered_by(version=false) -%}
-{% if version %}<p class="powered-by">{% if brand.name or brand.logo %}Powered by {% endif %}Office Sentry <span class="app-version">{{ app_version }}</span></p>
+{% if version %}<p class="powered-by">{% if brand.name or brand.logo %}Powered by {% endif %}Office Sentry <span class="app-version">{{ app_version }}</span>
+  {%- if update_available %}<a class="update-note" href="{{ url_for('updates.index') }}">{{ update_available.version }} is available</a>{% endif %}</p>
 {%- elif brand.name or brand.logo %}<p class="powered-by">Powered by Office Sentry</p>{% endif %}
 {%- endmacro %}
 
@@ -118,7 +119,7 @@
       Three fictional clients with made-up people. Look around freely: nothing can be changed, and it all resets every night.</span>
       {%- if public_demo_link %}<a class="btn sm primary" href="{{ public_demo_link }}">Get Office Sentry</a>{% endif %}</div>{% endif %}
     <main id="main" tabindex="-1">
-      {% if worker_down and request.endpoint != 'system.status' %}<div class="callout warn" role="status">{{ icon('alert') }}<span class="grow"><strong>The background worker isn't running.</strong>
+      {% if worker_down and request.endpoint != 'system.status' and not update_running %}<div class="callout warn" role="status">{{ icon('alert') }}<span class="grow"><strong>The background worker isn't running.</strong>
         Clients won't be collected and scheduled emails won't be sent until it is. With Docker, run <code class="nowrap">docker compose up -d</code> on the server.</span><a class="btn sm" href="{{ url_for('system.status') }}">System status</a></div>{% endif %}
       {% for e in expiring_certificates %}<div class="callout {{ e.tone }}" role="status">{{ icon('alert') }}<span class="grow"><strong>{{ e.headline }}</strong>
         {{ e.consequence }}</span>{% if e.kind == 'mail' %}<a class="btn sm" href="{{ url_for('email.settings') }}">Renew it</a>{% elif e.kind == 'sign_in' %}<a class="btn sm" href="{{ url_for('sso.settings_page') }}">{{ 'Finish replacing it' if e.replacing else 'Replace it' }}</a>{% elif e.replacing %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Finish replacing it</a>{% else %}<a class="btn sm" href="{{ url_for('admin.connections') }}#conn-{{ e.id }}">Replace it</a>{% endif %}</div>{% endfor %}

@@ -89,6 +89,7 @@ little as possible with that access. Details and code references are in
 | Secrets | Session key and encryption key are separate. `python -m officesentry rotate-keys` re-encrypts every encrypted value (the app's certificate keys, the staff sign-in certificate key, two-step secrets and the recovery code key, mail credentials, the alert webhook and its signing secret, and the setup wizard's sign-in code while it waits) and refuses if it finds one it doesn't know. Generated secrets are written with mode `0600`. |
 | PDFs | Rendered by WeasyPrint with a URL fetcher that only loads the app's own static files and `data:` URIs: no other files, no network. |
 | Outbound requests | Webhooks and MTA-STS fetches are HTTPS only, refuse internal addresses and connect to the address that was checked (no DNS rebinding). The SMTP password is never sent without TLS, except to a relay on the same machine. |
+| Updates | The portal reads the list of releases from GitHub's API once a day (an admin can turn it off) and never installs anything. The optional **updater** container (`updater.py`, off until turned on in `.env`) installs a release when someone with *Install updates* presses Update. It is the only container given the Docker socket and the folder with `docker-compose.yml`, has no ports, and takes one thing from the portal: the release number asked for, in a file on the data volume, ignored once ten minutes old. Its own record of an update in progress is in a volume the portal can't reach. It installs only a published release of this repository (not a draft or pre-release) that is newer than the one running with the same major version, only once cosign has verified the image's build provenance was signed by this repository's `release.yml` (GitHub's OIDC issuer, run from `main` or a `v*` tag) for the commit the release's tag points at, and it pulls and runs exactly that digest. So the most a compromised portal can do is ask for a newer, genuine release. Its helpers, Docker's command line (with no network) and cosign (read-only, every capability dropped), are pinned by digest. |
 
 ### Data retention
 
@@ -167,6 +168,9 @@ place, but nobody can sign in with the old one.
   user, with every capability dropped and a process limit. Set `OFFICESENTRY_TRUSTED_PROXIES` to the number of proxies
   in front (1 for the bundled Caddy) so sign-in limits and the activity log
   see real client addresses.
+- The Update button's updater container is given the Docker socket, which is as good as root on the
+  server. It's off unless you turn it on (`COMPOSE_PROFILES=updater`); leave it off, and update by hand,
+  if your policy rules out a container with the socket (`v2/DEPLOY.md`, "The Update button").
 - Only use `OFFICESENTRY_INSECURE_COOKIES=1` for local development over HTTP.
   [Securing the portal](v2/docs/securing-the-portal.md) has the full list of
   what the portal does by itself, what the person running it has to do, and

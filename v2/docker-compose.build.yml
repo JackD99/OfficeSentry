@@ -13,3 +13,4 @@ x-build: &build
 services:
   web: *build
   worker: *build
+  updater: *build

@@ -26,7 +26,8 @@ The same docs are on the website with search: [officesentry.co.uk/docs](https://
 ## Before you report a bug
 
 1. **Update first.** Fixes only go into the newest release ([CHANGELOG.md](CHANGELOG.md) lists them). The
-   version is at the foot of the portal's menu and in `/health`.
+   version is at the foot of the portal's menu and in `/health`, and *Settings → Updates* says whether a newer
+   one is out.
 2. **Check Troubleshooting** for the error text. Most setup problems are there with the fix.
 3. **Get the support package.** In the portal, open **Settings → Support** and download the support
    package: one zip with the versions, health, settings, database and disk sizes and the recent log of your

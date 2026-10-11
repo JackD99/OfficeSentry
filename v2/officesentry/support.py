@@ -70,6 +70,10 @@ PLAIN_SETTINGS = (
     "alerts.on_reports",
     "public_demo",
     "worker_seen_at",
+    "updates.check",
+    "updates.checked_at",
+    "updates.check_error",
+    "updates.audited_job",
 )
 PLAIN_SETTING_PREFIXES = ("retention.", "state_history.", "system_alert.")
 
@@ -286,6 +290,12 @@ def build(
         f"The last {MAX_ACTIVITY} actions in the activity log, without who or from where",
         lambda: _activity(conn, redact, include_identifiers),
         lambda d: f"{len(d)} actions",
+    )
+    part(
+        "updates.json",
+        "Updates",
+        "Whether the updater is running and can update this server, and its last update step by step",
+        lambda: _updates(data_dir, redact, now),
     )
     part("packages.txt", "Installed packages", "Every Python package and its version", _packages)
     for process in logs.PROCESSES:
@@ -551,6 +561,33 @@ def _failures(conn, redact: Redactor, now: datetime) -> dict:
     return {"since": since, "failed_runs_by_collector": by_collector, "runs": runs, "tasks": tasks}
 
 
+def _updates(data_dir: Path, redact, now: datetime) -> dict:
+    """What the updater last said (``updates.py``), without the server's folder or who asked."""
+    from . import updates
+
+    state = updates.status(data_dir, now)
+    job = state.job
+    return {
+        "updater_running": state.connected,
+        "seen_at": state.seen_at,
+        "version": state.version,
+        "can_update": state.ready,
+        "problem": redact(state.problem),
+        "last_update": {
+            "from": job.current,
+            "to": job.target,
+            "state": job.state,
+            "message": redact(job.message),
+            "started_at": job.started_at,
+            "finished_at": job.finished_at,
+            "restarted_updater": job.restarted_updater,
+            "steps": [{"step": s.key, "state": s.state, "detail": redact(s.detail)} for s in job.steps],
+        }
+        if job
+        else None,
+    }
+
+
 def _worker(conn, now: datetime) -> dict:
     if conn is None:
         raise RuntimeError("the database couldn't be opened")
@@ -721,6 +758,7 @@ PARTS = [
     ("Worker and queue", "the worker's last heartbeat, what's queued and running"),
     ("App connections", "each connection's cloud and certificate dates, never the certificate or key"),
     ("Recent activity", f"the last {MAX_ACTIVITY} actions in the activity log, without who or from where"),
+    ("Updates", "whether the updater is running, and its last update step by step"),
     ("Installed packages", "every Python package and its version"),
     ("Portal and worker logs", f"the last {LOG_TAIL_BYTES // 1024} KB of each, swept for names, addresses and tokens"),
 ]

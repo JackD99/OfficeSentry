@@ -596,7 +596,9 @@ docker compose --profile https up -d
 That runs the published release image. To run this folder's code instead,
 add `docker-compose.build.yml` (`-f docker-compose.yml -f
 docker-compose.build.yml up -d --build`). [DEPLOY.md](DEPLOY.md) has the full
-steps: HTTPS, schedule and retention settings, backups and updating.
+steps: HTTPS, schedule and retention settings, backups and updating, by hand
+or with the optional Update button (*Settings → Updates*, `updates.py`, and
+the `updater` container, `updater.py`).
 
 Create the first admin:
 
@@ -786,5 +788,8 @@ officesentry/
   search_index.py  the sidebar search's index, kept by the worker
   logs.py        rolling logs in <data dir>/logs, with request, run and task context
   support.py     the support package, with secrets and client names taken out
+  updates.py     the daily release check, and the files the portal and the updater share
+  updater.py     the updater container: checks a release's signature, installs it, goes back if it fails
+  docker_api.py  the updater's client for the server's Docker engine
   web/           Flask app: access.py is the single authorization gate
 ```

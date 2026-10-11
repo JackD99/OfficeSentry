@@ -9,6 +9,31 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 "Updating"](v2/DEPLOY.md#updating). How releases are made: [CONTRIBUTING.md,
 "Releases"](CONTRIBUTING.md#releases).
 
+## [2.3.0] - Unreleased
+
+### Added
+
+- **Settings → Updates** lists every release newer than yours with its notes, what each asks of you first
+  (Action required, New Microsoft permissions, Database upgrade, Security), and an **Update** button that
+  installs it. The button checks the release is genuine, with build provenance signed by Office Sentry's
+  release workflow on GitHub, downloads exactly that image, restarts the portal and the worker on it and, if
+  the new version doesn't start healthy, goes back to the old one by itself, database included. The page
+  follows the update through the portal's restart, and the activity log records who asked and how it ended.
+  Nothing installs unless an admin presses the button. Office Sentry asks GitHub for the list of releases
+  once a day (nothing about your server is sent, and the page can turn it off), and the foot of the menu
+  says when one is out.
+- The button needs the **updater**, a small container that is off until you turn it on with
+  `COMPOSE_PROFILES=updater` in `.env`, using this release's `docker-compose.yml`. It is the only part of
+  Office Sentry given the Docker socket; the portal never is. Updating by hand works as before, with or
+  without it ([v2/DEPLOY.md, "The Update button"](v2/DEPLOY.md#the-update-button)).
+- A capability for it, *Install updates*, held by Administrators and available to custom roles.
+
+### Fixed
+
+- An upgrade tried again within an hour of going back to the old version now copies the database again
+  first. Before, it reused the first attempt's copy, so going back a second time lost what was written in
+  between.
+
 ## [2.2.1] - Unreleased
 
 ### Fixed
@@ -726,6 +751,7 @@ first, then upgrades it on start. New installs start with an empty database.
   downloadable.
 - Dependencies are installed from a hash-pinned lock file, and base images are pinned by digest.
 
+[2.3.0]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.1]: https://github.com/JackD99/OfficeSentry/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/JackD99/OfficeSentry/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/JackD99/OfficeSentry/compare/v2.0.0...v2.1.0

@@ -30,6 +30,7 @@ MENU = (
     ("App connection, email delivery, alerts, branding, licence prices, data retention", ("settings.manage",)),
     ("Activity log", ("activity_log.read",)),
     ("System status", ("system.manage",)),
+    ("Updates", ("system.update",)),
 )
 # A client's tabs (``_macros.tenant_header``), for both kinds.
 TABS = (

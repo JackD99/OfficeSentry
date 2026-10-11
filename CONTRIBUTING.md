@@ -72,6 +72,14 @@ CI fails (`pip check`, `tests/test_release.py`) when a lock no longer
 matches `pyproject.toml`. The Windows tier installs from `pyproject.toml`
 directly, since the locks are made for Linux.
 
+The updater's two helper images, Docker's command line and cosign
+(`COMPOSE_IMAGE` and `COSIGN_IMAGE` in `v2/officesentry/updater.py`), are
+pinned by digest in the code, where Dependabot doesn't look. Move them by
+hand when Docker or cosign publish a release worth having, with the digest of
+the multi-platform image (`docker buildx imagetools inspect docker:<version>-cli`),
+and try an update and a rollback with the new ones before merging. Each release
+brings its own pins, so a change reaches people with their next update.
+
 ## Before opening a pull request
 
 ```bash

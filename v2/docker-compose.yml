@@ -76,6 +76,30 @@ services:
     security_opt: ["no-new-privileges:true"]
     pids_limit: 256
 
+  # Optional: the Update button (Settings > Updates). Turn it on once with
+  # COMPOSE_PROFILES=updater in .env, then docker compose up -d (DEPLOY.md,
+  # "Updating"). It installs a release only when an admin presses Update, after
+  # checking the release's signature, and puts the old version back by itself
+  # if the new one doesn't start. It is the only container given the Docker
+  # socket (which is root on this server) and this folder, to change
+  # OFFICESENTRY_VERSION in .env and restart web and worker; the portal never
+  # gets either. It has no ports and takes nothing but a release number from
+  # the portal. Updating by hand keeps working with or without it.
+  updater:
+    <<: *officesentry
+    profiles: ["updater"]
+    command: ["python", "-m", "officesentry", "updater"]
+    # Root in its container, to use the socket and to write .env as its owner
+    # left it, with only the powers that takes.
+    user: "0:0"
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    volumes:
+      - officesentry-data:/data
+      - updater-state:/state
+      - .:/project
+      # Rootless Docker, or a socket elsewhere: set OFFICESENTRY_DOCKER_SOCKET in .env.
+      - ${OFFICESENTRY_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+
   # Optional encrypted off-site backups with restic (https://restic.net) to any
   # S3-compatible storage, set in .env.backup. Never runs by itself:
   # deploy/backups.sh runs it after each nightly backup (DEPLOY.md, "Off-site
@@ -97,6 +121,7 @@ services:
 volumes:
   officesentry-data:
   officesentry-keys:
+  updater-state:
   caddy-data:
   caddy-config:
   restic-cache:
