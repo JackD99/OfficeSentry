@@ -71,7 +71,8 @@ def pytest_collection_modifyitems(config, items):
     out = config.getoption("--shard-list")
     if out and getattr(config, "workerinput", {}).get("workerid", "gw0") == "gw0":
         tests = [item.nodeid for item in kept]
-        Path(out).write_text(json.dumps({"part": part, "parts": parts, "collected": total, "tests": tests}))
+        data = {"part": part, "parts": parts, "collected": total, "tests": tests}
+        Path(out).write_text(json.dumps(data), encoding="utf-8")
 
 
 @pytest.fixture(autouse=True)

@@ -28,7 +28,7 @@ def test_each_test_is_in_exactly_one_part_of_about_the_same_size():
 
 def _write(tmp_path, name, part, parts, collected, tests):
     (tmp_path / f"{name}-{part}.json").write_text(
-        json.dumps({"part": part, "parts": parts, "collected": collected, "tests": tests})
+        json.dumps({"part": part, "parts": parts, "collected": collected, "tests": tests}), encoding="utf-8"
     )
 
 
@@ -57,7 +57,7 @@ def test_check_passes_when_the_parts_hold_every_test_once(tmp_path):
 def test_check_fails_when_a_test_is_missing_or_twice(tmp_path, parts, message):
     for n, part in enumerate(parts):
         (tmp_path / f"tests-3.12-{n}.json").write_text(
-            json.dumps(dict(zip(("part", "parts", "collected", "tests"), part, strict=True)))
+            json.dumps(dict(zip(("part", "parts", "collected", "tests"), part, strict=True))), encoding="utf-8"
         )
     with pytest.raises(ValueError, match=re.escape(message)):
         check_shards.check(list(tmp_path.glob("*.json")))
