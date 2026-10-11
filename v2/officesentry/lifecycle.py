@@ -7,7 +7,10 @@
   dashboards, rollups, digests and clients. Admins can restore it.
 * **Deleted**: the tenant and everything stored for it, in one transaction with
   foreign keys on, checked afterwards for anything left behind. Activity log
-  lines stay (they record who did what).
+  lines stay (they record who did what). The ``erase`` task then removes its
+  activity history and the deleted pages' last copies from the files on disk
+  (``erase``); a failure shows on System status, is alerted and audited, and
+  is tried again every hour.
 
 None of this touches the client's Microsoft 365 tenant; removing the app there
 is done by the client (see docs/what-office-sentry-reads.md).
@@ -16,11 +19,18 @@ is done by the client (see docs/what-office-sentry-reads.md).
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+import time
+from datetime import UTC, datetime, timedelta
 
-from . import events
+from . import events, packing, schedule, tasks
+from .backups import database_file
 from .db import audit, transaction, utcnow
+from .devices import parse_ts
 from .text import plural
+
+log = logging.getLogger(__name__)
 
 # Tables with a tenant_id that are kept on purpose when a tenant is deleted.
 KEPT = {"audit_log"}
@@ -166,20 +176,14 @@ def delete_tenant(conn, tenant, user: str, delete_users: list[int] = ()) -> dict
     unknown = set(delete_users) - set(allowed)
     if unknown:
         raise DeleteError("only client accounts with no other tenant can be deleted with it")
-    # The activity history is in its own files: its key goes with the tenant (ON DELETE CASCADE), and its rows
-    # are deleted right after. If that stops part-way, the daily retention pass sweeps up rows with no key.
-    key, base = events.tenant_key(conn, tenant["id"]), events.root(conn)
-    # Overwrite deleted content in the file instead of leaving it in free pages (see erase_freed_pages).
+    # Overwrite deleted content with zeros instead of leaving it in free pages. The old pages stay in the file
+    # until the write-ahead log is written back, which the erase task does (see ``erase``).
     previous = conn.execute("PRAGMA secure_delete").fetchone()[0]
     conn.execute("PRAGMA secure_delete = ON")
     try:
-        removed = _delete(conn, tenant, user, delete_users, allowed)
+        return _delete(conn, tenant, user, delete_users, allowed)
     finally:
         conn.execute(f"PRAGMA secure_delete = {('OFF', 'ON', 'FAST')[int(previous)]}")
-    if key is not None:
-        events.delete_tenant(base, key)
-    erase_freed_pages(conn)
-    return removed
 
 
 # Audit actions whose detail can name the client's people (UPNs, email addresses, delivery errors).
@@ -217,18 +221,6 @@ def _scrub_audit(conn, tenant_id: int, deleted_users: dict[int, str]) -> None:
         )
 
 
-def erase_freed_pages(conn) -> bool:
-    """Best effort, after a delete: rebuild the file and empty the write-ahead log, so deleted rows
-    can't be read from free pages or old WAL frames. Backups made before keep the data until they
-    rotate out. Returns False if another connection kept it from finishing (try again later)."""
-    try:
-        conn.execute("VACUUM")
-        busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
-    except sqlite3.Error:
-        return False
-    return not busy
-
-
 def _delete(conn, tenant, user: str, delete_users, allowed: dict[int, str]) -> dict:
     with transaction(conn, immediate=True):
         removed = stored(conn, tenant["id"])
@@ -250,4 +242,139 @@ def _delete(conn, tenant, user: str, delete_users, allowed: dict[int, str]) -> d
         if names:
             detail += "; client accounts deleted: " + ", ".join(names)
         audit(conn, user, "tenant_deleted", tenant["id"], detail)
+        request_erase(conn, user)
     return removed
+
+
+# -- Erasing what a delete leaves on disk ------------------------------------------------------------
+#
+# The delete itself is one quick transaction. What it leaves is slow to clear, so it's the ``erase`` task's
+# job, never the request's: the tenant's activity history rows (its key went with the tenant, so
+# ``events.sweep`` finds them), the deleted rows' old pages, which stay in the database file until the
+# write-ahead log is written back, and the free pages, which VACUUM gives back to the disk when there's room
+# for its copy. The settings row ``erase.state`` says a delete is waiting, and how the last try went:
+#
+#   {"requested": "<oldest delete waiting>", "deletes": <deletes so far>, "tried": <deletes when the last try
+#    started>, "attempted": "<when it started>", "error": "<why it failed>" or null}
+#
+# It's removed once a try that started after the last delete finishes (counted, not timed, so two in one
+# second can't be confused). The ``erase`` periodic job queues the task again when that hasn't happened: a
+# delete during a try, a worker that died, or a failure an hour ago.
+# Backups made before the delete keep the data until they rotate out (DEPLOY.md, "Backups").
+
+ERASE_STATE = "erase.state"
+ERASE_TASK = "erase"
+ERASE_RETRY = timedelta(hours=1)
+CHECKPOINT_TRIES = 6  # a reader holding the write-ahead log stops it being emptied: wait for it this many times
+CHECKPOINT_WAIT = 10  # seconds
+
+
+class EraseError(Exception):
+    pass
+
+
+def erase_state(conn) -> dict | None:
+    """The waiting erase (see above), or None when everything deleted has been erased."""
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (ERASE_STATE,)).fetchone()
+    try:
+        state = json.loads(row[0]) if row else None
+    except ValueError:
+        return None
+    return state if isinstance(state, dict) and state.get("requested") else None
+
+
+def _save_state(conn, state: dict) -> None:
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (ERASE_STATE, json.dumps(state)),
+    )
+
+
+def request_erase(conn, user: str | None = None) -> None:
+    """Note that a delete left something to erase, and queue the task. Works inside the delete's transaction."""
+    state = erase_state(conn) or {"requested": utcnow()}
+    _save_state(conn, {**state, "deletes": int(state.get("deletes") or 0) + 1})
+    tasks.enqueue(conn, ERASE_TASK, key=ERASE_TASK, user=user)
+
+
+def erase(conn, progress=lambda _text: None) -> str:
+    """Remove what deleted tenants left on disk. Returns a note for the activity log ("" when there's nothing
+    to say); raises EraseError, with words for people, when deleted data may still be readable."""
+    progress("Removing the activity history of deleted tenants")
+    try:
+        rows = events.sweep(conn)
+    except (OSError, sqlite3.Error) as exc:
+        raise EraseError(f"the activity history couldn't be cleaned: {exc}") from exc
+    notes = [f"{plural(rows, 'activity history row')} removed"] if rows else []
+    db_file = database_file(conn)
+    if db_file is not None:
+        # Deleted rows are already zeros in the database (secure_delete), so a VACUUM only gives the free
+        # pages back to the disk: skipped, and said, when there's no room for its copy.
+        needed, free = packing.vacuum_room(conn, db_file)
+        if free < needed:
+            notes.append(
+                f"the file wasn't shrunk: that needs about {needed // 2**20:,} MB free and there's {free // 2**20:,} MB"
+            )
+        else:
+            progress("Rebuilding the database file")
+            try:
+                packing.vacuum(conn, db_file)
+            except sqlite3.OperationalError as exc:
+                notes.append(f"the file wasn't shrunk: {exc}")
+    progress("Writing the database's log back")
+    for attempt in range(CHECKPOINT_TRIES):
+        if not conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]:
+            break
+        if attempt + 1 < CHECKPOINT_TRIES:
+            time.sleep(CHECKPOINT_WAIT)
+    else:
+        raise EraseError(
+            "the portal or worker kept the database busy, so the deleted data's last copies couldn't be "
+            "cleared from its log file"
+        )
+    return "; ".join(notes)
+
+
+@tasks.handler(ERASE_TASK)
+def _erase_task(ctx: tasks.TaskContext) -> dict:
+    user = ctx.task["requested_by"] or "worker"
+    with transaction(ctx.conn):
+        state = erase_state(ctx.conn) or {"requested": utcnow(), "deletes": 0}
+        tried = int(state.get("deletes") or 0)
+        _save_state(ctx.conn, {**state, "attempted": utcnow(), "tried": tried})
+    try:
+        note = erase(ctx.conn, ctx.progress)
+    except EraseError as exc:
+        problem = str(exc)[0].upper() + str(exc)[1:]
+        with transaction(ctx.conn):
+            if state := erase_state(ctx.conn):
+                _save_state(ctx.conn, {**state, "error": problem})
+            audit(ctx.conn, user, "tenant_erase_failed", None, problem)
+        raise tasks.TaskFailed(problem) from exc
+    with transaction(ctx.conn):
+        state = erase_state(ctx.conn)
+        if state and int(state.get("deletes") or 0) <= tried:
+            ctx.conn.execute("DELETE FROM settings WHERE key = ?", (ERASE_STATE,))
+        elif state:  # deleted again while this ran: the periodic job queues another try
+            _save_state(ctx.conn, {**state, "error": None})
+        audit(ctx.conn, user, "tenant_data_erased", None, note or "Deleted data erased from the files on disk")
+    return {"note": note}
+
+
+@schedule.periodic("erase")
+def _erase_job(ctx: schedule.TickContext) -> None:
+    """Queue the erase task again when a delete is still waiting for one (see above)."""
+    state = erase_state(ctx.conn)
+    if state is None or tasks.pending(ctx.conn, ERASE_TASK):
+        return
+    attempted = parse_ts(state.get("attempted"))
+    if attempted and state.get("tried") == state.get("deletes"):
+        if not state.get("error") or ctx.now - attempted < ERASE_RETRY:
+            return
+    tasks.enqueue(ctx.conn, ERASE_TASK, key=ERASE_TASK)
+
+
+def erase_waiting(state: dict | None, now: datetime | None = None) -> timedelta | None:
+    """How long the oldest delete has waited to be erased, or None when nothing is waiting."""
+    since = parse_ts(state.get("requested")) if state else None
+    return (now or datetime.now(UTC)) - since if since else None

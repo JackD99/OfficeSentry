@@ -15,13 +15,15 @@ Everything here is GET only.
 from __future__ import annotations
 
 import re
+import time
+from datetime import timedelta
 
 from ..graph import GraphError, PermissionMissing
 from ..mailflow import is_external, tenant_domains
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .base import Collector, RunContext, register
-from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups
+from .sharepoint_lookup import DRIVE_FIELDS, SITE_FIELDS, Lookups, refused
 
 # Microsoft's usage reports. v1.0 only returns CSV; beta returns JSON.
 REPORT_PERIOD = "D30"
@@ -174,6 +176,12 @@ PERMISSION_FIELDS = (
 MAX_DRIVES = 3000
 MAX_PAGES_PER_DRIVE = 250  # 250 pages of up to 200 items: 50,000 items per library
 MAX_PERMISSION_LOOKUPS = 5000  # shared items whose permissions are read per run
+# One run's share of the night, so a huge client can't hold a collector thread until morning: this many
+# delta pages across every library (about a million items), or this long, whichever comes first. The
+# libraries left over keep their last results and are scanned first the next night.
+MAX_PAGES = 6000
+TIME_BUDGET = timedelta(hours=2)
+clock = time.monotonic
 SCOPES = {
     "anonymous": "Anyone",
     "organization": "Organisation",
@@ -254,6 +262,40 @@ def describe_permissions(perms: list[dict], domains: set[str]) -> dict:
     }
 
 
+class Budget:
+    """One run's allowance of delta pages and time; the scan stops at whichever runs out first."""
+
+    def __init__(self):
+        self.started = clock()
+        self.pages = 0
+
+    @property
+    def time_spent(self) -> str | None:
+        if clock() - self.started >= TIME_BUDGET.total_seconds():
+            return f"the {int(TIME_BUDGET.total_seconds() // 3600)}-hour limit"
+        return None
+
+    @property
+    def spent(self) -> str | None:
+        """What ran out, in words, or None while there's allowance left."""
+        if self.pages >= MAX_PAGES:
+            return f"the limit of {plural(MAX_PAGES, 'page')} a night"
+        return self.time_spent
+
+    def over(self) -> bool:
+        return self.spent is not None
+
+
+def _in_turn(drives: list[dict], next_drive: str | None) -> list[dict]:
+    """The libraries in a fixed order, starting from where the last run stopped (if that library is still
+    there), so a run that reaches its budget leaves the rest to go first the next night."""
+    drives = sorted(drives, key=lambda d: d["id"])
+    for n, drive in enumerate(drives):
+        if drive["id"] == next_drive:
+            return drives[n:] + drives[:n]
+    return drives
+
+
 def _path(item: dict) -> str:
     parent = (item.get("parentReference") or {}).get("path") or ""
     parent = parent.split("root:", 1)[1] if "root:" in parent else ""
@@ -279,32 +321,41 @@ class SharedFiles(Collector):
         try:
             drives = self._drives(ctx, catalog)
         except PermissionMissing as exc:
-            ctx.warn(
-                "Reading files needs the Sites.Read.All permission. Re-send the consent link from the tenant "
-                f"page to add it. ({exc.message})"
-            )
-            ctx.objects("scan_status", [("status", {"available": False, "reason": "permission"})])
+            reason, why = refused(ctx, "reading files", exc)
+            ctx.warn(why)
+            ctx.objects("scan_status", [("status", {"available": False, "reason": reason})])
             return
 
         snap = TenantSnapshot(ctx.conn, ctx.tenant)
         domains = tenant_domains(snap) or set()
+        previous = (snap.objects("shared_files", "scan_status") or [None])[0] or {}
+        drives = _in_turn(drives, previous.get("next_drive"))
+        budget = Budget()
         lookups = 0
         scanned = 0
         stored: list[tuple[str, dict]] = []
         skipped_drives = 0
-        for drive in drives[:MAX_DRIVES]:
+        scanned_drives = 0
+        stopped = None
+        for n, drive in enumerate(drives):
+            stopped = budget.spent or (f"the limit of {MAX_DRIVES:,} libraries a night" if n >= MAX_DRIVES else None)
+            if stopped:
+                break
             try:
                 result = ctx.graph.get_all(
-                    f"/drives/{drive['id']}/root/delta", {"$select": ITEM_FIELDS}, max_pages=MAX_PAGES_PER_DRIVE
+                    f"/drives/{drive['id']}/root/delta",
+                    {"$select": ITEM_FIELDS},
+                    max_pages=min(MAX_PAGES_PER_DRIVE, MAX_PAGES - budget.pages),
+                    stop=budget.over,
                 )
             except GraphError as exc:
                 skipped_drives += 1
                 ctx.log(f"Skipped {drive['webUrl'] or drive['id']}: {exc.message}", "warning")
                 continue
-            if result.truncated:
+            budget.pages += result.pages
+            if result.truncated and not budget.spent:
                 ctx.warn(f"Stopped scanning {drive['webUrl']} after {MAX_PAGES_PER_DRIVE} pages")
             items = [i for i in result.items if "deleted" not in i and "root" not in i]
-            scanned += len(items)
             shared_ids = {i["id"] for i in items if i.get("shared") is not None}
             # Children of a shared folder report the folder's sharing too. Read
             # permissions only at the top of each shared branch.
@@ -313,8 +364,9 @@ class SharedFiles(Collector):
                 for i in items
                 if i["id"] in shared_ids and (i.get("parentReference") or {}).get("id") not in shared_ids
             ]
+            found: list[tuple[str, dict]] = []
             for item in tops:
-                if lookups >= MAX_PERMISSION_LOOKUPS:
+                if lookups >= MAX_PERMISSION_LOOKUPS or budget.time_spent:
                     break
                 lookups += 1
                 try:
@@ -327,7 +379,7 @@ class SharedFiles(Collector):
                 info = describe_permissions(perms, domains)
                 if not info["exposure"]:
                     continue
-                stored.append(
+                found.append(
                     (
                         f"{drive['id']}:{item['id']}",
                         {
@@ -346,11 +398,33 @@ class SharedFiles(Collector):
                         },
                     )
                 )
+            incomplete = (result.truncated and budget.spent) or budget.time_spent
+            if incomplete and (scanned_drives or not result.pages):
+                # The budget ran out part-way through this library: it's scanned again, whole, next time.
+                # (Unless it was the first and it did read something: then it keeps what was read, so one
+                # library that alone takes longer than the budget can't stop the others ever being scanned.)
+                stopped = budget.spent
+                break
+            stored.extend(found)
+            scanned += len(items)
+            scanned_drives += 1
         if lookups >= MAX_PERMISSION_LOOKUPS:
             ctx.warn(f"Read sharing for the first {MAX_PERMISSION_LOOKUPS} shared items only")
             ctx.truncated = True
-        if len(drives) > MAX_DRIVES:
-            ctx.warn(f"Scanned the first {MAX_DRIVES} of {len(drives)} libraries")
+        left = drives[scanned_drives + skipped_drives :]
+        next_drive = left[0]["id"] if left else None
+        carried = 0
+        if left:
+            # Those libraries keep what the last scan found, so a report doesn't lose its rows for a night.
+            left_ids = {d["id"] for d in left}
+            for item in snap.objects("shared_files", "shared_item") or []:
+                if item["_id"].split(":", 1)[0] in left_ids:
+                    stored.append((item["_id"], {k: v for k, v in item.items() if k not in ("_id", "_kind")}))
+                    carried += 1
+            ctx.warn(
+                f"Scanned {plural(scanned_drives, 'library')} of {len(drives)} before reaching {stopped}; "
+                f"the other {len(left)} keep their last results and are scanned first next time"
+            )
             ctx.truncated = True
         if skipped_drives:
             ctx.warn(f"{plural(skipped_drives, 'library')} couldn't be read")
@@ -366,6 +440,9 @@ class SharedFiles(Collector):
                         "drives": len(drives),
                         "items": scanned,
                         "lookups": lookups,
+                        "scanned_drives": scanned_drives,
+                        "next_drive": next_drive,
+                        "carried": carried,
                     },
                 )
             ],

@@ -220,12 +220,15 @@ def migrate(conn: sqlite3.Connection) -> int:
 
 
 def _request_ip() -> str | None:
-    """The portal visitor's address when called during a web request, else None (CLI, worker)."""
+    """The portal visitor's address when called during a web request, else None (CLI, worker).
+
+    Never on the public demo (``web/public_demo.py``): every visitor there is a stranger, and pages and
+    downloads they open are still audited, but without keeping where they came from."""
     try:
-        from flask import has_request_context, request
+        from flask import g, has_request_context, request
     except ImportError:  # pragma: no cover
         return None
-    if not has_request_context():
+    if not has_request_context() or g.get("public_demo"):
         return None
     return (request.remote_addr or "")[:64] or None
 

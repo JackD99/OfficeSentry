@@ -86,6 +86,27 @@ def test_inbox_rule_risk():
     assert disabled.severity == "low"
 
 
+def test_inbox_rule_moving_mail_to_an_unnamed_folder_is_raised():
+    """Without Exchange the folder has no name, so a rule hiding invoices can't be shown to be harmless."""
+    rule = {
+        "id": "r1",
+        "displayName": "Tidy",
+        "isEnabled": True,
+        "conditions": {"subjectContains": ["invoice"]},
+        "actions": {"moveToFolder": "AAMkAD1", "markAsRead": True},
+        "moveToFolderName": None,
+    }
+    risk = inbox_rule_risk(rule, {"x.com"})
+    assert risk.severity == "medium"
+    assert risk.reasons == [
+        "Moves mail mentioning invoice to a folder Office Sentry couldn't name and marks it as read"
+    ]
+    named = inbox_rule_risk(rule | {"moveToFolderName": "Invoices"}, {"x.com"})
+    assert named.severity is None  # a named, ordinary folder is a tidy-up rule
+    plain = inbox_rule_risk(rule | {"conditions": {}, "actions": {"moveToFolder": "AAMkAD1"}}, {"x.com"})
+    assert plain.severity is None
+
+
 # -- Collectors and checks end to end ----------------------------------------------
 
 
@@ -219,6 +240,44 @@ def test_exchange_access_denied_fails_only_that_run(db, two_tenants):
         or db.execute("SELECT * FROM runs WHERE collector = 'mailboxes' ORDER BY id DESC").fetchone()
     )
     assert "Global Reader" in run["error"]
+
+
+def test_inbox_rules_fallback_skips_accounts_without_a_mailbox(db, two_tenants):
+    """Without Exchange access every licensed account is tried; one with no Exchange Online mailbox has no
+    rules to read, and mustn't make the run partial every night."""
+    alpha, _ = two_tenants
+    import re
+    from unittest.mock import patch
+
+    from officesentry.collectors import REGISTRY
+    from officesentry.graph import GraphClient
+    from officesentry.worker import execute_run
+    from tests.seed import V1, exchange_factory, mock_tenant
+
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
+        rsps.get(
+            f"{V1}/users/u1/mailFolders/inbox/messageRules",
+            status=404,
+            json={
+                "error": {
+                    "code": "MailboxNotEnabledForRESTAPI",
+                    "message": "The mailbox is either inactive, soft-deleted, or is hosted on-premise.",
+                }
+            },
+        )
+        mock_tenant(rsps, exchange=False)
+        rsps.post(re.compile(re.escape(EXCHANGE_ROOT) + r"/.*"), status=401)
+        for key in REGISTRY:
+            store.enqueue_run(db, alpha, key)
+        while (run := store.claim_next_run(db)) is not None:
+            execute_run(db, run, lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None), exchange_factory)
+    run = store.latest_run(db, alpha, "inbox_rules")
+    assert run["status"] == "succeeded" and not run["error"]
+    logs = [r["message"] for r in db.execute("SELECT message FROM run_events WHERE run_id = ?", (run["id"],))]
+    assert any("1 account had no Exchange Online mailbox" in m for m in logs)
 
 
 # -- Conditional Access coverage ----------------------------------------------------
@@ -469,3 +528,19 @@ def test_live_test_can_look_dns_up_over_https():
     answer("TXT", status=2)  # SERVFAIL is an error, not "no records"
     with pytest.raises(dnscheck.DnsError):
         doh_lookup("x.example", "TXT")
+
+
+def test_shared_mailbox_that_needs_its_licence_is_not_waste(db, two_tenants):
+    """A shared mailbox should be blocked from sign-in, and needs a licence once it has an archive, a hold or
+    50 GB; flagging it as a disabled account wasting a licence would tell the MSP to break it."""
+    alpha, beta = two_tenants
+    shared = gd.INFO_USER | {"accountEnabled": False, "assignedLicenses": USERS[0]["assignedLicenses"]}
+    boxes = [dict(m) for m in gd.EXCHANGE["Get-Mailbox"]]
+    boxes[1]["LitigationHoldEnabled"] = True
+    seed_tenant(db, alpha, users=USERS + [shared], exchange=dict(gd.EXCHANGE, **{"Get-Mailbox": boxes}))
+    seed_tenant(db, beta, users=USERS + [shared])
+    held = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, alpha)))}["licensed_disabled"]
+    assert "info@x.com" not in [f.subject for f in held.findings]
+    assert "(not counting 1 shared mailbox that needs one)" in held.summary
+    plain = {r.key: r for r in evaluate(TenantSnapshot(db, store.get_tenant(db, beta)))}["licensed_disabled"]
+    assert "info@x.com" in [f.subject for f in plain.findings]  # no hold, archive or size: licence not needed
