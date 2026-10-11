@@ -20,11 +20,17 @@ Microsoft cloud (``graph_cloud``), which needn't be its clients'.
 from __future__ import annotations
 
 import base64
+import contextvars
 import hashlib
 import ipaddress
+import logging
 import re
 import smtplib
 import ssl
+import threading
+import time
+from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
@@ -60,6 +66,17 @@ ENCRYPTED_KEYS = ("smtp_password_enc", "graph_secret_enc", "graph_key_enc")
 
 # Graph rejects JSON requests over 4 MB; attachments grow by a third as base64.
 GRAPH_MAX_ATTACHMENT_BYTES = 2_900_000
+
+# Exchange Online takes 30 messages a minute from one mailbox and answers 429 past that, by SMTP or Graph.
+# A month-end approving 200 clients at once sent faster than that and lost a fifth of its emails, so every
+# send in a process takes its turn (``PACER``), and background work (``patient``) waits out 429 and 503
+# answers too. A page never waits: it sends at once, as before.
+PER_MINUTE = 30
+BACKGROUND_PATIENCE = 600  # seconds a background send may wait for its turn
+RETRY_STATUSES = (429, 503)  # Microsoft hadn't taken the message, so sending it again can't send it twice
+DEFAULT_RETRY_AFTER = 30
+
+log = logging.getLogger(__name__)
 
 
 class MailError(Exception):
@@ -147,6 +164,67 @@ def sender_label(settings: dict) -> str:
     return settings.get("smtp_from") or ""
 
 
+class Pacer:
+    """At most ``per_minute`` messages in any minute from each sender, shared by every thread in the process,
+    and no message from a sender Microsoft has asked to wait until that wait is over."""
+
+    def __init__(self, per_minute: int = PER_MINUTE, clock=time.monotonic, sleep=time.sleep):
+        self.per_minute, self.clock, self.sleep = per_minute, clock, sleep
+        self._lock = threading.Lock()
+        self._sent: dict[str, deque] = {}
+        self._held: dict[str, float] = {}
+        self._refusing: dict[str, float] = {}  # since when Microsoft has refused every message from the sender
+
+    def turn(self, sender: str, deadline: float) -> None:
+        """Wait until ``sender`` may send again, then count the message. Past ``deadline`` it stops waiting
+        and the message goes anyway, so Microsoft decides."""
+        key = sender.lower()
+        while True:
+            with self._lock:
+                now = self.clock()
+                sent = self._sent.setdefault(key, deque())
+                while sent and sent[0] <= now - 60:
+                    sent.popleft()
+                ready = max(self._held.get(key, 0.0), sent[0] + 60 if len(sent) >= self.per_minute else 0.0)
+                if ready <= now or ready > deadline:
+                    sent.append(now)
+                    return
+            self.sleep(ready - now)
+
+    def refused(self, sender: str, seconds: float) -> None:
+        """Microsoft asked this sender to wait: every thread waits with it."""
+        key = sender.lower()
+        with self._lock:
+            now = self.clock()
+            self._held[key] = max(self._held.get(key, 0.0), now + seconds)
+            self._refusing.setdefault(key, now)
+
+    def accepted(self, sender: str) -> None:
+        with self._lock:
+            self._refusing.pop(sender.lower(), None)
+
+    def refusing_for(self, sender: str) -> float:
+        """Seconds Microsoft has refused every message from ``sender`` (0 when it last took one)."""
+        with self._lock:
+            since = self._refusing.get(sender.lower())
+            return self.clock() - since if since is not None else 0.0
+
+
+PACER = Pacer()
+_patience: contextvars.ContextVar[float] = contextvars.ContextVar("mail_patience", default=0.0)
+
+
+@contextmanager
+def patient(seconds: float = BACKGROUND_PATIENCE):
+    """Sends inside this block may wait up to ``seconds`` for their turn and for Microsoft's throttling.
+    Background tasks use it; a web request mustn't, as it would hold the page."""
+    token = _patience.set(seconds)
+    try:
+        yield
+    finally:
+        _patience.reset(token)
+
+
 def send(conn, vault, email: Email) -> str:
     """Send ``email`` with the configured transport. Returns the transport used."""
     s = mail_settings(conn)
@@ -157,9 +235,11 @@ def send(conn, vault, email: Email) -> str:
         raise MailNotConfigured("Email isn't set up yet (Settings → Email delivery)")
     if not email.to:
         raise MailError("No one to send to")
+    deadline = PACER.clock() + _patience.get()
     if transport(s) == "graph":
-        _send_graph(s, vault, email)
+        _send_graph(s, vault, email, deadline)
         return "graph"
+    PACER.turn(sender_label(s), deadline)
     _send_smtp(s, vault, email)
     return "smtp"
 
@@ -319,16 +399,38 @@ def graph_payload(email: Email) -> dict:
     return {"message": message, "saveToSentItems": True}
 
 
-def _send_graph(s: dict, vault, email: Email) -> None:
-    payload = graph_payload(email)
-    token = _graph_token(s, vault)
-    url = send_url(s)
+def retry_after(resp) -> float:
+    """Seconds Microsoft asked us to wait (``Retry-After``), or a default when it didn't say."""
     try:
-        resp = requests.post(url, json=payload, headers={"Authorization": f"Bearer {token}"}, timeout=60)
-    except requests.RequestException as exc:
-        raise MailError(f"Couldn't reach Microsoft 365: {exc}") from exc
-    if resp.status_code == 202:
-        return
+        return max(1.0, float(resp.headers.get("Retry-After", "")))
+    except ValueError:
+        return DEFAULT_RETRY_AFTER
+
+
+def _send_graph(s: dict, vault, email: Email, deadline: float) -> None:
+    payload = graph_payload(email)
+    url, sender = send_url(s), s["graph_sender"]
+    if PACER.refusing_for(sender) >= BACKGROUND_PATIENCE:
+        # An outage: Microsoft has refused this mailbox for as long as any send may wait. Each later send
+        # tries once and fails at once, rather than holding a task thread for ten minutes of its own.
+        deadline = PACER.clock()
+    while True:
+        PACER.turn(sender, deadline)
+        token = _graph_token(s, vault)
+        try:
+            resp = requests.post(url, json=payload, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+        except requests.RequestException as exc:
+            raise MailError(f"Couldn't reach Microsoft 365: {exc}") from exc
+        if resp.status_code == 202:
+            PACER.accepted(sender)
+            return
+        if resp.status_code not in RETRY_STATUSES:
+            break
+        wait = retry_after(resp)
+        PACER.refused(sender, wait)
+        if PACER.clock() + wait > deadline:
+            break
+        log.info("Microsoft 365 answered %s to sendMail; sending again in %.0f seconds", resp.status_code, wait)
     try:
         err = resp.json().get("error", {})
         code, message = err.get("code", ""), err.get("message", "")
@@ -341,6 +443,8 @@ def _send_graph(s: dict, vault, email: Email) -> None:
         )
     elif resp.status_code == 404 or code in ("ErrorInvalidUser", "MailboxNotEnabledForRESTAPI"):
         hint = f"Check that {s['graph_sender']} is a mailbox in your tenant."
+    elif resp.status_code == 429:
+        hint = f"Microsoft 365 takes at most {PER_MINUTE} messages a minute from one mailbox."
     else:
         hint = ""
     raise MailError(

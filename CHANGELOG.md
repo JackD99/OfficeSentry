@@ -11,33 +11,31 @@ versions follow [semantic versioning](https://semver.org). How to update: [v2/DE
 
 ## [2.3.0] - Unreleased
 
+### Changed
+
+- **All clients opens reports from the All reports menu**, the same one as a client's Reports tab: every
+  report in columns with a search box, Monthly review, Insurance evidence and Checks included, instead of a
+  drop-down list as tall as the screen. One row per client and Every row sit beside it; phones keep a list.
+
 ### Fixed
 
+- **A large month-end no longer loses emails to Microsoft's sending limit.** Exchange Online takes 30
+  messages a minute from one mailbox; approving more clients than that at once had the rest refused ("429
+  ApplicationThrottled") and left Approved with "Send failed", to be sent again one by one. Approvals and
+  scheduled report emails now go out at that pace and wait out Microsoft's "too many messages" and "service
+  unavailable" answers, for up to ten minutes, before they count as failed (in a longer outage the rest fail
+  at once, as before). A test email or Send now from a page still sends at once.
+- **The month-end queue flags a client a whole data source never came in for** ("Mailboxes not collected",
+  or "2 data sources not collected") instead of marking it Ready, so a client whose Exchange access was
+  never granted isn't approved and sent a report with that part missing. A client that removed the app,
+  whose report could only say "Nothing has been collected, so no security checks could run", is flagged
+  "No checks could run": it was marked Ready and sent in bulk before.
 - On the public demo, picking a client group in the Group picker now shows that group, and the choice
   follows to All clients, What changed and the other group-aware pages. Before, the page went straight back
   to every client, because demo visitors have no sign-in to keep the choice on.
-
-### Security
-
-- **Release images you can check by their version tag.** Each release's multi-platform image, the one its
-  version tags point at and `docker pull` fetches, now has a signed build provenance of its own, so
-  `gh attestation verify oci://ghcr.io/jackd99/officesentry:<version> --repo JackD99/OfficeSentry` passes
-  ([SECURITY.md, "Checking a release"](SECURITY.md#checking-a-release)). Until now only each platform's build
-  was signed. The release notes give the image's digest.
-- The image no longer includes pip, which nothing uses once it's built and whose bundled copy trailed pip's
-  own security fixes.
-- The project's own GitHub workflows: the tools CI installs for itself come from a hash-pinned lock, and the
-  jobs that publish images or deploy no longer leave their token in the checked-out code or build the website
-  on the runner that holds the server's keys.
-- The support package also sweeps the System status checks it includes, whose messages can quote a run's or a
-  backup's error, and hides the portal's own address, the names a client or account had before it was renamed
-  or deleted, the data folder's path, IPv6 addresses and ranges, and secrets written in quotes or as a header
-  in printed data.
-- Behind a reverse proxy the portal no longer takes a path prefix from the forwarded headers, and sends HSTS only
-  when the visitor came over HTTPS, so a proxy that doesn't pass `X-Forwarded-Proto` shows by its absence
-  ([Securing the portal](v2/docs/securing-the-portal.md#behind-a-reverse-proxy)). The brand colours and logo
-  may be kept by the visitor's browser only, never a shared cache. The page that refuses a form sent with a
-  stale token keeps its script, and email previews also refuse links to other base addresses and form targets.
+- Pages no longer scroll sideways past the edge of the window: the All clients Checks page and Projects
+  (hidden text in their tables widened the page), and on phones the monthly review's buttons and the
+  History list on person, mailbox, group and site pages, where a long address now wraps.
 
 ## [2.2.0] - 2026-10-11
 

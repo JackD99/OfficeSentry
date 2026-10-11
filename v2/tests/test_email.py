@@ -262,6 +262,105 @@ def test_graph_errors_explain_what_to_fix(db, vault, monkeypatch):
     assert len(responses.calls) == 1  # too-large mail never leaves
 
 
+class FakeTime:
+    """A clock for ``mailer.Pacer`` that moves only when it's slept on."""
+
+    def __init__(self):
+        self.now, self.slept = 1000.0, []
+
+    def clock(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def paced(monkeypatch) -> FakeTime:
+    fake = FakeTime()
+    monkeypatch.setattr(mailer, "PACER", mailer.Pacer(clock=fake.clock, sleep=fake.sleep))
+    return fake
+
+
+GRAPH_SEND = "https://graph.microsoft.com/v1.0/users/reports@msp.com/sendMail"
+THROTTLED = {"error": {"code": "ApplicationThrottled", "message": "Too many messages sent in a short time."}}
+
+
+def test_the_pacer_keeps_a_sender_under_microsofts_rate():
+    fake = FakeTime()
+    pacer = mailer.Pacer(clock=fake.clock, sleep=fake.sleep)
+    for _ in range(mailer.PER_MINUTE):
+        pacer.turn("Reports@msp.com", fake.now + 600)
+        fake.now += 1
+    pacer.turn("alerts@msp.com", fake.now + 600)  # another mailbox has its own minute
+    assert fake.slept == []
+    pacer.turn("reports@msp.com", fake.now + 600)  # the 31st waits until the first is a minute old
+    assert fake.slept == [30] and fake.now == 1060
+    pacer.turn("reports@msp.com", fake.now)  # with no patience it goes at once, and Microsoft decides
+    assert fake.slept == [30]
+    pacer.refused("reports@msp.com", 120)  # Microsoft said wait: every later message waits too
+    pacer.turn("reports@msp.com", fake.now + 600)
+    assert fake.slept == [30, 120]
+
+
+@responses.activate
+def test_background_sends_wait_out_microsofts_throttling(db, vault, monkeypatch):
+    fake = paced(monkeypatch)
+    monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
+    _graph_db(db, vault)
+    responses.post(GRAPH_SEND, status=429, json=THROTTLED, headers={"Retry-After": "20"})
+    responses.post(GRAPH_SEND, status=503, json={"error": {"code": "ServiceUnavailable"}})  # no Retry-After
+    responses.post(GRAPH_SEND, status=202)
+    with mailer.patient():
+        assert mailer.send(db, vault, mailer.Email(to=["a@x.com"], subject="s", text="t")) == "graph"
+    assert len(responses.calls) == 3 and fake.slept == [20, mailer.DEFAULT_RETRY_AFTER]
+
+
+@responses.activate
+def test_a_page_never_waits_for_microsoft(db, vault, monkeypatch):
+    fake = paced(monkeypatch)
+    monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
+    _graph_db(db, vault)
+    responses.post(GRAPH_SEND, status=429, json=THROTTLED, headers={"Retry-After": "20"})
+    responses.post(GRAPH_SEND, status=429, json=THROTTLED, headers={"Retry-After": "900"})
+    responses.post(GRAPH_SEND, status=202)
+    email = mailer.Email(to=["a@x.com"], subject="s", text="t")
+    with pytest.raises(mailer.MailError, match="429 ApplicationThrottled.*30 messages a minute"):
+        mailer.send(db, vault, email)
+    assert len(responses.calls) == 1 and fake.slept == []
+    # A background send after it waits out what Microsoft asked first, but not past its patience.
+    with mailer.patient(), pytest.raises(mailer.MailError, match="429"):
+        mailer.send(db, vault, email)
+    assert len(responses.calls) == 2 and fake.slept == [20]
+    with mailer.patient(1000):
+        assert mailer.send(db, vault, email) == "graph"
+    assert len(responses.calls) == 3 and fake.slept == [20, 900]
+
+
+@responses.activate
+def test_an_outage_fails_later_sends_at_once(db, vault, monkeypatch):
+    """Each send waits out Microsoft for up to ten minutes; once Microsoft has refused that long, the rest try
+    once and fail, so a month-end during an outage doesn't take ten minutes a client to fail."""
+    fake = paced(monkeypatch)
+    monkeypatch.setattr(mailer, "_graph_token", lambda s, v: "mail-token")
+    _graph_db(db, vault)
+    down = responses.post(GRAPH_SEND, status=503, json={"error": {"code": "ServiceUnavailable"}})
+    email = mailer.Email(to=["a@x.com"], subject="s", text="t")
+    with mailer.patient(), pytest.raises(mailer.MailError, match="503"):
+        mailer.send(db, vault, email)
+    tries = mailer.BACKGROUND_PATIENCE // mailer.DEFAULT_RETRY_AFTER + 1  # at once, then every 30 seconds
+    assert down.call_count == tries and sum(fake.slept) == mailer.BACKGROUND_PATIENCE
+    fake.slept.clear()
+    with mailer.patient(), pytest.raises(mailer.MailError, match="503"):
+        mailer.send(db, vault, email)
+    assert down.call_count == tries + 1 and fake.slept == []
+    # Once Microsoft takes one again, sends wait their turn as before.
+    responses.replace(responses.POST, GRAPH_SEND, status=202)
+    with mailer.patient():
+        mailer.send(db, vault, email)
+    assert mailer.PACER.refusing_for("reports@msp.com") == 0
+
+
 def test_unconfigured_email_records_failure(client, db, two_tenants):
     alpha, _ = two_tenants
     make_user(db, "admin")

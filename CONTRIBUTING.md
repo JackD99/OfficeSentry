@@ -109,6 +109,10 @@ and a final check fails unless the parts together ran every test.
   in a running portal shows them and every shared component. Pull requests
   that touch templates or CSS also run the browser tests (screenshots against
   baselines, and axe-core); `v2/tests/browser/README.md` says how to run them.
+  They also run the layout checks, which open every page at three laptop
+  widths and on a phone with long names and empty data, and list pages that
+  scroll sideways, cut text off, overlap or push controls off the screen
+  (`v2/tests/layout/README.md`; report only for now).
 - When a screenshot or an example PDF changes because you meant it to, add
   the label `refresh-baselines` to the pull request: a workflow retakes the
   screenshots in the pinned browser and redraws the PDF pages (from your
@@ -178,7 +182,8 @@ The same gates apply to every change, whoever wrote it:
   it showing up is caught), and the Graph client has no write methods.
 - Pages and reports that change are checked in a real browser, with
   screenshots, before they're merged, and CI compares about 34 pages with
-  their screenshots and runs an accessibility check on them.
+  their screenshots and runs an accessibility check on them, and opens every
+  page at four widths to catch layouts that break.
 
 The project's direction, scope and releases are decided by its maintainer,
 [@JackD99](https://github.com/JackD99).
