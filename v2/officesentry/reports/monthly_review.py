@@ -196,7 +196,8 @@ def build(conn, tenant, now: datetime | None = None) -> Report:
 
     skus = snap.objects("tenant_profile", "subscribed_sku") or []
     users = snap.objects("users", "user")
-    licences = licence_summary(skus, users, load_prices(conn), now)
+    subscriptions = snap.objects("tenant_profile", "company_subscription")
+    licences = licence_summary(skus, users, load_prices(conn), now, subscriptions)
 
     stale = by_key["stale_users"]
     kpis = [

@@ -12,7 +12,7 @@ from contextlib import closing
 
 from werkzeug.security import generate_password_hash
 
-from . import alerts, mailer, store
+from . import alerts, mailer, store, totp
 from .config import clear_setup_token, load_config, new_secrets, setup_token, write_private
 from .crypto import Vault
 from .db import audit, connect, migrate, transaction, utcnow
@@ -106,7 +106,7 @@ ENCRYPTED_COLUMNS = (
 )
 # ...and every encrypted key in the settings table. Encrypted names end in "_enc";
 # tests/test_key_rotation.py fails if one isn't listed here.
-ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS)
+ENCRYPTED_SETTINGS = (*mailer.ENCRYPTED_KEYS, *alerts.ENCRYPTED_KEYS, *totp.ENCRYPTED_KEYS)
 
 
 def unregistered_encrypted(conn) -> list[str]:

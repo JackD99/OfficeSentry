@@ -110,6 +110,26 @@ def test_two_step_setup_stores_nothing_for_the_shared_visitor(demo_app, db):
     assert row["totp_pending_enc"] is None
 
 
+def test_downloads_keep_no_address_on_the_demo(demo_app, db, two_tenants):
+    """Every download is audited, but a stranger's address isn't kept on the demo; a real portal keeps it."""
+    alpha, _ = two_tenants
+    stranger = {"REMOTE_ADDR": "203.0.113.9"}
+    visitor = demo_app.test_client()
+    for url in (f"/tenants/{alpha}/report.csv", "/upcoming.csv"):
+        assert visitor.get(url, environ_base=stranger).status_code == 200
+    rows = db.execute("SELECT username, ip FROM audit_log WHERE action = 'report_downloaded'").fetchall()
+    assert len(rows) == 2 and {tuple(r) for r in rows} == {(public_demo.USERNAME, None)}
+    assert db.execute("SELECT COUNT(*) FROM audit_log WHERE ip IS NOT NULL").fetchone()[0] == 0
+
+    demo_app.extensions["officesentry.config"].public_demo = False  # the same app as a real portal
+    make_user(db, "admin")
+    staff = demo_app.test_client()
+    login(staff, "admin")
+    staff.get(f"/tenants/{alpha}/report.csv", environ_base={"REMOTE_ADDR": "198.51.100.7"})
+    row = db.execute("SELECT ip FROM audit_log WHERE username = 'admin' AND action = 'report_downloaded'").fetchone()
+    assert row["ip"] == "198.51.100.7"
+
+
 def test_every_page_opens_for_the_demo_user(demo_app):
     client = demo_app.test_client()
     for rule in demo_app.url_map.iter_rules():
