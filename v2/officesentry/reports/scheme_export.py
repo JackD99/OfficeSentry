@@ -161,13 +161,15 @@ def _lines(r: SchemeResult, brand_name: str) -> list[tuple[str, str]]:
                 out.append(("label", f"Text to paste: {c.text}"))
             out.append(("muted", f"What Microsoft 365 can't show: {c.control.scope}"))
     if r.scheme.audit:
-        out.append(("h1", "What the assessor tests"))
+        out.append(("h1", "What the assessor checks"))
         for a in r.scheme.audit:
             out.append(("h2", a.title))
             out.append(("p", a.what))
             out.append(("label", f"What Microsoft 365 shows: {a.m365}"))
             verdicts = ", ".join(
-                f"{r.by_key[k].control.ref} {r.by_key[k].verdict}" for k in a.controls if k in r.by_key
+                f"{r.by_key[k].control.ref or r.by_key[k].control.title} {r.by_key[k].verdict}"
+                for k in a.controls
+                if k in r.by_key
             )
             if verdicts:
                 out.append(("label", f"Today: {verdicts}"))

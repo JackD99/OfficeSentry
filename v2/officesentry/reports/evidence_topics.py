@@ -634,6 +634,154 @@ GAPS = (
         "External vulnerability scans run [monthly] using [tool or provider]. [A penetration test was last carried "
         "out on (date) by (provider).]",
     ),
+    # Governance and data protection: what IASME Cyber Assurance, ISO 27001 and UK GDPR ask beyond the technical
+    # controls. Written for UK organisations; the ICO and UK GDPR articles are named where a form expects them.
+    gap(
+        "security_responsibility",
+        "Who is responsible for information security and data protection?",
+        M365,
+        "[Name], [role], has overall responsibility for information security and data protection and reports to "
+        "[the board or partners], where security is a standing agenda item. Day-to-day IT security is managed by "
+        "[IT provider].",
+        kind="text",
+    ),
+    gap(
+        "risk_assessment",
+        "Is there a current information security risk assessment, reviewed in the last 12 months?",
+        M365,
+        "An information security risk assessment covering [scope] names an owner for each risk, the agreed "
+        "treatment and an action plan. It was last reviewed on [date] by [name and role] and approved by [director "
+        "or partner].",
+    ),
+    gap(
+        "asset_register",
+        "Is there an up-to-date register of information and equipment, with a named owner for each?",
+        f"{M365} It lists the devices Intune and Entra ID know about (see the device answers), not the full register.",
+        "An asset register in [tool or spreadsheet] lists [hardware, software, cloud services and the information "
+        "held], each with a named owner, a category and where it is. Devices are added when they're set up and "
+        "removed when they're disposed of, and the register was last reviewed on [date].",
+    ),
+    gap(
+        "supplier_security",
+        "Are suppliers that handle the organisation's data held to security requirements?",
+        f"{M365} It lists the apps connected to Microsoft 365 (see the cloud services answer), not the contracts.",
+        "Suppliers and contractors that handle the organisation's data are checked before they're used, must meet "
+        "[Cyber Essentials or equivalent security requirements], and are reviewed [every 12 months]. They're listed "
+        "in [supplier register].",
+    ),
+    gap(
+        "processor_contracts",
+        "Is there a data processing agreement with every supplier that processes personal data?",
+        M365,
+        "Every supplier that processes personal data for the organisation has a written contract with the terms UK "
+        "GDPR Article 28 requires: acting only on instructions, confidentiality, security, approval of "
+        "sub-processors, help with people's rights, and deleting or returning the data at the end. They're recorded "
+        "in [register].",
+    ),
+    gap(
+        "ico_registration",
+        "Has the organisation paid the data protection fee to the ICO?",
+        M365,
+        "The organisation is registered with the Information Commissioner's Office, registration number [ZA number], "
+        "renewed on [date].",
+        beyond="Some organisations are exempt from the fee; say so if this one is.",
+    ),
+    gap(
+        "dpo",
+        "Does the organisation need a Data Protection Officer, and who manages data protection?",
+        M365,
+        "[The organisation has appointed (name) as its Data Protection Officer, contactable at (email address).] or "
+        "[The organisation assessed on (date) that it doesn't need a Data Protection Officer; (name, role) is "
+        "responsible for data protection.]",
+        kind="text",
+    ),
+    gap(
+        "ropa",
+        "Is there a record of the personal data held, why, on what lawful basis and where?",
+        M365,
+        "A record of processing activities lists each kind of personal data held, its purpose and lawful basis, who "
+        "it's shared with, where it's stored and how long it's kept. [Role] maintains it, and it was last reviewed "
+        "on [date].",
+    ),
+    gap(
+        "privacy_notice",
+        "Is there an up-to-date privacy notice?",
+        M365,
+        "A privacy notice at [web address] explains what personal data is collected, why and on what lawful basis, "
+        "who it's shared with, how long it's kept, people's rights and how to complain. It was last reviewed on "
+        "[date].",
+    ),
+    gap(
+        "data_subject_rights",
+        "How are requests from people to see, correct or delete their data handled?",
+        M365,
+        "Requests to see, correct or delete personal data, and complaints about how it's used, go to [contact] and "
+        "are logged in [system]. They're answered within one month, and [role] checks each response before it's "
+        "sent.",
+        kind="text",
+    ),
+    gap(
+        "dpia",
+        "Is a data protection impact assessment done before new high-risk use of personal data?",
+        M365,
+        "A data protection impact assessment is carried out before any new system or process that is likely to be "
+        "high risk to people, using [the ICO's template]. [Role] signs each one off, and the ICO would be consulted "
+        "if a high risk remained.",
+    ),
+    gap(
+        "breach_reporting",
+        "Are personal data breaches recorded, and reported to the ICO within 72 hours when required?",
+        M365,
+        "Every personal data breach is recorded in a breach log with what happened, its effects and what was done. "
+        "[Role] decides whether it must be reported; reportable breaches go to the ICO within 72 hours of the "
+        "organisation becoming aware, and to the people affected when the risk to them is high. Lessons learned are "
+        "reviewed by [role].",
+    ),
+    gap(
+        "data_retention",
+        "Is personal data deleted when it's no longer needed?",
+        f"{M365} Office Sentry doesn't read Microsoft 365 retention policies.",
+        "A retention schedule sets how long each kind of data is kept. Data past its retention period is deleted [by "
+        "Microsoft 365 retention policies or at a review every (period)], and the data held is reviewed [every 12 "
+        "months] to check it's still needed.",
+    ),
+    gap(
+        "secure_disposal",
+        "Is data securely wiped, or the storage destroyed, before equipment is reused or disposed of?",
+        M365,
+        "Before devices and storage are reused or disposed of, data is securely wiped [with an Intune wipe or a "
+        "certified erasure tool] or the storage is destroyed by [certified disposal company], and the certificate is "
+        "kept.",
+    ),
+    gap(
+        "removable_media",
+        "Is the use of USB drives and other removable media controlled?",
+        f"{M365} Office Sentry doesn't read Intune device restriction profiles.",
+        "Removable media is [blocked by Intune policy or allowed only on encrypted, company-issued drives], and drives "
+        "that hold the organisation's data are recorded in the asset register.",
+    ),
+    gap(
+        "web_filtering",
+        "Are known malicious websites blocked?",
+        M365,
+        "Malicious websites are blocked by [Microsoft Defender SmartScreen and network protection, a filtering DNS "
+        "service such as Quad9, or the firewall's web filter].",
+    ),
+    gap(
+        "change_management",
+        "Are changes to systems planned, tested and approved?",
+        M365,
+        "Changes to systems, applications and networks are logged in [ticket system], checked for their security "
+        "effect, tested where possible and approved by [role] before they're made. Emergency changes are reviewed "
+        "afterwards.",
+    ),
+    gap(
+        "log_review",
+        "Are security logs and alerts reviewed regularly, and kept safe?",
+        f"{M365} It shows whether auditing is on (see the logging answer), not who reads the logs.",
+        "Security alerts and sign-in logs are reviewed [daily or weekly] by [team or provider]. Logs are kept for "
+        "[period] where users can't change them.",
+    ),
 )
 
 TOPICS = DATA + GAPS

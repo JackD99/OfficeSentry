@@ -55,6 +55,7 @@ GAP_LIMIT = 5  # specific gaps listed under a control before "and N more"
 GROUPS = (
     ("uk", "UK certification"),
     ("forms", "Insurance and supplier questionnaires"),
+    ("privacy", "Data protection"),
     ("international", "Frameworks and benchmarks"),
 )
 
@@ -114,6 +115,7 @@ class Scheme:
     audit: tuple[Audit, ...] = ()  # the on-site tests (Cyber Essentials Plus)
     notes: tuple[str, ...] = ()  # what the engineer should know before using the pack
     renewal: str = ""  # how often it's renewed, for the "since" comparison ("12 months")
+    numbered: bool = True  # controls cite the scheme's question numbers (False where they change between versions)
 
     @property
     def controls(self) -> list[Control]:

@@ -43,6 +43,14 @@ No.
   Partly, since insurers price the risk rather than refuse it), with the figures, the fix and the form's
   answers to paste. The emailed
   "Cyber insurance evidence pack" is now this pack; the old controls view and its links open it.
+- Three more packs on the Evidence page. **IASME Cyber Assurance** (Level 1 and Level 2), theme by theme from
+  governance to incidents, judged strictly like Cyber Essentials. **ISO/IEC 27001:2022 Annex A**: the
+  controls Microsoft 365 evidences (5.14 to 5.23, 6.5, 6.7, 7.9, 8.1 to 8.16 and more) with their ISO numbers,
+  for the Statement of Applicability and the audit. **UK GDPR security and accountability**: the ICO's
+  security outcomes (A to D) plus the records a client or the ICO asks for after a breach (record of
+  processing, processor contracts, privacy notice, rights requests, DPIAs, retention, the ICO fee and
+  72-hour breach reporting). Eighteen new fill-in answers cover the governance and data protection
+  questions Microsoft 365 can't see, each written once and reused by every pack.
 
 ### Changed
 

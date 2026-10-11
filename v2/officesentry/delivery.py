@@ -52,6 +52,9 @@ from .reports import (
     schemes,
     schemes_cyber_essentials,  # noqa: F401  (registers the schemes)
     schemes_forms,  # noqa: F401
+    schemes_iasme,  # noqa: F401
+    schemes_iso27001,  # noqa: F401
+    schemes_uk_gdpr,  # noqa: F401
     summary,
     tables,
     views,

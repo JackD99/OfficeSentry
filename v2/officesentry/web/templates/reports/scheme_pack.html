@@ -25,7 +25,7 @@
   {% if r.since %}<li><a href="#since">What changed</a></li>{% endif %}
   {% if r.to_fix or r.to_review %}<li><a href="#fix">{{ 'Fix before you apply' if r.scheme.strict else 'Gaps to close' }}</a></li>{% endif %}
   {% for t in r.themes %}<li><a href="#theme-{{ t.theme.key }}">{{ t.theme.title }}</a></li>{% endfor %}
-  {% if r.scheme.audit %}<li><a href="#audit">What the assessor tests</a></li>{% endif %}
+  {% if r.scheme.audit %}<li><a href="#audit">What the assessor checks</a></li>{% endif %}
   {% if r.sheet %}<li><a href="#answers">Answers for the form</a></li>{% endif %}
   <li><a href="#about">About this evidence</a></li>
 {% endblock %}
@@ -92,14 +92,14 @@
 
 {% if r.scheme.audit %}
 <section id="audit" class="page-break">
-  <h2>What the assessor tests</h2>
-  <p class="section-intro">The on-site tests, what each needs, and what Microsoft 365 already shows for it.</p>
+  <h2>What the assessor checks</h2>
+  <p class="section-intro">What the assessor or auditor checks, what each needs, and what Microsoft 365 already shows for it.</p>
   {% for a in r.scheme.audit %}
   <div class="control">
     <h3>{{ a.title }}</h3>
     <p class="outside">{{ a.what }}</p>
     <p class="outside"><strong>Microsoft 365 shows:</strong> {{ a.m365 }}</p>
-    {% if a.controls %}<p class="outside">Today: {% for k in a.controls %}{% set c = r.by_key[k] %}{{ c.control.ref }} <span class="answer answer-{{ TONE[c.verdict] }}">{{ c.verdict }}</span>{{ ' ' if not loop.last }}{% endfor %}</p>{% endif %}
+    {% if a.controls %}<p class="outside">Today: {% for k in a.controls %}{% set c = r.by_key[k] %}{{ c.control.ref or c.control.title }} <span class="answer answer-{{ TONE[c.verdict] }}">{{ c.verdict }}</span>{{ ' ' if not loop.last }}{% endfor %}</p>{% endif %}
   </div>
   {% endfor %}
 </section>
