@@ -298,6 +298,11 @@ client's approval.
 - A database upgrade on a large database no longer fails the deploy: the portal's health check allows 15
   minutes to start, the start script waits that long and then starts the worker, and Docker keeps the
   containers running while it is itself updated (`live-restore`, on new servers).
+- The file pickers on Branding and the onboarding import look like the portal's other buttons and show
+  the chosen file's name, the Activity log's filters sit level on one row with their button, the partial-run
+  notice carries the same icon as other notices, each Data retention section says plainly what the next pass would
+  delete, the onboarding "Send link" button has its full label, and a report plan's Save and Cancel stay in view
+  on a long form like the scheduled-email form's.
 - A deploy no longer copies the portal's settings files, among them the off-site backup password, into
   the public demo's folder on the server, and removes the copies earlier deploys left. The temporary SSH
   rule it opens in the Hetzner firewall is removed by a second job too, in case GitHub loses the deploy

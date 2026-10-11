@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import ts, status %}
+{% from "_macros.html" import ts, status, icon %}
 {% block title %}Run {{ run.id }} · {{ tenant.name }}{% endblock %}
 {% block content %}
 {% set title = collectors[run.collector].title if run.collector in collectors else run.collector %}
@@ -12,8 +12,8 @@
     <div class="sub">Run {{ run.id }} · queued {{ ts(run.created_at) }}{% if run.finished_at %} · finished {{ ts(run.finished_at) }}{% endif %}{% if run.requested_by %} · by {{ run.requested_by }}{% endif %}{% if run.truncated %} · <strong>truncated</strong>{% endif %}</div>
   </div>
 </div>
-{% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' else 'bad' }}">{{ run.error|run_error }}
-  {% if run.error|run_error != run.error %}<details class="small"><summary>Microsoft's message</summary><code>{{ run.error }}</code></details>{% endif %}</div>{% endif %}
+{% if run.error %}<div class="callout {{ 'warn' if run.status == 'partial' else 'bad' }}" role="status">{{ icon('alert') }}<div class="grow">{{ run.error|run_error }}
+  {% if run.error|run_error != run.error %}<details class="small"><summary>Microsoft's message</summary><code>{{ run.error }}</code></details>{% endif %}</div></div>{% endif %}
 
 {% macro period(s) %}{% if s == 1 %}second{% elif s == 60 %}minute{% elif s % 60 == 0 %}{{ (s // 60)|int }} minutes{% else %}{{ s|int }} seconds{% endif %}{% endmacro %}
 {% macro secs(s) %}{% if s < 0.5 %}{{ 'under 1 s' if s > 0 else 'none' }}{% elif s < 90 %}{{ '%.0f'|format(s) }} s{% elif s < 5400 %}{{ '%.0f'|format(s / 60) }} min{% else %}{{ '%.1f'|format(s / 3600) }} h{% endif %}{% endmacro %}
