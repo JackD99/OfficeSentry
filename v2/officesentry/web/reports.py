@@ -13,12 +13,10 @@ from ..licences import sku_name
 from ..reports import (
     branding,
     data_reports,
-    evidence,
     evidence_answers,
     export,
     findings_report,
     library,
-    questionnaires,
     schemes,
     tables,
     views,
@@ -142,54 +140,35 @@ def tenant_report_xlsx(tenant_id: int):
     )
 
 
-def _evidence_name(tenant, ext: str) -> str:
-    return _filename(tenant, ext).replace("security-review", "security-evidence")
+def _scheme_for(set_key: str | None) -> str:
+    """The scheme whose page carries question set ``set_key`` (old ``?set=`` links), the insurance one otherwise."""
+    for scheme in schemes.SCHEMES.values():
+        if scheme.questions == set_key:
+            return scheme.key
+    return "insurance"
 
 
-CONTROLS_VIEW = "controls"
-
-
-def _set_key(value: str | None, default: str | None = questionnaires.DEFAULT) -> str | None:
-    """The question set a request asks for (``set=``), or ``default``; the controls view is its own."""
-    return value if value in questionnaires.SETS or value == CONTROLS_VIEW else default
+def _show() -> str | None:
+    return request.values.get("show") if request.values.get("show") in ("input", "attention") else None
 
 
 @bp.get("/tenants/<int:tenant_id>/evidence")
 @login_required
 def evidence_pack(tenant_id: int):
     """The client's Evidence page: every scheme with its verdict (``web/evidence.py`` has each scheme's page).
-    With ``set=``, a question set's answers (insurance, supplier), or the controls view."""
+    ``set=`` (the old question-set and controls pages) goes to the scheme that carries that form."""
     t = tenant_or_404(tenant_id)
-    if not request.args.get("set"):
-        results = schemes.assess_all(g.db, t)
-        return render_template(
-            "evidence_index.html",
-            tenant=t,
-            groups=[(title, [r for r in results if r.scheme in found]) for title, found in schemes.grouped()],
-            sets=[
-                s
-                for s in questionnaires.SETS.values()
-                if not any(x.questions == s.key for x in schemes.SCHEMES.values())
-            ],
-            oldest_data=results[0].oldest_data if results else None,
-            V=schemes,
+    if request.args.get("set"):
+        return redirect(
+            url_for("evidence.scheme_page", tenant_id=t["id"], scheme=_scheme_for(request.args["set"]), show=_show())
         )
-    view = _set_key(request.args.get("set"))
-    pack = evidence.build(g.db, t)
-    sheet = questionnaires.sheet(pack, view) if view != CONTROLS_VIEW else None
-    copy_all = questionnaires.to_text(sheet, branding.load(g.db).display_name) if sheet else ""
-    show = request.args.get("show") if request.args.get("show") in ("input", "attention") else ""
+    results = schemes.assess_all(g.db, t)
     return render_template(
-        "evidence_page.html",
-        pack=pack,
-        sheet=sheet,
-        view=view,
-        sets=questionnaires.SETS,
-        copy_all=copy_all,
-        show=show,
-        answers=evidence_answers.ANSWERS,
-        staff=g.user["role"] in STAFF,
-        max_note=evidence_answers.MAX_NOTE,
+        "evidence_index.html",
+        tenant=t,
+        groups=[(title, [r for r in results if r.scheme in found]) for title, found in schemes.grouped()],
+        oldest_data=results[0].oldest_data if results else None,
+        V=schemes,
     )
 
 
@@ -198,20 +177,17 @@ def evidence_pack(tenant_id: int):
 def evidence_answer(tenant_id: int, key: str):
     """The technical lead's answer to one questionnaire topic, in place of the suggested one (or back to it).
 
-    One answer per topic and tenant, so it fills every question set that asks it."""
+    One answer per topic and tenant, so it fills every scheme and question set that asks it."""
     t = tenant_or_404(tenant_id)
     if key not in evidence_answers.KEYS:
         abort(404)
-    view = _set_key(request.form.get("set"), None)
-    show = request.form.get("show") if request.form.get("show") in ("input", "attention") else None
-    scheme = request.form.get("scheme") if request.form.get("scheme") in schemes.SCHEMES else None
-    if scheme:  # a scheme's page (web/evidence.py): back to the control or form answer that was edited
-        anchor = request.form.get("anchor") or ""
-        if not re.fullmatch(r"[a-z0-9_-]+", anchor):
-            anchor = f"answer-{key}"
-        back = url_for("evidence.scheme_page", tenant_id=t["id"], scheme=scheme, show=show) + f"#{anchor}"
-    else:
-        back = url_for("reports.evidence_pack", tenant_id=t["id"], set=view, show=show) + f"#answer-{key}"
+    scheme = request.form.get("scheme")
+    if scheme not in schemes.SCHEMES:
+        scheme = _scheme_for(request.form.get("set"))
+    anchor = request.form.get("anchor") or ""  # back to the control or form answer that was edited
+    if not re.fullmatch(r"[a-z0-9_-]+", anchor):
+        anchor = f"answer-{key}"
+    back = url_for("evidence.scheme_page", tenant_id=t["id"], scheme=scheme, show=_show()) + f"#{anchor}"
     if request.form.get("action") == "clear":
         if evidence_answers.clear_override(g.db, t["id"], key, g.user["username"]):
             flash("Back to the suggested answer.", "success")
@@ -219,67 +195,26 @@ def evidence_answer(tenant_id: int, key: str):
     answer = request.form.get("answer", "")
     if answer not in evidence_answers.ANSWERS:
         abort(400)
-    suggested = next(a.suggested for a in evidence.build(g.db, t).answers if a.key == key)
+    suggested = schemes.context(g.db, t).answers[key].suggested
     evidence_answers.set_override(
         g.db, t["id"], key, answer, request.form.get("note", ""), suggested, g.user["username"]
     )
-    flash("Answer saved for this client. Every question set that asks it, and the downloads, now use it.", "success")
+    flash(
+        "Answer saved for this client. Every scheme and question set that asks it, and the downloads, now use it.",
+        "success",
+    )
     return redirect(back)
 
 
-@bp.get("/tenants/<int:tenant_id>/evidence.pdf")
+@bp.get("/tenants/<int:tenant_id>/evidence.<ext>")
 @login_required
-def evidence_pdf(tenant_id: int):
-    """With ``set=``, that question set's answer sheet; without, the controls evidence pack."""
+def evidence_download(tenant_id: int, ext: str):
+    """The old download links: a question set's file is its scheme's file now, the controls pack the insurance one."""
     t = tenant_or_404(tenant_id)
-    key = _set_key(request.args.get("set"), None)
-    pack = evidence.build(g.db, t)
-    if key in questionnaires.SETS:
-        audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.pdf")
-        return pdf_response(
-            "reports/answer_sheet.html",
-            _evidence_name(t, "pdf")[:-4] + f"-{key}",
-            sheet=questionnaires.sheet(pack, key),
-        )
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], "evidence.pdf")
-    return pdf_response(
-        "reports/evidence.html",
-        _evidence_name(t, "pdf")[:-4],
-        pack=pack,
-        sheet=questionnaires.sheet(pack, questionnaires.DEFAULT),
-    )
-
-
-@bp.get("/tenants/<int:tenant_id>/evidence.xlsx")
-@login_required
-def evidence_xlsx(tenant_id: int):
-    """Every question set and the controls; with ``set=``, that question set only."""
-    t = tenant_or_404(tenant_id)
-    key = _set_key(request.args.get("set"), None)
-    key = key if key in questionnaires.SETS else None
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.xlsx" if key else "evidence.xlsx")
-    name = _evidence_name(t, "xlsx")
-    return Response(
-        evidence.to_xlsx(evidence.build(g.db, t), brand=branding.load(g.db), only=key),
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={name[:-5] + '-' + key if key else name[:-5]}.xlsx"},
-    )
-
-
-@bp.get("/tenants/<int:tenant_id>/evidence.txt")
-@login_required
-def evidence_text(tenant_id: int):
-    """One question set as plain text, to paste from."""
-    t = tenant_or_404(tenant_id)
-    key = _set_key(request.args.get("set"))
-    key = key if key in questionnaires.SETS else questionnaires.DEFAULT
-    audit(g.db, g.user["username"], "report_downloaded", t["id"], f"evidence-{key}.txt")
-    body = questionnaires.to_text(questionnaires.sheet(evidence.build(g.db, t), key), branding.load(g.db).display_name)
-    return Response(
-        body,
-        mimetype="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{_evidence_name(t, "txt")[:-4]}-{key}.txt"'},
-    )
+    endpoint = {"pdf": "scheme_pdf", "xlsx": "scheme_xlsx", "txt": "scheme_text", "csv": "scheme_csv"}.get(ext)
+    if endpoint is None:
+        abort(404)
+    return redirect(url_for(f"evidence.{endpoint}", tenant_id=t["id"], scheme=_scheme_for(request.args.get("set"))))
 
 
 @bp.get("/tenants/<int:tenant_id>/data")

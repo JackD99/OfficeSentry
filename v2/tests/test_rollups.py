@@ -145,7 +145,7 @@ def test_clients_get_their_own_downloads_but_no_cross_tenant_pages(client, db, t
     assert client.get(f"/tenants/{alpha}/changes").status_code == 200
     for url in (
         f"/tenants/{alpha}/report.csv",
-        f"/tenants/{alpha}/evidence.csv",
+        f"/tenants/{alpha}/evidence/insurance.csv",
         f"/tenants/{alpha}/data/mailboxes.csv",
         f"/tenants/{alpha}/changes.csv",
     ):

@@ -290,8 +290,8 @@ EXAMPLES = {
         "One client judged against Cyber Essentials: each control's verdict, the fixes and the answers for the form.",
     ),
     "insurance-evidence-pack.pdf": (
-        "/tenants/{t}/evidence.pdf",
-        "The controls cyber-insurance questionnaires ask about, answered from the data.",
+        "/tenants/{t}/evidence/insurance.pdf",
+        "The controls cyber insurers ask about, judged from the data, with the answers for the proposal form.",
     ),
     "sharepoint-storage.pdf": (
         "/tenants/{t}/data/sharepoint-storage.pdf",

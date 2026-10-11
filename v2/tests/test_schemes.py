@@ -5,8 +5,10 @@ from datetime import UTC, datetime, timedelta
 from officesentry import store
 from officesentry.reports import evidence_answers, schemes
 from officesentry.reports import schemes_cyber_essentials as ce
+from officesentry.reports import schemes_forms as forms
 from officesentry.reports.schemes import FAIL, MANUAL, PARTLY, PASS, UNKNOWN
 from tests import graphdata as gd
+from tests.conftest import login, make_user
 from tests.seed import seed_tenant
 from tests.test_collectors import USERS
 
@@ -20,11 +22,14 @@ def test_registered_schemes_name_real_checks_topics_and_questions():
     for s in schemes.SCHEMES.values():
         assert s.version and s.source and s.intro and s.themes
         for c in s.controls:
-            assert c.ref and c.title and c.requirement and c.scope, c.key
+            assert c.title and c.requirement and c.scope, c.key
+            assert c.ref or not s.strict, c.key  # a certification's control names the question it answers
             assert set(c.rules + c.support) <= schemes.RULE_KEYS
             assert not c.topic or c.topic in evidence_answers.KEYS
     assert ce.CYBER_ESSENTIALS.strict and ce.CYBER_ESSENTIALS_PLUS.audit
-    assert [k for k, _ in schemes.grouped()] == ["UK certification"]
+    assert [k for k, _ in schemes.grouped()] == ["UK certification", "Insurance and supplier questionnaires"]
+    assert not forms.INSURANCE.strict and forms.INSURANCE.questions == "insurance"
+    assert not forms.SUPPLIER.strict and forms.SUPPLIER.questions == "supplier"
 
 
 def test_register_refuses_a_bad_scheme():
@@ -136,3 +141,39 @@ def test_assess_all_judges_every_scheme_once(db, two_tenants):
     seed_tenant(db, alpha)
     results = schemes.assess_all(db, store.get_tenant(db, alpha))
     assert [r.scheme.key for r in results] == list(schemes.SCHEMES)
+
+
+def test_forms_judge_gaps_as_partly_and_keep_the_forms_answers(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    r = _assess(db, alpha, "insurance")
+    by = r.by_key
+    assert by["legacy_auth"].verdict in (FAIL, PARTLY) and by["mfa_all"].figures  # judged, never strict
+    assert by["backups"].verdict == MANUAL and "[" in by["backups"].text
+    assert r.headline.label in ("Gaps to close", "Mostly in place") and "applying" not in r.headline.headline
+    assert r.sheet is not None and r.sheet.qset.key == "insurance"
+    supplier = _assess(db, alpha, "supplier")
+    assert supplier.by_key["shared_accounts"].verdict in (PASS, FAIL, PARTLY)
+    assert {c.control.topic for c in supplier.controls} >= {"policies", "data_location", "vulnerability_scanning"}
+
+
+def test_old_links_land_on_the_scheme_pages(client, db, two_tenants):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha)
+    make_user(db, "client", role="client", tenants=[alpha])
+    login(client, "client")
+    for query, scheme in (
+        ("?set=insurance", "insurance"),
+        ("?set=supplier", "supplier"),
+        ("?set=cyber-essentials", "cyber-essentials"),
+        ("?set=controls", "insurance"),
+        ("?set=nope", "insurance"),
+    ):
+        resp = client.get(f"/tenants/{alpha}/evidence{query}")
+        assert resp.status_code == 302 and resp.headers["Location"].endswith(f"/tenants/{alpha}/evidence/{scheme}")
+    for ext in ("pdf", "xlsx", "txt", "csv"):
+        resp = client.get(f"/tenants/{alpha}/evidence.{ext}?set=supplier")
+        assert resp.status_code == 302 and resp.headers["Location"].endswith(f"/evidence/supplier.{ext}")
+        assert client.get(f"/tenants/{bravo}/evidence.{ext}").status_code == 404
+    assert client.get(f"/tenants/{alpha}/evidence.pdf").headers["Location"].endswith("/evidence/insurance.pdf")
+    assert client.get(f"/tenants/{alpha}/evidence.doc").status_code == 404

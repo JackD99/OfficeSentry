@@ -19,6 +19,7 @@ from ..reports import (
     scheme_export,
     schemes,
     schemes_cyber_essentials,  # noqa: F401  (registers the schemes)
+    schemes_forms,  # noqa: F401
     tables,
 )
 from ..reports.docx_writer import MIMETYPE as DOCX
