@@ -379,7 +379,7 @@ def sharing_part(s: Site) -> Part:
     items = _shared_items(s)
     if items is None:
         result.note = "The files behind these links show once Shared files is scanned."
-    elif items:
+    elif items := [i for i in items if i.get("exposure")]:  # not those shared only with colleagues
         table = Section(
             "Files shared from this site",
             ["File or folder", "Library", "Shared with", "Can edit", "Last modified"],

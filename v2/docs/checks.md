@@ -8,7 +8,7 @@ Generated from the code. To refresh it, run this from `v2/`:
 PYTHONPATH=. python scripts/gen_check_catalogue.py > docs/checks.md
 ```
 
-60 checks, 38 data sources (collectors) and 46 detail reports.
+61 checks, 38 data sources (collectors) and 47 detail reports.
 
 A check reads only the data its collectors stored. When that data is missing, or the tenant's licence can't provide it, the check shows as **not checked** with the reason, instead of passing or failing.
 
@@ -117,6 +117,7 @@ A check reads only the data its collectors stored. When that data is missing, or
 | Check | Reads data from | Licence note | Recommendation |
 |---|---|---|---|
 | **No files are shared with anyone links**<br>`anyone_links` | `shared_files`, `sharepoint_usage` | The tenant has no SharePoint licence | Remove anyone links that are no longer needed, and set the rest to view-only with an expiry date. The Shared files report lists each one. |
+| **People outside can only view shared files**<br>`outside_edit_access` | `shared_files` | The tenant has no SharePoint licence | Change sharing with people outside the organisation to view-only unless they need to edit, and remove sharing that's no longer needed. The File and folder permissions report lists each person outside and what they can edit. |
 | **Files can't be shared with anonymous links**<br>`sharepoint_sharing` | `tenant_policies` |  | Change SharePoint external sharing to "New and existing guests" so every external person signs in. If the client relies on Anyone links, set them to expire and to view-only. |
 | **Guests don't have full control of sites**<br>`site_guest_full_control` | `site_permissions` | The tenant has no SharePoint licence | Take guests out of each site's owners group and away from Full Control; give them Edit or Read through the site's members or visitors group instead. Full Control lets someone outside the organisation change who can open the site and delete anything on it. The Site permissions report lists them. |
 | **Every site has at least two owners**<br>`site_owners` | `site_access` | The tenant has no SharePoint licence | Give each site a second owner (in the Microsoft 365 group, or as a site administrator) so access requests and content questions have someone to go to when one person leaves. The Site access report lists each site's owners. |
@@ -172,7 +173,7 @@ Each collector reads one area of a tenant and stores a snapshot. They run every 
 | `per_user_mfa` | Per-user MFA | The per-user MFA setting on each member, for tenants without Entra ID P1. | `Policy.Read.All` |
 | `risky_users` | Risky users | Accounts Entra ID Protection rates at risk or confirmed compromised, and those resolved in the last 90 days (needs Entra ID P2). | `IdentityRiskyUser.Read.All` |
 | `secure_score` | Secure Score | Current Secure Score, per-control scores and up to 90 days of daily history. | `SecurityEvents.Read.All` |
-| `shared_files` | Shared files | Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, or people outside it. Needs the Sites.Read.All permission. | `Sites.Read.All` |
+| `shared_files` | Shared files | Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, people outside it, or given its own permissions. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_storage` | SharePoint storage | What fills each site's storage: libraries, folders, large and old files, version history and recycle bins. Needs the Sites.Read.All permission. | `Sites.Read.All` |
 | `sharepoint_usage` | SharePoint and OneDrive usage | Every site and OneDrive with storage, activity and sharing link counts, from Microsoft's usage reports. | `Reports.Read.All` |
 | `sign_ins` | Sign-in activity | Interactive sign-ins in the last 7 days, summarised by account, country, app and failure reason (needs Entra ID P1; sign-in risk needs P2). | `AuditLog.Read.All` |
@@ -202,6 +203,7 @@ Each one is a page at `/tenants/<id>/data/<key>` with an XLSX export.
 | `devices` | Devices | Intune compliance, encryption and Windows support, and every Entra ID device record. | `devices` |
 | `distribution-lists` | Distribution lists | Every distribution list with its members and owners, who can mail it, and empty, ownerless or unused lists. | `distribution_lists`, `mailboxes`, `users` |
 | `domains` | Email domains | SPF, DMARC, DKIM, MTA-STS and TLS-RPT for each of the tenant's domains, from public DNS. | `domain_health` |
+| `file-permissions` | File and folder permissions | Who can open each shared file or folder, how they got access, who shared it and when links expire. | `shared_files`, `users` |
 | `group-membership` | Group membership | Who is in which team and Microsoft 365 group: each person's teams and groups, each group's members, and every membership in one table. | `groups`, `users` |
 | `group-structure` | Empty, nested and dynamic groups | Groups with no members, groups inside other groups, dynamic groups with their rules and whether they're paused, teams and groups about to expire, role-assignable groups, and blocked accounts still in groups. | `group_nesting`, `groups`, `users` |
 | `groups` | Groups and Teams | Who can create teams and groups, which have no owner, and the guests in each. | `groups` |

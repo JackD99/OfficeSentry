@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
+from ..devices import parse_ts
 from ..graph import GraphError, PermissionMissing
 from ..mailflow import is_external, tenant_domains
 from ..snapshot import TenantSnapshot
@@ -181,12 +182,27 @@ MAX_PERMISSION_LOOKUPS = 5000  # shared items whose permissions are read per run
 # libraries left over keep their last results and are scanned first the next night.
 MAX_PAGES = 6000
 TIME_BUDGET = timedelta(hours=2)
+# After a library's first full walk, each night asks Microsoft only for what changed since (its delta link,
+# kept as a ``drive_cursor`` object) and re-reads the permissions of changed items only; the rest keep last
+# night's answer. Every library is walked whole again after this long, so nothing drifts for good.
+FULL_SCAN_DAYS = 30
+MAX_STORED_ITEMS = 20000  # shared files and folders kept per tenant; the ones shared furthest come first
 clock = time.monotonic
 SCOPES = {
     "anonymous": "Anyone",
     "organization": "Organisation",
     "users": "Specific people",
     "existingAccess": "People with access",
+}
+ROLE_WORDS = {"read": "View", "write": "Edit", "owner": "Full control"}
+LINK_WORDS = {
+    "view": "View",
+    "edit": "Edit",
+    "review": "Review",
+    "embed": "Embed",
+    "blocksDownload": "View, no download",
+    "createOnly": "Upload only",
+    "addressBar": "View",
 }
 
 
@@ -210,31 +226,89 @@ def _is_guest(identity: dict | None) -> bool:
     return False
 
 
-def describe_permissions(perms: list[dict], domains: set[str]) -> dict:
-    """Reduce an item's own (not inherited) permissions to what matters for exposure."""
-    links, people = [], []
+def _is_group(identity: dict | None) -> bool:
+    return any((identity or {}).get(part) for part in ("group", "siteGroup"))
+
+
+def _can(roles: list, link: dict | None) -> str:
+    if link:
+        return LINK_WORDS.get(link.get("type"), link.get("type") or "View")
+    if "owner" in roles:
+        return ROLE_WORDS["owner"]
+    return ROLE_WORDS["write"] if "write" in roles else ROLE_WORDS["read"]
+
+
+def describe_permissions(perms: list[dict], domains: set[str], now: datetime | None = None) -> dict:
+    """Reduce an item's own (not inherited) permissions to what matters for exposure, and list each grant.
+
+    ``grants`` is one row per way in: a person, group or guest given access directly, each person a link
+    was sent to, or an anyone or organisation-wide link on its own. ``kind`` is person, guest (a guest
+    account or an outside address), group, anyone or organisation; ``how`` says direct or link. A grant
+    past its expiry (at ``now``) is listed, so the report can say so, but no longer counts as access.
+    """
+    links, people, grants = [], [], []
     for p in perms:
         if p.get("inheritedFrom"):
             continue
-        roles = [r for r in p.get("roles") or [] if r != "owner"]
-        link = p.get("link")
+        roles = [r for r in p.get("roles") or [] if r != "owner"] if isinstance(p.get("roles"), list) else []
+        link = p.get("link") if isinstance(p.get("link"), dict) else None
+        expires = p.get("expirationDateTime") or None
+        ends = parse_ts(expires)
+        expired = bool(now and ends and ends < now)
         if link:
-            granted = [_identity_email(i) for i in p.get("grantedToIdentitiesV2") or []]
+            scope = link.get("scope") or "users"
+            identities = [i for i in p.get("grantedToIdentitiesV2") or [] if isinstance(i, dict)]
+            granted = [_identity_email(i) for i in identities]
             external = [g for g in granted if g and "@" in g and is_external(g, domains)]
-            links.append(
+            if expired:
+                links_in = []  # listed as a grant below, but it opens nothing any more
+            else:
+                links_in = links
+            links_in.append(
                 {
-                    "scope": link.get("scope") or "users",
+                    "scope": scope,
                     "type": link.get("type") or "view",
-                    "expires": p.get("expirationDateTime"),
+                    "expires": expires,
                     "password": bool(p.get("hasPassword")),
                     "people": [g for g in granted if g],
                     "external": external,
                 }
             )
+            can = _can(roles, link)
+            how = {"anonymous": "Anyone link", "organization": "Organisation link"}.get(scope, "Link")
+            if scope in ("anonymous", "organization"):
+                grants.append(
+                    {
+                        "who": "Anyone with the link" if scope == "anonymous" else "Everyone in the organisation",
+                        "kind": "anyone" if scope == "anonymous" else "organisation",
+                        "how": how,
+                        "can": can,
+                        "outside": scope == "anonymous",
+                        "expires": expires,
+                        "password": bool(p.get("hasPassword")),
+                    }
+                )
+            for identity, who in zip(identities, granted, strict=True):
+                if not who:
+                    continue
+                outside = _is_guest(identity) or who in external
+                grants.append(
+                    {
+                        "who": who,
+                        "kind": "group" if _is_group(identity) else ("guest" if outside else "person"),
+                        "how": how,
+                        "can": can,
+                        "outside": outside,
+                        "expires": expires,
+                        "password": bool(p.get("hasPassword")),
+                    }
+                )
             continue
         if "owner" in (p.get("roles") or []) and not roles:
             continue
         for identity in [p.get("grantedToV2")] + (p.get("grantedToIdentitiesV2") or []):
+            if not isinstance(identity, dict):
+                continue
             who = _identity_email(identity)
             if not who:
                 continue
@@ -244,22 +318,48 @@ def describe_permissions(perms: list[dict], domains: set[str]) -> dict:
                 or bool(invited and is_external(invited, domains))
                 or ("@" in who and bool(domains) and is_external(who, domains))
             )
-            people.append({"who": invited or who, "roles": roles, "external": external})
+            if not expired:
+                people.append({"who": invited or who, "roles": roles, "external": external})
+            grants.append(
+                {
+                    "who": invited or who,
+                    "kind": "group" if _is_group(identity) else ("guest" if external else "person"),
+                    "how": "Direct",
+                    "can": _can(roles, None),
+                    "outside": external,
+                    "expires": expires,
+                    "password": False,
+                }
+            )
     anyone = [lk for lk in links if lk["scope"] == "anonymous"]
     org = [lk for lk in links if lk["scope"] == "organization"]
     outside = sorted({e for lk in links for e in lk["external"]} | {p["who"] for p in people if p["external"]})
     exposure = "anyone" if anyone else ("external" if outside else ("organization" if org else None))
+    expiries = [g["expires"] for g in grants if g["expires"]]
     return {
         "exposure": exposure,
         "links": links,
         "people": people,
+        "grants": grants,
         "externalPeople": outside,
+        "internalPeople": sorted(
+            {p["who"] for p in people if not p["external"]}
+            | {g for lk in links for g in lk["people"] if g not in lk["external"]}
+        ),
         "anyoneLinks": len(anyone),
         "orgLinks": len(org),
         "editable": any(lk["type"] == "edit" for lk in anyone + org)
         or any("write" in p["roles"] for p in people if p["external"]),
         "neverExpires": any(not lk["expires"] for lk in anyone),
+        "expires": min(expiries) if expiries else None,
     }
+
+
+def _shared_by(item: dict) -> tuple[str | None, str | None]:
+    """Who shared the item and when, from its ``shared`` facet (Microsoft fills it on the item itself)."""
+    shared = item.get("shared") if isinstance(item.get("shared"), dict) else {}
+    by = shared.get("sharedBy") if isinstance(shared.get("sharedBy"), dict) else {}
+    return _identity_email(by), shared.get("sharedDateTime") or None
 
 
 class Budget:
@@ -268,6 +368,7 @@ class Budget:
     def __init__(self):
         self.started = clock()
         self.pages = 0
+        self.lookups = 0
 
     @property
     def time_spent(self) -> str | None:
@@ -280,10 +381,17 @@ class Budget:
         """What ran out, in words, or None while there's allowance left."""
         if self.pages >= MAX_PAGES:
             return f"the limit of {plural(MAX_PAGES, 'page')} a night"
+        if self.lookups >= MAX_PERMISSION_LOOKUPS:
+            return f"the limit of {MAX_PERMISSION_LOOKUPS:,} sharing lookups a night"
         return self.time_spent
 
     def over(self) -> bool:
         return self.spent is not None
+
+    def no_lookups(self) -> bool:
+        """True once the sharing lookups a library's items still need can't be made this run: the pages a
+        run may read don't stop the lookups of a library already read."""
+        return self.lookups >= MAX_PERMISSION_LOOKUPS or self.time_spent is not None
 
 
 def _in_turn(drives: list[dict], next_drive: str | None) -> list[dict]:
@@ -302,13 +410,31 @@ def _path(item: dict) -> str:
     return f"{parent}/{item.get('name')}".lstrip("/")
 
 
+def _ranked(rows: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
+    """The items shared furthest first, so a cut keeps what matters most."""
+    rank = {"anyone": 0, "external": 1, "organization": 2}
+    return sorted(rows, key=lambda kv: (rank.get(kv[1].get("exposure"), 3), kv[0]))
+
+
+class _DriveScan:
+    """What one library's walk found: its shared items, how many unchanged ones it kept, and its cursor."""
+
+    def __init__(self):
+        self.found: list[tuple[str, dict]] = []
+        self.kept = 0
+        self.items = 0  # items read this run
+        self.complete = True
+        self.cursor: dict | None = None
+        self.full = False
+
+
 @register
 class SharedFiles(Collector):
     key = "shared_files"
     title = "Shared files"
     description = (
         "Every file and folder in SharePoint and OneDrive shared with anyone, the whole organisation, "
-        "or people outside it. Needs the Sites.Read.All permission."
+        "people outside it, or given its own permissions. Needs the Sites.Read.All permission."
     )
     permissions = ("Sites.Read.All",)
 
@@ -329,11 +455,20 @@ class SharedFiles(Collector):
         snap = TenantSnapshot(ctx.conn, ctx.tenant)
         domains = tenant_domains(snap) or set()
         previous = (snap.objects("shared_files", "scan_status") or [None])[0] or {}
+        last_items: dict[str, dict] = {}
+        for item in snap.objects("shared_files", "shared_item") or []:
+            last_items[item["_id"]] = {k: v for k, v in item.items() if k not in ("_id", "_kind")}
+        cursors = {c["_id"]: c for c in snap.objects("shared_files", "drive_cursor") or []}
+        now = datetime.now(UTC)
+        self.now_dt = now
+        self.now = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        rescan_before = (now - timedelta(days=FULL_SCAN_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
         drives = _in_turn(drives, previous.get("next_drive"))
         budget = Budget()
-        lookups = 0
-        scanned = 0
+        scanned = kept = changed = 0
+        full_scans = 0
         stored: list[tuple[str, dict]] = []
+        new_cursors: list[tuple[str, dict]] = []
         skipped_drives = 0
         scanned_drives = 0
         stopped = None
@@ -341,86 +476,41 @@ class SharedFiles(Collector):
             stopped = budget.spent or (f"the limit of {MAX_DRIVES:,} libraries a night" if n >= MAX_DRIVES else None)
             if stopped:
                 break
+            cursor = cursors.get(drive["id"])
+            incremental = bool(cursor and cursor.get("deltaLink") and (cursor.get("fullScanAt") or "") > rescan_before)
             try:
-                result = ctx.graph.get_all(
-                    f"/drives/{drive['id']}/root/delta",
-                    {"$select": ITEM_FIELDS},
-                    max_pages=min(MAX_PAGES_PER_DRIVE, MAX_PAGES - budget.pages),
-                    stop=budget.over,
-                )
+                scan = self._scan_drive(ctx, drive, budget, domains, last_items, cursor if incremental else None)
             except GraphError as exc:
                 skipped_drives += 1
                 ctx.log(f"Skipped {drive['webUrl'] or drive['id']}: {exc.message}", "warning")
                 continue
-            budget.pages += result.pages
-            if result.truncated and not budget.spent:
-                ctx.warn(f"Stopped scanning {drive['webUrl']} after {MAX_PAGES_PER_DRIVE} pages")
-            items = [i for i in result.items if "deleted" not in i and "root" not in i]
-            shared_ids = {i["id"] for i in items if i.get("shared") is not None}
-            # Children of a shared folder report the folder's sharing too. Read
-            # permissions only at the top of each shared branch.
-            tops = [
-                i
-                for i in items
-                if i["id"] in shared_ids and (i.get("parentReference") or {}).get("id") not in shared_ids
-            ]
-            found: list[tuple[str, dict]] = []
-            for item in tops:
-                if lookups >= MAX_PERMISSION_LOOKUPS or budget.time_spent:
-                    break
-                lookups += 1
-                try:
-                    perms = ctx.graph.get_all(
-                        f"/drives/{drive['id']}/items/{item['id']}/permissions", {"$select": PERMISSION_FIELDS}
-                    ).items
-                except GraphError as exc:
-                    ctx.log(f"Couldn't read sharing for {item.get('webUrl')}: {exc.message}", "warning")
-                    continue
-                info = describe_permissions(perms, domains)
-                if not info["exposure"]:
-                    continue
-                found.append(
-                    (
-                        f"{drive['id']}:{item['id']}",
-                        {
-                            "name": item.get("name"),
-                            "path": _path(item),
-                            "webUrl": item.get("webUrl"),
-                            "folder": "folder" in item,
-                            "size": item.get("size"),
-                            "lastModified": item.get("lastModifiedDateTime"),
-                            "site": drive["site"],
-                            "siteUrl": drive["siteUrl"],
-                            "library": drive["name"],
-                            "personal": drive["personal"],
-                            "owner": drive["owner"],
-                            **info,
-                        },
-                    )
-                )
-            incomplete = (result.truncated and budget.spent) or budget.time_spent
-            if incomplete and (scanned_drives or not result.pages):
+            if not scan.complete and (scanned_drives or not scan.items):
                 # The budget ran out part-way through this library: it's scanned again, whole, next time.
                 # (Unless it was the first and it did read something: then it keeps what was read, so one
                 # library that alone takes longer than the budget can't stop the others ever being scanned.)
                 stopped = budget.spent
                 break
-            stored.extend(found)
-            scanned += len(items)
+            stored.extend(scan.found)
+            if scan.cursor:
+                new_cursors.append((drive["id"], scan.cursor))
+            scanned += scan.items
+            kept += scan.kept
+            changed += len(scan.found) - scan.kept
+            full_scans += scan.full
             scanned_drives += 1
-        if lookups >= MAX_PERMISSION_LOOKUPS:
-            ctx.warn(f"Read sharing for the first {MAX_PERMISSION_LOOKUPS} shared items only")
-            ctx.truncated = True
         left = drives[scanned_drives + skipped_drives :]
         next_drive = left[0]["id"] if left else None
         carried = 0
         if left:
             # Those libraries keep what the last scan found, so a report doesn't lose its rows for a night.
             left_ids = {d["id"] for d in left}
-            for item in snap.objects("shared_files", "shared_item") or []:
-                if item["_id"].split(":", 1)[0] in left_ids:
-                    stored.append((item["_id"], {k: v for k, v in item.items() if k not in ("_id", "_kind")}))
+            for item_id, item in last_items.items():
+                if item_id.split(":", 1)[0] in left_ids:
+                    stored.append((item_id, item))
                     carried += 1
+            for d in left:
+                if d["id"] in cursors:
+                    new_cursors.append((d["id"], {k: v for k, v in cursors[d["id"]].items() if k[0] != "_"}))
             ctx.warn(
                 f"Scanned {plural(scanned_drives, 'library')} of {len(drives)} before reaching {stopped}; "
                 f"the other {len(left)} keep their last results and are scanned first next time"
@@ -428,8 +518,15 @@ class SharedFiles(Collector):
             ctx.truncated = True
         if skipped_drives:
             ctx.warn(f"{plural(skipped_drives, 'library')} couldn't be read")
+        if len(stored) > MAX_STORED_ITEMS:
+            ctx.warn(
+                f"Found {len(stored):,} shared files and folders; keeping the {MAX_STORED_ITEMS:,} shared furthest"
+            )
+            ctx.truncated = True
+            stored = _ranked(stored)[:MAX_STORED_ITEMS]
         catalog.save()
         ctx.objects("shared_item", stored)
+        ctx.objects("drive_cursor", new_cursors)
         ctx.objects(
             "scan_status",
             [
@@ -439,19 +536,122 @@ class SharedFiles(Collector):
                         "available": True,
                         "drives": len(drives),
                         "items": scanned,
-                        "lookups": lookups,
+                        "lookups": budget.lookups,
                         "scanned_drives": scanned_drives,
+                        "full_scans": full_scans,
+                        "kept": kept,
+                        "changed": changed,
                         "next_drive": next_drive,
                         "carried": carried,
+                        "at": self.now,
                     },
                 )
             ],
         )
+        if scanned_drives and full_scans < scanned_drives:
+            ctx.log(
+                f"Asked Microsoft for changes only in {scanned_drives - full_scans} of {scanned_drives} libraries: "
+                f"{plural(changed, 'shared item')} changed, {kept:,} unchanged"
+            )
         rows = [r for _, r in stored]
         ctx.metric("sharing.items_scanned", scanned)
         ctx.metric("sharing.anyone_items", sum(r["exposure"] == "anyone" for r in rows))
         ctx.metric("sharing.external_items", sum(bool(r["externalPeople"]) for r in rows))
         ctx.metric("sharing.org_items", sum(r["orgLinks"] > 0 for r in rows))
+        ctx.metric("sharing.unique_items", len(rows))
+        ctx.metric("sharing.external_people", len({p for r in rows for p in r["externalPeople"]}))
+
+    def _scan_drive(
+        self, ctx: RunContext, drive: dict, budget: Budget, domains: set[str], last_items: dict, cursor: dict | None
+    ) -> _DriveScan:
+        """Walk one library: whole (``cursor`` None), or only what changed since its delta link."""
+        scan = _DriveScan()
+        prefix = drive["id"] + ":"
+        mine = {k: v for k, v in last_items.items() if k.startswith(prefix)}
+        pages = min(MAX_PAGES_PER_DRIVE, MAX_PAGES - budget.pages)
+        result = None
+        if cursor:
+            try:
+                result = ctx.graph.get_all(cursor["deltaLink"], max_pages=pages, stop=budget.over)
+            except GraphError as exc:
+                if exc.status != 410:  # 410 Gone: the token expired, so walk the library whole again
+                    raise
+                ctx.log(f"Change tracking for {drive['webUrl'] or drive['id']} expired; scanning it whole")
+                cursor = None
+        if cursor is None:
+            scan.full = True
+            result = ctx.graph.get_all(
+                f"/drives/{drive['id']}/root/delta", {"$select": ITEM_FIELDS}, max_pages=pages, stop=budget.over
+            )
+        budget.pages += result.pages
+        if result.truncated:
+            scan.complete = False
+            if not budget.spent:
+                ctx.warn(f"Stopped scanning {drive['webUrl']} after {MAX_PAGES_PER_DRIVE} pages")
+        items = [i for i in result.items if "deleted" not in i and "root" not in i]
+        scan.items = len(items)
+        gone = {prefix + i["id"] for i in result.items if "deleted" in i}
+        shared_ids = {i["id"] for i in items if i.get("shared") is not None}
+        if not scan.full:
+            # Unchanged items keep last night's answer; the shared folders among them still shelter their
+            # changed children from a lookup of their own.
+            unchanged = {
+                k: v for k, v in mine.items() if k not in gone and k[len(prefix) :] not in {i["id"] for i in items}
+            }
+            shared_ids |= {k[len(prefix) :] for k in unchanged}
+            scan.found.extend(unchanged.items())
+            scan.kept = len(unchanged)
+        # Children of a shared folder report the folder's sharing too. Read
+        # permissions only at the top of each shared branch.
+        tops = [
+            i for i in items if i["id"] in shared_ids and (i.get("parentReference") or {}).get("id") not in shared_ids
+        ]
+        for item in tops:
+            if budget.no_lookups():
+                scan.complete = False
+                break
+            budget.lookups += 1
+            try:
+                perms = ctx.graph.get_all(
+                    f"/drives/{drive['id']}/items/{item['id']}/permissions", {"$select": PERMISSION_FIELDS}
+                ).items
+            except GraphError as exc:
+                ctx.log(f"Couldn't read sharing for {item.get('webUrl')}: {exc.message}", "warning")
+                continue
+            info = describe_permissions(perms, domains, self.now_dt)
+            if not info["grants"]:
+                continue
+            key = prefix + item["id"]
+            by, at = _shared_by(item)
+            scan.found.append(
+                (
+                    key,
+                    {
+                        "name": item.get("name"),
+                        "path": _path(item),
+                        "webUrl": item.get("webUrl"),
+                        "folder": "folder" in item,
+                        "size": item.get("size"),
+                        "lastModified": item.get("lastModifiedDateTime"),
+                        "site": drive["site"],
+                        "siteUrl": drive["siteUrl"],
+                        "library": drive["name"],
+                        "personal": drive["personal"],
+                        "owner": drive["owner"],
+                        "sharedBy": by,
+                        "sharedAt": at,
+                        "firstSeen": (mine.get(key) or {}).get("firstSeen") or self.now,
+                        **info,
+                    },
+                )
+            )
+        if scan.complete and result.delta_link:
+            scan.cursor = {
+                "deltaLink": result.delta_link,
+                "fullScanAt": self.now if scan.full else cursor.get("fullScanAt") or self.now,
+                "checkedAt": self.now,
+            }
+        return scan
 
     def _drives(self, ctx: RunContext, catalog: Lookups) -> list[dict]:
         """Every document library and OneDrive, de-duplicated by drive ID."""

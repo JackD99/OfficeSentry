@@ -46,8 +46,10 @@ def onedrive_part(p: Person) -> Part:
             )
 
     names = p.keys | ({p.user["displayName"].lower()} if p.user.get("displayName") else set())
-    mine = [
-        s for s in shared or [] if s.get("personal") and isinstance(s.get("owner"), str) and s["owner"].lower() in names
+    mine = [  # shared with anyone, outside or the whole organisation; not only with colleagues
+        s
+        for s in shared or []
+        if s.get("personal") and s.get("exposure") and isinstance(s.get("owner"), str) and s["owner"].lower() in names
     ]
     if shared is None:
         result.note = (

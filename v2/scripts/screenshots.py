@@ -243,6 +243,7 @@ SHOTS = [
         height=950,
         scroll_to="h2:has-text('Largest files')",
     ),
+    Shot("file-permissions", "/tenants/{t}/data/file-permissions", height=1100),
     Shot("mfa", "/tenants/{t}/data/mfa", height=950),
     Shot("mail-forwarding", "/tenants/{t}/data/mailboxes", height=900),
     Shot("mailbox-permissions", "/tenants/{t}/data/mailbox-permissions", height=950),
