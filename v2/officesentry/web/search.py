@@ -3,29 +3,33 @@
 One box finds people, mailboxes, where mail is forwarded to, sign-in IP
 addresses, apps, devices and domains in each tenant's latest snapshot, so a
 responder can answer "which clients forward to this address?" or "who signed in
-from this IP?" without opening every tenant. It scans stored objects in Python
-(no index); tenants without data are skipped and the scan stops at a cap.
+from this IP?" without opening every tenant. Tenants whose index
+(``search_index.py``, kept by the worker) is current are searched through it;
+the rest are scanned in Python, so a search never misses what the latest
+snapshot holds. Tenants without data are skipped and the search stops at a cap.
 
-To make something searchable, add a ``Kind`` to ``KINDS``: the collector and
-object kind it reads, the values to match in each object, and how to show and
-link a match. Links open the person's page, or the detail report filtered to
-the row (``f=<table>/<column>:<value>``, see ``reports/views.py``).
+To make something searchable, add a ``Kind`` to ``search_index.KINDS`` (the
+collector and object kind it reads, and the values to match in each object)
+and how to show and link a match to ``SHOW`` here, under the kind's key. Links
+open the person's page, or the detail report filtered to the row
+(``f=<table>/<column>:<value>``, see ``reports/views.py``).
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import cached_property
 from urllib.parse import urlencode
 
 from flask import Blueprint, abort, g, render_template, request, url_for
 
+from .. import search_index
 from ..checks.apps import app_risks
-from ..mailflow import inbox_rule_risk, mailbox_forwarding
 from ..reports import sign_in_reports
 from ..reports.views import slug
+from ..search_index import KINDS
 from ..snapshot import TenantSnapshot
 from ..text import plural
 from .access import roles_required, visible_tenants
@@ -106,15 +110,6 @@ class Tenant:
         return {d["_id"].lower() for d in self.snap.objects("domain_health", "domain") or []}
 
 
-@dataclass(frozen=True)
-class Kind:
-    collector: str
-    kind: str
-    values: Callable[[dict], Iterable]  # what a query is matched against
-    show: Callable[[Tenant, dict, str], Hit]  # (tenant, object, the value that matched)
-    ip: bool = False  # values are IP addresses: matched by prefix, and only for an IP-like query
-
-
 def _text(value) -> str:
     return value if isinstance(value, str) else ""
 
@@ -154,10 +149,6 @@ def _forwarding(t: Tenant, m: dict, target: str) -> Hit:
         "Set by an admin on the mailbox",
         t.report("mailboxes", "Forwarding", "Forwards to", target),
     )
-
-
-def _rule_targets(r: dict) -> list[str]:
-    return inbox_rule_risk(r, set()).forwards_to
 
 
 def _rule(t: Tenant, r: dict, target: str) -> Hit:
@@ -239,10 +230,6 @@ def _entra_device(t: Tenant, d: dict, _v: str) -> Hit:
     )
 
 
-def _domain_names(org: dict) -> list[str]:
-    return [d["name"] for d in org.get("verifiedDomains") or [] if d.get("name")]
-
-
 def _domain(t: Tenant, _org: dict, name: str) -> Hit:
     checked = name.lower() in t.checked_domains
     return Hit(
@@ -253,32 +240,21 @@ def _domain(t: Tenant, _org: dict, name: str) -> Hit:
     )
 
 
-# In the order results are listed within a tenant.
-KINDS: tuple[Kind, ...] = (
-    Kind("users", "user", lambda u: (u.get("displayName"), u.get("userPrincipalName"), u.get("mail")), _person),
-    Kind(
-        "mailboxes",
-        "mailbox",
-        lambda m: (
-            m.get("DisplayName"),
-            m.get("PrimarySmtpAddress"),
-            m.get("UserPrincipalName"),
-            m.get("Alias"),
-            m.get("Name"),
-        ),
-        _mailbox,
-    ),
-    Kind("mailboxes", "mailbox", lambda m: (mailbox_forwarding(m),), _forwarding),
-    Kind("inbox_rules", "inbox_rule", _rule_targets, _rule),
-    Kind("sign_ins", "sign_in_failure_ip", lambda i: (i.get("ip"),), _failure_ip, ip=True),
-    Kind("sign_ins", "risky_sign_in", lambda r: (r.get("ip"),), _risky, ip=True),
-    Kind("sign_ins", "sign_in_location", lambda loc: loc.get("ips") or (), _location, ip=True),
-    Kind("app_consents", "service_principal", lambda sp: (sp.get("displayName"), sp.get("appId")), _app),
-    Kind("app_consents", "application", lambda a: (a.get("displayName"), a.get("appId")), _registration),
-    Kind("devices", "managed_device", lambda d: (d.get("deviceName"),), _managed_device),
-    Kind("devices", "entra_device", lambda d: (d.get("displayName"),), _entra_device),
-    Kind("tenant_profile", "organization", _domain_names, _domain),
-)
+# How a match of each kind in ``search_index.KINDS`` is shown: (tenant, object, the value that matched).
+SHOW: dict[str, Callable[[Tenant, dict, str], Hit]] = {
+    "person": _person,
+    "mailbox": _mailbox,
+    "forwarding": _forwarding,
+    "rule": _rule,
+    "failure_ip": _failure_ip,
+    "risky": _risky,
+    "location": _location,
+    "app": _app,
+    "registration": _registration,
+    "managed_device": _managed_device,
+    "entra_device": _entra_device,
+    "domain": _domain,
+}
 
 
 def _matches(value, q: str, ip: bool) -> bool:
@@ -289,7 +265,7 @@ def _matches(value, q: str, ip: bool) -> bool:
 
 
 def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT) -> Group:
-    """Matches for ``q`` (lower case) in one tenant's latest snapshot, at most ``limit``."""
+    """Matches for ``q`` (lower case) in one tenant's latest snapshot, scanned in Python, at most ``limit``."""
     t = Tenant(conn, tenant)
     group = Group(tenant)
     if not t.snap.runs:
@@ -303,16 +279,66 @@ def search_tenant(conn, tenant, q: str, limit: int = PER_TENANT) -> Group:
             for value in kind.values(obj):
                 if not _matches(value, q, kind.ip):
                     continue
-                hit = kind.show(t, obj, value)
-                if hit.key in seen:
-                    continue
-                seen.add(hit.key)
-                group.hits.append(hit)
-                if len(group.hits) >= limit:
-                    group.capped = True
+                if _add(group, SHOW[kind.key](t, obj, value), seen, limit):
                     return group
                 break  # one result per object and kind
     return group
+
+
+def _add(group: Group, hit: Hit, seen: set, limit: int) -> bool:
+    """Add a hit unless it's a repeat. Returns True when the tenant's cap is reached."""
+    if hit.key in seen:
+        return False
+    seen.add(hit.key)
+    group.hits.append(hit)
+    if len(group.hits) >= limit:
+        group.capped = True
+        return True
+    return False
+
+
+def indexed_tenant(conn, tenant, q: str, matches: list, limit: int = PER_TENANT) -> Group:
+    """The same results as ``search_tenant``, from the index rows ``search_index.find`` returned for the
+    tenant (kind key, run id, object id, value), loading only the objects that matched."""
+    t = Tenant(conn, tenant)
+    group = Group(tenant)
+    ip_query = looks_like_ip(q)
+    seen: set = set()
+    done: set[tuple[str, str]] = set()  # one result per object and kind
+    order = {k.key: i for i, k in enumerate(KINDS)}
+    for key, run_id, object_id, value in sorted(matches, key=lambda m: order.get(m[0], len(order))):
+        kind = search_index.BY_KEY.get(key)
+        if kind is None or (kind.ip and not ip_query) or (key, object_id) in done:
+            continue
+        obj = search_index.load(conn, run_id, kind, object_id)
+        if obj is None:
+            continue
+        matched = next((v for v in kind.values(obj) if _text(v).lower() == value), None)
+        if matched is None:  # the object changed under the index: the fingerprint catches this, but be safe
+            continue
+        done.add((key, object_id))
+        if _add(group, SHOW[key](t, obj, matched), seen, limit):
+            return group
+    return group
+
+
+def search(conn, tenants, q: str) -> tuple[list[Group], bool]:
+    """Every tenant's matches for ``q`` (lower case), through the index where it's current and by scanning
+    where it isn't. Returns (groups with hits, whether the search stopped before the last tenant)."""
+    current = search_index.current(conn, tenants)
+    found = search_index.find(conn, sorted(current), q, looks_like_ip(q)) if current else {}
+    groups, total = [], 0
+    for tenant in tenants:
+        if tenant["id"] in current:
+            group = indexed_tenant(conn, tenant, q, found.get(tenant["id"], []))
+        else:
+            group = search_tenant(conn, tenant, q)
+        if group.hits:
+            groups.append(group)
+            total += len(group.hits)
+        if total >= TOTAL:
+            return groups, tenant is not tenants[-1]
+    return groups, False
 
 
 @bp.get("/search")
@@ -327,15 +353,7 @@ def index():
             abort(404)
     groups, truncated, short = [], False, bool(q) and len(q) < MIN_LENGTH
     if q and not short:
-        total = 0
-        for tenant in tenants:
-            group = search_tenant(g.db, tenant, q.lower())
-            if group.hits:
-                groups.append(group)
-                total += len(group.hits)
-            if total >= TOTAL:
-                truncated = tenant is not tenants[-1]
-                break
+        groups, truncated = search(g.db, tenants, q.lower())
     return render_template(
         "search.html",
         q=q,

@@ -387,8 +387,12 @@ def clients(
     now = now or datetime.now(UTC)
     active = _active(tenants)
     rollup = rollup or (lambda t: rollup_row(conn, t, cached=True))
-    queued = {r.tenant["id"]: r for r in (queue or (lambda ts: month_end.queue(conn, ts, period, now)))(active)}
-    piped = {r.tenant["id"]: r for r in (pipeline or (lambda ts: projects.pipeline(conn, ts, now)))(active).rows}
+    queued = {
+        r.tenant["id"]: r for r in (queue or (lambda ts: month_end.queue(conn, ts, period, now, cached=True)))(active)
+    }
+    piped = {
+        r.tenant["id"]: r for r in (pipeline or (lambda ts: projects.pipeline(conn, ts, now, cached=True)))(active).rows
+    }
     up = upcoming.collect(conn, active, now)
     renewals: dict[int, list] = {}
     for item in up.items:
