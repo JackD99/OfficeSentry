@@ -379,6 +379,9 @@ These areas have no real recording and are tested with simulated data only:
 - [Troubleshooting](docs/troubleshooting.md): the common setup errors
   (`AADSTS50011`, `create-app`, Global Reader, the worker not running) and
   their fixes.
+- [Getting help](docs/getting-help.md): where to look first, the support
+  package (one zip of versions, settings, health, failures and logs with
+  secrets and client names taken out) and how to report a problem.
 - [Securing the portal](docs/securing-the-portal.md): what the portal does
   by itself, what the person running it has to do, and reverse proxy setups
   for Caddy, nginx, Traefik and a CDN.
@@ -499,7 +502,10 @@ Create the first admin:
 2. Choose a username and password, then scan the QR code with an authenticator
    app (Microsoft Authenticator works) and save the recovery codes.
 
-Then:
+Your home page then shows a **Get started** checklist (`first_run.py`): the app
+connection, your first client, its consent and its first collection, each read
+from what Office Sentry has stored, so it ticks itself off as you go and
+disappears after the first collection. Then:
 
 1. Create the app: **Settings → App connection → Sign in to Microsoft**. The
    page shows a code and Microsoft's link; sign in there as an admin of *your*

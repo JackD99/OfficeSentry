@@ -101,6 +101,12 @@
   <div class="empty compact"><p>None sent yet.</p></div>
   {% endif %}
 </section>
+
+<section class="card" id="support">
+  <div class="card-head"><h2>{{ icon('download') }} Need help?</h2></div>
+  <p class="muted small">A support package gathers the version, settings, these checks, recent failures and the logs into one zip to attach to a bug report, with secrets and client names taken out.</p>
+  <div class="form-actions"><a class="btn sm" href="{{ url_for('support.index') }}">Open Support</a></div>
+</section>
 </div>
 </div>
 {% endblock %}
