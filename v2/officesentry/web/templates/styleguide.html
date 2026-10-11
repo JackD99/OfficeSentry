@@ -136,14 +136,14 @@
   <div class="callout ok">{{ icon('check') }}<div><strong>Nothing is due in the next 90 days.</strong> No renewals or expiring credentials.</div></div>
   <div class="callout warn">{{ icon('alert') }}<div><strong>2 items need attention now.</strong> A certificate expires in 6 days.</div></div>
   <div class="callout bad">{{ icon('alert') }}<div><strong>The last collection failed.</strong> Global Reader isn't assigned to the app.</div></div>
-  <div class="card empty sg-empty"><h3>No tenants yet</h3><p>Add a client tenant and its reports show here after the first collection.</p><a class="btn primary" href="#messages">{{ icon('plus') }} Add a tenant</a></div>
+  <div class="card empty sg-empty"><h3>No clients yet</h3><p>Add a client and its reports show here after the first collection.</p><a class="btn primary" href="#messages">{{ icon('plus') }} Add a client</a></div>
 </section>
 
 {# -- Forms ----------------------------------------------------------------------------------------- #}
 <section class="card" id="forms">
   <div class="card-head"><h2>Forms</h2></div>
   <form class="narrow" action="#forms">
-    <label class="field"><span>Tenant name</span><input type="text" value="Fabrikam Dental Group"><span class="hint">As your clients know it. Shown on every report.</span></label>
+    <label class="field"><span>Client name</span><input type="text" value="Fabrikam Dental Group"><span class="hint">As your clients know it. Shown on every report.</span></label>
     <div class="form-row">
       <label>Day of the month<select><option>1</option><option>15</option></select></label>
       <label>Time<input type="time" value="08:00"></label>
@@ -170,7 +170,7 @@
   <div class="card">
     <div class="card-head"><h2>A simple table</h2><span class="meta">in a card, stacking on phones</span></div>
     <table class="stack-sm">
-      <thead><tr><th>Tenant</th><th>Last collection</th><th class="num">Findings</th></tr></thead>
+      <thead><tr><th>Client</th><th>Last collection</th><th class="num">Findings</th></tr></thead>
       <tbody>
         <tr class="flag-critical"><td>Fabrikam Dental Group</td><td data-label="Last collection">{{ status('succeeded') }}</td><td class="num" data-label="Findings">137</td></tr>
         <tr class="flag-medium"><td>Contoso Legal LLP</td><td data-label="Last collection">{{ status('partial') }}</td><td class="num" data-label="Findings">42</td></tr>

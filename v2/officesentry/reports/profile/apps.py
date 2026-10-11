@@ -13,7 +13,7 @@ def apps_part(p: Person) -> Part:
     result = Part("apps", "Apps this person allowed")
     grants = p.snap.objects("app_consents", "delegated_grant")
     if grants is None:
-        result.unavailable = "Apps haven't been collected yet. Refresh Apps and consents on the tenant page."
+        result.unavailable = "Apps haven't been collected yet. Refresh Apps and consents on the client page."
         return result
     sps = {s["_id"]: s for s in p.snap.objects("app_consents", "service_principal") or []}
     own = p.snap.own_app_ids

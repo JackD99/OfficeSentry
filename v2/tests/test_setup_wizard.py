@@ -188,7 +188,7 @@ def test_fresh_install_reaches_first_tenant_consent_link_without_the_command_lin
     assert actions[-2:] == ["app_setup_started", "connection_created"]
 
     page = admin.get("/admin/connections").get_data(as_text=True)
-    assert "App created" in page and APP_ID.lower() in page and "Add your first tenant" in page
+    assert "App created" in page and APP_ID.lower() in page and "Add your first client" in page
     assert f'data-value="{HOME}"' in page  # offers the MSP's own tenant
 
     resp = admin.post(
@@ -206,7 +206,7 @@ def test_fresh_install_reaches_first_tenant_consent_link_without_the_command_lin
 
     # With a tenant added, the wizard is finished and the page is back to the connection itself.
     page = admin.get("/admin/connections").get_data(as_text=True)
-    assert "Connect Office Sentry to Microsoft 365" not in page and "Add a tenant" in page
+    assert "Connect Office Sentry to Microsoft 365" not in page and "Add a client" in page
     assert db.execute("SELECT COUNT(*) FROM setup_sign_ins").fetchone()[0] == 0
 
 
@@ -428,7 +428,7 @@ def test_page_warns_when_opened_at_another_address_than_consent_links_use(app, d
         client.post("/login", data={"username": "admin", "password": PASSWORD}, base_url=address)
         page = client.get("/admin/connections", base_url=address).get_data(as_text=True)
         assert ("Office Sentry's address doesn't match this one." in page) is warned
-        assert ("portal.example.com" in page) is warned
+        assert (page.count("portal.example.com") > 0) is warned
 
 
 def test_tenant_input_is_checked():

@@ -183,7 +183,7 @@ def _usage(snap: TenantSnapshot, report: DataReport) -> dict | None:
     status = (snap.objects("sharepoint_usage", "usage_status") or [None])[0]
     if status is None:
         report.unavailable = (
-            'SharePoint usage hasn\'t been collected yet. Refresh "SharePoint and OneDrive usage" on the tenant page.'
+            'SharePoint usage hasn\'t been collected yet. Refresh "SharePoint and OneDrive usage" on the client page.'
         )
         return None
     if not status.get("available"):
@@ -535,7 +535,7 @@ def _link_words(link: dict) -> str:
 def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> None:
     status = (snap.objects("shared_files", "scan_status") or [None])[0]
     if status is None:
-        report.unavailable = 'Shared files haven\'t been scanned yet. Refresh "Shared files" on the tenant page.'
+        report.unavailable = 'Shared files haven\'t been scanned yet. Refresh "Shared files" on the client page.'
         return
     if not status.get("available"):
         report.unavailable = (
@@ -544,7 +544,7 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
             else DENIED_TEXT
             if status.get("reason") == "denied"
             else "Office Sentry can't read this tenant's files yet. It needs the Sites.Read.All "
-            "permission: open the tenant page, send the consent link to the client's Global "
+            "permission: open the client page, send the consent link to the client's Global "
             "Admin again and ask them to accept. The other SharePoint reports work without it."
         )
         return
@@ -594,7 +594,7 @@ def shared_files(snap: TenantSnapshot, now: datetime, report: DataReport) -> Non
     if links and not anyone:
         report.notice = (
             f"Microsoft counts {plural(links, 'anyone link')} in this tenant, but the scan found none. "
-            "Some libraries may not have been readable; check the last Shared files run on the tenant "
+            "Some libraries may not have been readable; check the last Shared files run on the client "
             "page."
         )
     report.footnote = (

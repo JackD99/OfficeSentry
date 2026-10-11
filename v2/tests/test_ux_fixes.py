@@ -41,7 +41,7 @@ def test_settings_are_one_sidebar_entry_with_their_own_row(client, db):
     home = client.get("/").get_data(as_text=True)
     sidebar = home[home.index('<aside class="sidebar"') : home.index("</aside>")]
     assert sidebar.count(">Settings</span></a>") == 1
-    assert "Client tenants" not in sidebar and "Activity log" not in sidebar
+    assert "Client settings" not in sidebar and "Activity log" not in sidebar
     assert 'class="settings-nav"' not in home  # only on settings pages
     for path in SETTINGS:
         page = client.get(path).get_data(as_text=True)

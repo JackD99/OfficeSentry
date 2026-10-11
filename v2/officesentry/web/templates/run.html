@@ -3,7 +3,7 @@
 {% block title %}Run {{ run.id }} · {{ tenant.name }}{% endblock %}
 {% block content %}
 {% set title = collectors[run.collector].title if run.collector in collectors else run.collector %}
-<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Tenants</a><span>/</span>
+<div class="crumbs"><a href="{{ url_for('tenants.dashboard') }}">Clients</a><span>/</span>
   <a href="{{ url_for('tenants.tenant', tenant_id=tenant.id) }}">{{ tenant.name }}</a><span>/</span>
   <a href="{{ url_for('tenants.collection', tenant_id=tenant.id) }}">Data collection</a></div>
 <div class="page-head">

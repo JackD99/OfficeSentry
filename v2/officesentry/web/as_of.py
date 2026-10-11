@@ -67,7 +67,7 @@ def day(conn, tenant_id: int, raw, today: date | None = None) -> Day:
             first,
             first,
             today,
-            f"Office Sentry's data for this tenant starts on {_label(first)}, so this is how it was then.",
+            f"Office Sentry's data starts on {_label(first)}, so this is how it was then.",
         )
     return Day(on, first, today)
 
@@ -114,7 +114,7 @@ def period(conn, tenant_id: int, raw_from, raw_to, today: date | None = None) ->
     first = earliest(conn, tenant_id)
     note = ""
     if first and start < first:
-        note = f"Office Sentry's data for this tenant starts on {_label(first)}, so that's the starting point."
+        note = f"Office Sentry's data starts on {_label(first)}, so that's the starting point."
         start = first
     if end is not None and end < start:
         end = start
