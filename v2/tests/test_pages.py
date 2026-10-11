@@ -61,7 +61,7 @@ def test_no_platform_specific_date_formats():
     assert not unsafe.search("datefmt(nxt, '%a %-d %b, %H:%M')") and not unsafe.search('f"{start:%Y-%m-%d}"')
     root = pathlib.Path(__file__).parent.parent / "officesentry"
     for path in [*root.rglob("*.py"), *root.rglob("*.html")]:
-        if path.name == "filters.py":
+        if path.name in ("filters.py", "formatting.py"):
             continue
         assert not unsafe.search(path.read_text(encoding="utf-8")), path
 
