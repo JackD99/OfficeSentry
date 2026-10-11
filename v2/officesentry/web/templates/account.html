@@ -5,12 +5,37 @@
 <div class="page-head"><div><h1>Your account</h1>
   <div class="sub">Signed in as {{ current_user.username }} ({{ current_role.name if current_role else current_user.role }}).</div></div></div>
 
-{% if not current_user.totp_enabled_at %}
+{% if not current_user.totp_enabled_at and has_password %}
 <div class="callout warn"><div><strong>Two-step sign-in is off.</strong> Anyone with your password can sign in. <a href="{{ url_for('auth.two_step_setup') }}">Set it up</a>; it takes about a minute.</div></div>
 {% elif codes_left <= 2 %}
 <div class="callout warn"><div><strong>{{ codes_left }} recovery code{{ '' if codes_left == 1 else 's' }} left.</strong> Make new ones below so you can still get in if you lose your phone.</div></div>
 {% endif %}
 
+{% if microsoft or current_user.entra_oid %}
+<section class="card" id="microsoft">
+  <div class="card-head"><h2>Microsoft account</h2>
+    {% if current_user.entra_oid %}<span class="pill ok">Connected</span>{% else %}<span class="pill">Not connected</span>{% endif %}</div>
+  {% if current_user.entra_oid %}
+  <p class="muted">You can sign in with <strong>{{ current_user.entra_upn or 'your Microsoft account' }}</strong>{% if current_user.entra_linked_at %}, connected {{ ts(current_user.entra_linked_at) }}{% endif %}. Your role comes from the role assigned to you in Entra.</p>
+  {% if has_password %}
+  <form method="post" action="{{ url_for('sso.disconnect') }}" class="form-row">{{ csrf() }}
+    <label>Your password <input type="password" name="password" autocomplete="current-password" required>
+      <span class="hint">Asked again before your way of signing in changes.</span></label>
+    <div class="form-actions"><button class="sm">Disconnect</button></div></form>
+  {% else %}
+  <p class="footnote">This account has no password: Microsoft is the only way to sign in.</p>
+  {% endif %}
+  {% else %}
+  <p class="muted">Connect the Microsoft account you use at work and sign in with it instead of a password, with your organisation's own MFA.</p>
+  <form method="post" action="{{ url_for('sso.connect') }}" class="form-row">{{ csrf() }}
+    <label>Your password <input type="password" name="password" autocomplete="current-password" required>
+      <span class="hint">Asked again before your way of signing in changes.</span></label>
+    <div class="form-actions"><button class="primary">Connect my Microsoft account</button></div></form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if has_password %}
 <div class="grid-2">
 <section class="card">
   <div class="card-head"><h2>Two-step sign-in</h2>
@@ -58,6 +83,7 @@
   </form>
 </section>
 </div>
+{% endif %}
 
 {% if homes %}
 <section class="card" id="home-page">
@@ -89,7 +115,7 @@
     {% for s in sessions %}
     <tr><td>{{ s.device }}{% if s.current %} <span class="pill accent">This browser</span>{% endif %}</td>
       <td data-label="IP address" class="mono">{{ s.ip or '–' }}</td>
-      <td data-label="Signed in" class="nowrap">{{ ts(s.created_at) }}</td>
+      <td data-label="Signed in" class="nowrap">{{ ts(s.created_at) }}{% if s.method == 'microsoft' %} <span class="muted small">with Microsoft</span>{% endif %}</td>
       <td data-label="Last active" class="nowrap">{{ ts(s.last_seen_at) }}</td>
       <td class="num">{% if not s.current %}<form method="post" action="{{ url_for('auth.end_session', session_id=s.id) }}" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="sm ghost">Sign out</button></form>{% endif %}</td></tr>

@@ -8,9 +8,10 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if last_admin %}<p class="callout warn small">This is the only Administrator. Make someone else an Administrator before changing their role or disabling the account.</p>{% endif %}
   <fieldset class="choices" data-roles>
-    <legend>Role</legend>
+    <legend>Role{% if user.entra_oid %} <span class="faint small">(partly set in Entra)</span>{% endif %}</legend>
+    {% if user.entra_oid %}<p class="muted small m0">{{ user.username }} signs in with Microsoft, so the app role assigned in Entra decides at each sign-in whether they're an Administrator or staff. Change that there; which staff role they hold is picked here.</p>{% endif %}
     {% for r in roles %}
-    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if user.id == current_user.id and r.kind != 'admin' %} disabled{% endif %}>
+    <label class="choice"><input type="radio" name="role" value="{{ r.id }}" data-kind="{{ r.kind }}" data-scope="{{ r.scope }}" {% if r.id == role.id %}checked{% endif %}{% if (user.id == current_user.id and r.kind != 'admin') or (user.entra_oid and r.kind != role.kind) %} disabled{% endif %}>
       <span><span class="strong">{{ r.name }}{% if r.kind == 'client' %} <span class="faint small">client role</span>{% endif %}</span><span class="hint">{{ r.description }}</span></span></label>
     {% endfor %}
     <p class="footnote m0">{% if can('users.manage') %}Roles are built-in sets of capabilities. What each one opens is listed under <strong>What {{ user.username }} can do</strong> below.{% endif %}</p>
@@ -31,8 +32,8 @@
     </div>
   </fieldset>
   {% endif %}
-  <label>New password <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
-    <span class="hint">Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.</span></label>
+  <label>{{ 'Password' if user.password_hash == '!' else 'New password' }} <span class="faint">(optional)</span><input type="password" name="password" minlength="12" autocomplete="new-password">
+    <span class="hint">{% if user.password_hash == '!' %}This account signs in with Microsoft and has no password. Set one only as a fallback; they choose their own at their first password sign-in.{% else %}Leave blank to keep the current password. Setting one signs them out, and they choose their own at their next sign-in.{% endif %}</span></label>
   <label>Your password <span class="faint">(only to set a new password)</span><input type="password" name="admin_password" autocomplete="current-password">
     <span class="hint">Your own password, asked again before you change someone's password.</span></label>
   <label class="check"><input type="checkbox" name="disabled" value="1" {% if user.disabled %}checked{% endif %}> Disable this account (they can't sign in)</label>
@@ -56,6 +57,7 @@
 <section class="card narrow-lg">
   <h2>Sign-in security</h2>
   <dl class="kv">
+    {% if user.entra_oid %}<dt>Microsoft account</dt><dd><span class="pill ok">Connected</span> <span class="mono small">{{ user.entra_upn }}</span></dd>{% endif %}
     <dt>Two-step sign-in</dt>
     <dd>{% if user.totp_enabled_at %}<span class="pill ok">On</span>{% elif two_step_required %}<span class="pill warn">Not set up</span> <span class="muted small">They'll be asked to set it up at their next sign-in.</span>{% else %}<span class="pill">Off</span>{% endif %}</dd>
     <dt>Signed in on</dt>
@@ -80,6 +82,8 @@
   {% elif unlock %}
   <div class="form-actions wrap"><button form="unlock-user">Unlock now</button></div>
   {% endif %}
+  {% if user.entra_oid %}<form method="post" action="{{ url_for('sso.admin_disconnect', user_id=user.id) }}" class="form-actions wrap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button data-confirm="Disconnect {{ user.username }} from Microsoft? They'll sign in with a password.">Disconnect Microsoft account</button></form>{% endif %}
   <p class="footnote">Lost phone? Reset two-step sign-in. They'll set it up again with the new phone when they next sign in.</p>
 </section>
 {% if user.id != current_user.id %}

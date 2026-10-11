@@ -32,6 +32,8 @@ ANYONE = {
     "auth.new_recovery_codes",
     "home.index",
     "home.choose",
+    "sso.connect",
+    "sso.disconnect",
     "reports.overview",
     "tenants.dashboard",
     "tenants.tenant",
@@ -43,7 +45,17 @@ SIGNING_IN = {"auth.new_password", "auth.login_code"}
 # The consent link's return has no decorator (see onboarding.client_returned); for anyone signed in it
 # is the admin's own return, which needs this.
 IMPLIED = {"tenants.consent_callback": ("clients.manage",)}
-PUBLIC = {"static", "health", "health_ready", "auth.login", "auth.setup", "branding.brand_css", "branding.logo"}
+PUBLIC = {
+    "static",
+    "health",
+    "health_ready",
+    "auth.login",
+    "auth.setup",
+    "branding.brand_css",
+    "branding.logo",
+    "sso.start",  # Sign in with Microsoft, and Microsoft's answer
+    "sso.callback",
+}
 
 
 def role_user(db, username: str, key: str, tenants=(), all_tenants=False) -> int:

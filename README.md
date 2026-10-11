@@ -248,7 +248,9 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   page goes through one access check, and anything else returns 404. What they may do there is a role made of
   capabilities (built-in: Administrator, Team leader, Second line, First line, Account manager, Auditor and
   Client viewer), narrowed or widened per person and per client by an admin. Clients see only their own reports.
-- **The portal itself:** two-step sign-in for everyone on new installs, client accounts included; wrong passwords
+- **The portal itself:** staff can sign in with their own Microsoft account (Entra ID, under your Conditional
+  Access and MFA; roles assigned in Entra), or with two-step sign-in, which is required for everyone on new
+  installs, client accounts included; wrong passwords
   slow down the address they come from rather than locking the account, so nobody can lock a colleague out;
   server-side sessions, CSRF protection, a strict Content Security Policy with no external assets, and encrypted
   secrets with key rotation.
@@ -299,11 +301,13 @@ consent page, mailboxes failing without Global Reader and the worker not running
 
 - [Technical reference](v2/README.md): every report and check, Exchange data, sign-in security, setup and layout
 - [Running it on your own server](v2/DEPLOY.md)
+- [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md): let your team sign in with their Entra ID account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
+- [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be
 

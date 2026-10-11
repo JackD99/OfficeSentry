@@ -31,6 +31,7 @@ from urllib.parse import urlsplit
 from flask import abort, g, has_request_context, redirect, request, url_for
 
 from .. import permissions, roles
+from ..db import audit_counted
 from . import public_demo, sessions
 
 ROLES = ("admin", "analyst", "client")  # what users.role may say (permissions.ROLE_COLUMN)
@@ -112,13 +113,13 @@ def needs(*capabilities: str, kind: str | None = None):
         @login_required
         def wrapper(*args, **kwargs):
             a = current()
-            if kind == "staff" and not a.is_staff:
-                abort(403)
-            if kind == "admin" and not a.is_admin:
+            if (kind == "staff" and not a.is_staff) or (kind == "admin" and not a.is_admin):
+                refused()
                 abort(403)
             g.needed = capabilities
             for cap in capabilities:
                 if not a.can(cap):
+                    refused()
                     abort(403)
             return view(*args, **kwargs)
 
@@ -207,14 +208,30 @@ def tenant_or_404(tenant_id: int):
     clients (to restore or delete). 403 when a capability the view needs is taken away on this client."""
     tenant = g.db.execute("SELECT * FROM tenants WHERE id = ?", (tenant_id,)).fetchone()
     if tenant is None or not can_see_tenant(g.db, g.user, tenant_id):
+        refused(f"tenant {tenant_id}")
         abort(404)
     a = current()
     if tenant["archived_at"] and not a.can("clients.manage"):
+        refused(f"tenant {tenant_id} (archived)")
         abort(404)
     needed = g.get("needed") or ()
     if not a.can_all(needed, tenant_id):
+        refused(f"tenant {tenant_id}")
         abort(403)
     return tenant
+
+
+def refused(what: str = "") -> None:
+    """Count a request the signed-in person wasn't allowed (a tenant they weren't granted, a staff page) in
+    the activity log: one ``access_refused`` row per person, address and hour, naming the latest route.
+    A stale bookmark can't flood the log, and a client probing other clients' tenants is visible to admins.
+    The public demo's shared visitor is refused plenty by design and isn't recorded."""
+    user = g.get("user")
+    if user is None or "db" not in g or g.get("public_demo") or g.get("refusal_counted"):
+        return
+    g.refusal_counted = True  # once per request, however many layers refuse it
+    detail = f"{request.method} {request.path}" + (f" ({what})" if what else "")
+    audit_counted(g.db, "access_refused", (request.remote_addr or "")[:64], user["username"], detail)
 
 
 def safe_next(target: str | None, fallback: str | None = None) -> str:
