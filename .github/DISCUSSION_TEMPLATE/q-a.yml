@@ -1,0 +1,45 @@
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking. Search Q&A and [troubleshooting](https://officesentry.co.uk/docs/troubleshooting/) first, as your answer may already be there.
+        **Everything here is public.** Replace client names, tenant IDs, domains, people and email addresses before you paste anything. Never post secrets, certificates, `.env` files or databases. Security problems go [here, privately](https://github.com/JackD99/OfficeSentry/security/advisories/new).
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you're trying to do, what you tried, and what happened.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Office Sentry version
+      description: At the foot of the menu once you're signed in.
+      placeholder: "2.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - Docker (Linux server)
+        - Docker Desktop (Windows or macOS)
+        - Windows without Docker
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: reference
+    attributes:
+      label: Error reference (if a page failed)
+      description: The code under "Something went wrong on our side", such as 3f9a1c2b4d5e.
+  - type: textarea
+    id: package
+    attributes:
+      label: Support package (if something isn't working)
+      description: Settings → Support → Download support package, or `docker compose run --rm -T web python -m officesentry support-package --out - > support.zip` on the server. Read it before you attach it, and leave "Include client identifiers" unticked.
+      placeholder: Drag the zip here.
