@@ -28,7 +28,7 @@
     </div>
   </div>
   <p class="intro">Open any site to see its storage and what fills it, how it's shared, the team behind it, its activity and its history on one page. Sites with open findings or anyone links come first, system sites last.</p>
-  <div class="scroll-x">
+  <div class="table-scroll{{ ' tall' if rows|length > 12 }}" data-key="sites">
   <table class="stack-sm sortable" id="sites">
     <thead><tr>
       <th aria-sort="none"><button type="button" class="sort">Site</button></th>
@@ -43,13 +43,13 @@
     <tbody>
     {% for r in rows %}
     <tr data-name="{{ (r.name ~ ' ' ~ r.url ~ ' ' ~ r.type)|lower }}">
-      <td class="wrap"><a class="strong" href="{{ url_for('site_pages.site', tenant_id=tenant.id, site_id=r.key) }}">{{ r.name }}</a><span class="sub">{{ r.url }}</span></td>
-      <td data-label="Type">{{ r.type }}</td>
+      <td class="wrap"><a class="strong" href="{{ url_for('site_pages.site', tenant_id=tenant.id, site_id=r.key) }}">{{ r.name }}</a><span class="sub">{{ r.url|wrappable }}</span></td>
+      <td data-label="Type" class="wrap w-m">{{ r.type }}</td>
       <td data-label="Storage" class="num" data-sort="{{ r.storage_sort }}">{{ r.storage }}{% if r.share is not none %} {% if r.share >= 90 %}<span class="pill warn">{{ r.share }}%</span>{% else %}<span class="faint">{{ r.share }}%</span>{% endif %}{% endif %}</td>
       <td data-label="Files" class="num">{{ '{:,}'.format(r.files) }}</td>
       <td data-label="Anyone links" class="num">{% if r.anyone %}<span class="pill bad">{{ r.anyone }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
       <td data-label="Guest links" class="num">{% if r.guest %}<span class="pill warn">{{ r.guest }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
-      <td data-label="Last activity" data-sort="{{ r.last_activity }}">{% if r.last_activity %}{{ r.last_activity|day }}{% else %}<span class="muted">None recorded</span>{% endif %}{% if r.inactive and r.type != 'System' %} <span class="pill warn">Inactive</span>{% endif %}</td>
+      <td data-label="Last activity" class="w-s" data-sort="{{ r.last_activity }}">{% if r.last_activity %}{{ r.last_activity|day }}{% else %}<span class="muted">None recorded</span>{% endif %}{% if r.inactive and r.type != 'System' %} <span class="pill warn">Inactive</span>{% endif %}</td>
       <td data-label="Open findings" class="num">{% if r.findings %}<span class="pill warn">{{ r.findings }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
     </tr>
     {% endfor %}

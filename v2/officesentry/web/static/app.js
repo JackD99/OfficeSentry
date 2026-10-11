@@ -127,6 +127,31 @@
   else start();
 })();
 
+/* The menu folds to its icons on laptops ([data-fold], .menu-folded on <html>), giving wide reports the
+ * room, and stays folded from page to page (localStorage; base.html applies it before the page draws).
+ * Folded, each icon's name shows as its tooltip. */
+(function () {
+  var button = document.querySelector('[data-fold]');
+  if (!button) return;
+  var root = document.documentElement;
+  var named = button.closest('.sidebar').querySelectorAll('.nav a, .account .links a, .account button.link, [data-fold]');
+  function show(folded) {
+    root.classList.toggle('menu-folded', folded);
+    button.querySelector('span').textContent = folded ? 'Unfold the menu' : 'Fold the menu';
+    named.forEach(function (el) {
+      if (folded) el.title = el.textContent.trim();
+      else el.removeAttribute('title');
+    });
+  }
+  show(root.classList.contains('menu-folded'));
+  button.addEventListener('click', function () {
+    var folded = !root.classList.contains('menu-folded');
+    show(folded);
+    try { localStorage.setItem('menu', folded ? 'folded' : 'open'); } catch (e) { /* kept for this page only */ }
+    window.dispatchEvent(new Event('resize'));  // tables and the pinned header measure again
+  });
+})();
+
 /* Copy buttons: data-copy="#id" copies that element's text (a textarea's value) to the clipboard and says so;
  * data-copy-text="..." copies the attribute's own text (a link). */
 (function () {

@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   {% if not brand.is_default %}<link rel="stylesheet" href="{{ url_for('branding.brand_css', v=brand.version) }}">{% endif %}
+  {#- The menu folded to its icons stays folded (app.js), set before the page draws so it doesn't jump. -#}
+  <script nonce="{{ csp_nonce }}">try { if (localStorage.getItem('menu') === 'folded') document.documentElement.classList.add('menu-folded'); } catch (e) {}</script>
 </head>
 <body{% if not brand.is_default %} class="branded"{% endif %}>
 {#- Admin settings: one sidebar entry, and this row of links on top of each settings page.
@@ -45,6 +47,7 @@
     <label>{{ icon('search') }}<span class="sr-only">Search all clients</span>
       <input type="search" name="q" placeholder="Search all clients" autocomplete="off" maxlength="200"{% if request.endpoint == 'search.index' %} value="{{ request.args.get('q', '') }}"{% endif %}></label>
   </form>
+  <a class="nav-search-link" href="{{ url_for('search.index') }}">{{ icon('search') }}<span>Search all clients</span></a>
   {{ nav_link('home.index', 'Home', 'home', ('home.today', 'home.clients')) }}
   {% endif %}
   {{ nav_link('tenants.dashboard', 'Clients', 'tenants', ('tenants', 'reports.tenant_findings', 'across.tenant_changes', 'reports.data_report', 'reports.evidence_pack', 'email.tenant_emails', 'email.new_schedule', 'email.edit_schedule', 'email.preview_schedule', 'email.preview_alert', 'tenant_admin.manage', 'tenant_admin.offboard', 'projects.tenant')) }}
@@ -67,15 +70,15 @@
 <div class="account">
   <span class="name">Demo visitor</span>
   <span class="role">guest</span>
-  {% if public_demo_link %}<div class="links"><a href="{{ public_demo_link }}">Back to the website</a></div>{% endif %}
+  {% if public_demo_link %}<div class="links"><a href="{{ public_demo_link }}">{{ icon('external', 'fold-icon') }}<span>Back to the website</span></a></div>{% endif %}
 </div>
 {% else %}
 <div class="account">
   <span class="name">{{ current_user.username }}</span>
   <span class="role">{{ current_role.name if current_role else current_user.role }}</span>
   <div class="links">
-    <a href="{{ url_for('auth.account') }}">Account</a>
-    <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="link">Sign out</button></form>
+    <a href="{{ url_for('auth.account') }}">{{ icon('person', 'fold-icon') }}<span>Account</span></a>
+    <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="link">{{ icon('sign-out', 'fold-icon') }}<span>Sign out</span></button></form>
   </div>
 </div>
 {% endif %}
@@ -88,7 +91,7 @@
 {#- The MSP's logo, or the shield and its name (Office Sentry until branding is set up). -#}
 {% macro brand_mark() -%}
 <a class="brand" href="{{ url_for('home.index') if current_user else url_for('auth.login') }}">
-{%- if brand.logo %}<span class="logo-chip"><img src="{{ url_for('branding.logo', v=brand.version) }}" alt="{{ brand.display_name }}"></span>
+{%- if brand.logo %}<span class="logo-chip"><img src="{{ url_for('branding.logo', v=brand.version) }}" alt="{{ brand.display_name }}"></span><span class="logo fold-logo">{{ icon('logo') }}</span>
 {%- else %}<span class="logo">{{ icon('logo') }}</span>{{ brand.display_name }}{% endif %}</a>
 {%- endmacro %}
 {#- Signed-in pages say which version is running, for support and after an update; the sign-in page doesn't. -#}
@@ -104,6 +107,7 @@
     {{ brand_mark() }}
     {{ navigation() }}
     <div class="spacer"></div>
+    <button type="button" class="menu-fold" data-fold>{{ icon('fold') }}<span>Fold the menu</span></button>
     {{ account() }}
     {{ powered_by(version=true) }}
   </aside>

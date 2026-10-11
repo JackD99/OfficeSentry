@@ -71,6 +71,9 @@
   --shadow-menu: 0 12px 32px rgba(16, 24, 40, .16);  /* menus that drop over the page */
   --shadow-lg: 0 6px 20px rgba(16, 24, 40, .25);     /* floating notices */
   --scroll-shade: rgba(16, 24, 40, .16);              /* the shaded edge of a table with more to the side */
+
+  /* Layout */
+  --sidebar-w: 232px; --sidebar-w-folded: 64px;  /* the menu, open and folded to its icons */
   color-scheme: light;
 }
 

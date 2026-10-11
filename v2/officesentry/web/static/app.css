@@ -20,12 +20,14 @@ td.num { white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* -- App shell ------------------------------------------------------------- */
-.app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; background: linear-gradient(to right, var(--sidebar) 232px, transparent 232px); }
+/* The menu is --sidebar-w wide; folded (.menu-folded on <html>, app.js) it keeps only its icons. */
+.app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; background: linear-gradient(to right, var(--sidebar) var(--sidebar-w), transparent var(--sidebar-w)); }
 .sidebar { background: var(--sidebar); color: var(--sidebar-text); padding: 18px 12px; display: flex; flex-direction: column; gap: var(--space-1); position: sticky; top: 0; height: 100vh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--sidebar-active) transparent; }
 .brand { display: flex; align-items: center; gap: var(--space-2-5); color: var(--sidebar-strong); font-weight: 700; font-size: var(--fs-lg); padding: 4px 10px 18px; }
 .brand:hover { text-decoration: none; }
 .brand .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--logo-from), var(--logo-to)); display: grid; place-items: center; }
 .brand .logo svg { width: 16px; height: 16px; }
+.brand .fold-logo { display: none; }
 .nav-label { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .08em; color: var(--sidebar-muted); padding: var(--space-3-5) var(--space-2-5) var(--space-1-5); }
 .nav a { display: flex; align-items: center; gap: var(--space-2-5); color: var(--sidebar-text); padding: 7px 10px; border-radius: var(--radius-sm); font-weight: 500; }
 .nav a svg { width: 16px; height: 16px; flex: none; opacity: .75; }
@@ -39,6 +41,32 @@ td.num { white-space: nowrap; }
 .account a, .account button.link { color: var(--sidebar-text); }
 .mobile-bar { display: none; }
 .content { min-width: 0; }
+.nav a.nav-search-link, .fold-icon { display: none; }
+.menu-fold { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2-5); width: 100%; margin: 0 0 var(--space-2); padding: 7px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--sidebar-muted); font-size: var(--fs-sm); font-weight: 500; text-align: left; cursor: pointer; }
+.menu-fold:hover { background: var(--sidebar-active); color: var(--sidebar-strong); }
+.menu-fold svg { width: 16px; height: 16px; flex: none; }
+@media (min-width: 961px) {
+  .menu-folded .app { grid-template-columns: var(--sidebar-w-folded) 1fr; background: linear-gradient(to right, var(--sidebar) var(--sidebar-w-folded), transparent var(--sidebar-w-folded)); }
+  .menu-folded .menu-panel.report-panel { width: min(1040px, calc(100vw - var(--sidebar-w-folded) - var(--space-16))); }
+  .menu-folded .sidebar { padding: 18px 8px; }
+  .menu-folded .sidebar .brand { justify-content: center; padding: 4px 0 18px; font-size: 0; }
+  /* A logo is too wide for the folded menu, so the mark stands in for it, in the brand's colour. */
+  .menu-folded .sidebar .brand .logo-chip { display: none; }
+  .menu-folded .sidebar .brand .fold-logo { display: grid; }
+  .menu-folded .sidebar .nav-search { display: none; }
+  .menu-folded .sidebar .nav a.nav-search-link { display: flex; }
+  .menu-folded .sidebar .fold-icon { display: block; }
+  .menu-folded .sidebar :is(.nav a, .menu-fold, .account .links a, .account button.link) { justify-content: center; padding: 9px 0; }
+  .menu-folded .sidebar :is(.nav a, .menu-fold, .account .links a, .account button.link) > span,
+  .menu-folded .sidebar .account :is(.name, .role), .menu-folded .sidebar .powered-by { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .menu-folded .menu-fold svg { transform: scaleX(-1); }
+  .menu-folded .sidebar .account { padding: var(--space-2) 0 0; }
+  .menu-folded .sidebar .account .links { flex-direction: column; gap: var(--space-0-5); margin: 0; }
+  .menu-folded .sidebar .account .links form { display: block; }
+  .menu-folded .sidebar .account :is(.links a, button.link) { display: flex; width: 100%; border-radius: var(--radius-sm); }
+  .menu-folded .sidebar .account :is(.links a, button.link):hover { background: var(--sidebar-active); color: var(--sidebar-strong); }
+  .menu-folded .sidebar .fold-icon { width: 16px; height: 16px; }
+}
 /* The public demo site's bar (web/public_demo.py): what this is, and where to get it. */
 .demo-bar { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-2-5) var(--space-8); background: var(--accent-soft); color: var(--text-2); border-bottom: 1px solid var(--border); font-size: var(--fs-base); }
 .demo-bar strong { color: var(--text); }
@@ -734,7 +762,7 @@ td.tenant-col { min-width: 190px; max-width: 20em; } /* a long client name wraps
 .report-switch > summary .chev { width: 14px; height: 14px; color: var(--muted); transition: transform .15s; }
 .report-switch[open] > summary .chev { transform: rotate(180deg); }
 .report-area { color: var(--muted); font-size: var(--fs-sm); }
-.menu-panel.report-panel { left: 0; right: auto; width: min(1040px, calc(100vw - 232px - var(--space-16))); max-height: none; overflow: visible; padding: var(--space-3) var(--space-4) var(--space-3); }
+.menu-panel.report-panel { left: 0; right: auto; width: min(1040px, calc(100vw - var(--sidebar-w) - var(--space-16))); max-height: none; overflow: visible; padding: var(--space-3) var(--space-4) var(--space-3); }
 .report-panel .picker-search { max-width: 320px; }
 .picker-search { position: relative; flex: none; }
 .picker-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--decor); pointer-events: none; }
@@ -896,6 +924,7 @@ details.menu[open] > summary { margin: 0; background: var(--sunken); }
 .menu-panel.wide { width: 380px; }
 .menu-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding: var(--space-0-5) var(--space-1) var(--space-2); font-size: var(--fs-sm); }
 .menu-head a { font-weight: 500; }
+.menu-note { margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-1) 0; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--fs-xs); }
 .menu-link { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-2); padding: var(--space-2) var(--space-1) 0; border-top: 1px solid var(--border); font-weight: 500; }
 .menu-group { padding: var(--space-2) var(--space-1); border-top: 1px solid var(--border); }
 .menu-label { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); margin-bottom: var(--space-1-5); }
