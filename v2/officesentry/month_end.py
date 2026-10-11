@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import delivery, issued, projects, store, tasks
+from . import delivery, issued, mailer, projects, store, tasks
 from .db import audit, transaction, utcnow
 from .reports import monthly_review, summary
 from .reports.precomputed import Rows, stored_rows
@@ -405,6 +405,7 @@ class ReviewFacts:
     verdict: summary.Verdict
     oldest: str | None  # the oldest collector's data, or None when nothing has been collected
     not_run: int  # checks that couldn't run
+    missing: tuple[str, ...] = ()  # data sources never collected, while others have been (titles)
 
 
 def review_facts(conn, tenants, now: datetime | None = None, rebuild: bool = False) -> dict[int, ReviewFacts]:
@@ -418,7 +419,9 @@ def review_facts(conn, tenants, now: datetime | None = None, rebuild: bool = Fal
 def _review_facts(conn, tenant, now: datetime, stored: Rows | None) -> ReviewFacts:
     fingerprint = stored.fingerprint(tenant) if stored else ""
     if stored and (data := stored.get(tenant, fingerprint)) is not None:
-        return ReviewFacts(summary.Verdict(*data["verdict"]), data["oldest"], data["not_run"])
+        return ReviewFacts(
+            summary.Verdict(*data["verdict"]), data["oldest"], data["not_run"], tuple(data.get("missing", ()))
+        )
     facts = facts_of(monthly_review.build(conn, tenant, now))
     if stored:
         verdict = facts.verdict
@@ -429,6 +432,7 @@ def _review_facts(conn, tenant, now: datetime, stored: Rows | None) -> ReviewFac
                 "verdict": [verdict.tone, verdict.label, verdict.headline],
                 "oldest": facts.oldest,
                 "not_run": facts.not_run,
+                "missing": list(facts.missing),
             },
         )
     return facts
@@ -441,6 +445,9 @@ def facts_of(report) -> ReviewFacts:
         summary.monthly(report).verdict,
         min(finished) if finished else None,
         sum(1 for r in report.unavailable if r.summary.startswith("This check couldn't run")),
+        # A source that has never come in (Exchange refusing the app, a permission never approved) has no age
+        # to be old by, so it's named on its own: the report says "not collected yet" for it.
+        tuple(f.title for f in report.freshness if not f.finished_at) if finished else (),
     )
 
 
@@ -461,6 +468,14 @@ def flags_for(conn, tenant, facts: ReviewFacts, period: str, now: datetime) -> t
         flags.append("No data collected yet")
     elif facts.oldest < cutoff:
         flags.append("Data older than 24 hours")
+    if facts.oldest and facts.verdict.label == summary.NOT_CHECKED:
+        # Sign-in failing (the client removed the app): a few sources that need no answer from Microsoft
+        # still finish, but the report would only say nothing could be checked.
+        flags.append("No checks could run")
+    elif len(facts.missing) == 1:
+        flags.append(f"{facts.missing[0]} not collected")
+    elif facts.missing:
+        flags.append(f"{len(facts.missing)} data sources not collected")
     if facts.not_run:
         flags.append(f"{plural(facts.not_run, 'check')} couldn't run")
     plan, _ = plan_for(conn, tenant["id"])
@@ -913,7 +928,8 @@ def _approve_task(ctx: tasks.TaskContext) -> dict:
         return {"state": "sent"}  # an earlier attempt sent it and then stopped
     plan, _ = plan_for(conn, tenant["id"])
     ctx.progress("Sending" if plan and emailed(plan, conn, tenant["id"]) else "Publishing")
-    error = deliver(ctx.app, conn, ctx.vault, tenant, period, user)
+    with mailer.patient():  # a bulk approval sends faster than Microsoft 365 takes them; wait our turn
+        error = deliver(ctx.app, conn, ctx.vault, tenant, period, user)
     if error:
         raise tasks.TaskFailed(error)
     return {"state": "sent"}
