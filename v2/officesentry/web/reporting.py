@@ -20,12 +20,10 @@ from ..db import audit, transaction, utcnow
 from ..reports import monthly_review, summary
 from ..reports.data_reports import grouped as report_groups
 from ..text import plural
-from .access import roles_required, tenant_or_404, visible_tenants
+from .access import can, is_staff, needs, tenant_or_404, visible_tenants
 from .groups import group_aware, scoped_tenants
 
 bp = Blueprint("reporting", __name__)
-
-STAFF = ("admin", "analyst")
 
 
 def _cfg():
@@ -46,7 +44,7 @@ def report_extras(tenant, *, page: bool) -> dict:
     """Template context for the monthly review page (``page``) or its PDF: this month's commentary,
     recommendations and notes. Staff-only notes only reach staff on the page; clients and PDFs never get them.
     Clients see none of it until the month is approved (or an automatic plan sent it)."""
-    staff = g.user["role"] in STAFF
+    staff = is_staff() and can("month_end.review")
     period = _period_now()
     extras = month_end.report_context(g.db, tenant["id"], period, staff=staff and page, approved_only=not staff)
     if staff and page:
@@ -170,7 +168,7 @@ def _save_plan(existing=None):
 
 
 @bp.get("/reporting/plans")
-@roles_required("admin")
+@needs("settings.manage")
 def plans():
     tenants = visible_tenants(g.db, g.user)
     return render_template(
@@ -188,7 +186,7 @@ def plans():
 
 
 @bp.route("/reporting/plans/new", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def new_plan():
     if request.method == "POST":
         return _save_plan()
@@ -197,7 +195,7 @@ def new_plan():
 
 
 @bp.route("/reporting/plans/<int:plan_id>", methods=["GET", "POST"])
-@roles_required("admin")
+@needs("settings.manage")
 def edit_plan(plan_id: int):
     plan = month_end.get_plan(g.db, plan_id)
     if plan is None:
@@ -210,7 +208,7 @@ def edit_plan(plan_id: int):
 
 
 @bp.post("/reporting/plans/<int:plan_id>/delete")
-@roles_required("admin")
+@needs("settings.manage")
 def delete_plan(plan_id: int):
     plan = month_end.get_plan(g.db, plan_id)
     if plan is None:
@@ -229,13 +227,13 @@ FILTERS = {"": "All", "mine": "Mine", "review": "Needs review", "ready": "Ready"
 
 
 @bp.get("/reporting")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def index():
     return redirect(url_for("reporting.queue", period=_period_now()))
 
 
 @bp.get("/reporting/<period>")
-@roles_required(*STAFF)
+@needs("month_end.review")
 @group_aware
 def queue(period: str):
     period = _period_or_404(period)
@@ -270,7 +268,7 @@ def queue(period: str):
         prev=month_end.shift_period(period, -1),
         next=month_end.shift_period(period, 1),
         current=_period_now(),
-        admin=g.user["role"] == "admin",
+        admin=can("month_end.approve"),
         bulk=_bulk_progress(period, rows),
         worker_running=worker.is_alive(g.db),
     )
@@ -295,7 +293,7 @@ def _bulk_progress(period: str, rows) -> dict | None:
 
 
 @bp.post("/reporting/<period>/approve")
-@roles_required("admin")
+@needs("month_end.approve")
 def approve_many(period: str):
     """Queue an approval for each ticked client; the worker freezes and sends them, and the queue shows progress."""
     period = _period_or_404(period)
@@ -347,7 +345,7 @@ def _approve(tenant, period: str, reason: str | None = None) -> str | None:
 
 
 @bp.get("/reporting/<period>/progress")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def progress(period: str):
     """How far approvals have got, for the page waiting on them: ``?batch=`` (a bulk approval, counted over the
     clients this person can see) or ``?tenant=`` (one client's month)."""
@@ -385,14 +383,14 @@ def _planned_tenant(tenant_id: int):
 
 
 @bp.get("/reporting/<period>/<int:tenant_id>")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def review(period: str, tenant_id: int):
     period = _period_or_404(period)
     t, plan = _planned_tenant(tenant_id)
     report = monthly_review.build(g.db, t)
     r = month_end.review(g.db, t["id"], period)
     state = month_end.state_of(g.db, t["id"], period, r)
-    severe, flags = month_end.flags_for(g.db, t, report, period, datetime.now(UTC))
+    severe, flags = month_end.flags_for(g.db, t, month_end.facts_of(report), period, datetime.now(UTC))
     taken = {a["rule_key"] for a in month_end.actions(g.db, t["id"]) if a["rule_key"]}
     staff_users = [
         u["username"]
@@ -427,13 +425,13 @@ def review(period: str, tenant_id: int):
         worker_running=worker.is_alive(g.db),
         emailed=month_end.emailed(plan, g.db, t["id"]) if plan else False,
         months=[month_end.shift_period(period, i) for i in range(0, 7)],
-        admin=g.user["role"] == "admin",
+        admin=can("month_end.approve"),
         period_label=month_end.issued.period_label,
     )
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/commentary")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def save_commentary(period: str, tenant_id: int):
     period = _period_or_404(period)
     t = tenant_or_404(tenant_id)
@@ -447,7 +445,7 @@ def save_commentary(period: str, tenant_id: int):
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/assign")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def assign(period: str, tenant_id: int):
     period = _period_or_404(period)
     t = tenant_or_404(tenant_id)
@@ -471,7 +469,7 @@ def assign(period: str, tenant_id: int):
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/state")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def set_state(period: str, tenant_id: int):
     """Staff move a month between Draft and In review; approval has its own (admin) route."""
     period = _period_or_404(period)
@@ -489,7 +487,7 @@ def set_state(period: str, tenant_id: int):
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/approve")
-@roles_required("admin")
+@needs("month_end.approve")
 def approve(period: str, tenant_id: int):
     period = _period_or_404(period)
     t, plan = _planned_tenant(tenant_id)
@@ -503,7 +501,7 @@ def approve(period: str, tenant_id: int):
 
 
 @bp.post("/reporting/<period>/<int:tenant_id>/send")
-@roles_required("admin")
+@needs("month_end.approve")
 def send_again(period: str, tenant_id: int):
     """Send the frozen files again after a failed send, in the background. Nothing is rebuilt."""
     period = _period_or_404(period)
@@ -531,7 +529,7 @@ def _target(value: str) -> str | None:
 
 
 @bp.post("/tenants/<int:tenant_id>/report-actions")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def add_action(tenant_id: int):
     t = tenant_or_404(tenant_id)
     title = request.form.get("title", "").strip()[:300]
@@ -568,7 +566,7 @@ def _action_or_404(action_id: int):
 
 
 @bp.post("/report-actions/<int:action_id>")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def update_action(action_id: int):
     a = _action_or_404(action_id)
     op = request.form.get("op", "save")
@@ -595,7 +593,7 @@ def update_action(action_id: int):
 
 
 @bp.post("/tenants/<int:tenant_id>/finding-notes")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def add_note(tenant_id: int):
     t = tenant_or_404(tenant_id)
     rule_key = request.form.get("rule_key", "").strip()[:100]
@@ -626,7 +624,7 @@ def add_note(tenant_id: int):
 
 
 @bp.post("/finding-notes/<int:note_id>/delete")
-@roles_required(*STAFF)
+@needs("month_end.review")
 def delete_note(note_id: int):
     n = g.db.execute("SELECT * FROM finding_notes WHERE id = ?", (note_id,)).fetchone()
     if n is None:

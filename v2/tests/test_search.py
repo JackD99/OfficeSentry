@@ -2,9 +2,9 @@
 
 import html
 
-from officesentry import store
+from officesentry import lifecycle, permissions, search_index, store
 from officesentry.reports import data_reports, views
-from officesentry.web.search import looks_like_ip, search_tenant
+from officesentry.web.search import COLLECTOR_CAPABILITY, looks_like_ip, search, search_tenant
 from tests import graphdata as gd
 from tests.conftest import login, make_user
 from tests.seed import seed_tenant
@@ -95,9 +95,9 @@ def test_only_granted_tenants_are_searched(app, client, db, two_tenants):
     seed_tenant(db, bravo)
     make_user(db, "admin")
     make_user(db, "bravo-analyst", role="analyst", tenants=[bravo])
-    # Without an account in the snapshot, a mailbox opens the shared mailboxes report.
+    # Without an account in the snapshot, a mailbox opens its own page.
     info = [h for h in _hits(app, db, alpha, "info@x.com") if h.label == "Mailbox"]
-    assert [h.href for h in info] == [f"/tenants/{alpha}/data/shared-mailboxes"]
+    assert [h.href for h in info] == [f"/tenants/{alpha}/mailboxes/u7"]
 
     login(client, "admin")
     page = _page(client, "ann@x.com")
@@ -158,6 +158,110 @@ def test_empty_and_short_queries(client, db, two_tenants):
     assert "Nothing found" in _page(client, "nobody-here")  # tenants without data are skipped
 
 
+def test_every_kind_found_needs_a_capability(app, db, two_tenants):
+    # A collector added to search without a capability here would break search for everyone.
+    assert {k.collector for k in search_index.KINDS} <= set(COLLECTOR_CAPABILITY)
+    assert set(COLLECTOR_CAPABILITY.values()) <= {c.key for c in permissions.CAPABILITIES}
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=[*USERS, ZED])
+    with app.test_request_context():
+        tenant = store.get_tenant(db, alpha)
+        assert search_tenant(db, tenant, "zed.quinn").hits
+        assert not search_tenant(db, tenant, "zed.quinn", allowed=lambda cap: cap != "reports.people").hits
+
+
 def test_ip_like_queries():
     assert looks_like_ip("203.0.113") and looks_like_ip("2001:db8") and looks_like_ip("10.")
     assert not looks_like_ip("ann") and not looks_like_ip("cafe") and not looks_like_ip("2026")
+
+
+# -- The index ------------------------------------------------------------------------------------------
+
+
+def _shown(hits):
+    return [(h.label, h.title, h.detail, h.href) for h in hits]
+
+
+def test_the_index_finds_what_a_scan_finds(app, db, two_tenants):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha, users=[*USERS, gd.INFO_USER, ZED])
+    seed_tenant(db, bravo)
+    tenants = db.execute("SELECT * FROM tenants ORDER BY id").fetchall()
+    assert search_index.current(db, tenants) == set()  # nothing indexed yet: every tenant is scanned
+    for t in tenants:
+        assert search_index.refresh(db, t)
+    assert search_index.current(db, tenants) == {alpha, bravo}
+    assert not search_index.refresh(db, tenants[0])  # up to date: nothing written
+    with app.test_request_context():
+        for q in (
+            "zed",
+            "ann@x.com",
+            "ann@gmail.com",
+            "home@gmail",
+            "203.0.113",
+            "192.0.2.10",
+            "app-evil",
+            "laptop",
+            "parked",
+        ):
+            indexed, _ = search(db, tenants, q)
+            scanned = [g for g in (search_tenant(db, t, q) for t in tenants) if g.hits]
+            assert [(g.tenant["id"], _shown(g.hits)) for g in indexed] == [
+                (g.tenant["id"], _shown(g.hits)) for g in scanned
+            ], q
+        assert not search(db, tenants, "0.2.10")[0]  # not the start of an address
+        assert not search(db, tenants, "nobody-here")[0]
+
+
+def test_an_index_behind_the_latest_collection_is_not_used(app, db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha, users=USERS)
+    tenant = store.get_tenant(db, alpha)
+    search_index.refresh(db, tenant)
+    seed_tenant(db, alpha, users=[*USERS, ZED])  # a new collection: Zed joined
+    assert search_index.current(db, [tenant]) == set()
+    with app.test_request_context():
+        groups, _ = search(db, [tenant], "zed")  # scanned, so the newcomer is found
+        assert [h.title for g in groups for h in g.hits] == ["Zed Quinn"]
+        assert search_index.refresh(db, tenant)
+        assert search_index.current(db, [tenant]) == {alpha}
+        groups, _ = search(db, [tenant], "zed")
+        assert [h.title for g in groups for h in g.hits] == ["Zed Quinn"]
+    # Deleting the tenant takes its rows with it.
+    assert db.execute("SELECT COUNT(*) FROM search_index WHERE tenant_id = ?", (alpha,)).fetchone()[0]
+    lifecycle.delete_tenant(db, tenant, "admin")
+    assert db.execute("SELECT COUNT(*) FROM search_index").fetchone()[0] == 0
+
+
+def test_the_index_only_answers_for_the_tenants_asked_about(app, client, db, two_tenants):
+    alpha, bravo = two_tenants
+    seed_tenant(db, alpha, users=[*USERS, ZED])
+    seed_tenant(db, bravo)
+    for t in db.execute("SELECT * FROM tenants").fetchall():
+        search_index.refresh(db, t)
+    assert search_index.find(db, [bravo], "zed", False) == {}
+    assert list(search_index.find(db, [alpha, bravo], "zed", False)) == [alpha]
+    make_user(db, "bravo-analyst", role="analyst", tenants=[bravo])
+    login(client, "bravo-analyst")
+    page = _page(client, "zed")
+    assert "Zed Quinn" not in page and "Nothing found" in page
+    assert "Ann" in _page(client, "ann@x.com") and "Alpha Ltd" not in _page(client, "ann@x.com")
+
+
+def test_searches_use_the_indexes(db, two_tenants):
+    alpha, _ = two_tenants
+    seed_tenant(db, alpha)
+    search_index.refresh(db, store.get_tenant(db, alpha))
+    db.execute("ANALYZE")
+    plan = " ".join(
+        r["detail"]
+        for r in db.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM search_index WHERE value >= ? AND value < ? AND tenant_id IN (?)",
+            ("203.", "203/", alpha),
+        )
+    )
+    assert "idx_search_index_value" in plan
+    plan = " ".join(
+        r["detail"] for r in db.execute("EXPLAIN QUERY PLAN DELETE FROM search_index WHERE tenant_id = ?", (alpha,))
+    )
+    assert "idx_search_index_tenant" in plan

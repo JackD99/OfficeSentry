@@ -10,7 +10,8 @@ keys that decrypt its stored certificates and passwords in a second one
 
 - A Linux server or VM with [Docker](https://docs.docker.com/engine/install/)
   installed, with at least 2 CPUs and 4 GB of RAM. Disk use grows with the
-  number of clients and users (see [How much disk](#how-much-disk)).
+  number of clients and users (see [How much disk](#how-much-disk)); page
+  times hardly do ([How fast](#how-fast)).
 - A domain name for the portal, such as `sentry.yourmsp.com`, with its DNS
   pointing at the server, if you want the built-in HTTPS.
 
@@ -46,16 +47,56 @@ docker compose run --rm --no-deps worker python -m officesentry compact
 docker compose start worker
 ```
 
+### How fast
+
+Measured with `scripts/timings.py` on the same 200-client database (90 nights of history, 1.5 GB,
+every client with open findings and on a month-end plan), on 4 cores with nothing else running.
+"Normal" is what people get on an ordinary day, after the worker's nightly work; "first" is a page
+nobody has opened since an upgrade or a restore, when the portal builds what the worker hasn't yet.
+
+| Page, at 200 clients | Normal | First |
+|---|---|---|
+| Dashboard | 0.6 s | 3.9 s |
+| Today | 0.5 s | 0.4 s |
+| Accounts | 0.5 s | 6 s |
+| All clients: monthly review | 0.1 s | 0.1 s |
+| All clients: checks | 0.3 s | 2 s |
+| All clients: insurance evidence | 0.05 s | 4 s |
+| All clients: a report's rollup | 0.05 s | 0.6 to 1 s |
+| All clients: every row of a report | 0.9 s | 0.7 s |
+| What changed, every client | 0.2 s | 25 s |
+| Projects | 0.1 s | 0.2 s |
+| Coming up | 0.3 s | 0.5 s |
+| Month-end queue | 0.05 s | 0.1 s |
+| Search for a name | 0.15 s | 0.9 s |
+| Search for an IP address | 0.35 s | 0.8 s |
+| A client's own pages (overview, findings, changes, reports, a person) | 0.01 to 0.2 s | 0.03 to 0.3 s |
+| PDF downloads (a client's review, every client's changes, a rollup) | 1.7 to 4.6 s | |
+| XLSX and CSV downloads | 0.05 to 0.9 s | |
+
+| Worker job, at 200 clients | Time |
+|---|---|
+| Rebuild of every precomputed row (after each night's collection, and once a day) | 91 s in all, about half a second a client |
+| Findings sync, every client | 3 s |
+| Retention pass | 2 s |
+| Compressed backup (1.5 GB database, 0.77 GB on disk) | 47 s |
+
+Pages that show every client read rows the worker keeps up to date, so their time hardly grows with
+the number of clients; a PDF's time is the rendering, which is why PDFs keep the first 2,000 rows of
+a table. How long the night's collection takes depends on Microsoft's rate limits and each tenant's
+size, not on the server: see `OFFICESENTRY_WORKER_CONCURRENCY` below.
+
 ## First start
 
-On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone).
+Running Portainer, a NAS, Kubernetes, Azure, AWS or another cloud? The [deploy guides](docs/deploy/README.md)
+start from there.
 
 1. Make a folder on the server (say `/opt/officesentry`) and open a terminal in it.
    From the newest [release](https://github.com/JackD99/OfficeSentry/releases),
    download `docker-compose.yml`, `Caddyfile` and `env.example` into it.
-   They run that release: the image `ghcr.io/jackd99/officesentry`, built and
-   tested by GitHub, for amd64 (Intel and AMD) servers; arm64 builds follow
-   once the repository is public.
+   They run that release: the image `ghcr.io/jackd99/officesentry`, built,
+   tested and scanned by GitHub Actions, for amd64 (Intel and AMD) servers and, from 2.1.0,
+   arm64 (such as Ampere and Raspberry Pi 4 or 5).
 2. Create your settings file: `cp env.example .env`
 3. Open `.env` in an editor (`nano .env`) and set at least:
    - `OFFICESENTRY_BASE_URL` to the address people will use, e.g. `https://sentry.yourmsp.com`
@@ -69,19 +110,17 @@ On Hetzner with only a phone? See [Hetzner, from a phone](#hetzner-from-a-phone)
    docker compose --profile https up -d
    ```
 
-   Until the repository is public its image is private: pulling it needs
-   `docker login ghcr.io` with a GitHub token that can read packages. The
-   Hetzner deploy below doesn't pull, it builds.
-
    Already have a reverse proxy (nginx, Traefik)? Leave out `--profile https`
    and point the proxy at `http://127.0.0.1:8000`.
 5. Create the first admin account. Run `docker compose logs web`, find the line
    starting **No admin account yet** and open the link on it (`docker compose exec
    web python -m officesentry setup-link` prints it again). Choose a username and
    password, scan the QR code with an authenticator app and save the recovery codes.
-6. Open **Settings → App connection** and press **Sign in to Microsoft**. Enter the code it shows on
-   Microsoft's page and sign in as an admin of your own tenant who can create app registrations. Office
-   Sentry creates its read-only app and then offers to add your first client. No command needed.
+6. Your home page now shows a **Get started** checklist: the app connection, your first client, its
+   consent and its first collection, each ticking itself off as it happens. Press **Set up the app
+   connection** (or open **Settings → App connection**) and press **Sign in to Microsoft**. Enter the code it
+   shows on Microsoft's page and sign in as an admin of your own tenant who can create app registrations.
+   Office Sentry creates its read-only app and then offers to add your first client. No command needed.
 
 ## Is it working?
 
@@ -192,6 +231,12 @@ Before 2.1.0 the signature was `sha256=` and the HMAC of the body alone, with
 no timestamp, so a copied request could be sent again.
 
 ## Sign-in protection
+
+**Staff can sign in with their Microsoft account** instead of a password and authenticator code: an admin
+sets it up under *Settings → Staff sign-in* in about two minutes, and
+[docs/staff-sign-in.md](docs/staff-sign-in.md) walks through it, including turning passwords off for staff
+and turning them back on from the server (`python -m officesentry staff-sign-in --passwords on`) if
+Microsoft sign-in ever breaks. The rest of this section is about password sign-ins.
 
 Wrong passwords never lock an account, so nobody can keep you out just by
 knowing your username. Instead, Office Sentry slows down **where** the
@@ -362,7 +407,7 @@ and run `docker compose up -d`. To back up every night at 03:30, add this
 line with `crontab -e` (change the folder):
 
 ```
-30 3 * * * cd /opt/officesentry/v2 && docker compose exec -T web python -m officesentry backup --dir /backups --keep 14
+30 3 * * * cd /opt/officesentry && docker compose exec -T web python -m officesentry backup --dir /backups --keep 14
 ```
 
 Each run writes how it went to `/data/backup-status.json`, wherever the copy
@@ -426,7 +471,7 @@ Costs are small: each night sends only what's new, the night's compressed
 copy (see [How much disk](#how-much-disk)). With 200 clients the copies kept
 come to about 40 GB, well under a dollar a month at B2's published price.
 
-**On the Hetzner deploy**, from your phone:
+To set it up:
 
 1. Make the storage. On Backblaze B2 (backblaze.com, free to sign up): *B2
    Cloud Storage → Buckets → Create a Bucket*, a name such as
@@ -440,48 +485,37 @@ come to about 40 GB, well under a dollar a month at B2's published price.
    `'` in it). **Save it in the password manager, next to the copy of
    `secrets.json`.** Without it the off-site copies can't be read by anyone,
    you included.
-4. In GitHub: the repository's *Settings → Secrets and variables → Actions*.
-   Add a variable and three secrets:
+4. Put the settings in a file named `.env.backup` next to
+   `docker-compose.yml`, readable only by you (`chmod 600 .env.backup`), each
+   value in single quotes. The repository is `s3:https://` + the endpoint +
+   `/` + the bucket name + `/officesentry`:
 
-   | | Name | Value |
-   |---|---|---|
-   | Variable | `BACKUP_REPOSITORY` | `s3:https://` + the endpoint + `/` + the bucket name + `/officesentry`, e.g. `s3:https://s3.eu-central-003.backblazeb2.com/yourmsp-officesentry-backups/officesentry` |
-   | Secret | `BACKUP_PASSWORD` | the password from step 3 |
-   | Secret | `BACKUP_KEY_ID` | the keyID |
-   | Secret | `BACKUP_SECRET_KEY` | the applicationKey |
+   ```
+   RESTIC_REPOSITORY='s3:https://s3.eu-central-003.backblazeb2.com/yourmsp-officesentry-backups/officesentry'
+   RESTIC_PASSWORD='the password from step 3'
+   AWS_ACCESS_KEY_ID='the keyID'
+   AWS_SECRET_ACCESS_KEY='the applicationKey'
+   ```
 
-5. *Actions → Deploy → Run workflow*, action **deploy**, to put the settings
-   on the server. Then run it again with action **backup**: the first run
-   sets up the storage, and the log ends with a line like
-   `snapshot 1a2b3c4d saved`.
-6. Run it once more with action **restore-drill** ([below](#restore-drill)).
-   When it's green, the backup is proven to restore.
+5. Copy `deploy/jobs.sh` from the release's source next to it as
+   `deploy/jobs.sh`, then run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule`
+   in that folder (as a user who can run `docker`) to add the nightly and
+   weekly lines to your crontab.
+6. Run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh now`: the first run sets up
+   the storage and ends with a line like `snapshot 1a2b3c4d saved`. Then run
+   it with `drill` instead of `now` ([below](#restore-drill)). When that
+   passes, the backup is proven to restore.
 
-Then run **status** whenever you like: its last lines say when the database
-copy, the off-site copy and the restore check last worked. *Settings → System
-status* in the portal shows the same, and the team gets a system alert when
-one fails or is overdue.
+`docker compose exec web python -m officesentry backup-status` says when the
+database copy, the off-site copy and the restore check last worked. *Settings →
+System status* in the portal shows the same, and the team gets a system alert
+when one fails or is overdue.
 
 To hear about a failed backup even when the whole server is down, add a free
 check at [Healthchecks.io](https://healthchecks.io) (period 1 day, grace 2
-hours), and add its ping address as the secret `BACKUP_PING_URL`, then deploy.
-Every nightly run pings it, or its `/fail` address when something failed.
-
-**Elsewhere**, put the same four settings in a file named `.env.backup` next to
-`docker-compose.yml`, readable only by you (`chmod 600 .env.backup`), each
-value in single quotes:
-
-```
-RESTIC_REPOSITORY='s3:https://s3.eu-central-003.backblazeb2.com/yourmsp-officesentry-backups/officesentry'
-RESTIC_PASSWORD='the password'
-AWS_ACCESS_KEY_ID='the key ID'
-AWS_SECRET_ACCESS_KEY='the secret key'
-```
-
-copy `deploy/jobs.sh` from the release's source next to it as
-`deploy/jobs.sh`, then run `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh schedule`
-in that folder (as a user who can run `docker`) to add the nightly and weekly
-lines to your crontab. `bash deploy/jobs.sh now` backs up straight away.
+hours), and add its ping address to `.env.backup` as
+`BACKUP_PING_URL='https://hc-ping.com/...'`. Every nightly run pings it, or its
+`/fail` address when something failed.
 
 The password and storage keys are only in `.env.backup`, which only restic's
 own container reads; the portal never sees them.
@@ -495,9 +529,8 @@ it read-only, run SQLite's integrity check and count the clients. It never
 touches the live database, and deletes the scratch volume afterwards. The
 result is the **Restore check** line in `status` and on *System status*.
 
-To run it now: *Actions → Deploy → Run workflow*, action **restore-drill**
-(or `bash deploy/jobs.sh drill` in a shell on the server). A green run ends
-with a line like:
+To run it now: `OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh drill` in the
+folder with `docker-compose.yml`. A run that passes ends with a line like:
 
 ```
 OK: officesentry-20261009-034500.db.gz opens and passes SQLite's integrity check; database version 26, 12 clients, newest collection 2026-10-09 02:14
@@ -578,13 +611,10 @@ When the server is lost. You need the backup password and the saved
 `secrets.json` from your password manager. Tested on a fresh server with
 Office Sentry's own scripts.
 
-1. Make a new server and deploy as in [Hetzner, from a phone](#hetzner-from-a-phone),
-   steps 2 to 6 but without creating an admin (with the same repository
-   variables and secrets, the off-site settings included). Elsewhere: *First
-   start* steps 1 to 4, plus `.env.backup` and `deploy/jobs.sh` as in
+1. Make a new server and install as in *First start* steps 1 to 4 (without
+   creating an admin), plus `.env.backup` and `deploy/jobs.sh` as in
    *Off-site backups*.
-2. Open a shell on it ([If you need a shell](#if-you-need-a-shell)) and
-   `cd /opt/officesentry/v2`.
+2. Open a terminal on it in that folder (such as `/opt/officesentry`).
 3. Put back `secrets.json`: `nano secrets.json`, paste the saved line, save
    (Ctrl+O, Enter, Ctrl+X), then:
 
@@ -597,7 +627,7 @@ Office Sentry's own scripts.
 4. Restore the newest off-site copy and start again:
 
    ```bash
-   bash deploy/jobs.sh restore
+   OFFICESENTRY_DIR=$PWD bash deploy/jobs.sh restore
    ```
 
    It fetches the newest database copy from the storage, stops the portal and
@@ -606,8 +636,7 @@ Office Sentry's own scripts.
    restore fails, it says why and leaves the portal and worker stopped, so
    nothing starts on a missing or half-restored database; fix the problem and
    run it again.
-5. Point your domain at the new server (step 4 of the Hetzner steps), if
-   you haven't yet.
+5. Point your domain at the new server, if you haven't yet.
 
 The off-site copies hold every database copy of the last nights too. To
 restore an older one, ask restic for a list in step 4 instead:
@@ -657,8 +686,8 @@ The portal upgrades the database on start, before the worker starts, after
 saving a `pre-upgrade-*` copy (see Backups). Data in the volume is kept. The
 portal is down from `up -d` until the copy and the upgrade finish: seconds
 for a small database, minutes for a large one, so update at a quiet time. The portal's health check
-allows it 15 minutes to come up before Docker calls it unhealthy, and the Deploy workflow waits as long
-and then starts the worker if `up -d` gave up on it. The version now
+allows it 15 minutes to come up before Docker calls it unhealthy; if `up -d` gives up on it before the
+worker starts, run `docker compose up -d` again once the portal answers. The version now
 running shows at the foot of the menu and at `/health`.
 
 If the release notes change `docker-compose.yml` or `Caddyfile`, download
@@ -666,8 +695,7 @@ the new ones as well; they are attached to every release.
 
 Running your own build of the `v2` folder instead (a branch, or changes of
 your own)? Add `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` to
-`.env`, and update with `git pull` then `docker compose up -d --build`. The
-Hetzner deploy below works this way.
+`.env`, and update with `git pull` then `docker compose up -d --build`.
 
 ### Rolling back an update
 
@@ -703,299 +731,6 @@ restore.
 `docker compose down` stops everything and keeps your data. A collection in
 progress is given up to two minutes to finish. Never use `down -v` unless you
 mean to delete all data.
-
-## Hetzner, from a phone
-
-Everything here works from a phone browser: the Hetzner Cloud console, GitHub
-(use github.com in the browser for Settings; the GitHub app can run
-workflows) and an SSH app such as Termius to make a key. You never type
-commands on the server. The **Deploy** workflow (`.github/workflows/deploy.yml`)
-copies the app over and starts it, and the server's Hetzner firewall decides
-who can open the portal. It builds the chosen branch, tag or commit on the
-server (`docker-compose.build.yml`) rather than pulling a release image, so
-any commit can be deployed.
-
-### 1. Make a deploy key
-
-In Termius: *Keychain → + → Generate key*, type **ED25519**, name it
-`officesentry-deploy`, no passphrase. Keep it open: you need the public key in
-step 3 and the private key in step 5.
-
-### 2. Create the firewall
-
-In the [Hetzner Cloud console](https://console.hetzner.cloud), open (or create)
-a project, then *Firewalls → Create firewall*, named `officesentry`, with these
-inbound rules and **no rule for port 22**:
-
-| Protocol | Port | Source | Why |
-|---|---|---|---|
-| TCP | 443 | your office and home addresses, e.g. `203.0.113.10/32` | the portal |
-| TCP | 80 | Any IPv4, Any IPv6 | Let's Encrypt checks here before issuing the HTTPS certificate; Caddy only redirects it to 443 |
-| ICMP | | Any | optional, lets you ping the server |
-
-Port 443 is the allow-list. Anyone else can't even connect. Your address is
-whatever a "what is my IP" search shows on that network. Mobile data changes
-address often, so for a phone away from the office add its current address
-while you need it and remove it after. Client users who sign in to the portal
-need their addresses here too.
-
-SSH stays closed: the Deploy workflow opens port 22 to its own address for the
-length of each run (a rule named `github-actions-deploy (temporary)`) and
-removes it at the end, whether the run passed, failed or was cancelled; a
-second, separate job removes it again in case GitHub lost the first one's
-runner part way through.
-
-### 3. Create the server
-
-*Servers → Add server*:
-
-- **Image** Ubuntu 24.04. **Type** shared vCPU, x86, 2 vCPUs and 4 GB (the
-  minimum in [What you need](#what-you-need)). Check its disk against
-  [How much disk](#how-much-disk); a bigger type can be chosen later.
-- **Networking** public IPv4 (and IPv6 if you like).
-- **SSH keys** none needed.
-- **Firewalls** tick `officesentry`.
-- **Backups** worth ticking: Hetzner keeps a copy of the whole server, data
-  and keys included, for 7 days, and the server saves a consistent database
-  copy every night at 03:45 for those to hold. They're with the same
-  provider, so add [Off-site backups](#off-site-backups) too.
-- **Cloud config** paste [`deploy/cloud-init.yaml`](deploy/cloud-init.yaml),
-  with its `ssh-ed25519 AAAA...` line replaced by your public key (Termius:
-  the key → *Export to clipboard* or copy the public key).
-
-Create it and note its IPv4 address. It takes a few minutes to install Docker.
-
-### 4. Point your domain at it
-
-At your DNS provider add an **A** record for, say, `sentry.yourmsp.com` with
-the server's IPv4 address. Only add an AAAA (IPv6) record if your firewall
-rules list your IPv6 ranges too, or browsers that prefer IPv6 won't get in.
-
-**Domain on Cloudflare?** In the Cloudflare app or dash.cloudflare.com: the
-domain → *DNS → Records → Add record*: type **A**, name `app` (for
-`app.yourmsp.com`, or `@` for the bare domain), IPv4 address the server's,
-and **Proxy status off (grey cloud, "DNS only")**. Keep the proxy off: with the orange
-cloud, every visitor reaches the server from a Cloudflare address, so the
-Hetzner firewall's allow-list would block everyone (or have to let all of
-Cloudflare in), and Caddy can't get its certificate the usual way. Caddy
-makes the HTTPS certificate itself, so nothing needs changing under
-Cloudflare's SSL/TLS settings.
-
-### 5. Tell GitHub where to deploy
-
-In Hetzner: *Security → API tokens → Generate API token*, **Read & Write**
-(the workflow edits the firewall with it).
-
-In GitHub: the repository's *Settings → Secrets and variables → Actions*.
-
-| Secrets | |
-|---|---|
-| `HCLOUD_TOKEN` | the Hetzner API token |
-| `DEPLOY_SSH_KEY` | the deploy key's **private** key, all of it, including the BEGIN and END lines |
-| `DEPLOY_HOST_KEY` | the server's own SSH key, one line starting `ssh-ed25519 AAAA` (below). Required: the workflow only talks to the server that has this key |
-| `PORTAL_ALLOWED_IPS` | only when the server also runs a public site (below): the addresses that may open the portal, separated by commas |
-| `SETUP_CODE` | only while there is no admin yet: a long random password (20 characters or more) to use as the first-admin code in step 6. Delete it afterwards |
-
-| Variables | |
-|---|---|
-| `DEPLOY_HOST` | the server's IPv4 address |
-| `OFFICESENTRY_DOMAIN` | the domain alone, e.g. `sentry.yourmsp.com` |
-| `OFFICESENTRY_TIMEZONE` | e.g. `Europe/London` (default UTC) |
-| `HCLOUD_FIREWALL` | only if the firewall isn't called `officesentry` |
-| `OFFICESENTRY_WEBSITE_DOMAIN`, `OFFICESENTRY_WEBSITE_CONTACT`, `OFFICESENTRY_DEMO_DOMAIN`, `DEMO_ENABLED` | only for the project's own website and public demo (below) |
-| `OFFICESENTRY_SETTINGS` | optional: more `.env` lines, one per line, e.g. `OFFICESENTRY_COLLECT_CRON=0 1 * * *`. Variables show in run logs, so never put a password or key here |
-| `AUTO_DEPLOY` | `true` to deploy every merge to main once its tests pass (only main's newest commit; a re-run of an older test run doesn't redeploy it). Anything else, or no variable, means you deploy by hand ([below](#automatic-deploys-off-and-on)) |
-| `PRODUCTION_FROM_TAGS` | `true` makes the portal take release tags only, and merges never deploy it ([below](#production-from-releases)). Unset or anything else: a deploy builds the chosen code, as today |
-| `BACKUP_REPOSITORY` | optional: where the off-site copies go ([Off-site backups](#off-site-backups)), with the secrets `BACKUP_PASSWORD`, `BACKUP_KEY_ID`, `BACKUP_SECRET_KEY`, and optionally `BACKUP_PING_URL` and `UPTIME_PING_URL` |
-
-The workflow writes the server's `.env` from these on every deploy (with
-`OFFICESENTRY_TRUSTED_PROXIES=1` for Caddy), so change settings here, not on
-the server.
-
-**Getting `DEPLOY_HOST_KEY`.** Leave it out at first. Run the Deploy workflow
-(step 6): it stops with a red message that shows the key the server answered
-with, a line starting `ssh-ed25519 AAAA`. Add that line as the
-`DEPLOY_HOST_KEY` secret and run the workflow again. Because you created the
-server a few minutes earlier, the key it shows is its own. From then on every
-run checks the server's key first, and if a different machine ever answers at
-that address the run stops before sending it anything. If you rebuild or
-replace the server, it gets a new key: the run stops with a message showing
-the new one, and you update the secret the same way. If you haven't touched
-the server and see that message, don't change the secret; check the
-`DEPLOY_HOST` variable and the server in the Hetzner console first.
-
-### 6. Deploy and create the admin
-
-1. *Actions → Deploy → Run workflow*, action **deploy**. When it's green, it
-   notes that there is no admin account yet.
-2. Add a `SETUP_CODE` secret (step 5's page) holding a long random password,
-   say one your password manager makes. Keep a copy for the next step.
-3. Run the workflow again with action **setup-link**. Its summary says which
-   page to open: `https://<your domain>/setup`.
-4. Open that page, enter your `SETUP_CODE` as the setup code and create the
-   admin account (with two-step sign-in), as in *First start*. The code only
-   works until the first admin exists.
-5. Delete the `SETUP_CODE` secret. Then carry on from step 6 of *First start*.
-
-The run logs never show the setup link or code: they will be public once the
-repository is, and whoever has the link can create the first admin.
-
-### Everyday jobs
-
-All from *Actions → Deploy → Run workflow*:
-
-| Action | Does |
-|---|---|
-| `deploy` | copies the chosen branch, tag or commit and rebuilds; the portal is only down while the containers swap |
-| `website-and-demo` | only with the website or public demo on (below): updates them from `main` (they also update by themselves after every merge), without touching the portal |
-| `status` | container health, free disk, whether the worker checked in, how many errors the portal and worker logged in the last 24 hours, and when each backup job last worked |
-| `backup` | a database copy now, keeping 14, then the off-site copy when it's set up |
-| `restore-drill` | restores the newest off-site copy into a scratch volume and checks it opens ([Restore drill](#restore-drill)) |
-| `restart` | restarts the portal, worker and Caddy |
-| `setup-link` | makes your `SETUP_CODE` secret the first-admin code (step 6); does nothing once an admin exists |
-
-To go back to an older version, deploy its commit or tag in the `ref` box; if
-the database was upgraded since, restore the `pre-upgrade-*` copy as in
-*Rolling back an update* (that needs a shell, below).
-
-The runs never print the portal's own log, because it names clients, users
-and addresses and the run logs will be public once the repository is. When
-`status` counts errors, or a deploy says the portal didn't become healthy,
-read the log in a shell (below) with `docker compose logs --tail 200 web`
-(or `worker`).
-
-### Automatic deploys: off and on
-
-With the `AUTO_DEPLOY` variable set to `true`, every pull request merged
-into main goes to your server as soon as its tests pass. To stop that and
-choose when to deploy:
-
-1. On github.com, open the repository, then **Settings** (the tab with the
-   gear; on a phone, use the browser, not the GitHub app).
-2. In the left menu, **Secrets and variables**, then **Actions**.
-3. Open the **Variables** tab. Next to `AUTO_DEPLOY`, press the pencil.
-4. Change the value to `false` and press **Update variable**.
-
-The portal doesn't update by itself from then on (the project's website and
-public demo, [below](#the-website-and-public-demo), still follow `main`). To turn it back on, do the same and
-set the value to `true`. Merges keep running their tests either way.
-
-### Deploying by hand
-
-1. Open the repository's **Actions** tab (in the GitHub app: the repository,
-   then *Actions*).
-2. Pick **Deploy** in the list of workflows.
-3. Press **Run workflow**. Leave *Use workflow from* on `main`, leave the
-   action on **deploy**, and leave the `ref` box on `main` to deploy the
-   newest code (or type a branch, tag or commit).
-4. Press the green **Run workflow**. The run takes a few minutes; a green
-   tick means the portal is up on the new version.
-
-To see what a deploy will bring, look at the **Pull requests** tab, filter
-*Closed*, and read what merged since your last deploy (the Deploy run list
-shows when that was).
-
-Every deploy also (re)installs the server's scheduled jobs in the `deploy`
-user's crontab: the nightly backup at 03:45, the restore drill on Sundays at
-04:30 and, when set up, the uptime ping. Their output goes to
-`/opt/officesentry/jobs.log`.
-
-### Production from releases
-
-Off until you turn it on. Today every deploy builds the chosen code on the
-server and runs it in production. With the `PRODUCTION_FROM_TAGS` variable set
-to `true`:
-
-- **The portal only takes releases.** Deploy with a release tag such as
-  `v2.1.0` in the `ref` box. The server runs the image the release workflow
-  built, scanned and published, pinned by its digest, so it runs exactly what
-  was tested and nothing else, even if someone later moved the tag. Deploying
-  anything else stops with a message saying so.
-- **Merges never deploy the portal**, whatever `AUTO_DEPLOY` says. The
-  [website and public demo](#the-website-and-public-demo) still follow `main`
-  by themselves, so you can try what's coming on the demo before releasing it.
-
-To turn it on:
-
-1. Make a release first, if there isn't one yet (CONTRIBUTING.md, "Releases").
-2. *Settings → Secrets and variables → Actions → Variables → New repository
-   variable*: name `PRODUCTION_FROM_TAGS`, value `true`.
-3. Deploy that release: *Actions → Deploy → Run workflow*, action **deploy**,
-   `ref` the release tag (the *Releases* page lists them, e.g. `v2.1.0`).
-
-**Deploying a release from your phone:** open the repository in the GitHub
-app, *Actions → Deploy → Run workflow*, leave *Use workflow from* on `main`,
-action **deploy**, type the tag (`v2.1.0`) in `ref`, then *Run workflow*. The
-run's summary names the release and image it deployed. Going back to an older
-release is the same with its tag (and the `pre-upgrade-*` copy if the database
-was upgraded since, as in *Rolling back an update*).
-
-To turn it off, delete the variable or set it to `false`; the next deploy
-builds from the code again.
-
-### Uptime monitor
-
-The firewall only lets your own addresses reach the portal, so an outside
-monitor can't open it. Instead the server asks the portal's `/health/ready`
-every 5 minutes and tells a monitor the answer, and the monitor emails you
-when the pings fail or stop (the server, Docker or the portal is down, or the
-database, the worker or the disk has a problem):
-
-1. Sign up at [Healthchecks.io](https://healthchecks.io) (free for 20 checks).
-2. *Add Check*: name `Office Sentry portal`, period **5 minutes**, grace
-   **10 minutes**. Copy its ping address (`https://hc-ping.com/...`).
-3. In GitHub, add it as the repository secret `UPTIME_PING_URL`, then deploy.
-4. Within 5 minutes the check turns green. Healthchecks.io emails you when it
-   stops; its app can notify your phone too.
-
-Use a second check, with period **1 day**, for `BACKUP_PING_URL` ([Off-site
-backups](#off-site-backups)).
-
-### When the repository goes public
-
-Runs before this change printed the portal's log in `status` and `restart`
-runs, and the first-admin link. GitHub keeps run logs for 90 days, and they
-become public with the repository. Before making it public, open
-*Actions → Deploy*, and for each run older than this change press **⋯** and
-**Delete workflow run** (or wait until they are 90 days old).
-
-Once it is public, GitHub Free also allows a **`production` environment that
-needs your approval** before any deploy reaches the server, holding the deploy
-secrets so nothing else in the repository can read them. Set it up straight
-after making it public:
-
-1. *Settings → Environments → New environment*, named `production`.
-2. Tick **Required reviewers** and add yourself. Under *Deployment branches
-   and tags*, choose **Selected branches and tags** and add the rule `main`
-   and the tag rule `v*`.
-3. Under **Environment secrets**, add `HCLOUD_TOKEN`, `DEPLOY_SSH_KEY`,
-   `DEPLOY_HOST_KEY` and the `BACKUP_*` and `*_PING_URL` secrets again, with
-   the same values as the repository secrets.
-4. Ask for the Deploy workflow's `server` job to name `environment:
-   production` (a one-line change in `.github/workflows/deploy.yml`). Once
-   that has merged and a deploy has worked, delete those secrets from
-   *Settings → Secrets and variables → Actions* so only the environment holds
-   them.
-
-From then on every deploy waits on the run's page for you to press
-**Review deployments → Approve**.
-
-### The website and public demo
-
-The project's own server also runs the website (officesentry.co.uk) and a
-public, read-only demo with fictional clients, next to its private portal.
-That's how the project shows itself, and nothing an MSP running Office Sentry
-needs; it moves the portal's allow-list from the Hetzner firewall to Caddy (the
-`PORTAL_ALLOWED_IPS` secret), because the public sites need port 443 open to
-everyone. How it's kept apart from the portal, and how to turn it on:
-[`deploy/public/README.md`](deploy/public/README.md).
-
-### If you need a shell
-
-Add an inbound rule for TCP 22 from your current address in the firewall,
-connect in Termius as `deploy@<server IP>` with the deploy key, run
-`cd /opt/officesentry/v2`, and the commands elsewhere in this file work as
-written (`.env` already picks the https and demo parts). Remove the rule afterwards.
 
 ## Running on Windows without Docker
 

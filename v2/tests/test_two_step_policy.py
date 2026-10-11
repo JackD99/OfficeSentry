@@ -56,5 +56,5 @@ def test_users_page_shows_who_must_use_two_step(cfg, db, client):
     make_user(db, "client", role="client")
     enrol(client, db, Vault(cfg.encryption_keys), "admin")
     page = client.get("/admin/users").get_data(as_text=True)
-    assert "Two-step sign-in is required for admins and analysts" in page
+    assert "Two-step sign-in is required for staff" in page
     assert "OFFICESENTRY_REQUIRE_MFA=all" in page and "1 client account" in page

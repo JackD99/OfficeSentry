@@ -5,10 +5,13 @@ Office Sentry reads each client's Microsoft 365 every night, keeps the history, 
 actually sends: a monthly review, a cyber-insurance evidence pack, about 30 detail reports, a view across all
 clients, and what changed since last month. It never changes anything in a client's tenant.
 
-[![v2](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
+[![CI](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml/badge.svg)](https://github.com/JackD99/OfficeSentry/actions/workflows/v2.yml)
+[![Release](https://img.shields.io/github/v/release/JackD99/OfficeSentry?label=release)](https://github.com/JackD99/OfficeSentry/releases/latest)
+[![Image](https://img.shields.io/badge/image-ghcr.io%2Fjackd99%2Fofficesentry-2563eb)](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry)
+[![Licence](https://img.shields.io/badge/licence-AGPL--3.0-blue)](LICENSE)
 
 [Website](https://officesentry.co.uk) · [Live demo](https://demo.officesentry.co.uk) · [Example reports (PDF)](examples/) · [Quick start](#quick-start) · [What it reads](v2/docs/what-office-sentry-reads.md) ·
-[Security model](#security-model) · [Technical reference](v2/README.md)
+[Security model](#security-model) · [Getting help](SUPPORT.md) · [Technical reference](v2/README.md)
 
 ![A client's overview: key figures, what needs attention and what changed since last month](docs/screenshots/tenant-overview.png)
 
@@ -114,6 +117,16 @@ for, mailbox forwarding and delegates, devices, sharing, and a "Needs attention"
 changed over time. Useful for offboarding checks and "was this account compromised?" questions.
 
 ![An account page: needs attention, MFA, admin roles, licences and devices](docs/screenshots/person.png)
+
+Mailboxes get the same treatment: **Users > Mailboxes** lists every mailbox with its size, forwarding and who
+else can open it, and each has a page with its size and growth over time, inbox rules, access, protocols, automatic
+reply, the phones syncing it and what changed. Mailbox addresses in reports and search results open it.
+So do groups: **Users > Groups and teams** lists every team, Microsoft 365 group, security group and distribution
+list, and each has a page with its owners and members, what membership gives (Conditional Access, admin roles,
+licences), its mail and team site, how it's set up and what changed.
+And SharePoint sites: **Users > Sites** lists every site with its storage, sharing links and last activity, and
+each has a page with its storage and what fills it, how it's shared, the team behind it, its activity and what
+changed. Site addresses in reports and on group pages open it.
 
 ### Across all clients, and what changed
 
@@ -244,9 +257,13 @@ Office Sentry holds read access to many clients, so it is built to do as little 
   isn't on a fixed allow-list of `Get-` cmdlets. It never creates or changes anything in a client's tenant.
 - **Certificate sign-in, no credential files.** The app signs in with a certificate whose private key is encrypted
   in the database. Secrets and private keys are never downloadable; only the public `.cer` is, by admins.
-- **Tenant isolation.** Deny by default: people see only the clients they're granted, every client page goes
-  through one access check, and anything else returns 404. Clients see only their own reports.
-- **The portal itself:** two-step sign-in for everyone on new installs, client accounts included; wrong passwords
+- **Tenant isolation and roles.** Deny by default: people see only the clients they're granted, every client
+  page goes through one access check, and anything else returns 404. What they may do there is a role made of
+  capabilities (built-in: Administrator, Team leader, Second line, First line, Account manager, Auditor and
+  Client viewer), narrowed or widened per person and per client by an admin. Clients see only their own reports.
+- **The portal itself:** staff can sign in with their own Microsoft account (Entra ID, under your Conditional
+  Access and MFA; roles assigned in Entra), or with two-step sign-in, which is required for everyone on new
+  installs, client accounts included; wrong passwords
   slow down the address they come from rather than locking the account, so nobody can lock a colleague out;
   server-side sessions, CSRF protection, a strict Content Security Policy with no external assets, and encrypted
   secrets with key rotation.
@@ -272,14 +289,16 @@ cp env.example .env           # set OFFICESENTRY_BASE_URL, OFFICESENTRY_DOMAIN a
 docker compose --profile https up -d
 ```
 
-The image is `ghcr.io/jackd99/officesentry`, for amd64 servers (arm64 too once the repository is public); each release lists what changed in
-[CHANGELOG.md](CHANGELOG.md). While this repository is private the image is too, so the server needs
-`docker login ghcr.io` with a GitHub token that can read packages.
+The image is [`ghcr.io/jackd99/officesentry`](https://github.com/JackD99/OfficeSentry/pkgs/container/officesentry),
+public, for amd64 (Intel and AMD) servers and, from 2.1.0, arm64 ones. It is built and
+scanned by GitHub Actions from a tagged release, with a signed build provenance. Each release lists what changed,
+and anything to do before updating, in [CHANGELOG.md](CHANGELOG.md).
 
 Leave out `--profile https` if you already have a reverse proxy, and point it at `http://127.0.0.1:8000`. Then:
 
 1. Run `docker compose logs web` and open the link on the line starting **No admin account yet** to create the
-   first admin (with two-step sign-in).
+   first admin (with two-step sign-in). Your home page then shows a **Get started** checklist of the next
+   three steps, which ticks itself off as you go.
 2. Open **Settings → App connection** and press **Sign in to Microsoft**. The page shows a code and Microsoft's
    link: enter the code there and sign in as an admin of **your own** (MSP) tenant who can create app
    registrations. Office Sentry then creates its multi-tenant, read-only app with a certificate and saves it, with
@@ -289,21 +308,31 @@ Leave out `--profile https` if you already have a reverse proxy, and point it at
    tenant grants consent, you assign Global Reader, and the first collection runs.
 
 Stuck? [Troubleshooting](v2/docs/troubleshooting.md) covers the common errors, such as `AADSTS50011` on the
-consent page, mailboxes failing without Global Reader and the worker not running.
+consent page, mailboxes failing without Global Reader and the worker not running. For anything else,
+**Settings → Support** makes a support package to attach to a bug report, with secrets and client names taken
+out ([Getting help](v2/docs/getting-help.md)).
 
-[v2/DEPLOY.md](v2/DEPLOY.md) covers HTTPS, the collection schedule, retention, backups and updating.
+[v2/DEPLOY.md](v2/DEPLOY.md) covers HTTPS, the collection schedule, retention, backups and updating. Running
+Portainer, a NAS, Kubernetes, Azure, AWS or another cloud? The [deploy guides](v2/docs/deploy/README.md) start
+from there.
 
 ## Documentation
 
 - [Technical reference](v2/README.md): every report and check, Exchange data, sign-in security, setup and layout
 - [Running it on your own server](v2/DEPLOY.md)
+- [Deploy guides](v2/docs/deploy/README.md): Portainer and other container managers, Unraid, Synology and
+  TrueNAS, Kubernetes, Azure, AWS, other clouds and Cloudflare
+- [Staff sign-in with Microsoft](v2/docs/staff-sign-in.md): let your team sign in with their Entra ID account
 - [Onboarding a client](v2/docs/onboarding-a-client.md): consent, Global Reader, the first collection, connection
   health and offboarding
 - [What Office Sentry reads](v2/docs/what-office-sentry-reads.md): for clients approving access
 - [Check catalogue](v2/docs/checks.md): every check, data source, detail report and permission
 - [Troubleshooting](v2/docs/troubleshooting.md): the common setup and collection errors and their fixes
+- [Getting help](v2/docs/getting-help.md): where to look first, the support package and what it leaves out
+- [Securing the portal](v2/docs/securing-the-portal.md): hardening defaults, what you have to do, reverse proxies
 - [Example reports](examples/)
 - [Roadmap](ROADMAP.md): what's planned next, and what never will be
+- [Changelog](CHANGELOG.md): what changed in each release
 
 ## Development
 
@@ -321,6 +350,18 @@ OFFICESENTRY_INSECURE_COOKIES=1 python -m officesentry web   # http://127.0.0.1:
 The screenshots and example reports here are made by `python scripts/screenshots.py` from the same demo data;
 re-run it when the UI or reports change. [DEVELOPING.md](DEVELOPING.md) is a short tour of the code and tests, and
 [CONTRIBUTING.md](CONTRIBUTING.md) has the conventions.
+
+## Getting help and contributing
+
+[SUPPORT.md](SUPPORT.md) says where to go for what: [Troubleshooting](v2/docs/troubleshooting.md) for setup
+errors, [Discussions](https://github.com/JackD99/OfficeSentry/discussions) for questions, and the
+[issue forms](https://github.com/JackD99/OfficeSentry/issues/new/choose) for bugs (attach the support package
+from the portal's Settings) and for report, check and feature requests. Issues are public: never paste a
+client's data.
+
+Pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the conventions and how every change is
+checked, and [DEVELOPING.md](DEVELOPING.md) is the tour of the code. Everyone taking part agrees to the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Security issues
 

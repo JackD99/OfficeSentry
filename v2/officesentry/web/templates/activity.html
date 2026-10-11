@@ -48,5 +48,5 @@
     {% if has_next %}<a class="btn sm" href="{{ url_for('activity.index', page=page + 1, **query) }}">Older</a>{% endif %}
   </span>
 </div>
-<p class="footnote">Failed and slowed-down sign-ins are kept for {{ noise_days }} days; everything else is kept. Failed sign-ins with usernames that don't exist are counted per address and hour without the name that was typed. Addresses are the visitor's as the portal sees it (set <code>OFFICESENTRY_TRUSTED_PROXIES</code> behind a proxy).</p>
+<p class="footnote">Failed and slowed-down sign-ins are kept for {{ noise_days }} days; everything else is kept. Failed sign-ins with usernames that don't exist are counted per address and hour without the name that was typed. Pages someone wasn't allowed to open (another client's tenant, a staff page) and forms sent with a stale token are counted per person, address and hour, with the latest page named. Addresses are the visitor's as the portal sees it (set <code>OFFICESENTRY_TRUSTED_PROXIES</code> behind a proxy).</p>
 {% endblock %}

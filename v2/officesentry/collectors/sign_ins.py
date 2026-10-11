@@ -323,11 +323,11 @@ def _at(ts: int) -> str:
     return datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def read_log(ctx: RunContext) -> events.Ingest:
+def read_log(ctx: RunContext, now: datetime | None = None) -> events.Ingest:
     """Bring the tenant's stored sign-ins up to date (``events.ingest``). The legacy sign-in collector
     calls this too; whichever runs second reads only the few hours since."""
     return events.ingest(
-        ctx, events.SIGNIN_LOG, LOG_DAYS, SIGNIN_PAGES, retries=QUERY_RETRIES, deadline=lambda: deadline()
+        ctx, events.SIGNIN_LOG, LOG_DAYS, SIGNIN_PAGES, retries=QUERY_RETRIES, deadline=lambda: deadline(), now=now
     )
 
 
@@ -377,7 +377,7 @@ class SignIns(Collector):
         since = _iso(start)
         p2 = ctx.capabilities.get("entra_p2")
         try:
-            got = read_log(ctx)
+            got = read_log(ctx, now)
         except (LicenseRequired, PermissionMissing) as exc:
             ctx.warn(f"The sign-in log isn't available: {exc.message}")
             reason = "licence" if isinstance(exc, LicenseRequired) else "permission"

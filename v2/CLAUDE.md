@@ -17,13 +17,35 @@ overview and DEPLOY.md for running it on a server.
   multi-tenant read-only app. `tests/test_no_writes.py` fails on any
   `.post/.put/.patch/.delete/.request(` outside its `ALLOWED` files, and
   checks a full collection only sends GETs (plus `Get-` cmdlets).
-- **Every route needs `@login_required` or `@roles_required`.** Anything
-  tenant-scoped loads the tenant with `access.tenant_or_404()`.
-  `tests/test_access.py::test_every_page_requires_login` enforces the first;
+- **Every route needs `@needs(...)`** naming the capabilities it needs
+  (`permissions.py`; `kind="staff"` for a page clients never see), or
+  `@login_required` for the few pages anyone signed in may open (listed in
+  `tests/test_roles.py::ANYONE`). Inside a view, `can()` and `require()`
+  answer the same question for one client; a view that only knows what it
+  needs once it has read its URL (which report) calls `need_also()`. Anything
+  tenant-scoped loads the tenant with `access.tenant_or_404()`, which is also
+  where a capability taken away on one client becomes a 403.
+  `tests/test_access.py::test_every_page_requires_login` enforces sign-in,
+  `tests/test_roles.py` opens every route as every built-in role and expects
+  403 exactly where the role lacks what the view declared, and
   `tests/test_isolation_walk.py` opens every route that takes a tenant (or
   one of its objects) with another tenant's IDs and expects a refusal. A new
   URL argument fails there until it's listed in `TENANT_ARGS` (seed an object
-  for it in the `world` fixture) or `OTHER_ARGS`.
+  for it in the `world` fixture) or `OTHER_ARGS`. Templates use
+  `can('<capability>', tenant.id)` to show or hide; never `current_user.role`
+  except to tell a client account from staff. Roles live in `roles` (built-in
+  ones by `key`, editable except Administrator, custom ones too) and a person's
+  overrides in `user_access`; `roles.py` reads and writes both (every change
+  audited: `role_created`, `role_updated`, `role_deleted`,
+  `user_access_changed`) and `web/roles.py` and `admin.user_access` are their
+  pages. Someone with `users.manage` who isn't an Administrator only hands out
+  what they hold everywhere, only on clients they see, can't change their own
+  role or access, and can't change an account that holds more than they do
+  (`admin._out_of_reach`, `_givable`; `web/roles._grantable`), so nobody
+  raises their own access. A new capability is a `Capability` in `permissions.CAPABILITIES`,
+  added to the built-in roles that should hold it (`TEMPLATES`; the
+  migration seeded those rows, so a later change to a template needs a
+  migration of its own if existing installs should pick it up).
 - **Graph paths are relative to the version** (`"/users"`, `version="beta"`).
 - **Microsoft hosts come from `clouds.py`** (commercial, GCC High, DoD,
   China). A tenant (`tenants.cloud`) only signs in with an app connection of
@@ -85,6 +107,8 @@ overview and DEPLOY.md for running it on a server.
 
 Exchange data: use `ctx.exchange.invoke("Get-...")` (created lazily). An
 `ExchangeAccessDenied` fails the run with instructions to assign Global Reader.
+An answer longer than `exchange.MAX_PAGES` pages is cut there, and the run is
+partial with a warning naming the cmdlet (`RunContext.note_exchange_cuts`).
 
 The two SharePoint collectors list sites and OneDrives through
 `collectors/sharepoint_lookup.Lookups`, both asking for the same fields
@@ -177,15 +201,19 @@ needing goes in those lists.
   (`rollups.check_matrix`) is every check for every tenant, evaluated from
   stored data with accepted risks from `findings`. All
   `/across` pages are admin and analyst only, over `visible_tenants()`.
-  `/changes` and `/across/checks` (and their downloads) read each tenant's
-  stored row from `summary_cache` (`reports/precomputed.py`, kinds
-  `changes:<days>` and `checks`) while its fingerprint matches, and build and
-  store it otherwise. The worker builds them in a `precompute` task after the
-  tenant's collection and once a day (every row again when retention removed
+  Every page with one row per tenant (`/changes`, `/across/checks`,
+  `/across/evidence`, `/across/<report key>`, the month-end queue, `/projects`
+  and the Accounts home, and their downloads) reads each tenant's stored row
+  from `summary_cache` (`reports/precomputed.py`, kinds `changes:<days>`,
+  `checks`, `evidence`, `rollup:<key>`, `review` and `projects`) while its
+  fingerprint matches, and builds and stores it otherwise. The worker builds
+  them in a `precompute` task (`precomputed.refresh`) after the tenant's
+  collection and once a day (every row again when retention removed
   something). If a row comes to depend on something else, add it to
   `Rows.fingerprint`; `tests/test_precomputed.py` checks stored rows equal the
-  live build (`across(..., now=...)` and `check_matrix(..., now=...)` never
-  use them). Rows are per tenant: only ever read them for `scoped_tenants()`.
+  live build (a call with `now=...` never uses them). Rows are per tenant:
+  only ever read them for `scoped_tenants()`. The same task keeps each
+  tenant's rows in `search_index` (`search_index.py`) for the sidebar search.
   The change report matches table rows on their first column; set
   `Section(compare=False)` for event logs and time series. Columns named
   `Last ...`, `... (UTC)` or containing "change", and the day counts in
@@ -238,6 +266,15 @@ needing goes in those lists.
   Styles are `report.css`; brand colours arrive as CSS variables (`--brand`,
   `--brand-ink`, ...), from `/brand.css` on the web and inline in PDFs, since
   the CSP blocks inline styles in the browser. Render the PDF and look at it.
+- The monthly review (`reports/monthly_review.py`, `templates/reports/monthly_review.html`)
+  leads with two summary pages (At a glance: the plain-English summary, key figures and the
+  severity bar; This month: findings found and fixed by month (`found_and_fixed`,
+  `charts.month_columns`), what was done (`fixed_groups` and the month-end actions marked
+  done) and what to do next), then the appendix with the detail, which the summary links
+  into. `appendix=False` (the PDF route's `?appendix=0`, the report option
+  `review-summary`, `monthly_review.SUMMARY_KEY`) leaves the appendix out: the summary then
+  carries no links into it (`summary.next_steps(anchors=False)`) and says the full report is
+  available from the MSP.
 - PDF routes return `web/printing.pdf_response(template, filename, ...)`: a
   WeasyPrint PDF, or without WeasyPrint (Windows without Docker) the same
   template as a print-ready page that opens the browser's print window. Table
@@ -299,9 +336,33 @@ that are exactly an account's sign-in name or address become `UserLink`s in
 anything to link people; PDFs and spreadsheets show the plain name.
 
 Staff search every visible tenant's latest snapshot from the sidebar box
-(`web/search.py`, `/search`, admin and analyst only); to make something
-searchable, add a `Kind(collector, kind, values, show)` to `search.KINDS`, with
-`show` linking the person's page or the detail report filtered to the row.
+(`web/search.py`, `/search`, admin and analyst only). A tenant whose
+`search_index` rows were built from its latest runs (`search_index.current`)
+is searched through them; the rest are scanned, so nothing is missed. To make
+something searchable, add a `Kind(key, collector, kind, values)` to
+`search_index.KINDS` and a `show` under its key in `search.SHOW`, linking the
+person's page or the detail report filtered to the row.
+
+## One page per mailbox, group or site
+
+`reports/object_page.py` is the same pattern for things that aren't people: an `ObjectPage` drawn by
+`templates/object_page.html` for every kind, a `Subject` (the snapshot, the object, `flag()`), areas as
+`@part(kind, order)` functions returning a `Part`, `findings_for()`, `sources_for()` and `object_path()`.
+Each kind is one module (`reports/mailbox_page.py`: `/tenants/<id>/mailboxes/<object id>` and the
+Mailboxes list, routes in `web/mailboxes.py`; `reports/group_page.py`: `/tenants/<id>/groups/<group id>`
+for teams, Microsoft 365 and security groups and distribution lists, joined by directory id or address,
+and the Groups and teams list, routes in `web/group_pages.py`; `reports/site_page.py`:
+`/tenants/<id>/sites/<site key>` for SharePoint sites, keyed by site id (`site_key`), and the Sites list,
+routes in `web/site_pages.py`), imported in `reports/__init__.py`, with
+its list in the Users tab's second row. A module registers how its objects are named in reports in
+`data_reports.PAGE_INDEXES` as a `PageIndex(build, where)`: `build` maps lower-cased names to page paths
+and `where(section title, column)` says which cells may link (None for any column; group names only link
+in group columns, so a department called Sales stays text). `data_reports.build()` and the person page
+turn matching plain cells into `PageLink`s after people are linked, so an address that is an account's
+still opens the person's page. A `Link` cell whose address is a site gets the site page as its `page_href` (`link_pages`):
+pages open that, while PDFs and spreadsheets keep the SharePoint address. Pages read stored snapshots only (`store.object_copies` for history) and
+link back to the reports the facts came from, filtered to the object (`Subject.report()`). Part order 15
+on the group page is kept free for Teams detail (channels, apps, guests per channel) once collected.
 
 ## Home pages by role
 
@@ -314,6 +375,10 @@ reports to approve and projects to propose). Each opens with one sentence (`Toda
 settings, or "Make this my home page" on either page); `/home` (the sidebar's Home and the logo) opens it,
 and signing in without a page to go back to lands there. Client users keep the dashboard. A new reason on Today
 is a `Reason` with a `kind` in `home.KINDS` and a `target` that `web/home._link` turns into a URL.
+Until the first collection has run, admins see the **Get started** checklist (`first_run.py`,
+`_get_started.html`) on Today, Accounts and Clients instead of the empty state: the app connection, the first
+client, its consent and its first collection, each read from stored state, with `web/home.get_started`
+turning each step's `target` into a link.
 
 ## Web UI conventions
 
@@ -463,7 +528,8 @@ words for people; a handler's own failure isn't retried. Pages show
 progress from the rows (`tasks.batch_progress`, a JSON route polled by
 `_progress.html`). Finished tasks are pruned after 30 days. Table report
 PDFs keep the first `printing.PDF_MAX_ROWS` (2,000) rows per table and say
-so (`printing.cap_rows`); the XLSX and CSV have every row.
+so (`printing.cap_rows`, and `cap_rollup` and `cap_changes` for rollups and
+change reports); the XLSX and CSV have every row.
 
 The dashboard and the All clients review read each tenant's row from
 `rollup_cache` (`monthly_review.rollup_row(..., cached=True)`), rebuilt when
@@ -643,7 +709,7 @@ change is audited; note text is never put in the audit log.
   link: it never expires and comes back to `/consent/callback` without a
   sign-in. That route is the one exception to "every route needs a
   decorator": it hands a client state to the public `client_returned` page and
-  everything else to `_consent_return` (`@roles_required("admin")`). The
+  everything else to `_consent_return` (`@needs("clients.manage")`). The
   public page never records consent and never shows Microsoft's text; it
   notes `approved_at` and queues a `consent_check` task. Only
   `onboarding.confirm` (signing in as the app, `connection_check.check`)
@@ -669,7 +735,12 @@ and `/tenants/<id>/designs/<id>` (`.pdf`) is a tenant's copy. A design is a
 report key `design:<id>` in `delivery.catalog(conn)` (PDF only), so plans and
 schedules send it through `_attachments`; `designs.remove` strips the key from
 them. Adding a widget: a `Widget` in `WIDGETS` and a `w_<kind>` macro in
-`DRAW`; the editor reads the palette from `designs.palette()`.
+`DRAW`; the editor reads the palette from `designs.palette()`. `STARTERS` are
+the designs the editor offers to start from; the Quarterly review starter's
+blocks (`quarter_trend`, `quarter_fixed`, `projects`, `licence_spend`,
+`upcoming`) read `Context.quarter`, a `reports/quarterly.Quarter` built once
+per tenant from the monthly review, `findings`, `projects.assess` and
+`upcoming.collect`; text blocks also take `{quarter}` (`quarterly.quarter_label`).
 
 ## Tenant groups
 
@@ -682,7 +753,7 @@ analyst (`user_tenant_groups`): `access._GRANTED` adds its tenants, now and
 later, and ignores it for every other role. Never read group grants anywhere
 else.
 
-Staff pages that list tenants are `@group_aware` (under `@roles_required`)
+Staff pages that list tenants are `@group_aware` (under `@needs`)
 and read `scoped_tenants()` instead of `visible_tenants()`: the dashboard,
 `/across/*` (and their downloads), `/changes*`, the month-end queue and
 Client settings. The choice is kept on the sign-in (`sessions.group_id`); a GET
@@ -776,6 +847,19 @@ deduplicated on (tenant, time, id), so reading an event twice stores it once.
   missing files.
 - Tests that need a fixed "now" patch `events.clock` (the live replay sets it to the recording's time).
 
+## Logs and the support package
+
+`logs.setup(data_dir, process)` (called by `create_app` and the `worker` command) logs to stderr and to
+`<data dir>/logs/<process>.log` (`LOG_FILES` × `LOG_BYTES`, several processes may share `web.log`). Wrap
+work in `logs.context(run=..., tenant=..., task=...)` so its lines carry that context; the portal sets
+`req=`, `user=` and `tenant=` per request, answers `X-Request-ID`, and the 500 page shows the id as the
+reference to quote. `support.build()` gathers the package from stored state and those files only (never
+Microsoft) and `support.Redactor` sweeps every piece of free text; a new part is a `part(...)` call in
+`build` and a line in `PARTS`, and a new kind of secret is a pattern in `support.PATTERNS` with a case in
+`tests/test_support.py`, which plants each kind of secret and name and searches every byte of the zip.
+Settings values go in the package only when listed in `PLAIN_SETTINGS` (or a prefix in
+`PLAIN_SETTING_PREFIXES`); everything else is a name and a length.
+
 ## Schema changes
 
 Add `migrations/NNNN_description.sql`. Never edit an applied migration.
@@ -816,6 +900,7 @@ and `python -m officesentry <command>`:
 | `compact` | compress snapshots stored before compression now and shrink the database file |
 | `history [--dry-run\|--backfill\|--verify]` | the daily history: progress, an estimate of the backfill without writing, the backfill now, or a check that it reads back as the snapshots |
 | `delete-tenant <id>` | delete a tenant and everything stored for it |
+| `support-package [--out FILE\|-] [--include-identifiers]` | the zip to attach to a bug report (`support.py`): versions, settings, health, failures and logs with secrets and client names taken out; works over a broken database or configuration |
 | `live-test [--record FILE] [--canary REPORT]` | collect from a test tenant (`OFFICESENTRY_TEST_*`), optionally re-record the fixture or compare the answers' shape with it (the live canary) |
 
 Keys: `secrets.json` lives at `OFFICESENTRY_SECRETS_FILE` when set (Docker: `/keys/secrets.json`, its own

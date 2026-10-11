@@ -1049,11 +1049,15 @@ def ingest(
     *,
     retries: int | None = None,
     deadline: Callable[[], Callable[[], bool]] = _no_deadline,
+    now: datetime | None = None,
 ) -> Ingest:
     """Read the log from where the last run got to, into the event files. See the module docstring.
 
     ``keep_days`` is how far back Microsoft keeps the log, ``budget`` the most pages this run reads.
     ``deadline`` starts a timer at the first timeout; once it says so, the rest waits for the next run.
+    ``now`` is the caller's own clock reading, so the window it then checks with ``coverage.missing`` starts
+    exactly where this run's coverage does (reading the clock again can land a second later and leave a
+    one-second "unread" gap at the start).
     Raises the first failure when every request failed, and anything that isn't a timeout or server
     error (no licence or permission); the cursor is saved first, so the next run carries on.
     """
@@ -1062,7 +1066,7 @@ def ingest(
     if base is None:
         raise RuntimeError("Activity history needs the database in a file")
     key = tenant_key(conn, tenant_id, create=True)
-    now = int(clock().timestamp())
+    now = int((now or clock()).timestamp())
     cov = coverage(conn, tenant_id, source.source)
     _extend(cov, now, now - keep_days * DAY)
     reader = _Reader(ctx, source, base, key, cov, now, budget, retries, deadline)

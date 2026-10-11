@@ -123,6 +123,9 @@ class Book:
         self.header(ws, 1, len(header))
         widths = [len(str(c)) + 3 for c in header]  # room for the filter button
         long_cols: set[int] = set()
+        by_row: dict[int, list[tuple[int, str]]] = {}  # each row's links, so a row looks only at its own
+        for (ri, ci), href in (links or {}).items():
+            by_row.setdefault(ri, []).append((ci, href))
         for i, row in enumerate(rows):
             values = [xlsx_value(v) for v in row]
             flag = (flags[i] if flags and i < len(flags) else None) if flagged else None
@@ -149,11 +152,10 @@ class Book:
                 cell = ws.cell(r, len(header))
                 cell.fill = PatternFill("solid", fgColor=FLAG_FILLS[flag][0])
                 cell.font = Font(bold=True, color=FLAG_FILLS[flag][1])
-            for (ri, ci), href in (links or {}).items():
-                if ri == i:
-                    cell = ws.cell(r, ci + 1)
-                    cell.hyperlink = href
-                    cell.font = Font(color="1D4ED8", underline="single")
+            for ci, href in by_row.get(i, ()):
+                cell = ws.cell(r, ci + 1)
+                cell.hyperlink = href
+                cell.font = Font(color="1D4ED8", underline="single")
         for col, w in enumerate(widths, 1):
             ws.column_dimensions[get_column_letter(col)].width = max(MIN_WIDTH, w + 2)
         if wrap and long_cols:

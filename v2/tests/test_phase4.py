@@ -43,6 +43,50 @@ def test_exchange_pages_and_sends_cmdlet():
 
 
 @responses.activate
+def test_exchange_cuts_an_endless_answer_at_the_page_cap_instead_of_failing():
+    for n in (1, 2, 3):
+        responses.post(
+            URL + (f"?$skiptoken={n}" if n > 1 else ""),
+            json={"value": [{"n": n}], "@odata.nextLink": URL + f"?$skiptoken={n + 1}"},
+        )
+    exo = client()
+    assert exo.invoke("Get-Mailbox", max_pages=2) == [{"n": 1}, {"n": 2}]
+    assert exo.truncated == {"Get-Mailbox": 2} and len(responses.calls) == 2
+
+
+def test_a_cut_exchange_answer_makes_the_run_partial_and_says_so(db, two_tenants, monkeypatch):
+    alpha, _ = two_tenants
+    import re
+    from unittest.mock import patch
+
+    from officesentry import exchange
+    from officesentry.graph import GraphClient
+    from officesentry.worker import execute_run
+    from tests.seed import exchange_factory, mock_tenant
+
+    monkeypatch.setattr(exchange, "MAX_PAGES", 2)
+    with (
+        responses.RequestsMock(assert_all_requests_are_fired=False) as rsps,
+        patch("officesentry.dnscheck.lookup", gd.fake_dns),
+    ):
+        mock_tenant(rsps)
+
+        def endless(request):  # every cmdlet's answer goes on for ever
+            page = int(request.url.rsplit("=", 1)[-1] if "skiptoken" in request.url else "0") + 1
+            link = f"{EXCHANGE_ROOT}/adminapi/beta/tid/InvokeCommand?$skiptoken={page}"
+            return 200, {}, json.dumps({"value": [], "@odata.nextLink": link})
+
+        rsps.add_callback(responses.POST, re.compile(re.escape(EXCHANGE_ROOT) + r"/.*"), callback=endless)
+        store.enqueue_run(db, alpha, "mailboxes")
+        run = store.claim_next_run(db)
+        status = execute_run(db, run, lambda t, c: GraphClient(lambda: "t", sleep=lambda s: None), exchange_factory)
+    row = db.execute("SELECT error, truncated FROM runs WHERE id = ?", (run["id"],)).fetchone()
+    assert status == "partial", row["error"]
+    assert row["error"].startswith("Get-Mailbox returned more than 2 pages of results; the rest were left out; ")
+    assert row["truncated"] == 1
+
+
+@responses.activate
 def test_exchange_refuses_next_link_to_another_host():
     responses.post(URL, json={"value": [], "@odata.nextLink": "https://evil.example/adminapi/x"})
     with pytest.raises(ValueError):
